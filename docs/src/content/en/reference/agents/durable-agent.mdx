@@ -118,8 +118,9 @@ Returns: `DurableAgent`
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
+    description:
+      'PubSub instance for streaming events. Takes precedence over `mastra.pubsub`. When omitted, a registered agent publishes on `mastra.pubsub` and an unregistered agent uses an in-process `EventEmitterPubSub`.',
+    defaultValue: 'mastra.pubsub, or EventEmitterPubSub when unregistered',
   },
   {
     name: 'maxSteps',
@@ -177,8 +178,9 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
+    description:
+      'PubSub instance for streaming events. Once the agent is registered, evented run frames use `mastra.pubsub` instead, because evented steps publish there.',
+    defaultValue: 'mastra.pubsub, or EventEmitterPubSub when unregistered',
   },
   {
     name: 'maxSteps',
@@ -240,8 +242,9 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
+    description:
+      'PubSub instance for streaming events. Takes precedence over `mastra.pubsub`. When omitted, a registered agent publishes on `mastra.pubsub` and an unregistered agent uses an in-process `EventEmitterPubSub`.',
+    defaultValue: 'mastra.pubsub, or EventEmitterPubSub when unregistered',
   },
   {
     name: 'maxSteps',
@@ -327,7 +330,19 @@ const { output } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. This transport index is unavailable through public stream chunks and callbacks. Only pass an offset when another integration already tracks the transport position.
+The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. Every chunk carries the index of the event it came from as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass the last received chunk's `index + 1`, or `0` if nothing arrived. Lifecycle events send no chunk, so indexes have gaps and a chunk count isn't a valid offset. An `abort` chunk shares its index with the `finish` chunk that follows it. If the last chunk received was `abort`, pass its `index` to receive both again.
+
+```typescript
+let lastIndex: number | undefined
+for await (const chunk of output.fullStream) {
+  lastIndex = chunk.index
+}
+
+// After a dropped connection:
+const { output: resumed } = await agent.observe(runId, {
+  offset: lastIndex === undefined ? 0 : lastIndex + 1,
+})
+```
 
 A non-zero offset can skip earlier events. Aggregated values are built only from chunks delivered to that observer. If the offset skips earlier text deltas, `output.text` is partial and structured output may be incomplete or fail validation or parsing.
 

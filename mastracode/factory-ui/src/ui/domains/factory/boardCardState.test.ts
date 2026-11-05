@@ -75,7 +75,7 @@ describe('status row', () => {
   it('separates an effect the server is retrying from one it has not tried yet', () => {
     expect(boardCardState({ decision: decision({ status: 'retry', lastError: 'ECONNRESET' }) }).status).toEqual({
       kind: 'error',
-      label: 'Automated run could not start — retrying…',
+      label: 'Automated run could not start. Retrying…',
       detail: 'ECONNRESET',
     });
   });
@@ -119,7 +119,7 @@ describe('status row', () => {
           lastError: null,
         }),
       }).status,
-    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue — retrying…", detail: undefined });
+    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue. Retrying…", detail: undefined });
   });
 
   it('says a run is starting until the registry or the workspace record shows its session', () => {
@@ -184,12 +184,12 @@ describe('status row', () => {
   it('says a card triage left in Intake waits on a person', () => {
     expect(boardCardState({ held: true }).status).toEqual({
       kind: 'held',
-      label: 'Triaged · waiting for you',
+      label: 'Triaged and waiting for you',
     });
     // A suggested run cannot start until the card is accepted, so the hold is the live question.
     expect(boardCardState({ held: true, proposal: { label: 'Build', decisionId: 'decision-9' } }).status).toEqual({
       kind: 'held',
-      label: 'Triaged · waiting for you',
+      label: 'Triaged and waiting for you',
     });
     // Anything the server is doing outranks the standing hold.
     expect(boardCardState({ held: true, preparing: 'Starting…' }).status).toEqual({
@@ -265,7 +265,7 @@ describe('what a card shows', () => {
     [
       'an automatic retry',
       { decision: decision({ status: 'retry', lastError: 'Timeout' }) },
-      { row: 'Automated run could not start — retrying…', wick: undefined, buttons: ['Retrying… (disabled)'] },
+      { row: 'Automated run could not start. Retrying…', wick: undefined, buttons: ['Retrying… (disabled)'] },
     ],
     [
       'a refused move while a run is queued',

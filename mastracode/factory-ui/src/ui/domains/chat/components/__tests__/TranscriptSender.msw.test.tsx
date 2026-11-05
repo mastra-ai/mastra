@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -52,6 +52,8 @@ describe('message sender', () => {
     ]);
 
     expect(screen.getByLabelText('Sent by Caleb Barnes')).toHaveTextContent('C');
-    expect(screen.getByLabelText('Sent from Slack')).toHaveTextContent('via Slack · Caleb Barnes');
+    const origin = within(screen.getByLabelText('Sent from Slack'));
+    expect(origin.getByText('via Slack')).toBeInTheDocument();
+    expect(origin.getByText('Caleb Barnes')).toBeInTheDocument();
   });
 });

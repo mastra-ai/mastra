@@ -171,15 +171,14 @@ export function SessionTrack({
           return (
             <span
               key={pinKey(pin)}
-              className={cn(
-                'ring-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
-                fadedUnlessFocused(pinKey(pin)),
-              )}
+              className="ring-popover bg-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2"
               data-track-hit={pinCaption(pin, nameOf(pin.personId))}
               style={{ left: `${pin.left}%` }}
               onPointerEnter={() => setFocus(pinFocus(pin, nameOf(pin.personId)))}
             >
-              <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              <span className={cn('flex', fadedUnlessFocused(pinKey(pin)))}>
+                <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              </span>
             </span>
           );
         })}

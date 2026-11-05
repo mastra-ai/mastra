@@ -57,7 +57,7 @@ export function routingGap({
   labelled: boolean;
   labels: string[];
 }): string | undefined {
-  if (board === null) return "Choose a board — this factory won't pick up issues until one is set.";
+  if (board === null) return "Choose a board. This factory won't pick up issues until one is set.";
   if (labelled && labels.length === 0) return 'Still takes all issues until you add a label.';
   return undefined;
 }

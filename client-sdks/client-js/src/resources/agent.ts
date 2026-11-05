@@ -2676,7 +2676,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   input: toolCall.args,
-                  result,
+                  output: { type: 'json', value: result as JSONValue },
                   ...(modelOutput != null
                     ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
                     : {}),
@@ -3414,15 +3414,18 @@ export class Agent extends BaseResource {
    * Use this to resume receiving events after a disconnection.
    *
    * @param params.runId - The run ID to observe
-   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Run-log position to resume from. Chunks from `stream()` and `observe()` on durable
+   *   and evented agents carry an `index`; pass the last received chunk's `index + 1`. An `abort` chunk shares its
+   *   index with the `finish` chunk after it, so if the last chunk received was `abort`, pass its `index`. If omitted,
+   *   replays all chunks.
    * @returns Promise containing a streaming Response
    *
    * @example
    * ```typescript
-   * // Reconnect to a stream from a specific position
+   * // Resume after the last chunk received
    * const response = await client.agents('my-agent').observe({
    *   runId: 'run-123',
-   *   offset: 42, // Resume from event 42
+   *   offset: lastChunk.index + 1,
    * });
    *
    * await response.processDataStream({

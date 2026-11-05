@@ -12,6 +12,7 @@ import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '@/domains/knowledg
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { presentTool, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 /** The tools `Knowledge.createTools()` gives an agent. */
@@ -60,7 +61,7 @@ function asNotes(value: unknown): NoteSummary[] {
 }
 
 /** The collapsed row's detail: the page name, then which part of it was read or written. */
-const withExtent = (name: string, extent: BodyExtent | undefined) => (extent?.row ? `${name} · ${extent.row}` : name);
+const withExtent = (name: string, extent: BodyExtent | undefined) => (extent?.row ? `${name}: ${extent.row}` : name);
 
 /** The numbered lines of a part read: a window, or each match, under the range it covers. */
 function ReadLines({ page }: { page: unknown }) {
@@ -202,9 +203,14 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
           </Txt>
           {note.page || note.author ? (
             <Meta>
-              {note.page ? <PageLink page={note.page} /> : null}
-              {note.page && note.author ? ' · ' : null}
-              {note.author}
+              <Metadata singleLine>
+                {note.page && (
+                  <Metadata.Item>
+                    <PageLink page={note.page} />
+                  </Metadata.Item>
+                )}
+                {note.author && <Metadata.Item className="shrink-0">{note.author}</Metadata.Item>}
+              </Metadata>
             </Meta>
           ) : null}
         </li>

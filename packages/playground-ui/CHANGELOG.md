@@ -1,5 +1,309 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.0
+
+### Minor Changes
+
+- Added `Metadata` and `Metadata.Item` for compact UI fields. Fields wrap as space narrows; pass `singleLine` to keep them on one line with truncation in cards, menu options, and titles. Replaced decorative copy separators with structured fields and natural sentences. Added copy lint rules for separators and layout whitespace. ([#29312](https://github.com/mastra-ai/mastra/pull/29312))
+
+  The `recommended` Oxlint preset now enables `playground-ui/no-text-separators` and `playground-ui/no-text-layout-spacing` as errors. Add `copyRuleExclusions` to skip tests, stories, fixtures, and generated files. Set either rule to `'off'` in your rules or overrides to disable it.
+
+  ```ts
+  import { defineConfig } from 'oxlint';
+  import { copyRuleExclusions, recommended } from '@mastra/playground-ui/oxlint';
+
+  export default defineConfig({
+    jsPlugins: ['@mastra/playground-ui/oxlint'],
+    rules: recommended,
+    overrides: [copyRuleExclusions],
+  });
+  ```
+
+  ```tsx
+  import { Metadata } from '@mastra/playground-ui/components/Metadata';
+
+  <Metadata>
+    <Metadata.Item>v8</Metadata.Item>
+    <Metadata.Item>(current)</Metadata.Item>
+  </Metadata>;
+  ```
+
+- Improved MCP Apps support in Studio: ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+  - Studio now tells apps that it can run server tools and post chat messages, so apps that check host capabilities before using these features (for example, a chart's "View in traces" button) now show them.
+  - MCP App views now accept context updates from the app (`ui/update-model-context`) through a new `onUpdateModelContext` callback, and only advertise that capability when the callback is provided.
+  - An app can call any tool on its own server from the MCP tool playground (previously every call ran the tool being viewed).
+  - Apps can no longer call tools their server keeps for the model only (`_meta.ui.visibility: ['model']`); those calls are refused without running the tool.
+  - Apps now receive object tool outputs as `structuredContent`, with the JSON text kept alongside it, so apps that render from structured data work in Studio.
+  - Links an app asks Studio to open must be `http` or `https`; others (such as `javascript:` or `file:`) are refused.
+  - Apps follow Studio's light or dark theme.
+
+  ```tsx
+  import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
+
+  <McpAppViewer
+    html={html}
+    toolName="showObservabilityDashboard"
+    onToolCall={(name, args) => callServerTool(name, args)}
+    onUpdateModelContext={context => setNextTurnContext(context)}
+  />;
+  ```
+
+- Studio now shows how a sandbox command ended. Before, chat messages never handed a command's streamed output, exit code or workspace link to its tool call, so a command that failed after printing something looked like a success. Now a non-zero exit marks the call failed, on its own row and in its tool group's failure count, next to a chip saying how it ended: `exit N`, `killed`, `timed out`, or `error` when the sandbox could not run it. Opening it shows what the command printed, followed by its exit code and the full error, even one that spans several paragraphs. While it runs, you can scroll up through its output without it jumping back to the latest line on every update. ([#29314](https://github.com/mastra-ai/mastra/pull/29314))
+
+  `ToolCallOutput` no longer takes `maxLength`: a long result shows in full, scrolling inside its box, and still copies whole.
+
+  Added the pieces Studio uses to draw a tool call, so other chat UIs can show tool calls and their failures the same way:
+
+  ```tsx
+  import {
+    exitedWithFailure,
+    ToolCallBody,
+    ToolCallExitStatus,
+    toolCallHasBody,
+  } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const view = {
+    toolName,
+    args,
+    status: exitedWithFailure(toolName, exit?.exitCode) ? 'error' : status,
+    output,
+    result,
+    exit, // { exitCode, killed, timedOut, error }
+  };
+
+  {
+    exit && <ToolCallExitStatus exit={exit} />;
+  }
+  {
+    toolCallHasBody(view) && <ToolCallBody {...view} />;
+  }
+  ```
+
+- Added a series palette for charts that break down by model, provider or key: eleven `--chart-series-*` hues at one lightness and chroma per theme, plus `--chart-series-neutral`. `seriesColors(items)` colors a page's series from it: each lab reserves one hue (Anthropic orange, OpenAI green, Google indigo, Jev pink, DeepSeek blue, xAI neutral, and others), its next two models take shifted shades of that hue (a lab's other models, or every model when the page shows one lab, take hues of their own), and series with no lab take the hues left over. Call it once per page so a model keeps its color on every chart. ([#29212](https://github.com/mastra-ai/mastra/pull/29212))
+
+  ```ts
+  import { seriesColors } from '@mastra/playground-ui/domains/metrics';
+
+  // Ranked largest first.
+  const colors = seriesColors([
+    { key: 'claude-opus-5-5', provider: 'anthropic', model: 'claude-opus-5-5' },
+    { key: 'gpt-5-mini', provider: 'openai', model: 'gpt-5-mini' },
+    { key: 'claude-sonnet-5-5', provider: 'anthropic', model: 'claude-sonnet-5-5' },
+  ]);
+  colors.get('claude-opus-5-5'); // 'var(--chart-series-orange)'
+  colors.get('claude-sonnet-5-5'); // a shifted shade of orange
+  ```
+
+- Added optional `onPin` and `isPinned` props to `DashboardRenderer` for pinning single widgets. Pass both together: each widget card then shows a pin button named after the widget, such as "Pin Agent runs". `isPinned` tells the renderer which widgets are pinned, by id, and `onPin` is called with the widget and the state the user asked for, so your app keeps the pinned widgets. A pinned widget keeps its unpin button in view; an unpinned one shows its pin button on hover. ([#29443](https://github.com/mastra-ai/mastra/pull/29443))
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    isPinned={id => pinnedIds.includes(id)}
+    onPin={(widget, isPinned) =>
+      setPinnedIds(ids =>
+        isPinned ? (ids.includes(widget.id) ? ids : [...ids, widget.id]) : ids.filter(id => id !== widget.id),
+      )
+    }
+  />
+  ```
+
+- Removed `callPose` from `@mastra/playground-ui/domains/chat/activity`. Use `presentTool(toolName, args).pose` so the icon reflects the call's operation, including Knowledge moves, merges and deletions. ([#29309](https://github.com/mastra-ai/mastra/pull/29309))
+
+  **Before**
+
+  ```ts
+  import { callPose } from '@mastra/playground-ui/domains/chat/activity';
+
+  const pose = callPose(call.toolName);
+  ```
+
+  **After**
+
+  ```ts
+  import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const pose = presentTool(call.toolName, call.args).pose;
+  ```
+
+- `MessageTimestamp` now says how long ago a message was sent ("just now", "7 minutes ago", "yesterday") and keeps that label current. Hovering or focusing it shows the full date and time, such as "Nov 3, 2026, 10:24 PM". ([#29373](https://github.com/mastra-ai/mastra/pull/29373))
+
+  Tool call lines no longer show when they started on hover, so the time appears only in the message's action bar. Removed `ActivityTimedTrigger` from `@mastra/playground-ui/domains/chat/activity`; use `ActivityTrigger` instead. `ActivityCall` and `ActivityCallState` no longer take `startedAt`.
+
+  **Before**
+
+  ```tsx
+  import { ActivityTimedTrigger } from '@mastra/playground-ui/domains/chat/activity';
+
+  <ActivityTimedTrigger at={startedAt}>{headline}</ActivityTimedTrigger>;
+  ```
+
+  **After**
+
+  ```tsx
+  import { ActivityTrigger } from '@mastra/playground-ui/components/ai/activity';
+
+  <ActivityTrigger>{headline}</ActivityTrigger>;
+  ```
+
+- Added distinct chat icons for Knowledge, files, terminal, browser, delegation, workflows, schedules, notifications, source control and skills. Running calls animate to show their action. Icons are clearer at small sizes. ([#29309](https://github.com/mastra-ai/mastra/pull/29309))
+
+  `presentTool` reads a call's arguments, so the same tool can show a different icon per operation. For example, deleting a Knowledge page no longer looks like editing one:
+
+  ```tsx
+  import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+  import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const { pose, icon: Icon, label } = presentTool('knowledge_page', { op: 'delete', page: 'Refund policy' });
+
+  <AgentIndicator state={pose} />; // live, while the call runs
+  <Icon aria-hidden />; // still, on the settled row; label is "Delete page"
+  ```
+
+- Redesigned the calendar and the custom date range picker. Picking a custom range now takes one two-month calendar: click the start day, then the end day, and set each end's time underneath. `DateTimePicker` uses the same time field instead of hour, minute and AM/PM dropdowns. Selected days are round, and the days in between read as one continuous band. ([#29195](https://github.com/mastra-ai/mastra/pull/29195))
+
+  `DatePicker` now uses react-day-picker v9. If you pass react-day-picker props through it, rename them to their v9 equivalents:
+
+  - `fromMonth` / `toMonth` → `startMonth` / `endMonth`
+  - `fromDate={date}` → `startMonth={date}` plus `disabled={{ before: date }}` (or `hidden={{ before: date }}` to hide those days)
+  - `toDate={date}` → `endMonth={date}` plus `disabled={{ after: date }}` (or `hidden={{ after: date }}`)
+
+  ```tsx
+  // Before
+  <DatePicker mode="single" selected={day} onSelect={setDay} fromDate={minDay} />
+
+  // After
+  <DatePicker mode="single" selected={day} onSelect={setDay} startMonth={minDay} disabled={{ before: minDay }} />
+  ```
+
+  `TimePicker` is removed. Use `<Input type="time" />`, which reads and writes `HH:mm`.
+
+- Added `Steps`, a numbered vertical rail for setup guides, like the steps in docs. Each `Steps.Step` takes a title, an optional description and action, and a `done` flag that swaps its number for a check. Steps number themselves in render order, so they can be rendered conditionally or composed from several components. ([#29272](https://github.com/mastra-ai/mastra/pull/29272))
+
+  ```tsx
+  import { Steps } from '@mastra/playground-ui/components/Steps';
+
+  <Steps>
+    <Steps.Step title="Create an API key" done>
+      …
+    </Steps.Step>
+    <Steps.Step title="Send your first request" />
+  </Steps>;
+  ```
+
+  `PageHeader.Description` now wraps with `text-pretty`, so a long description no longer leaves a single word on its last line.
+
+- Added chat annotations, so a person can point the agent at parts of the transcript and comment on them. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+  - Select text in a message and choose **Add to chat**, or press Tab to reach it.
+  - The passage gets a numbered comment bubble that stays with the text as you scroll. Selecting the bubble opens a card to comment on the passage or remove it.
+  - The composer counts what is waiting.
+  - The agent receives a numbered Markdown list, each passage quoted with its comment, ahead of the typed text.
+
+  Added `ChatShell.Transcript`, the conversation's reading column. It is positioned, so overlays such as annotation bubbles travel with the text.
+
+  **Usage**
+
+  Mount `ChatAnnotationsProvider` once per conversation, below whatever remounts when the thread changes. Render `TranscriptAnnotations` in `ChatShell.Transcript` and `ComposerAnnotations` in the composer inside `ChatShell.Dock`; adding an annotation focuses that composer's `ComposerInput`. Format the outgoing message with `takeAnnotations()`, and count waiting `annotations` as content when enabling Send, so they can go out without typed text.
+
+  ```tsx
+  import { useState } from 'react';
+  import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
+  import { ComposerBox, ComposerInput } from '@mastra/playground-ui/components/Composer';
+  import {
+    ChatAnnotationsProvider,
+    ComposerAnnotations,
+    formatAnnotatedMessage,
+    TranscriptAnnotations,
+    useChatAnnotations,
+  } from '@mastra/playground-ui/components/ai/annotations';
+
+  function Thread({ messages }) {
+    return (
+      <ChatAnnotationsProvider>
+        <ChatShell>
+          <ChatShell.Stage>
+            <ChatShell.Viewport>
+              <ChatShell.Content>
+                <ChatShell.Transcript>
+                  <TranscriptAnnotations />
+                  {messages}
+                </ChatShell.Transcript>
+              </ChatShell.Content>
+              <ChatShell.Dock>
+                <MessageComposer />
+              </ChatShell.Dock>
+            </ChatShell.Viewport>
+          </ChatShell.Stage>
+        </ChatShell>
+      </ChatAnnotationsProvider>
+    );
+  }
+
+  function MessageComposer() {
+    const [draft, setDraft] = useState('');
+    const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
+
+    const submit = () => {
+      const taken = takeAnnotations();
+      send(formatAnnotatedMessage(draft, taken)).catch(() => restoreAnnotations(taken));
+    };
+
+    return (
+      <ComposerBox>
+        <ComposerAnnotations />
+        <ComposerInput value={draft} onChange={event => setDraft(event.target.value)} />
+        <button type="button" disabled={!draft.trim() && annotations.length === 0} onClick={submit}>
+          Send
+        </button>
+      </ComposerBox>
+    );
+  }
+  ```
+
+### Patch Changes
+
+- Fixed button labels wrapping onto a second line inside their pill when space is tight. Labels now stay on one line. ([#29444](https://github.com/mastra-ai/mastra/pull/29444))
+
+- Dashboard widgets now keep their saved widths on any screen wide enough for the 12-column grid, so a row of three or four cards no longer wraps onto a second line below 1280px. Cards in a row now share one height, so a card whose title wraps no longer stands taller than its neighbours. Narrow screens still stack every widget. ([#29337](https://github.com/mastra-ai/mastra/pull/29337))
+
+  `DashboardRenderer` accepts an optional `dragHandle` prop that returns the drag props for each widget id. When a widget has them, a grip appears left of its title, including on cards that failed to render and beside KPI groups. Widget kinds receive the same props as `dragHandle`, and `ChartCard` and the new `MetricsCard.DragHandle` render the grip.
+
+- Improved markdown chat tables in Factory and Studio with highlighted headers, softly faded row dividers, and rounded hover backgrounds. Added a small gap below the header and hide adjacent dividers while a row is hovered or focused. ([#29300](https://github.com/mastra-ai/mastra/pull/29300))
+
+- Fixed the `panelRef` type on `CollapsiblePanel`: it now requires an object ref (for example from `useRef` or `usePanelRef`), since the panel reads `.current` to collapse and expand. Passing a callback ref was accepted by the types but did not work. ([#29341](https://github.com/mastra-ai/mastra/pull/29341))
+
+- Fixed `MessageScroller` losing the end of the thread when its last row is hidden: "jump to latest" now appears when you scroll up and brings you back to the last visible message. ([#29241](https://github.com/mastra-ai/mastra/pull/29241))
+
+- Improved scrolling performance of `MessageScroller` and `ThreadRail` on long threads with thousands of messages. ([#28713](https://github.com/mastra-ai/mastra/pull/28713))
+
+- `ProviderLogo` now shows a real brand mark or a neutral monogram for every vendor in the Gateway model catalog. Vendors without a logo no longer render the generic models.dev placeholder. ([#29448](https://github.com/mastra-ai/mastra/pull/29448))
+
+  - Added colored bundled marks for Tencent, ByteDance (including `bytedance-seed`), Sakana, Microsoft, Amazon (Nova), Cohere, Perplexity, Fireworks, StepFun, Meituan (LongCat), Upstage, Morph, and a Nous Research mark.
+  - Only models.dev logos verified to be real are requested. Any other provider shows a monogram sized by the same icon tokens.
+
+  ```tsx
+  <ProviderLogo providerId="tencent" size="md" />
+  <ProviderLogo providerId="aion-labs" size="md" />
+  ```
+
+- Fixed task list scroll fades so they start at the card edge. Rows now scroll gradually out of view through the padding instead of disappearing into a blank band. ([#29315](https://github.com/mastra-ai/mastra/pull/29315))
+
+- Fixed long option labels being cut off in `Combobox`. Labels and descriptions now wrap and stop at two lines instead of truncating on one. A new `popupWidth` prop (`sm`, `md`, `lg`, `xl`) gives a compact trigger a wider, fixed popup for long options such as model ids. Without it the popup keeps the trigger's width. ([#28851](https://github.com/mastra-ai/mastra/pull/28851))
+
+  ```tsx
+  <Combobox options={modelOptions} popupWidth="lg" />
+  ```
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`314e6bc`](https://github.com/mastra-ai/mastra/commit/314e6bca2523f46fdb35a051b1d1d671fd9038ec), [`b28ed08`](https://github.com/mastra-ai/mastra/commit/b28ed08077f4b4649d863f7671fb9eff7d920651), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`b28ed08`](https://github.com/mastra-ai/mastra/commit/b28ed08077f4b4649d863f7671fb9eff7d920651), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+  - @mastra/client-js@1.60.0-alpha.0
+  - @mastra/memory@1.41.1-alpha.0
+  - @mastra/react@1.15.0-alpha.0
+  - @mastra/ai-sdk@1.11.3
+
 ## 68.0.0
 
 ### Minor Changes

@@ -789,12 +789,12 @@ describe('__subscribeToRunStream()', () => {
     await transport.close();
   });
 
-  it('forwards frames without the cache-assigned sequencing fields', async () => {
+  it('forwards each frame with its run-log index so observers can resume after it', async () => {
     const { durable, pubsub, transport } = await observedAgent();
     const runId = 'subscribed-run';
 
     // Published before the observer attaches, so this frame reaches it out of the
-    // topic history — the path that hands an event its `index`.
+    // topic history; the second arrives live. Both must carry their log position.
     await emitChunkEvent(pubsub, runId, textChunk('replayed'));
 
     const events: any[] = [];
@@ -805,10 +805,7 @@ describe('__subscribeToRunStream()', () => {
       [AgentStreamEventTypes.CHUNK, 'replayed', undefined],
       [AgentStreamEventTypes.CHUNK, 'live', undefined],
     ]);
-    // They exist for subscribers of the topic, not for the payload observe forwards.
-    for (const event of events) {
-      expect(event).not.toHaveProperty('index');
-    }
+    expect(events.map(event => event.index)).toEqual([0, 1]);
     await unsubscribe();
     await transport.close();
   });
