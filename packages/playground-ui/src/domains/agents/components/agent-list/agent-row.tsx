@@ -1,7 +1,8 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { useRef } from 'react';
-import type { SyntheticEvent } from 'react';
+import type { ReactNode, SyntheticEvent } from 'react';
 import { extractPrompt } from '../../utils/extract-prompt';
+import type { AgentsListColumn } from './agents-list';
 import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';
@@ -13,7 +14,11 @@ import { useLinkComponent } from '@/lib/framework';
 export interface AgentRowProps {
   agent: GetAgentResponse;
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
+  showColumn?: (column: AgentsListColumn) => boolean;
+  extraCell?: ReactNode;
 }
+
+const showAll = () => true;
 
 // Trailing cells host popovers: a click there must open the popover, not
 // activate the row. Same for the link itself, whose native click already
@@ -25,12 +30,13 @@ const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
  * `useDataListKeyboard({ global: true })`: the wrapper owns focus/roving and
  * forwards activation to the inner link via `linkRef.current.click()`.
  */
-export function AgentRow({ agent, rowProps }: AgentRowProps) {
+export function AgentRow({ agent, rowProps, showColumn = showAll, extraCell }: AgentRowProps) {
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
 
+  const description = agent.description?.replace(/\s+/g, ' ').trim();
   const instructions = extractPrompt(agent.instructions).replace(/\s+/g, ' ').trim();
-  const purpose = instructions || 'No instructions provided.';
+  const purpose = description || instructions || 'No instructions provided.';
 
   return (
     <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
@@ -56,15 +62,24 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
       <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
         <AgentProviderDetails agentName={agent.name} provider={agent.provider} modelId={agent.modelId} />
       </DataList.Cell>
-      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
-        <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
-      </DataList.Cell>
-      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
-        <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
-      </DataList.Cell>
-      <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
-        <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
-      </DataList.Cell>
+      {showColumn('workflows') ? (
+        <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+          <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
+        </DataList.Cell>
+      ) : null}
+      {showColumn('agents') ? (
+        <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+          <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
+        </DataList.Cell>
+      ) : null}
+      {showColumn('tools') ? (
+        <DataList.Cell className="justify-center overflow-visible" onClick={stopPropagation}>
+          <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
+        </DataList.Cell>
+      ) : null}
+      {extraCell !== undefined ? (
+        <DataList.Cell className="justify-center overflow-visible">{extraCell}</DataList.Cell>
+      ) : null}
     </DataList.RowWrapper>
   );
 }

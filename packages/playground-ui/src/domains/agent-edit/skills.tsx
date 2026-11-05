@@ -1,17 +1,20 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Txt } from '@/ds/components/Txt';
+import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
-import type { AgentBuilderEditFormValues } from '../../../schemas';
+import type { AgentEditFormValues } from './types';
 
-interface SkillsProps {
+export interface SkillsProps {
   editable?: boolean;
   availableSkills?: StoredSkillResponse[];
+  /** Host-supplied control shown at the end of each skill row (e.g. an edit button). */
+  renderSkillAction?: (skill: StoredSkillResponse) => ReactNode;
 }
 
-export const Skills = ({ editable = true, availableSkills = [] }: SkillsProps) => {
-  const { setValue, getValues, watch } = useFormContext<AgentBuilderEditFormValues>();
+export const Skills = ({ editable = true, availableSkills = [], renderSkillAction }: SkillsProps) => {
+  const { setValue, getValues, watch } = useFormContext<AgentEditFormValues>();
   const selected = watch('skills') ?? {};
 
   const toggle = (id: string, next: boolean) => {
@@ -29,8 +32,11 @@ export const Skills = ({ editable = true, availableSkills = [] }: SkillsProps) =
             const isChecked = Boolean(selected[skill.id]);
 
             return (
-              <li key={skill.id}>
-                <SkillItem skill={skill} editable={editable} onToggle={toggle} isChecked={isChecked} />
+              <li key={skill.id} className="flex items-center gap-2 pr-2">
+                <div className="min-w-0 flex-1">
+                  <SkillItem skill={skill} editable={editable} onToggle={toggle} isChecked={isChecked} />
+                </div>
+                {renderSkillAction?.(skill)}
               </li>
             );
           })}

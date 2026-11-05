@@ -1,6 +1,6 @@
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { useFormContext, useWatch } from 'react-hook-form';
-import type { AgentBuilderEditFormValues } from '../../../schemas';
+import type { AgentEditFormValues } from './types';
 
 export interface InstructionsProps {
   editable?: boolean;
@@ -8,7 +8,7 @@ export interface InstructionsProps {
 }
 
 export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsProps) => {
-  const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
+  const { setValue, control } = useFormContext<AgentEditFormValues>();
   const draftInstructions = useWatch({ control, name: 'instructions' }) ?? '';
   const displayedPrompt = editable ? draftInstructions : (fallbackPrompt ?? draftInstructions);
 
@@ -25,10 +25,11 @@ export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsPr
         value={displayedPrompt}
         onChange={handleChange}
         language="markdown"
+        variant="embedded"
         editable={editable}
         placeholder="You are a helpful assistant"
         showCopyButton={false}
-        className="min-h-0 w-full rounded-none border-0 bg-transparent p-0 [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-y-auto"
+        className="min-h-0 w-full [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-y-auto"
       />
     </div>
   );
