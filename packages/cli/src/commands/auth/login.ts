@@ -18,6 +18,10 @@ export async function loginAction() {
     }
   }
   const interactive = isInteractive();
+  if (!interactive && process.env.MASTRA_API_TOKEN) {
+    console.info('\nMASTRA_API_TOKEN is set, so commands here already use it. Browser sign-in is not needed.\n');
+    return;
+  }
   if (!interactive) {
     console.warn(
       '\nNo interactive terminal detected, so browser sign-in may not finish here.\n' +

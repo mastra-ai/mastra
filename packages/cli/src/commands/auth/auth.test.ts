@@ -226,6 +226,21 @@ describe('loginAction', () => {
       expect(warnSpy.mock.invocationCallOrder[hintIndex]).toBeLessThan(mockLogin.mock.invocationCallOrder[0]!);
     });
 
+    it('skips browser sign-in when MASTRA_API_TOKEN is already set', async () => {
+      mockLoadCredentials.mockResolvedValue(null);
+      vi.stubEnv('MASTRA_API_TOKEN', 'env-token');
+      try {
+        const { loginAction } = await import('./login.js');
+        await loginAction();
+
+        expect(mockLogin).not.toHaveBeenCalled();
+        expect(tokenHintCallIndex()).toBe(-1);
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('MASTRA_API_TOKEN is set'));
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('fails with the MASTRA_API_TOKEN fallback when browser sign-in does not complete', async () => {
       mockLoadCredentials.mockResolvedValue(null);
       const { LoginCancelledError } = await import('./credentials.js');
