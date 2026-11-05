@@ -120,7 +120,7 @@ const FIRST_ASKED_AT = '2026-10-27T12:00:05.000Z';
 const SECOND_ASKED_AT = '2026-10-27T12:01:10.000Z';
 
 const card = () => screen.queryByTestId('mcp-input-request');
-const chipText = () => screen.getByTestId('mcp-task-chip').textContent;
+const chipStatus = () => within(screen.getByTestId('mcp-task-chip')).getByText(/^task /).textContent;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -131,7 +131,7 @@ describe('a deferred call whose MCP task asks for input', () => {
       renderWithProviders(<Shell props={deferredCall} />);
 
       expect(await screen.findByText('Include the draft figures in the Q3 report?')).toBeTruthy();
-      expect(chipText()).toContain('task · input required');
+      expect(chipStatus()).toBe('task input required');
 
       const request = await screen.findByTestId('mcp-input-request');
       fireEvent.change(within(request).getByRole('textbox'), { target: { value: 'use final numbers' } });
@@ -143,7 +143,7 @@ describe('a deferred call whose MCP task asks for input', () => {
         suspendedAt: SUSPENDED_AT,
       });
       await waitFor(() => expect(card()).toBeNull(), { timeout: BEFORE_NEXT_POLL_MS });
-      expect(chipText()).toContain('task · working');
+      expect(chipStatus()).toBe('task working');
     });
 
     it.each([
@@ -178,13 +178,13 @@ describe('a deferred call whose MCP task asks for input', () => {
       await events.emit(suspendedEvent());
 
       expect(await screen.findByText('Include the draft figures in the Q3 report?')).toBeTruthy();
-      expect(chipText()).toContain('task · input required');
+      expect(chipStatus()).toBe('task input required');
 
       backend.task = backgroundTask('running');
       await events.emit(resumedEvent);
 
       await waitFor(() => expect(card()).toBeNull());
-      expect(chipText()).toContain('task · working');
+      expect(chipStatus()).toBe('task working');
     });
   });
 
@@ -216,7 +216,7 @@ describe('a deferred call whose MCP task asks for input', () => {
 
       const request = await screen.findByTestId('mcp-input-request');
       expect(within(request).getByText('Include the draft figures in the Q3 report?')).toBeTruthy();
-      expect(chipText()).toContain('task · input required');
+      expect(chipStatus()).toBe('task input required');
 
       fireEvent.click(within(request).getByRole('button', { name: 'Decline' }));
       await waitFor(() => expect(backend.resumes).toHaveLength(1));
@@ -379,6 +379,43 @@ describe('a deferred call whose server asks for more than Studio shows', () => {
   });
 });
 
+describe('a deferred call whose request keys share names with object built-ins', () => {
+  it('answers each one and sends every answer', async () => {
+    // Built from JSON so `__proto__` is an own key, as it is when the payload arrives over the wire.
+    const payload = JSON.parse(
+      JSON.stringify({
+        ...confirmRequest,
+        requests: {},
+      }).replace(
+        '"requests":{}',
+        '"requests":{"constructor":{"method":"elicitation/create","params":{"message":"First?","mode":"url","url":"https://a.example.com"}},"__proto__":{"method":"elicitation/create","params":{"message":"Second?","mode":"url","url":"https://b.example.com"}}}',
+      ),
+    ) as McpInputRequestPayload;
+    expect(Object.keys(payload.requests)).toEqual(['constructor', '__proto__']);
+    const backend = serveBackground(suspendedBackgroundTask(payload));
+    renderWithProviders(<Shell props={deferredCall} />);
+
+    const request = await screen.findByTestId('mcp-input-request');
+    const done = (key: string) =>
+      within(within(request).getByRole('region', { name: `Input request ${key}` })).getByRole('button', {
+        name: 'Done',
+      });
+    expect(done('constructor')).toHaveProperty('disabled', false);
+    expect(done('__proto__')).toHaveProperty('disabled', false);
+
+    fireEvent.click(done('constructor'));
+    expect(backend.resumes).toHaveLength(0);
+    fireEvent.click(done('__proto__'));
+
+    await waitFor(() => expect(backend.resumes).toHaveLength(1));
+    const sent = (backend.resumes[0] as { resumeData: { inputResponses: Record<string, unknown> } }).resumeData
+      .inputResponses;
+    expect(Object.keys(sent)).toEqual(['constructor', '__proto__']);
+    expect(Object.getOwnPropertyDescriptor(sent, 'constructor')?.value).toEqual({ action: 'accept' });
+    expect(Object.getOwnPropertyDescriptor(sent, '__proto__')?.value).toEqual({ action: 'accept' });
+  });
+});
+
 describe('a live deferred call with no MCP task progress yet', () => {
   it('shows input required on the chip while its task waits', async () => {
     serveBackground(suspendedBackgroundTask());
@@ -389,7 +426,7 @@ describe('a live deferred call with no MCP task progress yet', () => {
     );
 
     await screen.findByTestId('mcp-input-request');
-    await waitFor(() => expect(chipText()).toContain('task · input required'));
+    await waitFor(() => expect(chipStatus()).toBe('task input required'));
   });
 });
 
@@ -409,7 +446,7 @@ describe('a foreground call whose MCP task asks for input', () => {
     renderWithProviders(<Shell props={foregroundCall} approveToolcall={approveToolcall} />);
 
     const request = await screen.findByTestId('mcp-input-request');
-    expect(chipText()).toContain('task · input required');
+    expect(chipStatus()).toBe('task input required');
     fireEvent.click(within(request).getByRole('button', { name: 'Decline' }));
 
     expect(approveToolcall).toHaveBeenCalledWith('call-1', { inputResponses: { confirm: { action: 'decline' } } });

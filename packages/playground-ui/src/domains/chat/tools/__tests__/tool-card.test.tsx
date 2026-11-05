@@ -352,6 +352,60 @@ describe('ToolCard dispatch', () => {
     expect(screen.getByTestId('sandbox-execution-badge')).toBeTruthy();
   });
 
+  describe('when a command exits non-zero after printing output', () => {
+    it('reads as failed, says how it exited, and shows the error only its result carries', () => {
+      renderToolCard(
+        baseProps({
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pnpm build' },
+          output: 'building\n\nError: sandbox connection lost\nExit code: -1',
+          dataParts: [
+            {
+              type: 'data',
+              name: 'sandbox-stdout',
+              data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-1' },
+            },
+            { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, toolCallId: 'call-1' } },
+          ],
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('exit -1')).toBeTruthy();
+      fireEvent.click(within(line).getByRole('button', { name: /Run/ }));
+      expect(within(line).getByText(/Error: sandbox connection lost/)).toBeTruthy();
+    });
+  });
+
+  describe('when the sandbox could not run a command after it printed output', () => {
+    it('says it errored and shows the whole error, even one with blank lines in it', () => {
+      const error = 'Request failed with status 502\n\n<html>Bad Gateway</html>';
+      renderToolCard(
+        baseProps({
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pnpm build' },
+          output: `building\n\nError: ${error}\nExit code: -1`,
+          dataParts: [
+            {
+              type: 'data',
+              name: 'sandbox-stdout',
+              data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-1' },
+            },
+            { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, error, toolCallId: 'call-1' } },
+          ],
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('error')).toBeTruthy();
+      expect(within(line).queryByText('exit -1')).toBeNull();
+      fireEvent.click(within(line).getByRole('button', { name: /Run/ }));
+      expect(within(line).getByText(/Error: Request failed with status 502/)).toBeTruthy();
+    });
+  });
+
   it('routes code-mode calls to the code mode badge', () => {
     renderToolCard(
       baseProps({

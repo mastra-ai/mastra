@@ -14,7 +14,7 @@ The `.listMemory()` method returns all memory instances registered with the Mast
 ## Usage example
 
 ```typescript
-const memoryInstances = mastra.listMemory()
+const memoryInstances = mastra.listMemory() ?? {}
 
 for (const [key, memory] of Object.entries(memoryInstances)) {
   console.log(`Memory "${key}": ${memory.id}`)
@@ -31,7 +31,7 @@ This method takes no parameters.
   content={[
   {
     name: 'memory',
-    type: 'Record<string, MastraMemory>',
+    type: 'Record<string, MastraMemory> | undefined',
     description: 'An object containing all registered memory instances, keyed by their registry keys.',
   },
 ]}
@@ -62,7 +62,7 @@ const mastra = new Mastra({
 })
 
 // List all registered memory instances
-const allMemory = mastra.listMemory()
+const allMemory = mastra.listMemory() ?? {}
 console.log(Object.keys(allMemory)) // ["conversationMemory", "analyticsMemory"]
 ```
 

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -30,7 +31,13 @@ export function CandidateCardRows({
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <Txt as="span" variant="meta" tone="faint" className="truncate pr-16">
-          {candidate.meta}
+          <Metadata singleLine>
+            {candidate.meta.map((part, index) => (
+              <Metadata.Item key={index} className={index === 0 ? 'shrink-0' : undefined}>
+                {part}
+              </Metadata.Item>
+            ))}
+          </Metadata>
         </Txt>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />

@@ -17,6 +17,7 @@ import type {
 
 import { Badge } from '@/ds/components/Badge';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 const ACTIVITY_LABELS: Record<KnowledgeActivityAction, string> = {
@@ -297,7 +298,9 @@ export function KnowledgePageDetail({
   notesMore,
   childPages,
   activity,
+  compact = false,
 }: {
+  compact?: boolean;
   page: KnowledgePagePayload;
   notes: KnowledgeNotePayload[];
   pin?: KnowledgePinPayload;
@@ -334,8 +337,14 @@ export function KnowledgePageDetail({
   const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
 
   return (
-    <article aria-label={page.name} className="flex min-h-0 flex-col overflow-y-auto">
-      <header className="flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4">
+    <article aria-label={page.name} className="@container flex min-h-0 flex-col overflow-y-auto">
+      <header
+        className={
+          compact
+            ? 'flex flex-col gap-3 border-b border-surface-rim px-4 pt-3 pb-4'
+            : 'flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4'
+        }
+      >
         {ancestors.length > 0 ? (
           <nav aria-label="Breadcrumb">
             <ol className="flex flex-wrap items-center gap-1">
@@ -343,7 +352,7 @@ export function KnowledgePageDetail({
                 <li key={ancestor.id} className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="text-ui-sm rounded px-1 py-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
+                    className="rounded px-1 py-0.5 text-caption text-muted-foreground hover:bg-fill hover:text-foreground"
                     onClick={() => onPageClick(ancestor)}
                   >
                     {ancestor.name}
@@ -370,9 +379,11 @@ export function KnowledgePageDetail({
               </Badge>
             ) : null}
           </div>
-          <Txt as="h2" variant="title" className="break-words">
-            {page.name}
-          </Txt>
+          {compact ? null : (
+            <Txt as="h2" variant="title" className="break-words">
+              {page.name}
+            </Txt>
+          )}
           {page.description ? (
             <Txt variant="body" tone="muted">
               {page.description}
@@ -404,15 +415,20 @@ export function KnowledgePageDetail({
             <dt className="sr-only">Version</dt>
             <dd>
               <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
-                Version {page.version} · updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
+                <Metadata>
+                  <Metadata.Item>Version {page.version}</Metadata.Item>
+                  <Metadata.Item>
+                    Updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
+                  </Metadata.Item>
+                </Metadata>
               </Txt>
             </dd>
           </div>
         </dl>
       </header>
 
-      <div className="grid gap-8 p-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="flex min-w-0 flex-col gap-8">
+      <div className={`flex flex-col gap-8 ${compact ? 'p-4' : 'p-6'} @4xl:flex-row`}>
+        <div className="flex min-w-0 flex-col gap-8 @4xl:flex-1">
           {page.body ? (
             <div data-testid="knowledge-page-body" className="max-w-3xl">
               <BodyLinks.Provider value={bodyLinks}>
@@ -461,7 +477,7 @@ export function KnowledgePageDetail({
           </Section>
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-8">
+        <aside className="flex min-w-0 flex-col gap-8 @4xl:w-72 @4xl:shrink-0">
           {childPages ? <Section label="Pages">{childPages}</Section> : null}
 
           {mentionedBy.length > 0 ? (
@@ -494,7 +510,12 @@ export function KnowledgePageDetail({
                       {ACTIVITY_LABELS[event.action] ?? event.action}
                     </Txt>
                     <Txt as="span" variant="caption" tone="muted">
-                      {event.provenance.author} · <When iso={event.createdAt} />
+                      <Metadata>
+                        <Metadata.Item>{event.provenance.author}</Metadata.Item>
+                        <Metadata.Item>
+                          <When iso={event.createdAt} />
+                        </Metadata.Item>
+                      </Metadata>
                     </Txt>
                   </li>
                 ))}

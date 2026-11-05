@@ -1,5 +1,5 @@
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
-import { useCallback, useContext } from 'react';
+import { useCallback, useContext, useMemo } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
@@ -12,7 +12,12 @@ import { suspendedMcpInputRequest } from './mcp-input-request';
 import { SubmitPlanTool } from './submit-plan-tool';
 import { ToolResultMedia } from './tool-result-media';
 import type { MessageMetadata } from '@/domains/chat';
-import { ChatAgentContext, useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
+import {
+  ChatAgentContext,
+  useChatModelContext,
+  useChatRunning,
+  useChatSend,
+} from '@/domains/chat/context/chat-context';
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
 import { ObservationMarkerBadge } from '@/domains/chat/tools/badges/observation-marker-badge';
@@ -94,6 +99,11 @@ export const ToolCardInner = ({
     },
     [send],
   );
+  const setModelContext = useChatModelContext();
+  const handleMcpAppModelContext = useMemo(
+    () => setModelContext && ((context: string | undefined) => setModelContext(toolCallId, context)),
+    [setModelContext, toolCallId],
+  );
   useWorkflowStream(output);
 
   const kind = toolCardKind(
@@ -105,7 +115,7 @@ export const ToolCardInner = ({
     toolName,
     toolCallId,
   );
-  const status = badgeStatus(state, isRunning);
+  const status = badgeStatus({ toolName, toolCallId, state }, dataParts, isRunning);
   // Any deferred call, whatever its output looks like: live it holds the MCP task's progress records,
   // after a reload the "Background task started" placeholder.
   const deferredRequest = useDeferredInputRequest(
@@ -146,7 +156,15 @@ export const ToolCardInner = ({
         }
         break;
       case 'connect_prompt':
-        return <ConnectPromptTool output={output} readOnly={readOnly} />;
+        return (
+          <ConnectPromptTool
+            toolName={toolName}
+            toolCallId={toolCallId}
+            output={output}
+            metadata={metadata}
+            readOnly={readOnly}
+          />
+        );
       case 'submit_plan':
         return (
           <SubmitPlanTool
@@ -299,6 +317,7 @@ export const ToolCardInner = ({
           return (
             <KnowledgeToolBadge
               card={card}
+              args={input}
               toolName={toolName}
               metadata={metadata}
               toolCallId={toolCallId}
@@ -341,7 +360,9 @@ export const ToolCardInner = ({
             appInfo={mcpAppInfo}
             toolArgs={input}
             toolResult={output}
+            toolCallId={toolCallId}
             onSendMessage={handleMcpAppSendMessage}
+            onUpdateModelContext={handleMcpAppModelContext}
             readOnly={readOnly}
           />
         )}
