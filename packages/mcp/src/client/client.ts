@@ -479,6 +479,12 @@ export class InternalMastraMCPClient extends MastraBase {
   private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
+  /**
+   * The requestContext of the tool call whose execution opened the connection. Only the
+   * transport's fetch reads it, so the handshake and the streams the connection keeps open are
+   * sent as that call, while server logs arriving on those streams are not labelled with it.
+   */
+  private connectionContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
@@ -704,7 +710,7 @@ export class InternalMastraMCPClient extends MastraBase {
     const policyUserFetch =
       userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
-      const requestContext = this.operationContextStore.getStore() ?? null;
+      const requestContext = this.operationContextStore.getStore() ?? this.connectionContextStore.getStore() ?? null;
       const executeFetch = (): Promise<Response> => {
         if (allowedHosts === undefined) {
           return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
@@ -1820,13 +1826,15 @@ export class InternalMastraMCPClient extends MastraBase {
             workflow?: ToolSuspendHost;
           },
         ) => {
-          // A hydrated tool was rebuilt from cache without ever opening a connection, so the
-          // first execution is what establishes it. `connect()` is memoised.
-          if (serverMeta.connectFirst) {
-            await this.connect();
-          }
-
           const operationContext = context?.requestContext ?? null;
+
+          // A hydrated tool was rebuilt from cache without ever opening a connection, so the
+          // first execution is what establishes it. The connection context lets a custom fetch
+          // authenticate that handshake, and the streams the connection keeps open, as this call.
+          // `connect()` is memoised: concurrent first calls share the handshake of the first one.
+          if (serverMeta.connectFirst) {
+            await this.connectionContextStore.run(operationContext, () => this.connect());
+          }
 
           return this.operationContextStore.run(operationContext, async () => {
             const suspendHost = context?.agent ?? context?.workflow;

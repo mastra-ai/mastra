@@ -2041,7 +2041,7 @@ With hooks disabled, your application is responsible for closing MCP connections
 
 For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
-The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
+The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during a connection handshake that no tool call started, such as the one `listTools()` opens. When a tool call opens the connection, either because a tool rebuilt with `toolsFromDefinitions()` or `toolFromDefinition()` connects on its first execution or because the call reconnects, the handshake receives that call's `requestContext`. Streams the connection keeps open afterwards, such as the server-to-client event stream, keep using that same `requestContext`.
 
 When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
 
