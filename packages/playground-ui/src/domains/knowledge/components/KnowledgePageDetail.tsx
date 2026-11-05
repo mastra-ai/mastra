@@ -99,7 +99,7 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
       <button
         type="button"
         data-testid="knowledge-body-link"
-        className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+        className="rounded bg-badge-blue-subtle px-1 text-left font-medium wrap-anywhere text-badge-blue-foreground hover:underline"
         onClick={() => links.onPageClick(target)}
       >
         {target.name}
@@ -109,7 +109,7 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
     <KnowledgeTooltip label="No loaded page has this address">
       <span
         data-testid="knowledge-body-link-unresolved"
-        className="rounded border border-dashed border-border px-1 text-muted-foreground"
+        className="rounded border border-dashed border-border px-1 wrap-anywhere text-muted-foreground"
       >
         {ref}
       </span>
@@ -224,7 +224,7 @@ export function KnowledgeNoteItem({
             </Txt>
           ) : null}
         </div>
-        <p className="text-ui-md break-words text-foreground">
+        <p className="text-ui-md wrap-anywhere text-foreground">
           {parseRecordSegments(note.text).map((segment, index) => {
             if (segment.type === 'text') return <span key={index}>{segment.value}</span>;
             const target = mentionTarget(segment.value);
@@ -233,24 +233,24 @@ export function KnowledgeNoteItem({
                 <button
                   type="button"
                   data-testid="knowledge-note-link"
-                  className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+                  className="rounded bg-badge-blue-subtle px-1 text-left font-medium wrap-anywhere text-badge-blue-foreground hover:underline"
                   onClick={() => onPageClick(target)}
                 >
                   {target.name}
                 </button>
               </KnowledgeTooltip>
             ) : (
-              <span key={index} className="font-medium">
+              <span key={index} className="font-medium wrap-anywhere">
                 {segment.value}
               </span>
             );
           })}
         </p>
         {note.stampScopeIds.length > 0 ? (
-          <div className="flex flex-wrap gap-1" aria-label="Stamped to">
+          <div className="flex min-w-0 flex-wrap gap-1" aria-label="Stamped to">
             {note.stampScopeIds.map(id => (
-              <Badge key={id} variant="neutral" size="xs">
-                {scopeLabel(id)}
+              <Badge key={id} variant="neutral" size="xs" title={scopeLabel(id)}>
+                <span className="truncate">{scopeLabel(id)}</span>
               </Badge>
             ))}
           </div>

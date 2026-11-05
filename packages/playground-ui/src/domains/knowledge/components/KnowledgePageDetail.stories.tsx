@@ -143,3 +143,43 @@ export const Compact: Story = {
     ),
   ],
 };
+
+// An imported page whose name is its source's id, and a Linear document under a scope the explorer hasn't walked.
+const linearDoc = page('linear-doc', 'lin', {
+  scopeId: 'lin',
+  name: '464a18f3-2607-4619-b1fa-6820548f0719-incremental-discovery-benchmarks',
+  key: '464a18f3-2607-4619-b1fa-6820548f0719',
+});
+
+/** Importer relation notes naming pages by long, unbroken refs and names, stamped to the connection's scope. */
+export const LongImportedRefs: Story = {
+  args: {
+    pagesById: new Map([...pagesById, [linearDoc.id, linearDoc]]),
+    page: refunds,
+    ancestors: [org, policies],
+    notes: [
+      {
+        ...note(
+          'n3',
+          'Related: [[linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE#linear/document/464a18f3-2607-4619-b1fa-6820548f0719]] — This benchmark quantifies incremental discovery as a potential remedy.',
+          'importer:kimp_cbd1e92f-c828-41a8-a118-dc6cbd322a16/run:run_1',
+          1,
+          ['linear-doc'],
+        ),
+        stampScopeIds: ['linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE'],
+      },
+    ],
+    mentionedBy: [
+      {
+        ...note(
+          'm1',
+          'Related: [[linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE#linear/document/464a18f3-2607-4619-b1fa-6820548f0719]] — This benchmark quantifies incremental discovery as a potential remedy for the production CPU issue.',
+          'importer:kimp_cbd1e92f-c828-41a8-a118-dc6cbd322a16/run:run_1',
+          1,
+        ),
+        pageId: 'escalation',
+        stampScopeIds: ['linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE'],
+      },
+    ],
+  },
+};

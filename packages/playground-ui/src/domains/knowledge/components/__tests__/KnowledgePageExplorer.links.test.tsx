@@ -158,6 +158,46 @@ describe('KnowledgePageExplorer body links', () => {
     });
   });
 
+  describe('when a note holds an unbroken ref and is stamped to a long scope address', () => {
+    // A layout engine isn't available here, so these check the classes that keep the note inside its card.
+    const scope = 'linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE';
+    const longNote: KnowledgeNotePayload = {
+      ...pathNote,
+      text: `Related: [[${scope}#linear/document/464a18f3-2607-4619-b1fa-6820548f0719]] — benchmarks`,
+      mentions: [],
+      stampScopeIds: [scope],
+    };
+    const longSource: KnowledgeExplorerSource = {
+      ...source,
+      usePage: pageId => (pageId === 'overview' ? ok({ ...detail('overview'), notes: [longNote] }) : idle),
+    };
+
+    it('wraps the ref anywhere and truncates the stamp, naming the scope on hover', () => {
+      renderWithProviders(
+        <KnowledgePageExplorer
+          graph={graph}
+          source={longSource}
+          selectedPageId="overview"
+          onSelect={() => {}}
+          view="page"
+          onViewChange={() => {}}
+        />,
+      );
+      const notes = within(screen.getByRole('region', { name: 'Notes' }));
+      const ref = notes.getByText(`${scope}#linear/document/464a18f3-2607-4619-b1fa-6820548f0719`);
+      expect(ref.closest('p')?.className).toContain('wrap-anywhere');
+      const stamp = within(notes.getByLabelText('Stamped to')).getByText(scope);
+      expect(stamp.className).toContain('truncate');
+      expect(stamp.parentElement?.getAttribute('title')).toBe(scope);
+    });
+
+    it('lets a linked page name wrap inside the note', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      const notes = within(screen.getByRole('region', { name: 'Notes' }));
+      expect(notes.getByTestId('knowledge-note-link').className).toContain('wrap-anywhere');
+    });
+  });
+
   describe('when an imported page links a page nested in a scope the explorer has not loaded', () => {
     const ref = 'notion:acme:conn_1#roadmaps/3f2a9c1e0b7d4e5f8a6b';
     const plan = page('plan', 'roadmaps', {
