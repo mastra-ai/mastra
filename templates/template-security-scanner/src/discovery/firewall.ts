@@ -10,6 +10,7 @@ const canonical = (value: unknown): string =>
     }
     return item;
   });
+/** Verify the sandbox namespace firewall against the expected confined egress policy. */
 export function verifyFirewall(value: unknown, gatewayIp: string, port: number | readonly [number, number]) {
   z.ipv4().parse(gatewayIp);
   const allowedPorts = Array.isArray(port) ? port : [port];

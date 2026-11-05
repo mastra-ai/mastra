@@ -23,6 +23,7 @@ export async function initializeRetention(tx: Transaction) {
   );
 }
 
+/** Remove retained proof observations and propagate expired availability to linked findings and jobs. */
 async function expireProof(tx: Transaction, record: StoredProof, at: string) {
   const { observation: _removed, ...summary } = record.proof;
   const availability: EvidenceAvailability = { state: 'expired', at };
@@ -62,6 +63,7 @@ async function expireProof(tx: Transaction, record: StoredProof, at: string) {
 
 // Earlier records gain retention only from their exact recorded policy revision.
 // An unavailable historical policy remains explicitly unknown; no period is invented.
+/** Recover proof retention only from its exact historical policy, leaving missing history unknown. */
 async function backfillProofRetention(tx: Transaction) {
   const rows = await tx.execute(`SELECT data FROM scanner_verification_proofs
     WHERE json_type(data,'$.expiresAt') IS NULL ORDER BY rowid LIMIT ${RETENTION_BATCH_SIZE}`);
@@ -99,6 +101,7 @@ async function backfillProofRetention(tx: Transaction) {
   }
 }
 
+/** Delete one bounded batch of expired evidence and record retention progress or debt. */
 export async function purgeExpiredBatch(tx: Transaction, at: string) {
   const expired = await tx.execute({
     sql: `SELECT id,scan_id,owner FROM scanner_discovery_evidence

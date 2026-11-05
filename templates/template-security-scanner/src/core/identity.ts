@@ -22,6 +22,7 @@ export class DisabledIdentityTransport implements IdentityTransport {
   supports() {
     return false;
   }
+  /** Verify the expected principal through confined identity transport without exporting credentials. */
   async check(): Promise<IdentityObservation> {
     return { status: 'UNAVAILABLE', reason: 'REMOTE_IDENTITY_DISABLED' };
   }
@@ -43,6 +44,7 @@ const identityResponse = z
 
 // A trusted caller supplies its own already-listening fixture, never a request-provided URL.
 // This capability is limited to one literal IPv4 loopback socket and the fixed GET /identity route.
+/** Create identity transport confined to the explicitly owned loopback target boundary. */
 export function ownedLoopbackIdentityTransport(listener: Server): IdentityTransport {
   const address = listener.address();
   if (!address || typeof address === 'string' || address.address !== '127.0.0.1' || !listener.listening) {
@@ -55,6 +57,7 @@ export function ownedLoopbackIdentityTransport(listener: Server): IdentityTransp
       (profile.kind === 'bearer' || profile.kind === 'header') &&
       profile.identityEndpoint === endpoint &&
       listener.listening,
+    /** Verify the expected principal through confined identity transport without exporting credentials. */
     async check(profile, headers) {
       if (
         profile.kind === 'public' ||

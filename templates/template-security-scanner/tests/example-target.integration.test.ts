@@ -34,6 +34,7 @@ const inventory = async () => ({
   images: (await client.listImages({ all: true, filters: kindFilter })).map(item => item.Id).sort(),
 });
 
+/** Start the bundled example target in the selected mode and await its local readiness. */
 async function launchExample(mode: 'vulnerable' | 'protected') {
   const child = spawn('npm', ['run', 'example-target', ...(mode === 'protected' ? ['--', '--mode=protected'] : [])], {
     cwd: settings.root,
@@ -92,6 +93,7 @@ async function crashChild(exit: Promise<void>) {
   process.kill(receipt.pid, 'SIGKILL');
   await exit;
 }
+/** Stop the example process using its owned receipt and await child termination. */
 async function closeChild(exit: Promise<void>) {
   const receipt = JSON.parse(await readFile(join(settings.root, 'data/example-target/transport.json'), 'utf8')) as {
     pid: number;

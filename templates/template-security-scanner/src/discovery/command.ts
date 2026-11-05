@@ -66,6 +66,7 @@ export function restCommand(url: string, proxy: string): RestCommand {
     [katanaBrand]: true,
   };
 }
+/** Construct bounded Katana arguments for the authorized target and selected discovery mode. */
 export function katanaCommand(input: z.infer<typeof commandInput>): KatanaCommand {
   const { entryUrl, mode, proxy } = commandInput.parse(input);
   const args = [

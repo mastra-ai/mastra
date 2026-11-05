@@ -17,6 +17,7 @@ export type ModelFailureCode =
 
 // Only fixed SDK brands, official Mastra error IDs and native types classify a failure. Never inspect messages,
 // arbitrary names, stacks, response bodies or error serializations.
+/** Map provider or parsing failures to bounded operational codes without retaining raw model errors. */
 export function classifyModelFailure(error: unknown): {
   code: ModelFailureCode;
   sdkClass: string;

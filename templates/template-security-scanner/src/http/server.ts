@@ -38,6 +38,7 @@ import { BolaGatewayDriver, type BolaImageBuildHook, type BolaVerificationHook }
 import { MastraBolaModels, type BolaModels } from '../investigation/bola-models.js';
 import { registerBolaRoutes } from './bola-routes.js';
 
+/** Prepare separate domain and native Mastra storage before the control plane starts. */
 export async function initializeStorage(
   settings: Settings,
   processDue?: () => Promise<void>,
@@ -67,6 +68,7 @@ export async function startLocalServer(settings: Settings, port = settings.PORT)
   return startControlPlane(settings, port);
 }
 
+/** Start the protected local Hono/Mastra server and return its draining shutdown operation. */
 export async function startControlPlane(
   settings: Settings,
   port = settings.PORT,

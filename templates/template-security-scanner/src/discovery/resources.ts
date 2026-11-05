@@ -15,6 +15,7 @@ export class ScanResources {
   ) {
     this.client = dockerClient(settings);
   }
+  /** Persist a resource ownership intent before creating its corresponding runtime object. */
   async intent(kind: Exclude<OwnedResource['kind'], 'image'>, imageId?: string) {
     const token = randomUUID(),
       name = `scanner-${kind}-${token}`;
@@ -36,6 +37,7 @@ export class ScanResources {
     });
     return { container, resource: intent.resource };
   }
+  /** Create and record a scan-owned Docker network with its expected labels. */
   async network(internal: boolean) {
     const intent = await this.intent('network');
     const network = await this.client.createNetwork({
@@ -50,6 +52,7 @@ export class ScanResources {
     const prefix = subnet.slice(0, subnet.indexOf('/')).split('.').slice(0, 3).join('.');
     return { network, name: intent.name, address: (host: number) => `${prefix}.${host}`, resource: intent.resource };
   }
+  /** Check that actual Docker resources match the scan's persisted ownership receipt. */
   async verify(resource: OwnedResource) {
     if (resource.kind === 'image') {
       const reference = resource.imageId ?? resource.id;
@@ -77,6 +80,7 @@ export class ScanResources {
       throw new Error('RESOURCE_OWNERSHIP_CHANGED');
     return observed;
   }
+  /** Stop the scan's owned runtime resources while preserving cleanup error visibility. */
   async stop(resource: OwnedResource) {
     const observed = await this.verify(resource);
     if ('State' in observed && observed.State.Running) {
@@ -84,6 +88,7 @@ export class ScanResources {
       await this.client.getContainer(resource.id).wait();
     }
   }
+  /** Release only resources attributable to the scan's ownership and lifecycle receipts. */
   async cleanup(retainImageRecords = false) {
     let complete = true;
     for (const resource of (await this.store.resources(this.scanId)).reverse()) {
@@ -126,6 +131,7 @@ export class ScanResources {
     return complete;
   }
 }
+/** Reconcile interrupted scan resources using their persisted ownership and lifecycle receipts. */
 export async function reconcileScans(settings: Settings, store: DiscoveryStore) {
   // Instance ownership must already be held before this function is called.
   for (const scan of await store.interrupted()) {

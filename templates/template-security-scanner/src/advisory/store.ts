@@ -161,6 +161,7 @@ export class AdvisoryStore {
       return next;
     });
   }
+  /** Read the persisted advisory schedule and expose its current revision and next occurrence. */
   async scheduleStatus() {
     const row = await this.client.execute('SELECT data FROM scanner_advisory_schedule WHERE singleton=1');
     const events = await this.client.execute(
@@ -223,6 +224,7 @@ export class AdvisoryStore {
       }),
     );
   }
+  /** Read synchronization cursors, backoff and incomplete-coverage state from durable storage. */
   async checkpoint() {
     const result = await this.client.execute('SELECT * FROM scanner_advisory_checkpoint WHERE singleton = 1');
     const row = result.rows[0];
@@ -263,6 +265,7 @@ export class AdvisoryStore {
     });
     return result.rows.map(row => this.planningCandidateFromRow(row));
   }
+  /** Load the current advisory revision in the minimized form allowed for hypothesis planning. */
   async planningCandidate(id: string, revision: number): Promise<PlanningAdvisory> {
     const result = await this.client.execute({
       sql: "SELECT id,revision,detail FROM scanner_advisories WHERE id=? AND revision=? AND upstream_status='published'",
@@ -271,6 +274,7 @@ export class AdvisoryStore {
     if (!result.rows[0]) throw new ControlPlaneError('ADVISORY_NOT_CURRENT', 409);
     return this.planningCandidateFromRow(result.rows[0]);
   }
+  /** Project supported advisory metadata into bounded products and reference hostnames. */
   private planningCandidateFromRow(row: Record<string, unknown>): PlanningAdvisory {
     const detail = detailSchema.parse(JSON.parse(String(row.detail)));
     const affectedProducts: PlanningAdvisory['affectedProducts'] = [];
@@ -293,6 +297,7 @@ export class AdvisoryStore {
       referenceHosts,
     };
   }
+  /** Load an advisory by its canonical identifier and parse its persisted detail. */
   async get(id: string) {
     const result = await this.client.execute({
       sql: 'SELECT id,revision,record_revision,provider_modified_at,retrieved_at,upstream_status,triage_status,detail FROM scanner_advisories WHERE id = ?',
@@ -311,6 +316,7 @@ export class AdvisoryStore {
       detail: JSON.parse(String(row.detail)),
     };
   }
+  /** Resolve a normalized advisory identifier to its current canonical record. */
   async resolveAlias(alias: string) {
     const result = await this.client.execute({
       sql: 'SELECT id FROM scanner_advisory_aliases WHERE alias = ?',
@@ -351,6 +357,7 @@ export class AdvisoryStore {
       await tx.execute({ sql: 'INSERT INTO scanner_advisory_refresh_queue(advisory_id) VALUES (?)', args: [id] });
     });
   }
+  /** Import validated advisory details and advance the selected cursor in one transaction. */
   async importPage(kind: CursorKind, details: AdvisoryDetail[], nextCursor: string | null, refreshedId?: string) {
     const now = new Date().toISOString();
     if (refreshedId && details.length !== 1) throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);
@@ -448,6 +455,7 @@ export class AdvisoryStore {
     if ('canonicalChanged' in result) throw new ControlPlaneError('ADVISORY_CANONICAL_CHANGED', 503);
     return result;
   }
+  /** Insert a new source/reason pair and retain at most the newest 200 distinct diagnostics. */
   private async insertQuarantine(tx: Transaction, sourceId: string, reason: string, now: string) {
     await tx.execute({
       sql: `INSERT INTO scanner_advisory_quarantine(source_id,reason,occurred_at)
@@ -459,11 +467,13 @@ export class AdvisoryStore {
       'DELETE FROM scanner_advisory_quarantine WHERE id NOT IN (SELECT id FROM scanner_advisory_quarantine ORDER BY id DESC LIMIT 200)',
     );
   }
+  /** Retain one bounded source/reason diagnostic without duplicating an existing persisted pair. */
   async quarantineItem(sourceId: string, code: string) {
     const id = advisoryId.parse(sourceId).toUpperCase();
     if (!/^[A-Z0-9_]{1,80}$/.test(code)) throw new ControlPlaneError('ADVISORY_SYNC_INVALID', 503);
     await this.write(tx => this.insertQuarantine(tx, id, code, new Date().toISOString()));
   }
+  /** Persist bounded exponential retry state and retain a safe source diagnostic when available. */
   async markFailure(code: string, sourceId?: string) {
     const now = new Date().toISOString();
     const reason = /^[A-Z0-9_]{1,80}$/.test(code) ? code : 'ADVISORY_SYNC_INVALID';

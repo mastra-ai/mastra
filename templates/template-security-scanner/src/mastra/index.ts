@@ -4,6 +4,7 @@ import { hasMorphApiKey, type Settings } from '../config/settings.js';
 import { createInvestigationAgents } from './agents/investigation-agents.js';
 import { createInvestigationPlanningWorkflow, createAdvisorySyncWorkflow } from './workflows/schedules.js';
 
+/** Assemble the scanner's Mastra agents, tools, workflows and storage from validated services. */
 export function createMastra(
   settings: Settings,
   processDue?: () => Promise<void>,

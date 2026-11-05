@@ -21,6 +21,7 @@ import type { AdvisorySource } from '../../src/advisory/source.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const cleanup: Array<() => Promise<void>> = [];
+/** Close every registered discovery lab while collecting cleanup failures. */
 export async function closeDiscoveryLabs() {
   const failures: unknown[] = [];
   for (const close of cleanup.splice(0).reverse())
@@ -34,6 +35,7 @@ export async function closeDiscoveryLabs() {
 export function registerLabCleanup(close: () => Promise<void>) {
   cleanup.push(close);
 }
+/** Create the isolated Docker lab and protected application used by discovery journeys. */
 export async function startDiscoveryLab(
   options: {
     processMode?: boolean;
@@ -330,6 +332,7 @@ except Exception as e:
 }
 
 export type DiscoveryLab = Awaited<ReturnType<typeof startDiscoveryLab>>;
+/** Run one discovery scenario with bounded execution and owned-resource cleanup. */
 export async function discoveryCase(
   lab: DiscoveryLab,
   options: {
@@ -417,6 +420,7 @@ export async function discoveryCase(
   return { target, policy, profile, admit };
 }
 
+/** Execute a bounded command in the owned target fixture container. */
 export async function fixtureCommand(lab: DiscoveryLab, path: string) {
   if (
     !/^\/(?:dns\?mode=(?:allow|mixed|denied|rebind|mapped|cname|malformed|timeout|many)|expire\?role=viewer|ssrf-pair\?mode=(?:hold|release))$/.test(
@@ -432,6 +436,7 @@ export async function fixtureCommand(lab: DiscoveryLab, path: string) {
   expect(result.success).toBe(true);
 }
 
+/** Read actual Chromium control evidence from the owned sandbox. */
 export async function observeBrowserControls(lab: DiscoveryLab, scanId: string, signal: AbortSignal) {
   const observed = new Map<string, number>(),
     guard = new SecretGuard(Object.values(lab.privateValues));
@@ -483,6 +488,7 @@ export async function observeBrowserControls(lab: DiscoveryLab, scanId: string, 
   }
 }
 
+/** Start an owned host listener to detect forbidden gateway egress. */
 export async function hostGatewayCanary(lab: DiscoveryLab) {
   const counts = { tcp: 0, http: 0 };
   const server = createServer((request, response) => {

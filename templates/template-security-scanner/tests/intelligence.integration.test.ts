@@ -58,6 +58,7 @@ type Wire = {
   truncatedBody?: boolean;
   beforeSend?: () => Promise<void>;
 };
+/** Serve controlled advisory pages and details over real loopback HTTP while recording requests. */
 async function startAdvisoryFixture() {
   const pages = new Map<string, Wire>();
   const details = new Map<string, Wire>();
@@ -126,6 +127,7 @@ async function startAdvisoryFixture() {
   };
 }
 
+/** Wait until the persisted advisory backoff permits the next real synchronization attempt. */
 async function waitForAdvisoryRetry(app: Awaited<ReturnType<typeof startHarness>>) {
   const status = await app.request<{ nextRetryAt?: string | null }>('/api/advisories/status');
   const nextRetryAt = status.body.nextRetryAt;

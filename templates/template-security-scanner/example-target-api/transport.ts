@@ -44,6 +44,7 @@ export type ExampleReceipt = z.infer<typeof receiptSchema>;
 const home = (settings: Settings) => join(settings.dataDirectory, 'example-target');
 const receiptPath = (settings: Settings) => join(home(settings), 'transport.json');
 const imageTag = (settings: Settings) => `security-scanner/example-target:${ownerIdentity(settings).slice(-16)}`;
+/** Read a bounded build input after checking its ownership, permissions and file type. */
 async function readPrivateBuildFile(path: string, maxBytes: number) {
   try {
     const info = await lstat(path);
@@ -74,6 +75,7 @@ async function writeReceipt(settings: Settings, receipt: ExampleReceipt) {
   }
   await rename(temporary, path);
 }
+/** Load the private transport receipt, returning null only when it does not exist. */
 async function readReceipt(settings: Settings) {
   try {
     const path = receiptPath(settings),
@@ -92,6 +94,7 @@ async function readReceipt(settings: Settings) {
     throw error;
   }
 }
+/** Find the receipt-bound example image and verify its ownership and source labels. */
 async function inspectImage(client: Docker, settings: Settings, receipt: ExampleReceipt) {
   if (!receipt.sourceHash) return null;
   const image = await client.getImage(receipt.imageId ?? imageTag(settings)).inspect();
@@ -107,6 +110,7 @@ async function inspectImage(client: Docker, settings: Settings, receipt: Example
     throw new Error('EXAMPLE_IMAGE_CHANGED');
   return image;
 }
+/** Release only the example resources attributed to the supplied owner receipt. */
 async function cleanupExampleTransport(settings: Settings, receipt: ExampleReceipt) {
   if (receipt.owner !== ownerIdentity(settings)) throw new Error('EXAMPLE_OWNER_CHANGED');
   const client = dockerClient(settings);
@@ -190,6 +194,7 @@ async function cleanupExampleTransport(settings: Settings, receipt: ExampleRecei
   await rm(receiptPath(settings), { force: true });
 }
 
+/** Build the locally owned example image from its recorded source inputs. */
 async function buildImage(settings: Settings, receipt: ExampleReceipt) {
   const context = join(home(settings), 'build');
   await rm(context, { recursive: true, force: true });
@@ -372,6 +377,7 @@ async function buildImage(settings: Settings, receipt: ExampleReceipt) {
   return image.Id;
 }
 
+/** Start the example API behind the launch fence and persist its owned resource receipt. */
 async function startLockedExampleTransport(
   settings: Settings,
   mode: ExampleReceipt['mode'],
@@ -499,6 +505,7 @@ async function startLockedExampleTransport(
   }
 }
 
+/** Acquire the launch fence and start the requested vulnerable or protected example mode. */
 export async function startExampleTransport(settings: Settings, mode: ExampleReceipt['mode']) {
   const releaseLaunch = await acquireExampleLaunchLock(settings.root);
   try {
@@ -509,6 +516,7 @@ export async function startExampleTransport(settings: Settings, mode: ExampleRec
   }
 }
 
+/** Reconcile receipt-bound example resources while holding the launch fence. */
 export async function reconcileExampleTransport(settings: Settings) {
   const releaseLaunch = await acquireExampleLaunchLock(settings.root);
   try {
@@ -519,6 +527,7 @@ export async function reconcileExampleTransport(settings: Settings) {
   }
 }
 
+/** Validate the running example receipt before exposing its owned target boundary. */
 export async function readExampleBoundary(settings: Settings) {
   const receipt = await readReceipt(settings);
   if (!receipt) return undefined;

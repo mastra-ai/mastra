@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { RuntimeDiagnostic, type Settings } from '../config/settings.js';
 
+/** Create and validate the private data directory used by runtime state. */
 export async function prepareDataDirectory(settings: Settings) {
   await mkdir(settings.dataDirectory, { mode: 0o700 }).catch(error => {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
@@ -15,6 +16,7 @@ export async function prepareDataDirectory(settings: Settings) {
   await chmod(settings.dataDirectory, 0o700);
 }
 
+/** Run setup while holding the project lock and release it after success or failure. */
 export async function withSetupLock<T>(settings: Settings, operation: () => Promise<T>): Promise<T> {
   await prepareDataDirectory(settings);
   const path = join(settings.dataDirectory, 'setup.lock');

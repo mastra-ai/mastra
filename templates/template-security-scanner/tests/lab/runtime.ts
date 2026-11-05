@@ -57,6 +57,7 @@ async function save(settings: Settings, state: State) {
   }
   await rename(temporary, path);
 }
+/** Read the owned lab receipt after validating its private file boundary. */
 async function previous(settings: Settings) {
   try {
     const path = statePath(settings),
@@ -75,6 +76,7 @@ async function previous(settings: Settings) {
     throw error;
   }
 }
+/** Remove only the lab resources attributed to the validated runtime receipt. */
 async function cleanup(settings: Settings, state: State) {
   const client = dockerClient(settings);
   if (state.owner !== ownerIdentity(settings)) throw new Error('OWNED_LAB_OWNER_CHANGED');
@@ -127,6 +129,7 @@ async function cleanup(settings: Settings, state: State) {
 
 // Local operation uses a real fixture and real application. No scripted model
 // or finding response is connected; providers require the normal explicit opt-in.
+/** Start or reconcile the isolated target fixture from its persisted ownership state. */
 export async function startOwnedFixture(settings: Settings, signal?: AbortSignal) {
   signal?.throwIfAborted();
   await setup(settings, signal);

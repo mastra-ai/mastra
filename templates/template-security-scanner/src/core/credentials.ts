@@ -43,9 +43,11 @@ const associatedData = (binding: CredentialBinding) =>
   );
 export class CredentialVault {
   private readonly key?: Buffer;
+  /** Initialize credential encryption from the configured key or retain explicit unavailable-key state. */
   constructor(key?: string) {
     this.key = key ? Buffer.from(key, 'hex') : undefined;
   }
+  /** Encrypt a profile credential with its authenticated profile binding. */
   seal(value: unknown, binding: CredentialBinding) {
     if (!this.key || this.key.length !== 32) throw new ControlPlaneError('CREDENTIAL_KEY_REQUIRED', 503);
     const nonce = randomBytes(12);
@@ -65,6 +67,7 @@ export class CredentialVault {
       plaintext.fill(0);
     }
   }
+  /** Decrypt a credential only when its encryption key and authenticated profile binding match. */
   open(envelope: string, binding: CredentialBinding): unknown {
     try {
       if (!this.key || this.key.length !== 32) throw new Error();

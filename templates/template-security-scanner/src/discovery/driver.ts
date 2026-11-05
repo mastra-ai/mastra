@@ -56,6 +56,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
     private readonly store: DiscoveryStore,
     private readonly lab?: OwnedLabBoundary,
   ) {}
+  /** Run bounded discovery with confined identities, shared budgets and owned-resource cleanup. */
   async discover(
     scan: Scan,
     context: ScanContext,

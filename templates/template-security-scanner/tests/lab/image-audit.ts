@@ -27,6 +27,7 @@ export function secretScanner(values: string[]) {
 
 // Docker save may export legacy layer.tar entries or OCI blobs. Inspect every
 // file, decompress gzip layers, and reject unsupported compression explicitly.
+/** Inspect an exported image archive for forbidden credential representations in files and layers. */
 export async function auditImageArchive(stream: Readable, values: string[]) {
   const parser = extract();
   let archiveBytes = 0,
@@ -117,6 +118,7 @@ export async function auditImageArchive(stream: Readable, values: string[]) {
     parser.destroy();
   }
 }
+/** Exercise the image audit against a compressed layer containing a controlled marker. */
 export async function compressedLayerCanary() {
   const value = 'OWNED_IMAGE_SECRET_CANARY_f3af4d9f';
   const layer = pack();

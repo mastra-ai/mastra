@@ -110,6 +110,7 @@ export interface InvestigationModels {
 
 type AgentSet = { nemo: Agent; sherlock: Agent; dupin: Agent; watson: Agent };
 
+/** Build the trusted playbook catalogue and immutable planning limits sent to the models. */
 function planningContract(playbooks: Playbook[], authorized: PlanningLimits, limit: number) {
   const catalog = playbooks.map(item => ({
     category: item.category,
@@ -212,6 +213,7 @@ const usage = (response: { usage?: { totalTokens?: number } }) =>
     ? response.usage.totalTokens
     : null;
 
+/** Project a typed verification observation into the facts allowed at the model boundary. */
 function observationFacts(observation: Observation | undefined) {
   if (!observation) return null;
   switch (observation.category) {
@@ -281,6 +283,7 @@ function observationFacts(observation: Observation | undefined) {
   }
 }
 
+/** Export the minimized verification context after filtering credential-sensitive evidence. */
 export function sanitizedVerificationInput(proof: VerificationProof, playbook: Playbook) {
   if (
     proof.category !== playbook.category ||
@@ -310,6 +313,7 @@ export class MastraInvestigationModels implements InvestigationModels {
     private readonly explorerId: string,
     private readonly judgeId: string,
   ) {}
+  /** Send Nemo and Sherlock bounded evidence and the complete trusted catalogue within the shared input allowance. */
   async propose(
     scanId: string,
     evidence: Evidence[],

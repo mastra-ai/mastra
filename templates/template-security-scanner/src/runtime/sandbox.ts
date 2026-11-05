@@ -60,6 +60,7 @@ async function stagePrivateHeader(sandbox: DockerSandbox, signal: AbortSignal) {
   }
 }
 
+/** Probe the owned runtime for the required namespace, process and browser controls. */
 export async function probeSandbox(settings: Settings, receipt: ImageReceipt, abortSignal?: AbortSignal) {
   abortSignal?.throwIfAborted();
   const image = await inspectOwnedImage(settings, receipt.imageId, receipt.sourceHash);

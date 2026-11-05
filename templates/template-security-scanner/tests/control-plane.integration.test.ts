@@ -46,6 +46,7 @@ function policyBody(policy: Policy) {
   const { id, owner, revision, ...body } = policy;
   return body;
 }
+/** Build a bounded bearer or header profile for the owned identity endpoint. */
 function profileInput(origin: string, role: string, value: string, kind: 'bearer' | 'header' = 'bearer') {
   return {
     name: `${role} profile`,
@@ -60,6 +61,7 @@ function binding(profile: ProfileDto): IdentityBinding {
   const { targetRevision, policyRevision, profileId, profileRevision, credentialRevision } = profile.identity;
   return { targetRevision, policyRevision, profileId, profileRevision, credentialRevision };
 }
+/** Start an isolated protected control plane with optional real local identity transport. */
 async function startHarness(withFixture = true, sessionTtlSeconds = 1800) {
   const root = await mkdtemp(join(tmpdir(), 'security-scanner-control-'));
   cleanup.push(() => rm(root, { recursive: true, force: true }));

@@ -41,6 +41,7 @@ async function requestWithHost(url: string, host: string) {
   });
 }
 
+/** Run the real setup CLI with isolated settings and retain its bounded diagnostic outcome. */
 async function runSetupCli(root: string) {
   try {
     const output = await executeFile(
@@ -78,6 +79,7 @@ async function parentFingerprints(parent = resolve(templateRoot, '../..')) {
   );
 }
 
+/** Remove the exact test-owned image only after its consumers have stopped. */
 async function cleanOwnedTestImage(settings: ReturnType<typeof loadSettings>) {
   const client = dockerClient(settings);
   try {

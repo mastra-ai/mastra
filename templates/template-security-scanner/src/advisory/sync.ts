@@ -31,6 +31,7 @@ export class AdvisorySync {
     private readonly source: AdvisorySource,
   ) {}
 
+  /** Translate an upstream source error into a bounded synchronization-cycle failure. */
   private async fromSource<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -41,6 +42,7 @@ export class AdvisorySync {
     }
   }
 
+  /** Hydrate and persist one advisory page while carrying its deterministic item failures. */
   private async importPage(...args: Parameters<AdvisoryStore['importPage']>) {
     try {
       return await this.store.importPage(...args);
@@ -54,6 +56,7 @@ export class AdvisorySync {
     }
   }
 
+  /** Resolve valid page details while quarantining deterministic item failures and propagating source-wide failures. */
   private async hydratePage(
     kind: CursorKind,
     signal: AbortSignal,
@@ -92,6 +95,7 @@ export class AdvisorySync {
     return { ...imported, skipped };
   }
 
+  /** Execute one serialized advisory cycle and persist its completed or skipped outcome. */
   private async run(signal: AbortSignal) {
     let phase = 'status';
     let sourceId: string | undefined;
@@ -184,6 +188,7 @@ export class AdvisorySync {
     }
   }
 
+  /** Synchronize only when persisted backoff and the caller's cancellation state permit it. */
   private async runWhenDue() {
     const checkpoint = await this.store.checkpoint();
     if (this.closed) throw new ControlPlaneError('ADVISORY_SYNC_CLOSED', 503);
@@ -197,6 +202,7 @@ export class AdvisorySync {
     return this.run(signal);
   }
 
+  /** Poll head and rotation pages, refresh queued records and preserve incomplete-coverage semantics. */
   syncOnce() {
     if (this.closed) throw new ControlPlaneError('ADVISORY_SYNC_CLOSED', 503);
     if (this.active) throw new ControlPlaneError('ADVISORY_SYNC_BUSY', 409);

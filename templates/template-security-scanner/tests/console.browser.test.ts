@@ -233,6 +233,7 @@ async function noCredentialInBrowser(page: Page, marker: string) {
   expect(JSON.stringify(snapshot)).not.toContain(marker);
 }
 
+/** Poll a real asynchronous browser-side condition within the bounded attempt limit. */
 async function waitFor<T>(read: () => Promise<T | undefined>, attempts = 120): Promise<T> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const result = await read();

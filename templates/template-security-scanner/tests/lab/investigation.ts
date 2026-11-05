@@ -62,6 +62,7 @@ export async function resourceSnapshotProcess(
   });
 }
 
+/** Start the local model-wire fixture and record the requests crossing the SDK boundary. */
 export async function modelWire(scenario: Scenario) {
   const received: unknown[] = [];
   let releaseInterpret: () => void = () => {};
@@ -196,6 +197,7 @@ export async function modelWire(scenario: Scenario) {
   return { models, received, scenario, interpretStarted, releaseInterpret };
 }
 
+/** Complete an owned discovery scan and return the persisted evidence for investigation tests. */
 export async function ownedScan(
   lab: DiscoveryLab,
   path: string,
@@ -287,6 +289,7 @@ export async function investigation(lab: DiscoveryLab, scan: Scan, maxRequests =
   return admitted.data as { id: string; revision: number; state: string; usedRequests: number };
 }
 
+/** Wait for a verification job to reach a terminal state and return its stored result. */
 export async function completedJob(lab: DiscoveryLab, investigationId: string) {
   for (let attempt = 0; attempt < 900; attempt++) {
     const jobs = await lab.request(`/api/investigations/${investigationId}/jobs`);

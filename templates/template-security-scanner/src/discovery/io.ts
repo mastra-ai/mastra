@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import { pack, extract } from 'tar-stream';
 import { setTimeout as pause } from 'node:timers/promises';
 
+/** Stage bounded private runtime files inside the owned sandbox. */
 export async function stageFiles(
   container: Docker.Container,
   files: Record<string, { bytes: Buffer; mode?: number }>,
@@ -36,6 +37,7 @@ export async function stageFiles(
     for (const file of Object.values(files)) file.bytes.fill(0);
   }
 }
+/** Read a bounded sandbox file without enabling retained native command output. */
 export async function readRuntimeFile(
   container: Docker.Container,
   path: '/workspace/gateway-stats.json' | '/workspace/ca/mitmproxy-ca-cert.pem' | '/workspace/lab-root.pem',
@@ -77,6 +79,7 @@ export async function readRuntimeFile(
 }
 // Only fixed diagnostic commands call this helper. It never receives Katana or
 // a credential-bearing command; discovery uses the private pull pipe instead.
+/** Send a typed gateway control operation and validate its bounded response. */
 export async function control(container: Docker.Container, args: string[], timeout = 5000, signal?: AbortSignal) {
   const joined = AbortSignal.any([AbortSignal.timeout(timeout), ...(signal ? [signal] : [])]);
   const execution = await container.exec({

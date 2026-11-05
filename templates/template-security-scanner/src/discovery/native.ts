@@ -5,6 +5,7 @@ import { inspectAppliedPolicy } from '../runtime/seccomp.js';
 
 // Reconnect is a supported provider API. Precreation adds a missing logging
 // control without changing the reviewed runtime's requested isolation options.
+/** Create native sandbox access restricted to the validated owned runtime boundary. */
 export async function privateNativeSandbox(
   client: Docker,
   options: Omit<ReturnType<typeof sandboxOptions>, 'labels'> & { labels: Record<string, string> },

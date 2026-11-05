@@ -237,6 +237,7 @@ export const targetSchema = z
         });
     }
   });
+/** Check a request path against the target's allowed and excluded path boundaries. */
 export function pathAllowed(path: string, scope: { allowedPaths: string[]; excludedPaths: string[] }) {
   const matches = (prefix: string) =>
     prefix === '/' || path === prefix || path.startsWith(`${prefix.replace(/\/$/, '')}/`);
@@ -396,6 +397,7 @@ export type Profile = ProfileMetadata<ProfileInput> & {
   /** Most recent identity check bound to the recorded revisions. */
   identityResult?: IdentityResult;
 };
+/** Validate a domain input and translate schema failures into a control-plane error. */
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new ControlPlaneError('INVALID_INPUT', 400);

@@ -52,6 +52,7 @@ export class RestJsonReader {
   ) {
     this.origin = new URL(target.entryUrl).origin;
   }
+  /** Fetch an authorized REST resource through the confined gateway within shared budgets. */
   private async read(path: string): Promise<ReadResult> {
     const canonical = canonicalReference(path, this.origin, this.target);
     if (!canonical || canonical !== path || !this.target.permittedMethods.includes('GET')) return null;
@@ -134,6 +135,7 @@ export class RestJsonReader {
     }
     return null;
   }
+  /** Persist a sanitized REST observation only when it is inside the authorized evidence boundary. */
   private emit(path: string, rule: RouteAccessRule, status?: number, linkedFrom?: string) {
     const observation = observationSchema.safeParse({
       kind: 'endpoint',
@@ -161,6 +163,7 @@ export class RestJsonReader {
     )
       this.observations.push(observation.data);
   }
+  /** Extract bounded in-scope API references from the configured discovery documents. */
   private references(value: unknown, detailRules: RouteAccessRule[]): Array<{ path: string; rule: RouteAccessRule }> {
     const arrays = Array.isArray(value)
       ? [value]
@@ -179,6 +182,7 @@ export class RestJsonReader {
     }
     return result;
   }
+  /** Resolve observed collection/detail links without inventing unobserved object identifiers. */
   private detailLinks(value: unknown, detailRules: RouteAccessRule[]) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
     const result: Array<{ path: string; rule: RouteAccessRule }> = [];
@@ -190,6 +194,7 @@ export class RestJsonReader {
     }
     return result.slice(0, 8);
   }
+  /** Discover authorized REST resources from supported documents and observed JSON links. */
   async discover(accessCheckPath?: string, identityOnly = false) {
     const rules = (this.target.routeAccessRules ?? []).filter(
       rule => rule.source === 'operator' && rule.method === 'GET',

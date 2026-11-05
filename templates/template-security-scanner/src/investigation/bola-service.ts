@@ -60,6 +60,7 @@ export class BolaAssessmentService {
   get enabled() {
     return Boolean(this.models && this.scans.enabled);
   }
+  /** Reconcile an interrupted BOLA verification job against its durable assessment state. */
   private async reconcileVerificationJob(owner: string, id: string) {
     const assessment = await this.store.get(id, owner);
     if (!assessment.verificationJobId) return true;
@@ -79,6 +80,7 @@ export class BolaAssessmentService {
     });
     return complete;
   }
+  /** Initialize BOLA persistence and recover interrupted owned verification work. */
   async initialize(owner: string) {
     await this.store.initialize();
     await this.store.purgeExpired();
@@ -102,6 +104,7 @@ export class BolaAssessmentService {
       }));
     }
   }
+  /** Fence BOLA admissions and drain active work before closing its runtime state. */
   close() {
     if (this.closePromise) return this.closePromise;
     if (this.retentionTimer) clearInterval(this.retentionTimer);
@@ -117,6 +120,7 @@ export class BolaAssessmentService {
     })();
     return this.closePromise;
   }
+  /** Cancel an owned BOLA assessment and await active verification settlement. */
   async cancel(owner: string, id: string, revision: number) {
     const assessmentId = parse(idSchema, id);
     const requested = await this.store.requestCancel(assessmentId, owner, revision);
@@ -140,6 +144,7 @@ export class BolaAssessmentService {
       return { ...current, state: 'CANCELLED', reason: 'BOLA_CANCELLED' };
     });
   }
+  /** Fence and drain affected BOLA work while the supplied domain mutation executes. */
   async coordinateMutation<T>(
     scope: MutationScope,
     validate: () => Promise<void>,
@@ -171,6 +176,7 @@ export class BolaAssessmentService {
     this.mutations = operation.catch(() => undefined);
     return operation;
   }
+  /** Serialize assessment admission so shutdown and mutations cannot race new work. */
   admit(owner: string, targetId: string, input: unknown): Promise<BolaAssessment> {
     if (this.closing.signal.aborted) return Promise.reject(new ControlPlaneError('SERVER_CLOSING', 503));
     const operation = this.admissionQueue.then(() => this.admitOpen(owner, targetId, input));
@@ -182,6 +188,7 @@ export class BolaAssessmentService {
     );
     return operation;
   }
+  /** Reject new BOLA work once service shutdown has fenced admissions. */
   private async rejectClosingAdmission(
     owner: string,
     scanId: string,
@@ -203,6 +210,7 @@ export class BolaAssessmentService {
     }
     throw new ControlPlaneError('SERVER_CLOSING', 503);
   }
+  /** Settle the assessment when its associated discovery scan could not be admitted. */
   private async cleanupFailedScanAdmission(owner: string, scanId: string) {
     const deadline = Date.now() + 15000;
     for (let attempt = 0; ; attempt++) {
@@ -217,6 +225,7 @@ export class BolaAssessmentService {
       }
     }
   }
+  /** Validate and persist a new assessment while its admission fence remains open. */
   private async admitOpen(owner: string, targetId: string, input: unknown) {
     if (this.closing.signal.aborted) throw new ControlPlaneError('SERVER_CLOSING', 503);
     if (!this.enabled) throw new ControlPlaneError('BOLA_ASSESSMENT_DISABLED', 503);
@@ -341,6 +350,7 @@ export class BolaAssessmentService {
     admitted.start();
     return assessment;
   }
+  /** Rebuild the assessment's current revision-bound execution context. */
   private async current(owner: string, assessment: BolaAssessment) {
     const scan = await this.scans.store.get(assessment.scanId, owner);
     if (scan.state !== 'COMPLETED' || scan.partial || scan.cleanup !== 'COMPLETE')
@@ -385,11 +395,13 @@ export class BolaAssessmentService {
       modelEvents: [...value.modelEvents, { role, modelId, usageTokens }],
     }));
   }
+  /** Reject verification when the assessment is cancelled or no longer active. */
   private requireActive(value: BolaAssessment): BolaAssessment {
     if (value.state === 'CANCEL_REQUESTED' || value.state === 'CANCELLED')
       throw new ControlPlaneError('BOLA_CANCELLED', 409);
     return value;
   }
+  /** Execute admitted BOLA discovery and verification through persisted terminal settlement. */
   private async run(owner: string, id: string, signal: AbortSignal) {
     const workSignal = AbortSignal.any([signal, this.closing.signal, AbortSignal.timeout(180000)]);
     try {

@@ -59,11 +59,13 @@ export class BolaGatewayDriver {
     private readonly verificationHook?: BolaVerificationHook,
     private readonly imageBuildHook?: BolaImageBuildHook,
   ) {}
+  /** Release the exact owned resources retained by a BOLA verification job. */
   async cleanupJob(jobId: string) {
     const resources = new ScanResources(this.settings, this.discoveryStore, jobId);
     const cleaned = await resources.cleanup();
     return cleaned && (await this.discoveryStore.resources(jobId)).length === 0;
   }
+  /** Verify the observed collection/detail candidate with isolated role reads and bounded evidence. */
   async verify(scan: Scan, candidate: BolaCandidate, jobId: string, signal: AbortSignal): Promise<BolaProof> {
     const context = await this.control.store.write(tx =>
       this.control.scanContext(scan.owner, scan.targetId, scan.request, tx),

@@ -20,6 +20,7 @@ import { ScanResources } from '../../src/discovery/resources.js';
 import { INPUT_LABEL } from '../../src/runtime/docker.js';
 import { startDiscoveryLab } from './harness.js';
 
+/** Verify shared-image consumers protect each other's resources throughout cleanup. */
 export async function sharedImageLifecycle() {
   const lab = await startDiscoveryLab();
   const store = new DiscoveryStore(lab.settings.databaseUrl);
@@ -86,6 +87,7 @@ export async function sharedImageLifecycle() {
   }
 }
 
+/** Verify classic-builder artifacts and shared consumers are reconciled without broad deletion. */
 export async function legacySharedImageLifecycle() {
   const root = await mkdtemp(join(tmpdir(), 'scanner-legacy-image-'));
   const home = join(root, 'home');

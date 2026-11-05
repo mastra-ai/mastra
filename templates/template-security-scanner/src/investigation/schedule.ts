@@ -11,6 +11,7 @@ const weekdays = new Map([
 ]);
 const ranges = [59, 23, 31, 12, 6] as const;
 
+/** Parse the supported five-field cron subset or return null for unsupported expressions. */
 export function parseCron(cron: string): (number | null)[] | null {
   const parts = cron.split(' ');
   if (parts.length !== 5) return null;
@@ -29,6 +30,7 @@ export function parseCron(cron: string): (number | null)[] | null {
   return values;
 }
 
+/** Extract timezone-local calendar fields used when matching scheduled occurrences. */
 function localFields(date: Date, formatter: Intl.DateTimeFormat) {
   const parts = Object.fromEntries(formatter.formatToParts(date).map(part => [part.type, part.value]));
   return {
@@ -40,6 +42,7 @@ function localFields(date: Date, formatter: Intl.DateTimeFormat) {
   };
 }
 
+/** Find the next supported cron occurrence in the specified timezone within the bounded search. */
 export function nextOccurrence(cron: string, timezone: string, after: Date): Date {
   const values = parseCron(cron);
   if (!values) throw new Error('INVALID_CRON');

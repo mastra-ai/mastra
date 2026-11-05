@@ -1,5 +1,6 @@
 import { Loading, Notice, Section, Status, useData } from './ui';
 
+/** Load runtime readiness and distinguish pending, unavailable and actionable diagnostic states. */
 export function RuntimeState() {
   const data = useData<{
     operation: { state: string; detail: string | null; at: string | null };

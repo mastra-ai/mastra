@@ -21,6 +21,7 @@ const receiptSchema = z
     scanApproval: z.literal('operator-enablement-required'),
   })
   .strict();
+/** Hash discovery-relevant source files for runtime capability binding. */
 async function sourceHash(settings: Settings) {
   const source = (await readdir(join(settings.root, 'src'), { recursive: true }))
     .filter(path => path.endsWith('.ts'))
@@ -75,6 +76,7 @@ export async function prepareDiscoveryCapability(settings: Settings, signal?: Ab
     await releaseDiscoveryImages(dockerClient(settings), settings, images);
   }
 }
+/** Reject discovery until runtime capability evidence matches the current inputs and policy. */
 export async function requireDiscoveryCapability(settings: Settings, mode: DiscoveryMode) {
   if (!settings.SCANNER_DISCOVERY_ENABLED) throw new ControlPlaneError('EXECUTION_DISABLED', 503);
   await preflight(settings);

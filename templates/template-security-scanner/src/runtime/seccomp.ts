@@ -10,6 +10,7 @@ export function policyDigest(serialized: string) {
   return createHash('sha256').update(serialized).digest('hex');
 }
 
+/** Load and verify the bounded pinned seccomp policy for the selected runtime platform. */
 export function loadSandboxPolicy(settings: Pick<Settings, 'root'>) {
   let bytes: Buffer;
   try {
@@ -37,6 +38,7 @@ export function loadSandboxPolicy(settings: Pick<Settings, 'root'>) {
   return { profile, serialized, fileSha256: SECCOMP_FILE_SHA256, policySha256: SECCOMP_POLICY_SHA256 };
 }
 
+/** Compare observed seccomp state with the policy required for the running sandbox. */
 export function inspectAppliedPolicy(securityOptions: string[] | undefined) {
   const options = securityOptions?.filter(option => option.startsWith('seccomp=')) ?? [];
   let digest: string | undefined;

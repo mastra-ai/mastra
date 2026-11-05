@@ -71,6 +71,7 @@ export class DiscoveryStore {
     });
     await this.purgeExpired().catch(() => undefined);
   }
+  /** Load a persisted scan only for its owning operator. */
   async get(id: string, owner: string, transaction?: Transaction): Promise<Scan> {
     const result = await (transaction ?? this.client).execute({
       sql: 'SELECT data FROM scanner_discovery_scans WHERE id=? AND owner=?',
@@ -131,6 +132,7 @@ export class DiscoveryStore {
       return next;
     });
   }
+  /** List the operator's scans using bounded pagination and supported target filtering. */
   async list(owner: string, limit: number, offset: number, targetId?: string) {
     const result = await this.client.execute({
       sql: `SELECT data FROM scanner_discovery_scans WHERE owner=?${targetId ? ' AND target_id=?' : ''} ORDER BY rowid DESC LIMIT ? OFFSET ?`,
@@ -138,6 +140,7 @@ export class DiscoveryStore {
     });
     return result.rows.map(row => scanSchema.parse(JSON.parse(String(row.data))));
   }
+  /** Find the newest completed scan whose retained evidence remains usable. */
   async latestUsable(owner: string, targetId: string): Promise<Scan | null> {
     const result = await this.client.execute({
       sql: `SELECT data FROM scanner_discovery_scans WHERE owner=? AND target_id=?
@@ -186,6 +189,7 @@ export class DiscoveryStore {
     });
     return result.rows.map(row => evidenceSchema.parse(JSON.parse(String(row.data))));
   }
+  /** Purge one bounded evidence-retention batch and preserve visible retry debt. */
   async purgeExpired() {
     try {
       const result = await this.write(tx => purgeExpiredBatch(tx, new Date().toISOString()));
@@ -202,6 +206,7 @@ export class DiscoveryStore {
       throw new ControlPlaneError('RETENTION_CLEANUP_FAILED', 503);
     }
   }
+  /** Report retained, expired and unknown evidence availability with recorded cleanup debt. */
   async retentionStatus() {
     const runs = await this.client.execute('SELECT * FROM scanner_retention_runs ORDER BY rowid DESC LIMIT 10');
     const pending = await this.client.execute({
@@ -228,6 +233,7 @@ export class DiscoveryStore {
       transaction.execute({ sql: 'DELETE FROM scanner_discovery_resources WHERE id=?', args: [id] }),
     );
   }
+  /** Read a scan's persisted runtime-resource receipts for lifecycle reconciliation. */
   async resources(scanId?: string): Promise<OwnedResource[]> {
     const result = await this.client.execute({
       sql: `SELECT data FROM scanner_discovery_resources${scanId ? ' WHERE scan_id=?' : ''} ORDER BY rowid`,

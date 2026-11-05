@@ -44,6 +44,7 @@ const inputs = inputSchema.parse(
 );
 await preflight(settings);
 if (inputs.platform !== settings.DOCKER_PLATFORM) throw new Error('VALIDATION_PLATFORM_UNSUPPORTED');
+/** Create a private test directory and reject unsafe existing filesystem entries. */
 async function directory(path: string) {
   await mkdir(path, { recursive: true, mode: 0o700 });
   const stat = await lstat(path);

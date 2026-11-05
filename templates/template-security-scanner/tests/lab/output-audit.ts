@@ -27,6 +27,7 @@ function auditSecrets(lab: DiscoveryLab) {
   ];
 }
 
+/** Inspect the owned lab images for credential leakage and return measured audit results. */
 async function imageAudit(lab: DiscoveryLab, images: string[]) {
   const measurements = [];
   for (const id of images) {
@@ -40,6 +41,7 @@ async function imageAudit(lab: DiscoveryLab, images: string[]) {
   }
   return measurements;
 }
+/** Inspect application persistence for forbidden credential representations. */
 async function persistenceAudit(lab: DiscoveryLab, guard: SecretGuard) {
   const inspected = [];
   for (const url of [lab.settings.databaseUrl, `file:${lab.settings.mastraDatabasePath}`]) {
@@ -94,6 +96,7 @@ async function nativeRetentionAudit(lab: DiscoveryLab, guard: SecretGuard) {
   }
 }
 
+/** Exercise model, telemetry, persistence and image output boundaries in the owned lab. */
 async function outputAndTelemetryAuditRun() {
   const wire = await modelWire({
     category: 'information_exposure',

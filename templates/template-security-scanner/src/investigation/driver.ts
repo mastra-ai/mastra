@@ -84,12 +84,14 @@ export class OwnedGatewayVerifier implements VerificationDriver {
     private readonly discoveryStore: DiscoveryStore,
     private readonly lab?: OwnedLabBoundary,
   ) {}
+  /** Recover interrupted verification resources from their persisted ownership receipts. */
   async recover(jobIds: string[]) {
     for (const id of jobIds) {
       if (!(await new ScanResources(this.settings, this.discoveryStore, id).cleanup()))
         throw new ControlPlaneError('VERIFICATION_CLEANUP_DEBT', 503);
     }
   }
+  /** Execute the allowlisted checker inside its authorized target and owned-resource boundary. */
   async verify(input: {
     jobId: string;
     scan: Scan;
@@ -510,6 +512,7 @@ export class OwnedGatewayVerifier implements VerificationDriver {
       if (!complete) throw new ControlPlaneError('VERIFICATION_CLEANUP_DEBT', 503);
     }
   }
+  /** Read the bounded owned callback receipt used to evaluate SSRF evidence. */
   private async callbackCount(resources: ScanResources, approvalId: string) {
     if (!this.lab) throw new ControlPlaneError('OWNED_LAB_REQUIRED', 403);
     const receipt = await control(resources.client.getContainer(this.lab.fixtureId), [

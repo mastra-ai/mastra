@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+/** Hash the selected source tree while excluding generated output and local runtime state. */
 export async function sourceDigest(root: string) {
   const files = [
     'package.json',

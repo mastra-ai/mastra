@@ -49,6 +49,7 @@ export const verificationProofSchema = z
 /** Sanitized deterministic proof; incomplete observations cannot confirm a finding. */
 export type VerificationProof = z.infer<typeof verificationProofSchema>;
 
+/** Classify bounded verification evidence without treating missing or withheld proof as confirmation. */
 export function deterministicOutcome(
   playbook: Playbook,
   proof: VerificationProof,

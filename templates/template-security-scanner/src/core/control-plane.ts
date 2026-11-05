@@ -31,6 +31,7 @@ const credentialSchema = z
     name: z.enum(['authorization', 'cookie', 'x-api-key', 'x-test-identity']).optional(),
   })
   .strict();
+/** Reject a mutation whose expected revision differs from the persisted record. */
 function requireRevision(actual: number, expected: number) {
   if (actual !== expected) throw new ControlPlaneError('REVISION_CONFLICT', 409);
 }
@@ -49,6 +50,7 @@ function currentBinding(target: Target, profile: Profile): IdentityBinding {
     credentialRevision: profile.credentialRevision,
   };
 }
+/** Reject an identity result whose recorded revision binding has changed. */
 function requireBinding(expected: IdentityBinding, current: IdentityBinding) {
   if (
     Object.keys(current).some(key => expected[key as keyof IdentityBinding] !== current[key as keyof IdentityBinding])
@@ -56,6 +58,7 @@ function requireBinding(expected: IdentityBinding, current: IdentityBinding) {
     throw new ControlPlaneError('REVISION_CONFLICT', 409);
   }
 }
+/** Reject application-specific settings on the legacy execution path. */
 function requireLegacyExecution(target: Target) {
   if (
     target.application !== undefined ||
@@ -64,6 +67,7 @@ function requireLegacyExecution(target: Target) {
   )
     throw new ControlPlaneError('APPLICATION_DRIVER_UNSUPPORTED', 403);
 }
+/** Resolve and validate the API-key driver bound to the selected target and profile. */
 function apiKeyDriver(target: Target, profile: Profile) {
   const driver = target.authenticationDrivers?.find(item => item.profileId === profile.id);
   if (profile.kind !== 'api_key_header' || driver?.kind !== 'api_key_header')
@@ -88,6 +92,7 @@ function apiKeyDriver(target: Target, profile: Profile) {
     throw new ControlPlaneError('ACCESS_CHECK_RULE_REQUIRED', 403);
   return driver;
 }
+/** Reject unsupported application and authentication combinations before execution. */
 function requireExecutableApplication(target: Target) {
   if (!target.application) return requireLegacyExecution(target);
   if (
@@ -104,6 +109,7 @@ function requireExecutableApplication(target: Target) {
     throw new ControlPlaneError('ROUTE_RULES_REQUIRED', 403);
   requireRouteRuleRevision(target, target.revision);
 }
+/** Require every operator route rule to match the target revision being executed. */
 function requireRouteRuleRevision(target: Pick<Target, 'routeAccessRules'>, revision: number) {
   if (target.routeAccessRules?.some(rule => rule.source === 'operator' && rule.operatorRevision !== revision))
     throw new ControlPlaneError('INVALID_INPUT', 400);
@@ -152,6 +158,7 @@ export class ControlPlane {
       return policy;
     });
   }
+  /** Load the target and policy owned by the requesting operator or reject access. */
   private async authorizeTarget(target: Target, transaction: Transaction) {
     const policy = await this.store.get<Policy>('policy', target.policyId, target.owner, transaction);
     requireRevision(policy.revision, target.policyRevision);
@@ -170,6 +177,7 @@ export class ControlPlane {
     }
     return policy;
   }
+  /** Load an operator-owned profile and reject a mismatched target binding. */
   private authorizeProfile(target: Target, profile: Pick<Profile, 'kind'> & { identityEndpoint?: string }) {
     if (profile.kind === 'public') return;
     if (profile.kind === 'api_key_header') {
@@ -186,6 +194,7 @@ export class ControlPlane {
       throw new ControlPlaneError('IDENTITY_SCOPE_DENIED', 403);
     }
   }
+  /** Validate target scope and policy binding before persisting its initial revision. */
   async createTarget(owner: string, input: unknown) {
     const data = parse(targetSchema, input);
     requireRouteRuleRevision(data, 1);
@@ -227,6 +236,7 @@ export class ControlPlane {
     });
     return this.profile(owner, targetId, result.id);
   }
+  /** Seal profile credentials and atomically update the target's profile binding. */
   private async persistProfile(
     owner: string,
     target: Target,
@@ -282,6 +292,7 @@ export class ControlPlane {
     });
     return this.profile(owner, targetId, id);
   }
+  /** Build current execution context from the authorized target, policy and requested profiles. */
   private async context(owner: string, targetId: string, profileId: string, transaction?: Transaction) {
     const target = await this.store.get<Target>('target', targetId, owner, transaction);
     const profile = await this.store.get<Profile>('profile', profileId, owner, transaction);
@@ -341,6 +352,7 @@ export class ControlPlane {
       target.authProfileIds.slice(offset, offset + limit).map(id => this.profile(owner, targetId, id)),
     );
   }
+  /** Apply an identity result only while its target, policy and profile revision binding remains current. */
   private async applyCheckIdentity(owner: string, targetId: string, id: string, input: unknown) {
     const binding = parse(bindingSchema, input);
     const { target, profile, policy } = await this.context(owner, targetId, id);
@@ -395,6 +407,7 @@ export class ControlPlane {
     );
     return this.profile(owner, targetId, id);
   }
+  /** Validate execution context and atomically persist scan admission with its durable job state. */
   async admitScan(owner: string, targetId: string, input: unknown): Promise<never> {
     const binding = parse(bindingSchema, input);
     const { target, profile, policy } = await this.context(owner, targetId, binding.profileId);
@@ -430,6 +443,7 @@ export class ControlPlane {
       await this.store.remove(kind, id, owner, revision, transaction);
     });
   }
+  /** Rebuild authorized scan context and reject stale revisions or identity bindings. */
   async scanContext(
     owner: string,
     targetId: string,
@@ -520,6 +534,7 @@ export class ControlPlane {
       }
     });
   }
+  /** Validate profile-specific credentials and identity configuration against the target boundary. */
   private async validateProfileData(
     target: Target,
     data: z.infer<typeof profileSchema>,

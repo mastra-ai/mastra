@@ -13,6 +13,7 @@ export class AdvisoryScheduler {
   initialize() {
     return this.sync.store.configureSchedule(this.settings);
   }
+  /** Run one due advisory schedule event while preventing overlapping scheduler ticks. */
   private async tick() {
     if (this.closed || !this.settings.SCANNER_ADVISORY_SYNC_ENABLED) return;
     const id = await this.sync.store.claimSchedule();
@@ -35,6 +36,7 @@ export class AdvisoryScheduler {
       );
     }
   }
+  /** Admit the due advisory event and persist its completed, skipped or failed outcome. */
   runDue() {
     if (this.closed || this.active) return this.active ?? Promise.resolve();
     const work = this.tick();

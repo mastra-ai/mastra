@@ -117,6 +117,7 @@ const initialView = (): View => {
   return views.find(view => view === hash) ?? 'overview';
 };
 
+/** Submit the local bootstrap credential and display typed sign-in failures. */
 function Login({ onLogin, initialError = '' }: { onLogin: (session: Session) => void; initialError?: string }) {
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
@@ -160,6 +161,7 @@ function Login({ onLogin, initialError = '' }: { onLogin: (session: Session) => 
   );
 }
 
+/** Render persisted runtime and advisory settings with their supported operator controls. */
 export function SettingsView() {
   const settings = useData<{
     discovery: { driver: string; requested: boolean };
@@ -277,6 +279,7 @@ export function SettingsView() {
   );
 }
 
+/** Render the selected console view with shared navigation callbacks. */
 function CurrentView({ view, navigate }: { view: View; navigate: (view: View) => void }) {
   if (view === 'overview')
     return (
@@ -300,6 +303,7 @@ function CurrentView({ view, navigate }: { view: View; navigate: (view: View) =>
 
 const priorSessionKey = 'scanner-prior-session';
 
+/** Manage authenticated console navigation and explicit sign-out failure state. */
 function Console({ session, onLogout }: { session: Session; onLogout: () => void }) {
   const [view, setView] = useState<View>(initialView);
   const [signOutError, setSignOutError] = useState('');
@@ -422,6 +426,7 @@ function Console({ session, onLogout }: { session: Session; onLogout: () => void
   );
 }
 
+/** Recover the local session and switch between authenticated console and sign-in views. */
 function App() {
   const [session, setSession] = useState<Session>();
   const [loginReason, setLoginReason] = useState('');

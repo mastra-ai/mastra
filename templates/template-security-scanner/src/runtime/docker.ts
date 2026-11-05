@@ -19,6 +19,7 @@ export function ownerIdentity(settings: Settings) {
   return `${IMAGE_OWNER}-${createHash('sha256').update(settings.root).digest('hex').slice(0, 16)}`;
 }
 
+/** Check local Docker connectivity and required runtime capabilities before preparing resources. */
 export async function preflight(settings: Settings) {
   if (Number(process.versions.node.split('.')[0]) !== 24) {
     throw new RuntimeDiagnostic('UNSUPPORTED_NODE', 'Select the Node version in .nvmrc before running this template.');
@@ -81,6 +82,7 @@ export type ImageReceipt = z.infer<typeof imageReceiptSchema>;
 
 // Classic Docker builds can retain a labeled parent below the final run-label
 // layer. Follow only the actual immutable parent chain with matching provenance.
+/** Resolve only image ancestors attributable to the expected owner and input identity. */
 export async function ownedImageChain(settings: Settings, imageId: string, sourceHash: string) {
   const client = dockerClient(settings),
     ids: string[] = [];
@@ -102,6 +104,7 @@ export async function ownedImageChain(settings: Settings, imageId: string, sourc
   return ids;
 }
 
+/** Remove attributed images without force or pruning, preserving images with active consumers. */
 export async function releaseOwnedImageIds(settings: Settings, ids: string[], sourceHash: string) {
   if (!cleanupImageIdsSchema.safeParse(ids).success)
     throw new RuntimeDiagnostic('IMAGE_ANCESTRY_BOUND', 'The owned image cleanup exceeded its bound.');
@@ -140,6 +143,7 @@ export async function releaseOwnedImageIds(settings: Settings, ids: string[], so
   return inUse ? ('in-use' as const) : ('removed' as const);
 }
 
+/** Inspect an image and reject mismatched ownership or input labels. */
 export async function inspectOwnedImage(settings: Settings, imageId: string, sourceHash?: string) {
   let image;
   try {
@@ -238,6 +242,7 @@ async function build(settings: Settings, sourceHash: string, runId: string, sign
   });
 }
 
+/** Build the owned runtime image and track attributable intermediate artifacts for cleanup. */
 export async function buildLocalImage(settings: Settings, signal?: AbortSignal): Promise<ImageReceipt> {
   signal?.throwIfAborted();
   const dockerfile = await readFile(join(settings.root, 'docker', 'discovery', 'Dockerfile'), 'utf8');
@@ -302,6 +307,7 @@ export async function buildLocalImage(settings: Settings, signal?: AbortSignal):
   });
 }
 
+/** Reconcile interrupted sandbox resources after validating their exact ownership labels. */
 export async function reconcileOwnedSandboxes(settings: Settings) {
   const client = dockerClient(settings);
   const containers = await client.listContainers({
@@ -321,6 +327,7 @@ export async function reconcileOwnedSandboxes(settings: Settings) {
   }
 }
 
+/** Release the owned runtime image according to retention policy and current consumer state. */
 export async function releaseImage(settings: Settings, receipt: ImageReceipt) {
   if (settings.DOCKER_RETAIN_SHARED_BASE_IMAGE) return 'retained' as const;
   const ids = receipt.cleanupImageIds ?? (await ownedImageChain(settings, receipt.imageId, receipt.sourceHash));

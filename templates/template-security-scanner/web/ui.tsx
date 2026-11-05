@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError, get } from './api';
 
+/** Load revision-independent API data while discarding obsolete responses and marking retained failures stale. */
 export function useData<T>(path: string) {
   const [state, setState] = useState<{ path: string; data?: T; error: string; loading: boolean }>({
     path,
@@ -52,10 +53,12 @@ export function useData<T>(path: string) {
   };
 }
 
+/** Expose a typed API error code or a bounded generic request failure. */
 export function errorCode(error: unknown) {
   return error instanceof ApiError ? error.code : 'REQUEST_FAILED';
 }
 
+/** Display a readable operational failure with optional retry and stale-data context. */
 export function Notice({ code, onRetry, stale = false }: { code: string; onRetry?: () => void; stale?: boolean }) {
   if (!code) return null;
   const message =
@@ -105,6 +108,7 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
 
+/** Render a status label using the recognized success, warning and failure tones. */
 export function Status({ value }: { value: string }) {
   const tone = /^(COMPLETED|CONFIRMED|READY|approved|published|closed)$/.test(value)
     ? 'good'
@@ -116,6 +120,7 @@ export function Status({ value }: { value: string }) {
   return <span className={`status ${tone}`}>{value.replaceAll('_', ' ')}</span>;
 }
 
+/** Format a valid persisted timestamp and show an empty marker for unavailable values. */
 export function Time({ value }: { value?: string | null }) {
   if (!value) return <span className="muted">—</span>;
   const date = new Date(value);
@@ -126,6 +131,7 @@ export function Time({ value }: { value?: string | null }) {
   );
 }
 
+/** Render bounded previous and next controls from the current result page. */
 export function Pager({
   offset,
   count,
@@ -152,6 +158,7 @@ export function Pager({
   );
 }
 
+/** Render the modal form boundary and route supported close interactions to its owner. */
 export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);

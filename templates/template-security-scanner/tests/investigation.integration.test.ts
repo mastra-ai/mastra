@@ -58,6 +58,7 @@ afterEach(async () => {
   for (const close of openFixtures.splice(0).reverse()) await close();
 });
 
+/** Serve a local advisory feed and record the real HTTP requests used by investigation tests. */
 async function advisoryWire() {
   const id = 'CVE-2026-42420';
   const requests: string[] = [];
@@ -140,6 +141,7 @@ async function processClaim(databaseUrl: string, leaseMs = 5000) {
   return result;
 }
 
+/** Build a queued hypothesis bound to the supplied persisted investigation and scan evidence. */
 function queuedHypothesis(
   investigation: Investigation,
   scan: Scan,
@@ -172,11 +174,13 @@ function queuedHypothesis(
   };
 }
 
+/** Process the stored recurrence at the selected due or not-yet-due boundary. */
 async function tickRecurrenceAtNextWindow(store: InvestigationStore, targetId: string, due: boolean) {
   const events = await store.tickSchedules('local-operator', new Date(Date.now() + 180000));
   expect(events.filter(event => event.targetId === targetId)).toHaveLength(due ? 1 : 0);
 }
 
+/** Persist terminal scan history to verify scheduling rejects unusable evidence. */
 async function seedNonusableScanHistory(scan: Scan, databaseUrl: string) {
   const client = createClient({ url: databaseUrl });
   const transaction = await client.transaction('write');
@@ -220,6 +224,7 @@ async function seedNonusableScanHistory(scan: Scan, databaseUrl: string) {
   }
 }
 
+/** Wait for the registered profile's actual expiry before exercising authorization checks. */
 async function awaitProfileExpiry(expiresAt: string) {
   const remaining = Date.parse(expiresAt) - Date.now();
   if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining + 100));

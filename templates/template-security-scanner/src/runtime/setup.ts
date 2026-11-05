@@ -7,6 +7,7 @@ import { prepareDiscoveryCapability } from '../discovery/capability.js';
 import { acquireInstance } from '../discovery/instance.js';
 import { recoverInterruptedRestore } from './operations.js';
 
+/** Validate supported runtime settings before preparing and probing the owned local sandbox. */
 export async function setup(settings: Settings = loadSettings(), signal?: AbortSignal) {
   if (settings.DOCKER_PLATFORM !== 'linux/arm64')
     throw new RuntimeDiagnostic(

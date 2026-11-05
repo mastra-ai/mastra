@@ -19,6 +19,7 @@ async function temporarySettings() {
   return { root, settings: loadSettings({}, root) };
 }
 
+/** Persist a real native Mastra memory thread for storage separation and restore assertions. */
 async function saveNativeThread(store: LibSQLStore, id: string) {
   const memory = await store.getStore('memory');
   if (!memory) throw new Error('NATIVE_MEMORY_STORE_MISSING');

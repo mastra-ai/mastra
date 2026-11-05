@@ -14,6 +14,7 @@ const seedSchema = z.object({
 });
 export type ExampleSeed = z.infer<typeof seedSchema>;
 export const keyVerifier = (key: string) => createHash('sha256').update(key, 'utf8').digest('hex');
+/** Create and verify the private data directory used by the bundled example API. */
 async function exampleHome(root: string) {
   const data = join(root, 'data');
   await mkdir(data, { mode: 0o700, recursive: true });
@@ -29,6 +30,7 @@ async function exampleHome(root: string) {
   await chmod(home, 0o700);
   return home;
 }
+/** Acquire the example launch fence and return its asynchronous release function. */
 export async function acquireExampleLaunchLock(root: string) {
   await exampleHome(root);
   const canonicalRoot = await realpath(root);
@@ -53,6 +55,7 @@ export async function acquireExampleLaunchLock(root: string) {
       listener.close(error => (error ? reject(new Error('EXAMPLE_LOCK_RELEASE_FAILED')) : resolve()));
     });
 }
+/** Read the example seed only from a bounded, private file owned by the current user. */
 async function readSeed(path: string) {
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o600)
@@ -60,6 +63,7 @@ async function readSeed(path: string) {
   return seedSchema.parse(JSON.parse(await readFile(path, 'utf8')));
 }
 
+/** Load or create the example accounts and order data under the protected data directory. */
 export async function initializeExampleData(root: string): Promise<ExampleSeed> {
   const home = await exampleHome(root);
   const dbHome = join(home, 'db');

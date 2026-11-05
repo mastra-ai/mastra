@@ -127,6 +127,7 @@ export class RuntimeDiagnostic extends Error {
   }
 }
 
+/** Validate environment settings and resolve runtime paths beneath the selected project root. */
 export function loadSettings(environment: NodeJS.ProcessEnv = process.env, root = process.cwd()) {
   const parsed = environmentSchema.safeParse(environment);
   if (!parsed.success) {
@@ -157,12 +158,14 @@ export function loadSettings(environment: NodeJS.ProcessEnv = process.env, root 
 /** Validated runtime settings with absolute application/native storage paths. */
 export type Settings = ReturnType<typeof loadSettings>;
 
+/** Convert an unknown runtime error into a safe diagnostic without exporting raw error details. */
 export function diagnostic(error: unknown) {
   return error instanceof RuntimeDiagnostic
     ? { code: error.code, message: error.message }
     : { code: 'RUNTIME_FAILURE', message: 'Runtime operation failed. Check local prerequisites and retry.' };
 }
 
+/** Report whether a nonempty Morph credential is available without exposing its value. */
 export function hasMorphApiKey(environment: NodeJS.ProcessEnv = process.env) {
   return typeof environment.MORPH_API_KEY === 'string' && environment.MORPH_API_KEY.trim().length > 0;
 }
@@ -175,6 +178,7 @@ export function morphModelDescriptor(settings: Settings) {
   };
 }
 
+/** Build Morph model configuration only when its required credential is available. */
 export function morphModelConfiguration(settings: Settings, environment: NodeJS.ProcessEnv = process.env) {
   if (!hasMorphApiKey(environment))
     throw new RuntimeDiagnostic('MORPH_API_KEY_REQUIRED', 'Set MORPH_API_KEY before enabling investigation models.');

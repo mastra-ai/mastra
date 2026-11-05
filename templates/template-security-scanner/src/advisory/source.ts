@@ -11,6 +11,7 @@ const ghsaCdnPath =
 const isRedirect = (status: number) => status >= 300 && status < 400;
 const redirectDenied = () => new ControlPlaneError('ADVISORY_REDIRECT_DENIED', 503);
 
+/** Read upstream JSON within the response limit and reject incompatible or malformed bodies. */
 async function boundedJson(response: Response): Promise<unknown> {
   if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     void response.body?.cancel().catch(() => undefined);
@@ -43,6 +44,7 @@ async function boundedJson(response: Response): Promise<unknown> {
     throw new ControlPlaneError('ADVISORY_JSON_INVALID', 503);
   }
 }
+/** Parse an upstream value with the supplied schema or raise a typed advisory failure. */
 function validated<T>(schema: z.ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
   if (!parsed.success) throw new ControlPlaneError('ADVISORY_SCHEMA_UNKNOWN', 503);
@@ -52,6 +54,7 @@ function validated<T>(schema: z.ZodType<T>, value: unknown): T {
 export class AdvisorySource {
   private readonly base: URL;
   private readonly fixture: boolean;
+  /** Bind the advisory client to validated source origins and its bounded request policy. */
   constructor(
     base = OFFICIAL,
     fixture = false,
@@ -64,6 +67,7 @@ export class AdvisorySource {
         throw new ControlPlaneError('ADVISORY_SOURCE_DENIED', 403);
     } else if (this.base.href !== `${OFFICIAL}/`) throw new ControlPlaneError('ADVISORY_SOURCE_DENIED', 403);
   }
+  /** Fetch an advisory resource with timeout, redirect and response-size enforcement. */
   private async request(path: string, signal?: AbortSignal) {
     const url = new URL(path, this.base);
     if (url.origin !== this.base.origin) throw new ControlPlaneError('ADVISORY_SOURCE_DENIED', 403);
@@ -79,6 +83,7 @@ export class AdvisorySource {
     }
     return response;
   }
+  /** Read and validate the upstream advisory service status response. */
   async status(signal?: AbortSignal) {
     const response = await this.request('/api/v1/status', signal);
     if (isRedirect(response.status)) throw redirectDenied();
@@ -99,6 +104,7 @@ export class AdvisorySource {
       value,
     );
   }
+  /** Read one bounded advisory page and validate its identifiers and pagination cursor. */
   async list(cursor?: string, signal?: AbortSignal) {
     const value = cursor ? z.string().min(1).max(1024).parse(cursor) : undefined;
     const response = await this.request(
@@ -112,6 +118,7 @@ export class AdvisorySource {
     }
     return validated(pageSchema, await boundedJson(response));
   }
+  /** Resolve a canonical advisory detail through the allowed source paths and validate its identity. */
   async detail(id: string, signal?: AbortSignal): Promise<AdvisoryDetail> {
     const requested = advisoryId.parse(id);
     const response = await this.request(`/api/v1/entries/${encodeURIComponent(requested)}`, signal);

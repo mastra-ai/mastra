@@ -9,6 +9,7 @@ import { PlaybookRegistry } from '../../src/knowledge/playbooks.js';
 import { drainOffline } from '../../src/runtime/operations.js';
 import { discoveryCase, startDiscoveryLab } from './harness.js';
 import { investigation } from './investigation.js';
+/** Interrupt active verification and approval leases and verify their durable recovery. */
 export async function activeLeaseCrash() {
   const lab = await startDiscoveryLab();
   const selected = await discoveryCase(lab, { path: '/owned/ssrf/vulnerable' });

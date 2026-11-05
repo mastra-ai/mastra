@@ -383,6 +383,7 @@ export class InvestigationStore {
       await migrateOwnedResources(tx);
     });
   }
+  /** Load and parse one owner-bound investigation record from the selected application table. */
   private async record<T>(table: string, id: string, owner: string, tx?: Transaction): Promise<T> {
     const row = await (tx ?? this.client).execute({
       sql: `SELECT data FROM ${table} WHERE id=? AND owner=?`,
@@ -411,6 +412,7 @@ export class InvestigationStore {
   getApproval(id: string, owner: string, tx?: Transaction) {
     return this.record<Approval>('scanner_approvals', id, owner, tx);
   }
+  /** Withhold proof observations when their retained source evidence is expired or unknown. */
   private async availableProof(record: StoredProof, transaction?: Transaction): Promise<StoredProof> {
     const db = transaction ?? this.client;
     const expiredSource = await db.execute({
@@ -433,6 +435,7 @@ export class InvestigationStore {
       availability: { state: expired ? 'expired' : 'unknown', at: record.availability?.at ?? null },
     };
   }
+  /** Load an owner-bound finding together with its current evidence availability. */
   async getFinding(id: string, owner: string) {
     const record = await this.record<Finding>('scanner_findings', id, owner);
     const proof = await this.getProof(record.proofId, owner);
@@ -445,6 +448,7 @@ export class InvestigationStore {
   async getProof(id: string, owner: string) {
     return this.availableProof(await this.record<StoredProof>('scanner_verification_proofs', id, owner));
   }
+  /** Read the operator's persisted recurrence configuration for a target. */
   async getRecurrence(targetId: string, owner: string) {
     const result = await this.client.execute({
       sql: 'SELECT data FROM scanner_recurrences WHERE target_id=? AND owner=?',
@@ -457,6 +461,7 @@ export class InvestigationStore {
   getOwnedResource(id: string, owner: string, tx?: Transaction) {
     return this.record<OwnedResource>('scanner_owned_resources', id, owner, tx);
   }
+  /** Load the current immutable resource binding for an owner, target, category and path. */
   async ownedResource(owner: string, targetId: string, category: string, path: string) {
     const result = await this.client.execute({
       sql: `SELECT r.data FROM scanner_current_owned_resources c JOIN scanner_owned_resources r ON r.id=c.resource_id
@@ -514,6 +519,7 @@ export class InvestigationStore {
       return { binding, created: true };
     });
   }
+  /** Find the approval bound to the specified owner and verification job. */
   async approvalForJob(jobId: string, owner: string) {
     const result = await this.client.execute({
       sql: 'SELECT data FROM scanner_approvals WHERE job_id=? AND owner=?',
@@ -521,6 +527,7 @@ export class InvestigationStore {
     });
     return result.rows[0] ? read<Approval>(result.rows[0]) : null;
   }
+  /** List owner-bound investigation records using supported filters and bounded pagination. */
   async list<T>(
     table:
       | 'scanner_investigations'
@@ -549,6 +556,7 @@ export class InvestigationStore {
     }
     return records;
   }
+  /** Find the newest owner-bound investigation for a target; callers validate its planning suitability. */
   async latestInvestigationForTarget(owner: string, targetId: string) {
     const result = await this.client.execute({
       sql: "SELECT data FROM scanner_investigations WHERE owner=? AND json_extract(data,'$.lineage.targetId')=? ORDER BY rowid DESC LIMIT 1",
@@ -665,6 +673,7 @@ export class InvestigationStore {
       }),
     );
   }
+  /** Resolve the durable advisory event associated with the selected investigation. */
   async advisoryEventForInvestigation(owner: string, idempotencyKey: string) {
     const result = await this.client.execute({
       sql: `SELECT e.advisory_id,e.advisory_revision FROM scanner_advisory_reassessment_events e
@@ -761,6 +770,7 @@ export class InvestigationStore {
       return { investigation, created: true };
     });
   }
+  /** Reject event admission whose persisted target, policy or scan binding has changed. */
   private async validateEventAdmissionLineage(
     tx: Transaction,
     owner: string,
@@ -808,6 +818,7 @@ export class InvestigationStore {
       if (!current.rows[0]) throw new ControlPlaneError('REVISION_CONFLICT', 409);
     }
   }
+  /** Atomically consume a due schedule event and persist its admitted or cancelled outcome. */
   private async consumeScheduleEvent(tx: Transaction, id: string, owner: string) {
     const result = await tx.execute({
       sql: "UPDATE scanner_recurrence_events SET state='CONSUMED' WHERE id=? AND owner=? AND state='PENDING'",
@@ -815,6 +826,7 @@ export class InvestigationStore {
     });
     if (result.rowsAffected !== 1) throw new ControlPlaneError('SCHEDULE_EVENT_CANCELLED', 409);
   }
+  /** Atomically consume an advisory event without duplicating its investigation admission. */
   private async consumeAdvisoryEvent(tx: Transaction, id: string, owner: string) {
     const result = await tx.execute({
       sql: "UPDATE scanner_advisory_reassessment_events SET state='CONSUMED' WHERE id=? AND owner=? AND state='PENDING'",
@@ -1024,6 +1036,7 @@ export class InvestigationStore {
       return this.finishIfAllJobsTerminal(tx, id, owner);
     });
   }
+  /** Settle the investigation only after every persisted verification job is terminal. */
   private async finishIfAllJobsTerminal(tx: Transaction, investigationId: string, owner: string) {
     const current = await this.getInvestigation(investigationId, owner, tx);
     if (['COMPLETED', 'CANCELLED', 'BLOCKED', 'PLANNING'].includes(current.state)) return current;
@@ -1058,6 +1071,7 @@ export class InvestigationStore {
       return approvals + unrequested;
     });
   }
+  /** Expire due approvals and their affected jobs within the current write transaction. */
   private async expireApprovalsInTransaction(tx: Transaction, owner: string, limit: number) {
     const expired = await tx.execute({
       sql: `SELECT a.data AS data,i.data AS investigation_data FROM scanner_approvals a
@@ -1096,6 +1110,7 @@ export class InvestigationStore {
     }
     return expired.rows.length;
   }
+  /** Settle approval-gated jobs whose required approval request never became available. */
   private async expireUnrequestedApprovalJobs(tx: Transaction, owner: string, limit: number) {
     const jobs = await tx.execute({
       sql: `SELECT j.data FROM scanner_verification_jobs j
@@ -1141,6 +1156,7 @@ export class InvestigationStore {
       return current;
     });
   }
+  /** Atomically reserve the job's bounded model allowance without exceeding investigation limits. */
   async reserveModelTokens(id: string, owner: string, tokens: number) {
     if (!Number.isSafeInteger(tokens) || tokens < 1) throw new ControlPlaneError('TOKEN_RESERVATION_INVALID', 400);
     for (let attempt = 0; attempt < 4; attempt++) {

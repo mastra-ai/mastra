@@ -14,10 +14,12 @@ const ifMatchSchema = z
 const revision = (context: Context) => parse(ifMatchSchema, context.req.header('if-match'));
 const id = (context: Context, parameter = 'id') => parse(idSchema, context.req.param(parameter));
 const page = (context: Context) => parse(pageSchema, context.req.query());
+/** Return a revisioned JSON record with its ETag and creation status. */
 function respond(context: Context, value: { revision: number }, created = false) {
   context.header('ETag', `"${value.revision}"`);
   return context.json(value, created ? 201 : 200);
 }
+/** Register protected policy, target and profile routes on the local Hono application. */
 export function registerDomainRoutes(app: Hono, service: ControlPlane, scans?: ScanService) {
   app.onError((error, context) =>
     context.json(

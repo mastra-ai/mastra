@@ -24,6 +24,7 @@ const availabilityOutcome = {
   unknown: 'EVIDENCE_UNKNOWN',
 } as const;
 
+/** Format elapsed approval-decision time, leaving undecided approvals visibly unknown. */
 function approvalLatency({ createdAt, decidedAt }: Approval): string {
   if (!decidedAt) return '—';
   const seconds = Math.floor((Date.parse(decidedAt) - Date.parse(createdAt)) / 1000);
@@ -38,6 +39,7 @@ function approvalLatency({ createdAt, decidedAt }: Approval): string {
   return `${remainder}s`;
 }
 
+/** Render persisted scanner activity and summary counts with explicit loading and failure states. */
 export function OverviewView({ navigate }: { navigate: (view: string) => void }) {
   const scans = useData<Page<Scan>>('/api/scans?limit=5&offset=0');
   const investigations = useData<Page<Investigation>>('/api/investigations?limit=5&offset=0');
@@ -173,6 +175,7 @@ export function OverviewView({ navigate }: { navigate: (view: string) => void })
   );
 }
 
+/** Render the scanner agents and their recorded execution activity. */
 export function AgentsView() {
   const [offset, setOffset] = useState(0);
   const data = useData<AgentData>(`/api/agents?limit=${limit}&offset=${offset}`);
@@ -240,6 +243,7 @@ export function AgentsView() {
   );
 }
 
+/** Render the identifying symbol associated with the selected scanner agent. */
 function AgentSymbol({ id }: { id: string }) {
   const mark =
     id === 'nemo' ? (
@@ -281,6 +285,7 @@ function AgentSymbol({ id }: { id: string }) {
   );
 }
 
+/** Load and display the selected finding's retained evidence and availability state. */
 function FindingDetail({ finding }: { finding: Finding }) {
   const [showEvidence, setShowEvidence] = useState(false);
   const [evidenceOffset, setEvidenceOffset] = useState(0);
@@ -437,6 +442,7 @@ function FindingDetail({ finding }: { finding: Finding }) {
   );
 }
 
+/** List persisted findings and load their evidence detail on selection. */
 export function FindingsView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string>();
@@ -527,6 +533,7 @@ export function FindingsView() {
   );
 }
 
+/** Show persisted evaluations and their measured operational outcomes. */
 export function EvaluationsView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string>();
@@ -642,6 +649,7 @@ export function EvaluationsView() {
   );
 }
 
+/** Browse the advisory inbox and expose its supported triage actions. */
 export function VulnerabilitiesView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string>();
@@ -1087,6 +1095,7 @@ export function VulnerabilitiesView() {
   );
 }
 
+/** List approval requests and open the selected decision for operator review. */
 export function ApprovalsView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Approval>();
@@ -1154,6 +1163,7 @@ export function ApprovalsView() {
   );
 }
 
+/** Load the selected approval and submit an operator decision with its revision binding. */
 function ApprovalReview({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
   const approval = useData<Approval>(`/api/approvals/${id}`);
   const hypothesis = useData<Hypothesis>(approval.data ? `/api/hypotheses/${approval.data.hypothesisId}` : '');

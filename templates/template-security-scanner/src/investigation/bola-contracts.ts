@@ -111,6 +111,7 @@ export function observedBolaCandidates(
   return candidates.slice(0, 16);
 }
 
+/** Resolve an observed collection/detail candidate or reject an unsupported explicit selection. */
 export function selectedBolaCandidate(selection: unknown, candidates: BolaCandidate[]): BolaCandidate {
   const value = bolaSelectionSchema.parse(selection);
   const candidate = candidates.find(item => item.id === value.candidateId);

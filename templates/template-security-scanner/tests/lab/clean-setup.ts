@@ -13,6 +13,7 @@ import { operationStatus } from '../../src/runtime/operations.js';
 import { dockerClient, ownerIdentity } from '../../src/runtime/docker.js';
 
 const sourceRoot = resolve(import.meta.dirname, '../..');
+/** Reserve and release a loopback port for the isolated setup journey. */
 async function freePort() {
   const listener = createServer();
   await new Promise<void>(resolve => listener.listen(0, '127.0.0.1', resolve));
@@ -22,6 +23,7 @@ async function freePort() {
   await new Promise<void>((resolve, reject) => listener.close(error => (error ? reject(error) : resolve())));
   return port;
 }
+/** Verify installation, setup and a public scan using only the owned local lab. */
 export async function cleanSetupAndPublicLab() {
   const temporary = await mkdtemp(join(tmpdir(), 'scanner-clean-'));
   const root = join(temporary, 'application'),

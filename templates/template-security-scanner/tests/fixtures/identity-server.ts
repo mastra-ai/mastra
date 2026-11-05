@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 
+/** Start the owned HTTP identity fixture and expose its requests and shutdown operation. */
 export async function startIdentityFixture() {
   const accounts = new Map<string, { identity: string; role: string }>();
   const observations: { method: string; path: string; identity: string | null }[] = [];

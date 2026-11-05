@@ -32,6 +32,7 @@ export class BrowserInspectionError extends Error {
     super(stage);
   }
 }
+/** Inspect Chromium readiness and report the observed browser sandbox controls. */
 export async function inspectBrowser(sandbox: PrivateSandbox, guard: SecretGuard, signal: AbortSignal) {
   const result = await sandbox.executeCommand('/bin/sh', ['/workspace/browser-inspect.sh'], {
     timeout: 3000,
@@ -82,6 +83,7 @@ type BrowserCall = (
   sessionId?: string,
   observe?: BrowserObserver,
 ) => Promise<Record<string, unknown>>;
+/** Open an isolated browser page and drain its command process during teardown. */
 async function withBrowserPage<T>(
   sandbox: PrivateSandbox,
   signal: AbortSignal,
@@ -302,6 +304,7 @@ export async function browserSandboxStatus(
 
 // The source document is owned, inert and opaque-origin. Only this fixed fetch
 // expression executes; no target HTML or model-supplied program is evaluated.
+/** Observe a bounded cross-origin browser read through the confined discovery runtime. */
 export async function browserCrossOriginRead(
   sandbox: PrivateSandbox,
   signal: AbortSignal,

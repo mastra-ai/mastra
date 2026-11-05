@@ -9,6 +9,7 @@ import { INSTANCE_DATABASE_NAME } from '../config/storage-names.js';
 
 // The SQLite write transaction serializes stale-instance recovery. A live or
 // ambiguous PID fails closed even when its event loop/heartbeat is delayed.
+/** Acquire the project instance fence and return its guarded asynchronous release operation. */
 export async function acquireInstance(settings: Settings) {
   const path = join(settings.dataDirectory, INSTANCE_DATABASE_NAME);
   const file = await open(path, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);

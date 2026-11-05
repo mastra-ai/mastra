@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 import { z } from 'zod';
 import { discoveryCase, startDiscoveryLab } from './harness.js';
 
+/** Kill an active owned scan process and verify restart reconciliation and cleanup. */
 export async function activeScanCrash() {
   const lab = await startDiscoveryLab({ processMode: true });
   const token = randomUUID(),

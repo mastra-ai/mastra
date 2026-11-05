@@ -8,6 +8,7 @@ import type { Hono } from 'hono';
 export const OPERATOR_ID = 'local-operator';
 const COOKIE = 'scanner_session';
 const MAX_SESSIONS = 16;
+/** Compare equal-length authentication values with a timing-safe byte comparison. */
 export function constantEquals(left: string, right: string) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
@@ -111,6 +112,7 @@ export function protectControlPlane(
   app.use('/native/*', nativeBoundary);
   return { close: () => sessions.clear() };
 }
+/** Read JSON after checking its media type; the surrounding middleware enforces the body limit. */
 export async function readJson(request: { header(name: string): string | undefined; json(): Promise<unknown> }) {
   if (!/^application\/json(?:;|$)/i.test(request.header('content-type') ?? ''))
     throw new ControlPlaneError('JSON_REQUIRED', 400);

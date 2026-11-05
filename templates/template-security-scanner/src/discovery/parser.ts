@@ -19,6 +19,7 @@ export class SecretGuard {
     ]);
     this.tailLength = Math.max(1, ...this.variants.map(value => value.length)) - 1;
   }
+  /** Detect forbidden credential representations before exporting a parsed value. */
   unsafe(value: string) {
     let decoded = value;
     for (let pass = 0; pass < 3; pass++) {
@@ -38,6 +39,7 @@ export class SecretGuard {
     }
     return this.variants.some(secret => decoded.includes(secret)) || /%[a-f0-9]{2}/i.test(decoded);
   }
+  /** Count bounded occurrences of forbidden credential representations in candidate output. */
   occurrences(value: string, previousLength: number) {
     let count = 0;
     for (const secret of this.values) {
@@ -54,6 +56,7 @@ export class SecretGuard {
     this.variants = [];
   }
 }
+/** Expand credential values into representations that must be withheld from exported evidence. */
 export function forbiddenCredentialValues(headers: Record<string, string>[]) {
   const values: string[] = [];
   for (const header of headers)
@@ -106,6 +109,7 @@ export class DiscoveryParser {
     this.pending = '';
     this.stop();
   }
+  /** Consume bounded native output chunks and parse only complete private records. */
   feed(channel: 'stdout' | 'stderr', chunk: string) {
     if (this.stopped) return;
     this.counters[channel === 'stdout' ? 'bytes' : 'stderrBytes'] += Buffer.byteLength(chunk);
@@ -131,6 +135,7 @@ export class DiscoveryParser {
     }
     if (Buffer.byteLength(this.pending) > this.bounds.line) this.bound();
   }
+  /** Accept only bounded parameter names that contain no forbidden credential material. */
   private safeName(value: unknown) {
     if (typeof value !== 'string' || this.guard.unsafe(value)) {
       this.counters.secretFields++;
@@ -144,6 +149,7 @@ export class DiscoveryParser {
     }
     return value;
   }
+  /** Emit an allowlisted sanitized evidence record within the configured output budget. */
   private emit(
     kind: Observation['kind'],
     input: unknown,
@@ -216,6 +222,7 @@ export class DiscoveryParser {
       this.bound();
     }
   }
+  /** Normalize a native discovery record and withhold unsafe or unsupported fields. */
   private parse(line: string) {
     if (!line.trim()) return;
     if (this.counters.parsed + this.counters.malformed >= this.bounds.records) {
@@ -281,6 +288,7 @@ export class DiscoveryParser {
       }
     }
   }
+  /** Finalize private parsing and report bounded evidence and withheld-output status. */
   finish(interrupted = false) {
     if (!this.stopped && this.pending.trim()) this.parse(this.pending);
     this.pending = '';

@@ -22,6 +22,7 @@ export function ownedApprovalCallback(boundary: OwnedLabBoundary, approvalId: st
   z.string().uuid().parse(approvalId);
   return `${boundary.callback}/${approvalId}`;
 }
+/** Verify the owned lab receipt before allowing its target origins and network boundary. */
 export async function ownedLabBoundary(
   client: Docker,
   fixtureId: string,

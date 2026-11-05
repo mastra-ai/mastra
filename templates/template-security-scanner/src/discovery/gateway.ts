@@ -30,6 +30,7 @@ const originTuple = (origin: string) => {
 export const gatewayRole = (profile: ScanContext['profiles'][number]) =>
   profile.kind === 'api_key_header' ? profile.id : profile.role;
 
+/** Read the gateway's bounded state snapshot and validate its current receipt. */
 export async function gatewayState(gateway: Docker.Container, guard: SecretGuard) {
   const state = gatewayStatsSchema.parse(
     JSON.parse((await readRuntimeFile(gateway, '/workspace/gateway-stats.json')).toString()),
@@ -37,6 +38,7 @@ export async function gatewayState(gateway: Docker.Container, guard: SecretGuard
   if (guard.unsafe(JSON.stringify(state))) throw new Error('SANITIZED_COUNTERS_REJECTED');
   return state;
 }
+/** Start the owned policy gateway and expose lifecycle controls for the scan. */
 export async function openGateway(
   resources: ScanResources,
   context: ScanContext,

@@ -1,5 +1,6 @@
 import { diagnostic, loadSettings, RuntimeDiagnostic } from '../src/config/settings.js';
 
+/** Run one authenticated advisory synchronization and print its bounded operational result. */
 async function main() {
   const settings = loadSettings();
   if (!settings.CONTROL_BOOTSTRAP_SECRET)

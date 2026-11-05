@@ -166,6 +166,7 @@ export class ScanService {
     this.admissions = operation.catch(() => undefined);
     return operation;
   }
+  /** Wait for the admitted scan to settle or reject when the bounded wait expires. */
   async waitForCompletion(owner: string, scanId: string, signal: AbortSignal) {
     signal.throwIfAborted();
     const running = this.active.get(scanId);
@@ -184,6 +185,7 @@ export class ScanService {
     signal.throwIfAborted();
     return this.store.get(scanId, owner);
   }
+  /** Revalidate scan revisions, authorization and identity state before discovery execution. */
   private async validate(scan: Scan) {
     const current = await this.store.get(scan.id, scan.owner);
     if (current.state === 'CANCEL_REQUESTED' || terminal(current.state))
@@ -192,6 +194,7 @@ export class ScanService {
       this.control.scanContext(scan.owner, scan.targetId, scan.request, transaction),
     );
   }
+  /** Execute an admitted scan and persist its terminal state after lifecycle settlement. */
   private async run(scan: Scan, context: ScanContext, entry: Running) {
     try {
       if (entry.controller.signal.aborted) {
@@ -287,6 +290,7 @@ export class ScanService {
       this.active.delete(scan.id);
     }
   }
+  /** Cancel an operator-owned scan and await its runtime cleanup. */
   async cancel(owner: string, id: string, reason: ScanReason = 'CANCELLED_BY_OPERATOR') {
     const existing = await this.store.get(id, owner);
     if (terminal(existing.state)) return existing;
@@ -321,6 +325,7 @@ export class ScanService {
     }
     return this.store.get(id, owner);
   }
+  /** Run a confined profile identity check and apply only a current revision-bound result. */
   async checkIdentity(owner: string, targetId: string, profileId: string, input: unknown) {
     const binding = parse(bindingSchema, input);
     if (binding.profileId !== profileId) throw new ControlPlaneError('REVISION_CONFLICT', 409);
@@ -355,6 +360,7 @@ export class ScanService {
       throw new ControlPlaneError('REVISION_CONFLICT', 409);
     return profile;
   }
+  /** Prevent new scan activity and drain existing admissions and executions. */
   private async quiesce({ owner, kind, id }: MutationScope) {
     const affected = [...this.active.entries()].filter(([, entry]) =>
       kind === 'target'
@@ -385,6 +391,7 @@ export class ScanService {
   close() {
     return (this.closing ??= this.shutdown());
   }
+  /** Fence admissions before cancelling active scans and draining their cleanup. */
   private async shutdown() {
     this.closed = true;
     if (this.retentionTimer) clearInterval(this.retentionTimer);

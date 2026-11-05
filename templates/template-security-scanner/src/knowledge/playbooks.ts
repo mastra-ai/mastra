@@ -392,6 +392,7 @@ const tools: Record<Category, (observation: Observation) => Outcome> = {
 export class PlaybookRegistry {
   private readonly byCategory = new Map<Category, Playbook>();
   constructor(private readonly catalog: ReferenceCatalog) {}
+  /** Load the bundled playbook registry and verify its referenced knowledge bindings. */
   async initialize() {
     await this.catalog.verify();
     for (const input of definitions) {
@@ -407,6 +408,7 @@ export class PlaybookRegistry {
     await this.catalog.verify();
     return [...this.byCategory.values()];
   }
+  /** Resolve a playbook's pinned version, source digest and reference bindings. */
   async binding(category: Category): Promise<PlaybookBinding> {
     const playbook = (await this.list()).find(item => item.category === category);
     if (!playbook) throw new ControlPlaneError('PLAYBOOK_NOT_FOUND', 404);
@@ -417,6 +419,7 @@ export class PlaybookRegistry {
       playbookDigest: createHash('sha256').update(JSON.stringify(playbook)).digest('hex'),
     };
   }
+  /** Classify supported playbook applicability without inventing missing target evidence. */
   async assess(
     category: Category,
     context: unknown,

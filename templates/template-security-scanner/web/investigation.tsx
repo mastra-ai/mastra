@@ -4,6 +4,7 @@ import { Empty, Loading, Notice, Pager, Section, Status, errorCode, useData } fr
 
 const limit = 25;
 
+/** Show the scan's investigations and admit supported bounded verification work. */
 export function ScanInvestigations({ scanId }: { scanId: string }) {
   const [offset, setOffset] = useState(0);
   const [hypothesisOffset, setHypothesisOffset] = useState(0);

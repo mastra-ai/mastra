@@ -5,6 +5,7 @@ import type { Finding, StoredProof } from '../../src/investigation/store.js';
 import { discoveryCase, startDiscoveryLab } from './harness.js';
 import { completedJob, investigation, modelWire } from './investigation.js';
 
+/** Verify expired evidence removal, visible retention debt and successful bounded retry. */
 export async function retentionExpiryAndDebt() {
   const wire = await modelWire({
     category: 'information_exposure',
@@ -104,6 +105,7 @@ export async function retentionExpiryAndDebt() {
   expect((await lab.request(`/api/findings/${finding.id}`)).data.availability).toMatchObject({ state: 'expired' });
 }
 
+/** Verify lost encryption keys require credential re-registration without plaintext recovery. */
 export async function keyLossRecovery() {
   const wire = await modelWire({ category: 'ssrf', path: '/owned/ssrf/vulnerable', interpretation: 'CONFIRMED' });
   const lab = await startDiscoveryLab({ investigationModels: wire.models });

@@ -62,12 +62,14 @@ export class ReferenceCatalog {
     this.root = root;
   }
 
+  /** Resolve a reference path within the bundled catalogue boundary. */
   private filePath(relative: string) {
     const absolute = resolve(this.root, relative);
     if (!absolute.startsWith(this.root + sep)) throw catalogError();
     return absolute;
   }
 
+  /** Verify bundled reference bytes against the pinned manifest before use. */
   async verify(): Promise<Manifest> {
     let manifest: Manifest;
     try {
@@ -112,6 +114,7 @@ export class ReferenceCatalog {
     return MANIFEST_SHA256;
   }
 
+  /** Load and verify the offline reference catalogue and its license bindings. */
   async initialize() {
     const manifest = await this.verify();
     await this.client.execute(
@@ -136,6 +139,7 @@ export class ReferenceCatalog {
     }
   }
 
+  /** Resolve a verified reference entry by its supported catalogue identifier. */
   async resolve(id: string) {
     const manifest = await this.verify();
     const item = manifest.references.find(reference => reference.id === id);
@@ -147,6 +151,7 @@ export class ReferenceCatalog {
     };
   }
 
+  /** Search the verified offline catalogue with bounded terms and result count. */
   async search(input: string, limit = 10) {
     const query = z.string().trim().min(1).max(120).parse(input);
     const count = z.number().int().min(1).max(25).parse(limit);

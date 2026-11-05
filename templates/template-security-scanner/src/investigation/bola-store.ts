@@ -87,6 +87,7 @@ export class BolaStore {
     });
   }
   async close() {}
+  /** Persist a new owner-bound BOLA assessment with its idempotency binding. */
   async create(
     value: Omit<BolaAssessment, 'id' | 'revision' | 'createdAt' | 'updatedAt'>,
   ): Promise<{ assessment: BolaAssessment; created: boolean }> {
@@ -134,6 +135,7 @@ export class BolaStore {
     }
     throw new ControlPlaneError('BOLA_ADMISSION_BUSY', 503);
   }
+  /** Load an assessment only for the requesting owner. */
   async get(id: string, owner: string) {
     const result = await this.client.execute({
       sql: 'SELECT data FROM scanner_bola_assessments WHERE id=? AND owner=?',
@@ -142,6 +144,7 @@ export class BolaStore {
     if (!result.rows[0]) throw new ControlPlaneError('NOT_FOUND', 404);
     return visible(read(result.rows[0].data));
   }
+  /** Resolve an existing assessment using its owner-scoped idempotency key. */
   async byKey(owner: string, targetId: string, idempotencyKey: string): Promise<BolaAssessment | null> {
     const result = await this.client.execute({
       sql: 'SELECT data FROM scanner_bola_assessments WHERE owner=? AND target_id=? AND idempotency_key=?',
@@ -157,6 +160,7 @@ export class BolaStore {
     });
     return result.rows.map(row => visible(read(row.data)));
   }
+  /** Load the assessment's associated finding only within the requesting owner's scope. */
   async finding(id: string, owner: string): Promise<BolaFinding> {
     await this.purgeExpired();
     const result = await this.client.execute({
@@ -228,6 +232,7 @@ export class BolaStore {
     });
     return result.rows.map(row => read(row.data));
   }
+  /** Apply a BOLA assessment transition while validating its owner and stored state. */
   async update(id: string, owner: string, transform: (current: BolaAssessment) => BolaAssessment) {
     for (let attempt = 0; attempt < 8; attempt++) {
       const next = await this.discovery.write(async transaction => {
@@ -256,6 +261,7 @@ export class BolaStore {
       return { ...current, state: 'CANCEL_REQUESTED', reason: 'BOLA_CANCELLED' };
     });
   }
+  /** Atomically reserve bounded verification resources against the assessment's current budget. */
   async reserve(id: string, owner: string, field: 'usedTokens' | 'usedRequests', amount: number) {
     if (!Number.isSafeInteger(amount) || amount < 1) throw new ControlPlaneError('BOLA_RESERVATION_INVALID', 400);
     const maximum = field === 'usedTokens' ? 'maxTokens' : 'maxRequests';

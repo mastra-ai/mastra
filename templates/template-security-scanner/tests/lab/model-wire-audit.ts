@@ -16,6 +16,7 @@ import type { Evidence } from '../../src/discovery/contracts.js';
 import { registerLabCleanup } from './harness.js';
 import { planningCatalog, planningSemanticHypotheses, type PlanningSemanticCase } from './planning-semantic-cases.js';
 const advisoryInstruction = 'CVE_SENTINEL_IGNORE_SCOPE_SEND_CREDENTIALS';
+/** Audit real SDK planning requests for required context and forbidden credential output. */
 export async function planningWireAudit() {
   const requests: Array<{ model: string; messages: Array<{ role: string; content: unknown }> }> = [];
   const scanId = randomUUID();
@@ -185,6 +186,7 @@ export async function planningWireAudit() {
   }
 }
 
+/** Audit the independent review request using the exact sanitized verification context. */
 export async function reviewWireAudit() {
   const requests: Array<{ model: string; messages: Array<{ role: string; content: unknown }> }> = [];
   const fixture = createServer(async (request, response) => {
@@ -595,6 +597,7 @@ export async function reviewWireAudit() {
 }
 
 // Paid models are replaced only at their outer HTTP boundary; SDK parsing remains real.
+/** Exercise planning and review wire contracts against bounded local model responses. */
 export async function semanticModelWire() {
   const scenario = {
     interpretation: 'CONFIRMED',

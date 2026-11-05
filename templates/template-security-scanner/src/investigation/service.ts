@@ -52,9 +52,11 @@ export interface VerificationDriver {
 
 export class InvestigationService {
   readonly store: InvestigationStore;
+  /** Resume the durable approval decision only after its stored binding remains valid. */
   approvalCallback() {
     return this.ownedLab?.callback ?? null;
   }
+  /** Report whether model-backed investigation is enabled with usable configuration. */
   modelConfigured() {
     return this.enabled && !!this.models;
   }
@@ -99,6 +101,7 @@ export class InvestigationService {
       }
     })();
   }
+  /** Fence new investigation work and drain workers through terminal storage settlement. */
   async close() {
     if (this.workerTimer) clearInterval(this.workerTimer);
     this.closing.abort();
@@ -107,6 +110,7 @@ export class InvestigationService {
     await this.mutations;
     await this.store.close();
   }
+  /** Start bounded verification and schedule workers while preventing duplicate active loops. */
   startWorkers(owner: string) {
     if (this.workerTimer) return;
     const tick = () => {
@@ -117,6 +121,7 @@ export class InvestigationService {
     this.workerTimer.unref();
     tick();
   }
+  /** Fence affected admissions and drain active work before applying a domain mutation. */
   async coordinateMutation<T>(
     scope: MutationScope,
     validate: () => Promise<void>,
@@ -148,6 +153,7 @@ export class InvestigationService {
     this.mutations = operation.catch(() => undefined);
     return operation;
   }
+  /** Rebuild current lineage from a completed scan and reject stale profile or authorization bindings. */
   private async current(owner: string, scan: Scan): Promise<Lineage> {
     if (!terminal(scan.state) || scan.state !== 'COMPLETED' || scan.partial || scan.cleanup !== 'COMPLETE')
       throw new ControlPlaneError('SCAN_NOT_READY', 409);
@@ -191,6 +197,7 @@ export class InvestigationService {
       for (const item of context.guardHeaders) for (const name of Object.keys(item.headers)) delete item.headers[name];
     }
   }
+  /** Check target, policy, profile and scan revisions against the admitted investigation lineage. */
   private async validateLineage(owner: string, investigation: Investigation) {
     const scan = await this.scans.store.get(investigation.lineage.scanId, owner);
     const current = await this.current(owner, scan);
@@ -198,6 +205,7 @@ export class InvestigationService {
       throw new ControlPlaneError('REVISION_CONFLICT', 409);
     return scan;
   }
+  /** Resolve a verified playbook matching the hypothesis's recorded version and digest. */
   private async reviewedPlaybook(hypothesis: Hypothesis): Promise<Playbook> {
     const binding = hypothesis.ruleBinding;
     if (!binding) throw new ControlPlaneError('PLAYBOOK_BINDING_STALE', 409);
@@ -213,6 +221,7 @@ export class InvestigationService {
     const lineage = await this.current(owner, scan);
     return this.store.admit(owner, request, lineage, scheduleEventId, advisoryEventId);
   }
+  /** Validate and persist a revision-bound owned resource for bounded verification. */
   async bindOwnedResource(owner: string, targetId: string, input: unknown) {
     const request = parse(ownedResourceSchema, input);
     const target = await this.control.store.get<Target>('target', targetId, owner);
@@ -288,6 +297,7 @@ export class InvestigationService {
       this.control.store.write.bind(this.control.store),
     );
   }
+  /** Admit operator-supplied hypotheses after checking their evidence, scope and budget constraints. */
   async propose(owner: string, investigationId: string, input: unknown) {
     const investigation = await this.store.getInvestigation(investigationId, owner);
     const scan = await this.validateLineage(owner, investigation);
@@ -338,6 +348,7 @@ export class InvestigationService {
     };
     return this.store.enqueue(hypothesis, 'dupin');
   }
+  /** Check an owned resource against the current target, policy and profile revisions. */
   private resourceCurrent(resource: OwnedResource, lineage: Lineage) {
     return (
       resource.targetRevision === lineage.targetRevision &&
@@ -352,6 +363,7 @@ export class InvestigationService {
       )
     );
   }
+  /** Project only current owned resources and roles represented in the sanitized planning evidence. */
   private async planningResources(
     owner: string,
     investigation: Investigation,
@@ -394,6 +406,7 @@ export class InvestigationService {
       bindings,
     };
   }
+  /** Generate bounded model proposals and persist only schema-validated evidence-grounded hypotheses. */
   async proposeWithModels(owner: string, investigationId: string) {
     if (!this.models) throw new ControlPlaneError('MODEL_UNAVAILABLE', 503);
     const controller = new AbortController();
@@ -496,6 +509,7 @@ export class InvestigationService {
     void task.finally(() => this.workers.delete(task)).catch(() => undefined);
     return task;
   }
+  /** Admit work into the service's mutation and shutdown lifecycle fence. */
   private async enterScope(
     controller: AbortController,
     lineage: Lineage,
@@ -524,6 +538,7 @@ export class InvestigationService {
     signal.throwIfAborted();
     this.activeScopes.set(controller, { lineage, finished });
   }
+  /** Execute a claimed job through budget reservation, verification, review and durable terminal settlement. */
   private async executeClaimed(owner: string, signal: AbortSignal) {
     if (this.closing.signal.aborted || signal.aborted) return null;
     if (!this.models || !this.verifier) throw new ControlPlaneError('VERIFICATION_DISABLED', 503);
@@ -669,6 +684,7 @@ export class InvestigationService {
       finish();
     }
   }
+  /** Create an approval request bound to the current verification job and execution lineage. */
   async requestApproval(owner: string, hypothesisId: string, callback: string, expiresAt: string) {
     const hypothesis = await this.store.getHypothesis(hypothesisId, owner);
     await this.reviewedPlaybook(hypothesis);
@@ -712,6 +728,7 @@ export class InvestigationService {
     };
     return this.store.requestApproval(approval);
   }
+  /** Persist an operator approval decision only while its revision and lineage remain current. */
   async decide(owner: string, id: string, input: unknown) {
     const decision = parse(approvalDecisionSchema, input);
     const approval = await this.store.getApproval(id, owner);
@@ -722,11 +739,13 @@ export class InvestigationService {
       throw new ControlPlaneError('OWNED_CALLBACK_REQUIRED', 403);
     return this.store.decide(id, owner, decision.revision, decision.decision);
   }
+  /** Cancel an owner-bound investigation and drain its active verification work. */
   async cancel(owner: string, id: string, revision: number) {
     const cancelled = await this.store.cancel(id, owner, revision);
     for (const controller of this.active.get(id) ?? []) controller.abort();
     return cancelled;
   }
+  /** Persist a supported target recurrence with current policy and revision bindings. */
   async schedule(owner: string, input: unknown, revision?: number) {
     const parsed = parse(scheduleSchema, input);
     const target = await this.control.store.get('target', parsed.targetId, owner);
@@ -734,6 +753,7 @@ export class InvestigationService {
       throw new ControlPlaneError('TARGET_AUTHORIZATION_REQUIRED', 403);
     return this.store.schedule(owner, parsed, revision);
   }
+  /** Consume due persisted schedule events without admitting duplicate investigation work. */
   async processSchedules(owner: string) {
     if (!this.enabled || !this.models || this.closing.signal.aborted) return;
     for (const investigation of await this.store.unplannedAdvisoryInvestigations(owner, 100))
@@ -820,6 +840,7 @@ export class InvestigationService {
       }
     }
   }
+  /** Admit scheduled planning only when the event retains usable scan evidence and current lineage. */
   private async planScheduled(owner: string, investigationId: string) {
     try {
       await this.proposeWithModels(owner, investigationId);

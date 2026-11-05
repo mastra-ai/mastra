@@ -43,6 +43,7 @@ export class MastraAdvisoryModels implements AdvisoryModels {
     private readonly sherlock: Agent,
     private readonly modelId: string,
   ) {}
+  /** Generate a bounded metadata-only advisory recommendation through the configured model interface. */
   async plan(candidate: PlanningAdvisory, signal: AbortSignal) {
     const prompt = JSON.stringify({
       task: 'Choose one bounded manual advisory triage recommendation. Target relevance is unknown. Do not assert target impact, invent evidence, or request execution.',
@@ -92,6 +93,7 @@ export class AdvisoryTriage {
   ) {
     this.client = createClient({ url });
   }
+  /** Initialize advisory triage state and the offline reference catalogue. */
   async initialize() {
     await this.client.execute('PRAGMA busy_timeout = 5000');
     await this.client.execute(`CREATE TABLE IF NOT EXISTS scanner_advisory_hypotheses (
@@ -137,6 +139,7 @@ export class AdvisoryTriage {
     await this.active?.catch(() => undefined);
     this.client.close();
   }
+  /** Load the advisory triage state visible to the requesting local operator. */
   async state(id: string, targetId: string | undefined, operator: string) {
     const canonical = (await this.advisories.resolveAlias(id)) ?? id.toUpperCase();
     const advisory = await this.advisories.get(canonical);
@@ -206,6 +209,7 @@ export class AdvisoryTriage {
       })),
     };
   }
+  /** Normalize supported upstream severity labels, leaving unrecognized importance unknown. */
   private importance(detail: { severity?: unknown; statedSeverity?: unknown }) {
     for (const value of [detail.statedSeverity, detail.severity]) {
       const label =
@@ -214,6 +218,7 @@ export class AdvisoryTriage {
     }
     return 'unknown';
   }
+  /** Select local advisory guidance whose search terms match affected-product metadata. */
   private catalog(detail: { affected?: unknown }) {
     const affected = Array.isArray(detail.affected) ? detail.affected : [];
     const terms = affected
@@ -227,6 +232,7 @@ export class AdvisoryTriage {
       entry.terms.some(term => terms.some(value => value === term || value.includes(term))),
     );
   }
+  /** Search the bounded advisory catalogue without inferring target applicability. */
   async search(id: string) {
     const canonical = (await this.advisories.resolveAlias(id)) ?? id.toUpperCase();
     const advisory = await this.advisories.get(canonical);
@@ -236,6 +242,7 @@ export class AdvisoryTriage {
       items: this.catalog(advisory.detail).map(({ terms: _terms, ...entry }) => entry),
     };
   }
+  /** Save or refresh an operator-scoped advisory ignore after checking any target ownership. */
   async ignore(id: string, input: z.infer<typeof ignoreInput>, operator: string) {
     const canonical = (await this.advisories.resolveAlias(id)) ?? id.toUpperCase();
     await this.advisories.get(canonical);
@@ -248,6 +255,7 @@ export class AdvisoryTriage {
     });
     return this.state(canonical, input.targetId ?? undefined, operator);
   }
+  /** Restore an ignored advisory to the operator's active triage view. */
   async unignore(id: string, scope: 'all_targets' | 'target', targetId: string | null, operator: string) {
     const canonical = (await this.advisories.resolveAlias(id)) ?? id.toUpperCase();
     await this.advisories.get(canonical);
@@ -259,6 +267,7 @@ export class AdvisoryTriage {
     if (!result.rowsAffected) throw new ControlPlaneError('ADVISORY_IGNORE_NOT_ACTIVE', 409);
     return this.state(canonical, targetId ?? undefined, operator);
   }
+  /** Record a manual advisory case with its source revision, operator notes and evidence references. */
   async investigate(id: string, input: z.infer<typeof caseInput>, operator: string) {
     const canonical = (await this.advisories.resolveAlias(id)) ?? id.toUpperCase();
     const advisory = await this.advisories.get(canonical);
@@ -277,6 +286,7 @@ export class AdvisoryTriage {
     });
     return this.state(canonical, undefined, operator);
   }
+  /** Plan newly imported advisory revisions and retain their bounded recommendations. */
   async planNew(operator: string) {
     if (this.closing.signal.aborted) throw new ControlPlaneError('ADVISORY_TRIAGE_CLOSED', 503);
     if (this.active) throw new ControlPlaneError('ADVISORY_TRIAGE_BUSY', 409);
@@ -288,6 +298,7 @@ export class AdvisoryTriage {
       this.active = undefined;
     }
   }
+  /** Plan eligible advisory records while respecting current triage state and cancellation. */
   private async planAvailable(operator: string) {
     const rows = await this.client.execute({
       sql: `SELECT a.id,a.revision FROM scanner_advisories a

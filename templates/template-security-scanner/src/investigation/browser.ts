@@ -13,6 +13,7 @@ import type { ImageReceipt } from '../runtime/docker.js';
 import { sandboxOptions } from '../runtime/sandbox.js';
 import { BROWSER_FLAGS } from '../runtime/browser.js';
 
+/** Run the authorized browser verification and preserve its result while draining the command process. */
 export async function verifyBrowserRead(input: {
   settings: Settings;
   resources: ScanResources;

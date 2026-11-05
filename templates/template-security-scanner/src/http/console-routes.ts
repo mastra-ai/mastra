@@ -15,6 +15,7 @@ const assetName = z.string().regex(/^(?:console-[a-f0-9]{64}\.js|style-[a-f0-9]{
 const manifestSchema = z.object({ script: assetName, style: assetName }).strict();
 type Asset = { name: string; bytes: Buffer; type: string };
 
+/** Load bounded console assets or return null when the built console is unavailable. */
 async function consoleAssets(root: string): Promise<Asset[] | null> {
   try {
     const folder = join(root, 'web', 'dist');
@@ -38,6 +39,7 @@ async function consoleAssets(root: string): Promise<Asset[] | null> {
   }
 }
 
+/** Project a persisted finding into the bounded fields exposed by the console API. */
 function findingView(item: Finding) {
   return {
     id: item.id,
@@ -51,6 +53,7 @@ function findingView(item: Finding) {
   };
 }
 
+/** Project proof status and evidence availability into the console's public response shape. */
 function proofView(item: StoredProof) {
   return {
     id: item.id,

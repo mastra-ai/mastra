@@ -86,6 +86,7 @@ const fakeModels: BolaModels = {
   },
 };
 
+/** Run the vulnerable or protected owned BOLA journey and verify the selected lifecycle scenario. */
 async function journey(
   mode: 'vulnerable' | 'protected',
   scenario:

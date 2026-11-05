@@ -23,6 +23,7 @@ export const planningSemanticCases = [
 export type PlanningSemanticCase = (typeof planningSemanticCases)[number][0];
 
 // These independent vectors describe the existing accepted contract, not a model verdict.
+/** Run bounded local planning cases and verify the persisted hypotheses match the supplied evidence. */
 export function planningSemanticHypotheses(input: any, selected: PlanningSemanticCase) {
   if (selected === 'empty') return [];
   const rules = input.hypothesisRules;

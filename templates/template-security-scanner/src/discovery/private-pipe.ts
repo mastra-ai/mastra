@@ -6,6 +6,7 @@ import type { KatanaCommand, RestCommand } from './command.js';
 
 // This is a provider-specific pipe control, not a second sandbox. DockerSandbox
 // still owns start, inspected isolation, safe control commands, and destroy.
+/** Run an owned sandbox command with bounded private pipes and explicit cancellation cleanup. */
 export async function privateProcess(
   sandbox: PrivateSandbox,
   command: KatanaCommand | RestCommand,

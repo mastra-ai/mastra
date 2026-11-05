@@ -37,6 +37,7 @@ export async function legacyResourceSchema(url: string) {
   }
 }
 
+/** Create a compatible legacy database pair for real restore and rollback tests. */
 async function legacyBackupPair(settings: ReturnType<typeof loadSettings>, sourceName: string, name: string) {
   const source = join(settings.dataDirectory, 'backups', sourceName);
   const directory = join(settings.dataDirectory, 'backups', name);
@@ -72,6 +73,7 @@ async function legacyBackupPair(settings: ReturnType<typeof loadSettings>, sourc
   return manifest;
 }
 
+/** Interrupt and recover a two-file restore while preserving both compatible databases. */
 export async function compatiblePairRollback(databaseStem = 'security-scanner') {
   const root = await mkdtemp(join(tmpdir(), 'scanner-restore-'));
   const settings = loadSettings(

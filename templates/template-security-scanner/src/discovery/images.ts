@@ -32,12 +32,14 @@ const inputsSchema = z
   })
   .strict();
 export const digest = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
+/** Create a private discovery-input directory and reject unsafe existing entries. */
 async function directory(path: string) {
   await mkdir(path, { recursive: true, mode: 0o700 });
   const stat = await lstat(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.())
     throw new ControlPlaneError('UNSAFE_RUNTIME_CACHE', 503);
 }
+/** Obtain a bounded discovery artifact and verify its pinned size and digest before storage. */
 async function download(path: string, input: z.infer<typeof artifactSchema>, signal?: AbortSignal) {
   let bytes: Buffer | undefined;
   try {
@@ -80,6 +82,7 @@ async function download(path: string, input: z.infer<typeof artifactSchema>, sig
     throw new ControlPlaneError('RUNTIME_INPUT_INTEGRITY', 503);
   return bytes;
 }
+/** Extract the certificate utility from the bounded pinned Alpine package archive. */
 function certutil(apk: Buffer) {
   const archive = gunzipSync(apk, { maxOutputLength: 4 * 1024 * 1024 });
   let offset = 0;
@@ -94,6 +97,7 @@ function certutil(apk: Buffer) {
   }
   throw new ControlPlaneError('NSS_BINARY_MISSING', 503);
 }
+/** Stage and verify the pinned files required to build the confined discovery images. */
 export async function prepareDiscoveryInputs(settings: Settings, signal?: AbortSignal) {
   const manifest = inputsSchema.parse(
     JSON.parse(await readFile(join(settings.root, 'scripts/runtime/inputs.json'), 'utf8')),
@@ -122,6 +126,7 @@ export type DiscoveryImages = {
   /** Verified NSS certutil binary bytes used for the private browser profile. */
   certutil: Buffer;
 };
+/** Build the owned crawler and browser images from verified discovery inputs. */
 export async function buildDiscoveryImages(
   settings: Settings,
   signal?: AbortSignal,
@@ -252,6 +257,7 @@ export async function buildDiscoveryImages(
     throw error;
   }
 }
+/** Release discovery images only after checking for remaining owned consumers. */
 export async function releaseDiscoveryImages(client: Docker, settings: Settings, images: DiscoveryImages) {
   for (const id of [images.gateway, images.firewall]) {
     let image;

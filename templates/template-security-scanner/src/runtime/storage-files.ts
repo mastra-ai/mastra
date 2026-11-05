@@ -13,6 +13,7 @@ function unsafe(kind: FileKind): never {
   throw new RuntimeDiagnostic(code(kind), `Use an owned regular ${kind} database file inside private data/.`);
 }
 
+/** Validate an existing storage path's type, ownership and optional private permissions. */
 async function checkExisting(path: string, kind: FileKind, strictMode = true): Promise<boolean> {
   let stat;
   try {
@@ -31,6 +32,7 @@ async function checkExisting(path: string, kind: FileKind, strictMode = true): P
   return true;
 }
 
+/** Create a private storage file without following unsafe pre-existing entries. */
 async function ensureOwnedFile(path: string, kind: FileKind) {
   let file;
   try {
@@ -46,6 +48,7 @@ async function ensureOwnedFile(path: string, kind: FileKind) {
   }
 }
 
+/** Validate SQLite sidecars for both domain and native Mastra databases. */
 async function checkSidecars(settings: Settings) {
   for (const path of [settings.databasePath, settings.mastraDatabasePath]) {
     for (const suffix of ['-wal', '-shm']) {
@@ -55,6 +58,7 @@ async function checkSidecars(settings: Settings) {
   }
 }
 
+/** Detect native Mastra records that require migration out of the domain database. */
 async function hasLegacyNativeRows(settings: Settings): Promise<boolean> {
   const client = createClient({ url: settings.databaseUrl, concurrency: 1 });
   try {
@@ -85,6 +89,7 @@ function rejectLegacyState(): never {
   );
 }
 
+/** Prepare private domain and native database files while rejecting aliases and unsafe paths. */
 export async function prepareStorageFiles(settings: Settings) {
   await prepareDataDirectory(settings);
   const applicationExists = await checkExisting(settings.databasePath, 'application', false);
@@ -101,6 +106,7 @@ export async function prepareStorageFiles(settings: Settings) {
   await checkSidecars(settings);
 }
 
+/** Inspect both database paths and their sidecars without preparing or mutating storage. */
 export async function inspectStorageFiles(settings: Settings) {
   let directory;
   try {

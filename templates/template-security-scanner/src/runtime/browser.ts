@@ -24,6 +24,7 @@ const statusSchema = z.object({
     .nullable(),
 });
 
+/** Parse Chromium's observed sandbox status and reject missing required positive controls. */
 export function parseBrowserSandboxStatus(html: string) {
   const input = z.string().max(65536).safeParse(html);
   const table = input.success

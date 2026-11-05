@@ -59,6 +59,7 @@ export class DomainStore {
     this.pendingWrite = pending.catch(() => undefined);
     return pending;
   }
+  /** Load an operator-owned revisioned record of the requested domain kind. */
   async get<T extends StoredRecord>(
     kind: RecordKind,
     id: string,
@@ -72,6 +73,7 @@ export class DomainStore {
     if (!result.rows[0]) throw new ControlPlaneError('NOT_FOUND', 404);
     return JSON.parse(String(result.rows[0].data)) as T;
   }
+  /** List operator-owned domain records with bounded pagination and total count. */
   async list<T>(
     kind: RecordKind,
     owner: string,
@@ -106,6 +108,7 @@ export class DomainStore {
     });
     await this.saveRevision(kind, record, transaction);
   }
+  /** Replace a domain record only when its persisted owner and expected revision match. */
   async replace(kind: RecordKind, record: StoredRecord, expectedRevision: number, transaction: Transaction) {
     const result = await transaction.execute({
       sql: 'UPDATE scanner_records SET revision = ?, data = ? WHERE kind = ? AND id = ? AND owner = ? AND revision = ?',
@@ -114,6 +117,7 @@ export class DomainStore {
     if (result.rowsAffected !== 1) throw new ControlPlaneError('REVISION_CONFLICT', 409);
     await this.saveRevision(kind, record, transaction);
   }
+  /** Delete an operator-owned record only when its expected revision is current. */
   async remove(kind: RecordKind, id: string, owner: string, revision: number, transaction: Transaction) {
     const result = await transaction.execute({
       sql: 'DELETE FROM scanner_records WHERE kind = ? AND id = ? AND owner = ? AND revision = ?',
@@ -131,6 +135,7 @@ export class DomainStore {
       args: [profileId, envelope],
     });
   }
+  /** Parse a persisted domain row into its revisioned owner-bound record shape. */
   async envelope(profileId: string, transaction?: Transaction) {
     const result = await (transaction ?? this.client).execute({
       sql: 'SELECT envelope FROM scanner_credentials WHERE profile_id = ?',

@@ -151,6 +151,7 @@ export const triageSchema = z
   })
   .strict();
 
+/** Serialize material advisory fields with stable object-key ordering for revision hashing. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object')
@@ -160,6 +161,7 @@ function canonical(value: unknown): string {
       .join(',')}}`;
   return JSON.stringify(value) ?? 'null';
 }
+/** Hash the canonical advisory fields that define a material revision. */
 export function materialHash(detail: AdvisoryDetail) {
   const material = {
     id: detail.id.toUpperCase(),

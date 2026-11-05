@@ -10,6 +10,7 @@ import { startControlPlane } from '../../src/http/server.js';
 import { AdvisorySource } from '../../src/advisory/source.js';
 import type { AdvisoryModels } from '../../src/advisory/triage.js';
 
+/** Exercise the opt-in advisory schedule against a local feed and persisted application state. */
 export async function periodicAdvisoryLifecycle() {
   const root = await mkdtemp(join(tmpdir(), 'scanner-schedule-'));
   const requests: string[] = [];

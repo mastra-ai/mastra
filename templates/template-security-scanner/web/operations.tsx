@@ -30,6 +30,7 @@ const unauthorizedStatuses = (text: string) =>
     .map(value => Number(value.trim()))
     .filter(value => Number.isInteger(value) && value >= 400 && value <= 499);
 
+/** Create or update a policy with explicit limits, retention and optimistic concurrency. */
 export function PolicyForm({
   policy,
   onClose,
@@ -167,6 +168,7 @@ export function PolicyForm({
   );
 }
 
+/** Browse persisted policies and open their create or edit forms. */
 export function PoliciesView() {
   const [offset, setOffset] = useState(0);
   const [editing, setEditing] = useState<Policy | 'new'>();
@@ -258,6 +260,7 @@ export function PoliciesView() {
   );
 }
 
+/** Edit target scope and application settings while preserving revision-bound policy selection. */
 function TargetForm({
   target,
   policies,
@@ -639,6 +642,7 @@ function TargetForm({
   );
 }
 
+/** Register a bounded identity profile and reconfirm only the target's operator route rules. */
 export function ProfileForm({
   target,
   profile,
@@ -1127,6 +1131,7 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
   );
 }
 
+/** Browse persisted targets and manage their supported profiles and scan actions. */
 export function TargetsView() {
   const [offset, setOffset] = useState(0);
   const [policyOffset, setPolicyOffset] = useState(0);
@@ -1225,6 +1230,7 @@ export function TargetsView() {
   );
 }
 
+/** Browse scan history and expose actions allowed by the stored scan lifecycle. */
 export function ScansView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string>();

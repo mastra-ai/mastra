@@ -78,6 +78,7 @@ const journalSchema = z
 /** Durable two-file restoration stage recorded before and between replacements. */
 export type RestoreStage = z.infer<typeof journalSchema>['stage'];
 
+/** Create or validate a private operational directory without accepting unsafe existing paths. */
 async function privateDirectory(path: string) {
   await mkdir(path, { mode: 0o700 }).catch(error => {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
@@ -86,6 +87,7 @@ async function privateDirectory(path: string) {
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o777) !== 0o700)
     throw new ControlPlaneError('OPERATION_DIRECTORY_UNSAFE', 503);
 }
+/** Validate ownership, permissions, type and size before reading an operational file. */
 async function ownedFile(path: string, maximum = maximumFileBytes) {
   const stat = await lstat(path);
   if (
@@ -134,6 +136,7 @@ async function replacePrivate(source: string, destination: string) {
     await rm(temporary, { force: true });
   }
 }
+/** Check a private SQLite file for structural integrity before operational use. */
 async function inspectDatabase(path: string) {
   await ownedFile(path);
   const client = createClient({ url: `file:${path}` });
@@ -199,6 +202,7 @@ const applicationTables: Record<string, Record<string, string>> = {
 };
 // Restore compares exact schema fingerprints; the only supported historical
 // projection is the known schema3 resource table before immutable renewal.
+/** Verify the supported application schema, including the requested legacy projection. */
 async function applicationSchema(path: string, version: 3 | 4, legacyProjection = false) {
   await inspectDatabase(path);
   const client = createClient({ url: `file:${path}` });
@@ -253,6 +257,7 @@ async function applicationSchema(path: string, version: 3 | 4, legacyProjection 
     client.close();
   }
 }
+/** Read the application migration version and reject unsupported database generations. */
 async function applicationVersion(path: string): Promise<3 | 4> {
   const db = createClient({ url: `file:${path}` });
   try {
@@ -265,6 +270,7 @@ async function applicationVersion(path: string): Promise<3 | 4> {
     db.close();
   }
 }
+/** Migrate a compatible application database copy without modifying the original backup. */
 async function upgradeApplicationCopy(path: string) {
   const version = await applicationVersion(path);
   if (version === 3) {
@@ -291,6 +297,7 @@ async function snapshot(source: string, destination: string) {
   const content = await bytes(destination);
   return { sha256: digest(content), bytes: content.length, schemaHash: await inspectDatabase(destination) };
 }
+/** Checkpoint both drained databases before removing their safe, owned sidecar files. */
 async function checkpointAndClearSidecars(settings: Settings) {
   for (const path of [settings.databasePath, settings.mastraDatabasePath]) {
     const client = createClient({ url: `file:${path}` });
@@ -319,6 +326,7 @@ async function versions() {
     };
   return { coreVersion: (await read('core')).version, libsqlVersion: (await read('libsql')).version };
 }
+/** Reject maintenance while persisted work still requires active runtime ownership. */
 async function assertDrained(settings: Settings) {
   const client = createClient({ url: settings.databaseUrl });
   try {
@@ -347,6 +355,7 @@ async function status(settings: Settings, state: string, detail: string | null =
     at: new Date().toISOString(),
   });
 }
+/** Inspect local maintenance readiness, recovery state and owned runtime resources. */
 export async function operationStatus(settings: Settings) {
   try {
     const path = join(settings.dataDirectory, 'owned-lab-runtime.json');
@@ -381,6 +390,7 @@ export async function operationStatus(settings: Settings) {
 
 // The server and offline commands call this only while holding the instance
 // fence, before opening either live database. Recovery restores the prior pair.
+/** Recover an interrupted two-file restore from its validated durable journal. */
 export async function recoverInterruptedRestore(settings: Settings) {
   const journalPath = join(settings.dataDirectory, 'restore-journal.json');
   let journal: z.infer<typeof journalSchema>;
@@ -435,6 +445,7 @@ export async function drainOffline(settings: Settings) {
   return offline(settings, () => drainWithInstanceHeld(settings));
 }
 // Internal recovery entry point; callers must already own the instance fence.
+/** Drain scanner work while retaining the instance fence throughout maintenance. */
 export async function drainWithInstanceHeld(
   settings: Settings,
   cause: 'OPERATOR_DRAIN' | 'PROCESS_INTERRUPTED' = 'OPERATOR_DRAIN',

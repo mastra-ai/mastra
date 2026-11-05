@@ -58,6 +58,7 @@ export const categoryMatrix: MatrixCase[] = [
     binding: ids => ({ publicProfileId: ids[0], marker: 'LAB_MARKER_EXPOSURERESOURCE01', expectedAccess: 'private' }),
   },
 ];
+/** Run one owned category/variant verification journey and return its measured outcome. */
 export async function runMatrixVariant(
   lab: DiscoveryLab,
   wire: Awaited<ReturnType<typeof modelWire>>,
