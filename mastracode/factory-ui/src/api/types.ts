@@ -43,13 +43,7 @@ import type {
 } from '@mastra/factory/routes/fs';
 import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
 
-export type {
-  ProviderInfo,
-  CustomProviderInfo,
-  OMConfigInfo,
-  ProviderOMDefaultsResponse,
-  MastraGatewayCredits,
-};
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
   ArtifactEntry,
   ArtifactListing,
