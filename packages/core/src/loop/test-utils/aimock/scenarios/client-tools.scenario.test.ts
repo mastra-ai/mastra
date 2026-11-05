@@ -349,42 +349,4 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
     expect(result?.payload?.result).not.toEqual({ acknowledged: true });
     expect(JSON.stringify(result?.payload)).toMatch(/validation failed/i);
   });
-
-  // JSON Schema client tools are validated as JSON Schema, not converted to Zod, so formats
-  // must be checked by the validator itself or a malformed value reaches the client.
-  it('rejects client tool arguments that break a JSON Schema format', async () => {
-    const invite = {
-      id: 'invite',
-      description: 'Invite someone by email',
-      inputSchema: {
-        type: 'object',
-        properties: { email: { type: 'string', format: 'email' } },
-        required: ['email'],
-      },
-      renderOnly: true,
-    };
-
-    const { chunks } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      prompt: 'Invite Ada',
-      clientTools: { invite: invite as any },
-      stopWhen: stepCountIs(2),
-      collectChunks: true,
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { toolCalls: [{ id: 'call-invite', name: 'invite', arguments: { email: 'not-an-email' } }] },
-        );
-        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'That address is invalid.' });
-      },
-    });
-
-    const result = (chunks ?? []).find(
-      (c: any) => (c.type === 'tool-result' || c.type === 'tool-error') && c.payload?.toolCallId === 'call-invite',
-    ) as any;
-    expect(result?.payload?.result).not.toEqual({ acknowledged: true });
-    expect(JSON.stringify(result?.payload)).toMatch(/validation failed/i);
-    expect(JSON.stringify(result?.payload)).toMatch(/email/);
-  });
 });

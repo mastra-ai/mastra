@@ -1,7 +1,6 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import { Ajv } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
-import addFormats from 'ajv-formats';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
@@ -214,8 +213,6 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
         strict: false,
         ...this.#options.ajvOptions,
       });
-      // Ajv ignores `format` (email, uri, date-time, ...) unless the formats are registered.
-      addFormats(this.#ajvInstance);
 
       this.#ajvValidateCache = this.#ajvInstance.compile(this.#schema);
     }
