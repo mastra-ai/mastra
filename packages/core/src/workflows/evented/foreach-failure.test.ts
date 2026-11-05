@@ -87,12 +87,18 @@ describe('evented foreach with several failing iterations', () => {
     const runFailed = new Promise<void>(resolve => (markRunFailed = resolve));
     const pubsub = new EventEmitterPubSub();
     const failEvents: unknown[] = [];
+    const failedIterations: unknown[] = [];
     const publish = pubsub.publish.bind(pubsub);
     pubsub.publish = async (topic, event) => {
       await publish(topic, event);
       if (topic === 'workflows' && event.type === 'workflow.fail') {
         failEvents.push(event);
         markRunFailed();
+      }
+      // Published for each settled iteration right before it decides whether to fail the run.
+      const progress = (event.data as any)?.payload;
+      if ((event.data as any)?.type === 'workflow-step-progress' && progress?.iterationStatus === 'failed') {
+        failedIterations.push(progress.currentIndex);
       }
     };
 
@@ -128,7 +134,7 @@ describe('evented foreach with several failing iterations', () => {
         );
         expect(recorded).toEqual(statuses);
       });
-    return { mastra, run, failEvents, loadForeach, allIterationsRecorded };
+    return { mastra, run, failEvents, failedIterations, loadForeach, allIterationsRecorded };
   }
 
   it('keeps the first failure when a sibling fails after the run failed', async () => {
@@ -150,6 +156,35 @@ describe('evented foreach with several failing iterations', () => {
       expect(foreach.status, 'stored foreach status after the late siblings finished').toBe('failed');
       expect(foreach.error?.message, 'stored foreach error after a second iteration failed').toBe('first failure');
       expect(failEvents, 'workflow.fail events for one failed run').toHaveLength(1);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('fails the run once when two iterations fail at the same time', async () => {
+    let arrive!: () => void;
+    let arrived = 0;
+    const bothRunning = new Promise<void>(resolve => (arrive = resolve));
+    const { mastra, run, failEvents, failedIterations, loadForeach } = await setup(
+      'foreach-simultaneous-failures',
+      async n => {
+        if (++arrived === 2) arrive();
+        await bothRunning;
+        throw new Error(`failure ${n}`);
+      },
+    );
+    try {
+      const result: any = await run.start({ inputData: {} });
+      expect(result.status).toBe('failed');
+
+      await vi.waitFor(() => expect(failedIterations).toHaveLength(2));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      const foreach = await loadForeach();
+      expect(failEvents, 'workflow.fail events for one failed run').toHaveLength(1);
+      expect(foreach.status, 'stored foreach status after both iterations failed').toBe('failed');
+      expect(foreach.error?.message, 'stored foreach error is the error the run failed with').toBe(
+        result.error?.message,
+      );
     } finally {
       await mastra.stopWorkers();
     }

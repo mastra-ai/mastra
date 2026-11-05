@@ -60,12 +60,14 @@ export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
 /**
  * A step's stored result with a new write of it merged in: per element when both outputs are
  * arrays (foreach iterations written one at a time, or pending markers resetting elements),
- * otherwise the new result. Foreach child run ids from both are kept.
+ * otherwise the new result. A failed foreach keeps its first failure. Foreach child run ids from
+ * both are kept.
  */
 export function mergeStepResult(
   existingResult: StepResult<any, any, any, any> | undefined,
   result: StepResult<any, any, any, any>,
 ): StepResult<any, any, any, any> {
+  const failedResult = existingResult?.status === 'failed' ? existingResult : undefined;
   let merged = result;
   if (
     existingResult &&
@@ -101,6 +103,19 @@ export function mergeStepResult(
       ...(hasPendingMarker ? {} : (result as any)),
       output: mergedOutput,
     };
+    // A failed foreach stays failed with its first failure. Siblings settling from a read taken
+    // before the failure landed would otherwise flip it back to running, and a later failure
+    // would replace the error (and the failed index) the run fails with.
+    if (failedResult) {
+      const failedIndex = failedResult.metadata?.foreachFailedIndex;
+      merged = {
+        ...merged,
+        status: 'failed',
+        error: failedResult.error,
+        endedAt: failedResult.endedAt,
+        ...(failedIndex !== undefined ? { metadata: { ...merged.metadata, foreachFailedIndex: failedIndex } } : {}),
+      } as StepResult<any, any, any, any>;
+    }
   }
 
   // Concurrent child starts and completions carry partial/stale foreach metadata.

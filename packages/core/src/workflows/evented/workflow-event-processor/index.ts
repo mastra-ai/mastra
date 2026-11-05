@@ -3790,6 +3790,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
         priorFailure = foreachOutput.find((r: any, i: number) => i !== currentIdx && r?.status === 'failed');
+        // The iteration that failed the foreach. The store keeps the first one it saw, so of several
+        // iterations failing at once exactly one fails the run.
+        const foreachFailedIndex =
+          existingStepResult?.status === 'failed'
+            ? (existingStepResult.metadata as StepResult<any, any, any, any>['metadata'])?.foreachFailedIndex
+            : prevResult.status === 'failed'
+              ? currentIdx
+              : undefined;
         // Drop `payload`: it holds the whole foreach input array, which is already stored once on the step.
         const { payload: _payload, ...iterationRecord } = prevResult as any;
         foreachOutput[currentIdx] =
@@ -3843,6 +3851,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           }
         } else {
           newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
+        }
+        if (foreachFailedIndex !== undefined) {
+          newResult = { ...newResult, metadata: { ...newResult.metadata, foreachFailedIndex } };
         }
       }
       // Persist (and thread forward) any state changes made inside the foreach body,
@@ -3925,9 +3936,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         }
 
-        // A failed iteration fails the whole foreach, like a failed regular step. Only the first
-        // failure fails the run; a later failing sibling stops here like any other late sibling.
-        if (prevResult.status === 'failed' && !priorFailure) {
+        // A failed iteration fails the whole foreach, like a failed regular step. Only the iteration
+        // the stored foreach failed with fails the run; a later failing sibling stops here like any
+        // other late sibling. A redelivered first failure still matches and fails the run.
+        const failedIndex = (foreachResult?.metadata as StepResult<any, any, any, any>['metadata'])?.foreachFailedIndex;
+        if (prevResult.status === 'failed' && !priorFailure && (failedIndex ?? currentIdx) === currentIdx) {
           await this.#pubsub.publish('workflows', {
             type: 'workflow.fail',
             runId,

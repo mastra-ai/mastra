@@ -1259,6 +1259,48 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         ).toBe(null);
       });
 
+      it('keeps a failed foreach failed with its first failure while siblings settle late', async () => {
+        const id = runId();
+        const run = { workflowName, runId: id };
+        const iteration = (status: string, output: unknown[], failure?: { message: string; index: number }) =>
+          ({
+            ...ok(output),
+            status,
+            ...(failure
+              ? {
+                  error: { message: failure.message },
+                  endedAt: failure.index,
+                  metadata: { foreachFailedIndex: failure.index },
+                }
+              : {}),
+          }) as unknown as StepResult<any, any, any, any>;
+        await store.writeWorkflowRunCheckpoint({
+          ...run,
+          header: makeHeader(id),
+          steps: { f: iteration('running', [null, null, null]) },
+          state: {},
+        });
+
+        await store.mergeWorkflowRunStepResult({
+          ...run,
+          stepId: 'f',
+          result: iteration('failed', [null, null, null], { message: 'first', index: 1 }),
+        });
+        // Siblings that read the step before the failure landed: one still running, one failing too.
+        await Promise.all([
+          store.mergeWorkflowRunStepResult({ ...run, stepId: 'f', result: iteration('running', [10, null, null]) }),
+          store.mergeWorkflowRunStepResult({
+            ...run,
+            stepId: 'f',
+            result: iteration('failed', [null, null, null], { message: 'second', index: 2 }),
+          }),
+        ]);
+
+        expect(await store.loadWorkflowRunSteps({ ...run, stepIds: ['f'] })).toEqual({
+          f: iteration('failed', [10, null, null], { message: 'first', index: 1 }),
+        });
+      });
+
       it('tracks the state columns across patches, full states, checkpoints and state bases', async () => {
         const { parent, child } = pair(runId());
         const header = makeHeader(parent.runId);

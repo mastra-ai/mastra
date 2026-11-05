@@ -43,4 +43,37 @@ describe('mergeWorkflowStepResult', () => {
 
     expect(snapshot.context.foreach?.metadata?.foreachNestedRunIds).toEqual({ 0: 'child-0', 1: 'child-1' });
   });
+  it('keeps a failed foreach failed with its first failure when siblings settle late', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const write = (result: Record<string, unknown>) =>
+      mergeWorkflowStepResult({
+        snapshot,
+        stepId: 'foreach',
+        result: { startedAt: 1, payload: [1, 2, 3], ...result } as any,
+        requestContext: {},
+      });
+
+    write({
+      status: 'failed',
+      error: new Error('first'),
+      endedAt: 2,
+      output: [null, null, null],
+      metadata: { foreachFailedIndex: 1 },
+    });
+    write({ status: 'running', output: [10, null, null] });
+    write({
+      status: 'failed',
+      error: new Error('second'),
+      endedAt: 3,
+      output: [null, null, null],
+      metadata: { foreachFailedIndex: 2 },
+    });
+
+    const foreach = snapshot.context.foreach as any;
+    expect(foreach.status).toBe('failed');
+    expect(foreach.error.message).toBe('first');
+    expect(foreach.endedAt).toBe(2);
+    expect(foreach.metadata.foreachFailedIndex).toBe(1);
+    expect(foreach.output).toEqual([10, null, null]);
+  });
 });
