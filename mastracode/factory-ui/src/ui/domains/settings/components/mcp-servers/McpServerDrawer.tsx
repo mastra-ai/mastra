@@ -267,7 +267,16 @@ export function McpServerDrawer({
                 onChange={event => update({ name: event.target.value })}
                 autoFocus
               />
-              <FieldDescription>Its tools are named after it, like docs_search.</FieldDescription>
+              <FieldDescription>
+                {server ? (
+                  <>
+                    Its tools keep the names they were given when it was added, like{' '}
+                    <InlineCode>{server.slug}_search</InlineCode>.
+                  </>
+                ) : (
+                  'Its tools are named after it, like docs_search.'
+                )}
+              </FieldDescription>
             </Field>
             <Field className="gap-1">
               <FieldLabel>Server URL</FieldLabel>

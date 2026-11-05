@@ -360,6 +360,10 @@ describe('McpServersSection', () => {
       expect(token).toHaveAttribute('placeholder', 'Saved. Enter a new token to replace it');
       await user.clear(screen.getByRole('textbox', { name: 'Name' }));
       await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Docs v2');
+      // Renaming doesn't rename the tools sessions already know.
+      expect(screen.getByText(/keep the names they were given when it was added/)).toHaveTextContent(
+        'like docs_search.',
+      );
       await user.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(await row('Docs v2')).toBeInTheDocument();
