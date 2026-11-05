@@ -7,6 +7,17 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 const RECLAIM_PAGE_SIZE = 100;
 const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
+// A restarted Redis answers `-LOADING` until it has replayed its RDB/AOF, which
+// takes from seconds to minutes. node-redis does not retry server replies, so
+// a publish that fails there loses the event (e.g. a finished step's result).
+const LOADING_RETRY_BUDGET_MS = 120_000;
+const LOADING_RETRY_DELAY_MS = 250;
+
+function isLoadingError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('LOADING');
+}
+
+type XaddTrimOptions = { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } };
 
 /**
  * Heartbeat: reset a pending entry's idle time only if this consumer still
@@ -571,6 +582,18 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     };
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
+    const deadline = Date.now() + LOADING_RETRY_BUDGET_MS;
+    for (;;) {
+      try {
+        return await this.#xaddEvent(streamKey, payload, xaddOptions);
+      } catch (error) {
+        if (!isLoadingError(error) || this.#closed || Date.now() >= deadline) throw error;
+        await new Promise(resolve => setTimeout(resolve, LOADING_RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  async #xaddEvent(streamKey: string, payload: Event, xaddOptions: XaddTrimOptions): Promise<void> {
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
     // after a successful XADD — and on the *last* write before a topic is
@@ -598,7 +621,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     await promise;
   }
 
-  #xaddTrimOptions(): { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } {
+  #xaddTrimOptions(): XaddTrimOptions {
     if (this.#maxStreamLength <= 0) return {};
     return { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: this.#maxStreamLength } };
   }
@@ -1241,6 +1264,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       arguments: [fromOwner, toOwner, String(ttlMs)],
     });
     return result === 1;
+  }
+
+  /** A server replaying its dataset after a restart answers `LOADING` to every client. */
+  isUnavailableToAll(error: unknown): boolean {
+    return isLoadingError(error);
   }
 
   /**

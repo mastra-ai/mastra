@@ -110,6 +110,9 @@ export const FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA: CollectionSchema = {
     factory_project_id: { type: 'text' },
     version: { type: 'text' },
     updated_at: { type: 'timestamp' },
+    // Keys of the boards Factory stored in the project (Work, app and seed boards); each is stored
+    // once, so one the project deleted stays deleted. Null on projects stored before the list.
+    seeded_boards: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_board_definition_versions_project', columns: ['org_id', 'factory_project_id'] }],
 };

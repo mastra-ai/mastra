@@ -89,7 +89,7 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Run worker takeover tests
-        run: pnpm vitest run src/durable-worker-takeover.test.ts
+        run: pnpm vitest run src/durable-worker-takeover.test.ts src/plain-run-cross-server.test.ts
         working-directory: pubsub/redis-streams
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'

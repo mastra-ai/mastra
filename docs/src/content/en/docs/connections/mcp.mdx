@@ -422,20 +422,24 @@ Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing 
 The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render Mastra UI. `dashboardRendererApp` renders a dashboard definition with live observability data, such as agent runs, token usage, or scores.
 
 ```bash npm2yarn
-npm install @mastra/mcp-apps-components
+npm install @mastra/mcp-apps-components @mastra/server
 ```
 
-Register the app and `observabilityAppTools` on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI:
+The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to `dashboardDataTool` over the host's MCP connection. The tool runs the observability route behind that read in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks. The app sees the same data the user can.
+
+`dashboardDataTool` is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call. The tool only answers the reads in `DASHBOARD_DATA_OPERATIONS` and rejects any other operation.
+
+Register the app and `dashboardDataTool`, from the `dashboard-data-tool` entry, on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. The app calls the data tool by name. Use `dashboardDataTool` as its key:
 
 ```typescript title="src/mastra/mcp/dashboard-server.ts"
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards'
 import { createTool } from '@mastra/core/tools'
 import { MCPServer } from '@mastra/mcp'
+import { dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool'
 import {
   dashboardRendererApp,
   dashboardRendererInputSchema,
 } from '@mastra/mcp-apps-components/dashboard-renderer'
-import { observabilityAppTools } from '@mastra/mcp-apps-components/observability-tools'
 import { z } from 'zod'
 
 const DASHBOARD_APP_URI = 'ui://mastra/dashboard'
@@ -486,17 +490,13 @@ export const dashboardServer = new MCPServer({
   name: 'Dashboard Server',
   version: '1.0.0',
   appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
-  tools: { showAgentRuns, ...observabilityAppTools },
+  tools: { showAgentRuns, dashboardDataTool },
 })
 ```
 
-The app never reaches the network from its iframe. It reads data by calling the observability tools over the host's MCP connection. These tools are marked app-only, so `MCPClient.listTools()` hides them from agents.
-
-Each tool runs its observability route in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks. The app sees the same data the caller can read over HTTP.
-
 :::note
 
-When server auth is configured, the tools need the caller resolved by Mastra server auth. Serve the MCP server through a Mastra server adapter, such as Hono, Express, Fastify, Koa, Elysia, or NestJS. Calls without an authenticated caller return `401`.
+When server auth is configured, `invokeRoute()` needs the caller resolved by Mastra server auth. Serve the MCP server through a Mastra server adapter, such as Hono, Express, Fastify, Koa, Elysia, or NestJS. Calls without an authenticated caller return `401`.
 
 :::
 
