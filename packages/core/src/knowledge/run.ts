@@ -82,7 +82,11 @@ export class KnowledgeRun {
     if (!this.open.addresses.length && !this.open.prefixes.length) return own;
     const { pages } = await this.storage.listChildScopes({ parentId: null, read: this.open, limit: OPEN_ROOT_SCOPES });
     const seen = new Set(own.map(scope => scope.id));
-    return [...own, ...pages.filter(scope => !scope.deletedAt && !seen.has(scope.id))];
+    // Checked again so a custom store that ignores `read` can't list private scopes to every run.
+    return [
+      ...own,
+      ...pages.filter(scope => !scope.deletedAt && !seen.has(scope.id) && knowledgeScopeReadable(scope, this.open)),
+    ];
   }
 
   /** The strongest role on a scope page, or null. */

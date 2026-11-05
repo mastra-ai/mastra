@@ -1,5 +1,5 @@
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
-import type { KnowledgeConfig } from '@mastra/core/knowledge';
+import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
 import {
   MastraCompositeStore,
   KnowledgeStorage,
@@ -64,10 +64,6 @@ const operations = [
   'listPageBodyLinkSources',
 ] as const satisfies readonly (keyof KnowledgePageStore)[];
 
-// Storage methods outside the page store that the hosted store answers: the scope declarations its
-// instance supplies, such as the ones its importers write to, with their access rules.
-const storeOperations = ['getScopeDeclarations'] as const;
-
 // Fails to compile when a page-store method is neither forwarded nor deliberately left to the base class.
 type UnforwardedOperation = Exclude<keyof KnowledgePageStore, (typeof operations)[number]>;
 const operationsAreExhaustive: [UnforwardedOperation] extends ['renameScopeDeclaration']
@@ -101,11 +97,7 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     super({ storageIsolationKey: endpoint });
     return new Proxy(this, {
       get(target, key) {
-        if (
-          typeof key === 'string' &&
-          (operations.includes(key as (typeof operations)[number]) ||
-            storeOperations.includes(key as (typeof storeOperations)[number]))
-        ) {
+        if (typeof key === 'string' && operations.includes(key as (typeof operations)[number])) {
           return (input?: unknown) => target.request(key, input);
         }
         const value: unknown = Reflect.get(target, key, target);
@@ -117,7 +109,13 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   private async request(operation: string, input?: unknown): Promise<unknown> {
     const response = await fetch(`${this.endpoint}/operations/${operation}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${this.token}`,
+        'content-type': 'application/json',
+        // This client merges the instance's scope declarations (`getScopeDeclarations`) into its own, so
+        // the service leaves its read views as they are rather than widening them for older clients.
+        'x-mastra-knowledge-store-declarations': 'merged',
+      },
       body: encode({ input }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -161,6 +159,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       throw new Error(message);
     }
     return decode<{ result?: unknown }>(text).result;
+  }
+
+  /**
+   * The scope declarations the instance supplies, such as the ones its importers write to, with their
+   * access rules. Anything but a declaration record is a broken response, not "none".
+   */
+  override async getScopeDeclarations(): Promise<KnowledgeScopeDeclarations> {
+    const result = await this.request('getScopeDeclarations');
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      throw new Error('Knowledge service answered getScopeDeclarations without a declaration record');
+    }
+    return result as KnowledgeScopeDeclarations;
   }
 
   override getCapabilities() {

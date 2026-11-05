@@ -96,6 +96,19 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).toContain('notion:acme:conn_2');
   });
 
+  it("lists no open root scope a store returns that the run can't read", async () => {
+    const { storage, call } = await setup();
+    const { scope: secret } = await storage.materializeScope({
+      address: 'docs:secret',
+      declaration: 'docs:$team',
+      name: 'Secret',
+      provenance: host,
+    });
+    // A custom store that ignores `read` and returns every root scope.
+    vi.spyOn(storage, 'listChildScopes').mockResolvedValue({ pages: [secret], nextCursor: null } as never);
+    expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).not.toContain('docs:secret');
+  });
+
   it('passes the declaration check for stored scopes the store declares, and only those', async () => {
     await expect((await setup()).knowledge.readScopeFor(['docs:eng'])).resolves.toMatchObject({
       addresses: ['docs:eng'],
@@ -112,7 +125,9 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect((await closed.call('knowledge_search', { query: 'Roadmap' })).results).toEqual([]);
 
     const viewer = await setup();
-    await expect(viewer.call('knowledge_page', { op: 'write', page: 'Roadmap', body: 'Changed' })).rejects.toThrow();
+    await expect(viewer.call('knowledge_page', { op: 'write', page: 'Roadmap', body: 'Changed' })).rejects.toThrow(
+      /needs editor on "linear:acme:conn_1"; this run has viewer/,
+    );
 
     const editor = await setup({
       'linear:$account:$connection': {

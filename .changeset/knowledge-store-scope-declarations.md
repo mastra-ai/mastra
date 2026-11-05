@@ -2,12 +2,16 @@
 '@mastra/core': minor
 ---
 
-Knowledge storage can now supply scope declarations. A store returns them, access rules included, from `getScopeDeclarations()` (none by default), for example the scopes a hosted store's importers write to. Knowledge reads them at the start of every call and merges them under its config's, so a declaration the store adds or changes applies from the next call, with no restart; a key the config declares keeps the config's declaration, and a store declaration that doesn't compile is skipped with a warning. Stored scopes under store-declared keys pass the declaration check.
+Knowledge storage can supply scope declarations, and access rules accept a `'*'` principal that gives its role to every run.
 
-Access rules take a new principal, `'*'`, that gives its role to every run whatever it holds. Runs list the root scopes `'*'` rules open after their own at the root of `knowledge_list` and `knowledge_read`.
+A store returns declarations, access rules included, from `getScopeDeclarations()` (none by default). Knowledge reads them at the start of every call and merges them under its config's: the config wins on a key both declare, and a declaration that doesn't compile is skipped with a warning. Runs list the root scopes `'*'` rules open after their own.
 
 ```ts
-const scopes = {
-  'policy:$name': { access: [{ principal: '*', role: 'viewer' }] },
-};
+class ImportingKnowledgeStorage extends InMemoryKnowledgeStorage {
+  override async getScopeDeclarations() {
+    return {
+      'linear:$account:$connection': { access: [{ principal: '*', role: 'viewer' }] },
+    };
+  }
+}
 ```
