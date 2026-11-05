@@ -6,18 +6,21 @@ export { DashboardGrid, DashboardGridCell, DashboardGridRow } from './components
 export type { DashboardSpan } from './components/dashboard-grid';
 export { ViewGate } from './components/view-gate';
 export { WidgetError } from './components/widget-error';
-export { DrilldownAction, PinAction } from './components/widget-controls';
+export { AlertAction, DrilldownAction, PinAction } from './components/widget-controls';
 export { METRICS_DASHBOARD } from './metrics-dashboard';
 export { useDashboardRequests } from './hooks/use-dashboard-requests';
 export { hasDrilldownAction, useDrilldown, useViewMenu } from './hooks/use-widget-views';
 export * from './kinds';
 export { dashboardDefaults } from './lib/definition';
 export type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
-export { buildRequest } from './lib/requests';
+export { buildRequest, pageQuery } from './lib/requests';
 export type { DashboardPageContext, DashboardRequest } from './lib/requests';
 export { defineWidgetKind } from './widget-kind';
 export type {
   AnyWidgetKind,
+  DashboardAlert,
+  DashboardAlertAction,
+  DashboardAlertTarget,
   DashboardExpand,
   ResolvedView,
   WidgetKind,

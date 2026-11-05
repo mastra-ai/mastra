@@ -29,7 +29,7 @@ import { DrilldownAction } from '../components/widget-controls';
 import { useViewMenu } from '../hooks/use-widget-views';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
-import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
+import type { AnyWidgetKind, DashboardAlert, DashboardAlertTarget, DashboardExpand } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
@@ -105,11 +105,13 @@ function renderDashboard(
     expand,
     dragHandle,
     pin,
+    alert,
   }: {
     kinds?: AnyWidgetKind[];
     onDrilldown?: OnDashboardDrilldown;
     expand?: DashboardExpand;
     dragHandle?: DashboardRendererProps['dragHandle'];
+    alert?: DashboardAlert;
     pin?: {
       onPin: NonNullable<DashboardRendererProps['onPin']>;
       isPinned: NonNullable<DashboardRendererProps['isPinned']>;
@@ -139,6 +141,7 @@ function renderDashboard(
         onDrilldown={onDrilldown}
         expand={expand}
         dragHandle={dragHandle}
+        alert={alert}
         {...pin}
       />,
     ),
@@ -601,6 +604,118 @@ describe('DashboardRenderer', () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
       expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('button', { name: /pin/i })).toBeNull();
+    });
+  });
+
+  describe('when the host can turn cards into alerts', () => {
+    const RouterLink = ({ href, ...props }: { href: string }) => <a href={`/app${href}`} {...props} />;
+    const hosting = (action: DashboardAlert['action'] = () => ({ href: '/alerts/new' })) => {
+      const spy = vi.fn(action);
+      return { spy, alert: { action: spy, LinkComponent: RouterLink } satisfies DashboardAlert };
+    };
+    const lastTarget = (spy: { mock: { lastCall: [DashboardAlertTarget] | undefined } }) => {
+      if (!spy.mock.lastCall) throw new Error('The host was never asked');
+      return spy.mock.lastCall[0];
+    };
+    /** Hovering or focusing a disabled button's wrapper shows why it's disabled. */
+    const reasonTrigger = (button: HTMLElement) => {
+      if (!button.parentElement) throw new Error('No wrapper');
+      return button.parentElement;
+    };
+    const alertLabel = /^Create alert from /;
+
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs'), 'Create alert from Agent runs'],
+      ['a table card', models(), `Create alert from ${models().views[0].label}`],
+      ['a scores card', scoresWidget, `Create alert from ${scoresWidget.views[0].label ?? scoresWidget.title}`],
+      ['a KPI group', kpisWidget, `Create alert from ${kpisWidget.views[0].label ?? kpisWidget.title ?? 'widget'}`],
+    ])("links %s to the host's alert editor for its open view", async (_, widget, name) => {
+      const { alert, spy } = hosting();
+      const { container } = renderDashboard(definition(widget), { alert });
+      const link = await within(cell(container, widget.id)).findByRole('link', { name }, { timeout: 5000 });
+      expect(link.getAttribute('href')).toBe('/app/alerts/new');
+      expect(lastTarget(spy).widget.id).toBe(widget.id);
+      expect(lastTarget(spy).view).toMatchObject({ queries: widget.views[0].queries });
+    });
+
+    it('follows the view picked from the menu', async () => {
+      const { alert, spy } = hosting();
+      const widget = metricsWidget('agent-runs');
+      const { container } = renderDashboard(definition(widget), { alert });
+      await pickView('Agent runs', 'Failure rate');
+      expect(
+        await within(cell(container, 'agent-runs')).findByRole('link', { name: 'Create alert from Failure rate' }),
+      );
+      expect(lastTarget(spy).view).toMatchObject({ label: widget.views[1].label, queries: widget.views[1].queries });
+    });
+
+    it("hands the host the view's queries with the page's filters applied", async () => {
+      const { alert, spy } = hosting();
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert, environment: 'prod' });
+      await within(cell(container, 'agent-runs')).findByRole('link', { name: alertLabel });
+      for (const query of lastTarget(spy).queries) {
+        expect(query.source).toBe('metrics');
+        if (query.source === 'metrics') expect(query.filters).toMatchObject({ environment: 'prod' });
+        if (query.source === 'metrics') expect(query.filters).not.toHaveProperty('timestamp');
+      }
+    });
+
+    it('disables the button with the reason the host gives', async () => {
+      const { alert } = hosting(() => ({ disabled: 'Percentiles are not supported yet.' }));
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert });
+      const button = await within(cell(container, 'agent-runs')).findByRole('button', { name: alertLabel });
+      expect(button.hasAttribute('disabled')).toBe(true);
+      expect(within(cell(container, 'agent-runs')).queryByRole('link', { name: alertLabel })).toBeNull();
+      fireEvent.focus(reasonTrigger(button));
+      expect(await screen.findByText('Percentiles are not supported yet.')).toBeDefined();
+    });
+
+    it("shows no button on a card the host can't alert on", async () => {
+      const { alert } = hosting(() => undefined);
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert });
+      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: alertLabel })).toBeNull();
+      expect(screen.queryByRole('link', { name: alertLabel })).toBeNull();
+    });
+
+    it("disables the button on a card the page's filters block, saying which filter", async () => {
+      serveCapabilities(traceAggregateCapabilities);
+      const { alert, spy } = hosting();
+      const { container } = renderDashboard(definition(distinctIdsWidget), {
+        alert,
+        filterTokens: [{ fieldId: 'serviceName', value: 'checkout' }],
+      });
+      const button = await within(cell(container, 'distinct-ids')).findByRole('button', { name: alertLabel });
+      expect(button.hasAttribute('disabled')).toBe(true);
+      fireEvent.focus(reasonTrigger(button));
+      expect(await screen.findAllByText('Not available with a service filter.')).not.toHaveLength(0);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('puts the button after the drilldown and before the pin', async () => {
+      const { alert } = hosting();
+      const widget = {
+        ...metricsWidget('agent-runs'),
+        drilldown: { action: { page: 'traces' as const, filters: [] } },
+      };
+      const { container } = renderDashboard(definition(widget), {
+        alert,
+        onDrilldown: () => {},
+        pin: { onPin: () => {}, isPinned: () => false },
+      });
+      const card = cell(container, 'agent-runs');
+      const link = await within(card).findByRole('link', { name: alertLabel });
+      const controls = [...card.querySelectorAll('button, a')];
+      const at = (el: Element) => controls.indexOf(el);
+      expect(at(within(card).getByRole('button', { name: 'View in traces' }))).toBeLessThan(at(link));
+      expect(at(link)).toBeLessThan(at(within(card).getByRole('button', { name: 'Pin Agent runs' })));
+    });
+
+    it('shows no alert buttons for a host that passes none', async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
+      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(screen.queryByRole('link', { name: alertLabel })).toBeNull();
+      expect(screen.queryByRole('button', { name: alertLabel })).toBeNull();
     });
   });
 

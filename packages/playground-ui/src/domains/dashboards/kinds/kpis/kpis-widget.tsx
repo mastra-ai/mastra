@@ -6,6 +6,7 @@ import { ViewGate } from '../../components/view-gate';
 import { PinAction } from '../../components/widget-controls';
 import type { DashboardQueryResult } from '../../hooks/use-dashboard-requests';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
+import { alertAction } from '../../lib/alert-actions';
 import { valueOf } from '../../lib/answers';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
@@ -21,19 +22,31 @@ const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: Message
 const FORMAT = { count: formatCount, usd: formatUsd };
 const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
 
-export function KpisWidget({ views, dragHandle, pin }: WidgetKindProps<KpisOptions>) {
+export function KpisWidget({ widget, views, dragHandle, pin, alert }: WidgetKindProps<KpisOptions>) {
   const [view] = views;
   const gate = (
     <ViewGate queries={view.queries} pending={() => null}>
       {page => <KpisView view={view} page={page} />}
     </ViewGate>
   );
-  if (!dragHandle && !pin) return gate;
-  // The group has no title of its own, so the grip and the pin sit beside it, there even before the figures load.
+  if (!dragHandle && !pin && !alert) return gate;
+  // The group has no title of its own, so the grip, the alert and the pin sit beside it, there even before the figures load.
   return (
     <div className="flex items-center gap-1.5">
       {dragHandle && <MetricsCard.DragHandle {...dragHandle} />}
       <div className="min-w-0 flex-1">{gate}</div>
+      {alert && (
+        <ViewGate
+          queries={view.queries}
+          pending={waiting =>
+            waiting.status === 'unsupported-filter'
+              ? alertAction(alert, widget, view, { blocked: waiting.unsupportedFields })
+              : null
+          }
+        >
+          {page => alertAction(alert, widget, view, { page })}
+        </ViewGate>
+      )}
       {pin && <PinAction {...pin} />}
     </div>
   );

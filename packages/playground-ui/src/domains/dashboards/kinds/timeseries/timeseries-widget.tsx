@@ -8,6 +8,7 @@ import { PendingChartCard } from '../../components/widget-chrome';
 import { DrilldownAction } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
 import { pinActions } from '../../lib/pin-actions';
@@ -34,13 +35,20 @@ export function TimeseriesWidget(props: Props) {
   const { view } = menu;
   const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
   return (
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
+    <ViewGate
+      queries={view.queries}
+      pending={gate => (
+        <PendingChartCard gate={gate} heading={pendingHeading(heading, gate, props.alert, props.widget, view)} />
+      )}
+    >
       {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
     </ViewGate>
   );
 }
 
-function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps) {
+function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert }: ViewProps) {
+  // Drilldown, then the alert, then the pin.
+  const heading = withAction(own, alertAction(alert, widget, view, { page }));
   const { options } = view;
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const totals = new Set(options.totals ?? []);

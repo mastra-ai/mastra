@@ -9,6 +9,7 @@ import { ViewGate } from '../../components/view-gate';
 import { PendingChartCard } from '../../components/widget-chrome';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useScorers } from '../../hooks/use-scorers';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
@@ -30,7 +31,7 @@ const SCORER_COLORS = [
   CHART_COLORS.indigo,
 ];
 
-export function ScoresWidget({ widget, views, expand, dragHandle, pin }: WidgetKindProps<ScoresOptions>) {
+export function ScoresWidget({ widget, views, expand, dragHandle, pin, alert }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
   // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
   const heading = {
@@ -40,8 +41,13 @@ export function ScoresWidget({ widget, views, expand, dragHandle, pin }: WidgetK
   };
   return (
     // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
-      {page => <ScoresView heading={heading} view={view} page={page} />}
+    <ViewGate
+      queries={view.queries}
+      pending={gate => <PendingChartCard gate={gate} heading={pendingHeading(heading, gate, alert, widget, view)} />}
+    >
+      {page => (
+        <ScoresView heading={withAction(heading, alertAction(alert, widget, view, { page }))} view={view} page={page} />
+      )}
     </ViewGate>
   );
 }

@@ -1,4 +1,4 @@
-import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
+import type { DashboardQuery, DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ComponentType } from 'react';
 import type { z } from 'zod/v4';
 import type { ChartCardProps } from '../metrics/components/chart-card';
@@ -20,6 +20,28 @@ export type WidgetKindProps<Options> = {
   dragHandle?: MetricsCardDragHandleProps;
   /** The widget's pin button, shown with its card's actions: the host can pin widgets. */
   pin?: WidgetPin;
+  /** The card's Create alert button, for the open view: the host can turn views into alerts. */
+  alert?: DashboardAlert;
+};
+
+/** What a card's Create alert button watches: its open view, with the page's filters applied. */
+export type DashboardAlertTarget = {
+  widget: DashboardWidget;
+  view: DashboardWidgetView;
+  /** The view's queries with the page's filter bar ANDed in (`pageQuery`), without the time window. */
+  queries: DashboardQuery[];
+};
+
+/** Where the button opens the host's alert editor, or why the view can't become an alert. */
+export type DashboardAlertAction = { href: string } | { disabled: string };
+
+/**
+ * How a host turns a card's open view into an alert: `action` returns where the button links, a
+ * reason it's disabled, or `undefined` for no button. Links render through `LinkComponent`.
+ */
+export type DashboardAlert = {
+  action: (target: DashboardAlertTarget) => DashboardAlertAction | undefined;
+  LinkComponent: NonNullable<ChartCardProps['LinkComponent']>;
 };
 
 /** A widget's pinned state, as the host holds it, and the call that asks the host to change it. */
