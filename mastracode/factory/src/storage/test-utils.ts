@@ -23,6 +23,7 @@ import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
+import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 import type { ExternalWorkItemSource } from './domains/work-items/base.js';
 import type { WorkItemRow, WorkItemSourceRow } from './domains/work-items/work-item-schema.js';
@@ -101,6 +102,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   comments: WorkItemCommentsStorage;
   boards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
+  voiceSettings: VoiceSettingsStorage;
 }
 
 /**
@@ -136,6 +138,7 @@ export async function createFactoryStorageForTests(
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
   const boards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
+  const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -155,5 +158,6 @@ export async function createFactoryStorageForTests(
     comments,
     boards,
     skillOverrides,
+    voiceSettings,
   };
 }
