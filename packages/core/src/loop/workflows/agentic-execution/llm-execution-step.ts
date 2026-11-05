@@ -1650,7 +1650,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
         materializeFailedAttempt = undefined;
         settleRequest();
-        settleRequest = startRunStep(options?.abortSignal);
+        settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -2186,7 +2186,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 // runs while the retry waits, so a lease lost during that wait stops the run too.
                 onRequestFailed: () => settleRequest(),
                 onRequestRetry: () => {
-                  settleRequest = startRunStep(options?.abortSignal);
+                  settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
                 },
                 model: currentStep.model,
                 providerOptions: currentStep.providerOptions,

@@ -177,12 +177,12 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       expect(pageView()).toBeTruthy();
       expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Page' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Page' }).getAttribute('aria-selected')).toBe('true');
     });
 
     it('returns to the graph from the toggle, keeping the selection', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Graph' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Graph' }));
       expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
       expect(screen.getByTestId('knowledge-graph-container')).toBeTruthy();
       expect(within(screen.getByRole('tree')).getByRole('treeitem', { selected: true }).textContent).toContain(

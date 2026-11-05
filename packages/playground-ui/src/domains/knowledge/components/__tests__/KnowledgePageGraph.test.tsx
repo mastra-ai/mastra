@@ -297,6 +297,20 @@ describe('KnowledgePageGraph', () => {
           .map(item => item.textContent),
       ).toEqual(['Scope', 'Scope, above its pages', 'Page', 'Parent → child', 'Pinned']);
     });
+
+    it('shows again when the window narrows after it was collapsed', () => {
+      const graph = (collapsibleLegend: boolean) => (
+        <div style={{ width: 800, height: 600 }}>
+          <KnowledgePageGraph pages={pages} edges={[]} onSelect={() => {}} collapsibleLegend={collapsibleLegend} />
+        </div>
+      );
+      const { rerender } = renderWithProviders(graph(true));
+      expect(screen.getByRole('button', { name: 'Legend' }).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('list', { name: 'Legend' })).toBeNull();
+      rerender(graph(false));
+      expect(screen.queryByRole('button', { name: 'Legend' })).toBeNull();
+      expect(screen.getByRole('list', { name: 'Legend' })).toBeTruthy();
+    });
   });
 
   describe('lines', () => {

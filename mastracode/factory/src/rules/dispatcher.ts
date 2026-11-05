@@ -186,12 +186,15 @@ function watchRun(
   {
     timeoutMs,
     approvePlans,
+    requestContext,
     onAgentEnd,
     label,
     runStillActive,
   }: {
     timeoutMs: number;
     approvePlans: boolean;
+    /** The run's own request context; resuming an approved plan resolves the session's workspace with it. */
+    requestContext?: RequestContext;
     onAgentEnd?: () => Promise<boolean>;
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
@@ -276,7 +279,7 @@ function watchRun(
           const { toolCallId } = parked;
           parked = undefined;
           arm();
-          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
+          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
           observed = await wait();
         }
       }
@@ -365,7 +368,11 @@ interface DispatcherSession extends SkillSession {
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
-  respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
+  respondToToolSuspension(input: {
+    resumeData: SubmitPlanResumeData;
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<void>;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
@@ -983,11 +990,7 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /**
-   * Startup repair and terminal cleanup already settle a failed effect on a done or canceled
-   * card as superseded; a failure landing after the card settled would otherwise page a person
-   * until the next restart.
-   */
+  /** Terminal cleanup ran before this failure landed, so it never saw this row. */
   async #supersedeFailureOnSettledCard(record: FactoryDeferredDecisionRecord): Promise<void> {
     if (!record.workItemId) return;
     try {
@@ -1000,7 +1003,7 @@ export class FactoryDecisionDispatcher {
         supersededAt: new Date(),
       });
     } catch (error) {
-      // Best-effort: the row is already failed, and the next restart repairs it.
+      // Best-effort: the row stays failed until someone clears it from the card.
       console.error('Factory settled-card supersede failed', sanitizeDispatchError(error));
     }
   }
@@ -1270,6 +1273,7 @@ export class FactoryDecisionDispatcher {
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
+            requestContext,
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
@@ -2056,6 +2060,7 @@ export class FactoryDecisionDispatcher {
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
+            requestContext,
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

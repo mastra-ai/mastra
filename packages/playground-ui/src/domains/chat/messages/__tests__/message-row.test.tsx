@@ -18,6 +18,7 @@ import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/do
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 import { server } from '@/test/msw-server';
+import { toUntrustedAppContext } from '@/utils/mcp-app-context';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -96,6 +97,27 @@ describe('MessageRow', () => {
       renderRow(baseMessage({ role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'Hello there' }] } }));
       expect(screen.getByText('Hello there')).toBeTruthy();
       expect(screen.queryByLabelText(/^Skill:/)).toBeNull();
+    });
+  });
+
+  describe('when a user message carries MCP App context', () => {
+    const appContextMessage = () =>
+      baseMessage({
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Show me the traces for the selection I drilled into.' },
+            { type: 'text', text: toUntrustedAppContext(['{"page":"traces","filters":[]}']) },
+          ],
+        },
+      });
+
+    it('shows only the text the user typed', () => {
+      const { container } = renderRow(appContextMessage());
+      expect(screen.getByText('Show me the traces for the selection I drilled into.')).toBeTruthy();
+      expect(container.textContent).not.toContain('mcp-app-context');
+      expect(container.textContent).not.toContain('"page":"traces"');
     });
   });
 
@@ -367,6 +389,36 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  describe('when a command exits non-zero, as the stream saves its exit', () => {
+    it('marks the call failed and says how it exited', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'mastra_workspace_execute_command',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: { command: 'grep -rl DashboardQuery src/schema' },
+                  result: 'Exit code: 1',
+                },
+              },
+              { type: 'data-sandbox-exit', data: { exitCode: 1, success: false, toolCallId: 'call-1' } },
+            ],
+          },
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('exit 1')).toBeTruthy();
+    });
   });
 
   describe('when a completed tool result has image model output', () => {
