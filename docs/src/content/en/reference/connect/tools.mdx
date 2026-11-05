@@ -274,9 +274,15 @@ export const opsAgent = new Agent({
 })
 ```
 
-`codeMode()` returns two functions, `tools` and `instructions`. Pass both to the agent. Like the resolver, they resolve the current connections on every request, so the functions the program can call change as providers are connected or disconnected. Within one request both use the same resolution, so the instructions never declare a function the program can't call.
+:::warning
 
-It accepts every [`createCodeMode()` option](/reference/tools/create-code-mode) except `tools` (`sandbox`, `timeout`, `id`), plus `transport` for a [remote sandbox](/docs/agents/code-mode#remote-sandboxes) or [in-process isolation](/docs/agents/code-mode#in-process-isolation). It is available on every resolver, including the callback form and resolvers returned by `with()`, whose extra tools join the program's functions.
+`LocalSandbox` runs the model-written program as a host `node` process with host privileges. Connected tools return third-party data, such as issue text, that can influence the code the model writes. Use `LocalSandbox` only for trusted or local development. See [how Code Mode works](/docs/agents/code-mode#how-it-works) for isolated alternatives.
+
+:::
+
+`codeMode()` returns two functions, `tools` and `instructions`. Pass both to the agent. Like the resolver, they resolve the current connections on every request. The functions the program can call change as providers are connected or disconnected. Within one request both use the same resolution, and the instructions never declare a function the program can't call.
+
+The method accepts every [`createCodeMode()` option](/reference/tools/create-code-mode) except `tools` (`sandbox`, `timeout`, `id`), plus `transport` for a [remote sandbox](/docs/agents/code-mode#remote-sandboxes) or [in-process isolation](/docs/agents/code-mode#in-process-isolation). Every resolver provides it, including the callback form and resolvers returned by `with()`. Extra tools from `with()` join the program's functions.
 
 Some tools stay direct agent tools instead of program functions, because they pause the agent run and a call from inside a program can't:
 
