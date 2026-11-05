@@ -254,12 +254,19 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
       },
       { timeout: 10_000 },
     );
-    // What a resume that died before sending its event leaves behind once its lease lapsed.
+    // What a resume that died before sending its event leaves behind: its claim and the run it marked
+    // `running`. The claim's lease lapses at once here instead of after 60s.
+    await workflows.claimRunOwnership({
+      runId: `${loop}:resume-claim:${runId}`,
+      ownerId: 'dead-resume',
+      leaseMs: 1,
+    });
     await workflows.updateWorkflowState({
       workflowName: loop,
       runId,
       opts: { status: 'running', expectedStatus: 'suspended' },
     });
+    await new Promise(resolve => setTimeout(resolve, 10));
 
     const resumed = await approve();
     expect(await resumed.text).toBe('Archived.');
