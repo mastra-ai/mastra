@@ -2,4 +2,4 @@
 '@mastra/convex': patch
 ---
 
-Kept foreach iteration results saved before `workflow.step.end` when concurrent iterations update the same step, matching `@mastra/core`'s snapshot merge.
+Fixed foreach iteration completion records being lost when concurrent iterations updated the same step.
