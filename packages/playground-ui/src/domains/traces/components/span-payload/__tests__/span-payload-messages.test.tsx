@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { formatSkillsCatalog } from '@mastra/core/processors';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanInputRenderer } from '../span-input-renderers';
 import { SpanPayloadMessages } from '../span-payload-messages';
@@ -133,8 +133,12 @@ describe('SpanPayloadMessages', () => {
 
     it('names the message once when it is only the catalog', () => {
       const { container } = render(<SpanPayloadMessages value={[{ role: 'system', content: catalog }]} />);
-      const labels = Array.from(container.querySelectorAll('[data-role="system"] > span'), label => label.textContent);
-      expect(labels).toEqual(['system · Skills (2)']);
+      const labels = container.querySelectorAll<HTMLElement>('[data-role="system"] > span');
+      expect(labels).toHaveLength(1);
+      expect(Array.from(labels[0].querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
+        'system',
+        'Skills (2)',
+      ]);
     });
 
     it('keeps the text around the catalog', () => {

@@ -540,9 +540,11 @@ const DEFINED_BOARD = Symbol('DefinedBoard');
 /**
  * Declares a board in code.
  *
- * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
- * (README § Stored boards). Code boards are read-only and served alongside each project's stored
- * boards.
+ * @deprecated Write the board's definition into projects with `factory.upsertBoard()`, or manage
+ * it through the boards API
+ * (`/web/factory/projects/:id/boards`, README "Stored boards"); removal is tracked in
+ * mastra-ai/mastra#28920. A board defined here still works: each project stores it once and is
+ * served from its row, with the code behaviour it declares.
  */
 export function defineBoard<
   const BoardId extends string,
@@ -556,18 +558,47 @@ export function isDefinedBoard(board: object): boolean {
   return DEFINED_BOARD in board;
 }
 
-/** Validates and resolves a board declaration. Factory's own boards use this directly. */
+/** A board declaration as `defineBoard()` takes it, with any phase keys. */
+export type AnyBoardConfig = BoardConfig<string, Record<string, BoardPhaseDefinition<string>>>;
+
+/**
+ * The declaration a board was built from. A resolved board's `onEnter` handlers already carry its
+ * runner's skill and instructions, so a board with other runner fields is rebuilt from this.
+ */
+const BOARD_DECLARATION = Symbol('BoardDeclaration');
+
+/** On a board built from a stored definition, the code board that gave it its behaviour. */
+const CODE_BOARD = Symbol('CodeBoard');
+
+/** The declaration a board was built from; undefined for an object that was not built as a board. */
+export function declarationOf(board: object): AnyBoardConfig | undefined {
+  return (board as { [BOARD_DECLARATION]?: AnyBoardConfig })[BOARD_DECLARATION];
+}
+
+/** The code board a board takes its behaviour from: itself unless it was built from a stored definition. */
+export function codeBoardOf<Board extends object>(board: Board): Board {
+  return (board as { [CODE_BOARD]?: Board })[CODE_BOARD] ?? board;
+}
+
+/**
+ * Validates and resolves a board declaration. Factory's own boards use this directly. A board
+ * built from a stored definition names the code board whose behaviour it carries.
+ */
 export function compileBoardDefinition<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
->(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
-  return buildBoard(config, false);
+>(config: BoardConfig<BoardId, Phases>, codeBoard?: object): BoardDefinition<BoardId, keyof Phases & string> {
+  return buildBoard(config, false, codeBoard);
 }
 
 function buildBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
->(config: BoardConfig<BoardId, Phases>, defined: boolean): BoardDefinition<BoardId, keyof Phases & string> {
+>(
+  config: BoardConfig<BoardId, Phases>,
+  defined: boolean,
+  codeBoard?: object,
+): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
   const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
@@ -730,5 +761,7 @@ function buildBoard<
     },
   };
   if (defined) Object.defineProperty(board, DEFINED_BOARD, { value: true });
+  Object.defineProperty(board, BOARD_DECLARATION, { value: config });
+  if (codeBoard) Object.defineProperty(board, CODE_BOARD, { value: codeBoardOf(codeBoard) });
   return Object.freeze(board);
 }

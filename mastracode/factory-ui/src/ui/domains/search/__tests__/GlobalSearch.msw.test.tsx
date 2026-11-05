@@ -303,8 +303,8 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
 
 async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
   await Promise.all([
-    client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery({
+    client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.query({
       queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
       queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
     }),
@@ -640,7 +640,7 @@ describe('Global search', () => {
     stubSearchApi({ failWorkItems: true });
     renderSearchRoute();
     await openWithShortcut();
-    expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /factory\/pr-900/ })).toBeInTheDocument();
     expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
   });
 
@@ -747,11 +747,11 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
     await openWithShortcut();
-    await screen.findByText('factory/pr-900');
+    await screen.findByRole('option', { name: /factory\/pr-900/ });
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
 
-    expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /factory\/pr-900/ })).toBeInTheDocument();
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
   });
 
@@ -956,8 +956,9 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
-    const candidate = await screen.findByText('Harden the review board drop target');
-    expect(within(dialog).getByText(/Intake · not filed/)).toBeInTheDocument();
+    const candidate = await within(dialog).findByRole('option', { name: /Harden the review board drop target/ });
+    expect(within(candidate).getByText('Intake')).toBeInTheDocument();
+    expect(within(candidate).getByText('not filed')).toBeInTheDocument();
 
     await user.click(candidate);
 
@@ -1092,7 +1093,7 @@ describe('Global search', () => {
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
-    await user.click(within(dialog).getByText(title));
+    await user.click(within(dialog).getByRole('option', { name: name => name.startsWith(title) }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(path));
     if (preservesOrigin) expectOriginPathname(router.state.location.state, origin);

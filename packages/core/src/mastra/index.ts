@@ -2851,9 +2851,10 @@ export class Mastra<
     // distinct inner `Agent`; the standalone placeholder points at itself.
     const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
     if (!isRealDurableWrapper && (agent as Agent).durable) {
-      const durableOption = (agent as Agent).durable;
-      const opts = durableOption === true ? {} : { ...(durableOption as object) };
-      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
+      agent = createDurableAgent({
+        agent: agent as Agent,
+        ...(agent as Agent).__getDurableWrapOptions(),
+      }) as unknown as A;
     }
 
     // Handle durable agent wrappers (e.g., InngestAgent)
@@ -6594,8 +6595,11 @@ export class Mastra<
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
+        this.#agents?.[key]?.getChannels()?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#harnesses ?? {}).forEach(controller => controller.getChannels()?.__setLogger(this.#logger));
 
     if (this.#deployer) {
       this.#deployer.__setLogger(this.#logger);

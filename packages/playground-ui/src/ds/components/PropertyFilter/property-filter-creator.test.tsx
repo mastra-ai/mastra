@@ -233,13 +233,13 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
 
-    expect(screen.getByText('Tags · is')).toBeTruthy();
+    expect(screen.getByText('Tags is')).toBeTruthy();
     expect(screen.queryByRole('menuitem')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to properties' }));
 
     expect(screen.getByRole('menuitem', { name: /Tags/i })).toBeTruthy();
-    expect(screen.queryByText('Tags · is')).toBeNull();
+    expect(screen.queryByText('Tags is')).toBeNull();
   });
 
   it('invites a choice in its own words', async () => {
@@ -299,7 +299,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() => expect(screen.queryByText('Tags · is')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Tags is')).toBeNull());
     expect(onTokensChange).not.toHaveBeenCalled();
   });
 
@@ -315,7 +315,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     commitFilter();
 
     expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'tags', value: ['prod'] }]);
-    await waitFor(() => expect(screen.queryByText('Tags · is')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Tags is')).toBeNull());
   });
 
   it('forgets an earlier complaint as soon as a value is chosen', async () => {
@@ -381,7 +381,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     expect(screen.getByText('Choose at least one tags value.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByText('Tags · is')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Tags is')).toBeNull());
 
     openMenu();
 

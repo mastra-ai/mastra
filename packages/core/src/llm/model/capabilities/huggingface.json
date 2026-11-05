@@ -167,10 +167,22 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
+    "XiaomiMiMo/MiMo-V2.5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.5-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "stepfun-ai/Step-3.7-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "thinkingmachines/Inkling": [
@@ -179,16 +191,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "tencent/Hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "tencent/Hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro": [
@@ -203,34 +227,16 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -239,10 +245,22 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen/Qwen3-8B": [
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "Qwen/Qwen3-VL-235B-A22B-Thinking": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "Qwen/Qwen3.5-397B-A17B": [
@@ -257,10 +275,10 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "Qwen/Qwen3-VL-235B-A22B-Thinking": [
+    "Qwen/Qwen3-8B": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "Qwen/Qwen3.8-2.4T-A95B": [
@@ -269,34 +287,16 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "stepfun-ai/Step-3.7-Flash": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "XiaomiMiMo/MiMo-V2.5": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "XiaomiMiMo/MiMo-V2.5-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "tencent/Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "tencent/Hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshotai/Kimi-K3": [
