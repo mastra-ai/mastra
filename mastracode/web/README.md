@@ -202,6 +202,18 @@ gcloud auth application-default login
 
 Deployments can instead use a service account or a Google Cloud runtime identity. Every signed-in account can then run Vertex AI models using the configured project and location. Settings show Vertex AI as **From deployment** and offer no key field.
 
+### Mastra Connect tools
+
+Sessions can use the tools of your Platform project's [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect/tools) connections, for example to answer questions about Linear in a Slack thread. Connect the provider in the project, then name it in `mastracode/web/.env`:
+
+```dotenv
+FACTORY_CONNECT_PROVIDERS=linear
+```
+
+Separate several providers with commas. This needs `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`; without them the server doesn't start.
+
+Every session, in web chat, Slack and on work items, then gets the provider's tools, such as `linear_list_issues` and `linear_get_issue`. They act through the project's connections, so every user and organization on the server shares them. Sessions approve tools automatically by default, so delete and archive tools are left out. When Factory's own Linear integration is connected, its `linear_get_issue` and `linear_create_comment` stay, and the server logs that Connect's tools of the same name are skipped.
+
 ## Tests
 
 ```shell

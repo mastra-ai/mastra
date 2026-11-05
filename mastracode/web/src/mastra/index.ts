@@ -29,6 +29,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { tools as connectTools } from '@mastra/connect';
 import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
@@ -376,6 +377,16 @@ const integrations = [
   ...(slack ? [slack] : []),
 ];
 
+// Sessions auto-approve tools by default, so destructive Connect tools stay out.
+const connectProviders = (process.env.FACTORY_CONNECT_PROVIDERS ?? '')
+  .split(',')
+  .map(provider => provider.trim())
+  .filter(Boolean);
+const connectSessionTools =
+  connectProviders.length > 0
+    ? connectTools({ providers: connectProviders, disallowTools: ['*_delete_*', '*_archive_*'] })
+    : undefined;
+
 export const factoryConfigVersion = 'mastracode-web-v1';
 
 const hasPlatformSandboxEnv =
@@ -422,6 +433,7 @@ export const factory = new MastraFactory({
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
   browser,
+  tools: connectSessionTools,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

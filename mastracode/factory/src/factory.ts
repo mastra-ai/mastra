@@ -278,12 +278,12 @@ export interface MastraFactoryConfig {
    */
   disableBuiltinTools?: BuiltinToolId[];
   /**
-   * Tools offered to every Factory session, such as the tools of MCP servers
-   * connected before the factory is created (`await mcpClient.listTools()`).
-   * Credentials built into these tools are shared by every user of the
-   * instance. Pass a function to resolve tools per run instead, for example to
-   * use the run's org credentials. A name that clashes with a Factory tool
-   * fails the run.
+   * Tools offered to every Factory session, such as an MCP server's tools
+   * (`await mcpClient.listTools()`) or Mastra Connect's (`tools()` from
+   * `@mastra/connect`). Credentials built into these tools are shared by every
+   * user of the instance. Pass a function to resolve tools per run instead, for
+   * example to use the run's org credentials. A name Factory already gives the
+   * session keeps Factory's tool; the configured one is skipped with a warning.
    */
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
@@ -1475,6 +1475,7 @@ export class MastraFactory {
           ]
         : [],
     );
+    const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
@@ -1514,9 +1515,7 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
-        // MCP servers come in through `tools`. The SDK's own discovery reads
-        // the host process's mcp.json files, which never belong to a hosted
-        // session, and its tools would shadow same-named Factory tools.
+        // Host mcp.json files never belong to a hosted session; MCP tools come through `tools`.
         disableMcp: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
@@ -1841,10 +1840,19 @@ export class MastraFactory {
           }
           const configuredTools = this.#config.tools;
           if (configuredTools) {
-            mergeTools(
-              'tools',
-              typeof configuredTools === 'function' ? await configuredTools({ requestContext }) : configuredTools,
-            );
+            const contributed =
+              typeof configuredTools === 'function' ? await configuredTools({ requestContext }) : configuredTools;
+            for (const [name, tool] of Object.entries(contributed)) {
+              const owner = toolOwners.get(name);
+              if (!owner) {
+                tools[name] = tool;
+              } else if (!warnedConfiguredToolClashes.has(name)) {
+                warnedConfiguredToolClashes.add(name);
+                console.warn(
+                  `[factory] configured tool '${name}' is not offered to sessions: '${owner}' already provides a tool with that name.`,
+                );
+              }
+            }
           }
           return tools;
         },

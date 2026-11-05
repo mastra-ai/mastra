@@ -1435,12 +1435,15 @@ describe('MastraFactory.prepare', () => {
       expect(resolver).toHaveBeenCalledTimes(2);
     });
 
-    it('fails the run when a configured tool reuses a Factory tool name', async () => {
+    it("keeps Factory's own tool when a configured tool reuses its name, and still offers the others", async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
       const storage = fakeStorage();
       const config = await prepareFactory({
         storage,
         tools: {
           factory_transition_work_item: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
+          tickets_lookup: createTool({ id: 'tickets_lookup', description: 'y', execute: async () => ({}) }),
         },
       });
       vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'findActiveRunBinding').mockResolvedValue({
@@ -1466,9 +1469,15 @@ describe('MastraFactory.prepare', () => {
         getState: () => ({ factoryProjectId: '11111111-2222-4333-8444-555555555555' }),
       });
 
-      await expect((config.extraTools as ExtraTools)({ requestContext })).rejects.toThrow(
-        "tool 'factory_transition_work_item' from 'tools' conflicts with 'factory'",
+      const resolveTurn = () => (config.extraTools as ExtraTools)({ requestContext });
+      for (const tools of [await resolveTurn(), await resolveTurn()]) {
+        expect(tools.factory_transition_work_item.id).not.toBe('impostor');
+        expect(tools.tickets_lookup.id).toBe('tickets_lookup');
+      }
+      const clashWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes("configured tool 'factory_transition_work_item'"),
       );
+      expect(clashWarnings).toHaveLength(1);
     });
 
     it("never loads the host process's own MCP servers", async () => {

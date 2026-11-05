@@ -1095,6 +1095,22 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
+### Your own tools in sessions
+
+`tools` gives every Factory session more tools, such as an MCP server's or those of your [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect/tools) connections. Pass a record of tools, or a function that returns them for each run from its `requestContext`:
+
+```typescript
+import { tools as connectTools } from '@mastra/connect';
+import { MastraFactory } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  // ...
+  tools: connectTools({ providers: ['linear'] }),
+});
+```
+
+Credentials built into these tools are shared by every user of the Factory. A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools throws, the run fails with that error. Sessions run these tools without asking while automatic approval is on, the default; when a person turns it off, they follow the `mcp` permission category. Factory doesn't read MCP servers from the host's `mcp.json` files: `tools` is the one place a Factory's MCP tools come from.
+
 ### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
