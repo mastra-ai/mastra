@@ -3,10 +3,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
 import { useState } from 'react';
+import { userEvent, waitFor, within } from 'storybook/test';
 import { dashboardStoryFetch, STORY_BASE_URL } from '../../../../.storybook/fixtures/dashboards';
 import { MetricsProvider } from '../../metrics/hooks/use-metrics';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
-import type { DashboardAlert, DashboardAlertAction, DashboardAlertTarget } from '../widget-kind';
+import type { DashboardAlert, DashboardAlertAction, DashboardAlertSource, DashboardAlertTarget } from '../widget-kind';
 import { DashboardRenderer } from './dashboard-renderer';
 
 type Definition = ComponentProps<typeof DashboardRenderer>['definition'];
@@ -107,18 +108,27 @@ const definition: Definition = {
   ],
 };
 
-type HostResponse = 'mixed' | 'enabled' | 'disabled';
+type HostResponse = 'per-source' | 'enabled' | 'disabled';
 
-/** What a host might answer: a link for most cards, a reason for those it can't turn into rules. */
-function respond(response: HostResponse, target: DashboardAlertTarget): DashboardAlertAction {
-  const href = `#alerts/new?card=${target.widget.id}`;
-  if (response === 'enabled') return { href };
-  if (response === 'disabled') return { disabled: 'Your role cannot create alerts.' };
-  if (target.queries.some(q => (q.source === 'metrics' || q.source === 'scores') && q.request === 'percentiles'))
-    return { disabled: 'Rules cannot read metrics percentiles yet. Use a span percentile such as duration.p95.' };
-  if (target.queries.some(q => q.source === 'scores' && !q.scorerId))
+const PERCENTILES = 'Rules cannot read metrics percentiles yet. Use a span percentile such as duration.p95.';
+
+/** One source's answer: a reason for what rules can't read yet, else a link. */
+function respondTo(target: DashboardAlertTarget, source: DashboardAlertSource): DashboardAlertAction {
+  if (source.ref.percentile !== undefined) return { disabled: PERCENTILES };
+  if (source.ref.field === 'estimatedCost') return { disabled: 'Cost alerts are not supported yet.' };
+  if (source.query.source === 'scores' && !source.query.scorerId)
     return { disabled: 'This card reads every scorer. An alert watches one.' };
-  return { href };
+  return { href: `#alerts/new?card=${target.widget.id}&value=${encodeURIComponent(source.label)}` };
+}
+
+/**
+ * What a host might answer: per source, so a card with several opens a menu; a link for every card;
+ * or one reason for every card.
+ */
+function respond(response: HostResponse, target: DashboardAlertTarget) {
+  if (response === 'enabled') return { href: `#alerts/new?card=${target.widget.id}` };
+  if (response === 'disabled') return { disabled: 'Your role cannot create alerts.' };
+  return target.sources.map(source => respondTo(target, source));
 }
 
 type Args = { hostResponse: HostResponse; editing: boolean };
@@ -173,23 +183,53 @@ const meta: Meta<typeof AlertingHost> = {
   argTypes: {
     hostResponse: {
       description:
-        "What the host's `alert.action` returns: a link for every card, a reason for every card, or a mix (percentiles and multi-scorer cards disabled).",
+        "What the host's `alert.action` returns: per source (percentiles and every-scorer sources disabled), one link for every card, or one reason for every card.",
       control: 'inline-radio',
-      options: ['mixed', 'enabled', 'disabled'],
+      options: ['per-source', 'enabled', 'disabled'],
     },
     editing: { description: 'Pass drag handles, as a layout editor does. Cards then show no Create alert button.' },
   },
-  args: { hostResponse: 'mixed', editing: false },
+  args: { hostResponse: 'per-source', editing: false },
 };
 
 export default meta;
 
 type Story = StoryObj<typeof AlertingHost>;
 
-/** Every kind with an `alert` host. Agent runs is pinned. Heatmap is an error card, which never shows the button. */
+/**
+ * Every kind with a host answering per source. A card with one source, or one the host can link, has a
+ * plain button; one with several opens a menu of them (Agent runs, the KPIs, the tables), a disabled one
+ * saying why; one the host can link none of is disabled (Latency, Scores). Agent runs is pinned.
+ * Heatmap is an error card, which never shows the button.
+ */
 export const Default: Story = {};
 
-/** The host answers a link for every card. */
+/** Opens a card's alert menu once the card has settled: a card that re-renders as it loads closes it. */
+const openAlertMenu =
+  (widgetId: string): Story['play'] =>
+  async ({ canvasElement }) => {
+    await waitFor(
+      async () => {
+        if (canvasElement.ownerDocument.querySelector('[role="menu"]')) return;
+        const card = canvasElement.querySelector<HTMLElement>(`[data-widget-id="${widgetId}"]`);
+        const trigger = card && within(card).queryByRole('button', { name: /^Create alert from/ });
+        if (trigger) {
+          card.scrollIntoView();
+          await userEvent.click(trigger);
+        }
+        throw new Error(`No ${widgetId} alert menu yet`);
+      },
+      { timeout: 15000, interval: 1000 },
+    );
+  };
+
+/** The Agent runs card's menu, open: one entry per series. */
+export const MenuOpen: Story = { play: openAlertMenu('agent-runs') };
+
+/** The tabbed table's menu, open: one entry per value column, the cost column disabled with its reason. */
+export const MenuWithDisabledEntry: Story = { play: openAlertMenu('breakdown') };
+
+/** The host answers one link for every card: every button is plain, whatever its sources. */
 export const AllEnabled: Story = { args: { hostResponse: 'enabled' } };
 
 /** The host answers a reason for every card. The button is disabled, and its tooltip says why. */

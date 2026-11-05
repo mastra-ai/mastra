@@ -14,7 +14,7 @@ import { chartColor, FORMATTERS } from '../../lib/format';
 import { pinActions } from '../../lib/pin-actions';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
-import { shapeTimeseries } from '../../lib/timeseries';
+import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
 import { answersById } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -48,7 +48,10 @@ export function TimeseriesWidget(props: Props) {
 
 function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert }: ViewProps) {
   // Drilldown, then the alert, then the pin.
-  const heading = withAction(own, alertAction(alert, widget, view, { page }));
+  const heading = withAction(
+    own,
+    alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),
+  );
   const { options } = view;
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const totals = new Set(options.totals ?? []);

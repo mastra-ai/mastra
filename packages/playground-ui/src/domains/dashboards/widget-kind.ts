@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import type { z } from 'zod/v4';
 import type { ChartCardProps } from '../metrics/components/chart-card';
 import type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
+import type { ValueRef } from './lib/values';
 import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 
 /** A view whose options passed its kind's schema. */
@@ -34,17 +35,36 @@ export type DashboardAlertTarget = {
    * every scorer); the host has to pick one or disable the button.
    */
   queries: DashboardQuery[];
+  /**
+   * Each distinct number the view shows, read straight from one query: a series, column or KPI, or,
+   * for one combining several (a ratio, a sum), each part. Same order as the view's options.
+   */
+  sources: DashboardAlertSource[];
 };
+
+/** One number a view reads from one query, as a single alert could watch it. */
+export type DashboardAlertSource = {
+  /** The series, column or KPI it belongs to; a part of a combined value adds its query and ref. */
+  label: string;
+  /** The query, with the page's filters applied, as in `queries`. */
+  query: DashboardQuery;
+  /** Which of the query's numbers: a measure, a field, a percentile, or only some groups. */
+  ref: DashboardAlertRef;
+};
+
+export type DashboardAlertRef = Omit<ValueRef, 'query'>;
 
 /** Where the button opens the host's alert editor, or why the view can't become an alert. */
 export type DashboardAlertAction = { href: string } | { disabled: string };
 
 /**
- * How a host turns a card's open view into an alert: `action` returns where the button links, a
- * reason it's disabled, or `undefined` for no button. Links render through `LinkComponent`.
+ * How a host turns a card's open view into an alert. `action` returns one action for the whole card,
+ * `undefined` for no button, or an array aligned with `target.sources`: one action per source
+ * (`undefined` leaves it out). A card with several sources the host can alert on opens a menu of them.
+ * Links render through `LinkComponent`.
  */
 export type DashboardAlert = {
-  action: (target: DashboardAlertTarget) => DashboardAlertAction | undefined;
+  action: (target: DashboardAlertTarget) => DashboardAlertAction | (DashboardAlertAction | undefined)[] | undefined;
   LinkComponent: NonNullable<ChartCardProps['LinkComponent']>;
 };
 

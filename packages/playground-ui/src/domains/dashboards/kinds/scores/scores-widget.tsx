@@ -46,7 +46,23 @@ export function ScoresWidget({ widget, views, expand, dragHandle, pin, alert }: 
       pending={gate => <PendingChartCard gate={gate} heading={pendingHeading(heading, gate, alert, widget, view)} />}
     >
       {page => (
-        <ScoresView heading={withAction(heading, alertAction(alert, widget, view, { page }))} view={view} page={page} />
+        <ScoresView
+          heading={withAction(
+            heading,
+            // The scorers' means over the range: what the card's lines average to.
+            alertAction(alert, widget, view, {
+              page,
+              values: [
+                {
+                  label: view.label?.trim() || widget.title?.trim() || 'Scores',
+                  value: { query: view.options.average },
+                },
+              ],
+            }),
+          )}
+          view={view}
+          page={page}
+        />
       )}
     </ViewGate>
   );

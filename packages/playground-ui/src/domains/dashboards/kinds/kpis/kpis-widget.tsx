@@ -38,7 +38,12 @@ export function KpisWidget({ widget, views, dragHandle, pin, alert }: WidgetKind
       {alert && (
         // KPIs read metrics and scores aggregates only, which every page filter applies to.
         <ViewGate queries={view.queries} pending={() => null}>
-          {page => alertAction(alert, widget, view, { page })}
+          {page =>
+            alertAction(alert, widget, view, {
+              page,
+              values: view.options.items.map(({ label, value }) => ({ label, value })),
+            })
+          }
         </ViewGate>
       )}
       {pin && <PinAction {...pin} />}

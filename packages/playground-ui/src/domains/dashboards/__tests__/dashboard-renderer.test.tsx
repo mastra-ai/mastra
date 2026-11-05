@@ -30,7 +30,14 @@ import { DrilldownAction } from '../components/widget-controls';
 import { useViewMenu } from '../hooks/use-widget-views';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
-import type { AnyWidgetKind, DashboardAlert, DashboardAlertTarget, DashboardExpand } from '../widget-kind';
+import type {
+  AnyWidgetKind,
+  DashboardAlert,
+  DashboardAlertAction,
+  DashboardAlertSource,
+  DashboardAlertTarget,
+  DashboardExpand,
+} from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
@@ -834,6 +841,235 @@ describe('DashboardRenderer', () => {
       expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('link', { name: alertLabel })).toBeNull();
       expect(screen.queryByRole('button', { name: alertLabel })).toBeNull();
+    });
+
+    describe('per source', () => {
+      const perSource = (pick: (s: DashboardAlertSource, i: number) => DashboardAlertAction | undefined) =>
+        hosting(({ sources }) => sources.map(pick));
+      const linkEach = () => perSource(s => ({ href: `/alerts/new?from=${encodeURIComponent(s.label)}` }));
+      const labels = (target: DashboardAlertTarget) => target.sources.map(s => s.label);
+      const openMenu = async (card: HTMLElement, name: string | RegExp = alertLabel) => {
+        const trigger = await within(card).findByRole('button', { name }, { timeout: 5000 });
+        fireEvent.click(trigger);
+        return screen.findByRole('menu');
+      };
+
+      it('hands the host each KPI, and each part of a combined one, with its query and ref', async () => {
+        const { alert, spy } = linkEach();
+        const { container } = renderDashboard(definition(kpisWidget), { alert, environment: 'prod' });
+        await openMenu(cell(container, 'kpis'));
+        const { sources } = lastTarget(spy);
+        expect(labels(lastTarget(spy))).toEqual([
+          'Agent runs',
+          'Model cost',
+          'Tokens: input',
+          'Tokens: output',
+          'Threads',
+        ]);
+        expect(sources[1]?.ref).toEqual({ field: 'estimatedCost' });
+        expect(sources[1]?.query).toMatchObject({ id: 'cost', filters: { environment: 'prod' } });
+        expect(sources[2]?.ref).toEqual({});
+        expect(sources[2]?.query).toMatchObject({ id: 'input' });
+      });
+
+      it('lists the parts of a combined series once each, naming what they pick', async () => {
+        const { alert, spy } = linkEach();
+        const { container } = renderDashboard(definition(agentRunsWidget), { alert });
+        await openMenu(cell(container, 'agent-runs'));
+        expect(labels(lastTarget(spy))).toEqual(['Completed', 'Failed']);
+        await pickView('Agent runs', 'Failure rate');
+        await waitFor(() =>
+          expect(labels(lastTarget(spy))).toEqual([
+            'Failed runs: runs (error, failed)',
+            'Failed runs: runs (not error, failed)',
+          ]),
+        );
+        expect(lastTarget(spy).sources.map(s => s.ref)).toEqual([
+          { groups: ['error', 'failed'] },
+          { notGroups: ['error', 'failed'] },
+        ]);
+      });
+
+      it('hands the host a series by its value over the range, where it has one', async () => {
+        serveCapabilities(traceAggregateCapabilities);
+        const { alert, spy } = linkEach();
+        const { container } = renderDashboard(definition(distinctIdsWidget), { alert });
+        await openMenu(cell(container, 'distinct-ids'));
+        const { sources } = lastTarget(spy);
+        expect(sources.length).toBeGreaterThan(1);
+        for (const source of sources) {
+          expect(source.query.id).toBe('totals');
+          expect(source.ref.measure).toEqual(expect.any(String));
+        }
+      });
+
+      it("lists a table's value columns, one entry per column", async () => {
+        const { alert, spy } = linkEach();
+        const widget = models();
+        const { container } = renderDashboard(definition(widget), { alert });
+        await openMenu(cell(container, widget.id));
+        const columns = (widget.views[0]?.columns ?? []).filter(c => c.options?.type === 'value').map(c => c.label);
+        expect(labels(lastTarget(spy))).toEqual(columns);
+      });
+
+      it('lists one series per ref, the first label winning a repeat', async () => {
+        const { alert, spy } = linkEach();
+        const runs = agentRunsWidget.views[0];
+        if (!runs) throw new Error('Agent runs has no view');
+        const widget: DashboardWidget = {
+          ...agentRunsWidget,
+          views: [
+            {
+              ...runs,
+              options: {
+                ...runs.options,
+                series: [
+                  {
+                    dataKey: 'a',
+                    label: 'Failed',
+                    color: 'error',
+                    value: { query: 'runs', groups: ['error', 'failed'] },
+                  },
+                  { dataKey: 'b', label: 'Again', color: 'sky', value: { query: 'runs', groups: ['error', 'failed'] } },
+                ],
+              },
+            },
+          ],
+        };
+        const { container } = renderDashboard(definition(widget), { alert });
+        await within(cell(container, 'agent-runs')).findByRole('link', { name: 'Create alert from Agent runs' });
+        expect(labels(lastTarget(spy))).toEqual(['Failed']);
+      });
+
+      it('opens a menu linking each source the host can alert on', async () => {
+        const { alert } = linkEach();
+        const { container } = renderDashboard(definition(kpisWidget), { alert });
+        const menu = await openMenu(cell(container, 'kpis'), 'Create alert');
+        const links = within(menu).getAllByRole('menuitem');
+        expect(links.map(l => l.textContent)).toEqual([
+          'Agent runs',
+          'Model cost',
+          'Tokens: input',
+          'Tokens: output',
+          'Threads',
+        ]);
+        expect(links[1]?.getAttribute('href')).toBe(`/app/alerts/new?from=${encodeURIComponent('Model cost')}`);
+      });
+
+      it('shows a source the host disables in the menu, with its reason', async () => {
+        const { alert } = perSource(s =>
+          s.ref.field === 'estimatedCost'
+            ? { disabled: 'Cost alerts are not supported yet.' }
+            : { href: '/alerts/new' },
+        );
+        const { container } = renderDashboard(definition(kpisWidget), { alert });
+        const menu = await openMenu(cell(container, 'kpis'));
+        const cost = within(menu).getByRole('menuitem', { name: /Model cost/ });
+        expect(cost.getAttribute('aria-disabled')).toBe('true');
+        expect(cost.getAttribute('href')).toBeNull();
+        expect(cost.textContent).toContain('Cost alerts are not supported yet.');
+        expect(
+          within(menu)
+            .getAllByRole('menuitem')
+            .filter(i => i.getAttribute('href')),
+        ).toHaveLength(4);
+      });
+
+      it('leaves out a source the host passes over', async () => {
+        const { alert } = perSource((s, i) => (i === 0 ? undefined : { href: '/alerts/new' }));
+        const { container } = renderDashboard(definition(kpisWidget), { alert });
+        const menu = await openMenu(cell(container, 'kpis'));
+        expect(within(menu).queryByRole('menuitem', { name: 'Agent runs' })).toBeNull();
+        expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
+      });
+
+      it('links straight to the only source the host can alert on, naming it', async () => {
+        const { alert } = perSource((_, i) => (i === 4 ? { href: '/alerts/threads' } : { disabled: 'No.' }));
+        const { container } = renderDashboard(definition(kpisWidget), { alert });
+        const link = await within(cell(container, 'kpis')).findByRole('link', { name: 'Create alert from Threads' });
+        expect(link.getAttribute('href')).toBe('/app/alerts/threads');
+        expect(screen.queryByRole('menu')).toBeNull();
+      });
+
+      it("links a single source's card as a plain button, named for the card", async () => {
+        const { alert, spy } = perSource(() => ({ href: '/alerts/new' }));
+        const { container } = renderDashboard(definition(scoresWidget), { alert });
+        const link = await within(cell(container, 'scores')).findByRole(
+          'link',
+          { name: `Create alert from ${scoresWidget.title}` },
+          { timeout: 5000 },
+        );
+        expect(link.getAttribute('href')).toBe('/app/alerts/new');
+        expect(lastTarget(spy).sources).toEqual([
+          { label: 'Scores', query: expect.objectContaining({ id: 'average' }), ref: {} },
+        ]);
+      });
+
+      it('disables the button when the host can alert on no source, with the shared reason', async () => {
+        const { alert } = perSource(() => ({ disabled: 'Percentiles are not supported yet.' }));
+        const { container } = renderDashboard(definition(kpisWidget), { alert });
+        const button = await within(cell(container, 'kpis')).findByRole('button', { name: alertLabel });
+        expect(button.getAttribute('aria-disabled')).toBe('true');
+        expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+          'Percentiles are not supported yet.',
+        );
+      });
+
+      it("disables the button when the host can alert on no source, with each source's reason", async () => {
+        const { alert } = perSource(s => ({ disabled: `No ${s.label}.` }));
+        const { container } = renderDashboard(definition(agentRunsWidget), { alert });
+        const button = await within(cell(container, 'agent-runs')).findByRole('button', { name: alertLabel });
+        expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+          'Completed: No Completed.\nFailed: No Failed.',
+        );
+      });
+
+      it("disables, in its place, a source whose query the page's filters contradict", async () => {
+        const kpis = kpisWidget.views[0];
+        if (!kpis) throw new Error('KPIs have no view');
+        const widget: DashboardWidget = {
+          ...kpisWidget,
+          views: [
+            {
+              ...kpis,
+              queries: kpis.queries.map(q =>
+                q.id === 'cost' && q.source === 'metrics' ? { ...q, filters: { environment: 'staging' } } : q,
+              ),
+            },
+          ],
+        };
+        const { alert, spy } = linkEach();
+        const { container } = renderDashboard(definition(widget), { alert, environment: 'prod' });
+        const menu = await openMenu(cell(container, 'kpis'));
+        expect(labels(lastTarget(spy))).not.toContain('Model cost');
+        const items = within(menu).getAllByRole('menuitem');
+        expect(items.map(i => i.textContent?.split('The page')[0])).toEqual([
+          'Agent runs',
+          'Model cost',
+          'Tokens: input',
+          'Tokens: output',
+          'Threads',
+        ]);
+        expect(items[1]?.getAttribute('aria-disabled')).toBe('true');
+        expect(items[1]?.textContent).toContain("The page's filters exclude everything this card shows.");
+        expect(items[2]?.getAttribute('href')).toBe(`/app/alerts/new?from=${encodeURIComponent('Tokens: input')}`);
+      });
+
+      it('puts the menu after the drilldown and before the pin', async () => {
+        const { alert } = linkEach();
+        const widget = { ...agentRunsWidget, drilldown: { action: { page: 'traces' as const, filters: [] } } };
+        const { container } = renderDashboard(definition(widget), {
+          alert,
+          onDrilldown: () => {},
+          pin: { onPin: () => {}, isPinned: () => false },
+        });
+        const card = cell(container, 'agent-runs');
+        const trigger = await within(card).findByRole('button', { name: alertLabel });
+        const controls = [...card.querySelectorAll('button, a')];
+        const at = (el: Element) => controls.indexOf(el);
+        expect(at(within(card).getByRole('button', { name: 'View in traces' }))).toBeLessThan(at(trigger));
+        expect(at(trigger)).toBeLessThan(at(within(card).getByRole('button', { name: 'Pin Agent runs' })));
+      });
     });
   });
 

@@ -59,7 +59,14 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
     props.alert,
     props.widget,
     view,
-    unsupported ? { blocked: unsupported, names: FILTER_NAMES } : { page },
+    unsupported
+      ? { blocked: unsupported, names: FILTER_NAMES }
+      : {
+          page,
+          values: parseColumns(view.columns)
+            .columns.filter(isValueColumn)
+            .map(c => ({ label: c.label, value: c.options.value })),
+        },
   );
   const heading = withAction({ ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) }, alert);
 
