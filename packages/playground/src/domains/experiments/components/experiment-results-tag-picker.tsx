@@ -63,7 +63,7 @@ export function ExperimentResultsTagPicker({
       onValueChange={handleSelect}
       onInputValueChange={setSearch}
       placeholder="Add tag"
-      searchPlaceholder="Search or create tag..."
+      searchPlaceholder="Search or create tag"
       emptyText="Type to create a tag"
       variant={variant}
       size="sm"

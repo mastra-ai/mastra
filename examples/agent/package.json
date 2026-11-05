@@ -25,8 +25,11 @@
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
+    "@mastra/mcp-apps-components": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "@mastra/playground-ui": "latest",
+    "@mastra/server": "latest",
     "@mastra/slack": "latest",
     "@mastra/voice-openai": "latest",
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -64,8 +67,11 @@
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
+      "@mastra/mcp-apps-components": "link:../../packages/mcp-apps-components",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/playground-ui": "link:../../packages/playground-ui",
+      "@mastra/server": "link:../../packages/server",
       "@mastra/slack": "link:../../channels/slack",
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/auth-studio": "link:../../auth/studio",
@@ -75,7 +81,7 @@
       "qs@>=6.7.0 <6.16.0": "6.16.0",
       "fast-uri@<3.1.9": "3.1.9",
       "body-parser@>=2.0.0 <2.4.0": "2.4.0",
-      "fast-uri@>=4.0.0 <4.1.5": "4.2.1",
+      "fast-uri@>=4.0.0 <4.2.3": "4.2.3",
       "brace-expansion@>=1.0.0 <1.1.21": "1.1.21",
       "brace-expansion@>=2.0.0 <2.1.7": "2.1.7",
       "brace-expansion@>=4.0.0 <5.0.12": "5.0.12",
@@ -105,7 +111,9 @@
       "undici@<8.12.2": "8.12.2",
       "yargs@<18.1.0": "18.2.0",
       "raw-body@<4.0.0": "4.0.0",
-      "nanoid@<5.1.16": "5.1.16"
+      "nanoid@<5.1.16": "5.1.16",
+      "@modelcontextprotocol/sdk>@hono/node-server": "2.1.6",
+      "@modelcontextprotocol/node>@hono/node-server": "2.1.6"
     },
     "patchedDependencies": {
       "body-parser@2.4.0": "patches/body-parser@2.4.0.patch"

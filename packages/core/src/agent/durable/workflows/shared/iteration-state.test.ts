@@ -218,6 +218,23 @@ describe('createBaseIterationStateUpdate', () => {
     expect(JSON.stringify(update)).not.toContain('tool-19');
   });
 
+  it('saves the tracing facts for the next worker and keeps them off the public step records', () => {
+    const tracingTermination = { outcome: 'interrupted', stopReason: 'observer_failed' };
+    const tracingDelegationFailure = { outcome: 'error', stopReason: 'model_error' };
+    const output = {
+      ...executionOutput(),
+      tracingTermination,
+      tracingDelegationFailure,
+      toolResults: [{ toolCallId: 'call', toolName: 'agent-worker', result: 'failed', tracingDelegationFailure }],
+    };
+
+    const update = createBaseIterationStateUpdate({ currentState: iterationState(), executionOutput: output as any });
+
+    expect(update.tracingTermination).toEqual(tracingTermination);
+    expect(update.tracingDelegationFailure).toEqual(tracingDelegationFailure);
+    expect(JSON.stringify(update.accumulatedSteps)).not.toContain('tracingDelegationFailure');
+  });
+
   it('carries preemption through cold schemas, actual mapping and snapshots, then clears it on acceptance', async () => {
     const runId = 'cold-signal-preemption';
     expect(globalRunRegistry.get(runId)).toBeUndefined();

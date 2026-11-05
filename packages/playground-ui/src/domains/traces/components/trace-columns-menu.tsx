@@ -39,6 +39,7 @@ const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   duration: 'Duration',
   traceCount: 'Messages',
   timeToFirstChunk: 'Time to first chunk',
+  timeToFirstToken: 'Time to first token',
   endTime: 'End',
   environment: 'Environment',
   model: 'Model',
@@ -120,7 +121,7 @@ export function TraceColumnsMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenu.Trigger disabled={disabled} variant="ghost" size="icon-md" tooltip="Columns">
+        <DropdownMenu.Trigger disabled={disabled} size="icon-sm" tooltip="Columns">
           <Columns3Icon aria-hidden />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" className="min-w-56">
@@ -222,8 +223,8 @@ export function TraceColumnsMenu({
                       setMetadataError(undefined);
                     }}
                     allowCustomValue
-                    placeholder="Select a metadata key…"
-                    searchPlaceholder="Search metadata keys…"
+                    placeholder="Select a metadata key"
+                    searchPlaceholder="Search metadata keys"
                     emptyText="No metadata keys observed. Type one to add it."
                   />
                   <FieldError>{metadataError}</FieldError>

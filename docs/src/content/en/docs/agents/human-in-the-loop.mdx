@@ -612,6 +612,31 @@ A [supervisor agent](/docs/subagents) coordinates multiple subagents using `.str
 
 Tool approvals also propagate through multiple levels of delegation. If a supervisor delegates to subagent A, which delegates to subagent B that has a tool with `requireApproval: true`, the approval request still surfaces at the top-level supervisor.
 
+### Identify which subagent tool paused
+
+The supervisor raises a subagent's pause on its own delegation call, so `toolCallId` on the `tool-call-approval` or `tool-call-suspended` chunk is the supervisor's call to the subagent. Always pass that `toolCallId` when you approve, decline, or resume.
+
+To show which of the subagent's tool calls paused, read these fields from the same payload:
+
+- `delegatedToolCallId`: The ID of the subagent's tool call that paused. Use it to tell apart two pauses from the same delegation, such as a question followed by an approval.
+- `delegatedToolName`: The name of the subagent's tool that paused.
+
+With several levels of delegation, both fields name the deepest tool call, the one that actually paused. Memory saves them with the pause, so they're still there when you reload the conversation, and `generate()` returns them on `suspendPayload`.
+
+```typescript
+const stream = await supervisorAgent.stream('Draft and publish the report')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+    // Label the pause with the subagent tool call that caused it
+    console.log('Paused:', chunk.payload.delegatedToolName, chunk.payload.delegatedToolCallId)
+
+    // Pass the supervisor's delegation call when you approve, decline, or resume
+    console.log('Resume with:', chunk.payload.toolCallId)
+  }
+}
+```
+
 ### Approve and decline in supervisor agents
 
 The example below creates a subagent with a tool requiring approval. When the tool triggers an approval request, it surfaces in the supervisor's stream as a `tool-call-approval` chunk:

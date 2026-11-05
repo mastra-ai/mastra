@@ -441,7 +441,9 @@ The method can return any value. The returned value will be available to subsequ
 **Required** step that computes the final numerical score.
 
 **Function Mode:**
-Function: `({ run, results }) => number`
+Function: `({ run, results }) => number | NotScorable | Promise<number | NotScorable>`
+
+Return [`notScorable()`](/reference/evals/not-scorable) instead of a number to finish the run without a score.
 
 <PropertiesTable
   content={[
@@ -486,8 +488,8 @@ Function: `({ run, results }) => number`
 ]}
 />
 
-Returns: `number`\
-The method must return a numerical score.
+Returns: `number | NotScorable`\
+Return a numerical score, or `notScorable()` to finish the run without a score.
 
 **Prompt Object Mode:**
 

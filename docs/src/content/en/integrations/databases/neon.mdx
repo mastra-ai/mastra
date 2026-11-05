@@ -2,7 +2,6 @@
 title: "Neon Postgres | Database"
 description: "Connect Mastra to Neon Postgres with PostgresStore, pooled production connections, schema initialization, vector search, and Neon agent skills."
 packages:
-  - "@mastra/core"
   - "@mastra/pg"
 ---
 
@@ -151,7 +150,7 @@ See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling) 
 
 ## Vector search
 
-Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use the direct `DATABASE_URL_UNPOOLED` connection while creating the extension and indexes. After setup, configure [`PgVector`](/reference/vectors/pg) with the pooled connection for runtime queries:
+Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use the direct `DATABASE_URL_UNPOOLED` connection while creating the extension and indexes. After setup, configure [`PgVector`](/integrations/vectors/pg) with the pooled connection for runtime queries:
 
 ```typescript
 import { PgVector } from '@mastra/pg'

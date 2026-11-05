@@ -9,7 +9,7 @@ export function ActionRowRoot({ className, ...props }: DivProps) {
   return (
     <div
       data-slot="action-row"
-      className={cn('flex min-h-control-md flex-wrap items-center justify-between gap-2', className)}
+      className={cn('flex min-h-control-md flex-wrap items-center justify-between gap-1.5', className)}
       {...props}
     />
   );
@@ -20,7 +20,7 @@ export function ActionRowStart({ className, ...props }: DivProps) {
   return (
     <div
       data-slot="action-row-start"
-      className={cn('flex min-w-64 flex-1 flex-wrap items-center gap-2', className)}
+      className={cn('flex min-w-64 flex-1 flex-wrap items-center gap-1.5', className)}
       {...props}
     />
   );
@@ -29,6 +29,10 @@ export function ActionRowStart({ className, ...props }: DivProps) {
 /** Actions positioned on the right. Never shrinks; wraps under the start group when needed. */
 export function ActionRowEnd({ className, ...props }: DivProps) {
   return (
-    <div data-slot="action-row-end" className={cn('ml-auto flex shrink-0 items-center gap-2', className)} {...props} />
+    <div
+      data-slot="action-row-end"
+      className={cn('ml-auto flex shrink-0 items-center gap-1.5', className)}
+      {...props}
+    />
   );
 }

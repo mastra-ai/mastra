@@ -7,9 +7,11 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, isPullRequestCard, pullRequestReviewPhase } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -18,6 +20,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -29,6 +32,7 @@ import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
@@ -42,6 +46,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
   SessionBranchHeldError,
   SessionOwnershipMismatchError,
@@ -57,9 +62,11 @@ import {
   workItemThreadTitle,
 } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
+import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -122,6 +129,7 @@ export interface FactoryApiRoutesDeps {
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
+    skillOverrides: SkillOverridesStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -136,8 +144,10 @@ export interface FactoryApiRoutesDeps {
   knowledgeKey?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
-  /** Boards installed for this Factory instance. */
-  boardRegistry: BoardRegistry;
+  /** Each project's boards; integrations use the code boards (`codeRegistry`). */
+  boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Stored boards and their cache; mounts the board management routes when present. */
+  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -263,7 +273,10 @@ async function legacyPlanSession(
 function restingExitLane(
   board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
+  pullRequestCard: boolean,
 ): string | undefined {
+  // A pull request's own card is reviewed in PR review; Work's Review lane is the builder's self-review.
+  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return pullRequestReviewPhase('work');
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
@@ -278,7 +291,7 @@ export async function prepareFactoryRuleBinding(
   sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
-  boards: BoardRegistry,
+  boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
   intake?: Pick<IntakeStorage, 'getConfig'>,
 ): Promise<void> {
@@ -288,20 +301,20 @@ export async function prepareFactoryRuleBinding(
         ? sourceControlProvider.sourceControlStorage
         : sourceControlProvider;
     const source = workItemBranchSource(input.item.externalSource);
-    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
+    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.workItem.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
     // unknown board or phase yields no destination rather than a guessed one.
     const boardId = boardForWorkItem(input.item);
-    const board = boards.get(boardId);
+    const board = (await toBoardSource(boards).load(input.record)).get(boardId);
     const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
     const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
     const destinationStage =
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(board, input.role)
+          ? restingExitLane(board, input.role, isPullRequestCard({ source: workItemSource(input.item.externalSource) }))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -410,7 +423,7 @@ export async function prepareFactoryRuleBinding(
       sessionId: preparedSession.sessionId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
-      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {
@@ -643,6 +656,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     const context = buildIntegrationContext(
       {
         ...deps,
+        // Integrations evaluate code behaviors and place new cards with the code boards.
+        boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
@@ -790,6 +805,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
       ...(deps.skills ? { skills: deps.skills } : {}),
+      overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
@@ -816,10 +832,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
-          threadTitle: async threadId => {
-            const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
-            return (await memory?.getThreadById({ threadId }))?.title;
-          },
         }).routes()
       : []),
     ...(deps.factoryReady
@@ -829,11 +841,31 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new BoardRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
         }).routes()
       : []),
     ...(deps.factoryReady

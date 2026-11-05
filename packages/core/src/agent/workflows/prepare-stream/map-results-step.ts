@@ -168,7 +168,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messageList,
       onStepFinish: async (props: any) => {
         // When OM is enabled saving per step corrupts things because OM handles its own saving
-        const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
+        const shouldSavePerStep =
+          options.savePerStep && !isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (memoryData.thread?.id) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
@@ -592,6 +593,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
+        stepOwner: options.stepOwner,
       },
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,

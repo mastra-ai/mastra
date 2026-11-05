@@ -73,7 +73,7 @@ await vectorDB.deleteVectors({
 ## Documentation
 
 - [Elasticsearch integration guide](https://mastra.ai/integrations/databases/elasticsearch)
-- [Elasticsearch vector reference](https://mastra.ai/reference/vectors/elasticsearch)
+- [Elasticsearch vector reference](https://mastra.ai/integrations/vectors/elasticsearch)
 
 ## Changelog
 

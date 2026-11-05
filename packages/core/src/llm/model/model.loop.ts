@@ -137,6 +137,7 @@ export class MastraLLMVNext extends MastraBase {
     requireToolApproval,
     toolCallConcurrency,
     eagerToolExecution,
+    streamPublisher,
     _internal,
     onTracingTripwire,
     onTracingTerminalError,
@@ -279,6 +280,7 @@ export class MastraLLMVNext extends MastraBase {
         requireToolApproval,
         toolCallConcurrency,
         eagerToolExecution,
+        streamPublisher,
         agentId,
         agentVersionId,
         resolvedScopes,
@@ -420,11 +422,16 @@ export class MastraLLMVNext extends MastraBase {
               },
               usage: subtractReportedUsage(observedUsage, props?.generationReportedUsage),
               providerMetadata: props?.providerMetadata,
-              stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
+              stepProviderMetadata:
+                props?.generationStepProviderMetadata ?? props?.steps.map(step => step.providerMetadata),
             });
 
             try {
-              const { generationReportedUsage: _generationReportedUsage, ...userProps } = props;
+              const {
+                generationReportedUsage: _generationReportedUsage,
+                generationStepProviderMetadata: _generationStepProviderMetadata,
+                ...userProps
+              } = props;
               await options?.onFinish?.({ ...userProps, runId: runId! }, context);
             } catch (e: unknown) {
               const mastraError = new MastraError(

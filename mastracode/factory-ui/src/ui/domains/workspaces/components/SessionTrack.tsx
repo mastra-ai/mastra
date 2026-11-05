@@ -13,7 +13,6 @@ import type { TrackLayout, TrackPin, TrackSpan, TrackStage } from '../services/s
 
 const MIN_LABELLED_STAGE_PERCENT = 16;
 const MIN_HIT_WIDTH = '8px';
-const FADE_CLASSES = 'transition-[opacity,background-color] duration-150 motion-reduce:transition-none';
 
 /** The piece of the track under the pointer, as the header and axis read it out. */
 interface TrackFocus {
@@ -133,7 +132,6 @@ export function SessionTrack({
             key={stageKey(stage)}
             className={cn(
               'pointer-events-none absolute inset-y-0 rounded-[3px]',
-              FADE_CLASSES,
               focus?.key === stageKey(stage) ? stageStrongTintClass(stage.stage) : stageTintClass(stage.stage),
               fadedUnlessFocused(stageKey(stage)),
             )}
@@ -145,7 +143,6 @@ export function SessionTrack({
             key={runKey(run)}
             className={cn(
               'bg-span-agent pointer-events-none absolute top-[3px] h-1 min-w-0.5 rounded-xs',
-              FADE_CLASSES,
               fadedUnlessFocused(runKey(run)),
             )}
             style={{ left: `${run.left}%`, width: `${run.width}%` }}
@@ -174,16 +171,14 @@ export function SessionTrack({
           return (
             <span
               key={pinKey(pin)}
-              className={cn(
-                'ring-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
-                FADE_CLASSES,
-                fadedUnlessFocused(pinKey(pin)),
-              )}
+              className="ring-popover bg-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2"
               data-track-hit={pinCaption(pin, nameOf(pin.personId))}
               style={{ left: `${pin.left}%` }}
               onPointerEnter={() => setFocus(pinFocus(pin, nameOf(pin.personId)))}
             >
-              <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              <span className={cn('flex', fadedUnlessFocused(pinKey(pin)))}>
+                <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              </span>
             </span>
           );
         })}

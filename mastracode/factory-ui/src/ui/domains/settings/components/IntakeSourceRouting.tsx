@@ -8,7 +8,7 @@ import { RotateCcw } from 'lucide-react';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
 import type { IntakeSourceBinding } from '../../factory/services/intake';
-import { SourcePicker } from './IntakeSourcePicker';
+import { SourcePicker, sourcePickerItemText } from './IntakeSourcePicker';
 import type { SourcePickerItem, SourcePickerProps } from './IntakeSourcePicker';
 
 const UNROUTED = '__unrouted__';
@@ -50,9 +50,9 @@ export function RoutedSourcePicker({
           if (!bindings) return undefined;
           const binding = bindingBySource.get(sourceId);
           if (!factories.some(factory => factory.id === binding?.factoryProjectId))
-            return "Not routed — this source's issues won't be picked up.";
+            return "Not routed. This source's issues won't be picked up.";
           if (binding?.board == null)
-            return "Choose a board — this source's issues won't be picked up until one is set.";
+            return "Choose a board. This source's issues won't be picked up until one is set.";
           return undefined;
         }}
         itemActions={item =>
@@ -103,7 +103,11 @@ function SourceRoute({
           onRoute(next, next === routedFactory?.id ? board : null);
         }}
       >
-        <SelectTrigger size="sm" aria-label={`Factory for ${item.label}`} className="w-auto max-w-full min-w-0">
+        <SelectTrigger
+          size="sm"
+          aria-label={`Factory for ${sourcePickerItemText(item)}`}
+          className="w-auto max-w-full min-w-0"
+        >
           <Txt as="span" variant="caption">
             {routedFactory?.name ?? 'Not routed'}
           </Txt>
@@ -119,7 +123,7 @@ function SourceRoute({
       </Select>
       {routedFactory && (
         <BoardPicker
-          name={item.label}
+          name={sourcePickerItemText(item)}
           factoryProjectId={routedFactory.id}
           board={board}
           disabled={disabled}
@@ -130,7 +134,7 @@ function SourceRoute({
   );
 }
 
-function BoardPicker({
+export function BoardPicker({
   name,
   factoryProjectId,
   board,

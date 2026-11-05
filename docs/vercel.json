@@ -4078,6 +4078,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/vectors/:path*/llms.txt",
+      "destination": "/integrations/vectors/:path*/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/:path*",
       "destination": "/docs/observability/integrations/exporters/:path*",
       "permanent": true
@@ -4145,6 +4150,11 @@
     {
       "source": "/docs/datasets/:path*",
       "destination": "/docs/evals/datasets",
+      "permanent": true
+    },
+    {
+      "source": "/reference/vectors/:path*",
+      "destination": "/integrations/vectors/:path*",
       "permanent": true
     }
   ]

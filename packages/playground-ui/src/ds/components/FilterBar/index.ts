@@ -9,6 +9,13 @@ export {
 } from './filter-bar-chip';
 export type { FilterBarChipProps } from './filter-bar-chip';
 export { FilterBarInput } from './filter-bar-input';
+export {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+  FilterBarTimeRange,
+} from './filter-bar-time-range';
+export type { FilterBarTimeRangeProps } from './filter-bar-time-range';
 export type { FilterBarInputProps } from './filter-bar-input';
 export { FilterBarAdvancedChip } from './filter-bar-advanced-chip';
 export type { FilterBarAdvancedChipProps } from './filter-bar-advanced-chip';

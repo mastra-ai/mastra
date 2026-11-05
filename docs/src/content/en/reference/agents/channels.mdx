@@ -67,6 +67,14 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
       'Promote URLs found in message text to file parts so the model can process linked content. Each entry matches a domain. Disabled by default.',
   },
   {
+    name: 'maxAttachmentStorageBytes',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '104857600 (100 MiB)',
+    description:
+      'Total size of attachments the agent may store under `channel-attachments/` in its workspace. Binary attachments that need an authenticated download, such as Slack files, are saved there (up to 10 MiB each) so workspace tools can open them. When saving a file would go over this limit, the agent gets the attachment URL instead and nothing is written.',
+  },
+  {
     name: 'tools',
     type: 'boolean',
     isOptional: true,
@@ -103,7 +111,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
     isOptional: true,
     description:
-      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`. `logger` defaults to the Mastra logger. Set it to use a different logger or a Chat SDK log level.',
   },
   {
     name: 'resolveResourceId',
@@ -710,6 +718,8 @@ The `ResolveThreadIdContext` passed to the function:
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
 
+Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded.
+
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
 Supported glob patterns:
@@ -736,6 +746,74 @@ type InlineLinkEntry =
   | string // Domain pattern (HEAD determines mime type)
   | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
 ```
+
+## `toChatLogger()`
+
+Adapts a Mastra logger to the Chat SDK `Logger` interface. Pass the result to an adapter's `logger` option so its logs go to the same logger as the rest of your app. See [Logging](/docs/channels#logging) for when to use it.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { toChatLogger } from '@mastra/core/channels'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { PinoLogger } from '@mastra/loggers'
+
+const logger = new PinoLogger({ name: 'app', level: 'info' })
+
+const discord = createDiscordAdapter({
+  logger: toChatLogger(logger, { component: 'discord', minLevel: 'warn' }),
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'logger',
+    type: 'IMastraLogger',
+    description: 'The Mastra logger that receives the records.',
+  },
+  {
+    name: 'options',
+    type: 'ToChatLoggerOptions',
+    isOptional: true,
+    description: 'Options for the bridge.',
+    properties: [
+      {
+        type: 'ToChatLoggerOptions',
+        parameters: [
+          {
+            name: 'minLevel',
+            type: "'debug' | 'info' | 'warn' | 'error' | 'silent'",
+            isOptional: true,
+            defaultValue: "'debug'",
+            description:
+              "Lowest level to forward. `'silent'` forwards nothing. With the default, the Mastra logger's own level decides what gets written.",
+          },
+          {
+            name: 'component',
+            type: 'string',
+            isOptional: true,
+            defaultValue: "'chat-sdk'",
+            description:
+              'Written as the `component` field on each record. `child(prefix)` extends it, so `chat-sdk` becomes `chat-sdk:discord`.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: a Chat SDK `Logger`.
+
+Extra log arguments become fields on the record:
+
+| Arguments | Fields |
+| - | - |
+| None | `component` |
+| One `Error` | `error`, `component` |
+| One non-array object | The object's fields, `component` |
+| Anything else | `args`, `component` |
+
+An `Error` passed directly or under an object's `error` key is normalized so it keeps its message and stack when serialized.
 
 ## Related
 

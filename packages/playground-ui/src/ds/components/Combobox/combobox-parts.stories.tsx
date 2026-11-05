@@ -210,7 +210,7 @@ export const CustomItems: Story = {
     const [value, setValue] = useState<Option | null>(null);
     return (
       <ComboboxRoot items={all} value={value} onValueChange={setValue} autoHighlight>
-        <ComboboxInput aria-label="Target" placeholder="Pick a target…" />
+        <ComboboxInput aria-label="Target" placeholder="Pick a target" />
         <ComboboxContent>
           <ComboboxEmpty>Nothing matches.</ComboboxEmpty>
           <ComboboxList>
@@ -267,7 +267,7 @@ export const Clear: Story = {
       <Field>
         <FieldLabel>Agent</FieldLabel>
         <ComboboxRoot items={agents} value={value} onValueChange={setValue} autoHighlight>
-          <ComboboxInput placeholder="Pick an agent…" showClear />
+          <ComboboxInput placeholder="Pick an agent" showClear />
           <ComboboxContent>
             <ComboboxEmpty>No agents found.</ComboboxEmpty>
             <OptionList />
@@ -376,7 +376,7 @@ export const CompactTrigger: Story = {
             <ComboboxValue placeholder="Pick an agent" />
           </ComboboxTrigger>
           <ComboboxContent>
-            <ComboboxSearch placeholder="Search agents…" />
+            <ComboboxSearch placeholder="Search agents" />
             <ComboboxEmpty>No agents found.</ComboboxEmpty>
             <OptionList />
           </ComboboxContent>
@@ -386,7 +386,7 @@ export const CompactTrigger: Story = {
             <ComboboxValue placeholder="Workflow" />
           </ComboboxTrigger>
           <ComboboxContent>
-            <ComboboxSearch placeholder="Search workflows…" />
+            <ComboboxSearch placeholder="Search workflows" />
             <ComboboxEmpty>No workflows found.</ComboboxEmpty>
             <OptionList />
           </ComboboxContent>
@@ -396,7 +396,7 @@ export const CompactTrigger: Story = {
             <ComboboxValue placeholder="All agents" />
           </ComboboxTrigger>
           <ComboboxContent align="end">
-            <ComboboxSearch placeholder="Search agents…" />
+            <ComboboxSearch placeholder="Search agents" />
             <ComboboxEmpty>No agents found.</ComboboxEmpty>
             <OptionList />
           </ComboboxContent>

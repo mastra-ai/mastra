@@ -29,6 +29,8 @@ export {
 } from './iteration-state';
 export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 
+export { readAccumulatedSteps, storeAccumulatedSteps } from './accumulated-steps';
+
 export { buildDeferredStepFinishChunk, buildDurableStepContent, expandDurableSteps } from '@internal/core/durable';
 
 export {

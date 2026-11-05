@@ -2,6 +2,7 @@ import { EntityType } from '@mastra/core/observability';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
   applyDatePreset,
@@ -44,6 +45,8 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
+import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
 export type TracesExplorerRootProps = {
   selection: TracesSelection;
@@ -58,6 +61,8 @@ export type TracesExplorerRootProps = {
   metricsSupport: TracesMetricsSupport;
   /** Host switches combined with the server capabilities; a feature runs only when both allow it. */
   features?: TracesExplorerFeatures;
+  /** Write context and action support for feedback in trace, span and thread panels. */
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
   children: ReactNode;
@@ -88,6 +93,7 @@ export function TracesExplorerRoot({
   scope,
   metricsSupport,
   features,
+  feedbackOptions,
   initialFilters = DEFAULT_TRACES_FILTERS,
   children,
 }: TracesExplorerRootProps) {
@@ -107,9 +113,22 @@ export function TracesExplorerRoot({
   const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
   const withTimeToFirstChunkSort =
     withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
+  const withTimeToFirstToken = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstToken ?? false);
+  const withTimeToFirstTokenSort =
+    withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
+  const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(() => sanitizeTracesFilters(rawFilters, withRootDuration), [rawFilters, withRootDuration]);
+  const filters = useMemo(
+    () =>
+      sanitizeTracesFilters(rawFilters, {
+        withRootDuration,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+      }),
+    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -134,6 +153,8 @@ export function TracesExplorerRoot({
   const current: Latest = { selection, filters: rawFilters, onChange, onSortChange: onHostSortChange, scopedFieldIds };
   const latest = useRef(current);
   latest.current = current;
+  // Not part of the host's filters: a shared or reloaded link has no zoom to undo.
+  const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
 
   const actions = useMemo(() => {
     const emit = (next: TracesExplorerState) => {
@@ -164,6 +185,11 @@ export function TracesExplorerRoot({
       selectScore: scoreId => updateSelection(selectScore(latest.current.selection, scoreId)),
       highlightSpans: spanIds => updateSelection(highlightSpans(latest.current.selection, spanIds)),
     };
+    // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
+    const pickRange = (next: TracesFilters) => {
+      zoomMemory.current = undefined;
+      updateFilters(next);
+    };
     const filtersActions: TracesFiltersActions = {
       // Re-inject the scope tokens so "Clear filters" (which drops every removable item) and any
       // other edit can never drop the scope.
@@ -172,9 +198,20 @@ export function TracesExplorerRoot({
         const scopeTokens = base.tokens.filter(token => scoped.has(token.fieldId));
         updateFilters(applyFilterTokens(base, [...scopeTokens, ...tokens], groups));
       },
-      setDatePreset: preset => updateFilters(applyDatePreset(latest.current.filters, preset)),
-      setDate: (value, end) => updateFilters(applyDate(latest.current.filters, value, end)),
-      setDateRange: (from, to) => updateFilters(applyDateRange(latest.current.filters, from, to)),
+      setDatePreset: preset => pickRange(applyDatePreset(latest.current.filters, preset)),
+      setDate: (value, end) => pickRange(applyDate(latest.current.filters, value, end)),
+      setDateRange: (from, to) => pickRange(applyDateRange(latest.current.filters, from, to)),
+      zoomDateRange: (from, to) => {
+        const base = latest.current.filters;
+        zoomMemory.current = rememberZoom(zoomMemory.current, base, from, to);
+        updateFilters({ ...base, datePreset: 'custom', dateFrom: from, dateTo: to });
+      },
+      resetDateRange: defaultPreset => {
+        const base = latest.current.filters;
+        const before = rangeBeforeZoom(zoomMemory.current, base);
+        zoomMemory.current = undefined;
+        updateFilters({ tokens: base.tokens, groups: base.groups, ...(before ?? { datePreset: defaultPreset }) });
+      },
     };
     const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
     return { selectionActions, filtersActions, onSortChange };
@@ -190,6 +227,8 @@ export function TracesExplorerRoot({
   );
 
   const listId = listIdForScope(scope);
+  const hasFeedbackOptions = feedbackOptions !== undefined;
+  const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
       listId,
@@ -197,11 +236,15 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
       withDeltaPolling,
       withDiscovery,
       isCapabilitiesLoading: traceQuery.isLoading,
@@ -214,11 +257,19 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      hasFeedbackOptions,
+      contextMode,
+      feedbackUserId,
+      allowDelete,
+      allowReview,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
+      withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
       withDeltaPolling,
       withDiscovery,
       traceQuery.isLoading,
