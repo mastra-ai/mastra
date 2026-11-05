@@ -450,8 +450,10 @@ export class AdvisoryStore {
   }
   private async insertQuarantine(tx: Transaction, sourceId: string, reason: string, now: string) {
     await tx.execute({
-      sql: 'INSERT INTO scanner_advisory_quarantine(source_id,reason,occurred_at) VALUES (?,?,?)',
-      args: [sourceId, reason, now],
+      sql: `INSERT INTO scanner_advisory_quarantine(source_id,reason,occurred_at)
+        SELECT ?,?,? WHERE NOT EXISTS (
+          SELECT 1 FROM scanner_advisory_quarantine WHERE source_id = ? AND reason = ?)`,
+      args: [sourceId, reason, now, sourceId, reason],
     });
     await tx.execute(
       'DELETE FROM scanner_advisory_quarantine WHERE id NOT IN (SELECT id FROM scanner_advisory_quarantine ORDER BY id DESC LIMIT 200)',

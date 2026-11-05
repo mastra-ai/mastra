@@ -465,6 +465,45 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect(await app.request(`/api/advisories/${alias}/events`)).toEqual(canonical);
   }, 60000);
 
+  it('retains distinct quarantine diagnostics across repeated failures, concurrent writes and restart', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'scanner-quarantine-'));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const url = `file:${join(root, 'advisories.db')}`;
+    let store = new AdvisoryStore(url);
+    cleanup.push(async () => {
+      store.close();
+    });
+    await store.initialize();
+    await store.quarantineItem('CVE-2026-26000', 'ADVISORY_SCHEMA_UNKNOWN');
+    await store.quarantineItem('CVE-2026-26001', 'ADVISORY_DETAIL_PRIMARY_404');
+    const original = await store.quarantine(200, 0);
+    await store.close();
+    store = new AdvisoryStore(url);
+    await store.initialize();
+    await Promise.all(
+      Array.from({ length: 205 }, (_, index) =>
+        index % 2
+          ? store.markFailure('ADVISORY_DETAIL_PRIMARY_404', 'cve-2026-26001')
+          : store.quarantineItem('cve-2026-26001', 'ADVISORY_DETAIL_PRIMARY_404'),
+      ),
+    );
+    expect(await store.quarantine(200, 0)).toEqual(original);
+    await store.quarantineItem('CVE-2026-26001', 'ADVISORY_SCHEMA_UNKNOWN');
+    await store.quarantineItem('CVE-2026-26002', 'ADVISORY_DETAIL_PRIMARY_404');
+    expect(await store.quarantine(200, 0)).toHaveLength(4);
+    for (let index = 0; index < 201; index++)
+      await store.quarantineItem(`CVE-2026-${27000 + index}`, 'ADVISORY_SCHEMA_UNKNOWN');
+    const bounded = await store.quarantine(250, 0);
+    expect(bounded).toHaveLength(200);
+    expect(bounded[0]?.sourceId).toBe('CVE-2026-27200');
+    expect(bounded.at(-1)?.sourceId).toBe('CVE-2026-27001');
+    expect(new Set(bounded.map(item => `${item.sourceId}:${item.reason}`)).size).toBe(200);
+    await store.close();
+    store = new AdvisoryStore(url);
+    await store.initialize();
+    expect(await store.quarantine(250, 0)).toEqual(bounded);
+  }, 30000);
+
   it.each([
     { status: 404, code: 'ADVISORY_DETAIL_PRIMARY_404' },
     { status: 200, body: {}, code: 'ADVISORY_SCHEMA_UNKNOWN' },
@@ -1780,6 +1819,12 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       expect(JSON.stringify(quarantine)).not.toContain(marker);
       expect(JSON.stringify(quarantine)).not.toContain('http://[');
       if (scenario.expectedSourceId) {
+        const matches = (item: { sourceId: string; reason: string }) =>
+          item.sourceId === scenario.expectedSourceId && item.reason === scenario.reason;
+        const previous = before.body.items.filter(matches);
+        const retained = quarantine.body.items.filter(matches);
+        expect(retained).toHaveLength(1);
+        if (previous.length) expect(retained).toEqual(previous);
         requiredQuarantine.push({
           name: scenario.name,
           inserted: quarantine.body.items.length === before.body.items.length + 1,
@@ -1799,7 +1844,8 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect(visibleDuringFailure).toEqual(cases.map(scenario => ({ name: scenario.name, status: 200 })));
     expect(unknownDestination.requests).toHaveLength(0);
     expect(requiredQuarantine).toEqual([
-      { name: 'malformed-detail-location', inserted: true, sourceId: entry.id, reason: 'ADVISORY_REDIRECT_DENIED' },
+      // The preceding detail redirect already retained this same source/reason pair.
+      { name: 'malformed-detail-location', inserted: false, sourceId: entry.id, reason: 'ADVISORY_REDIRECT_DENIED' },
       { name: 'status-redirect', inserted: true, sourceId: 'STATUS', reason: 'ADVISORY_REDIRECT_DENIED' },
       { name: 'dotted-id-malformed-detail', inserted: true, sourceId: dotted.id, reason: 'ADVISORY_SCHEMA_UNKNOWN' },
     ]);
@@ -1808,7 +1854,12 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect(history.status).toBe(200);
     for (const reason of ['ADVISORY_SCHEMA_UNKNOWN', 'ADVISORY_REDIRECT_DENIED', 'ADVISORY_CURSOR_STALLED'])
       expect(history.body.items.some(item => item.reason.includes(reason))).toBe(true);
-    expect(history.body.items.filter(item => item.reason === 'ADVISORY_REDIRECT_DENIED')).toHaveLength(3);
+    expect(
+      history.body.items
+        .filter(item => item.reason === 'ADVISORY_REDIRECT_DENIED')
+        .map(item => item.sourceId)
+        .sort(),
+    ).toEqual([entry.id, 'STATUS']);
     expect(
       history.body.items.some(item => item.sourceId === 'STATUS' && item.reason === 'ADVISORY_REDIRECT_DENIED'),
     ).toBe(true);
