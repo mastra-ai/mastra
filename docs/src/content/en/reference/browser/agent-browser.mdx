@@ -444,7 +444,7 @@ Close the browser and clean up resources.
 
 ## How refs work
 
-The `browser_snapshot` tool returns an accessibility tree with element refs like `@e1`, `@e2`, etc. These refs are stable identifiers you use with other tools:
+The `browser_snapshot` tool returns an accessibility tree with element refs like `@e1`, `@e2`, etc. A ref still targets an element after a re-render when its role and name stay the same. Take a new snapshot after the page navigates; the previous refs no longer apply.
 
 1. Call `browser_snapshot` to see the page structure
 1. Find the element you want to interact with

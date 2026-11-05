@@ -105,7 +105,7 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(result.snapshot).toBeDefined();
     expect(result.snapshot.length).toBeGreaterThan(0);
     // Should contain refs like @e1, @e2
-    expect(result.snapshot).toMatch(/(?:\[ref=e\d+\]|@e\d+)/);
+    expect(result.snapshot).toMatch(/(?:\[ref=(?:f\d+)?e\d+\]|@(?:f\d+)?e\d+)/);
     // Should contain the button text
     expect(result.snapshot).toContain('Click me');
   }, 30_000);
@@ -129,10 +129,10 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     // Handle both [ref=e1] and @e1 formats
     const snapshot = snapshotResult.snapshot;
     const inputMatch =
-      snapshot.match(/(?:\[ref=(e\d+)\]|@(e\d+)).*?(?:Enter name|textbox)/i) ||
-      snapshot.match(/(?:Enter name|textbox).*?(?:\[ref=(e\d+)\]|@(e\d+))/i) ||
-      snapshot.match(/\[ref=(e\d+)\]/) ||
-      snapshot.match(/@(e\d+)/);
+      snapshot.match(/(?:\[ref=((?:f\d+)?e\d+)\]|@((?:f\d+)?e\d+)).*?(?:Enter name|textbox)/i) ||
+      snapshot.match(/(?:Enter name|textbox).*?(?:\[ref=((?:f\d+)?e\d+)\]|@((?:f\d+)?e\d+))/i) ||
+      snapshot.match(/\[ref=((?:f\d+)?e\d+)\]/) ||
+      snapshot.match(/@((?:f\d+)?e\d+)/);
     const ref = inputMatch ? inputMatch[1] || inputMatch[2] || inputMatch[3] || inputMatch[4] : null;
     expect(ref).not.toBeNull();
 
@@ -181,10 +181,10 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     // Find the button ref by looking for "Press Me" text context
     const snapshot = snapshotResult.snapshot;
     const buttonMatch =
-      snapshot.match(/(?:\[ref=(e\d+)\]|@(e\d+)).*?Press Me/i) ||
-      snapshot.match(/Press Me.*?(?:\[ref=(e\d+)\]|@(e\d+))/i) ||
-      snapshot.match(/\[ref=(e\d+)\]/) ||
-      snapshot.match(/@(e\d+)/);
+      snapshot.match(/(?:\[ref=((?:f\d+)?e\d+)\]|@((?:f\d+)?e\d+)).*?Press Me/i) ||
+      snapshot.match(/Press Me.*?(?:\[ref=((?:f\d+)?e\d+)\]|@((?:f\d+)?e\d+))/i) ||
+      snapshot.match(/\[ref=((?:f\d+)?e\d+)\]/) ||
+      snapshot.match(/@((?:f\d+)?e\d+)/);
     const ref = buttonMatch ? buttonMatch[1] || buttonMatch[2] || buttonMatch[3] || buttonMatch[4] : null;
     expect(ref).not.toBeNull();
 
@@ -218,10 +218,10 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     // Find the input ref by looking for placeholder context
     const snapshot = snapshotResult.snapshot;
     const inputMatch =
-      snapshot.match(/(?:\[ref=(e\d+)\]|@(e\d+)).*?Type here/i) ||
-      snapshot.match(/Type here.*?(?:\[ref=(e\d+)\]|@(e\d+))/i) ||
-      snapshot.match(/\[ref=(e\d+)\]/) ||
-      snapshot.match(/@(e\d+)/);
+      snapshot.match(/(?:\[ref=((?:f\d+)?e\d+)\]|@((?:f\d+)?e\d+)).*?Type here/i) ||
+      snapshot.match(/Type here.*?(?:\[ref=((?:f\d+)?e\d+)\]|@((?:f\d+)?e\d+))/i) ||
+      snapshot.match(/\[ref=((?:f\d+)?e\d+)\]/) ||
+      snapshot.match(/@((?:f\d+)?e\d+)/);
     const ref = inputMatch ? inputMatch[1] || inputMatch[2] || inputMatch[3] || inputMatch[4] : null;
     expect(ref).not.toBeNull();
 
@@ -263,6 +263,89 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     const frame = page.frames().find((f: any) => f !== page.mainFrame());
     expect(await frame.evaluate('document.body.dataset.clicked')).toBe('yes');
   }, 30_000);
+
+  // A re-render replaces the DOM node, so the snapshot aria-ref no longer matches.
+  // The same button is still clicked when its role and name are unchanged. (#25855)
+  it('clicks a re-rendered button using the ref from before the re-render', async () => {
+    const opened = await browser.goto({
+      url: 'data:text/html,<title>Draft</title><button>Save</button>',
+      waitUntil: 'load',
+    });
+    expect(opened.success).toBe(true);
+
+    const shot = await browser.snapshot({ interactiveOnly: true });
+    if (!shot.success) throw new Error(JSON.stringify(shot));
+    const ref = /button "Save" @((?:f\d+)?e\d+)/.exec(shot.snapshot)?.[1];
+    expect(ref, shot.snapshot).toBeDefined();
+
+    const page = await (browser as any).getPage();
+    await page.evaluate(`(() => {
+      const previous = document.querySelector('button');
+      const button = document.createElement('button');
+      button.textContent = 'Save';
+      button.onclick = () => { document.title = 'saved'; };
+      previous.replaceWith(button);
+    })()`);
+    await page.getByRole('button', { name: 'Save', exact: true }).waitFor({ timeout: 2_000 });
+
+    const started = Date.now();
+    const result = await browser.click({ ref: `@${ref}`, timeout: 20_000 });
+    expect(Date.now() - started).toBeLessThan(8_000);
+    expect(result.success).toBe(true);
+    expect(await page.title()).toBe('saved');
+  }, 60_000);
+
+  // After navigation the old ref must come back as stale_ref, not sit in click()
+  // until the action timeout. (#25855)
+  it('returns stale_ref after navigation instead of waiting out the click timeout', async () => {
+    const opened = await browser.goto({
+      url: 'data:text/html,<title>First</title><button>Save</button>',
+      waitUntil: 'load',
+    });
+    expect(opened.success).toBe(true);
+
+    const shot = await browser.snapshot({ interactiveOnly: true });
+    if (!shot.success) throw new Error(JSON.stringify(shot));
+    const ref = /button "Save" @((?:f\d+)?e\d+)/.exec(shot.snapshot)?.[1];
+    expect(ref, shot.snapshot).toBeDefined();
+
+    const gone = await browser.goto({
+      url: 'data:text/html,<title>Second</title><p>No button</p>',
+      waitUntil: 'load',
+    });
+    expect(gone.success).toBe(true);
+
+    const started = Date.now();
+    const result = await browser.click({ ref: `@${ref}`, timeout: 20_000 });
+    expect(Date.now() - started).toBeLessThan(8_000);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('stale_ref');
+  }, 60_000);
+
+  // The node is gone and nothing with that role and name remains, so the ref is
+  // stale immediately rather than waiting out the action timeout. (#25855)
+  it('returns stale_ref when the element is gone and no same-named control remains', async () => {
+    const opened = await browser.goto({
+      url: 'data:text/html,<title>Draft</title><button>Save</button>',
+      waitUntil: 'load',
+    });
+    expect(opened.success).toBe(true);
+
+    const shot = await browser.snapshot({ interactiveOnly: true });
+    if (!shot.success) throw new Error(JSON.stringify(shot));
+    const ref = /button "Save" @((?:f\d+)?e\d+)/.exec(shot.snapshot)?.[1];
+    expect(ref, shot.snapshot).toBeDefined();
+
+    const page = await (browser as any).getPage();
+    await page.evaluate(`document.querySelector('button').remove()`);
+    await page.getByRole('button', { name: 'Save', exact: true }).waitFor({ state: 'detached', timeout: 2_000 });
+
+    const started = Date.now();
+    const result = await browser.click({ ref: `@${ref}`, timeout: 20_000 });
+    expect(Date.now() - started).toBeLessThan(8_000);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('stale_ref');
+  }, 60_000);
 
   it('closes the browser via close method', async () => {
     const tempBrowser = new AgentBrowser({ headless: true });
@@ -338,7 +421,7 @@ describe.skipIf(!canLaunchBrowser)('BrowserManager with real Chrome', () => {
         const shown = [...snapshot.tree.matchAll(/\[ref=([a-z0-9]+)\]/g)].map(m => m[1]!);
         expect(shown.some(ref => ref.startsWith('f'))).toBe(true);
         for (const ref of shown) {
-          const locator = manager.getLocatorFromRef(`@${ref}`);
+          const locator = await manager.getLocatorFromRef(`@${ref}`);
           expect(locator, `${ref} in ${JSON.stringify(options)}`).not.toBeNull();
           expect(await locator!.count(), ref).toBe(1);
         }
@@ -347,8 +430,29 @@ describe.skipIf(!canLaunchBrowser)('BrowserManager with real Chrome', () => {
       const snapshot = await manager.getSnapshot({ interactive: true });
       const innerRef = Object.entries(snapshot.refs).find(([, r]) => r.name === 'Inner')?.[0];
       expect(innerRef).toMatch(/^f\d+e\d+$/);
-      await manager.getLocatorFromRef(innerRef!)!.click();
+      await (await manager.getLocatorFromRef(innerRef!))!.click();
       expect(await manager.getPage().frames()[1]!.title()).toBe('hit');
+    } finally {
+      await manager.close();
+    }
+  }, 30_000);
+
+  it('keeps page refs when only an iframe navigates', async () => {
+    const manager = new BrowserManager();
+    await manager.launch({ headless: true });
+    try {
+      const page = manager.getPage();
+      await page.setContent(`<button>Save</button><iframe srcdoc="<p>one</p>"></iframe>`);
+      await page.frames()[1]?.waitForLoadState();
+
+      const snapshot = await manager.getSnapshot({ interactive: true });
+      const ref = Object.entries(snapshot.refs).find(([, info]) => info.name === 'Save')?.[0];
+      expect(ref, snapshot.tree).toBeDefined();
+
+      await page.frames()[1]!.setContent('<p>two</p>');
+      const locator = await manager.getLocatorFromRef(`@${ref}`);
+      expect(locator).not.toBeNull();
+      expect(await locator!.count()).toBe(1);
     } finally {
       await manager.close();
     }

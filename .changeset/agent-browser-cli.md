@@ -7,6 +7,8 @@
 
 Local launches run Chrome as a child of your Node.js process, so the browser exits with it. Playwright's Chromium is used when installed, otherwise an installed Google Chrome. If neither is found, run `npx playwright install chromium` or set `executablePath`. Snapshot refs inside iframes (for example `@f1e2`) now resolve like any other ref.
 
+A ref from the last snapshot still targets an element after the page re-renders it, when its role and name stay the same. After the page navigates, that ref is rejected immediately instead of waiting out the action timeout.
+
 `BrowserManager` is now exported from `@mastra/agent-browser`, and `@mastra/browser-firecrawl` imports it from there instead of depending on `agent-browser` directly.
 
 ```typescript

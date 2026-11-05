@@ -294,8 +294,10 @@ export function processAiSnapshot(tree: string, options: SnapshotOptions = {}): 
  * outlives the process. With `cdpUrl` the manager attaches to an existing
  * browser and `close()` only disconnects from it.
  *
- * Snapshots come from Playwright's AI aria snapshot; refs resolve through
- * Playwright's `aria-ref` selector, including elements inside iframes.
+ * Snapshots come from Playwright's AI aria snapshot. Refs resolve through
+ * Playwright's `aria-ref` selector, including elements inside iframes. When
+ * that node is gone but the same role and name are still on the page, the ref
+ * falls back to that element. A main-frame navigation drops the ref map.
  */
 export class BrowserManager {
   private browser: Browser | null = null;
@@ -414,8 +416,14 @@ export class BrowserManager {
   private watchBrowser(browser: Browser): void {
     browser.on('disconnected', () => {
       if (this.browser !== browser) return;
+      // Page close events are not guaranteed when the connection drops. Leaving
+      // pages tracked would make the next launch() skip creating a page.
       this.browser = null;
       this.contexts = [];
+      this.pages = [];
+      this.activePageIndex = 0;
+      this.refMap = {};
+      this.snapshotPage = null;
       this.cdpSession = null;
       this.ownsBrowser = false;
     });
@@ -453,6 +461,14 @@ export class BrowserManager {
   private trackPage(page: Page): void {
     this.pages.push(page);
     page.on('close', () => this.untrackPage(page));
+    page.on('framenavigated', frame => {
+      // Iframe navigations leave the page's refs alone. A main-frame load does not:
+      // the old aria-ref would otherwise wait out the action timeout.
+      if (frame.parentFrame()) return;
+      if (this.snapshotPage !== page) return;
+      this.refMap = {};
+      this.snapshotPage = null;
+    });
   }
 
   private untrackPage(page: Page): void {
@@ -558,15 +574,30 @@ export class BrowserManager {
 
   /**
    * Resolve a ref (`e1`, `@e1`, `ref=e1`, `@f1e2`) from the last snapshot to a
-   * locator. Returns null for refs the last snapshot didn't show, or when that
-   * snapshot was taken on a different tab.
+   * locator. Returns null for refs the last snapshot didn't show, when that
+   * snapshot was taken on a different tab, after a main-frame navigation, or
+   * when neither the original node nor an element with the same role and name
+   * is on the page. Callers treat null as a stale ref instead of waiting.
    */
-  getLocatorFromRef(refArg: string): Locator | null {
+  async getLocatorFromRef(refArg: string): Promise<Locator | null> {
     const ref = parseRef(refArg);
-    if (!ref || !this.refMap[ref]) return null;
+    const info = ref ? this.refMap[ref] : undefined;
+    if (!ref || !info) return null;
     const page = this.getPage();
     if (page !== this.snapshotPage) return null;
-    return page.locator(`aria-ref=${ref}`);
+
+    const byAriaRef = page.locator(`aria-ref=${ref}`);
+    if ((await byAriaRef.count()) > 0 && this.snapshotPage === page && this.refMap[ref]) return byAriaRef;
+
+    // The node from the snapshot is gone (a re-render replaced it). Match the
+    // accessible role and name when they still identify exactly one element.
+    if (this.snapshotPage !== page || !this.refMap[ref] || info.name === undefined) return null;
+    const byRole = page.getByRole(info.role as Parameters<Page['getByRole']>[0], {
+      name: info.name,
+      exact: true,
+    });
+    if ((await byRole.count()) === 1 && this.snapshotPage === page && this.refMap[ref]) return byRole;
+    return null;
   }
 
   async getCDPSession(): Promise<CDPSession> {

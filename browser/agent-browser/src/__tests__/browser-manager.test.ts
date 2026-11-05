@@ -19,7 +19,7 @@ import { BrowserManager, CHROME_NOT_FOUND_MESSAGE, parseRef, processAiSnapshot }
 class FakePage extends EventEmitter {
   closed = false;
   ariaSnapshot = vi.fn(async (_options?: unknown) => '');
-  locator = vi.fn((selector: string) => ({ selector }));
+  locator = vi.fn((selector: string) => ({ selector, count: async () => 1 }));
   title = vi.fn(async () => `title of ${this.pageUrl}`);
   close = vi.fn(async () => {
     if (this.closed) return;
@@ -422,13 +422,28 @@ describe('BrowserManager.close', () => {
   it('forgets a browser that disconnects on its own', async () => {
     const manager = new BrowserManager();
     await manager.launch();
+    const stalePage = manager.getPage();
+    (stalePage as unknown as FakePage).ariaSnapshot.mockResolvedValue(AI_TREE);
+    await manager.getSnapshot();
+    expect(Object.keys(manager.getRefMap()).length).toBeGreaterThan(0);
+
     browser.emit('disconnected', browser);
     expect(manager.isLaunched()).toBe(false);
     expect(manager.getBrowser()).toBeNull();
-    // A later launch starts a new browser
+    // Page and ref state must go too, or the next launch skips creating a page
+    // and getPage() hands back a page from the dead browser.
+    expect(manager.getPages()).toEqual([]);
+    expect(manager.getRefMap()).toEqual({});
+    expect(() => manager.getPage()).toThrow(/Browser not launched/);
+
+    const previous = browser;
     browser = new FakeBrowser();
     await manager.launch();
     expect(manager.getBrowser()).toBe(browser);
+    expect(manager.getBrowser()).not.toBe(previous);
+    expect(manager.getPages()).toHaveLength(1);
+    expect(manager.getPage()).not.toBe(stalePage);
+    expect(manager.getPage().context()).toBe(browser.contextList[0]);
   });
 });
 
@@ -502,25 +517,37 @@ describe('BrowserManager refs', () => {
   it('resolves shown refs, including iframe refs, through aria-ref', async () => {
     const { manager, page } = await snapshotted({ interactive: true });
     for (const ref of ['e3', '@e3', 'ref=e3', '@f1e2']) {
-      expect(manager.getLocatorFromRef(ref)).toEqual({ selector: `aria-ref=${parseRef(ref)}` });
+      await expect(manager.getLocatorFromRef(ref)).resolves.toMatchObject({
+        selector: `aria-ref=${parseRef(ref)}`,
+      });
     }
     expect(page.locator).toHaveBeenCalledWith('aria-ref=f1e2');
   });
 
   it('returns null for refs the snapshot did not show or that are malformed', async () => {
     const { manager } = await snapshotted({ interactive: true });
-    expect(manager.getLocatorFromRef('@e1')).toBeNull(); // filtered out (not interactive)
-    expect(manager.getLocatorFromRef('@f1e1')).toBeNull();
-    expect(manager.getLocatorFromRef('@e99')).toBeNull();
-    expect(manager.getLocatorFromRef('#submit')).toBeNull();
+    expect(await manager.getLocatorFromRef('@e1')).toBeNull(); // filtered out (not interactive)
+    expect(await manager.getLocatorFromRef('@f1e1')).toBeNull();
+    expect(await manager.getLocatorFromRef('@e99')).toBeNull();
+    expect(await manager.getLocatorFromRef('#submit')).toBeNull();
   });
 
   it('treats refs as stale after switching to another tab', async () => {
     const { manager } = await snapshotted({ interactive: true });
     await manager.newTab();
-    expect(manager.getLocatorFromRef('@e3')).toBeNull();
+    expect(await manager.getLocatorFromRef('@e3')).toBeNull();
     await manager.switchTo(0);
-    expect(manager.getLocatorFromRef('@e3')).not.toBeNull();
+    expect(await manager.getLocatorFromRef('@e3')).not.toBeNull();
+  });
+
+  it('drops refs when the main frame navigates and keeps them when a child frame does', async () => {
+    const { manager, page } = await snapshotted({ interactive: true });
+    page.emit('framenavigated', { parentFrame: () => ({}) });
+    expect(await manager.getLocatorFromRef('@e3')).not.toBeNull();
+
+    page.emit('framenavigated', { parentFrame: () => null });
+    expect(manager.getRefMap()).toEqual({});
+    expect(await manager.getLocatorFromRef('@e3')).toBeNull();
   });
 
   it('clears refs on close', async () => {
