@@ -194,6 +194,41 @@ describe('chatRoute reconnect', () => {
     },
   );
 
+  it('uses the base agent for an unqualified reconnect when Editor has no published version', async () => {
+    const controlled = createControlledModel();
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: controlled.model,
+    });
+    const applyStoredOverrides = vi
+      .fn()
+      .mockResolvedValueOnce(agent)
+      .mockRejectedValue(new Error('No published agent version'));
+    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      editor: { registerWithMastra() {}, agent: { applyStoredOverrides } } as any,
+      server: { apiRoutes: [route] },
+    });
+    const runId = 'editor-draft-run';
+
+    const postResponse = await invoke(getRoute(mastra, 'POST'), createContext({ mastra, method: 'POST', runId }));
+    const postReader = postResponse.body!.getReader();
+    await readUntil(postReader, 'Hello from a resumable run');
+    await postReader.cancel();
+
+    const reconnectResponse = await invoke(getRoute(mastra, 'GET'), createContext({ mastra, method: 'GET', runId }));
+    expect(reconnectResponse.status).toBe(200);
+    expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+
+    const reconnectBody = reconnectResponse.text();
+    controlled.finish();
+    expect(await reconnectBody).toContain('Hello from a resumable run');
+  });
+
   it('reconstructs one complete message through DefaultChatTransport reconnect', async () => {
     const controlled = createControlledModel();
     const agent = new Agent({

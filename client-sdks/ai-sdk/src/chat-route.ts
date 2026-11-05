@@ -308,11 +308,13 @@ async function resolveChatAgent({
   agentId,
   agentVersion,
   requestContext,
+  defaultToPublished = true,
 }: {
   mastra: Mastra;
   agentId: string;
   agentVersion?: AgentVersionOptions;
   requestContext?: RequestContext;
+  defaultToPublished?: boolean;
 }) {
   const baseAgent = mastra.getAgentById(agentId);
   if (!baseAgent) {
@@ -321,6 +323,7 @@ async function resolveChatAgent({
 
   const editorAgent = mastra.getEditor?.()?.agent;
   if (editorAgent) {
+    if (!agentVersion && !defaultToPublished) return baseAgent;
     return editorAgent.applyStoredOverrides(baseAgent, agentVersion ?? { status: 'published' }, requestContext);
   }
 
@@ -1015,6 +1018,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         agentId: agentToUse,
         agentVersion: effectiveAgentVersion,
         requestContext,
+        defaultToPublished: false,
       });
       const runRecord = await agentObj.__getRunRecord(runId);
       if (!runRecord || runRecord.status === 'finished') {
