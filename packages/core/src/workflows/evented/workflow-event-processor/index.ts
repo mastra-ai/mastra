@@ -1238,13 +1238,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     // we shouldn't overwrite the existing 'suspended' status with 'running'.
     // A storage v2 run is always stored while it runs: its steps load from it. (`EventedRun.start`
     // stores a top-level run regardless; this stores a nested one.)
-    const shouldPersist =
-      currentStorageVersion() === 2 ||
-      (workflow?.options?.shouldPersistSnapshot?.({
+    const persistRequested =
+      workflow?.options?.shouldPersistSnapshot?.({
         stepResults: stepResults ?? {},
         workflowStatus: 'running',
-      }) ??
-        true);
+      }) ?? true;
+    const shouldPersist = currentStorageVersion() === 2 || persistRequested;
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
     const requiresGuardedSnapshot =
@@ -1272,7 +1271,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           __state: initialState,
         } as WorkflowRunState['context'],
         status: 'running',
-        guardedOnlySnapshot: !!requiresGuardedSnapshot && !shouldPersist,
+        // Stored only because guards or storage v2 need it, so a suspend that declines its snapshot removes it.
+        guardedOnlySnapshot: !persistRequested,
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),

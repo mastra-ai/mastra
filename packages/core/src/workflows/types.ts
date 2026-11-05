@@ -435,7 +435,10 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeLeasedClaimAt?: number;
-  /** @internal Snapshot created only to guard evented step deliveries. */
+  /**
+   * @internal Snapshot stored only because evented step guards or storage v2 need it while the run
+   * runs; the workflow's `shouldPersistSnapshot` declined it.
+   */
   guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;

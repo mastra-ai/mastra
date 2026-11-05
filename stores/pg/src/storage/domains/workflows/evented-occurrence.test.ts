@@ -841,9 +841,7 @@ describe.each([1, 2] as const)('Postgres evented occurrence replay on storage v%
   it.each(['step', 'parallel', 'foreach', 'nested'] as const)(
     'removes recovery-only snapshots after a %s suspension but preserves resumable snapshots',
     async kind => {
-      // A storage v2 run is stored while it runs whatever shouldPersistSnapshot says, so it has
-      // no recovery-only snapshot to remove; only the resumable case applies.
-      for (const persistSuspended of storageVersion === 1 ? [false, true] : [true]) {
+      for (const persistSuspended of [false, true]) {
         let shouldPersistSuspended = persistSuspended;
         const driver = new RedeliveryDriver();
         const schema = z.object({ n: z.number() });
