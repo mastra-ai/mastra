@@ -940,6 +940,7 @@ describe('MastraFactory.prepare', () => {
       'memory-settings',
       'boards',
       'custom-providers',
+      'mcp-servers',
       'queue-health',
       'integrations',
       'projects',

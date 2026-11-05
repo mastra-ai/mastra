@@ -74,6 +74,7 @@ import { buildPlatformConnectRoutes } from './integrations/platform/connect/rout
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { McpServersRuntime } from './mcp-servers/runtime.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -239,6 +240,16 @@ export interface MastraFactoryConfig {
    * `authorizationServers` set. Pass `false` to turn it off.
    */
   mcp?: false | FactoryMcpConfig;
+  /**
+   * Remote MCP servers that organization admins connect under Settings → MCP
+   * Servers. The selected tools of every connected server are available in all
+   * of the organization's sessions. On by default; pass `false` to turn it off.
+   *
+   * `allowPrivateNetwork` lets servers live on loopback, private, or link-local
+   * addresses (and plain `http://` on loopback). It is always on when auth is
+   * disabled; `MASTRA_FACTORY_MCP_ALLOW_PRIVATE_NETWORK=true` also turns it on.
+   */
+  mcpServers?: false | { allowPrivateNetwork?: boolean };
   /**
    * Allowed cross-origin SPA origins. The SPA may be served from a separate
    * static host, so credentialed requests must be explicitly allowed.
@@ -507,6 +518,7 @@ export class MastraFactory {
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
+  #mcpServersRuntime: McpServersRuntime | undefined;
   #shutdownPromise: Promise<void> | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
@@ -716,6 +728,16 @@ export class MastraFactory {
       comments: workItemCommentsStorage,
       skillOverrides: skillOverridesStorage,
     };
+    const mcpServersConfig = this.#config.mcpServers;
+    const mcpServersAllowPrivateNetwork =
+      !routeAuth.enabled() ||
+      (mcpServersConfig !== false && mcpServersConfig?.allowPrivateNetwork === true) ||
+      process.env.MASTRA_FACTORY_MCP_ALLOW_PRIVATE_NETWORK === 'true';
+    const mcpServersRuntime =
+      mcpServersConfig === false
+        ? undefined
+        : new McpServersRuntime({ storage: mcpServersStorage, allowPrivateNetwork: mcpServersAllowPrivateNetwork });
+    this.#mcpServersRuntime = mcpServersRuntime;
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -2229,6 +2251,7 @@ export class MastraFactory {
         this.#dispatcher?.stop() ?? Promise.resolve(),
         ...channelShutdowns.map(async shutdown => shutdown()),
       ]);
+      await this.#mcpServersRuntime?.close();
       results.slice(1).forEach((result, index) => {
         if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
       });
