@@ -1,6 +1,8 @@
 import {
   ArrowLeft,
+  ArrowRight,
   FileText,
+  Folder,
   Hash,
   Link2,
   ListTree,
@@ -15,6 +17,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
+import { scopeTitle } from '../lib/pageAddress';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
@@ -28,20 +31,28 @@ import type {
   KnowledgePinPayload,
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
-import { KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
+import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
+import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
+import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { ActionRow } from '@/ds/components/ActionRow';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
+import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
+import { menuItemButtonClass } from '@/ds/primitives/menu-item';
+import { frameSurfaceStyle, overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { cn } from '@/lib/utils';
 
 /** `tree` is only a choice below `lg`; wider screens always show the tree beside the graph or the page. */
 export type KnowledgeExplorerView = 'tree' | 'graph' | 'page';
@@ -238,7 +249,11 @@ function treeInset(overlay: boolean, treeOpen: boolean): number {
   return treeOpen ? TREE_DRAWER_INSET : TREE_TOGGLE_INSET;
 }
 const PAGE_DRAWER_INSET = 392;
-type InsetStyle = CSSProperties & { '--knowledge-tree-inset': string; '--knowledge-drawer-inset': string };
+type InsetStyle = CSSProperties & {
+  '--knowledge-tree-inset': string;
+  '--knowledge-tree-drawer-inset': string;
+  '--knowledge-drawer-inset': string;
+};
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
@@ -307,6 +322,59 @@ function withinScope(pages: KnowledgePagePayload[], scopeId: string | null): Kno
   return pages.filter(isInside);
 }
 
+const SKELETON_ROW_WIDTHS = ['w-32', 'w-24', 'w-40', 'w-28', 'w-36', 'w-20'];
+
+function TreeRowsSkeleton({ label, rows }: { label: string; rows: number }) {
+  return (
+    <div role="status" aria-label={label} className="flex flex-col">
+      {SKELETON_ROW_WIDTHS.slice(0, rows).map((width, index) => (
+        <div
+          key={width}
+          className="flex h-8 items-center gap-2 px-1"
+          style={{ paddingLeft: `${(index % 3) * 12 + 4}px` }}
+        >
+          <Skeleton className="size-3.5 shrink-0" />
+          <SkeletonText className={width} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotesSkeleton() {
+  return (
+    <div role="status" aria-label="Loading notes" className="flex flex-col gap-2">
+      {[0, 1].map(index => (
+        <div key={index} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+          <SkeletonText className="w-24" />
+          <SkeletonText className="w-full" />
+          <SkeletonText className="w-2/3" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PageSkeleton({ compact }: { compact?: boolean }) {
+  return (
+    <div role="status" aria-label="Loading page" className="flex flex-col">
+      <div
+        className={`flex flex-col gap-2 border-b border-border ${compact ? 'px-4 pt-3 pb-4' : 'bg-fill-subtle px-6 pt-5 pb-4'}`}
+      >
+        <SkeletonText line="text-caption" className="w-28" />
+        {compact ? null : <SkeletonText line="text-title" className="h-5 w-56" />}
+        <SkeletonText className="w-72 max-w-full" />
+        <SkeletonText line="text-caption" className="w-40" />
+      </div>
+      <div className={`flex flex-col gap-3 ${compact ? 'p-4' : 'p-6'}`}>
+        <SkeletonText className="w-full max-w-3xl" />
+        <SkeletonText className="w-5/6 max-w-2xl" />
+        <SkeletonText className="w-2/3 max-w-xl" />
+      </div>
+    </div>
+  );
+}
+
 function MoreButton({ onClick, label = 'Load more' }: { onClick: () => void; label?: string }) {
   return (
     <button
@@ -336,7 +404,7 @@ function MoreNotes({
   const chunk = source.usePage(pageId, cursor);
   const [showNext, setShowNext] = useState(false);
   const known = useMemo(() => withPages(pagesById, chunk.data?.related ?? []), [chunk.data, pagesById]);
-  if (chunk.isPending) return <p className="text-caption text-muted-foreground">Loading notes…</p>;
+  if (chunk.isPending) return <NotesSkeleton />;
   if (!chunk.data) return null;
   const next = chunk.data.notesNextCursor;
   return (
@@ -361,46 +429,151 @@ function MoreNotes({
 function ChildPages({
   useTreeLevels,
   parentId,
-  onPageClick,
+  onOpen,
 }: {
   useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
   parentId: string;
-  onPageClick: (page: KnowledgePagePayload) => void;
+  onOpen: (pageId: string) => void;
 }) {
   const [cursors, setCursors] = useState<string[]>([]);
   const requests = useMemo(() => [{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))], [parentId, cursors]);
   const levels = useTreeLevels(requests);
   const pages = levels.flatMap(level => level.data?.pages ?? []);
   const last = levels[levels.length - 1];
-  if (levels[0]?.isPending) return <p className="text-caption text-muted-foreground">Loading pages…</p>;
-  if (pages.length === 0) {
+  if (levels[0]?.isPending) {
     return (
-      <p className="text-body text-muted-foreground" data-testid="knowledge-no-child-pages">
-        No pages under this one.
-      </p>
+      <KnowledgeDetailSection label="Pages">
+        <TreeRowsSkeleton label="Loading pages" rows={3} />
+      </KnowledgeDetailSection>
     );
   }
   const next = last?.data?.nextCursor;
+  if (pages.length === 0 && !next) return null;
+  return (
+    <KnowledgeDetailSection label="Pages">
+      <div className={`rounded-xl p-1 ${raisedSurfaceStyle}`}>
+        <Tree className="rounded-lg bg-background p-1" onSelect={onOpen}>
+          <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
+        </Tree>
+      </div>
+      {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
+    </KnowledgeDetailSection>
+  );
+}
+
+function ChildPageItems({
+  pages,
+  useTreeLevels,
+  onOpen,
+}: {
+  pages: KnowledgePagePayload[];
+  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  onOpen: (pageId: string) => void;
+}) {
+  return pages.map(child =>
+    child.childCount !== 0 ? (
+      <ChildPageFolder key={child.id} page={child} useTreeLevels={useTreeLevels} onOpen={onOpen} />
+    ) : (
+      <Tree.File key={child.id} id={child.id}>
+        <Tree.Icon className="text-muted-foreground">
+          <FileText />
+        </Tree.Icon>
+        <ChildPageLabel page={child} />
+      </Tree.File>
+    ),
+  );
+}
+
+function ChildPageLabel({ page }: { page: KnowledgePagePayload }) {
+  if (!page.description) return <Tree.Label>{page.name}</Tree.Label>;
+  return (
+    <KnowledgeTooltip label={page.description}>
+      <Tree.Label>{page.name}</Tree.Label>
+    </KnowledgeTooltip>
+  );
+}
+
+function ChildPageFolder({
+  page,
+  useTreeLevels,
+  onOpen,
+}: {
+  page: KnowledgePagePayload;
+  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  onOpen: (pageId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Tree.Folder id={page.id} open={open} onOpenChange={setOpen}>
+      <Tree.FolderTrigger
+        actions={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            tooltip={`Open ${page.name}`}
+            aria-label={`Open ${page.name}`}
+            onClick={() => onOpen(page.id)}
+          >
+            <ArrowRight />
+          </Button>
+        }
+      >
+        <Tree.Icon className="text-muted-foreground">
+          <Folder />
+        </Tree.Icon>
+        <ChildPageLabel page={page} />
+        {page.childCount ? (
+          <Txt as="span" variant="caption" tone="muted" className="ml-auto pl-2 tabular-nums">
+            {page.childCount}
+          </Txt>
+        ) : null}
+      </Tree.FolderTrigger>
+      <Tree.FolderContent>
+        {open ? <ChildPageLevel parentId={page.id} useTreeLevels={useTreeLevels} onOpen={onOpen} /> : null}
+      </Tree.FolderContent>
+    </Tree.Folder>
+  );
+}
+
+function ChildPageLevel({
+  parentId,
+  useTreeLevels,
+  onOpen,
+}: {
+  parentId: string;
+  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  onOpen: (pageId: string) => void;
+}) {
+  const [cursors, setCursors] = useState<string[]>([]);
+  const levels = useTreeLevels([{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))]);
+  const pages = levels.flatMap(level => level.data?.pages ?? []);
+  const next = levels[levels.length - 1]?.data?.nextCursor;
+  if (levels[0]?.isPending) {
+    return (
+      <li role="none" className="pl-6">
+        <TreeRowsSkeleton label="Loading pages" rows={2} />
+      </li>
+    );
+  }
+  if (levels[0]?.isError) return <ChildPageLevelNote>Couldn’t load the pages under this one.</ChildPageLevelNote>;
+  if (pages.length === 0 && !next) return <ChildPageLevelNote>No pages under this one.</ChildPageLevelNote>;
   return (
     <>
-      <ul className="flex flex-col gap-1">
-        {pages.map(child => (
-          <li key={child.id} className="flex flex-col">
-            <button
-              type="button"
-              className="text-left text-body font-medium text-info-indicator hover:underline"
-              onClick={() => onPageClick(child)}
-            >
-              {child.name}
-            </button>
-            {child.description ? (
-              <span className="truncate text-caption text-muted-foreground">{child.description}</span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
+      <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
+      {next ? (
+        <li role="none" className="pl-9">
+          <MoreButton onClick={() => setCursors(current => [...current, next])} />
+        </li>
+      ) : null}
     </>
+  );
+}
+
+function ChildPageLevelNote({ children }: { children: ReactNode }) {
+  return (
+    <li role="none" className="flex h-8 items-center pl-9 text-caption text-muted-foreground">
+      {children}
+    </li>
   );
 }
 
@@ -466,9 +639,7 @@ function MentionPopup({
       </div>
       <div className="min-h-0 overflow-y-auto">
         {detail.isPending ? (
-          <Txt variant="caption" tone="muted">
-            Loading notes…
-          </Txt>
+          <NotesSkeleton />
         ) : notes.length === 0 ? (
           <Txt variant="caption" tone="muted">
             The notes that make this mention aren't in the first page of notes. Open {mention.source.name} to read them
@@ -515,7 +686,7 @@ function SelectedPage({
     [detail.data, pagesById],
   );
 
-  if (detail.isPending) return <p className="text-ui-md p-4 text-muted-foreground">Loading page…</p>;
+  if (detail.isPending) return <PageSkeleton compact={compact} />;
   if (detail.isError || !detail.data) {
     const notFound = isNotFound(detail.error);
     return (
@@ -543,7 +714,7 @@ function SelectedPage({
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
-          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onPageClick={onPageClick} />
+          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onOpen={onSelect} />
         ) : undefined
       }
       notesMore={
@@ -578,26 +749,26 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
         onValueChange={setQuery}
       />
       {pages.length > 0 ? (
-        <ul
-          role="listbox"
-          aria-label="Search results"
-          className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded border border-border bg-card shadow-raised"
-        >
-          {pages.map(page => (
-            <li key={page.id} role="option" aria-selected={false}>
-              <button
-                type="button"
-                className="text-ui-md w-full px-2 py-1.5 text-left hover:bg-muted"
-                onClick={() => {
-                  onSelect(page.id);
-                  setQuery('');
-                }}
-              >
-                {page.name}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className={`absolute z-20 mt-1 w-full overflow-hidden rounded-xl ${overlaySurfaceStyle}`}>
+          <ScrollArea maxHeight="18rem">
+            <ul role="listbox" aria-label="Search results" className="p-1">
+              {pages.map(page => (
+                <li key={page.id} role="option" aria-selected={false}>
+                  <button
+                    type="button"
+                    className={cn(menuItemButtonClass, 'whitespace-normal')}
+                    onClick={() => {
+                      onSelect(page.id);
+                      setQuery('');
+                    }}
+                  >
+                    <div className="line-clamp-2">{page.name}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        </div>
       ) : null}
     </div>
   );
@@ -1045,6 +1216,7 @@ export function KnowledgePageExplorer({
   };
   const insetStyle: InsetStyle = {
     '--knowledge-tree-inset': `${graphInsets.left}px`,
+    '--knowledge-tree-drawer-inset': `${overlay && treeOpen ? TREE_DRAWER_INSET : 0}px`,
     '--knowledge-drawer-inset': `${graphInsets.right}px`,
   };
   const focusViewTab = () =>
@@ -1088,9 +1260,14 @@ export function KnowledgePageExplorer({
             <Txt as="span" variant="eyebrow" tone="muted" className="uppercase">
               {focusScope.displayLabel ?? 'Scope'}
             </Txt>
-            <Txt as="span" variant="label" tone="ink" className="truncate">
-              {focusScope.address ?? focusScope.name}
-            </Txt>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <KnowledgeSourceIcon page={focusScope} className="size-3.5" />
+              <KnowledgeTooltip label={focusScope.address ?? focusScope.name}>
+                <Txt as="span" variant="label" tone="ink" className="truncate">
+                  {scopeTitle(focusScope)}
+                </Txt>
+              </KnowledgeTooltip>
+            </span>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setFocusScopeId(null)}>
             All scopes
@@ -1099,7 +1276,9 @@ export function KnowledgePageExplorer({
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
         {source.useTreeLevels && lazy.rootsPending ? (
-          <p className="px-3 py-2 text-body text-muted-foreground">Loading pages…</p>
+          <div className="p-2">
+            <TreeRowsSkeleton label="Loading pages" rows={6} />
+          </div>
         ) : (
           <KnowledgePageTree
             key={focusScope ? focusScope.id : 'all'}
@@ -1204,15 +1383,23 @@ export function KnowledgePageExplorer({
           <section
             ref={focusPageTabOnMount}
             aria-label="Selected page"
-            className={`min-h-0 min-w-0 flex-1 overflow-auto ${overlay ? `bg-background pl-(--knowledge-tree-inset) transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'rounded-lg border border-border bg-card'}`}
+            className={`flex min-h-0 min-w-0 flex-1 flex-col ${overlay ? `bg-background p-2 pl-[calc(var(--knowledge-tree-inset)+0.5rem)] transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'overflow-hidden rounded-lg border border-border bg-card'}`}
           >
-            <SelectedPage
-              source={source}
-              pageId={selectedPageId}
-              pagesById={pagesById}
-              onSelect={openAnywhere}
-              highlightMentionOf={highlightMentionOf}
-            />
+            <div
+              className={
+                overlay
+                  ? `flex min-h-0 flex-1 flex-col overflow-hidden rounded-studio-frame ${frameSurfaceStyle}`
+                  : 'contents'
+              }
+            >
+              <SelectedPage
+                source={source}
+                pageId={selectedPageId}
+                pagesById={pagesById}
+                onSelect={openAnywhere}
+                highlightMentionOf={highlightMentionOf}
+              />
+            </div>
           </section>
         ) : (
           <div
@@ -1221,11 +1408,17 @@ export function KnowledgePageExplorer({
           >
             {graphShown ? (
               <div className="absolute top-3 right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
-                <ButtonsGroup orientation="vertical" size="sm" aria-label="Graph options" className="shadow-overlay">
+                <ButtonsGroup
+                  orientation="vertical"
+                  size="sm"
+                  aria-label="Graph options"
+                  className="rounded-xl shadow-overlay"
+                >
                   <Button
                     data-testid="knowledge-graph-back"
                     aria-label="Back"
-                    title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
+                    tooltip={backTo ? 'Back to the previous page' : 'Nothing to go back to yet'}
+                    tooltipPosition="left"
                     size="icon-sm"
                     disabled={!backTo}
                     onClick={goBack}
@@ -1236,9 +1429,10 @@ export function KnowledgePageExplorer({
                     aria-label="All links"
                     aria-pressed={allLinks}
                     data-testid="knowledge-graph-all-links"
-                    title={`All links: ${allLinks ? 'on' : 'off'}. Draw every link between the pages in the graph, not only the selected page's`}
+                    tooltip={allLinks ? 'Show only the selected page’s links' : 'Show every link between pages'}
+                    tooltipPosition="left"
                     size="icon-sm"
-                    variant={allLinks ? 'subtle' : 'default'}
+                    className={allLinks ? '[--control-icon:var(--foreground)]' : undefined}
                     onClick={() => setAllLinks(current => !current)}
                   >
                     <Link2 />
@@ -1247,9 +1441,10 @@ export function KnowledgePageExplorer({
                     aria-label="Link counts"
                     aria-pressed={dotCounts}
                     data-testid="knowledge-graph-dot-counts"
-                    title={`Link counts: ${dotCounts ? 'on' : 'off'}. Write how many links go in and out of each dot inside it`}
+                    tooltip={dotCounts ? 'Hide link counts' : 'Show link counts on each dot'}
+                    tooltipPosition="left"
                     size="icon-sm"
-                    variant={dotCounts ? 'subtle' : 'default'}
+                    className={dotCounts ? '[--control-icon:var(--foreground)]' : undefined}
                     onClick={() => setDotCounts(current => !current)}
                   >
                     <Hash />
@@ -1340,7 +1535,7 @@ export function KnowledgePageExplorer({
                         />
                       </DataPanel.HeaderActions>
                     </DataPanel.Header>
-                    <div className="min-h-0 flex-1 overflow-auto">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                       <SelectedPage
                         source={source}
                         pageId={drawerShownId}

@@ -23,7 +23,8 @@ type Call =
   | { method: 'getScoreAggregate'; args: Args<'getScoreAggregate'> }
   | { method: 'getScoreBreakdown'; args: Args<'getScoreBreakdown'> }
   | { method: 'getScoreTimeSeries'; args: Args<'getScoreTimeSeries'> }
-  | { method: 'getScorePercentiles'; args: Args<'getScorePercentiles'> };
+  | { method: 'getScorePercentiles'; args: Args<'getScorePercentiles'> }
+  | { method: 'listScores'; args: Args<'listScores'> };
 
 /** One call a dashboard query makes, with the args it sends. */
 export type DashboardRequest = Call & {
@@ -39,6 +40,18 @@ type Answers = { [M in DashboardRequestMethod]: Awaited<ReturnType<MastraClient[
 export type DashboardAnswer = {
   [M in DashboardRequestMethod]: { method: M; data: Answers[M] };
 }[DashboardRequestMethod];
+
+/**
+ * Where a request's answer stands, as plain data: what a widget renders from, whoever fetched it.
+ * `isLoading` has no answer yet; `isRefetching` has one and is fetching it again.
+ */
+export type DashboardResult = {
+  data?: DashboardAnswer;
+  isLoading: boolean;
+  isRefetching: boolean;
+  isError: boolean;
+  error?: unknown;
+};
 
 type TraceWhere = NonNullable<AggregateTracesArgs['where']>;
 type SpanWhere = NonNullable<AggregateSpansArgs['where']>;
@@ -195,7 +208,7 @@ export function buildPreviousRequest(
 }
 
 /** What an unsatisfiable request answers: nothing matched. */
-function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
+export function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
   switch (method) {
     case 'aggregateTraces':
     case 'aggregateSpans':
@@ -211,6 +224,8 @@ function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
     case 'getScoreTimeSeries':
     case 'getScorePercentiles':
       return { method, data: { series: [] } };
+    case 'listScores':
+      return { method, data: { scores: [], pagination: { total: 0, page: 0, perPage: 0, hasMore: false } } };
   }
 }
 
@@ -238,6 +253,8 @@ export async function sendRequest(client: MastraClient, request: DashboardReques
       return { method: request.method, data: await client.getScoreTimeSeries(request.args) };
     case 'getScorePercentiles':
       return { method: request.method, data: await client.getScorePercentiles(request.args) };
+    case 'listScores':
+      return { method: request.method, data: await client.listScores(request.args) };
   }
 }
 
