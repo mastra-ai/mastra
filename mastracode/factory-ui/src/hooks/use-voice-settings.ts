@@ -15,13 +15,22 @@ export function useVoiceSettings(factoryId: string) {
   });
 }
 
-/** Saves the model on the side voice input uses; `null` goes back to auto. The response refreshes the cache. */
+/**
+ * Saves the model on the side voice input uses; `null` goes back to auto. The response refreshes this
+ * Factory's cache; other Factories are refetched because a personal choice is shared across them.
+ */
 export function useUpdateVoiceSettings(factoryId: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (choice: VoiceChoice | null) =>
       client.put<VoiceSettingsResponse>('/web/voice/settings', { factoryId, ...(choice ?? { provider: null }) }),
-    onSuccess: res => queryClient.setQueryData(queryKeys.voiceSettings(factoryId), res),
+    onSuccess: res => {
+      queryClient.setQueryData(queryKeys.voiceSettings(factoryId), res);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.voiceSettingsAll(),
+        predicate: query => query.queryKey[1] !== factoryId,
+      });
+    },
   });
 }

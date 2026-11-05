@@ -28,7 +28,12 @@ const ENV_VARS: Record<string, string> = {
 };
 
 function keys(saved: string[]): VoiceSettingsResponse['keys'] {
-  return Object.entries(ENV_VARS).map(([provider, envVar]) => ({ provider, envVar, saved: saved.includes(provider) }));
+  return Object.entries(ENV_VARS).map(([provider, envVar]) => ({
+    provider,
+    envVar,
+    saved: saved.includes(provider),
+    fromEnv: false,
+  }));
 }
 
 function settings(overrides: Partial<VoiceSettingsResponse> = {}): VoiceSettingsResponse {
@@ -146,6 +151,42 @@ describe('VoiceInputSettings', () => {
         { factoryId: FACTORY_ID, provider: null },
       ]),
     );
+  });
+
+  it('refetches other Factories after a personal choice, since it is shared across them', async () => {
+    const { requested } = stubSettings(settings(), () =>
+      settings({ selected: { provider: 'mistral', model: 'voxtral-mini-latest' } }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter>
+        <VoiceInputSettings factoryId={FACTORY_ID} />
+        <VoiceInputSettings factoryId="factory-2" />
+      </MemoryRouter>,
+    );
+
+    const [picker] = await screen.findAllByRole('combobox', { name: 'Your voice model' });
+    await waitFor(() => expect(requested).toEqual(expect.arrayContaining([FACTORY_ID, 'factory-2'])));
+    const before = requested.filter(id => id === 'factory-2').length;
+    await user.click(picker!);
+    await user.click(await screen.findByRole('option', { name: 'Mistral Voxtral Mini' }));
+
+    await waitFor(() => expect(requested.filter(id => id === 'factory-2').length).toBe(before + 1));
+    expect(requested.filter(id => id === FACTORY_ID)).toHaveLength(1);
+  });
+
+  it('shows a Deepgram key read from the server environment without offering to update or remove it', async () => {
+    stubSettings(
+      settings({
+        keys: keys(['mistral']).map(k => (k.provider === 'deepgram' ? { ...k, saved: true, fromEnv: true } : k)),
+      }),
+    );
+    renderVoiceSettings();
+
+    expect(await screen.findByText('From env')).toBeInTheDocument();
+    expect(screen.getByText('Deepgram')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Deepgram actions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mistral actions' })).toBeInTheDocument();
   });
 
   it('keeps a saved model whose key was removed visible, flagged as missing a key', async () => {

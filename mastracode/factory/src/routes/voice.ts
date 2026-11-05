@@ -72,12 +72,18 @@ export interface VoiceSettingsResponse {
   canEdit: boolean;
   effective: ModelChoice | null;
   models: Array<ModelChoice & { label: string }>;
-  keys: Array<{ provider: string; envVar: string | undefined; saved: boolean }>;
+  /** `fromEnv`: local mode reads the key from the server environment, so it cannot be updated or removed here. */
+  keys: Array<{ provider: string; envVar: string | undefined; saved: boolean; fromEnv: boolean }>;
 }
 
 export type TranscribeResponse = ModelChoice & { text: string };
 
-function settingsResponse(policy: VoicePolicy, saved: STTModel | undefined, canEdit: boolean): VoiceSettingsResponse {
+function settingsResponse(
+  request: VoiceRequest,
+  policy: VoicePolicy,
+  saved: STTModel | undefined,
+  canEdit: boolean,
+): VoiceSettingsResponse {
   const effective = chooseSTTModel(policy, saved);
   return {
     scope: policy.scope,
@@ -85,11 +91,16 @@ function settingsResponse(policy: VoicePolicy, saved: STTModel | undefined, canE
     canEdit,
     effective: 'error' in effective ? null : choice(effective.entry),
     models: STT_MODELS.map(m => ({ provider: m.provider, model: m.model, label: m.label })),
-    keys: sttProviders().map(provider => ({
-      provider,
-      envVar: sttApiKeyEnvVar(provider),
-      saved: policy.keyFor(provider) !== undefined,
-    })),
+    keys: sttProviders().map(provider => {
+      const envVar = sttApiKeyEnvVar(provider);
+      return {
+        provider,
+        envVar,
+        saved: policy.keyFor(provider) !== undefined,
+        // Tenant mode never reads deployment env keys for transcription.
+        fromEnv: !request.orgId && envVar !== undefined && Boolean(process.env[envVar]?.trim()),
+      };
+    }),
   };
 }
 
@@ -112,6 +123,24 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
     return { caller, orgId, factory: project };
   }
 
+  /** A named 503 rather than a generic 500, and never a silent fall back to auto. */
+  async #voiceSettings(c: Context): Promise<VoiceSettingsStorage | { response: Response }> {
+    try {
+      await this.deps.voiceSettings.ensureReady();
+      return this.deps.voiceSettings;
+    } catch {
+      return {
+        response: c.json(
+          {
+            error: 'voice_settings_unavailable',
+            message: 'Voice settings storage is unavailable — the app database is not configured or failed to start.',
+          },
+          503,
+        ),
+      };
+    }
+  }
+
   async #canEdit(c: Context, request: VoiceRequest, policy: VoicePolicy): Promise<boolean> {
     if (policy.scope === 'user' || !request.orgId) return true;
     return this.deps.auth.isOrganizationAdmin(c, request.orgId);
@@ -130,9 +159,11 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           const c = loose(context);
           const request = await this.#request(c, c.req.query('factoryId') || undefined);
           if ('response' in request) return request.response;
+          const storage = await this.#voiceSettings(c);
+          if ('response' in storage) return storage.response;
           const policy = voicePolicy(request.caller, request.factory);
-          const saved = await savedSTTModel(this.deps.voiceSettings, policy.settingsKey);
-          return c.json(settingsResponse(policy, saved, await this.#canEdit(c, request, policy)));
+          const saved = await savedSTTModel(storage, policy.settingsKey);
+          return c.json(settingsResponse(request, policy, saved, await this.#canEdit(c, request, policy)));
         },
       }),
       registerApiRoute('/web/voice/settings', {
@@ -152,11 +183,11 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           const policy = voicePolicy(request.caller, request.factory);
           const canEdit = await this.#canEdit(c, request, policy);
           if (!canEdit) return c.json({ error: 'organization_admin_required' }, 403);
-          const storage = this.deps.voiceSettings;
-          await storage.ensureReady();
+          const storage = await this.#voiceSettings(c);
+          if ('response' in storage) return storage.response;
           if (entry) await storage.set({ ...policy.settingsKey, provider: entry.provider, model: entry.model });
           else await storage.clear(policy.settingsKey);
-          return c.json(settingsResponse(policy, entry ?? undefined, canEdit));
+          return c.json(settingsResponse(request, policy, entry ?? undefined, canEdit));
         },
       }),
       registerApiRoute('/web/voice/transcribe', {
@@ -170,8 +201,10 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           }
           const request = await this.#request(c, c.req.query('factoryId') || undefined);
           if ('response' in request) return request.response;
+          const storage = await this.#voiceSettings(c);
+          if ('response' in storage) return storage.response;
           const policy = voicePolicy(request.caller, request.factory);
-          const chosen = chooseSTTModel(policy, await savedSTTModel(this.deps.voiceSettings, policy.settingsKey));
+          const chosen = chooseSTTModel(policy, await savedSTTModel(storage, policy.settingsKey));
           if ('error' in chosen) return c.json({ error: chosen.error }, 400);
 
           let audio: Buffer | undefined;
