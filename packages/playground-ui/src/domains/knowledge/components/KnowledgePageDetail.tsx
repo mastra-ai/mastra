@@ -397,7 +397,7 @@ export function KnowledgePageDetail({
             </Txt>
           )}
 
-          {notes.length > 0 ? (
+          {notes.length > 0 || notesMore ? (
             <KnowledgeDetailSection label="Notes" count={notesMore ? undefined : notes.length}>
               <ul className="flex flex-col gap-2">
                 {notes.map(note => {

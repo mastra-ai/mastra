@@ -59,6 +59,8 @@ const children = Array.from({ length: 3 }, (_, index) =>
   page(`child-${index}`, 'refund', { name: `Child ${index}`, position: `a${index}` }),
 );
 
+const grandchild = page('grandchild', 'child-1', { name: 'Grandchild', position: 'a0', childCount: 0 });
+
 const firstNotes = [note('n1', 'refund', 'First note')];
 const laterNotes = [note('n2', 'refund', 'Later note')];
 
@@ -66,7 +68,8 @@ const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: 
 const idle: KnowledgeExplorerQueryState<never> = { isPending: false, isError: false, error: null };
 
 function detail(pageId: string, noteCursor?: string): KnowledgeExplorerPageDetail {
-  const target = [org, policies, refund, escalation, ...children].find(candidate => candidate.id === pageId) ?? refund;
+  const target =
+    [org, policies, refund, escalation, ...children, grandchild].find(candidate => candidate.id === pageId) ?? refund;
   if (pageId === 'refund') {
     return {
       page: refund,
@@ -89,6 +92,8 @@ const levels: Record<string, KnowledgeExplorerTreeLevel> = {
   'policies@policies-2': { pages: [escalation] },
   refund: { pages: children.slice(0, 2), nextCursor: 'refund-2' },
   'refund@refund-2': { pages: children.slice(2) },
+  'child-1': { pages: [], nextCursor: 'child-1-2' },
+  'child-1@child-1-2': { pages: [grandchild] },
 };
 
 const source: KnowledgeExplorerSource = {
@@ -232,6 +237,16 @@ describe('KnowledgePageExplorer page view', () => {
       ]);
       fireEvent.click(childList.getByRole('button', { name: 'Open Child 2' }));
       expect(within(pageView()).getByRole('heading', { name: 'Child 2' })).toBeTruthy();
+    });
+
+    it('keeps Load more after an empty batch and opens a page found deeper in the tree', () => {
+      renderWithProviders(<Host initial="refund" initialView="page" />);
+      const childList = within(within(pageView()).getByRole('region', { name: 'Pages' }));
+      fireEvent.click(childList.getByText('Child 1'));
+      expect(childList.queryByText('No pages under this one.')).toBeNull();
+      fireEvent.click(childList.getAllByRole('button', { name: 'Load more' })[0]);
+      fireEvent.click(childList.getByRole('treeitem', { name: 'Grandchild' }));
+      expect(within(pageView()).getByRole('heading', { name: 'Grandchild' })).toBeTruthy();
     });
 
     it('lets a child page without a count open, and says when it has nothing under it', () => {

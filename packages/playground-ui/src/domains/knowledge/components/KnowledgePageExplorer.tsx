@@ -429,11 +429,11 @@ function MoreNotes({
 function ChildPages({
   useTreeLevels,
   parentId,
-  onPageClick,
+  onOpen,
 }: {
   useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
   parentId: string;
-  onPageClick: (page: KnowledgePagePayload) => void;
+  onOpen: (pageId: string) => void;
 }) {
   const [cursors, setCursors] = useState<string[]>([]);
   const requests = useMemo(() => [{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))], [parentId, cursors]);
@@ -447,19 +447,13 @@ function ChildPages({
       </KnowledgeDetailSection>
     );
   }
-  if (pages.length === 0) return null;
   const next = last?.data?.nextCursor;
+  if (pages.length === 0 && !next) return null;
   return (
     <KnowledgeDetailSection label="Pages">
       <div className={`rounded-xl p-1 ${raisedSurfaceStyle}`}>
-        <Tree
-          className="rounded-lg bg-background p-1"
-          onSelect={id => {
-            const child = pages.find(candidate => candidate.id === id);
-            if (child) onPageClick(child);
-          }}
-        >
-          <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onPageClick={onPageClick} />
+        <Tree className="rounded-lg bg-background p-1" onSelect={onOpen}>
+          <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
         </Tree>
       </div>
       {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
@@ -470,15 +464,15 @@ function ChildPages({
 function ChildPageItems({
   pages,
   useTreeLevels,
-  onPageClick,
+  onOpen,
 }: {
   pages: KnowledgePagePayload[];
   useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
-  onPageClick: (page: KnowledgePagePayload) => void;
+  onOpen: (pageId: string) => void;
 }) {
   return pages.map(child =>
     child.childCount !== 0 ? (
-      <ChildPageFolder key={child.id} page={child} useTreeLevels={useTreeLevels} onPageClick={onPageClick} />
+      <ChildPageFolder key={child.id} page={child} useTreeLevels={useTreeLevels} onOpen={onOpen} />
     ) : (
       <Tree.File key={child.id} id={child.id}>
         <Tree.Icon className="text-muted-foreground">
@@ -502,11 +496,11 @@ function ChildPageLabel({ page }: { page: KnowledgePagePayload }) {
 function ChildPageFolder({
   page,
   useTreeLevels,
-  onPageClick,
+  onOpen,
 }: {
   page: KnowledgePagePayload;
   useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
-  onPageClick: (page: KnowledgePagePayload) => void;
+  onOpen: (pageId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -518,7 +512,7 @@ function ChildPageFolder({
             size="icon-sm"
             tooltip={`Open ${page.name}`}
             aria-label={`Open ${page.name}`}
-            onClick={() => onPageClick(page)}
+            onClick={() => onOpen(page.id)}
           >
             <ArrowRight />
           </Button>
@@ -535,7 +529,7 @@ function ChildPageFolder({
         ) : null}
       </Tree.FolderTrigger>
       <Tree.FolderContent>
-        {open ? <ChildPageLevel parentId={page.id} useTreeLevels={useTreeLevels} onPageClick={onPageClick} /> : null}
+        {open ? <ChildPageLevel parentId={page.id} useTreeLevels={useTreeLevels} onOpen={onOpen} /> : null}
       </Tree.FolderContent>
     </Tree.Folder>
   );
@@ -544,11 +538,11 @@ function ChildPageFolder({
 function ChildPageLevel({
   parentId,
   useTreeLevels,
-  onPageClick,
+  onOpen,
 }: {
   parentId: string;
   useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
-  onPageClick: (page: KnowledgePagePayload) => void;
+  onOpen: (pageId: string) => void;
 }) {
   const [cursors, setCursors] = useState<string[]>([]);
   const levels = useTreeLevels([{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))]);
@@ -562,10 +556,10 @@ function ChildPageLevel({
     );
   }
   if (levels[0]?.isError) return <ChildPageLevelNote>Couldn’t load the pages under this one.</ChildPageLevelNote>;
-  if (pages.length === 0) return <ChildPageLevelNote>No pages under this one.</ChildPageLevelNote>;
+  if (pages.length === 0 && !next) return <ChildPageLevelNote>No pages under this one.</ChildPageLevelNote>;
   return (
     <>
-      <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onPageClick={onPageClick} />
+      <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
       {next ? (
         <li role="none" className="pl-9">
           <MoreButton onClick={() => setCursors(current => [...current, next])} />
@@ -720,7 +714,7 @@ function SelectedPage({
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
-          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onPageClick={onPageClick} />
+          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onOpen={onSelect} />
         ) : undefined
       }
       notesMore={
