@@ -1,7 +1,7 @@
 import { auth, MCPOAuthClientProvider } from '@mastra/mcp';
 import type { OAuthClientInformation, OAuthDiscoveryState, OAuthStorage } from '@mastra/mcp';
 
-import type { McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
+import type { McpServerOAuthStorage, McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
 import { findOAuthFailure, safeErrorText } from './errors.js';
 import { McpServerNetworkPolicyError } from './url-policy.js';
 import type { GuardedFetch } from './url-policy.js';
@@ -106,7 +106,7 @@ export function createMcpOAuthProvider(
       ...(record.oauthScopes.length > 0 ? { scope: record.oauthScopes.join(' ') } : {}),
     },
     ...(clientInformation ? { clientInformation } : { clientMetadataUrl: endpoints.clientMetadataUrl }),
-    storage: forSessions ? withoutSignInWrites(storage.oauthStorage(record)) : storage.oauthStorage(record),
+    storage: forSessions ? sessionOAuthStorage(storage.oauthStorage(record)) : storage.oauthStorage(record),
     // Sessions never send anyone to sign in; a refused token surfaces as `needs_auth`.
     onRedirectToAuthorization: onRedirectToAuthorization ?? (() => undefined),
     ...(stateGenerator ? { stateGenerator } : {}),
@@ -114,15 +114,32 @@ export function createMcpOAuthProvider(
 }
 
 const SIGN_IN_KEYS = new Set(['code_verifier', 'discovery_state']);
+const isTokensKey = (key: string) => key === 'tokens' || key.startsWith('tokens:');
 
-function withoutSignInWrites(storage: OAuthStorage): OAuthStorage {
+/**
+ * Sessions leave an admin's in-progress sign-in alone, and only discard the
+ * tokens they used: when replicas race to refresh a rotating refresh token,
+ * the loser's `invalid_grant` must not erase the tokens the winner just saved.
+ */
+function sessionOAuthStorage(storage: McpServerOAuthStorage): OAuthStorage {
+  const seen = new Map<string, string | undefined>();
   return {
-    get: key => storage.get(key),
+    get: async key => {
+      const value = await storage.get(key);
+      seen.set(key, value);
+      return value;
+    },
     set: async (key, value) => {
-      if (!SIGN_IN_KEYS.has(key)) await storage.set(key, value);
+      if (SIGN_IN_KEYS.has(key)) return;
+      await storage.set(key, value);
+      seen.set(key, value);
     },
     delete: async key => {
-      if (!SIGN_IN_KEYS.has(key)) await storage.delete(key);
+      if (SIGN_IN_KEYS.has(key)) return;
+      if (!isTokensKey(key)) return storage.delete(key);
+      // Tokens this session never read aren't its to discard.
+      const expected = seen.get(key);
+      if (expected !== undefined) await storage.deleteIf(key, expected);
     },
   };
 }

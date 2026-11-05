@@ -341,6 +341,28 @@ describe('McpServersStorage', () => {
     expect(await mcpServers.oauthStorage(server).get('tokens')).toBeUndefined();
   });
 
+  it('keeps no tokens from a sign-in or refresh that finishes after a sign-out or delete', async () => {
+    const { backend, domain } = await makeStore();
+    const oauthRows = (serverId: string) => backend.ops.findMany('mcp_server_oauth', { server_id: serverId });
+    const server = await domain.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
+    const inFlight = domain.oauthStorage(server);
+
+    // An admin signs the server out while a code exchange or refresh is still on its way.
+    const signedOut = await domain.disconnectOAuth({ orgId: 'org-a', id: server.id });
+    await inFlight.set('tokens', '{"refresh_token":"late-refresh-token"}');
+    expect(await oauthRows(server.id)).toEqual([]);
+
+    // The next sign-in still saves its tokens.
+    await domain.oauthStorage(signedOut!).set('tokens', '{"access_token":"current"}');
+    expect(await domain.hasOAuthTokens(signedOut!)).toBe(true);
+
+    // Nothing outlives the server.
+    const current = domain.oauthStorage(signedOut!);
+    await domain.delete({ orgId: 'org-a', id: server.id });
+    await current.set('tokens', '{"refresh_token":"after-delete"}');
+    expect(await oauthRows(server.id)).toEqual([]);
+  });
+
   it('requires headers when switching a server to header authentication', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({

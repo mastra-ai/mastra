@@ -15,6 +15,11 @@ export interface McpServerCatalogEntry {
   definition: SerializableMCPToolDefinition;
 }
 
+export interface McpServerOAuthStorage extends OAuthStorage {
+  /** Delete `key` only while it still holds `expected`, so a stale caller can't erase a newer value. */
+  deleteIf(key: string, expected: string): Promise<void>;
+}
+
 /** Discovered tools keyed by the server's own tool name. */
 export type McpServerToolCatalog = Record<string, McpServerCatalogEntry>;
 
@@ -633,25 +638,45 @@ export class McpServersStorage extends FactoryStorageDomain {
   /**
    * `@mastra/mcp` OAuth storage for one server's current sign-in, with every
    * value encrypted. Bound to the record's `oauthGeneration`: once the sign-in
-   * is reset, what this storage writes is never read again.
+   * is reset or the server deleted, its writes are dropped, so a code
+   * exchange or refresh that finishes late leaves no tokens behind.
    */
-  oauthStorage({ id, oauthGeneration }: Pick<McpServerRecord, 'id' | 'oauthGeneration'>): OAuthStorage {
+  oauthStorage({ id, oauthGeneration }: Pick<McpServerRecord, 'id' | 'oauthGeneration'>): McpServerOAuthStorage {
     const where = { server_id: id, generation: oauthGeneration };
+    // Holds the server row (as every reset does), so a write can't land just after a reset deleted the rows.
+    const whileCurrent = (fn: (ops: FactoryStorageOps) => Promise<void>) =>
+      this.storage.withTransaction(ops =>
+        ops.updateAtomic<McpServerDbRow>('mcp_servers', { id }, async current => {
+          if (Number(current.oauth_generation) === oauthGeneration) await fn(ops);
+          return null;
+        }),
+      );
     return {
       get: async key => {
         const row = await this.#db.findOne<McpServerOAuthDbRow>('mcp_server_oauth', { ...where, key });
         return row ? (await this.#decryptString(row.value)).value : undefined;
       },
       set: async (key, value) => {
-        await this.#db.upsertOne<McpServerOAuthDbRow>('mcp_server_oauth', ['server_id', 'generation', 'key'], {
-          ...where,
-          key,
-          value: await this.encryption.encrypt(value),
-          updated_at: new Date(),
+        const encrypted = await this.encryption.encrypt(value);
+        await whileCurrent(async ops => {
+          await ops.upsertOne<McpServerOAuthDbRow>('mcp_server_oauth', ['server_id', 'generation', 'key'], {
+            ...where,
+            key,
+            value: encrypted,
+            updated_at: new Date(),
+          });
         });
       },
       delete: async key => {
         await this.#db.deleteMany('mcp_server_oauth', { ...where, key });
+      },
+      deleteIf: async (key, expected) => {
+        await whileCurrent(async ops => {
+          const row = await ops.findOne<McpServerOAuthDbRow>('mcp_server_oauth', { ...where, key });
+          if (row && (await this.#decryptString(row.value)).value === expected) {
+            await ops.deleteMany('mcp_server_oauth', { ...where, key });
+          }
+        });
       },
     };
   }

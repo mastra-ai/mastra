@@ -483,6 +483,34 @@ describe('MCP server OAuth tokens in sessions', () => {
     expect((await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools).toEqual({});
   });
 
+  it("keeps the tokens one replica just refreshed when another replica's refresh of the same token loses", async () => {
+    const ctx = await signedIn();
+    await revokeAccessTokens(ctx.authorizationServer);
+    const other = replica(ctx.storage);
+    const loser = (await other.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools;
+    const winner = (await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools;
+
+    // Both replicas' sessions find the access token refused and refresh with the same rotating refresh token.
+    const held = ctx.authorizationServer.holdNextTokenRequest();
+    const losing = loser.orders_echo!.execute!({ text: 'loses the refresh' }, {} as never).catch(
+      (error: unknown) => error,
+    );
+    await held.arrived;
+    expect(await winner.orders_echo!.execute!({ text: 'wins the refresh' }, {} as never)).toMatchObject({
+      isError: false,
+    });
+    held.release();
+    await losing;
+
+    expect(await getServer(ctx, ctx.server.id)).toMatchObject({ status: 'connected', oauth: { connected: true } });
+    for (const factory of [ctx, other]) {
+      const { tools } = await factory.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+      expect(await tools.orders_echo!.execute!({ text: 'after the race' }, {} as never)).toMatchObject({
+        isError: false,
+      });
+    }
+  });
+
   it("never lets a session whose tokens stopped working break an admin's sign-in in progress", async () => {
     const ctx = await signedIn();
     await revokeAccessTokens(ctx.authorizationServer);
