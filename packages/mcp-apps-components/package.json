@@ -15,14 +15,14 @@
         "default": "./dist/dashboard-renderer.cjs"
       }
     },
-    "./observability-tools": {
+    "./dashboard-data-tool": {
       "import": {
-        "types": "./dist/observability-tools.d.ts",
-        "default": "./dist/observability-tools.js"
+        "types": "./dist/dashboard-data-tool.d.ts",
+        "default": "./dist/dashboard-data-tool.js"
       },
       "require": {
-        "types": "./dist/observability-tools.d.ts",
-        "default": "./dist/observability-tools.cjs"
+        "types": "./dist/dashboard-data-tool.d.ts",
+        "default": "./dist/dashboard-data-tool.cjs"
       }
     },
     "./host": {
@@ -51,6 +51,7 @@
   },
   "scripts": {
     "build": "tsx scripts/build-apps.ts && tsdown --silent --config tsdown.config.ts",
+    "pretest": "pnpm turbo build --filter @mastra/mcp-apps-components",
     "test": "vitest run --project 'unit:packages/mcp-apps-components'",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --type-aware .",
@@ -64,6 +65,9 @@
     "zod": "^4.2.0"
   },
   "peerDependenciesMeta": {
+    "@mastra/server": {
+      "optional": true
+    },
     "react": {
       "optional": true
     }

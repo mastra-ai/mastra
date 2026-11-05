@@ -6,6 +6,7 @@ import { useRef, useState } from 'react';
 import { defineMcpApp } from '../../runtime/define-mcp-app';
 import { MastraServerProvider } from '../../runtime/mastra-server-provider';
 import { useMcpApp } from '../../runtime/mcp-app-context';
+import { createDashboardDataFetch } from './data-fetch';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
 import { dashboardRendererInputSchema } from './input';
 import type { DashboardRendererInput } from './input';
@@ -60,7 +61,7 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
   const pin = pinState ? { onPin, isPinned: pinState.isPinned } : {};
 
   return (
-    <MastraServerProvider>
+    <MastraServerProvider createFetch={hostApp => createDashboardDataFetch(hostApp, { projectId: input.projectId })}>
       <MetricsProvider
         preset={preset}
         onPresetChange={setPreset}

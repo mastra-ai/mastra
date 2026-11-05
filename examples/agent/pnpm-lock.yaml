@@ -26,6 +26,7 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
   '@mastra/playground-ui': link:../../packages/playground-ui
+  '@mastra/server': link:../../packages/server
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
@@ -149,6 +150,9 @@ importers:
       '@mastra/playground-ui':
         specifier: link:../../packages/playground-ui
         version: link:../../packages/playground-ui
+      '@mastra/server':
+        specifier: link:../../packages/server
+        version: link:../../packages/server
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack

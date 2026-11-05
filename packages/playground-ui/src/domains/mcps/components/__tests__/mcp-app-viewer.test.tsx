@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
+import type { McpServerToolListResponse } from '@mastra/client-js';
 import type { App } from '@modelcontextprotocol/ext-apps';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { render } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { useMcpAppToolCall } from '../../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from '../mcp-app-viewer';
 import type { McpAppViewerProps } from '../mcp-app-viewer';
 import { connectApp, sandboxFrame } from './connect-app';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 const SANDBOX_URL = new URL('http://sandbox.test/proxy.html');
 const HTML = '<!DOCTYPE html><html><body>app</body></html>';
@@ -15,8 +21,12 @@ function viewer(props: Partial<McpAppViewerProps>) {
   return <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />;
 }
 
-async function renderApp(props: Partial<McpAppViewerProps> = {}, setup?: (app: App) => void) {
-  const { container } = render(viewer(props));
+async function renderApp(
+  props: Partial<McpAppViewerProps> = {},
+  setup?: (app: App) => void,
+  element: ReactElement = viewer(props),
+) {
+  const { container } = renderWithProviders(element);
   return connectApp(container, setup);
 }
 
@@ -140,7 +150,7 @@ describe('McpAppViewer', () => {
   });
 
   it('sends extra host-context keys to the app, and their changes to the running app', async () => {
-    const { container, rerender } = render(viewer({ hostContext: { 'mastra.ai/pins': ['a'] } }));
+    const { container, rerender } = renderWithProviders(viewer({ hostContext: { 'mastra.ai/pins': ['a'] } }));
     const { frame } = await sandboxFrame(container);
     const app = await connectApp(container);
     expect(app.getHostContext()).toMatchObject({ 'mastra.ai/pins': ['a'], theme: expect.any(String) });
@@ -192,5 +202,45 @@ describe('McpAppViewer', () => {
     await expect(
       app.updateModelContext({ content: [{ type: 'text', text: 'The user drilled into traces.' }] }),
     ).rejects.toThrow('No handler for method: ui/update-model-context');
+  });
+
+  describe("when Studio relays an app's tool call to the app's MCP server", () => {
+    /** The viewer as Studio mounts it: tool calls go to the server through Studio's API. */
+    function StudioViewer({ serverId }: { serverId: string }) {
+      const onToolCall = useMcpAppToolCall(serverId);
+      return <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} onToolCall={onToolCall} />;
+    }
+
+    function serveTools(tools: McpServerToolListResponse['tools']) {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/apps/tools`, () => HttpResponse.json<McpServerToolListResponse>({ tools })),
+      );
+    }
+
+    it("refuses a tool the server doesn't have with invalid params, as MCP servers do", async () => {
+      serveTools([]);
+      const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
+
+      await expect(app.callServerTool({ name: 'dashboardDataTool', arguments: {} })).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('isn\'t available to apps on MCP server "apps"'),
+      });
+    });
+
+    it('refuses a tool the server keeps for the model the same way', async () => {
+      serveTools([
+        {
+          name: 'dashboardDataTool',
+          description: 'Reads data',
+          inputSchema: { type: 'object' },
+          _meta: { ui: { visibility: ['model'] } },
+        },
+      ]);
+      const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
+
+      await expect(app.callServerTool({ name: 'dashboardDataTool', arguments: {} })).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+      });
+    });
   });
 });
