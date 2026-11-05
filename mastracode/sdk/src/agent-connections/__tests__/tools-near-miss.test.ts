@@ -46,7 +46,7 @@ describe('refusing a peer id that is not saved', () => {
     const refused = await send(MISTYPED_REVIEWER_ID);
 
     expect(refused.isError).toBe(true);
-    expect(refused.content.startsWith(`Cannot send: peer is not saved: ${MISTYPED_REVIEWER_ID}.`)).toBe(true);
+    expect(refused.content.startsWith(`Cannot send: no saved peer has id ${MISTYPED_REVIEWER_ID}.`)).toBe(true);
     expect(refused.content).toContain(`Did you mean ${REVIEWER_ID} ("reviewer")?`);
     expect(refused.content).not.toContain(BUILDER_ID);
     expect(refused.content).not.toContain(LEAD_ID);
@@ -77,13 +77,48 @@ describe('refusing a peer id that is not saved', () => {
     expect(sendNotificationSignal).not.toHaveBeenCalled();
   });
 
+  it('names the saved peer whose id had a stretch of another saved peer id spliced into it', async () => {
+    // The sender's model copied the reviewer's id but took the middle groups from the builder's id
+    // (9c10-4836-a1a5 -> 09cd-499c-94b5). That is 9 edits from the reviewer and 17 from the builder.
+    const { send, sendNotificationSignal } = await setup();
+    const splicedId = `code-agent:${RESOURCE_ID}:f4c572af-09cd-499c-94b5-33c4473f2b33`;
+
+    const refused = await send(splicedId);
+
+    expect(refused.isError).toBe(true);
+    expect(refused.content.startsWith(`Cannot send: no saved peer has id ${splicedId}.`)).toBe(true);
+    expect(refused.content).toContain(`Did you mean ${REVIEWER_ID} ("reviewer")?`);
+    expect(refused.content).not.toContain(BUILDER_ID);
+    expect(refused.content).not.toContain('is not saved');
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it('matches a label regardless of case and surrounding spaces', async () => {
+    const { send } = await setup();
+
+    const refused = await send('  Reviewer ');
+
+    expect(refused.content).toContain(`Did you mean ${REVIEWER_ID} ("reviewer")?`);
+  });
+
+  it('keeps the refusal for a saved peer that is not advertised distinct from an unknown id', async () => {
+    const advertised = [REVIEWER, BUILDER];
+    const { send } = await setup(advertised);
+    advertised.length = 0;
+
+    const refused = await send(REVIEWER_ID);
+
+    expect(refused.isError).toBe(true);
+    expect(refused.content).toBe(`Cannot send: saved peer is not currently advertised. Peer: ${REVIEWER_ID}`);
+  });
+
   it('suggests nothing for an id that is close to no saved peer', async () => {
     const { send, connect } = await setup();
     const unknownId = `code-agent:${RESOURCE_ID}:00000000-0000-4000-8000-000000000000`;
 
     await expect(send(unknownId)).resolves.toMatchObject({
       isError: true,
-      content: `Cannot send: peer is not saved: ${unknownId}`,
+      content: `Cannot send: no saved peer has id ${unknownId}`,
     });
     await expect(connect([unknownId])).resolves.toMatchObject({
       isError: true,
@@ -97,7 +132,7 @@ describe('refusing a peer id that is not saved', () => {
 
     await expect(send(otherResourceId)).resolves.toMatchObject({
       isError: true,
-      content: `Cannot send: peer is not saved: ${otherResourceId}`,
+      content: `Cannot send: no saved peer has id ${otherResourceId}`,
     });
   });
 
