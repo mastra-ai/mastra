@@ -676,7 +676,8 @@ export const checkRules = async (
     const condition = rule.condition;
     if (typeof condition === 'function') {
       return await Promise.resolve()
-        .then(() => !!condition(user))
+        .then(() => condition(user))
+        .then(result => !!result)
         .catch(() => false);
     }
     return !!rule.allow;

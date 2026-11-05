@@ -165,6 +165,39 @@ describe('auth helpers', () => {
       expect(await checkRules(layered, '/api/agents', 'GET', { role: 'user' })).toBe(true);
     });
 
+    it('should await async conditions', async () => {
+      const asyncRule = (condition: (user: any) => Promise<boolean>): MastraAuthConfig['rules'] => [
+        { path: '/api/admin/*', condition },
+        { path: '/api/*', allow: true },
+      ];
+      expect(
+        await checkRules(
+          asyncRule(async () => true),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(true);
+      expect(
+        await checkRules(
+          asyncRule(async () => false),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(false);
+      expect(
+        await checkRules(
+          asyncRule(async () => {
+            throw new Error('boom');
+          }),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(false);
+    });
+
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
     });
