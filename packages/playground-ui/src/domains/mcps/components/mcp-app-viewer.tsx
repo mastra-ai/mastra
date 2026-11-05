@@ -4,7 +4,6 @@ import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolRequest, CallToolResult, JSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import type { McpAppModelContextParams } from '../context/mcp-app-host-context-value';
 import { useTheme } from '@/ds/components/ThemeProvider';
 
 type HostCapabilities = NonNullable<ComponentProps<typeof AppRenderer>['hostCapabilities']>;
@@ -46,16 +45,6 @@ function modelContextText(toolName: string, params: JSONRPCRequest['params']): s
   return [`Context from the "${toolName}" MCP App shown in this conversation:`, ...text].join('\n');
 }
 
-function modelContextParams(params: JSONRPCRequest['params']): McpAppModelContextParams {
-  const { content, structuredContent } = params ?? {};
-  const isRecord =
-    structuredContent !== null && typeof structuredContent === 'object' && !Array.isArray(structuredContent);
-  return {
-    ...(Array.isArray(content) && { content }),
-    ...(isRecord && { structuredContent: structuredContent as Record<string, unknown> }),
-  };
-}
-
 export interface McpAppViewerProps {
   /** The HTML content to render in the sandboxed iframe */
   html: string;
@@ -76,10 +65,6 @@ export interface McpAppViewerProps {
    * text for the agent's next turn, or `undefined` when the app clears it.
    */
   onUpdateModelContext?: (context: string | undefined) => void;
-  /** Callback with the raw params of each updateModelContext, alongside `onUpdateModelContext`. */
-  onModelContext?: (params: McpAppModelContextParams) => void;
-  /** Extra host-context keys sent to the app; `theme` stays the viewer's own. Changes reach the running app. */
-  hostContext?: Record<string, unknown>;
   /** Sandbox configuration — URL to the sandbox proxy HTML. If omitted, a blob URL is generated automatically. */
   sandboxUrl?: URL;
   /** Optional className for the container */
@@ -102,8 +87,6 @@ export function McpAppViewer({
   onToolCall,
   onSendMessage,
   onUpdateModelContext,
-  onModelContext,
-  hostContext: extraHostContext,
   sandboxUrl,
   className,
 }: McpAppViewerProps) {
@@ -118,7 +101,7 @@ export function McpAppViewer({
   // Memoized for the same reason as hostInfo.
   const canCallTools = Boolean(onToolCall);
   const canSendMessages = Boolean(onSendMessage);
-  const canUpdateModelContext = Boolean(onUpdateModelContext || onModelContext);
+  const canUpdateModelContext = Boolean(onUpdateModelContext);
   const hostCapabilities: HostCapabilities = useMemo(
     () => ({
       openLinks: {},
@@ -129,8 +112,7 @@ export function McpAppViewer({
     [canCallTools, canSendMessages, canUpdateModelContext],
   );
   const { resolvedTheme } = useTheme();
-  // Not a bridge dependency: AppRenderer sends only the keys that changed, to the running app.
-  const hostContext = useMemo(() => ({ ...extraHostContext, theme: resolvedTheme }), [extraHostContext, resolvedTheme]);
+  const hostContext = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
 
   const normalizedToolResult: CallToolResult | undefined = useMemo(() => {
     if (toolResult === undefined) return undefined;
@@ -193,14 +175,13 @@ export function McpAppViewer({
   // AppRenderer has no prop for ui/update-model-context, so it arrives as an unhandled request.
   const handleFallbackRequest = useCallback(
     async (request: JSONRPCRequest) => {
-      if (request.method !== 'ui/update-model-context' || !canUpdateModelContext) {
+      if (request.method !== 'ui/update-model-context' || !onUpdateModelContext) {
         throw new McpError(ErrorCode.MethodNotFound, `No handler for method: ${request.method}`);
       }
-      onUpdateModelContext?.(modelContextText(toolName, request.params));
-      onModelContext?.(modelContextParams(request.params));
+      onUpdateModelContext(modelContextText(toolName, request.params));
       return {};
     },
-    [canUpdateModelContext, onUpdateModelContext, onModelContext, toolName],
+    [onUpdateModelContext, toolName],
   );
 
   const handleOpenLink = useCallback(async (params: { url: string }) => {
