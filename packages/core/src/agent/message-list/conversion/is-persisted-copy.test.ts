@@ -59,6 +59,33 @@ describe('isPersistedCopy', () => {
     expect(isPersistedCopy(live, stored)).toBe(true);
   });
 
+  describe('with a tool call that was still streaming', () => {
+    const lookup = (state: 'partial-call' | 'call'): MastraMessagePart => ({
+      type: 'tool-invocation',
+      toolInvocation: { state, toolCallId: 'call-lookup', toolName: 'lookup', args: { a: 17 } },
+    });
+    const live = assistant([reasoning('rs_example'), { type: 'text', text: 'hello\n' }, lookup('partial-call')]);
+
+    it('matches a copy saved through MessageHistory, which drops the partial call', () => {
+      const stored = assistant([reasoning('rs_example'), { type: 'text', text: 'hello' }]);
+
+      expect(isPersistedCopy(live, stored)).toBe(true);
+    });
+
+    it('matches a copy saved by Memory directly, which keeps the partial call', () => {
+      const stored = assistant([reasoning('rs_example'), { type: 'text', text: 'hello' }, lookup('partial-call')]);
+
+      expect(isPersistedCopy(live, stored)).toBe(true);
+    });
+
+    it('does not match a copy missing a tool call that had finished streaming', () => {
+      const finished = assistant([reasoning('rs_example'), { type: 'text', text: 'hello\n' }, lookup('call')]);
+      const stored = assistant([reasoning('rs_example'), { type: 'text', text: 'hello' }]);
+
+      expect(isPersistedCopy(finished, stored)).toBe(false);
+    });
+  });
+
   it('does not match when whitespace inside the text differs', () => {
     const live = assistant([{ type: 'text', text: 'hello  world' }]);
     const stored = assistant([{ type: 'text', text: 'hello world' }]);

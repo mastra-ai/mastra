@@ -1,6 +1,7 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
 import { removeWorkingMemoryTags, removeWorkingMemoryToolInvocationParts } from '../../../memory/working-memory-utils';
+import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MastraMessagePart } from '../state/types';
@@ -102,11 +103,18 @@ function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePa
  * both go through the cleanup memory applies when it saves a message. That cleanup makes
  * `messagesAreEqual` treat a stored copy as a different message, for example when the live
  * text ends in a newline.
+ *
+ * Saves through `MessageHistory` (observational memory's buffering) and the agent's save
+ * queue first run `filterMessagesForPersistence`, which also drops streaming `partial-call`
+ * tool parts, so the live message is matched with and without that filter.
  */
 export function isPersistedCopy(live: MastraDBMessage, stored: MastraDBMessage): boolean {
-  return (
-    live.id === stored.id &&
-    CacheKeyGenerator.fromDBParts(projectPartsForPersistence(live.content.parts)) ===
-      CacheKeyGenerator.fromDBParts(projectPartsForPersistence(stored.content.parts))
+  if (live.id !== stored.id) return false;
+  const storedKey = CacheKeyGenerator.fromDBParts(projectPartsForPersistence(stored.content.parts));
+  const [filteredLive] = filterMessagesForPersistence([live]);
+  return [live, filteredLive].some(
+    candidate =>
+      candidate !== undefined &&
+      CacheKeyGenerator.fromDBParts(projectPartsForPersistence(candidate.content.parts)) === storedKey,
   );
 }

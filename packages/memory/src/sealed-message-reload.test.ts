@@ -1,8 +1,10 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageHistory } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
+import { ObservationalMemory } from './processors/observational-memory/observational-memory';
 import { Memory } from './index';
 
 const threadId = 'sealed-reload-thread';
@@ -167,6 +169,54 @@ describe('Reloading a sealed assistant message from memory (#29380)', () => {
     const { list, recalled } = await reloadFromMemory({ live, saved: live });
 
     expect(recalled[0]!.content.parts.find(part => part.type === 'text')).toMatchObject({ text: 'hello' });
+    expect(list.get.all.db().map(message => message.id)).toEqual(['assistant-message']);
+    expect(reasoningItemIds(list)).toEqual(['rs_example']);
+  });
+
+  // Technical: a client can send back an assistant message whose tool call was still streaming
+  // (AI SDK `input-streaming`, stored as `partial-call`). Observational memory seals it and saves
+  // it through MessageHistory, which drops partial calls, so the stored copy has one part fewer
+  // than the live message. (#29380)
+  it('keeps one message when observational memory saved a sealed message without its streaming tool call', async () => {
+    const memory = await createMemory();
+    const list = new MessageList({ threadId, resourceId }).add(
+      {
+        id: 'assistant-message',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: '', providerMetadata: { openai: { itemId: 'rs_example' } } },
+          { type: 'text', text: 'Looking that up.' },
+          {
+            type: 'dynamic-tool',
+            toolName: 'lookup',
+            toolCallId: 'call-lookup',
+            state: 'input-streaming',
+            input: { a: 17 },
+          },
+        ],
+      },
+      'input',
+    );
+    const live = list.get.all.db();
+    expect(JSON.stringify(live)).toContain('partial-call');
+
+    // Seal and save the way observational memory's async buffering does.
+    const store = await memory.storage.getStore('memory');
+    if (!store) throw new Error('InMemoryStore has no memory domain');
+    const om = new ObservationalMemory({
+      storage: store,
+      scope: 'thread',
+      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1000, bufferTokens: 200 },
+      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 2000 },
+    });
+    om.sealMessagesForBuffering(live);
+    await new MessageHistory({ storage: store }).persistMessages({ messages: live, threadId, resourceId });
+
+    const { messages: recalled } = await memory.recall({ threadId, resourceId });
+    // The stored copy really lost the streaming tool call: this is the case under test.
+    expect(recalled[0]!.content.parts.map(part => part.type)).toEqual(['reasoning', 'text']);
+    list.add(recalled, 'memory');
+
     expect(list.get.all.db().map(message => message.id)).toEqual(['assistant-message']);
     expect(reasoningItemIds(list)).toEqual(['rs_example']);
   });
