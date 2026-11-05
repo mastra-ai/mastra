@@ -462,6 +462,77 @@ describe('useGenUIChat — surface tool', () => {
     expect(document.querySelector('[data-genui-surface="weather"]')?.getAttribute('data-genui-status')).toBe('ready');
   });
 
+  it('shows a surface node by node while the model is still writing it, without remounting once it completes', async () => {
+    weatherMounts = 0;
+    const List = defineGenUIComponent({
+      description: 'A vertical list',
+      schema: z.object({}),
+      component: ({ children }) => <div data-testid="list">{children}</div>,
+    });
+    const args = {
+      surfaceId: 'cities',
+      operations: [
+        // Models usually send the root last, as here.
+        { op: 'createSurface' },
+        {
+          op: 'upsertNodes',
+          nodes: [
+            { id: 'list', component: 'List', props: {}, children: ['rome', 'oslo'] },
+            { id: 'rome', component: 'WeatherCard', props: { city: 'Rome', temp: 30 } },
+            { id: 'oslo', component: 'WeatherCard', props: { city: 'Oslo', temp: 4 } },
+          ],
+        },
+        { op: 'setRoot', rootId: 'list' },
+      ],
+    };
+    const text = JSON.stringify(args);
+    // Stop in the middle of the last node's component name.
+    const cut = text.indexOf('Wea', text.indexOf('"oslo","component"')) + 3;
+    const stream = controllableStream();
+    let requests = 0;
+    server.use(
+      http.post(STREAM_URL, () => {
+        requests++;
+        if (requests === 1) return stream.response();
+        return sseResponse([
+          chunk('text-start', { id: 't2' }),
+          chunk('text-delta', { id: 't2', text: 'Done.' }),
+          chunk('text-end', { id: 't2' }),
+          finish('stop'),
+        ]);
+      }),
+    );
+    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard, List }, surfaceTool: true })} />);
+    await send('Weather in Rome and Oslo?');
+
+    act(() =>
+      stream.push(
+        chunk('start'),
+        chunk('tool-call-input-streaming-start', { toolCallId: 'c1', toolName: 'ui_surface' }),
+        chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: text.slice(0, cut) }),
+      ),
+    );
+    await waitFor(() => expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 30°']));
+    const surface = () => document.querySelector('[data-genui-surface="cities"]');
+    expect(surface()?.getAttribute('data-genui-status')).toBe('streaming');
+    expect(document.querySelector('[data-genui-fallback]')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+
+    act(() =>
+      stream.push(
+        chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: text.slice(cut) }),
+        chunk('tool-call-input-streaming-end', { toolCallId: 'c1' }),
+        chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args }),
+        finish('tool-calls'),
+      ),
+    );
+    stream.close();
+    expect(await screen.findByText('Done.')).toBeTruthy();
+    expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 30°', 'Oslo: 4°']);
+    expect(surface()?.getAttribute('data-genui-status')).toBe('ready');
+    expect(weatherMounts).toBe(2);
+  });
+
   it('a strict-mode model can build a surface from the advertised schema alone', async () => {
     type Schema = {
       type?: string;
@@ -647,6 +718,36 @@ describe('useGenUIChat — surface tool', () => {
       <GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} initialMessages={history} />,
     );
     expect(screen.getByTestId('weather').textContent).toBe('Rome: 30°');
+  });
+
+  it('does not bring back a surface from history that a later surface tool call deleted', () => {
+    const call = (toolCallId: string, args: object) => ({
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'result' as const,
+        toolCallId,
+        toolName: 'ui_surface',
+        args,
+        result: { ok: true, surfaceId: 'weather' },
+      },
+    });
+    const history: MastraDBMessage[] = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        createdAt: new Date(0),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [call('c1', surfaceArgs), call('c2', { surfaceId: 'weather', operations: [{ op: 'deleteSurface' }] })],
+        },
+      },
+    ];
+    renderWithProviders(
+      <GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} initialMessages={history} />,
+    );
+    expect(screen.queryByTestId('weather')).toBeNull();
   });
 });
 

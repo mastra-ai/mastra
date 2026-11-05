@@ -1,6 +1,6 @@
 import { resolveGenUILimits } from '@mastra/client-js/gen-ui';
 import type { GenUISurface } from '@mastra/client-js/gen-ui';
-import { Component, memo, useSyncExternalStore } from 'react';
+import { Component, createContext, memo, useContext, useSyncExternalStore } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { GenUINodeScope, useGenUIController, useGenUINode, useGenUISurface } from './context';
 import { isCatalogCompatible } from './registry';
@@ -93,10 +93,16 @@ interface NodeViewProps {
   depth: number;
 }
 
+/** A surface the model is still writing, rendered in place of the controller's (not yet existing) one. */
+const PreviewSurfaceContext = createContext<GenUISurface | undefined>(undefined);
+
 const NodeView = memo(function NodeView({ surfaceId, nodeId, depth }: NodeViewProps) {
   const controller = useGenUIController();
-  const node = useGenUINode(surfaceId, nodeId);
-  const status = useSurfaceStatus(surfaceId);
+  const preview = useContext(PreviewSurfaceContext);
+  const liveNode = useGenUINode(surfaceId, nodeId);
+  const liveStatus = useSurfaceStatus(surfaceId);
+  const node = preview ? preview.nodes[nodeId] : liveNode;
+  const status = preview ? preview.status : liveStatus;
   const { Fallback, Loading } = resolveFallbacks(controller.registry.fallbacks);
   const streaming = status === 'streaming';
 
@@ -104,8 +110,8 @@ const NodeView = memo(function NodeView({ surfaceId, nodeId, depth }: NodeViewPr
     return <Fallback kind="invalid-surface" reason="This interface is nested too deeply to display." />;
   }
   if (!node) {
-    // Children may reference nodes that have not streamed in yet.
-    return streaming ? <Loading /> : null;
+    // Children may reference nodes that have not streamed in yet; a preview simply grows into them.
+    return streaming && !preview ? <Loading /> : null;
   }
   const entry = controller.registry.components[node.component];
   const validation = controller.validateNodeProps(node);
@@ -164,9 +170,19 @@ export interface GenUISurfaceViewProps {
 
 /** Render one declarative surface from the controller in context. */
 export function GenUISurfaceView({ surfaceId, className }: GenUISurfaceViewProps) {
+  return <SurfaceFrame surfaceId={surfaceId} className={className} />;
+}
+
+/**
+ * Renders the controller's surface, or `preview` while the model is still writing it. Both share
+ * this component so the switch from preview to the real surface keeps every mounted component.
+ */
+export function SurfaceFrame({ surfaceId, preview, className }: GenUISurfaceViewProps & { preview?: GenUISurface }) {
   const controller = useGenUIController();
-  const surface = useGenUISurface(surfaceId);
-  const status = useSurfaceStatus(surfaceId);
+  const liveSurface = useGenUISurface(surfaceId);
+  const liveStatus = useSurfaceStatus(surfaceId);
+  const surface = preview ?? liveSurface;
+  const status = preview ? preview.status : liveStatus;
   const { Fallback, Loading, SurfaceStatus } = resolveFallbacks(controller.registry.fallbacks);
   if (!surface) return <Loading />;
   if (!isCatalogCompatible(controller.registry, surface)) {
@@ -178,22 +194,24 @@ export function GenUISurfaceView({ surfaceId, className }: GenUISurfaceViewProps
     );
   }
   return (
-    <div
-      className={className}
-      data-genui-surface={surface.id}
-      data-genui-status={status}
-      aria-busy={status === 'streaming' || undefined}
-      aria-label={surface.title}
-      role={surface.title ? 'group' : undefined}
-    >
-      {surface.rootId ? (
-        <NodeView surfaceId={surface.id} nodeId={surface.rootId} depth={1} />
-      ) : status === 'streaming' ? (
-        <Loading />
-      ) : null}
-      {status === 'streaming' || status === 'failed' || status === 'aborted' ? (
-        <SurfaceStatus status={status} error={surface.error} />
-      ) : null}
-    </div>
+    <PreviewSurfaceContext.Provider value={preview}>
+      <div
+        className={className}
+        data-genui-surface={surface.id}
+        data-genui-status={status}
+        aria-busy={status === 'streaming' || undefined}
+        aria-label={surface.title}
+        role={surface.title ? 'group' : undefined}
+      >
+        {surface.rootId ? (
+          <NodeView surfaceId={surface.id} nodeId={surface.rootId} depth={1} />
+        ) : status === 'streaming' ? (
+          <Loading />
+        ) : null}
+        {status === 'streaming' || status === 'failed' || status === 'aborted' ? (
+          <SurfaceStatus status={status} error={surface.error} />
+        ) : null}
+      </div>
+    </PreviewSurfaceContext.Provider>
   );
 }
