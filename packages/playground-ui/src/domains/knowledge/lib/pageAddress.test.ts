@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { ConfluenceIcon, LinearIcon, NotionIcon, ZendeskIcon } from '@/ds/icons';
-
 import type { KnowledgePagePayload } from '../pageTypes';
 import { scopeSource, scopeTitle } from './pageAddress';
+import { ConfluenceIcon, LinearIcon, NotionIcon, ZendeskIcon } from '@/ds/icons';
 
 function scope(address: string, name = address): KnowledgePagePayload {
   return {
