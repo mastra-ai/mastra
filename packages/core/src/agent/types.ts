@@ -79,7 +79,7 @@ import type { Workflow } from '../workflows';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentExecutionOptions, NetworkOptions, PublicAgentExecutionOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentScopesConfig } from './scopes';
@@ -773,7 +773,7 @@ interface AgentConfigBase<
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  defaultOptions?: DynamicArgument<PublicAgentExecutionOptions<TOutput>, TRequestContext>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.

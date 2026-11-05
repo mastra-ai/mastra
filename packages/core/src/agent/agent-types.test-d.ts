@@ -1,12 +1,14 @@
 import type { ProviderDefinedTool } from '@internal/external-types';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { createTool, webSearchTool } from '../tools';
 import { Agent } from './agent';
 import type { AgentExecutionOptions, PublicAgentExecutionOptions } from './agent.types';
+import type { AIV7Type } from './message-list/types';
 import type { AgentConfig } from './types';
 
 /**
@@ -468,6 +470,46 @@ describe('Agent Type Tests', () => {
       // @ts-expect-error resourceId/threadId stay required without runId
       assertType<SendSignal>({ scopes: ['resource:u1', 'thread:t1'] });
       assertType<SendSignal>({ resourceId: 'u1', threadId: 't1', scopes: ['resource:u1', 'thread:t1'] });
+    });
+  });
+
+  // zod v3 schemas have no `~standard.jsonSchema`, and zod v4's `z.infer` returns `unknown` for them
+  describe('Issue #29574: zod v3 schemas in agent options', () => {
+    const v3Schema = z3.object({ answer: z3.string() });
+    const agent = new Agent({ id: 'a', name: 'a', instructions: 'i', model: 'openai/gpt-4o' });
+
+    it('accepts a zod v3 schema in defaultOptions.structuredOutput', () => {
+      assertType<AgentConfig<'a', {}, { answer: string }>>({
+        id: 'a',
+        name: 'a',
+        instructions: 'i',
+        model: 'openai/gpt-4o',
+        defaultOptions: { structuredOutput: { schema: v3Schema } },
+      });
+    });
+
+    it('types generateLegacy object output from a zod v3 schema', async () => {
+      const result = await agent.generateLegacy('hi', { output: v3Schema });
+      expectTypeOf(result.object).toEqualTypeOf<{ answer: string }>();
+    });
+  });
+
+  // Core compiles against a vendored copy of `ai` v7 types; users pass messages typed by their own `ai`
+  describe('Issue #29575: AI SDK v7 UIMessage parts newer than the vendored copy', () => {
+    const agent = new Agent({ id: 'a', name: 'a', instructions: 'i', model: 'openai/gpt-4o' });
+
+    it('accepts UIMessage values with part types core does not know', async () => {
+      const messages = [] as Array<
+        Omit<AIV7Type.UIMessage, 'parts'> & { parts: Array<{ type: 'future-part'; payload: number }> }
+      >;
+      await agent.generate(messages);
+    });
+
+    it('still rejects malformed UIMessage literals', async () => {
+      // @ts-expect-error text must be a string
+      await agent.generate([{ id: '1', role: 'user', parts: [{ type: 'text', text: 123 }] }]);
+      // @ts-expect-error unknown part types are only accepted from values typed elsewhere
+      await agent.generate([{ id: '1', role: 'user', parts: [{ type: 'future-part', payload: 1 }] }]);
     });
   });
 });

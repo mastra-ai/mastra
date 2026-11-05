@@ -1,13 +1,13 @@
 import { z } from 'zod/v4';
 import type { Agent } from '../agent/agent';
-import type { AgentExecutionOptions } from '../agent/agent.types';
+import type { PublicAgentExecutionOptions } from '../agent/agent.types';
 import type { SubAgent } from '../agent/subagent';
 import type { AgentStreamOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { Classifier, ClassifierQuestions } from '../classifier';
 import type { MastraScorers } from '../evals';
 import { toStandardSchema } from '../schema';
-import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { PublicSchema } from '../schema';
 import type { DynamicArgument } from '../types';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from './entry-executors';
 import type { ClassifierStepOutput } from './entry-executors';
@@ -23,7 +23,7 @@ import type {
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
 export type AgentStepOptions<TOUTPUT> = Omit<
-  AgentExecutionOptions<TOUTPUT> & AgentStreamOptions,
+  PublicAgentExecutionOptions<TOUTPUT> & AgentStreamOptions,
   | 'format'
   | 'tracingContext'
   | 'requestContext'
@@ -40,7 +40,7 @@ export type AgentStepOptions<TOUTPUT> = Omit<
 export function createStepFromAgent<TStepId extends string, TStepOutput>(
   params: SubAgent<TStepId, any> | Agent<TStepId, any, any>,
   agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
-    structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
+    structuredOutput?: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;

@@ -30,6 +30,8 @@ describe('Agent message input accepts AI SDK v7 messages (#18956)', () => {
     await agent.generate(modelMessages);
   });
 
+  // `ai-v7` floats to the latest release, so this also covers part types added after the
+  // vendored copy in core was built (#29575).
   it('accepts v7 UIMessage[] in generate()', async () => {
     await agent.generate(uiMessages);
   });
