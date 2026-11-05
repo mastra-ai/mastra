@@ -22,7 +22,10 @@ const makeAgent = () =>
     model: new MockLanguageModelV2({}),
   });
 
-const cacheKeyFor = (topic: string) => `pubsub:${topic}`;
+const cacheKeyFor = (topic: string) => {
+  const prefix = ['agent.stream.', 'agent.control.'].find(prefix => topic.startsWith(prefix));
+  return `pubsub:${prefix ? `${prefix}v2.${JSON.stringify(['inner', topic.slice(prefix.length)])}` : topic}`;
+};
 
 describe('DurableAgent shouldCache', () => {
   it('caches every non-run-local topic by default', async () => {
@@ -45,7 +48,7 @@ describe('DurableAgent shouldCache', () => {
     });
 
     const received: string[] = [];
-    await inner.subscribe('agent.stream.run-1', e => {
+    await durable.pubsub.subscribe('agent.stream.run-1', e => {
       received.push(e.type);
     });
 
@@ -85,7 +88,8 @@ describe('DurableAgent shouldCache', () => {
     durable.__setLogger({ debug: vi.fn(), info: vi.fn(), warn, error: vi.fn(), trace: vi.fn() } as any);
 
     // No double-wrapping: the existing instance is reused and its policy wins.
-    expect(durable.pubsub).toBe(existing);
+    expect((durable.pubsub as CachingPubSub).getInner()).toBe(existing.getInner());
+    expect((durable.pubsub as CachingPubSub).getCache()).toBe(cache);
     await durable.pubsub.publish('agent.stream.run-1', { type: 'chunk', data: {} });
 
     expect(await cache.listLength(cacheKeyFor('agent.stream.run-1'))).toBe(1);

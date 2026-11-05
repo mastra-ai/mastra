@@ -846,7 +846,7 @@ describe.each(['durable', 'evented'] as const)('%s agent', kind => {
     const generation = ExecutionFence.getLocalActive(result.runId)?.generation;
     expect(generation).toEqual(expect.any(Number));
     const events: any[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC(result.runId), event => {
+    await wrapped.pubsub.subscribe(AGENT_STREAM_TOPIC(result.runId), event => {
       events.push(event);
     });
     for await (const _chunk of result.fullStream as any) {

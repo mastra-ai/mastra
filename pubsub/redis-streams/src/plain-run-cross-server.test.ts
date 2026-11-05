@@ -510,7 +510,9 @@ describe('plain Agent runs across two servers (LibSQL file + Redis)', () => {
 
       // No replay cache is written; whatever history the observer gets comes
       // from the transport itself (Redis Streams keeps its entries).
-      expect(await redis.exists(`${keyPrefix}:cache:pubsub:${`agent.stream.v2.${JSON.stringify([AGENT_ID, runId])}`}`)).toBe(0);
+      expect(await redis.exists(`${keyPrefix}:cache:pubsub:agent.stream.v2.${JSON.stringify([AGENT_ID, runId])}`)).toBe(
+        0,
+      );
       expect(text(live.frames)).toBe('Approved and done.');
       expect(types(live.frames).at(-1)).toBe('finish');
     });

@@ -173,7 +173,7 @@ describe('DurableAgent cross-process abort', () => {
     const { output, runId, cleanup } = await durableAgent.stream('Go');
 
     const terminalEvents: string[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+    await durableAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
       if (event?.type === 'finish' || event?.type === 'abort' || event?.type === 'error') {
         terminalEvents.push(event.type);
       }
@@ -186,7 +186,7 @@ describe('DurableAgent cross-process abort', () => {
     // and proves nothing about a caller living somewhere else. Publishing the
     // request straight to pubsub is what a different pod's abort() looks like
     // from here — the executing process must pick it up on its own.
-    await publishAbortRequest(pubsub, runId);
+    await publishAbortRequest(durableAgent.pubsub, runId);
 
     // The run must actually end, and it must end with a terminal event. A hard
     // workflow cancel would stop the work but skip the event, leaving every

@@ -24,7 +24,7 @@ import { createTool } from '../../../tools';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
+import { AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 import {
@@ -601,7 +601,9 @@ describe('DurableAgent.recover(runId)', () => {
       expect(agentThreadStreamRuntime.getThreadState({ threadId: 't', resourceId: 'r' }, conflictPubsub)).toBe('idle');
       expect(
         publish.mock.calls.filter(
-          ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+          ([topic, event]) =>
+            topic === `agent.stream.v2.${JSON.stringify([conflictAgent.id, runId])}` &&
+            event.type === AgentStreamEventTypes.ERROR,
         ),
       ).toHaveLength(0);
       await expect(conflictPubsub.acquireLease(threadKey, 'probe-run', 30_000)).resolves.toMatchObject({
@@ -640,7 +642,9 @@ describe('DurableAgent.recover(runId)', () => {
     await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED' });
     expect(
       publish.mock.calls.filter(
-        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+        ([topic, event]) =>
+          topic === `agent.stream.v2.${JSON.stringify([agent.id, runId])}` &&
+          event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(0);
   });
@@ -664,7 +668,9 @@ describe('DurableAgent.recover(runId)', () => {
     expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
     expect(
       publish.mock.calls.filter(
-        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+        ([topic, event]) =>
+          topic === `agent.stream.v2.${JSON.stringify([agent.id, runId])}` &&
+          event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(0);
   });
@@ -688,7 +694,9 @@ describe('DurableAgent.recover(runId)', () => {
     expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
     expect(
       publish.mock.calls.filter(
-        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+        ([topic, event]) =>
+          topic === `agent.stream.v2.${JSON.stringify([agent.id, runId])}` &&
+          event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(0);
   });
@@ -824,7 +832,9 @@ describe('DurableAgent.recover(runId)', () => {
       expect(globalRunRegistry.get(runId)).toBeUndefined();
       expect(
         publish.mock.calls.filter(
-          ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+          ([topic, event]) =>
+            topic === `agent.stream.v2.${JSON.stringify([lossAgent.id, runId])}` &&
+            event.type === AgentStreamEventTypes.ERROR,
         ),
       ).toHaveLength(0);
       // The new owner keeps the run.
@@ -941,7 +951,9 @@ describe('DurableAgent.recover(runId)', () => {
     expect((errors[0]?.payload as any).error.message).toBe('workflow construction failed');
     expect(
       publish.mock.calls.filter(
-        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+        ([topic, event]) =>
+          topic === `agent.stream.v2.${JSON.stringify([failureAgent.id, runId])}` &&
+          event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(1);
     expect(globalRunRegistry.get(runId)).toBeUndefined();
@@ -977,7 +989,9 @@ describe('DurableAgent.recover(runId)', () => {
     await expect(failureAgent.recover(runId)).rejects.toThrow('snapshot reload failed');
 
     const errorEvents = publish.mock.calls.filter(
-      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ([topic, event]) =>
+        topic === `agent.stream.v2.${JSON.stringify([failureAgent.id, runId])}` &&
+        event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);
     expect((errorEvents[0]?.[1] as any).data.error.message).toBe('snapshot reload failed');
@@ -1153,7 +1167,9 @@ describe('DurableAgent.recover(runId)', () => {
     await expect(globalRunRegistry.get(runId)?.workflowExecution).rejects.toThrow('terminal failure');
 
     const errorEvents = publish.mock.calls.filter(
-      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ([topic, event]) =>
+        topic === `agent.stream.v2.${JSON.stringify([failedAgent.id, runId])}` &&
+        event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);
     expect((errorEvents[0]?.[1] as any).data.error.message).toBe('terminal failure');
@@ -1166,7 +1182,10 @@ describe('DurableAgent.recover(runId)', () => {
     const failedPubsub = new EventEmitterPubSub();
     const actualPublish = failedPubsub.publish.bind(failedPubsub);
     vi.spyOn(failedPubsub, 'publish').mockImplementation(async (topic, event, options) => {
-      if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR) {
+      if (
+        topic === `agent.stream.v2.${JSON.stringify([failedAgent.id, runId])}` &&
+        event.type === AgentStreamEventTypes.ERROR
+      ) {
         throw new Error('terminal error publication failed');
       }
       return actualPublish(topic, event, options);
@@ -1194,7 +1213,7 @@ describe('DurableAgent.recover(runId)', () => {
     const failingPubsub = new EventEmitterPubSub();
     const actualSubscribe = failingPubsub.subscribe.bind(failingPubsub);
     vi.spyOn(failingPubsub, 'subscribe').mockImplementation((topic, callback, options) => {
-      if (topic === AGENT_STREAM_TOPIC(runId)) {
+      if (topic === `agent.stream.v2.${JSON.stringify([failingAgent.id, runId])}`) {
         return Promise.reject(new Error('pubsub subscription failed'));
       }
       return actualSubscribe(topic, callback, options);
@@ -1206,7 +1225,9 @@ describe('DurableAgent.recover(runId)', () => {
 
     await expect(failingAgent.recover(runId)).rejects.toThrow('pubsub subscription failed');
     const errorEvents = publish.mock.calls.filter(
-      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ([topic, event]) =>
+        topic === `agent.stream.v2.${JSON.stringify([failingAgent.id, runId])}` &&
+        event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);
     expect((errorEvents[0]?.[1] as any).data.error.message).toBe('pubsub subscription failed');

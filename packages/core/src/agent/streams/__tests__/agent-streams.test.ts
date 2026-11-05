@@ -29,7 +29,9 @@ class RecordingPubSub extends EventEmitterPubSub {
   }
 
   types(runId: string) {
-    return this.published.filter(p => p.topic === AGENT_STREAM_TOPIC(runId)).map(p => p.event.type);
+    return this.published
+      .filter(p => p.topic === `agent.stream.v2.${JSON.stringify(['streams-agent', runId])}`)
+      .map(p => p.event.type);
   }
 }
 

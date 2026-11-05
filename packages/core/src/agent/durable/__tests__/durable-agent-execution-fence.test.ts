@@ -456,7 +456,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = result;
       const stream = collect(result.fullStream);
       const events: string[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+      await durableAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
       });
 
@@ -562,7 +562,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const { runId } = result;
         const stream = collect(result.fullStream);
         const events: string[] = [];
-        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        await durableAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
           events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
         });
 
@@ -770,7 +770,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = started;
       const stream = collect(started.fullStream);
       const events: string[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+      await durableAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
       });
       await stuck.entered;
@@ -911,7 +911,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         expect(persist).not.toHaveBeenCalled();
         expect(remove).not.toHaveBeenCalled();
         const events = publish.mock.calls
-          .filter(([topic]) => topic === AGENT_STREAM_TOPIC(runId))
+          .filter(([topic]) => topic === `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`)
           .map(([, event]) => (event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type));
         expect(events).not.toContain('finish');
         expect(events).not.toContain('error');
@@ -1250,7 +1250,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = result;
       const stream = collect(result.fullStream);
       const errors: any[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+      await durableAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         if (event.type === 'error') errors.push(event);
       });
       await model.entered;
@@ -1305,7 +1305,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           execute: async () => ({ found: true }),
         });
         const durableAgent = buildAgent({ model, storage, memory, tools: { lookup }, cleanupTimeoutMs: 10 });
-        const clearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+        const clearTopic = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'clearTopic');
         const runId = crypto.randomUUID();
         const cleanups: Array<() => void> = [];
 
@@ -1372,7 +1372,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         await vi.waitFor(() => expect(globalRunRegistry.get(runId)).toBeUndefined());
         for (const cleanup of cleanups) cleanup();
         // ...but left the topics alone.
-        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+        expect(clearTopic).not.toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
         expect(clearTopic).not.toHaveBeenCalledWith(`workflow.events.v2.${runId}`);
       },
     );
@@ -1489,7 +1489,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const recoveryCall = gate();
         const { model, prompts } = recordingModel([originalCall.opened, recoveryCall.opened]);
         const durableAgent = buildAgent({ model, storage, memory });
-        const clearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+        const clearTopic = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'clearTopic');
         const runId = crypto.randomUUID();
         const generated = durableAgent.generate('What is the answer?', {
           runId,
@@ -1532,12 +1532,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         if (recoveryStarts === 'before') await generated;
         expect(globalRunRegistry.get(runId)).toBe(recoveredEntry);
         expect(durableAgent.runRegistry.get(runId)).toBe(recoveredLocalEntry);
-        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+        expect(clearTopic).not.toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
 
         // The recovery's own cleanup still finds its state, and clears it.
         recovered.cleanup();
         expect(globalRunRegistry.get(runId)).toBeUndefined();
-        expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+        expect(clearTopic).toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
       },
     );
 
@@ -1601,7 +1601,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = result;
       const stream = collect(result.fullStream);
       const events: string[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+      await eventedAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
       });
 

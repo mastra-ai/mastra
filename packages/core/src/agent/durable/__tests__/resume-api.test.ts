@@ -806,7 +806,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Read history before cleanup: the agent now reuses this CachingPubSub
     // instance, so cleanup clears this topic's cached history.
     const topic = `agent.stream.${runId}`;
-    const cachedEvents = await cachingPubsub.getHistory(topic);
+    const cachedEvents = await (durableAgent.pubsub as CachingPubSub).getHistory(topic);
     // Events should be cached (at least the start event)
     expect(cachedEvents.length).toBeGreaterThan(0);
 
@@ -960,7 +960,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
       expect(snapshot?.status).toBe('suspended');
     });
 
-    await transport.publish(AGENT_STREAM_TOPIC(started.runId), {
+    await firstProcess.pubsub.publish(AGENT_STREAM_TOPIC(started.runId), {
       type: AgentStreamEventTypes.CHUNK,
       runId: started.runId,
       data: { type: 'text-delta', payload: { id: 'stale', text: 'STALE' } },
@@ -1091,7 +1091,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Replay before cleanup: the agent now reuses this CachingPubSub instance,
     // so cleanup clears this topic's cached history.
     const topic = `agent.stream.${runId}`;
-    await cachingPubsub.subscribeWithReplay(topic, event => {
+    await durableAgent.pubsub.subscribeWithReplay(topic, event => {
       receivedEvents.push(event);
     });
 
@@ -1327,7 +1327,7 @@ describe('Observe API', () => {
       const entry = globalRunRegistry.get(runId)!;
       entry.messageList!.add({ role: 'assistant', content: 'Private producer answer' }, 'response');
       const resolveProcessors = vi.spyOn(baseAgent, 'listOutputProcessors');
-      const subscribe = vi.spyOn(producer.pubsub, 'subscribeWithReplay');
+      const subscribe = vi.spyOn((producer.pubsub as CachingPubSub).getInner(), 'subscribe');
       const attachment = observer.observe(runId);
       let unexpectedResult: Awaited<typeof attachment> | undefined;
 
@@ -1346,7 +1346,10 @@ describe('Observe API', () => {
 
         const ownerResult = await producer.observe(runId);
         try {
-          expect(subscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+          expect(subscribe).toHaveBeenCalledWith(
+            `agent.stream.v2.${JSON.stringify([producer.id, runId])}`,
+            expect.any(Function),
+          );
           const fullOutput = ownerResult.output.getFullOutput();
           await emitFinishEvent(producer.pubsub, runId, {
             output: {
@@ -1535,7 +1538,7 @@ describe('Observe API', () => {
       try {
         result = await durableAgent.observe(runId);
         const fullOutput = result.output.getFullOutput();
-        await emitFinishEvent(cachingPubsub, runId, {
+        await emitFinishEvent(durableAgent.pubsub, runId, {
           output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
           stepResult: { reason: 'stop', warnings: [], isContinued: false },
         });
@@ -1613,13 +1616,13 @@ describe('Observe API', () => {
     const fullOutput = result.output.getFullOutput();
 
     try {
-      await emitChunkEvent(cachingPubsub, runId, {
+      await emitChunkEvent(durableAgent.pubsub, runId, {
         type: 'text-delta',
         runId,
         from: 'AGENT',
         payload: { id: 'fallback-text', text: 'Fallback answer' },
       });
-      await emitFinishEvent(cachingPubsub, runId, {
+      await emitFinishEvent(durableAgent.pubsub, runId, {
         output: { text: 'Fallback answer', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
         stepResult: { reason: 'stop', warnings: [], isContinued: false },
       });

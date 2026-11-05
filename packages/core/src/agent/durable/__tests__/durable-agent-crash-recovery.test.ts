@@ -404,7 +404,7 @@ async function recoverFrom(
     if (event.type === AgentStreamEventTypes.FINISH) finishEvents++;
     await ack?.();
   };
-  await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), countFinish);
+  await durableAgent.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), countFinish);
   let onFinishCalls = 0;
 
   const attempt = (async () => {
@@ -453,7 +453,7 @@ async function recoverFrom(
     ]);
   } finally {
     clearTimeout(timer);
-    await pubsub.unsubscribe(AGENT_STREAM_TOPIC(runId), countFinish);
+    await durableAgent.pubsub.unsubscribe(AGENT_STREAM_TOPIC(runId), countFinish);
   }
 }
 

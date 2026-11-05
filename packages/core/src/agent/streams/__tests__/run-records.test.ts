@@ -56,7 +56,8 @@ class OrderingPubSub extends EventEmitterPubSub {
   }
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
     if (topic.startsWith('agent.stream.')) {
-      const runId = topic.slice('agent.stream.'.length);
+      const [agentId, runId] = JSON.parse(topic.slice('agent.stream.v2.'.length)) as [string, string];
+      expect(agentId).toBe(this.agentId);
       const record = (await this.cache.get(agentRunRecordKey(this.agentId, runId))) as AgentRunRecord | null;
       this.seen.push({ type: event.type, status: record?.status });
     }
@@ -289,7 +290,11 @@ describe('Agent run records', () => {
       () => {
         const topics = cleared.mock.calls.map(([topic]) => topic);
         expect(topics).toEqual(
-          expect.arrayContaining([`agent.stream.${runId}`, `agent.control.${runId}`, `agent.control.${runId}.ack`]),
+          expect.arrayContaining(
+            ['agent.stream.', 'agent.control.', 'agent.abort-ack.'].map(
+              prefix => `${prefix}v2.${JSON.stringify([agent.id, runId])}`,
+            ),
+          ),
         );
       },
       { timeout: 2000 },

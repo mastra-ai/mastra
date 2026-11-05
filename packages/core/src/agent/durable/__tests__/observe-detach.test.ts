@@ -10,6 +10,7 @@
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -56,9 +57,9 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
   const spies = async (runId: string) => {
     // These tests observe an existing run, not an unavailable topic.
     await emitOwnershipClaimedEvent(agent.pubsub, runId, 1);
-    const topic = AGENT_STREAM_TOPIC(runId);
-    const unsubscribe = vi.spyOn(agent.pubsub, 'unsubscribe');
-    const clearTopic = vi.spyOn(agent.pubsub, 'clearTopic');
+    const topic = `agent.stream.v2.${JSON.stringify([agent.id, runId])}`;
+    const unsubscribe = vi.spyOn((agent.pubsub as CachingPubSub).getInner(), 'unsubscribe');
+    const clearTopic = vi.spyOn((agent.pubsub as CachingPubSub).getInner(), 'clearTopic');
     return {
       unsubscribeCount: () => unsubscribe.mock.calls.filter(([t]) => t === topic).length,
       topicCleared: () => clearTopic.mock.calls.some(([t]) => t === topic),
@@ -66,7 +67,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
   };
 
   it('completes an unavailable run and settles public output promises without clearing history', async () => {
-    const clearTopic = vi.spyOn(agent.pubsub, 'clearTopic');
+    const clearTopic = vi.spyOn((agent.pubsub as CachingPubSub).getInner(), 'clearTopic');
     const result = await agent.observe(crypto.randomUUID());
     const chunks = [];
     for await (const chunk of result.fullStream) chunks.push(chunk);
@@ -200,8 +201,8 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     }) as DurableAgent;
     const runId = 'natural-end';
     await emitOwnershipClaimedEvent(noCleanup.pubsub, runId, 1);
-    const topic = AGENT_STREAM_TOPIC(runId);
-    const unsubscribe = vi.spyOn(noCleanup.pubsub, 'unsubscribe');
+    const topic = `agent.stream.v2.${JSON.stringify([noCleanup.id, runId])}`;
+    const unsubscribe = vi.spyOn((noCleanup.pubsub as CachingPubSub).getInner(), 'unsubscribe');
     const { fullStream } = await noCleanup.observe(runId);
     const consumed = (async () => {
       for await (const _ of fullStream) {
