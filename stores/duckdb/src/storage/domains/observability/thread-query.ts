@@ -7,7 +7,7 @@ import type {
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
 import { timeToFirstTokenSupported } from '../../features';
-import { payloadColumnSql } from './helpers';
+import { payloadColumnSql, timeRangeOf } from './helpers';
 import { missingPreviewSql, readPreview } from './preview-compat';
 import { compileThreadQueryPredicate } from './trace-query';
 
@@ -217,7 +217,7 @@ export async function queryThreadRows(
   const selected = await run<Selected>(compiled.sql, compiled.values);
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };
-  const values: unknown[] = [];
+  const values: unknown[] = timeRangeOf(page.flatMap(row => [row.firstEndedAt, row.lastEndedAt]));
   const keys = page.flatMap(row =>
     (['first', 'last'] as const).map(which => {
       const entries = {
@@ -244,7 +244,7 @@ export async function queryThreadRows(
     CASE WHEN spanType = 'agent_run' THEN timeToFirstTokenMs END AS timeToFirstTokenMs,
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
     ${(['input', 'output', 'error'] as const).map(field => `${field}Preview, CASE WHEN ${missingPreviewSql(`${field}Preview`)} THEN CAST(${field === 'error' ? field : payloadColumnSql(field)} AS VARCHAR) END AS ${field}`).join(', ')}
-    FROM span_events WHERE ${keys.join(' OR ')}`,
+    FROM span_events WHERE endedAt BETWEEN ? AND ? AND (${keys.join(' OR ')})`,
     values,
   );
   const key = (org: unknown, trace: unknown, version: unknown) => JSON.stringify([org, trace, String(version)]);

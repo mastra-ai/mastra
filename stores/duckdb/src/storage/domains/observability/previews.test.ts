@@ -1,5 +1,6 @@
 import { createPreviewTests } from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planSpanQuery, planThreadRowsQuery, planTraceQuery } from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBStore } from '../../../index';
@@ -202,5 +203,84 @@ describe('DuckDB stored previews', () => {
     } finally {
       await legacy.close();
     }
+  });
+});
+
+describe('DuckDB payload lookups on a large span_events table', () => {
+  const big = new DuckDBStore({ path: ':memory:' });
+  let observability: ObservabilityStorage;
+  const pageRange = { from: '2026-05-01T00:00:00.000Z', to: '2026-05-02T00:00:00.000Z' };
+  const FILLER_ROWS = 300_000;
+
+  beforeAll(async () => {
+    observability = (await big.getStore('observability'))!;
+    await observability.init();
+    await big.db.execute(
+      `INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt, input, output)
+       SELECT 'end', ts, i, md5(i::VARCHAR), md5('span' || i), 'old', 'agent_run', false, ts, '"old"', '"old"'
+       FROM (SELECT i, TIMESTAMP '2026-01-01 00:00:00' + INTERVAL (i) SECOND AS ts FROM range(${FILLER_ROWS}) r(i))`,
+    );
+    // Random-looking ids and distinct times, as in real data. Otherwise DuckDB prunes on the ids'
+    // prefixes, or factors a time shared by every key tuple out of the OR, and no range is needed.
+    const roots = [0, 1].map(i => ({
+      traceId: `abcdef${i}`,
+      spanId: `abcdef${i}`,
+      parentSpanId: null,
+      name: 'root',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      threadId: 'thread-page',
+      startedAt: new Date(Date.UTC(2026, 4, 1, 12, i)),
+      endedAt: new Date(Date.UTC(2026, 4, 1, 12, i, 30)),
+      input: `input ${i}`,
+      output: `output ${i}`,
+      error: null,
+    }));
+    await observability.batchCreateSpans({ records: roots });
+    await big.db.execute(
+      `UPDATE span_events SET inputPreview = NULL, outputPreview = NULL, errorPreview = NULL,
+         hasInputPayload = NULL, hasOutputPayload = NULL, hasErrorPayload = NULL
+       WHERE traceId LIKE 'abcdef%'`,
+    );
+  });
+  afterAll(() => big.close());
+
+  /** Runs a store read, then re-runs its payload lookup to count the rows DuckDB read from the table. */
+  async function lookupRowsScanned(read: () => Promise<unknown>): Promise<number> {
+    const query = vi.spyOn(big.db, 'query');
+    await read();
+    const calls = query.mock.calls.slice();
+    query.mockRestore();
+    const lookup = calls.find(([sql]) => /NULLIF\(input|arg_max\(input,/.test(sql));
+    if (!lookup) throw new Error('Expected the read to run a payload lookup');
+    const [plan] = await big.db.query<{ explain_value: string }>(
+      `EXPLAIN (ANALYZE, FORMAT JSON) ${lookup[0]}`,
+      lookup[1] as unknown[],
+    );
+    const scanned = (node: { operator_rows_scanned?: number; children?: object[] }): number =>
+      (node.operator_rows_scanned ?? 0) + (node.children ?? []).reduce((sum: number, child) => sum + scanned(child), 0);
+    return scanned(JSON.parse(plan!.explain_value));
+  }
+
+  it.each<[string, () => Promise<unknown>]>([
+    [
+      'queryTraces',
+      () =>
+        observability.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange: pageRange, pagination: { page: 0, perPage: 10 } })),
+        ),
+    ],
+    [
+      'listTracesLight',
+      () =>
+        observability.listTracesLight({
+          filters: { startedAt: { start: new Date(pageRange.from), end: new Date(pageRange.to) } },
+          pagination: { page: 0, perPage: 10 },
+        }),
+    ],
+    ['querySpans', () => observability.querySpans(planSpanQuery({ timeRange: pageRange }))],
+    ['queryThreads', () => observability.queryThreads(planThreadRowsQuery({ timeRange: { traces: pageRange } }))],
+  ])('%s reads the payloads of the page without scanning older row groups', async (_name, read) => {
+    expect(await lookupRowsScanned(read)).toBeLessThan(FILLER_ROWS / 2);
   });
 });
