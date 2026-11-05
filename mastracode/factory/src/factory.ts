@@ -179,6 +179,7 @@ import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
+import { backfillUntilDone } from './work-items/split-backfill.js';
 import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -1043,16 +1044,12 @@ export class MastraFactory {
       const controller = new AbortController();
       this.#workItemSplitBackfill = {
         controller,
-        promise: timedPhase('background.migrate.workItemSplit', async () => {
-          try {
-            await workItemsStorage.backfillLegacyCards({ signal: controller.signal });
-          } catch (error) {
-            // Uncopied cards are copied when read meanwhile; the next start resumes.
-            console.warn(
-              `[factory] work item split backfill stopped early: ${error instanceof Error ? error.message : error}; the next start resumes`,
-            );
-          }
-        }),
+        promise: timedPhase('background.migrate.workItemSplit', () =>
+          backfillUntilDone(
+            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+            controller.signal,
+          ),
+        ),
       };
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;

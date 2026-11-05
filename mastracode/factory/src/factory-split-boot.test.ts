@@ -19,6 +19,7 @@ import {
   FACTORY_WORK_ITEMS_SCHEMA,
 } from './storage/domains/work-items/work-item-schema.js';
 import { createFactoryStorageForTests } from './storage/test-utils.js';
+import { splitBackfillRetry } from './work-items/split-backfill.js';
 import { migrateWorkItemSplit } from './work-items/split-migration.js';
 
 const USER = 'user-split-boot';
@@ -309,6 +310,66 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
     const copied = await second.boardItemIds();
     for (const card of doneCards) expect(copied.has(card.id)).toBe(true);
     expect(await second.marker()).toHaveLength(1);
+  });
+
+  it('retries a failed background copy after a backoff, without a restart', async () => {
+    const { file, demoteAll, boot } = await setup();
+    const doneCards = [await file(['done']), await file(['done'])];
+    await demoteAll();
+    const failOnce = vi
+      .spyOn(WorkItemsStorage.prototype, 'backfillLegacyCards')
+      .mockRejectedValueOnce(new Error('connection reset'));
+    const waits: number[] = [];
+    const wait = vi.spyOn(splitBackfillRetry, 'wait').mockImplementation(async ms => {
+      waits.push(ms);
+    });
+    const warn = vi.spyOn(console, 'warn');
+    onTestFinished(() => {
+      failOnce.mockRestore();
+      wait.mockRestore();
+      warn.mockRestore();
+    });
+
+    const booted = await boot();
+    await booted.backfilled();
+
+    expect(failOnce).toHaveBeenCalledTimes(2);
+    expect(waits).toEqual([splitBackfillRetry.firstDelayMs]);
+    expect(warn.mock.calls.map(([line]) => String(line))).toContain(
+      '[factory] work item split backfill failed: connection reset; retrying in 5s',
+    );
+    const copied = await booted.boardItemIds();
+    for (const card of doneCards) expect(copied.has(card.id)).toBe(true);
+    expect(await booted.marker()).toHaveLength(1);
+  });
+
+  it('returns from shutdown at once while the background copy waits to retry', async () => {
+    const { file, demoteAll, boot } = await setup();
+    await file(['done']);
+    await demoteAll();
+    const failing = vi
+      .spyOn(WorkItemsStorage.prototype, 'backfillLegacyCards')
+      .mockRejectedValue(new Error('connection reset'));
+    const realWait = splitBackfillRetry.wait.bind(splitBackfillRetry);
+    let waiting = false;
+    // The real, abortable wait, at its real five-second first delay.
+    const wait = vi.spyOn(splitBackfillRetry, 'wait').mockImplementation((ms, signal) => {
+      waiting = true;
+      return realWait(ms, signal);
+    });
+    onTestFinished(() => {
+      failing.mockRestore();
+      wait.mockRestore();
+    });
+
+    const booted = await boot();
+    await vi.waitFor(() => expect(waiting).toBe(true));
+    const started = performance.now();
+    await booted.factory.shutdown();
+
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(await booted.marker()).toEqual([]);
   });
 
   it('copies nothing in dry-run mode', async () => {
