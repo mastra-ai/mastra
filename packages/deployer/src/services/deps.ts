@@ -547,6 +547,102 @@ async function readPnpmLockfileOverrides(
   return portable;
 }
 
+/**
+ * The fields Bun resolves a `$name` override reference from, highest precedence first. Bun 1.4 uses this order
+ * whatever the key order in the manifest.
+ */
+const BUN_DEPENDENCY_FIELDS = ['optionalDependencies', 'devDependencies', 'dependencies', 'peerDependencies'] as const;
+
+/** A Bun override value: a version spec, or overrides nested under a dependency (npm style). */
+type BunOverride = string | { [name: string]: BunOverride };
+
+/** The override field a Bun install read, and the entries it holds. */
+interface BunSourceOverrides {
+  field: 'overrides' | 'resolutions';
+  entries: Record<string, unknown>;
+}
+
+/**
+ * Returns the override field the project's Bun install read from the workspace root manifest. Bun reads
+ * `overrides` whenever that key holds an object, even an empty one, and `resolutions` only otherwise.
+ */
+function getBunSourceOverrides(rootManifest: Record<string, unknown>): BunSourceOverrides | undefined {
+  if (isRecord(rootManifest.overrides)) return { field: 'overrides', entries: rootManifest.overrides };
+  if (isRecord(rootManifest.resolutions)) return { field: 'resolutions', entries: rootManifest.resolutions };
+  return undefined;
+}
+
+/** Splits a Bun override key, `name` or `name@range`, into the package name and the range. */
+function parseBunOverrideKey(key: string): { name: string; range?: string } {
+  const separator = key.indexOf('@', 1);
+  return separator === -1 ? { name: key } : { name: key.slice(0, separator), range: key.slice(separator + 1) };
+}
+
+/** True when an override key applies to this package version, as Bun matched it in the source install. */
+function bunOverrideKeyMatches(range: string | undefined, version: string | undefined): boolean {
+  return !range || (version !== undefined && semver.satisfies(version, range));
+}
+
+/** Merges an override into `target`, combining the entries when both values are nested overrides. */
+function mergeBunOverride(target: Record<string, BunOverride>, key: string, value: BunOverride) {
+  const existing = target[key];
+  target[key] = typeof existing === 'object' && typeof value === 'object' ? { ...existing, ...value } : value;
+}
+
+/**
+ * Returns an override value the output directory can install, or `undefined` when it can't. `$name`
+ * references and `catalog:` specs are resolved against the root manifest, because the output manifest
+ * declares other dependencies and has no catalogs. Nested overrides keep their shape; Bun accepts them under
+ * `overrides` only.
+ */
+function toPortableBunOverride(
+  selector: string,
+  packageName: string,
+  spec: unknown,
+  rootManifest: Record<string, unknown>,
+  warn: (message: string) => void,
+): BunOverride | undefined {
+  if (isRecord(spec)) {
+    const nested: Record<string, BunOverride> = {};
+    for (const [key, value] of Object.entries(spec)) {
+      const portable =
+        key === '.'
+          ? toPortableBunOverride(selector, packageName, value, rootManifest, warn)
+          : toPortableBunOverride(`${selector} > ${key}`, parseBunOverrideKey(key).name, value, rootManifest, warn);
+      if (portable !== undefined) nested[key] = portable;
+    }
+    return Object.keys(nested).length > 0 ? nested : undefined;
+  }
+  if (typeof spec !== 'string') return undefined;
+
+  let name = packageName;
+  let resolved: unknown = spec;
+  if (spec.startsWith('$')) {
+    name = spec.slice(1);
+    resolved = BUN_DEPENDENCY_FIELDS.map(field => rootManifest[field])
+      .map(dependencies => (isRecord(dependencies) ? dependencies[name] : undefined))
+      .find(value => typeof value === 'string');
+    if (resolved === undefined) {
+      warn(`Skipping Bun override "${selector}": "${spec}" doesn't name a dependency of the workspace root.`);
+      return undefined;
+    }
+  }
+  if (typeof resolved === 'string' && resolved.startsWith('catalog:')) {
+    // Bun reads catalogs from the root `workspaces` object, or from the top level of the root manifest.
+    const workspaces = isRecord(rootManifest.workspaces) ? rootManifest.workspaces : {};
+    resolved = resolveCatalogSpec(
+      { catalog: workspaces.catalog ?? rootManifest.catalog, catalogs: workspaces.catalogs ?? rootManifest.catalogs },
+      name,
+      resolved,
+    );
+  }
+  if (typeof resolved !== 'string' || SOURCE_WORKSPACE_SPEC.test(resolved)) {
+    warn(`Skipping Bun override "${selector}": "${spec}" can only be resolved from the source workspace.`);
+    return undefined;
+  }
+  return resolved;
+}
+
 interface PackageIdentity {
   name: string;
   version?: string;
@@ -1021,6 +1117,102 @@ export class Deps extends MastraBase {
     await writeJSON(outputPackageJsonPath, outputPkg, { spaces: 2 });
   }
 
+  /**
+   * Writes the overrides the project's Bun install applied into the output manifest, so the output
+   * installs the versions the project resolved (#29311). Bun reads them from the workspace root, next to
+   * `bun.lock`, and reads only one of `overrides` and `resolutions`. The deployer's `resolutions` for packed
+   * workspace tarballs therefore go into the same field, and win for their packages. Overrides nested under a
+   * packed package still apply to its dependencies, with the tarball as the package's own (`.`) version.
+   * Overrides nested under the app apply to its dependencies, which the output package declares under another
+   * name, so they are moved to that name (as `retargetAppScopedOverrides` does for pnpm). The deployer's own
+   * `resolutions` stay in the manifest even when Bun ignores them, because `install` reads them to decide
+   * whether the source lockfile can be reused.
+   */
+  private async copyBunOverridesToOutput(dir: string): Promise<void> {
+    if (!this.lockFile) return;
+    // Installing in the project itself must never rewrite the project's own manifest.
+    const outputDir = path.resolve(dir);
+    if (outputDir === path.resolve(this.rootDir) || outputDir === path.dirname(path.resolve(this.lockFile.path))) {
+      return;
+    }
+
+    let rootManifest: unknown;
+    let outputManifest: unknown;
+    const outputManifestPath = path.join(dir, 'package.json');
+    try {
+      rootManifest = await readJSON(path.join(path.dirname(this.lockFile.path), 'package.json'));
+      outputManifest = await readJSON(outputManifestPath);
+    } catch {
+      return;
+    }
+    if (!isRecord(rootManifest) || !isRecord(outputManifest)) return;
+
+    const source = getBunSourceOverrides(rootManifest);
+    if (!source) return;
+
+    const packed = new Map(
+      Object.entries(isRecord(outputManifest.resolutions) ? outputManifest.resolutions : {}).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
+    );
+    const warn = (message: string) => this.logger.warn(message);
+    const app = await readPackageIdentity(path.join(this.rootDir, 'package.json'));
+    const outputName = typeof outputManifest.name === 'string' ? outputManifest.name : undefined;
+    // `.` is the version of the package an override is nested under.
+    const nestedOnly = (selector: string, name: string, spec: Record<string, unknown>) =>
+      toPortableBunOverride(
+        selector,
+        name,
+        Object.fromEntries(Object.entries(spec).filter(([key]) => key !== '.')),
+        rootManifest,
+        warn,
+      );
+    const carried: Record<string, BunOverride> = {};
+    // Bun applies a `name@range` key over the bare `name` key, so bare keys are merged first.
+    const entries = Object.entries(source.entries).sort(
+      ([a], [b]) =>
+        Number(parseBunOverrideKey(a).range !== undefined) - Number(parseBunOverrideKey(b).range !== undefined),
+    );
+    const skip = (selector: string, reason: string) =>
+      this.logger.debug(`Not copying Bun override "${selector}" into the build output: ${reason}.`);
+    for (const [selector, spec] of entries) {
+      const { name, range } = parseBunOverrideKey(selector);
+      const tarball = packed.get(name);
+      if (app && name === app.name && outputName) {
+        // The output package has its own name and version, so keys for the app are rewritten to its bare name.
+        if (!isRecord(spec)) {
+          skip(selector, 'it replaces the app itself');
+        } else if (!bunOverrideKeyMatches(range, app.version)) {
+          skip(selector, `the app version doesn't satisfy "${range}"`);
+        } else {
+          const nested = nestedOnly(selector, name, spec);
+          if (typeof nested === 'object') mergeBunOverride(carried, outputName, nested);
+        }
+      } else if (name === outputName) {
+        // In the output this key would name the app's own package, not the package it was written for.
+        skip(selector, `"${outputName}" is the name of the output package`);
+      } else if (tarball === undefined) {
+        const value = toPortableBunOverride(selector, name, spec, rootManifest, warn);
+        if (value !== undefined) mergeBunOverride(carried, selector, value);
+      } else if (source.field === 'overrides' && isRecord(spec)) {
+        // Packed tarballs are named `<name>-<version>.tgz` (`getWorkspaceDependencyPath`).
+        const version = /-(\d+\.\d+\.\d+[^/]*)\.tgz$/.exec(tarball)?.[1];
+        if (bunOverrideKeyMatches(range, version)) {
+          const nested = nestedOnly(selector, name, spec);
+          if (typeof nested === 'object') mergeBunOverride(carried, name, { ...nested, '.': tarball });
+        } else {
+          skip(selector, `the packed version doesn't satisfy "${range}"`);
+        }
+      } else {
+        skip(selector, 'the packed workspace tarball replaces this package');
+      }
+    }
+    if (Object.keys(carried).length === 0) return;
+
+    outputManifest[source.field] = { ...Object.fromEntries(packed), ...carried };
+    await writeJSON(outputManifestPath, outputManifest, { spaces: 2 });
+  }
+
   private getNpmArgs(options: ArchitectureOptions): string[] {
     const args: string[] = [];
     if (options.cpu) args.push(`--cpu=${options.cpu.join(',')}`);
@@ -1111,6 +1303,7 @@ export class Deps extends MastraBase {
         await this.copyYarnPatches(dir);
         break;
       case 'bun':
+        await this.copyBunOverridesToOutput(dir);
         await this.copyBunPatchesToOutput(dir);
         break;
       case 'npm':
