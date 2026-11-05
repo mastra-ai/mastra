@@ -266,5 +266,7 @@ export abstract class ExecutionEngine extends MastraBase {
     storedState?: { seq: number; patchBytes: number };
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
     inheritedState?: StateBase;
+    /** For a fresh start: no stored row can exist yet, so nothing outside this process can cancel it. @internal */
+    unstored?: boolean;
   }): Promise<TOutput>;
 }
