@@ -1161,6 +1161,55 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     createNestedReplayInputWorkflow('tt-replay-nested-object-input', z.object({}));
     createNestedReplayInputWorkflow('tt-replay-nested-nullable-input', z.string().nullable());
     createNestedReplayInputWorkflow('tt-replay-nested-optional-input', z.string().optional());
+
+    // A parent whose first entry is a nested workflow, followed by a parent step that reads the
+    // parent's own input. inputData passed to time travel belongs to the nested step, not the parent.
+    {
+      const observeInput = vi.fn();
+      const observeInitData = vi.fn();
+      const schema = z.string().nullable();
+      const inner = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData }) => {
+          observeInput(inputData);
+          return { received: inputData };
+        },
+      });
+      const child = createWorkflow({
+        id: 'tt-replay-nested-parent-input-child',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [inner],
+      });
+      child.then(inner).commit();
+      const readInit = createStep({
+        id: 'read-init',
+        inputSchema: z.object({ received: schema }),
+        outputSchema: z.object({ init: schema }),
+        execute: async ({ getInitData }) => {
+          const init = getInitData<string | null>();
+          observeInitData(init);
+          return { init };
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'tt-replay-nested-parent-input',
+        inputSchema: schema,
+        outputSchema: z.object({ init: schema }),
+        steps: [child, readInit],
+      });
+      workflow.then(child).then(readInit).commit();
+      workflows['tt-replay-nested-parent-input'] = {
+        workflow,
+        mocks: { observeInput, observeInitData },
+        resetMocks: () => {
+          observeInput.mockClear();
+          observeInitData.mockClear();
+        },
+      };
+    }
   }
 
   return workflows;
@@ -1872,6 +1921,28 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
           expect(replayed.result).toEqual({ received: null });
           expect(mocks.observeInput.mock.calls).toEqual([['stored'], [null]]);
         });
+
+        it.each([{ override: 'new' }, { override: null }])(
+          'keeps the parent input when inputData $override targets a nested first step',
+          async ({ override }) => {
+            const { workflow, mocks, resetMocks } = registry!['tt-replay-nested-parent-input']!;
+            resetMocks?.();
+            const runId = uniqueRunId('tt-replay-nested-parent');
+
+            const started = await execute(workflow, 'stored', { runId });
+            expect(started.status).toBe('success');
+
+            const replayed = await timeTravel!(workflow, {
+              step: 'tt-replay-nested-parent-input-child.observe',
+              runId,
+              inputData: override,
+            });
+
+            expect(replayed.status).toBe('success');
+            expect(mocks.observeInput.mock.calls).toEqual([['stored'], [override]]);
+            expect(mocks.observeInitData.mock.calls).toEqual([['stored'], ['stored']]);
+          },
+        );
 
         it.each([
           { id: 'tt-replay-nested-object-input', input: {} },

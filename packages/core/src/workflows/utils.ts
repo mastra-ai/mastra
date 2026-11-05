@@ -488,8 +488,11 @@ export const createTimeTravelExecutionParams = (params: {
     //the stepResult input is basically the payload of the first step
     if (index === 0 && stepIds.includes(firstStepId)) {
       // An explicit null inputData replaces the stored input; only an omitted one falls back (#29424).
+      // When the target is inside a nested workflow (steps.length > 1), inputData belongs to that
+      // nested step, so the parent keeps its stored input.
+      const replacesInput = steps.length === 1 && inputData !== undefined;
       stepResults.input = (context?.[firstStepId]?.payload ??
-        (inputData !== undefined ? inputData : snapshotContext?.input)) as any;
+        (replacesInput ? inputData : snapshotContext?.input)) as any;
     } else if (index === 0) {
       stepResults.input =
         stepIds?.reduce((acc, stepId) => {
