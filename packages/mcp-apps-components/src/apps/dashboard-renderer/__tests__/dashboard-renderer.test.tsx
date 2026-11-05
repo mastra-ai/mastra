@@ -48,6 +48,34 @@ describe('dashboard renderer app', () => {
           }),
         ),
       );
+      // A dashboard without a project leaves the server to pick its own.
+      expect(host.toolCalls.filter(({ call }) => call && 'projectId' in call)).toEqual([]);
+    });
+  });
+
+  describe("when the tool result names the dashboard's project", () => {
+    it('reads every widget from that project', async () => {
+      server.use(http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)));
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({
+        content: [],
+        structuredContent: { definition: agentRunsDashboard, projectId: 'proj_1' },
+      });
+
+      expect(await screen.findByText('693')).toBeTruthy();
+      expect(host.toolCalls.length).toBeGreaterThan(0);
+      expect(host.toolCalls.map(({ call }) => call?.projectId)).toEqual(host.toolCalls.map(() => 'proj_1'));
+    });
+
+    it('explains an empty project instead of reading without one', async () => {
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard, projectId: '' } });
+
+      expect(await screen.findByText("Couldn't show this dashboard")).toBeTruthy();
+      expect(screen.getByText(/`projectId`/)).toBeTruthy();
+      expect(host.toolCalls).toEqual([]);
     });
   });
 

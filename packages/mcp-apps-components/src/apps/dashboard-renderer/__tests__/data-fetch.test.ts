@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 /** A MastraClient inside an app whose host answers every tool call with `answer`. */
-async function clientBehindHost(answer: DashboardDataOutput) {
+async function clientBehindHost(answer: DashboardDataOutput, options?: { projectId?: string }) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
   const calls: Array<{ name: string; arguments?: Record<string, unknown> }> = [];
@@ -36,7 +36,7 @@ async function clientBehindHost(answer: DashboardDataOutput) {
     baseUrl: 'http://mastra.test',
     apiPrefix: '',
     retries: 0,
-    fetch: createDashboardDataFetch(app),
+    fetch: createDashboardDataFetch(app, options),
   });
   return { client, calls, app };
 }
@@ -85,6 +85,20 @@ describe('createDashboardDataFetch', () => {
           name: DASHBOARD_DATA_TOOL_NAME,
           arguments: { operation: 'listScores', query: { page: '0', perPage: '100' } },
         },
+      ]);
+    });
+  });
+
+  describe("when the app knows the dashboard's project", () => {
+    it('sends the project with every read, posted or listed', async () => {
+      const { client, calls } = await clientBehindHost({ status: 200, body: {} }, { projectId: 'proj_1' });
+
+      await client.getMetricAggregate({ name: ['mastra_agent_duration_ms'], aggregation: 'count' });
+      await client.listScores({ pagination: { page: 0, perPage: 100 } });
+
+      expect(calls.map(call => call.arguments)).toEqual([
+        expect.objectContaining({ operation: 'getMetricAggregate', projectId: 'proj_1' }),
+        expect.objectContaining({ operation: 'listScores', projectId: 'proj_1' }),
       ]);
     });
   });

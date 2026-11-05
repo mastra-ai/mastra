@@ -429,14 +429,14 @@ The app never reaches the network from its iframe. Each read its dashboard makes
 
 `dashboardDataTool` is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call. The tool only answers the reads in `DASHBOARD_DATA_OPERATIONS` and rejects any other operation.
 
-Register the app and `dashboardDataTool` on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. The app calls the data tool by name. Use `dashboardDataTool` as its key:
+Register the app and `dashboardDataTool`, from the `dashboard-data-tool` entry, on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. The app calls the data tool by name. Use `dashboardDataTool` as its key:
 
 ```typescript title="src/mastra/mcp/dashboard-server.ts"
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards'
 import { createTool } from '@mastra/core/tools'
 import { MCPServer } from '@mastra/mcp'
+import { dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool'
 import {
-  dashboardDataTool,
   dashboardRendererApp,
   dashboardRendererInputSchema,
 } from '@mastra/mcp-apps-components/dashboard-renderer'

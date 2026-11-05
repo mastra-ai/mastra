@@ -52,6 +52,8 @@ export const dashboardDataInputSchema = z
     query: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
     /** The JSON body. Every operation but `listScores` sends one. */
     body: z.record(z.string(), z.unknown()).optional(),
+    /** The project to read, from the renderer input's `projectId`. Absent when the app has none. */
+    projectId: z.string().min(1).optional(),
   })
   .superRefine(({ operation, query, body }, ctx) => {
     const sendsQuery = operation === 'listScores';

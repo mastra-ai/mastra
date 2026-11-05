@@ -15,6 +15,16 @@
         "default": "./dist/dashboard-renderer.cjs"
       }
     },
+    "./dashboard-data-tool": {
+      "import": {
+        "types": "./dist/dashboard-data-tool.d.ts",
+        "default": "./dist/dashboard-data-tool.js"
+      },
+      "require": {
+        "types": "./dist/dashboard-data-tool.d.ts",
+        "default": "./dist/dashboard-data-tool.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -42,6 +52,11 @@
     "@mastra/mcp": ">=2.9.0-0 <3.0.0-0",
     "@mastra/server": ">=1.83.0-0 <2.0.0-0",
     "zod": "^4.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@mastra/server": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@hono/node-server": "^2.1.3",

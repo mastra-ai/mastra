@@ -8,11 +8,8 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { MastraServer } from '@mastra/hono';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it.
-import {
-  DASHBOARD_DATA_REQUESTS,
-  DASHBOARD_DATA_TOOL_NAME,
-  dashboardDataTool,
-} from '@mastra/mcp-apps-components/dashboard-renderer';
+import { DASHBOARD_DATA_ROUTES, dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
+import { DASHBOARD_DATA_REQUESTS, DASHBOARD_DATA_TOOL_NAME } from '@mastra/mcp-apps-components/dashboard-renderer';
 import {
   Client,
   InMemoryTransport,
@@ -25,7 +22,6 @@ import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { Hono } from 'hono';
 import { afterAll, afterEach, assert, beforeAll, describe, expect, it } from 'vitest';
 import { createDashboardDataFetch } from '../apps/dashboard-renderer/data-fetch';
-import { DASHBOARD_DATA_ROUTES } from '../apps/dashboard-renderer/data-tool';
 
 const READER = 'reader-token';
 const GUEST = 'guest-token';
@@ -107,7 +103,11 @@ type RelayToolCall = (params: Parameters<Client['callTool']>[0]) => ReturnType<C
  * A MastraClient inside the dashboard app, whose host relays its tool calls to `server` the way a
  * real host does, or answers them with `relay`. Counts every call so retries show up.
  */
-async function dashboardClient(server: Client, relay: RelayToolCall = params => server.callTool(params)) {
+async function dashboardClient(
+  server: Client,
+  relay: RelayToolCall = params => server.callTool(params),
+  options?: { projectId?: string },
+) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
   let toolCalls = 0;
@@ -127,7 +127,7 @@ async function dashboardClient(server: Client, relay: RelayToolCall = params => 
   const client = new MastraClient({
     baseUrl: 'http://mastra.test',
     apiPrefix: '',
-    fetch: createDashboardDataFetch(app),
+    fetch: createDashboardDataFetch(app, options),
   });
   return { client, toolCalls: () => toolCalls };
 }
@@ -153,6 +153,16 @@ describe('dashboardDataTool', () => {
   describe('when the dashboard reads metrics as a user allowed to', () => {
     it("answers with the route's response", async () => {
       const { client } = await dashboardClient(reader);
+
+      const aggregate = await client.getMetricAggregate(SUM);
+
+      expect(aggregate).toEqual(expect.objectContaining({ value: 12 }));
+    });
+  });
+
+  describe('when the dashboard names a project, as hosts serving several do', () => {
+    it("reads the server's own project, which is the only one it holds", async () => {
+      const { client } = await dashboardClient(reader, undefined, { projectId: 'proj_1' });
 
       const aggregate = await client.getMetricAggregate(SUM);
 

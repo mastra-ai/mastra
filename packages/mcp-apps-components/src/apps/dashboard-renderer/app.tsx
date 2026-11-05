@@ -75,7 +75,7 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
   const pin = pinnedWidgets ? { onPin, isPinned: (widgetId: string) => pinnedWidgets.includes(widgetId) } : {};
 
   return (
-    <MastraServerProvider createFetch={createDashboardDataFetch}>
+    <MastraServerProvider createFetch={hostApp => createDashboardDataFetch(hostApp, { projectId: input.projectId })}>
       <MetricsProvider
         preset={preset}
         onPresetChange={setPreset}

@@ -10,6 +10,11 @@ import { z } from 'zod';
 export const dashboardRendererInputSchema = z.object({
   definition: dashboardDefinitionSchema,
   scope: z.enum(DASHBOARD_SCOPES).default('project'),
+  /**
+   * The project the dashboard reads, for hosts that serve several. The app sends it as `projectId`
+   * on every data tool call; leave it out when the server holds one project.
+   */
+  projectId: z.string().min(1).optional(),
 });
 
 export type DashboardRendererInput = z.output<typeof dashboardRendererInputSchema>;

@@ -44,7 +44,8 @@ function isMastra(value: unknown): value is Mastra {
  * `dashboardRendererApp` on the MCP server that serves the app. Each read runs its Mastra route
  * in-process as the caller, with the route's own input validation, authentication, RBAC permission
  * and FGA checks, so the app sees exactly the data the signed-in user can read over HTTP. It runs
- * only the routes in `DASHBOARD_DATA_ROUTES`.
+ * only the routes in `DASHBOARD_DATA_ROUTES`. It reads the one project its server holds, so it
+ * ignores a call's `projectId`.
  */
 export const dashboardDataTool = createTool({
   id: DASHBOARD_DATA_TOOL_NAME,

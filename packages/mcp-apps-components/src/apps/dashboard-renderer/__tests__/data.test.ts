@@ -49,4 +49,11 @@ describe('the dashboard data tool contract', () => {
     expect(dashboardDataInputSchema.safeParse({ operation: 'listScores', body: {} }).success).toBe(false);
     expect(dashboardDataInputSchema.safeParse({ operation: 'getMetricAggregate', query: {} }).success).toBe(false);
   });
+
+  it('takes a project to read, but not an empty one', () => {
+    const read = { operation: 'getMetricAggregate', body: {} } as const;
+
+    expect(dashboardDataInputSchema.parse({ ...read, projectId: 'proj_1' })).toEqual({ ...read, projectId: 'proj_1' });
+    expect(dashboardDataInputSchema.safeParse({ ...read, projectId: '' }).success).toBe(false);
+  });
 });

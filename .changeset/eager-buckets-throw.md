@@ -20,7 +20,8 @@ new MCPServer({
 **After**
 
 ```ts
-import { dashboardDataTool, dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
+import { dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
+import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
 
 new MCPServer({
   // ...
@@ -29,11 +30,21 @@ new MCPServer({
 });
 ```
 
-The app and the tool it needs now come from one import, so the tool is harder to forget. As before, the tool runs each observability route as the signed-in caller, with the route's own validation and permission checks, and agents don't see it.
+As before, the tool runs each observability route as the signed-in caller, with the route's own validation and permission checks, and agents don't see it.
 
 **Clearer errors in dashboard widgets**
 
 - If `dashboardDataTool` isn't registered, widgets say so and show how to register it, instead of retrying and failing with a generic error.
 - Invalid requests now fail once with the route's error message, instead of being retried and showing a raw JSON error.
 
-Hosts that answer the dashboard's reads themselves can use the exported contract: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema`, and `dashboardDataOutputSchema`.
+`@mastra/server` is now an optional peer dependency. Only `@mastra/mcp-apps-components/dashboard-data-tool` needs it.
+
+**Answering the reads yourself**
+
+Hosts that answer the dashboard's reads themselves can import the contract from `@mastra/mcp-apps-components/dashboard-renderer` without installing `@mastra/server`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema`, and `dashboardDataOutputSchema`.
+
+Set `projectId` in the dashboard's tool result to tell such a host which project to read. The app sends it as `projectId` on every data tool call:
+
+```ts
+execute: async () => ({ definition, scope: 'project' as const, projectId: 'proj_123' }),
+```

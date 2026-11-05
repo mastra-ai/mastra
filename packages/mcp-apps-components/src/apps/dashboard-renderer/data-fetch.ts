@@ -15,7 +15,7 @@ const OPERATION_BY_REQUEST = new Map<string, DashboardDataOperation>(
 // MastraClient builds absolute URLs; only their path and query matter here.
 const ORIGIN = 'http://mastra.internal';
 
-const MISSING_TOOL = `The MCP server serving this app has no ${DASHBOARD_DATA_TOOL_NAME} tool. Register it next to the app: \`tools: { ${DASHBOARD_DATA_TOOL_NAME} }\`, imported from @mastra/mcp-apps-components/dashboard-renderer.`;
+const MISSING_TOOL = `The MCP server serving this app has no ${DASHBOARD_DATA_TOOL_NAME} tool. Register it next to the app: \`tools: { ${DASHBOARD_DATA_TOOL_NAME} }\`, imported from @mastra/mcp-apps-components/dashboard-data-tool.`;
 
 const failure = (error: string, status: number) => Response.json({ error }, { status });
 
@@ -67,7 +67,7 @@ function isUnknownTool(error: unknown) {
  * A `fetch` for `MastraClient` that turns each request the dashboard makes into a named read sent
  * to the server's app-only data tool over the host's MCP connection.
  */
-export function createDashboardDataFetch(app: App): typeof fetch {
+export function createDashboardDataFetch(app: App, { projectId }: { projectId?: string } = {}): typeof fetch {
   return async (input, init) => {
     const isRequest = input instanceof Request;
     const url = new URL(isRequest ? input.url : String(input), ORIGIN);
@@ -78,11 +78,11 @@ export function createDashboardDataFetch(app: App): typeof fetch {
 
     let call: DashboardDataInput;
     if (operation === 'listScores') {
-      call = { operation, query: queryArguments(url.searchParams) };
+      call = { operation, query: queryArguments(url.searchParams), ...(projectId && { projectId }) };
     } else {
       const body = parseBody(init?.body);
       if (!body) return failure(`${request} needs a JSON object body.`, 400);
-      call = { operation, body };
+      call = { operation, body, ...(projectId && { projectId }) };
     }
 
     let result: Awaited<ReturnType<App['callServerTool']>>;
