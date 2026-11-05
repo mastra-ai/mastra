@@ -7920,9 +7920,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/observability':
-        specifier: workspace:*
-        version: link:../../observability/mastra
       '@mastra/pg':
         specifier: workspace:*
         version: link:../pg

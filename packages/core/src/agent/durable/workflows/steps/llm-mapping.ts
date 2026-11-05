@@ -363,6 +363,7 @@ export function createDurableLLMMappingStep() {
         delegationBailed = true;
         requestContext.set('__mastra_delegationBailed', false);
       }
+      // Keep the first failure, so a later bail with no failure can't hide it.
       const tracingDelegationFailure = toolResults.find(r => r?.tracingDelegationFailure)?.tracingDelegationFailure;
 
       // 4. Carry the deferred step-finish after tool-result chunks have been
