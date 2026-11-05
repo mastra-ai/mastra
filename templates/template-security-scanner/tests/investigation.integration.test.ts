@@ -2059,6 +2059,102 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
     expect(wire.received.map(call => call.role)).toEqual(['nemo', 'sherlock']);
   }, 30000);
 
+  it.each([false, true])(
+    'bounds aggregate planning context before real SDK dispatch (multibyte: %s)',
+    async multibyte => {
+      const wire = await semanticModelWire();
+      wire.scenario.summaryBytes = 2048;
+      const registry = new PlaybookRegistry(bindingCatalog);
+      await registry.initialize();
+      const books = await registry.list();
+      const scanId = randomUUID();
+      const evidence = Array.from({ length: 32 }, () => {
+        const item = planningEvidence(scanId);
+        return {
+          ...item,
+          observation: {
+            ...item.observation,
+            role: 'public',
+            parameterNames: multibyte
+              ? Array.from({ length: 16 }, (_, index) => `キー${index}${'測'.repeat(64)}`)
+              : ['page', 'sort'],
+          },
+        };
+      });
+      const advisories = Array.from({ length: 8 }, (_, index) => ({
+        id: `CVE-2026-${42000 + index}`,
+        revision: 1,
+        applicability: 'APPLICABILITY_UNKNOWN' as const,
+        affectedProducts: Array.from({ length: 3 }, () => ({
+          vendor: 'Vendor'.repeat(25),
+          product: 'Product'.repeat(20),
+        })),
+        referenceHosts: ['nvd.nist.gov', 'github.com'],
+      }));
+      const reservations: number[] = [];
+      const result = await wire.models.propose(
+        scanId,
+        evidence,
+        books,
+        advisories,
+        { maxRequests: 4, maxDurationSeconds: 180, maxTokens: 24576 },
+        4,
+        15000,
+        {
+          reserve: async (_role, bytes) => {
+            if (bytes > 8192) throw new ControlPlaneError('MODEL_INPUT_BOUND_EXCEEDED', 403);
+            reservations.push(bytes);
+          },
+        },
+        AbortSignal.timeout(30000),
+        {
+          targetRevision: 1,
+          policyRevision: 1,
+          coverage: 'SUPPLIED_FIRST_32_EVIDENCE',
+          complete: true,
+          bindings: books.map(book => ({
+            category: book.category,
+            evidenceIndexes: evidence.map((_, index) => index),
+            state: 'CURRENT',
+            roles: { owner: 'public', alternate: 'withheld-role' },
+          })),
+        },
+      );
+      expect(result.value).toHaveLength(1);
+      expect(evidence.every(item => item.observation.parameterNames.length === (multibyte ? 16 : 2))).toBe(true);
+      expect(wire.received.map(call => call.role)).toEqual(['nemo', 'sherlock']);
+      expect(reservations).toHaveLength(2);
+      expect(reservations.every(bytes => bytes <= 8192)).toBe(true);
+      const sent = wire.received.find(call => call.role === 'sherlock')!.body;
+      const input = JSON.parse(sent.messages.findLast((message: any) => message.role === 'user').content);
+      expect(planningCatalog(input).map(book => book.category)).toEqual(books.map(book => book.category));
+      expect(input.hypothesisRules).toEqual({
+        tool: true,
+        active: 'ssrf',
+        paired: true,
+        advisory: 'cve',
+        unique: true,
+      });
+      expect(input.contextTruncated).toBe(true);
+      expect(input.evidence.length).toBeGreaterThan(0);
+      expect(input.evidence.every((item: { id: string }) => evidence.some(original => original.id === item.id))).toBe(
+        true,
+      );
+      expect(input.availableResources.complete).toBe(false);
+      expect(JSON.stringify(input.availableResources)).not.toContain('withheld-role');
+      const actualPrompt = sent.messages.findLast((message: any) => message.role === 'user').content;
+      expect(reservations[1]).toBe(
+        Buffer.byteLength(actualPrompt) +
+          Math.max(0, Buffer.byteLength(JSON.stringify(sent.response_format.json_schema.schema)) - 2048),
+      );
+      for (const binding of input.availableResources.bindings) {
+        expect(binding.evidenceIndexes.every((index: number) => index < input.evidence.length)).toBe(true);
+        expect(binding.roles.alternate).toBeNull();
+      }
+    },
+    30000,
+  );
+
   it('real_mastra_hypothesis_semantic_truth_table_keeps_valid_origins_and_rejects_invalid_combinations', async () => {
     const wire = await semanticModelWire();
     const registry = new PlaybookRegistry(bindingCatalog);

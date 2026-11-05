@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ControlPlaneError } from '../core/contracts.js';
 import type { Agent } from '@mastra/core/agent';
 import { toStandardSchema } from '@mastra/core/schema';
 import { hypothesisSchema, hypothesisRules, type HypothesisInput, type InvestigationAdmission } from './contracts.js';
@@ -327,7 +328,7 @@ export class MastraInvestigationModels implements InvestigationModels {
       role: item.observation.role,
       method: item.observation.method,
       status: item.observation.status ?? null,
-      parameterNames: item.observation.parameterNames,
+      parameterNames: [...item.observation.parameterNames],
     }));
     const {
       catalog,
@@ -336,7 +337,23 @@ export class MastraInvestigationModels implements InvestigationModels {
       wireSchema,
       structuredSchema,
     } = planningContract(playbooks, planningLimits, limit);
-    const summaryPrompt = JSON.stringify({ evidence: minimal });
+    const trimParameters = () => {
+      const item = minimal.findLast(item => item.parameterNames.length > 0);
+      if (!item) return false;
+      item.parameterNames = [];
+      return true;
+    };
+    let contextTruncated = evidence.length > minimal.length;
+    let summaryPrompt = JSON.stringify({ evidence: minimal });
+    while (Buffer.byteLength(summaryPrompt) > 8192) {
+      if (!trimParameters()) {
+        if (minimal.length <= 1) break;
+        minimal.pop();
+      }
+      contextTruncated = true;
+      summaryPrompt = JSON.stringify({ evidence: minimal });
+    }
+    if (Buffer.byteLength(summaryPrompt) > 8192) throw new ControlPlaneError('MODEL_INPUT_BOUND_EXCEEDED', 403);
     await budget.reserve('nemo', Buffer.byteLength(summaryPrompt), 512);
     signal.throwIfAborted();
     const summary = await this.agents.nemo.generate(summaryPrompt, {
@@ -350,8 +367,10 @@ export class MastraInvestigationModels implements InvestigationModels {
     const resourceContext = availableResources
       ? {
           ...availableResources,
+          complete: availableResources.complete && minimal.length === Math.min(evidence.length, 32),
           bindings: availableResources.bindings.map(binding => ({
             ...binding,
+            evidenceIndexes: binding.evidenceIndexes.filter(index => index < minimal.length),
             roles: Object.fromEntries(
               Object.entries(binding.roles).map(([role, value]) => [
                 role,
@@ -361,7 +380,7 @@ export class MastraInvestigationModels implements InvestigationModels {
           })),
         }
       : null;
-    const hypothesisPrompt = JSON.stringify({
+    const prompt = {
       scanId,
       evidence: minimal,
       playbookFields: ['category', 'toolId', 'references', 'requiredRoles', 'requiredEvidence', 'limits'],
@@ -374,8 +393,9 @@ export class MastraInvestigationModels implements InvestigationModels {
         item.limits,
       ]),
       effectiveLimitDefaults,
-      advisoryCandidates: advisories,
+      advisoryCandidates: [...advisories],
       inventorySummary: summary.text.slice(0, 2048),
+      contextTruncated: contextTruncated ? true : (undefined as true | undefined),
       availableResources: resourceContext,
       maximumHypotheses: limit,
       planningLimits,
@@ -386,10 +406,30 @@ export class MastraInvestigationModels implements InvestigationModels {
         advisory: hypothesisRules.advisoryPresentIffOrigin,
         unique: true,
       },
-    });
+    };
     const schemaBytes = Buffer.byteLength(JSON.stringify(wireSchema));
+    const schemaOverhead = Math.max(0, schemaBytes - 2048);
+    let hypothesisPrompt = JSON.stringify(prompt);
+    // Keep the complete trusted catalog, semantic rules, limits, and schema.
+    // Remove only optional context, then a suffix of evidence if necessary.
+    while (Buffer.byteLength(hypothesisPrompt) + schemaOverhead > 8192) {
+      prompt.contextTruncated = true;
+      if (prompt.inventorySummary.length)
+        prompt.inventorySummary = prompt.inventorySummary.slice(0, Math.floor(prompt.inventorySummary.length / 2));
+      else if (prompt.advisoryCandidates.length > 1) prompt.advisoryCandidates.pop();
+      else if (resourceContext?.bindings.length) {
+        resourceContext.bindings.pop();
+        resourceContext.complete = false;
+      } else if (minimal.some(item => item.parameterNames.length > 0)) trimParameters();
+      else if (minimal.length > 1) {
+        minimal.pop();
+        if (resourceContext) resourceContext.complete = false;
+      } else if (prompt.advisoryCandidates.length) prompt.advisoryCandidates.pop();
+      else throw new ControlPlaneError('MODEL_INPUT_BOUND_EXCEEDED', 403);
+      hypothesisPrompt = JSON.stringify(prompt);
+    }
     // The shared model budget already reserves a 2048-byte schema/framing margin.
-    await budget.reserve('sherlock', Buffer.byteLength(hypothesisPrompt) + Math.max(0, schemaBytes - 2048), 2048);
+    await budget.reserve('sherlock', Buffer.byteLength(hypothesisPrompt) + schemaOverhead, 2048);
     signal.throwIfAborted();
     const response = await this.agents.sherlock.generate(hypothesisPrompt, {
       maxProcessorRetries: 0,
