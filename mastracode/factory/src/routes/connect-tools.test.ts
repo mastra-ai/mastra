@@ -82,11 +82,4 @@ describe('Connect tool settings routes', () => {
     }
     expect((await send(ADMIN, 'GET')).body.enabledProviders).toEqual([]);
   });
-
-  it('lets the local user change providers when auth is off', async () => {
-    const { send } = await setup({ authEnabled: false });
-
-    expect((await send(MEMBER, 'GET')).body.canEdit).toBe(true);
-    expect((await send(MEMBER, 'PUT', { enabledProviders: ['github'] })).body.enabledProviders).toEqual(['github']);
-  });
 });

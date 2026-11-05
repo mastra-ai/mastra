@@ -1585,6 +1585,18 @@ describe('MastraFactory.prepare', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
       });
 
+      it("keeps an org's other Connect tools when one turned-on provider is no longer in the catalog", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        onTestFinished(() => warn.mockRestore());
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-stale');
+
+        const tools = await prepareWithEnabled(['ghost-provider', 'linear']);
+
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(['linear_list_teams']));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("'ghost-provider' tools are unavailable"));
+      });
+
       it("offers the host's own tools instead of the org's Connect providers", async () => {
         const platform = await servePlatform({ listing: 'linear' });
         stubPlatform(platform.url, 'project-host-tools');

@@ -26,7 +26,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import { tools as connectTools } from '@mastra/connect';
+import { MastraConnectError, tools as connectTools } from '@mastra/connect';
 import type { ToolsResolver as ConnectToolsResolver } from '@mastra/connect';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -487,13 +487,32 @@ function orgConnectTools(settings: ConnectToolSettingsStorage): FactoryTools | u
     }
     return resolve;
   };
+  const resolve = async (providers: string[], requestContext: RequestContext): Promise<IntegrationTools> => {
+    try {
+      return await resolverFor(providers)({ requestContext });
+    } catch (error) {
+      if (providers.length === 1 || !(error instanceof MastraConnectError) || error.code !== 'invalid_options') {
+        throw error;
+      }
+      const settled = await Promise.allSettled(providers.map(provider => resolverFor([provider])({ requestContext })));
+      const tools: IntegrationTools = {};
+      settled.forEach((result, index) => {
+        if (result.status === 'fulfilled') Object.assign(tools, result.value);
+        else {
+          const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          console.warn(`MastraFactory: Mastra Connect '${providers[index]}' tools are unavailable: ${reason}`);
+        }
+      });
+      return tools;
+    }
+  };
   return async ({ requestContext }) => {
     const orgId = runOrgId(requestContext);
     if (!orgId) return {};
     try {
       const providers = [...(await settings.get({ orgId }))].sort();
       if (providers.length === 0) return {};
-      return await resolverFor(providers)({ requestContext });
+      return await resolve(providers, requestContext);
     } catch (error) {
       console.warn(
         `MastraFactory: Mastra Connect tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,

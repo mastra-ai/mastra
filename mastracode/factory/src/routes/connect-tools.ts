@@ -45,13 +45,8 @@ export class ConnectToolRoutes extends Route<ConnectToolRoutesDeps> {
     return { orgId: tenant.orgId, userId: tenant.userId };
   }
 
-  async #canEdit(c: Context, scope: Resolved): Promise<boolean> {
-    const { auth } = this.deps;
-    return !auth.enabled() || (await auth.isOrganizationAdmin(c, scope.orgId));
-  }
-
   async #requireAdmin(c: Context, scope: Resolved): Promise<void> {
-    if (!(await this.#canEdit(c, scope))) {
+    if (!(await this.deps.auth.isOrganizationAdmin(c, scope.orgId))) {
       throw new Refusal(403, {
         error: 'organization_admin_required',
         message: 'Organization administrator access is required to change Connect tools.',
@@ -88,7 +83,11 @@ export class ConnectToolRoutes extends Route<ConnectToolRoutesDeps> {
     const { storage, available } = this.deps;
     await storage.ensureReady();
     const enabledProviders = [...(await storage.get({ orgId: scope.orgId }))].sort();
-    return c.json({ available: available(), canEdit: await this.#canEdit(c, scope), enabledProviders });
+    return c.json({
+      available: available(),
+      canEdit: await this.deps.auth.isOrganizationAdmin(c, scope.orgId),
+      enabledProviders,
+    });
   }
 
   #route(contract: { path: string; method: 'GET' | 'PUT' }, handle: (c: Context) => Promise<Response>): ApiRoute {
