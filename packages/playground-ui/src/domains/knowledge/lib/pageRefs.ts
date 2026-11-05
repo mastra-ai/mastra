@@ -108,7 +108,7 @@ function onPath(
     if (current.key !== keys[depth]) return false;
     if (current.parentId === scope.id) return depth === 0;
     const parent = current.parentId ? pagesById.get(current.parentId) : undefined;
-    if (!parent) return true;
+    if (!parent) return depth > 0;
     current = parent;
   }
   return false;

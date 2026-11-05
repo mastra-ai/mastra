@@ -128,6 +128,16 @@ describe('noteMentionTarget', () => {
     expect(noteMentionTarget(refs, byId(y, yFoo), ['y-foo'], 'y#bar/foo')?.id).toBe('y-foo');
   });
 
+  it("links nothing to a nested page for a ref that names it at the scope's top level", () => {
+    // [[x#foo]] names a top-level page; the mentioned foo sits under x#parent, which isn't loaded.
+    const x = page('x', null, { name: 'X', address: 'x' });
+    const nestedFoo = page('nested-foo', 'x-parent', { scopeId: 'x', name: 'Nested foo', key: 'foo' });
+    const pages = byId(x, nestedFoo);
+    const refs = knowledgePageRefIndex(pages.values());
+    expect(noteMentionTarget(refs, pages, ['nested-foo'], 'x#foo')).toBeUndefined();
+    expect(noteMentionTarget(refs, pages, ['nested-foo'], 'x#parent/foo')?.id).toBe('nested-foo');
+  });
+
   it('links nothing when no mentioned page, or more than one, has that key', () => {
     expect(noteMentionTarget(index, byId(plan), ['plan'], 'notion:acme:conn#parent/zzz')).toBeUndefined();
     expect(noteMentionTarget(index, byId(plan), [], 'notion:acme:conn#parent/abc123')).toBeUndefined();
