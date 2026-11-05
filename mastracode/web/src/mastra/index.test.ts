@@ -65,6 +65,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'SLACK_APP_SIGNING_SECRET',
       'SLACK_APP_TOKEN',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
+      'FACTORY_CONNECT_PROVIDERS',
     ]) {
       vi.stubEnv(name, '');
     }

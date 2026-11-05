@@ -52,6 +52,7 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
       'E2B_API_KEY',
       'SANDBOX_PROVIDER',
       'FACTORY_SANDBOX_PROVIDER',
+      'FACTORY_CONNECT_PROVIDERS',
     ]) {
       vi.stubEnv(name, '');
     }

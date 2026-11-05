@@ -56,6 +56,7 @@ describe('production boot guards (src/mastra/index.ts)', () => {
       'E2B_API_KEY',
       'SANDBOX_PROVIDER',
       'FACTORY_SANDBOX_PROVIDER',
+      'FACTORY_CONNECT_PROVIDERS',
       'FACTORY_CREDENTIAL_ENCRYPTION',
       'FACTORY_CREDENTIAL_ENCRYPTION_KEY',
       'FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID',
