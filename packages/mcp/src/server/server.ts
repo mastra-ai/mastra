@@ -43,7 +43,6 @@ import {
   Server,
   ProtocolError,
   ProtocolErrorCode,
-  UriTemplate,
   createMcpHandler,
   createRequestStateCodec,
   inputRequired,
@@ -137,6 +136,7 @@ import type {
   MCPServerResources,
   MCPServerToolResultOptions,
 } from './types';
+import { matchesUriTemplate } from './uri-template';
 
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
@@ -1976,7 +1976,7 @@ export class MCPServer extends MCPServerBase {
         extra: toToolExecutionContext(ctx, this.name).extra,
         requestContext,
       });
-      const template = templates.find(t => new UriTemplate(t.uriTemplate).match(uri));
+      const template = templates.find(t => matchesUriTemplate(t.uriTemplate, uri));
       return template && { uri, name: template.name, mimeType: template.mimeType, _meta: template._meta };
     };
 
