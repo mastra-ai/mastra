@@ -6701,8 +6701,8 @@ export class Agent<
                         allowDelegationDispatch: false,
                       },
                     });
-                // Durable sub-agents return their MastraModelOutput nested under `output`
-                // alongside fullStream/runId; plain agents return the output itself.
+                // Some sub-agents (e.g. durable stream()) return their MastraModelOutput nested
+                // under `output` next to fullStream/runId; others return the output itself.
                 const nestedStreamOutput = (subAgentStream as { output?: typeof subAgentStream }).output;
                 const streamResult = nestedStreamOutput ?? subAgentStream;
 
@@ -6710,7 +6710,7 @@ export class Agent<
                 let suspendedPayload;
                 let resumeSchema;
                 let delegatedPause: DelegatedPauseIdentity = {};
-                for await (const chunk of streamResult.fullStream) {
+                for await (const chunk of subAgentStream.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
@@ -6839,7 +6839,7 @@ export class Agent<
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
-                    runId: streamResult.runId,
+                    runId: subAgentStream.runId,
                     isAgentSuspend: true,
                     ...delegatedPause,
                   });
