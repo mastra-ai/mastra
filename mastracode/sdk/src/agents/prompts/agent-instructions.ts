@@ -76,13 +76,13 @@ function createProjectPathResolver(projectPath: string): (path: string) => strin
   };
 }
 
-const GIT_TREE_CACHE_LIMIT = 10_000;
-const gitTreeOutputs = new Map<string, string>();
+const GIT_OBJECT_CACHE_LIMIT = 10_000;
+const gitObjectOutputs = new Map<string, string>();
 
 // A blobless clone fetches file content over the network, so only a successful read is cached.
-function gitAtTree(projectPath: string, args: string[]): string | null {
+function gitObjectRead(projectPath: string, args: string[]): string | null {
   const key = args.join('\0');
-  const cached = gitTreeOutputs.get(key);
+  const cached = gitObjectOutputs.get(key);
   if (cached !== undefined) return cached;
   try {
     const output = execFileSync('git', ['-C', projectPath, '--literal-pathspecs', ...args], {
@@ -90,8 +90,8 @@ function gitAtTree(projectPath: string, args: string[]): string | null {
       stdio: ['ignore', 'pipe', 'ignore'],
       maxBuffer: 1024 * 1024,
     });
-    if (gitTreeOutputs.size >= GIT_TREE_CACHE_LIMIT) gitTreeOutputs.delete(gitTreeOutputs.keys().next().value!);
-    gitTreeOutputs.set(key, output);
+    if (gitObjectOutputs.size >= GIT_OBJECT_CACHE_LIMIT) gitObjectOutputs.delete(gitObjectOutputs.keys().next().value!);
+    gitObjectOutputs.set(key, output);
     return output;
   } catch {
     return null;
@@ -112,20 +112,21 @@ function createGitRefLookup(projectPath: string, ref: string) {
       return [];
     }
   };
-  const typeAt = (tree: string, rel: string) =>
-    gitAtTree(projectPath, ['ls-tree', '--full-tree', tree, '--', rel])?.split(/\s/)[1];
+  const entryAt = (tree: string, rel: string) =>
+    gitObjectRead(projectPath, ['ls-tree', '--full-tree', tree, '--', rel])?.split(/\s/) ?? [];
   return {
     type: (rel: string): string | null => {
       for (const tree of (trees ??= resolveTrees())) {
-        const type = typeAt(tree, rel);
+        const [, type] = entryAt(tree, rel);
         if (type) return type;
       }
       return null;
     },
     show: (rel: string): string | null => {
       for (const tree of (trees ??= resolveTrees())) {
-        if (!typeAt(tree, rel)) continue;
-        const content = gitAtTree(projectPath, ['show', `${tree}:${rel}`]);
+        const [, type, blob] = entryAt(tree, rel);
+        if (type !== 'blob' || !blob) continue;
+        const content = gitObjectRead(projectPath, ['cat-file', 'blob', blob]);
         if (content !== null) return content;
       }
       return null;
@@ -136,7 +137,7 @@ function createGitRefLookup(projectPath: string, ref: string) {
 /**
  * Create a reader that serves instruction files from a git ref instead of the
  * working tree. Paths are still addressed as working-tree paths under
- * `projectPath`; content comes from `git show <ref>:<relpath>` so an untrusted
+ * `projectPath`; content comes from the blob at `<ref>:<relpath>` so an untrusted
  * checkout (e.g. a PR branch under review) cannot influence what is loaded.
  * Tries `origin/<ref>` first (remote truth), then the local ref. Any git
  * failure (missing ref, missing file, no repo) reports the file as absent.

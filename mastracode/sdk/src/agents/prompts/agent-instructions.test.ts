@@ -160,8 +160,12 @@ describe('git-ref instruction readers', () => {
     loadSessionInstructions({ workingDir, untrustedCheckout: true, baseRef, skipGlobal: true }).map(
       source => source.content,
     );
-  const refLookups = () =>
-    vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('show') || args?.includes('ls-tree'));
+  const contentReads = () =>
+    vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('show') || args?.includes('blob'));
+  const refLookups = () => [
+    ...contentReads(),
+    ...vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('ls-tree')),
+  ];
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'mastracode-gitref-'));
@@ -383,6 +387,18 @@ describe('git-ref instruction readers', () => {
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     git('update-ref', 'refs/heads/main', 'HEAD~1');
     expect(loadAtRef()).toEqual(['fetched base instructions']);
+  });
+
+  it('does not read an unchanged instruction file again after the base branch moves', () => {
+    writeFileSync(join(repo, 'AGENTS.md'), 'instructions kept across commits');
+    git('commit', '-am', 'kept');
+    expect(loadAtRef()).toEqual(['instructions kept across commits']);
+    writeFileSync(join(repo, 'unrelated.txt'), 'unrelated');
+    git('add', 'unrelated.txt');
+    git('commit', '-m', 'unrelated change');
+    vi.mocked(execFileSync).mockClear();
+    expect(loadAtRef()).toEqual(['instructions kept across commits']);
+    expect(contentReads()).toEqual([]);
   });
 
   it('falls back to the local ref per file when origin/<ref> lacks it', () => {
