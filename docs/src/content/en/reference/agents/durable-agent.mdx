@@ -332,6 +332,8 @@ await output.text
 
 The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. Every chunk carries the index of the event it came from as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass the last received chunk's `index + 1`, or `0` if nothing arrived. Lifecycle events send no chunk, so indexes have gaps and a chunk count isn't a valid offset. An `abort` chunk shares its index with the `finish` chunk that follows it. If the last chunk received was `abort`, pass its `index` to receive both again.
 
+`index` is additive and `offset` keeps its meaning, so code that already passes a log position, or replays from `0`, needs no change. Code that passed a count of chunks received should switch to the last `index + 1`.
+
 ```typescript
 let lastIndex: number | undefined
 for await (const chunk of output.fullStream) {

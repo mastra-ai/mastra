@@ -96,8 +96,8 @@ interface BaseChunkType {
   from: ChunkFrom;
   metadata?: Record<string, any>;
   /**
-   * Position of the run-log entry this chunk came from, on durable and evented agent streams
-   * whose transport numbers its entries. To resume after a dropped connection, observe the run
+   * Position of the run-log entry this chunk came from, on durable and evented agent streams and
+   * on `observe()` for any agent, when the transport numbers its entries. To resume after a dropped connection, observe the run
    * from the last received chunk's `index + 1`. Entries that send no chunk leave gaps, and an
    * `abort` chunk shares its index with the `finish` chunk that follows it.
    */

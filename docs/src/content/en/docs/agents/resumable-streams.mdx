@@ -101,7 +101,7 @@ export async function followRun(runId: string, request: Request) {
 }
 ```
 
-The [`observe()` reference](/reference/agents/durable-agent#observerunid-options) covers offsets and replay limits.
+Each chunk from `observe()` carries its run-log position as `chunk.index`. To resume an observation after a dropped connection, pass the last received chunk's `index + 1` as `offset`. Chunks from a plain agent's `stream()` don't carry `index` yet, so a client that lost its `stream()` connection should observe from the start. The [`observe()` reference](/reference/agents/durable-agent#observerunid-options) covers offsets and replay limits.
 
 Over HTTP, observing a run that can't be resumed fails instead of returning an empty stream. An unknown run, or one whose ownership record expired or was evicted, answers 404, and the client rejects with a `MastraClientError` carrying that status rather than resolving to an empty, closed stream.
 
