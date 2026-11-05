@@ -17,6 +17,7 @@ export interface DatasetComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  chevron?: ComboboxProps['chevron'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
   container?: ComboboxProps['container'];
@@ -32,6 +33,7 @@ export function DatasetCombobox({
   disabled = false,
   variant,
   size,
+  chevron,
   'aria-label': ariaLabel,
   align,
   container,
@@ -72,6 +74,7 @@ export function DatasetCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      chevron={chevron}
       aria-label={ariaLabel}
       align={align}
       container={container}

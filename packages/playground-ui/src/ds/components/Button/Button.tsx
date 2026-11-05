@@ -1,7 +1,7 @@
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Icon } from '@/ds/icons/Icon';
@@ -241,15 +241,19 @@ export function ButtonIcon({ size, children }: { size: ButtonSize; children: Rea
  * chevron ink spans the middle half of its box, twice a regular icon's inset, so it pulls in by
  * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
  */
-export function TriggerChevron() {
-  return <ChevronDown aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+export function TriggerChevron({ shape = 'down' }: { shape?: TriggerChevronShape }) {
+  const Chevron = shape === 'up-down' ? ChevronsUpDown : ChevronDown;
+  return <Chevron aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
 }
 
+/** `down` for a list that opens below; `up-down` for a switcher between peers (e.g. a breadcrumb's). */
+export type TriggerChevronShape = 'down' | 'up-down';
+
 /** The trigger chevron in a Button's end slot. */
-export function ButtonChevron({ size }: { size: ButtonSize }) {
+export function ButtonChevron({ size, shape }: { size: ButtonSize; shape?: TriggerChevronShape }) {
   return (
     <ButtonAdornment slot="button-icon-end" size={iconSizeMap[size]}>
-      <TriggerChevron />
+      <TriggerChevron shape={shape} />
     </ButtonAdornment>
   );
 }

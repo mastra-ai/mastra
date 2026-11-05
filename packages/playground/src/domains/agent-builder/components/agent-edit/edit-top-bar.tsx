@@ -38,7 +38,7 @@ export const EditTopBar = ({
 
   return (
     <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
-      <Breadcrumb label="Agent navigation" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
+      <Breadcrumb label="Agent navigation" className="min-w-0 flex-1 overflow-clip" listClassName="min-w-0">
         <Crumb as={Link} to="/agent-builder/agents" data-testid="agent-builder-back-to-list">
           Agent list
         </Crumb>

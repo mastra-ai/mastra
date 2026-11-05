@@ -15,6 +15,7 @@ export interface ScorerComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  chevron?: ComboboxProps['chevron'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -29,6 +30,7 @@ export function ScorerCombobox({
   disabled = false,
   variant,
   size,
+  chevron,
   'aria-label': ariaLabel,
   align,
 }: ScorerComboboxProps) {
@@ -67,6 +69,7 @@ export function ScorerCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      chevron={chevron}
       aria-label={ariaLabel}
       align={align}
     />

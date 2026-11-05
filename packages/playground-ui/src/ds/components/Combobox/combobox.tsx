@@ -18,7 +18,7 @@ import {
 import { comboboxStyles } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
-import type { ButtonSize } from '@/ds/components/Button/Button';
+import type { ButtonSize, TriggerChevronShape } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
@@ -63,6 +63,8 @@ type ComboboxSharedProps = {
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
   align?: 'start' | 'center' | 'end';
   showChevron?: boolean;
+  /** The trigger's chevron: `down` (default), or `up-down` for a switcher between peers. */
+  chevron?: TriggerChevronShape;
   iconOnlyValue?: boolean;
   allowCustomValue?: boolean;
   /** Called with the search text as it changes (and with `''` after a compact trigger's selection resets it). */
@@ -260,6 +262,7 @@ type TriggerLookProps = {
   variant: ComboboxVariant;
   size: ButtonSize;
   showChevron: boolean;
+  chevron?: TriggerChevronShape;
   iconOnlyValue: boolean;
   className?: string;
 };
@@ -295,6 +298,7 @@ function SingleComboboxControl({
       variant={look.variant}
       size={look.size}
       showChevron={look.showChevron}
+      chevron={look.chevron}
       icon={isIconButtonSize(look.size) ? undefined : selectedOption?.start}
       className={triggerClassName(look)}
     >
@@ -343,6 +347,7 @@ function MultipleComboboxControl({
       variant={look.variant}
       size={look.size}
       showChevron={look.showChevron}
+      chevron={look.chevron}
       className={triggerClassName(look)}
     >
       <span className={cn(selectedCount === 0 && comboboxStyles.placeholder)}>{text}</span>
@@ -370,6 +375,7 @@ function SingleCombobox({
   container,
   align = 'start',
   showChevron = true,
+  chevron,
   iconOnlyValue = false,
   allowCustomValue = false,
   onInputValueChange,
@@ -415,7 +421,7 @@ function SingleCombobox({
         controlProps={controlProps}
         placeholder={placeholder}
         selectedOption={selectedOption}
-        look={{ variant, size, showChevron, iconOnlyValue, className }}
+        look={{ variant, size, showChevron, chevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
         showSearch={!inField}
@@ -447,6 +453,7 @@ function MultipleCombobox({
   container,
   align = 'start',
   showChevron = true,
+  chevron,
   iconOnlyValue = false,
 }: ComboboxMultipleProps & ShapeProps) {
   const filter = useOptionFilter();
@@ -474,7 +481,7 @@ function MultipleCombobox({
         controlProps={controlProps}
         placeholder={placeholder}
         selectedCount={selectedOptions.length}
-        look={{ variant, size, showChevron, iconOnlyValue, className }}
+        look={{ variant, size, showChevron, chevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
         showSearch={shape !== 'chips'}

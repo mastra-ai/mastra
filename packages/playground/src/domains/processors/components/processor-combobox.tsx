@@ -15,6 +15,7 @@ export interface ProcessorComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  chevron?: ComboboxProps['chevron'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -29,6 +30,7 @@ export function ProcessorCombobox({
   disabled = false,
   variant,
   size,
+  chevron,
   'aria-label': ariaLabel,
   align,
 }: ProcessorComboboxProps) {
@@ -77,6 +79,7 @@ export function ProcessorCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      chevron={chevron}
       aria-label={ariaLabel}
       align={align}
     />

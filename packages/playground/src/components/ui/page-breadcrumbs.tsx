@@ -22,7 +22,7 @@ export function PageBreadcrumbs({ crumbs }: PageBreadcrumbsProps) {
   const lastIdx = crumbs.length - 1;
 
   return (
-    <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
+    <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-clip" listClassName="min-w-0">
       {crumbs.map((def, i) => {
         const isCurrent = i === lastIdx;
         const linkable = !isCurrent && def.to;
