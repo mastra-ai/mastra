@@ -17,7 +17,6 @@ export interface DatasetVersionsProps {
   container?: ComboboxProps['container'];
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
-  chevron?: ComboboxProps['chevron'];
   popupWidth?: ComboboxProps['popupWidth'];
   align?: ComboboxProps['align'];
   'aria-label'?: string;
@@ -33,7 +32,6 @@ export function DatasetVersions({
   container,
   variant,
   size = 'md',
-  chevron,
   popupWidth,
   align,
   'aria-label': ariaLabel,
@@ -82,7 +80,6 @@ export function DatasetVersions({
       disabled={isLoading || options.length === 0}
       variant={variant}
       size={size}
-      chevron={chevron}
       popupWidth={popupWidth}
       align={align}
       container={container}

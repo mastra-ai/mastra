@@ -7,7 +7,7 @@ import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
 import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/Button/Button';
-import type { ButtonSize, TextButtonSize, TriggerChevronShape } from '@/ds/components/Button/Button';
+import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
@@ -114,7 +114,6 @@ type ComboboxTriggerProps = Omit<BaseCombobox.Trigger.Props, 'className'> & {
   /** Shown before the value, or alone at icon sizes (e.g. a filter icon), replacing the chevron there. */
   icon?: React.ReactNode;
   showChevron?: boolean;
-  chevron?: TriggerChevronShape;
 };
 
 /**
@@ -129,7 +128,6 @@ function ComboboxTrigger({
   size = 'md',
   icon,
   showChevron = !(icon && isIconButtonSize(size)),
-  chevron,
   ...props
 }: ComboboxTriggerProps) {
   const iconOnly = isIconButtonSize(size);
@@ -151,7 +149,8 @@ function ComboboxTrigger({
           <span className="min-w-0 flex-1 truncate text-left">{children}</span>
         </>
       )}
-      {showChevron && <ButtonChevron size={size} shape={chevron} />}
+      {/* With no value text, the trigger is a switcher between peers (e.g. a breadcrumb's), so up-down. */}
+      {showChevron && <ButtonChevron size={size} shape={iconOnly ? 'up-down' : 'down'} />}
     </BaseCombobox.Trigger>
   );
 }

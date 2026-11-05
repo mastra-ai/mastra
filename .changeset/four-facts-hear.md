@@ -10,18 +10,8 @@ Improved breadcrumbs so they read cleaner and behave the same everywhere:
 - Unified crumb icons to one size across icon sets.
 - Fixed focus rings on crumbs being cut off at the edges of the breadcrumb.
 
-`Combobox` takes a new `chevron` prop for compact triggers. `crumbSwitcherTriggerProps` already sets it, so breadcrumb switchers pick it up:
+Icon-only `Combobox` triggers now draw an up-down chevron, since without value text they switch between peers. For an icon control inside a line of text, use the new `icon-inline` size:
 
 ```tsx
-const [projectId, setProjectId] = useState('demo-agents');
-
-<Combobox
-  options={projects}
-  value={projectId}
-  onValueChange={setProjectId}
-  variant="ghost"
-  size="icon-sm"
-  chevron="up-down"
-  aria-label="Switch project"
-/>;
+<CopyButton content={runId} tooltip="Copy run id" variant="ghost" size="icon-inline" />
 ```

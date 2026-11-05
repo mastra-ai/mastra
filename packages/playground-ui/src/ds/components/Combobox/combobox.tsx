@@ -18,7 +18,7 @@ import {
 import { comboboxPopupWidthClass, comboboxStyles } from './combobox-styles';
 import type { ComboboxPopupWidth, ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
-import type { ButtonSize, TriggerChevronShape } from '@/ds/components/Button/Button';
+import type { ButtonSize } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
@@ -65,11 +65,6 @@ type ComboboxSharedProps = {
   /** A fixed popup width for long options (e.g. model ids). Without it the popup takes the trigger's width, at least 11rem. */
   popupWidth?: ComboboxPopupWidth;
   showChevron?: boolean;
-  /**
-   * The compact trigger's chevron: `down` (default), or `up-down` for a switcher between peers. A
-   * field (inside a `Field`) always ends with its round down chevron.
-   */
-  chevron?: TriggerChevronShape;
   iconOnlyValue?: boolean;
   allowCustomValue?: boolean;
   /** Called with the search text as it changes (and with `''` after a compact trigger's selection resets it). */
@@ -272,7 +267,6 @@ type TriggerLookProps = {
   variant: ComboboxVariant;
   size: ButtonSize;
   showChevron: boolean;
-  chevron?: TriggerChevronShape;
   iconOnlyValue: boolean;
   className?: string;
 };
@@ -308,7 +302,6 @@ function SingleComboboxControl({
       variant={look.variant}
       size={look.size}
       showChevron={look.showChevron}
-      chevron={look.chevron}
       icon={isIconButtonSize(look.size) ? undefined : selectedOption?.start}
       className={triggerClassName(look)}
     >
@@ -357,7 +350,6 @@ function MultipleComboboxControl({
       variant={look.variant}
       size={look.size}
       showChevron={look.showChevron}
-      chevron={look.chevron}
       className={triggerClassName(look)}
     >
       <span className={cn(selectedCount === 0 && comboboxStyles.placeholder)}>{text}</span>
@@ -386,7 +378,6 @@ function SingleCombobox({
   align = 'start',
   popupWidth,
   showChevron = true,
-  chevron,
   iconOnlyValue = false,
   allowCustomValue = false,
   onInputValueChange,
@@ -432,7 +423,7 @@ function SingleCombobox({
         controlProps={controlProps}
         placeholder={placeholder}
         selectedOption={selectedOption}
-        look={{ variant, size, showChevron, chevron, iconOnlyValue, className }}
+        look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
         popupWidth={popupWidth}
@@ -466,7 +457,6 @@ function MultipleCombobox({
   align = 'start',
   popupWidth,
   showChevron = true,
-  chevron,
   iconOnlyValue = false,
 }: ComboboxMultipleProps & ShapeProps) {
   const filter = useOptionFilter();
@@ -494,7 +484,7 @@ function MultipleCombobox({
         controlProps={controlProps}
         placeholder={placeholder}
         selectedCount={selectedOptions.length}
-        look={{ variant, size, showChevron, chevron, iconOnlyValue, className }}
+        look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
         popupWidth={popupWidth}
