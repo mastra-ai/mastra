@@ -17,8 +17,7 @@ import type { UIMessageStreamOptions as UIMessageStreamOptionsV7 } from '@intern
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { MastraMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
-import type { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute, registerApiRouteGroup } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
 import { APPROVAL_ID_SEPARATOR } from './helpers';
@@ -998,8 +997,10 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
     },
     handler: async c => {
       const mastra = c.get('mastra');
+      const middlewareRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
       const requestContext =
-        ((c as any).get('requestContext') as RequestContext | undefined) || defaultOptions?.requestContext;
+        middlewareRequestContext ||
+        (defaultOptions?.requestContext ? new RequestContext(defaultOptions.requestContext.entries()) : undefined);
       const agentToUse = agent ?? c.req.param('agentId');
       const runId = c.req.param('runId');
 

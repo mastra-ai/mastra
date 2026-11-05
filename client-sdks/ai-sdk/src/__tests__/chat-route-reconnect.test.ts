@@ -46,14 +46,16 @@ function createContext({
   runId,
   requestContext,
   signal,
+  memory,
 }: {
   mastra: Mastra;
   method: 'POST' | 'GET';
   runId: string;
   requestContext?: RequestContext;
   signal?: AbortSignal;
+  memory?: { resource?: string; thread?: string };
 }) {
-  const body = { messages, runId };
+  const body = { messages, runId, ...(memory ? { memory } : {}) };
   const request = new Request(`http://localhost/chat/test-agent${method === 'GET' ? `/runs/${runId}` : ''}`, {
     method,
     signal,
@@ -374,13 +376,19 @@ describe('chatRoute reconnect', () => {
     });
     const runId = 'route-default-context-run';
 
-    const postResponse = await invoke(getRoute(mastra, 'POST'), createContext({ mastra, method: 'POST', runId }));
+    const postResponse = await invoke(
+      getRoute(mastra, 'POST'),
+      createContext({ mastra, method: 'POST', runId, memory: { thread: 'route-thread' } }),
+    );
     const postReader = postResponse.body!.getReader();
     await readUntil(postReader, 'Hello from a resumable run');
     await postReader.cancel();
 
     await vi.waitFor(async () =>
-      expect(await agent.__getRunRecord(runId)).toMatchObject({ resourceId: 'route-resource' }),
+      expect(await agent.__getRunRecord(runId)).toMatchObject({
+        resourceId: 'route-resource',
+        threadId: 'route-thread',
+      }),
     );
 
     const reconnectResponse = await invoke(getRoute(mastra, 'GET'), createContext({ mastra, method: 'GET', runId }));
@@ -388,6 +396,24 @@ describe('chatRoute reconnect', () => {
     const reconnectBody = reconnectResponse.text();
     controlled.finish();
     expect(await reconnectBody).toContain('Hello from a resumable run');
+    expect(routeRequestContext.has(MASTRA_THREAD_ID_KEY)).toBe(false);
+
+    const laterRunId = 'route-default-context-later-run';
+    const laterPostResponse = await invoke(
+      getRoute(mastra, 'POST'),
+      createContext({ mastra, method: 'POST', runId: laterRunId, memory: { thread: 'later-thread' } }),
+    );
+    const laterPostReader = laterPostResponse.body!.getReader();
+    await readUntil(laterPostReader, 'Hello from a resumable run');
+    await laterPostReader.cancel();
+
+    await vi.waitFor(async () =>
+      expect(await agent.__getRunRecord(laterRunId)).toMatchObject({
+        resourceId: 'route-resource',
+        threadId: 'later-thread',
+      }),
+    );
+    controlled.finish();
   });
 
   it('rejects an owner-less run for a tenant-scoped caller', async () => {
