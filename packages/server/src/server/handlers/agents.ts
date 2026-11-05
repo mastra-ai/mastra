@@ -9,11 +9,14 @@ import type {
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
+import { matchesPermission } from '@mastra/core/auth/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -21,13 +24,20 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageCreateAgentInput, StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import {
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  WORKSPACE_TOOLS,
+  resolveToolConfig,
+} from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
@@ -83,9 +93,10 @@ import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
+import { assertWriteAccess, getCallerAuthorId } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -142,6 +153,67 @@ function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versi
 
 function getIsStudioFromContext(requestContext: RequestContext): boolean {
   return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
+}
+
+function toStoredModelList(
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>,
+): StorageModelListEntry[] {
+  return modelList.map(model => ({
+    id: model.id,
+    provider: model.model.provider,
+    modelId: model.model.modelId,
+    enabled: model.enabled,
+    maxRetries: model.maxRetries,
+  }));
+}
+
+async function persistEditorOwnedModelList({
+  mastra,
+  agent,
+  modelList,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agent: Agent;
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
+  requestContext: RequestContext;
+}): Promise<boolean> {
+  const editorConfig = agent.__getEditorConfig?.();
+  if (!editorConfig || editorConfig.model !== true) return false;
+
+  const editorAgent = mastra.getEditor?.()?.agent;
+  const storage = mastra.getStorage?.();
+  const agentsStore = await storage?.getStore('agents');
+  if (!editorAgent || !agentsStore) {
+    throw new HTTPException(500, { message: 'Editor and agent storage are required for Editor-owned model lists' });
+  }
+
+  const storedModelList = toStoredModelList(modelList);
+  const storedAgent = await agentsStore.getById(agent.id);
+  const scope = await getStoredResourceScope(mastra, requestContext);
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, scope);
+    assertWriteAccess({
+      requestContext,
+      resource: 'stored-agents',
+      resourceId: agent.id,
+      action: 'edit',
+      record: storedAgent,
+    });
+    await editorAgent.update({ id: agent.id, modelList: storedModelList });
+  } else {
+    const authorId = getCallerAuthorId(requestContext) ?? undefined;
+    await editorAgent.create({
+      id: agent.id,
+      name: agent.name,
+      authorId,
+      visibility: authorId ? 'private' : 'public',
+      metadata: scopeStoredResourceMetadata(undefined, scope),
+      modelList: storedModelList,
+    } as StorageCreateAgentInput);
+  }
+
+  return true;
 }
 
 function normalizePublicExecutionOptions(
@@ -290,6 +362,84 @@ async function validateDurableToolCallAccess({
  */
 const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
 
+// Duck-typed so the server keeps working with a @mastra/core that predates resumable streams on Agent.
+type ResumableStreamsAgent = {
+  hasResumableStreams?: () => boolean;
+  __getStreamBus?: () => { pubsub: PubSub } | undefined;
+  __getPublishedRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+  __getRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+  __getRunRecord?: (runId: string) => Promise<PlainRunRecord | undefined>;
+  __abortRunAcknowledged?: (runId: string) => Promise<boolean>;
+};
+
+type PlainRunRecord = {
+  resourceId?: string;
+  threadId?: string;
+  status: 'running' | 'suspended' | 'finished';
+};
+
+/**
+ * The shared ownership record of a plain agent run, readable from any server
+ * sharing the agent's record cache. Undefined when the run is unknown or
+ * expired. Falls back to the owner of a run executing in this process on a
+ * core without shared records. A record cache that cannot be read is a 503:
+ * the caller is refused, never let through.
+ */
+async function getPlainRunRecord(agent: Agent, runId: string): Promise<PlainRunRecord | undefined> {
+  const resumable = agent as unknown as ResumableStreamsAgent;
+  if (typeof resumable.__getRunRecord === 'function') {
+    try {
+      return await resumable.__getRunRecord.call(agent, runId);
+    } catch {
+      throw new HTTPException(503, { message: 'Run ownership is temporarily unavailable' });
+    }
+  }
+  const owner = resumable.__getPublishedRunOwner?.call(agent, runId);
+  return owner ? { ...owner, status: 'running' } : undefined;
+}
+
+/** The caller must own the run and have `permission` on its thread. */
+async function authorizeRunOwner({
+  mastra,
+  agent,
+  owner,
+  requestContext,
+  permission,
+}: {
+  mastra: Mastra;
+  agent: Agent<any, any, any, any>;
+  owner: { resourceId?: string; threadId?: string };
+  requestContext: RequestContext;
+  permission: string;
+}): Promise<void> {
+  await validateRunOwnership(owner, getContextResourceId(requestContext), mastra, requestContext);
+  if (!owner.threadId) return;
+  const memory = await agent.getMemory({ requestContext });
+  const thread = await memory?.getThreadById({ threadId: owner.threadId });
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId: owner.threadId,
+    thread,
+    effectiveResourceId: getContextResourceId(requestContext),
+    permission,
+  });
+}
+
+/** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
+function hasResumableStreams(agent: Agent): boolean {
+  // Durable wrappers always publish. Check them first: a proxy wrapper (Inngest) forwards
+  // hasResumableStreams() to its wrapped Agent, which may have streams off.
+  if (isDurableAgentLike(agent)) return true;
+  const resumable = agent as unknown as ResumableStreamsAgent;
+  return typeof resumable.hasResumableStreams === 'function' && resumable.hasResumableStreams();
+}
+
+/** The bus a plain Agent with resumable streams publishes its runs on. */
+function getAgentStreamPubSub(agent: Agent): PubSub | undefined {
+  return (agent as unknown as ResumableStreamsAgent).__getStreamBus?.()?.pubsub;
+}
+
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
@@ -298,6 +448,7 @@ const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
  * @param customProviders - Optional record of custom gateway providers to check
  * @returns true if all required environment variables are set (or, for aliased providers, if any one is set), false otherwise
  */
+
 export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
   // Vertex AI is a distinct provider from Google AI Studio and must not be collapsed to the
   // "google" registry entry below (e.g. "google.vertex.chat", "google.vertex.anthropic.chat",
@@ -1035,6 +1186,59 @@ export async function getAgentFromSystem({
   }
 
   return agent;
+}
+
+async function getAgentForModelListMutation({
+  mastra,
+  agentId,
+  requestContext,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  requestContext: RequestContext;
+}): Promise<Agent> {
+  const publishedAgent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    requestContext,
+    versionOptions: { status: 'published' },
+  });
+
+  const editorConfig = publishedAgent.__getEditorConfig?.();
+  if (editorConfig === false || editorConfig?.model !== true) {
+    return publishedAgent;
+  }
+
+  const callerPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY);
+  if (
+    Array.isArray(callerPermissions) &&
+    !callerPermissions.some(permission =>
+      typeof permission === 'string' ? matchesPermission(permission, 'stored-agents:write') : false,
+    )
+  ) {
+    throw new HTTPException(403, { message: 'Missing required permission: stored-agents:write' });
+  }
+
+  const agentsStore = await mastra.getStorage?.()?.getStore('agents');
+  const storedAgent = await agentsStore?.getById(agentId);
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+    assertWriteAccess({
+      requestContext,
+      resource: 'stored-agents',
+      resourceId: agentId,
+      action: 'edit',
+      record: storedAgent,
+    });
+  }
+
+  const draftAgent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    requestContext,
+    versionOptions: { status: 'draft' },
+  });
+  return draftAgent === publishedAgent ? draftAgent.__fork() : draftAgent;
 }
 
 async function formatAgent({
@@ -1961,8 +2165,8 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       // Support `untilIdle` option on the /stream endpoint — delegates to
@@ -2299,6 +2503,111 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
   },
 });
 
+/**
+ * Authorizes a request against a durable run through its workflow rows: the
+ * caller must own the run, the run must belong to `agent`, and the caller must
+ * have `permission` on its thread. Throws 403 when access is denied.
+ * Returns 'missing' when no row exists and 'unverified' when the run has not
+ * checkpointed its input yet, so ownership cannot be confirmed.
+ */
+async function authorizeDurableRun({
+  mastra,
+  agent,
+  runId,
+  requestContext,
+  permission,
+}: {
+  mastra: Mastra;
+  agent: DurableAgentLike;
+  runId: string;
+  requestContext: RequestContext;
+  permission: string;
+}): Promise<'ok' | 'missing' | 'unverified'> {
+  const workflows = await mastra.getStorage()?.getStore('workflows');
+  const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
+  if (!run) return 'missing';
+  await validateRunOwnership(run, getContextResourceId(requestContext), mastra, requestContext);
+  const ownershipSchema = z.object({
+    context: z.object({
+      input: z.object({
+        agentId: z.string(),
+        state: z.object({ threadId: z.string().optional() }).optional(),
+      }),
+    }),
+  });
+  let parsed = ownershipSchema.safeParse(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
+  if (!parsed.success) {
+    // Active local runs may not checkpoint the outer input until the segment finishes.
+    const execution = await workflows?.getWorkflowRunById({
+      workflowName: getDurableLoopWorkflowName(agent).replace(
+        DurableStepIds.AGENTIC_LOOP,
+        DurableStepIds.AGENTIC_EXECUTION,
+      ),
+      runId,
+    });
+    await validateRunOwnership(execution, getContextResourceId(requestContext), mastra, requestContext);
+    parsed = ownershipSchema.safeParse(
+      typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
+    );
+  }
+  // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
+  if (!parsed.success) return 'unverified';
+  if (parsed.data.context.input.agentId !== agent.id) {
+    throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
+  }
+  const threadId = parsed.data.context.input.state?.threadId;
+  if (threadId) {
+    const memory = await agent.getMemory({ requestContext });
+    const thread = await memory?.getThreadById({ threadId });
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      thread,
+      effectiveResourceId: getContextResourceId(requestContext),
+      permission,
+    });
+  }
+  return 'ok';
+}
+
+/**
+ * Authorizes observing a run: the caller must own it and have read access to
+ * its thread. Plain agent runs are checked against their shared run record,
+ * so any server sharing the agent's record cache can authorize them. Durable
+ * runs use the owner the agent tracks in this process, then their workflow
+ * rows. Throws 404 when the run cannot be found or verified.
+ */
+async function authorizeRunObservation({
+  mastra,
+  agent,
+  runId,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agent: Agent<any, any, any, any>;
+  runId: string;
+  requestContext: RequestContext;
+}): Promise<void> {
+  const permission = MastraFGAPermissions.MEMORY_READ;
+  if (!isDurableAgentLike(agent)) {
+    const record = await getPlainRunRecord(agent, runId);
+    if (!record) throw new HTTPException(404, { message: 'Run not found' });
+    await authorizeRunOwner({ mastra, agent, owner: record, requestContext, permission });
+    return;
+  }
+  const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
+  const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
+  if (owner) {
+    await authorizeRunOwner({ mastra, agent, owner, requestContext, permission });
+    return;
+  }
+  const access = await authorizeDurableRun({ mastra, agent, runId, requestContext, permission });
+  if (access !== 'ok') {
+    throw new HTTPException(404, { message: 'Run not found' });
+  }
+}
+
 export const ABORT_AGENT_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/runs/:runId/abort',
@@ -2306,7 +2615,8 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
   pathParamSchema: agentRunPathParams,
   responseSchema: abortAgentThreadResponseSchema,
   summary: 'Abort an agent run',
-  description: 'Explicitly stop a durable run, including runs without a memory thread',
+  description:
+    'Explicitly stop a durable run or a run of an agent with resumable streams, including runs without a memory thread',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
@@ -2314,55 +2624,40 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       if (!isDurableAgentLike(agent)) {
-        throw new HTTPException(501, { message: 'Run-scoped cancellation requires a durable agent' });
-      }
-      const workflows = await mastra.getStorage()?.getStore('workflows');
-      const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
-      if (!run) return { aborted: false };
-      await validateRunOwnership(run, getContextResourceId(requestContext), mastra, requestContext);
-      const ownershipSchema = z.object({
-        context: z.object({
-          input: z.object({
-            agentId: z.string(),
-            state: z.object({ threadId: z.string().optional() }).optional(),
-          }),
-        }),
-      });
-      let parsed = ownershipSchema.safeParse(
-        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
-      );
-      if (!parsed.success) {
-        // Active local runs may not checkpoint the outer input until the segment finishes.
-        const execution = await workflows?.getWorkflowRunById({
-          workflowName: getDurableLoopWorkflowName(agent).replace(
-            DurableStepIds.AGENTIC_LOOP,
-            DurableStepIds.AGENTIC_EXECUTION,
-          ),
-          runId,
-        });
-        await validateRunOwnership(execution, getContextResourceId(requestContext), mastra, requestContext);
-        parsed = ownershipSchema.safeParse(
-          typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
-        );
-      }
-      // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
-      if (!parsed.success) return { aborted: false };
-      if (parsed.data.context.input.agentId !== agent.id) {
-        throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
-      }
-      const threadId = parsed.data.context.input.state?.threadId;
-      if (threadId) {
-        const memory = await agent.getMemory({ requestContext });
-        const thread = await memory?.getThreadById({ threadId });
-        await enforceThreadAccess({
+        const resumable = agent as unknown as ResumableStreamsAgent;
+        if (
+          (typeof resumable.__getRunRecord !== 'function' && typeof resumable.__getPublishedRunOwner !== 'function') ||
+          !hasResumableStreams(agent)
+        ) {
+          throw new HTTPException(501, {
+            message: 'Run-scoped cancellation requires a durable agent or an agent with resumable streams',
+          });
+        }
+        const record = await getPlainRunRecord(agent, runId);
+        if (!record) throw new HTTPException(404, { message: 'Run not found' });
+        await authorizeRunOwner({
           mastra,
+          agent,
+          owner: record,
           requestContext,
-          threadId,
-          thread,
-          effectiveResourceId: getContextResourceId(requestContext),
           permission: MastraFGAPermissions.MEMORY_WRITE,
         });
+        if (record.status === 'finished') return { aborted: false };
+        // The run may execute on another server: only report it aborted once
+        // the executing process confirms.
+        if (typeof resumable.__abortRunAcknowledged === 'function') {
+          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
+        }
+        return { aborted: agent.abortRunStream(runId) };
       }
+      const access = await authorizeDurableRun({
+        mastra,
+        agent,
+        runId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      if (access !== 'ok') return { aborted: false };
       // Another server may be executing the run: only report it aborted once that server confirms.
       if (typeof agent.__abortRunAcknowledged === 'function') {
         return { aborted: await agent.__abortRunAcknowledged(runId) };
@@ -2427,12 +2722,17 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
-      const aborted = await agent.abortThreadStream({
+      const abortOptions = {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
         expectedRunId,
-      });
+      };
+      // The run may execute on another server, which only the async variant can reach and report on.
+      const aborted =
+        typeof agent.__abortThreadStreamAcrossProcesses === 'function'
+          ? await agent.__abortThreadStreamAcrossProcesses(abortOptions)
+          : await agent.abortThreadStream(abortOptions);
       return { aborted };
     } catch (error) {
       return handleError(error, 'error aborting agent thread');
@@ -2689,8 +2989,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       const streamResult = structuredOutput
@@ -2732,14 +3032,16 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
     'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, runId, offset, abortSignal }) => {
+  handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
     try {
       // Verify agent exists and get its pubsub for stream subscription.
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      await authorizeRunObservation({ mastra, agent, runId, requestContext });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
-      const pubsub = durableAgent?.pubsub ?? mastra.pubsub;
+      // Plain agents with resumable streams publish on their own stream bus.
+      const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
       // A durable agent subscribes for us so the client never sees what an
@@ -2833,6 +3135,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                   for (const chunk of toAgentStreamChunks(event)) {
                     controller.enqueue(chunk);
                   }
+                  // Suspension is an event, not the end: a resumed run publishes on the
+                  // same topic, so observers of every agent stay attached through it.
                   if (type === 'finish' || event.type === 'error' || type === 'abort') {
                     cleanup(controller);
                   } else {
@@ -2921,8 +3225,8 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.approveToolCall({
         ...params,
         requestContext,
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       });
 
       return streamResult.fullStream;
@@ -3126,8 +3430,8 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.declineToolCall({
         ...params,
         requestContext,
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       });
 
       return streamResult.fullStream;
@@ -3247,8 +3551,8 @@ export const RESUME_STREAM_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       // Support `untilIdle` option on the /resume-stream endpoint — delegates
@@ -3464,8 +3768,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       const streamResult = structuredOutput
@@ -3778,24 +4082,34 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+  handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
 
-      if (typeof agent.model === 'function') {
+      if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
           message: 'Agent model list is dynamic (model is a function) and cannot be edited',
         });
       }
 
-      const modelList = await agent.getModelList();
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      const applied = agent.reorderModels(reorderedModelIds);
+      const applied = mutableAgent.reorderModels(reorderedModelIds);
       if (applied === false) {
         throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
+      }
+
+      const reorderedModelList = await mutableAgent.getModelList(requestContext);
+      if (reorderedModelList) {
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: reorderedModelList,
+          requestContext,
+        });
       }
 
       return { message: 'Model list reordered' };
@@ -3816,17 +4130,17 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
 
-      if (typeof agent.model === 'function') {
+      if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
           message: 'Agent model list is dynamic (model is a function) and cannot be edited',
         });
       }
 
-      const modelList = await agent.getModelList();
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
@@ -3846,9 +4160,19 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      const applied = agent.updateModelInModelList(updated);
+      const applied = mutableAgent.updateModelInModelList(updated);
       if (applied === false) {
         throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
+
+      const updatedModelList = await mutableAgent.getModelList(requestContext);
+      if (updatedModelList) {
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: updatedModelList,
+          requestContext,
+        });
       }
 
       return { message: 'Model updated in model list' };

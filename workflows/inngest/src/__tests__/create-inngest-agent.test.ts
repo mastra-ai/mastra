@@ -2543,6 +2543,34 @@ describe('InngestAgent observability tracing', () => {
     }
   });
 
+  it('ends the spans opened at prepare with the dispatch failure when the start event cannot be sent', async () => {
+    // Nothing else ends them: the run never reaches a worker, and cleanup only drops the registry entry.
+    const durableAgent = makeTracedAgent('tracing-dispatch-failure');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockRejectedValue(new Error('inngest unavailable'));
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const [agentRun] = recording.spansOfType('agent_run');
+      const [generation] = recording.spansOfType('model_generation');
+      await vi.waitFor(() => expect(agentRun.error).toHaveBeenCalled());
+      for (const span of [agentRun, generation]) {
+        expect(span.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.objectContaining({ message: 'inngest unavailable' }),
+            outcome: 'error',
+            stopReason: 'runtime_error',
+            endSpan: true,
+          }),
+        );
+      }
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('parents preparation-phase input processor spans to the AGENT_RUN root', async () => {
     const durableAgent = makeTracedAgent('tracing-input-proc', [
       { id: 'test-input-processor', processInput: async ({ messageList }: any) => messageList },
@@ -3232,6 +3260,65 @@ describe('thread and run abort (#25156)', () => {
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
+    }
+  });
+
+  // The server's thread-abort route calls this entry point (#28310).
+  it('the thread-abort route entry point stops the active Inngest run and asks the worker to abort it', async () => {
+    const durableAgent = makeDurable('abort-thread-route');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-route-t';
+    const resourceId = 'abort-thread-route-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(controller?.signal.aborted).toBe(false);
+
+      await expect(durableAgent.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).resolves.toBe(true);
+
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  // A server that never saw the run finds it through the thread lease (#28310).
+  it('the thread-abort route asks the Inngest worker to stop the thread lease owner on a server that never saw the run', async () => {
+    const durableAgent = makeDurable('abort-thread-cold');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const leaseOwner = vi
+      .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
+      .mockResolvedValue('run-on-another-server');
+    try {
+      await expect(
+        durableAgent.__abortThreadStreamAcrossProcesses({ threadId: 'cold-t', resourceId: 'cold-r' }),
+      ).resolves.toBe(true);
+      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(1);
+    } finally {
+      leaseOwner.mockRestore();
+    }
+  });
+
+  it('the thread-abort route leaves the lease owner alone when expectedRunId names another run', async () => {
+    const durableAgent = makeDurable('abort-thread-cold-stale');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const leaseOwner = vi
+      .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
+      .mockResolvedValue('run-on-another-server');
+    try {
+      await expect(
+        durableAgent.__abortThreadStreamAcrossProcesses({
+          threadId: 'cold-t',
+          resourceId: 'cold-r',
+          expectedRunId: 'an-earlier-run',
+        }),
+      ).resolves.toBe(false);
+      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(0);
+    } finally {
+      leaseOwner.mockRestore();
     }
   });
 

@@ -1,9 +1,11 @@
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallExit } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { z } from 'zod';
 
 import { sentByOther } from './message-author';
 
@@ -17,6 +19,7 @@ export interface ToolCall {
   output: string;
   // Epoch milliseconds.
   createdAt?: number;
+  exit?: ToolCallExit;
 }
 
 export function toolCallStatus(status: ToolCall['status']): ActivityStatus {
@@ -175,7 +178,10 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ],
       };
     case 'mergeWindow': {
-      const merged = dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages);
+      const merged = settleCommandExits(
+        dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages),
+        action.messages,
+      );
       // `pending` is otherwise cleared only by live stream events. When the
       // stream missed the run (dropped, or the tab was hidden), the refetched
       // window is what brings the reply in, so it has to clear `pending` too.
@@ -300,7 +306,14 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         },
       );
     case 'shell_output':
-      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
+      return withTool(state, event.toolCallId, t => ({
+        ...t,
+        output: appendShellOutput(t.output, stripAnsi(event.output)),
+      }));
+    case 'command_exit':
+      return knownToolIndex(state.entries, event.toolCallId) === -1
+        ? state
+        : withTool(state, event.toolCallId, t => ({ ...t, exit: commandExit(event) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -441,15 +454,71 @@ export function createInitialTranscript({
   messages?: MastraDBMessage[];
   threadId?: string;
 } = {}): TranscriptState {
-  return {
-    ...initialTranscript,
-    entries: messagesToEntries(messages),
-    threadId,
-  };
+  return settleCommandExits({ ...initialTranscript, entries: messagesToEntries(messages), threadId }, messages);
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+}
+
+const sandboxExitSchema = z.object({
+  toolCallId: z.string(),
+  exitCode: z.number(),
+  // These only describe the exit, so a malformed one is dropped rather than the whole exit and its ✕.
+  killed: z.boolean().optional().catch(undefined),
+  timedOut: z.boolean().optional().catch(undefined),
+  error: z.string().optional().catch(undefined),
+});
+
+/** One shape for an exit, whether it streamed as `command_exit` or was saved as `data-sandbox-exit`. */
+function commandExit({ exitCode, killed = false, timedOut = false, error }: ToolCallExit): ToolCallExit {
+  return { exitCode, killed, timedOut, error };
+}
+
+function sameExit(a: ToolCallExit, b: ToolCallExit | undefined): boolean {
+  return a.exitCode === b?.exitCode && a.killed === b.killed && a.timedOut === b.timedOut && a.error === b.error;
+}
+
+/** The exit shares its call's message, unless a sealed message pushed it into a later one. */
+function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, ToolCallExit> {
+  const exits = new Map<string, ToolCallExit>();
+  for (const part of messages.flatMap(message => message.content.parts)) {
+    if (part.type !== 'data-sandbox-exit' || !('data' in part)) continue;
+    const exit = sandboxExitSchema.safeParse(part.data);
+    if (exit.success) exits.set(exit.data.toolCallId, commandExit(exit.data));
+  }
+  return exits;
+}
+
+// SSE gaps can swallow command_exit; the persisted exit settles the row.
+function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const exits = commandExits(messages);
+  if (exits.size === 0) return state;
+
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message') return entry;
+    const exited = exitedTools(entry, exits);
+    if (exited.length === 0) return entry;
+    changed = true;
+    return { ...entry, runtimeTools: { ...entry.runtimeTools, ...Object.fromEntries(exited) } };
+  });
+
+  return changed ? { ...state, entries } : state;
+}
+
+function exitedTools(
+  entry: MessageEntry,
+  exits: ReadonlyMap<string, ToolCallExit>,
+): Array<readonly [string, ToolCall]> {
+  return entry.message.content.parts.flatMap(part => {
+    const persisted = toolCallFromPart(part);
+    if (!persisted) return [];
+    const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
+    const exit = exits.get(tool.toolCallId);
+    if (exit === undefined || sameExit(exit, tool.exit)) return [];
+    return [[tool.toolCallId, { ...tool, exit }] as const];
+  });
 }
 
 function persistedPrompts(message: MastraDBMessage): Array<ApprovalPrompt | SuspensionPrompt> {
@@ -761,7 +830,7 @@ function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessag
   });
 }
 
-// SSE gaps can swallow tool_end; persisted results settle the row.
+// SSE gaps can swallow tool_start or tool_end; persisted invocations settle the row.
 function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   const serverTerminalParts = new Map<string, ToolInvocationMessagePart>();
   for (const message of messages) {
@@ -778,9 +847,13 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
     if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
     let entryChanged = false;
     const parts = entry.message.content.parts.map(part => {
-      if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return part;
+      if (part.type !== 'tool-invocation') return part;
       const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
       if (!serverPart) return part;
+      const settled =
+        isTerminalInvocationState(part.toolInvocation.state) &&
+        part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
+      if (settled) return part;
       entryChanged = true;
       return serverPart;
     });
@@ -1010,14 +1083,19 @@ function hasAssistantText(state: TranscriptState): boolean {
   );
 }
 
-function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+function knownToolIndex(entries: TimelineEntry[], toolCallId: string): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
     if (entry.runtimeTools?.[toolCallId]) return i;
     if (entry.message.content.parts.some(part => toolCallIdForPart(part) === toolCallId)) return i;
   }
-  return currentTurnAssistantIndex(entries);
+  return -1;
+}
+
+function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+  const known = knownToolIndex(entries, toolCallId);
+  return known === -1 ? currentTurnAssistantIndex(entries) : known;
 }
 
 function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
@@ -1046,6 +1124,16 @@ function answeredLatestUser(entries: TimelineEntry[], stored: Set<number>): bool
     if (entry.message.role === 'user') return false;
   }
   return false;
+}
+
+/** Live shell output kept per tool call, in string code units. Matches the controller's display state. */
+const MAX_SHELL_OUTPUT = 1024 * 1024;
+
+/** Appends shell output, keeping only the latest `MAX_SHELL_OUTPUT` code units. */
+function appendShellOutput(existing: string, chunk: string): string {
+  // Copy an oversized chunk's tail: a plain `slice` can share, and so retain, the whole chunk.
+  if (chunk.length >= MAX_SHELL_OUTPUT) return JSON.parse(JSON.stringify(chunk.slice(-MAX_SHELL_OUTPUT))) as string;
+  return existing.slice(-(MAX_SHELL_OUTPUT - chunk.length)) + chunk;
 }
 
 function withTool(

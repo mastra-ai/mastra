@@ -9,7 +9,10 @@ import { takeDelegationFailure } from '../../../../loop/shared/delegation-outcom
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
-import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
+import {
+  applyBackgroundToolExecution,
+  applyBackgroundToolResult,
+} from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -21,7 +24,7 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
+import type { ExportedSpan, ObservabilityContext, SpanTermination } from '../../../../observability';
 import { compactStopReasonContext } from '../../../../observability/outcome-schema';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
@@ -178,6 +181,8 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // the evented engine rehydrates a fresh RequestContext per step, so the
   // wrapper's by-reference flag write never reaches the mapping step there.
   delegationBailed: z.boolean().optional(),
+  // Why that delegation failed, carried the same way for the root spans' outcome.
+  tracingDelegationFailure: z.custom<SpanTermination>().optional(),
 });
 
 /**
@@ -374,7 +379,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
-        getStepResult,
+        getStepResultAsync,
       } = params;
 
       const ownership = getExecutionOwnershipGuard(params);
@@ -799,7 +804,7 @@ export function createDurableToolCallStep() {
       // Replayed step transcripts supply context only, not messages to persist.
       let contextMessageList = messageList;
       if (!contextMessageList) {
-        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = await readMessageListState(params, llmOutput ?? {});
         if (messageListState) {
           contextMessageList = createRunMessageList({
@@ -1711,7 +1716,9 @@ export function createDurableToolCallStep() {
                       invocationKind: isAgentTool ? 'agent' : 'tool',
                       disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                     },
-                    ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                    ...(taskContext?.resumeData !== undefined
+                      ? { resumeData: taskContext.resumeData, suspendPayload: taskContext.suspendPayload }
+                      : {}),
                     // Framework-resolved delegated run id recovered from persisted
                     // suspension state (#23739) — never the model-authored one.
                     suspendedToolRunId: taskContext?.suspendedToolRunId,
@@ -1883,6 +1890,20 @@ export function createDurableToolCallStep() {
                 },
               });
               resolveReconciliation({});
+              if (info.disposition !== 'awaited' && state?.threadId && state?.resourceId) {
+                const owner = Object.values(mastra?.listAgents?.() ?? {}).find(agent => agent.id === initData.agentId);
+                void owner?.__notifyBackgroundTaskFinished({
+                  threadId: state.threadId,
+                  resourceId: state.resourceId,
+                  taskId: params.taskId,
+                  toolCallId: params.toolCallId,
+                  toolName: params.toolName,
+                  status: params.status === 'failed' ? 'failed' : 'completed',
+                  requestContext:
+                    registryEntry?.requestContext ??
+                    restoreRequestContext(initData.requestContextEntries, requestContext),
+                });
+              }
             } catch (error) {
               resolveReconciliation({ error });
               throw error;
@@ -1892,18 +1913,19 @@ export function createDurableToolCallStep() {
           onExecution: async (params: any) => {
             if (!messageList) return;
 
-            messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-              mode: 'stream',
-              backgroundTasks: {
-                [params.toolCallId]: {
-                  startedAt: params.startedAt,
-                  suspendedAt: params.suspendedAt,
-                  taskId: params.taskId,
-                },
-              },
+            await applyBackgroundToolExecution({
+              params,
+              args: cleanedArgs,
+              messageList,
+              transformChunk: chunk =>
+                applyToolPayloadTransformToChunk(chunk, {
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
+                  logger: logger as any,
+                }),
             });
 
-            // Flush to storage so the metadata update (especially suspendedAt)
+            // Flush to storage so the metadata update (especially an open suspension)
             // is persisted. Unlike the regular agent which has a single long-lived
             // messageList, the durable agent's workflow state is serialized before
             // this async callback fires, so we must flush directly.
@@ -1988,19 +2010,22 @@ export function createDurableToolCallStep() {
       // flag here — same process and same instances as tool execution — and
       // carrying it on the serializable step output stops the loop in the
       // same iteration on every engine.
-      const consumeDelegationBailSignal = (): boolean => {
+      const consumeDelegationBailSignal = ():
+        | { delegationBailed: true; tracingDelegationFailure?: SpanTermination }
+        | undefined => {
         let bailed = false;
+        let failure: SpanTermination | undefined;
         for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
           if (rc?.get('__mastra_delegationBailed')) {
-            // Reset once for this bail, before collecting causes from the live contexts.
-            if (!bailed && registryEntry) registryEntry.tracingDelegationFailure = undefined;
             bailed = true;
             rc.set('__mastra_delegationBailed', false);
-            const cause = takeDelegationFailure(rc);
-            if (cause && registryEntry) registryEntry.tracingDelegationFailure = cause;
+            failure = takeDelegationFailure(rc) ?? failure;
           }
         }
-        return bailed;
+        if (!bailed) return undefined;
+        // The run-registry copy keeps older @mastra/inngest finalizers working in-process.
+        if (registryEntry) registryEntry.tracingDelegationFailure = failure;
+        return { delegationBailed: true, ...(failure ? { tracingDelegationFailure: failure } : {}) };
       };
       let mappingFailure: { error: unknown } | undefined;
 
@@ -2245,7 +2270,7 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(transformMetadata ? { transformMetadata } : {}),
-          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
+          ...consumeDelegationBailSignal(),
         };
       } catch (error) {
         ownership?.throwIfLost();
@@ -2315,7 +2340,7 @@ export function createDurableToolCallStep() {
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
           // A hook may bail on a FAILED delegation too (success: false).
-          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
+          ...consumeDelegationBailSignal(),
         };
       }
     },

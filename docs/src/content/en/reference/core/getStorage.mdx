@@ -26,7 +26,8 @@ This method doesn't accept any parameters.
   {
     name: 'storage',
     type: 'MastraCompositeStore | undefined',
-    description: 'The configured storage instance, or undefined if no storage has been configured.',
+    description:
+      'The configured storage instance. When no storage is configured, Mastra uses a default `InMemoryStore`, which this method returns.',
   },
 ]}
 />

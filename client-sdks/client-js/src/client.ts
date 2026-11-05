@@ -7,6 +7,7 @@ import {
   Processor,
   Workflow,
   Vector,
+  Knowledge,
   BaseResource,
   A2A,
   A2AV1,
@@ -27,6 +28,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
+import type { KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -91,6 +93,7 @@ import type {
   GetScorePercentilesResponse,
   ListFeedbackArgs,
   CreateFeedbackBody,
+  ReplaceFeedbackBody,
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
@@ -126,6 +129,7 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './resources/observability-route-types.js';
+import type { SignalWriteOptions } from './resources/signal-writes';
 import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
   ListFeedbackResponse,
@@ -688,6 +692,23 @@ export class MastraClient extends BaseResource {
    */
   public getVector(vectorName: string) {
     return new Vector(this.options, vectorName);
+  }
+
+  /**
+   * Lists the Knowledge instances registered on the server
+   * @returns Promise containing each instance's application key and id
+   */
+  public listKnowledge(): Promise<{ instances: KnowledgeInstanceSummary[] }> {
+    return this.request('/knowledge');
+  }
+
+  /**
+   * Gets read-only access to a registered Knowledge instance
+   * @param knowledgeKey - Application key the instance is registered under
+   * @returns Knowledge resource
+   */
+  public getKnowledge(knowledgeKey: string) {
+    return new Knowledge(this.options, knowledgeKey);
   }
 
   /**
@@ -1413,8 +1434,8 @@ export class MastraClient extends BaseResource {
   }
 
   /** Creates a single score record in the observability store. */
-  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
-    return this.observability.createScore(params);
+  createScore(params: CreateScoreBody, options?: SignalWriteOptions): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params, options);
   }
 
   /** Deletes score records by scoreId, optionally scoped to a tenant. */
@@ -1452,8 +1473,13 @@ export class MastraClient extends BaseResource {
   }
 
   /** Creates a single feedback record in the observability store. */
-  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
-    return this.observability.createFeedback(params);
+  createFeedback(params: CreateFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params, options);
+  }
+
+  /** Full replacement on Platform. Preserve the original identity/timestamp; each accepted retry is a new replacement. */
+  replaceFeedback(params: ReplaceFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.replaceFeedback(params, options);
   }
 
   /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
@@ -2725,6 +2751,24 @@ export class MastraClient extends BaseResource {
    */
   public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
     return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Answers a suspended background task with `resumeData`. Pass the task's
+   * `suspendedAt` to have the server reject the answer (409) when the task has
+   * resumed or suspended again since you read it.
+   */
+  public resumeBackgroundTask(
+    backgroundTaskId: string,
+    resumeData: unknown,
+    options: { suspendedAt?: Date | string | number } = {},
+  ): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/resume`, {
+      method: 'POST',
+      body: { resumeData, suspendedAt: options.suspendedAt },
+      // A retry after a lost response could deliver this answer to a later suspension.
+      retries: 0,
+    });
   }
 
   /**

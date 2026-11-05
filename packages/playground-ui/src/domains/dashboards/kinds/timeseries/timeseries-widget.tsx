@@ -2,15 +2,13 @@ import { ChartArea } from '../../../metrics/components/chart-area';
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ChartCardError } from '../../../metrics/components/chart-card-error';
 import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
-import { bucketPlan, bucketWindow } from '../../../metrics/lib/metrics-buckets';
-import { ViewGate } from '../../components/view-gate';
+import { bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
 import { DrilldownAction } from '../../components/widget-controls';
-import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
-import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
+import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widget-views';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
-import { buildRequest } from '../../lib/requests';
+import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeTimeseries } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
@@ -29,23 +27,22 @@ type ViewProps = Props & {
 };
 
 export function TimeseriesWidget(props: Props) {
-  const { view, heading } = useViewMenu(props.widget, props.views);
-  return (
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
-      {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
-    </ViewGate>
+  const { gate, state, onStateChange } = props;
+  const menu = viewMenu(
+    props.widget,
+    props.views,
+    state.view ?? 0,
+    i => onStateChange({ ...state, view: i }),
+    props.expand,
   );
+  const { view } = menu;
+  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
+  if (gate.status === 'pending') return <PendingChartCard gate={gate.gate} heading={heading} />;
+  return <TimeseriesView {...props} view={view} heading={heading} page={gate.page} />;
 }
 
-function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps) {
+function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onRetry }: ViewProps) {
   const { options } = view;
-  const { interval } = bucketPlan(page.window.start, page.window.end);
-  const totals = new Set(options.totals ?? []);
-  const results = useDashboardRequests(
-    view.queries.map(q =>
-      buildRequest(q, page, { interval: q.id !== undefined && totals.has(q.id) ? undefined : interval }),
-    ),
-  );
   const sent = results.filter(r => r !== undefined);
   const hasTraceQueries = view.queries.some(q => q.source === 'traceAggregate' || q.source === 'spanAggregate');
   const onClick = useDrilldown(widget, view, onDrilldown);
@@ -78,8 +75,13 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
   const layout = {
     ...heading,
     actions: hasDrilldownAction(widget, view, onDrilldown) ? (
-      <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
-    ) : undefined,
+      <>
+        <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
+        {heading.actions}
+      </>
+    ) : (
+      heading.actions
+    ),
     total: withRangeTotals ? rangeTotals : undefined,
     isLoading,
     toolbar: lines.length > 0 && (
@@ -93,11 +95,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
   if (failed.length) {
     return (
       <ChartCard {...layout}>
-        {hasTraceQueries ? (
-          <ChartCardError error={failed[0]?.error} onRetry={() => failed.forEach(r => void r.refetch())} />
-        ) : (
-          <ChartCardError />
-        )}
+        {hasTraceQueries ? <ChartCardError error={failed[0]?.error} onRetry={onRetry} /> : <ChartCardError />}
       </ChartCard>
     );
   }
@@ -131,7 +129,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
         {options.chart === 'stackedBar' ? (
           <MetricsStackedBarChart {...chart} />
         ) : (
-          <MetricsLineChart {...chart} yDomain={yDomain} />
+          <MetricsLineChart {...chart} yDomain={yDomain} lineStyle="thin" />
         )}
       </ChartArea>
     </ChartCard>

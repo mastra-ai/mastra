@@ -200,7 +200,7 @@ export function PropertyFilterCreator({
                 <ArrowLeftIcon className="size-4" />
               </button>
               <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
-              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} · is`}</Txt>
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
 
@@ -293,7 +293,7 @@ export function PropertyFilterCreator({
                   setError(undefined);
                 }}
                 placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}`}
                 emptyText={selectedField.emptyText ?? 'No option found.'}
                 size="md"
                 aria-label={selectedField.label}

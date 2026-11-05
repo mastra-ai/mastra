@@ -51,9 +51,9 @@ import { FactoryEnvironmentStateProcessor } from './session/environment-state-pr
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
-import { factoryMemorySettingsUserId } from './storage/domains/memory-settings/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type * as reportsModule from './tools/reports.js';
@@ -379,7 +379,7 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
   const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
   await memorySettings.patch({
     orgId: 'org-1',
-    userId: factoryMemorySettingsUserId(project.id),
+    userId: factoryProjectSettingsUserId(project.id),
     patch: { observerModelId: 'anthropic/factory-observer' },
   });
   await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { observerModelId: 'openai/my-observer' } });
@@ -676,12 +676,18 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
     const knowledge = { key: 'mastra', instance };
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
 
     expect(config.knowledge).toEqual(knowledge);
+  });
+
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
   });
 
   it('throws when called twice', async () => {
@@ -941,6 +947,8 @@ describe('MastraFactory.prepare', () => {
       'source-control',
       'channel-identity',
       'work-item-comments',
+      'skill-overrides',
+      'voice-settings',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -1449,6 +1457,7 @@ describe('MastraFactory.prepare', () => {
       'factory_subscribe_session',
       'factory_unsubscribe_session',
       'factory_recreate_sandbox',
+      'factory_sandbox_port_url',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1496,6 +1505,7 @@ describe('MastraFactory.prepare', () => {
       };
 
       expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('platform')).toHaveProperty('factory_sandbox_port_url');
       expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');

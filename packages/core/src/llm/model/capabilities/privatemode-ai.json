@@ -30,10 +30,9 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "glm-5.3": [
+    "kimi-k2.6": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "glm-5.3-flash": [
@@ -42,9 +41,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k2.6": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-flash-latest": [

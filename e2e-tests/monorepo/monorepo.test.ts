@@ -18,7 +18,7 @@ import {
   removeOutputDir,
 } from './helpers';
 
-describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   let fixturePath: string;
 
   let buildQueue: Promise<unknown> = Promise.resolve();
@@ -91,6 +91,47 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
       ],
       { cwd: appDir },
     );
+  });
+
+  // `mastra dev` extracts the `server` option, whose api routes import installed packages (#28645). Rollup loads modules
+  // with `fs/promises` `readFile` and copies that module's functions when it is first imported, so the patch must run
+  // before the deployer import. The module reads recorded during extraction are the files that entered the graph.
+  it('extracts the server option without loading installed packages (#28645)', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const entryFile = join(appDir, 'src', 'mastra', 'index.ts');
+    const outputDir = join(appDir, '.mastra', 'option-extraction-e2e');
+
+    try {
+      const { stdout } = await execa(
+        'node',
+        [
+          '--input-type=module',
+          '-e',
+          `import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+const reads = [];
+const readFile = fs.readFile;
+fs.readFile = (path, ...args) => (reads.push(String(path)), readFile(path, ...args));
+syncBuiltinESMExports();
+const { extractMastraOption } = await import('@mastra/deployer/build');
+const result = await extractMastraOption('server', ${JSON.stringify(entryFile)}, ${JSON.stringify(outputDir)});
+fs.readFile = readFile;
+syncBuiltinESMExports();
+const server = await result.getConfig();
+console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.path) }));`,
+        ],
+        { cwd: appDir },
+      );
+      const { reads, routes }: { reads: string[]; routes: string[] } = JSON.parse(stdout.trim().split('\n').at(-1)!);
+      const modules = reads.filter(file => !file.endsWith('package.json'));
+      const routeFile = join('src', 'mastra', 'api', 'route', 'test.ts');
+
+      expect(modules.some(file => file.endsWith(routeFile))).toBe(true);
+      expect(modules.filter(file => file.includes('node_modules'))).toEqual([]);
+      expect(routes).toEqual(expect.arrayContaining(['/test', '/transitive-workspace']));
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
   });
 
   function runApiTests(port: number) {
@@ -207,7 +248,7 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
     });
   }
 
-  describe.sequential('dev', async () => {
+  describe('dev', { concurrent: false }, async () => {
     const buildReservation = reserveBuildQueue();
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
@@ -499,7 +540,7 @@ export const environmentRoute = registerApiRoute('/environment', {
   });
 
   // Runs after the `dev` suite's server has stopped, since two dev servers can't share the app directory.
-  describe.sequential('dev Ctrl-C', () => {
+  describe('dev Ctrl-C', { concurrent: false }, () => {
     it(
       'reports the model tokens when `mastra dev` is stopped with Ctrl-C',
       async () => {
@@ -543,7 +584,46 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
-  describe.sequential('build', async () => {
+  describe('dev --root', { concurrent: false }, () => {
+    it(
+      'writes dev pre-bundle output under <root>/.mastra/.build instead of the cwd (#29140)',
+      async () => {
+        const appDir = join(fixturePath, 'apps', 'custom');
+        const altRoot = join(appDir, '.mastra-alt');
+        // A clean checkout has no `<cwd>/.mastra`; the watcher used to write there and fail with ENOENT.
+        await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+        await rm(altRoot, { recursive: true, force: true });
+
+        const devPort = await getPort();
+        const devController = new AbortController();
+        const cli = execa('mastra', ['dev', '--root', altRoot], {
+          cwd: appDir,
+          preferLocal: true,
+          reject: false,
+          cancelSignal: devController.signal,
+          gracefulCancel: true,
+          env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY, MASTRA_PORT: devPort.toString() },
+        });
+        activeProcesses.push({ controller: devController, proc: cli });
+
+        try {
+          await waitForServer(devPort);
+
+          const altBuildFiles = await readdir(join(altRoot, '.mastra', '.build'));
+          expect(altBuildFiles).toContain('entry-0.mjs');
+          await expect(readdir(join(appDir, '.mastra', '.build'))).rejects.toMatchObject({ code: 'ENOENT' });
+        } finally {
+          devController.abort();
+          await Promise.race([cli.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(altRoot);
+          await rm(altRoot, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe('build', { concurrent: false }, async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -839,6 +919,8 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
 
       // An ordinary workspace package still gets bundled and remains usable by the built server.
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
+      // Bundled workspace packages must not also be packed and installed with their dependencies (#28303).
+      expect(await readdir(join(outputDir, 'workspace-module'))).toEqual(['inner-subpath-only-1.0.0.tgz']);
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
       expect((await agentResponse.json()).name).toBe('My Agent');
@@ -984,7 +1066,7 @@ export const mastra = new Mastra({
     });
   });
 
-  describe.sequential('start', async () => {
+  describe('start', { concurrent: false }, async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -1262,7 +1344,7 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('build without externals', async () => {
+  describe('build without externals', { concurrent: false }, async () => {
     let originalConfig: string;
     let port = await getPort();
     let proc: ReturnType<typeof execaNode> | undefined;
@@ -1358,6 +1440,81 @@ export const mastra = new Mastra({
       // Automatic version resolution must read the copy installed for the app (0.4.0),
       // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
+
+      // read-excel-file/node/package.json is named "read-excel-file/node" at 1.0.0 (#28828).
+      expect(dependencies['read-excel-file']).toBe('9.3.12');
+
+      // Only reachable through pino transport detection in the analyzed bundle.
+      expect(dependencies['pino-pretty']).toBe('13.2.0');
     });
+  });
+
+  describe('app without "type": "module" running under tsx (#28491)', { concurrent: false }, () => {
+    // `mastra dev` and `mastra build` import options extracted from the Mastra config. Chunks split from them were
+    // written as `.js`, which an app without "type": "module" treats as CommonJS, and tsx 4.21 then loads them
+    // without their named exports. Newer tsx releases load them on Node 24, so the app pins tsx 4.21.0.
+    const tsxEnv = { NODE_OPTIONS: '--import tsx', LOAD_OPTIONAL: 'true' };
+    const getAppDir = () => join(fixturePath, 'apps', 'typeless');
+
+    it(
+      'applies the bundler options during `mastra build`',
+      async () => {
+        const buildResult = await execa('mastra', ['build'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          env: { ...tsxEnv, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+        });
+        expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+        const outputFiles = await readdir(join(getAppDir(), '.mastra', 'output'));
+        expect(outputFiles, buildResult.stdout).toContain('index.mjs.map');
+      },
+      timeout,
+    );
+
+    it(
+      'serves api routes from `mastra dev`',
+      async () => {
+        const port = await getPort();
+        const controller = new AbortController();
+        const proc = execa('mastra', ['dev'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          cancelSignal: controller.signal,
+          gracefulCancel: true,
+          env: { ...tsxEnv, PORT: port.toString() },
+        });
+        activeProcesses.push({ controller, proc });
+
+        let output = '';
+        proc.stderr?.on('data', data => {
+          output += data.toString();
+        });
+        const started = new Promise<void>(resolve => {
+          proc.stdout?.on('data', data => {
+            output += data.toString();
+            if (output.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+
+        try {
+          const outcome = await Promise.race([started.then(() => 'started'), proc.then(() => 'exited')]);
+          expect(outcome, output).toBe('started');
+
+          const res = await fetch(`http://localhost:${port}/typeless`);
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toEqual({ message: 'typeless app (optional)' });
+        } finally {
+          controller.abort();
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(getAppDir());
+        }
+      },
+      timeout,
+    );
   });
 });

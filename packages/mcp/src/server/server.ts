@@ -20,9 +20,16 @@ import type { Span, TracingContext } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
-import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
-import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
+import { createTool, getValidationIssuePaths, isValidationError, validateToolInput } from '@mastra/core/tools';
+import type {
+  InternalCoreTool,
+  MCPToolExecutionContext,
+  MCPToolType,
+  ToolAction,
+  ValidationError,
+} from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
+import type { ToolExecuteFGACheck } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
@@ -78,6 +85,7 @@ import { createEventsInspector, listEventsInfo } from './events/inspector';
 import { ServerEventRegistry, toDescriptor } from './events/registry';
 import type { MCPServerEventDefinition, MCPServerEventsOptions } from './events/types';
 import { WebhookDispatcher } from './events/webhook-dispatcher';
+import { modelOutputToMcpContent } from './model-output-to-mcp';
 import {
   INPUT_KEY,
   callerTrace,
@@ -114,6 +122,7 @@ import {
   isWorkflowTaskContext,
   runErrorMessage,
   runSummary,
+  withLoadedSteps,
 } from './tasks/workflow-runs';
 import type { AnsweredSuspension, WorkflowRunView, WorkflowTaskContext } from './tasks/workflow-runs';
 import type {
@@ -125,7 +134,9 @@ import type {
   MCPServerRequest,
   MCPServerRequestStateOptions,
   MCPServerResources,
+  MCPServerToolResultOptions,
 } from './types';
+import { matchesUriTemplate } from './uri-template';
 
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
@@ -168,6 +179,11 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    *   (suspend/resume, `subscriptions/listen`, events) are not available to these clients.
    */
   legacy?: 'reject' | 'stateless';
+  /**
+   * How a tool's return value becomes the result an MCP client receives: build it from the tool's
+   * `toModelOutput` (`modelOutput`), and rewrite it before it is sent (`transform`).
+   */
+  toolResult?: MCPServerToolResultOptions;
 }
 
 export interface MCPServerHTTPOptions {
@@ -284,6 +300,7 @@ export class MCPServer extends MCPServerBase {
   private tasksInspector: MCPServerTasksInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
   private readonly legacy: 'reject' | 'stateless';
+  private readonly toolResultOptions: MCPServerToolResultOptions;
   private readonly tasks: ResolvedTasksConfig;
   /** Where tasks are kept: `tasks.store`, or the store picked on first use. */
   private readonly taskStore: MCPTaskStore;
@@ -309,6 +326,7 @@ export class MCPServer extends MCPServerBase {
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
+    this.toolResultOptions = config.toolResult ?? {};
     this.tasks = resolveTasksConfig(config.tasks, {
       tools: Object.keys(config.tools ?? {}),
       workflows: Object.keys(config.workflows ?? {}),
@@ -371,6 +389,8 @@ export class MCPServer extends MCPServerBase {
         mastra: this.mastra,
         logger: this.logger,
         description: 'description' in tool ? tool.description : undefined,
+        // Without it the tool would check the standalone tool resource, not this server's (#28787).
+        resolveExecuteFGA: ({ user, requestContext }) => this.toolFGACheck(name, user, requestContext),
       }) as InternalCoreTool;
       converted[name] = { ...coreTool, id: name } as InternalCoreTool;
     };
@@ -447,11 +467,13 @@ export class MCPServer extends MCPServerBase {
           mcp: { toolType: 'workflow' },
           execute: async (inputData, context) => {
             const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
-            return run.start({
-              inputData,
-              requestContext: context?.requestContext,
-              tracingContext: context?.tracingContext,
-            });
+            return withLoadedSteps(
+              await run.start({
+                inputData,
+                requestContext: context?.requestContext,
+                tracingContext: context?.tracingContext,
+              }),
+            );
           },
         }),
       );
@@ -995,10 +1017,12 @@ export class MCPServer extends MCPServerBase {
 
     this.setTracedHandler(server, 'tools/call', async (request, ctx, trace) => {
       const name = request.params.name;
-      const tool = this.convertedTools[name];
+      // `name` comes from the client, so names like `constructor` must not resolve to Object.prototype members.
+      const tool = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
       if (!tool) {
         this.logger.warn('Unknown tool requested', { tool: name });
-        return errorResult(`Unknown tool: ${name}`);
+        // The spec makes an unknown tool a protocol error; `isError` is for a tool that ran and failed.
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
       }
       const args = request.params.arguments ?? {};
       const argsHash = hashArguments(args);
@@ -1067,7 +1091,7 @@ export class MCPServer extends MCPServerBase {
         }
         // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
         const result = server.projectCallToolResult(
-          this.toCallToolResult(name, tool, execution.output),
+          await this.completedToolResult(name, tool, execution.output, requestContext),
           this.toolInfo(name, tool).outputSchema,
         );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
@@ -1156,11 +1180,10 @@ export class MCPServer extends MCPServerBase {
               ? undefined
               : { resumeData: options.resumeData, suspendPayload: options.suspendPayload },
           initialAttempt: () => ({
-            outcome: settled.then(
-              (outcome): MCPTaskAttemptOutcome =>
-                'error' in outcome
-                  ? this.toolErrorOutcome(name, outcome.error)
-                  : this.toTaskOutcome(name, tool, outcome.execution),
+            outcome: settled.then((outcome): Promise<MCPTaskAttemptOutcome> | MCPTaskAttemptOutcome =>
+              'error' in outcome
+                ? this.toolErrorOutcome(name, outcome.error)
+                : this.toTaskOutcome(name, tool, outcome.execution, requestContext),
             ),
             abort: reason => controller.abort(reason),
           }),
@@ -1314,7 +1337,7 @@ export class MCPServer extends MCPServerBase {
               suspendPayload,
               tracingContext: span ? { currentSpan: span } : undefined,
             });
-            return this.toTaskOutcome(name, tool, execution);
+            return await this.toTaskOutcome(name, tool, execution, requestContext);
           } catch (error) {
             return this.toolErrorOutcome(name, error);
           }
@@ -1425,11 +1448,13 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
-  private toTaskOutcome(
+  /** Never rejects: a failure building the result completes the task with the tool error result. */
+  private async toTaskOutcome(
     name: string,
     tool: InternalCoreTool,
     execution: MCPToolExecutionResultV2,
-  ): MCPTaskAttemptOutcome {
+    requestContext: RequestContext,
+  ): Promise<MCPTaskAttemptOutcome> {
     if (execution.status === 'suspended') {
       this.logger.debug(`Tool task '${name}' requires client input.`);
       // A fresh key per suspension: a task's keys must be unique over its lifetime.
@@ -1449,7 +1474,11 @@ export class MCPServer extends MCPServerBase {
         ),
       );
     }
-    return completed(this.toCallToolResult(name, tool, execution.output));
+    try {
+      return completed(await this.completedToolResult(name, tool, execution.output, requestContext));
+    } catch (error) {
+      return this.toolErrorOutcome(name, error);
+    }
   }
 
   /** A tool that throws inside a task completes it with `isError`, as a synchronous call would answer. */
@@ -1482,7 +1511,9 @@ export class MCPServer extends MCPServerBase {
     // Rejected input answers as the plain tool does, before a run or task exists to be left behind.
     const input = validateToolInput(workflow.inputSchema, args, name);
     if (input.error) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: input.error.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, {
+        issuePaths: getValidationIssuePaths(input.error, workflow.inputSchema),
+      });
       return errorResult(input.error.message);
     }
     // Never the task id: a task id is unguessable, a run id is visible to anyone who can list runs.
@@ -1504,8 +1535,8 @@ export class MCPServer extends MCPServerBase {
     // The run's span persists with its snapshot, so its resumes and restarts can join the same trace.
     const start = (runTracing: TracingContext) => {
       const run = workflow.createRun({ runId: context.runId });
-      const result: Promise<WorkflowRunView> = run.then(started =>
-        started.start({ inputData: input.data, requestContext, tracingContext: runTracing }),
+      const result: Promise<WorkflowRunView> = run.then(async started =>
+        withLoadedSteps(await started.start({ inputData: input.data, requestContext, tracingContext: runTracing })),
       );
       const cancel = () =>
         void run
@@ -1698,14 +1729,16 @@ export class MCPServer extends MCPServerBase {
           .catch(error => this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error })),
     );
     try {
-      view = await run.resume({
-        step: answered.step,
-        resumeData: answer.content ?? {},
-        requestContext,
-        // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
-        // Without a span, core falls back to the trace the run's snapshot recorded.
-        ...(span && { tracingContext: { currentSpan: span } }),
-      });
+      view = await withLoadedSteps(
+        await run.resume({
+          step: answered.step,
+          resumeData: answer.content ?? {},
+          requestContext,
+          // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
+          // Without a span, core falls back to the trace the run's snapshot recorded.
+          ...(span && { tracingContext: { currentSpan: span } }),
+        }),
+      );
     } catch (error) {
       // Resumed already, by another instance or an earlier try of this attempt: follow that.
       if (isResumeClaimLost(error)) return this.watchWorkflowRun(workflow, context, attempt.signal);
@@ -1857,9 +1890,40 @@ export class MCPServer extends MCPServerBase {
     return { status: 'completed', output };
   }
 
+  /**
+   * The result of a tool call that completed: the default result, built from `toModelOutput` when
+   * `toolResult.modelOutput` is on, then passed through `toolResult.transform`. Throws what
+   * `toModelOutput` or `transform` throw.
+   */
+  private async completedToolResult(
+    name: string,
+    tool: InternalCoreTool,
+    output: unknown,
+    requestContext: RequestContext,
+  ): Promise<CallToolResult> {
+    let result = this.toCallToolResult(name, tool, output);
+    const { modelOutput = false, transform } = this.toolResultOptions;
+    if (modelOutput && !result.isError && tool.toModelOutput && output != null) {
+      const mapped = modelOutputToMcpContent(await tool.toModelOutput(output), name);
+      if (mapped?.isError) {
+        result = { isError: true, content: mapped.content, ...(result._meta ? { _meta: result._meta } : {}) };
+      } else if (mapped) {
+        // Clients may read the JSON text block of a structured result, so it stays first.
+        result = {
+          ...result,
+          content: result.structuredContent !== undefined ? [...result.content, ...mapped.content] : mapped.content,
+        };
+      }
+    }
+    if (transform) result = (await transform({ toolName: name, output, result, requestContext })) ?? result;
+    return result;
+  }
+
   private toCallToolResult(name: string, tool: InternalCoreTool, value: unknown): CallToolResult {
     if (isValidationError(value)) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, {
+        issuePaths: getValidationIssuePaths(value, tool.parameters),
+      });
       return errorResult(value.message);
     }
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
@@ -1899,6 +1963,23 @@ export class MCPServer extends MCPServerBase {
       })) ?? []),
     ];
 
+    // A listed resource wins; otherwise the URI may expand one of the caller's own
+    // templates, so a read stays scoped to what that caller was advertised.
+    const findResource = async (
+      uri: string,
+      ctx: ServerContext,
+      requestContext: RequestContext,
+    ): Promise<Resource | undefined> => {
+      const listed = (await listResources(ctx, requestContext)).find(r => r.uri === uri);
+      if (listed || !options?.resourceTemplates) return listed;
+      const templates = await options.resourceTemplates({
+        extra: toToolExecutionContext(ctx, this.name).extra,
+        requestContext,
+      });
+      const template = templates.find(t => matchesUriTemplate(t.uriTemplate, uri));
+      return template && { uri, name: template.name, mimeType: template.mimeType, _meta: template._meta };
+    };
+
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
     this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
@@ -1907,7 +1988,7 @@ export class MCPServer extends MCPServerBase {
 
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
-      const resource = (await listResources(ctx, trace.requestContext)).find(r => r.uri === uri);
+      const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
       const html = this.appResourceHtml.get(uri);
@@ -2050,27 +2131,39 @@ export class MCPServer extends MCPServerBase {
 
     const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
       await import('@mastra/core/auth/ee');
-    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
     const user = requestContext.get('user');
     if (!user) {
-      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+      const resource = { type: 'tool', id: getMCPToolFGAResourceId(this.id, toolId) };
+      throw new FGADeniedError({ id: 'unknown' }, resource, MastraFGAPermissions.TOOLS_EXECUTE);
     }
+    await requireFGA({ fgaProvider, user, requestContext, ...(await this.toolFGACheck(toolId, user, requestContext)) });
+  }
+
+  /**
+   * The check for one of this server's tools: its MCP tool resource, or the server's `fga` mapping.
+   * The tools it builds run the same check, so they keep it when used outside the server, such as
+   * through `tools()` on an agent.
+   */
+  private async toolFGACheck(
+    toolId: string,
+    user: unknown,
+    requestContext: RequestContext | undefined,
+  ): Promise<ToolExecuteFGACheck> {
+    const { getMCPToolFGAResourceId, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
     const permission =
       this.fga?.permissionMapping?.[MastraFGAPermissions.TOOLS_EXECUTE] ?? MastraFGAPermissions.TOOLS_EXECUTE;
     const mapping = this.fga?.resourceMapping?.tool ?? this.fga?.resourceMapping?.tools;
-    const resource = mapping
-      ? { type: mapping.fgaResourceType, id: mapping.deriveId?.({ user, resourceId, requestContext }) ?? resourceId }
-      : { type: 'tool', id: resourceId };
-
-    await requireFGA({
-      fgaProvider,
-      user,
-      resource,
+    // deriveId is only ever given a user; without one, requireFGA denies or defers to a trusted actor.
+    const derivedId = mapping && user ? mapping.deriveId?.({ user, resourceId, requestContext }) : undefined;
+    return {
+      resource: mapping
+        ? { type: mapping.fgaResourceType, id: derivedId ?? resourceId }
+        : { type: 'tool', id: resourceId },
       permission,
-      requestContext,
       context: { resourceId },
       metadata: { mcpServerId: this.id, mcpServerName: this.name, toolId },
-    });
+    };
   }
 
   private async authorizedToolEntries(requestContext: RequestContext): Promise<Array<[string, InternalCoreTool]>> {
@@ -2385,7 +2478,7 @@ export class MCPServer extends MCPServerBase {
             id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
             domain: ErrorDomain.MCP,
             category: ErrorCategory.USER,
-            details: { toolId, args: JSON.stringify(args) },
+            details: { toolId },
           },
           error,
         );

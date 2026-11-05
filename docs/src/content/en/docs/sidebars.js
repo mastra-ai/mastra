@@ -61,6 +61,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/resumable-streams',
+              label: 'Resumable Streams',
+            },
+            {
+              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -217,6 +222,55 @@ const sidebars = {
               type: 'doc',
               id: 'memory/multi-user-threads',
               label: 'Multi-User Threads',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: {
+            type: 'doc',
+            id: 'knowledge/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+            tags: ['alpha'],
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/scopes-and-access',
+              label: 'Scopes and access',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/pinned-context',
+              label: 'Pinned context',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/search',
+              label: 'Search',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/load-your-content',
+              label: 'Load your content',
+            },
+            {
+              type: 'link',
+              label: 'Studio',
+              href: '/docs/studio/knowledge',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/patterns',
+              label: 'Patterns',
             },
           ],
         },
@@ -450,6 +504,11 @@ const sidebars = {
               type: 'doc',
               id: 'studio/auth',
               label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/knowledge',
+              label: 'Knowledge',
             },
             {
               type: 'doc',
@@ -753,34 +812,12 @@ const sidebars = {
       label: 'Regions',
     },
     {
-      type: 'category',
+      type: 'doc',
+      id: 'mastra-platform/connect',
       label: 'Connect',
-      collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'mastra-platform/connect/overview',
-      },
       customProps: {
-        contextualSidebar: true,
         tags: ['new'],
       },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/providers',
-          label: 'Providers',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/channels',
-          label: 'Channels',
-        },
-      ],
     },
     {
       type: 'doc',

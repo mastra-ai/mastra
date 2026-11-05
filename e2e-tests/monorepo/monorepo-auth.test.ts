@@ -7,12 +7,12 @@ import getPort from 'get-port';
 import { execa } from 'execa';
 import { timeout, activeProcesses, removeOutputDir } from './helpers';
 
-describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   beforeAll(() => {
     process.env.pnpm_config_registry = inject('registry');
   });
 
-  describe.sequential('Studio control route authentication', () => {
+  describe('Studio control route authentication', { concurrent: false }, () => {
     it(
       'keeps Studio control routes public during development when server auth is configured',
       async () => {
@@ -101,7 +101,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     );
   });
 
-  describe.sequential('Browser stream route authentication', () => {
+  describe('Browser stream route authentication', { concurrent: false }, () => {
     /**
      * Browser stream routes are registered outside the route-registration pipeline,
      * and a browser cannot set an Authorization header on a WebSocket handshake, so

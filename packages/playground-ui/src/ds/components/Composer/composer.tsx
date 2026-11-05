@@ -1,9 +1,11 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { forwardRef } from 'react';
+import { forwardRef, useContext } from 'react';
 
+import { ChatShellComposerInputContext } from '../ChatShell/chat-shell-context';
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointer } from './use-composer-pointer';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 import './composer.css';
@@ -101,21 +103,24 @@ export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWith
 ComposerAttachments.displayName = 'ComposerAttachments';
 
 export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
-  ({ className, variant = 'inline', maxHeight, autoComplete, ...props }, ref) => (
-    <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
-      <textarea
-        ref={ref}
-        data-slot="composer-input"
-        className={cn(
-          'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
-          variant === 'textarea' ? 'min-h-28' : 'min-h-10',
-          className,
-        )}
-        {...props}
-        {...textFieldAutofillProps(autoComplete)}
-      />
-    </ScrollArea>
-  ),
+  ({ className, variant = 'inline', maxHeight, autoComplete, ...props }, ref) => {
+    const shellInputRef = useContext(ChatShellComposerInputContext);
+    return (
+      <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
+        <textarea
+          ref={mergeRefs(ref, shellInputRef)}
+          data-slot="composer-input"
+          className={cn(
+            'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+            variant === 'textarea' ? 'min-h-28' : 'min-h-10',
+            className,
+          )}
+          {...props}
+          {...textFieldAutofillProps(autoComplete)}
+        />
+      </ScrollArea>
+    );
+  },
 );
 ComposerInput.displayName = 'ComposerInput';
 

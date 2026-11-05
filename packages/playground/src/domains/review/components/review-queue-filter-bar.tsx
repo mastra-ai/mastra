@@ -126,7 +126,7 @@ export function ReviewQueueFilterBar({
       className="min-w-64 flex-1"
     >
       <FilterBar.Chips />
-      <FilterBar.Input placeholder="Filter review queue…" />
+      <FilterBar.Input placeholder="Filter review queue" />
     </FilterBar>
   );
 }

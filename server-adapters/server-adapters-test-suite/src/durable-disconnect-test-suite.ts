@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
+  DurableStepIds,
   createDurableAgent,
   createDurableAgentStream,
   createEventedAgent,
@@ -43,6 +44,35 @@ function deferred() {
     resolve = r;
   });
   return { promise, resolve };
+}
+
+async function persistReplayOwner(mastra: Mastra, runId: string, agentId: string) {
+  const workflows = await mastra.getStorage()!.getStore('workflows');
+  const input = {
+    agentId,
+    status: 'success' as const,
+    output: {},
+    payload: {},
+    startedAt: Date.now(),
+    endedAt: Date.now(),
+  };
+  await workflows!.persistWorkflowSnapshot({
+    workflowName: DurableStepIds.AGENTIC_LOOP,
+    runId,
+    snapshot: {
+      runId,
+      status: 'success',
+      value: {},
+      context: { input },
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: [],
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    },
+  });
 }
 
 async function collectPublicFrames(response: Response, onFrame?: (frame: ChunkType<unknown>) => void) {
@@ -220,6 +250,17 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           } finally {
             await reference.cleanup();
           }
+          const observe = () =>
+            fetch(`${server!.baseUrl}/api/agents/agent/observe`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ runId }),
+            });
+          // A replay topic alone is not proof that this agent owns the run.
+          expect((await observe()).status).toBe(404);
+          await persistReplayOwner(mastra, runId, 'another-agent');
+          expect((await observe()).status).toBe(403);
+          await persistReplayOwner(mastra, runId, agent.id);
           for (const offset of [0, 1, 2]) {
             const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
               method: 'POST',
@@ -242,6 +283,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
         server = await config.startServer(mastra, () => {});
         const runId = `observe-model-error-${kind}`;
+        await persistReplayOwner(mastra, runId, agent.id);
         const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
         const output = { text: '', steps: [], usage };
         const stepResult = { reason: 'error', warnings: [], isContinued: false };
@@ -294,6 +336,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
           server = await config.startServer(mastra, () => {});
           const runId = `observe-usage-${kind}-${explicit}`;
+          await persistReplayOwner(mastra, runId, agent.id);
           const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
           const raw = { source: 'first step' };
           const steps = [{ usage: { ...usage, raw } }, { usage }];
@@ -359,6 +402,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
         server = await config.startServer(mastra, () => {});
         const runId = `observe-reject-${kind}`;
+        await persistReplayOwner(mastra, runId, agent.id);
         const prefix = { type: 'text-delta', runId, from: 'AGENT', payload: { text: 'before rejection' } };
         await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'chunk', data: prefix });
         await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
@@ -495,11 +539,13 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       'approve-tool-call',
       'decline-tool-call',
     ] as const) {
-      for (const explicitAbort of [false, true, 'run', 'threadless'] as const) {
+      for (const { durable, explicitAbort } of (kind === 'plain' ? ([undefined, false] as const) : [undefined]).flatMap(
+        durable => [false, true, 'run', 'threadless'].map(explicitAbort => ({ durable, explicitAbort })),
+      )) {
         if (typeof explicitAbort === 'string' && (kind === 'plain' || !['stream', 'stream-alias'].includes(route)))
           continue;
         const threadless = explicitAbort === 'threadless';
-        it(`${route}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`, async () => {
+        it(`${route}${durable === false ? ' (durable:false)' : ''}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`, async () => {
           fixture = await config.setupModel();
           const entered = deferred();
           const gate = deferred();
@@ -551,6 +597,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           const inner = new Agent({
             id: 'disconnect-agent',
             name: 'Disconnect agent',
+            durable,
             instructions: 'Execute three steps.',
             model: fixture.model,
             ...(threadless ? {} : { memory }),
@@ -634,7 +681,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             client.abort();
             await disconnected.promise;
             await request;
-            if (kind !== 'plain' && explicitAbort) {
+            if (durable !== false && explicitAbort) {
               const runScoped = typeof explicitAbort === 'string';
               if (runScoped) {
                 const denied = await fetch(`${server.baseUrl}/api/agents/otherAgent/runs/${runId}/abort`, {
@@ -654,11 +701,11 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               expect(response.status).toBe(200);
               expect(result).toEqual({ aborted: true });
             }
-            const completes = kind !== 'plain' && !explicitAbort;
+            const completes = durable !== false && !explicitAbort;
             if (!completes) await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
             else expect(toolSignal?.aborted).toBe(false);
             const observing =
-              kind === 'plain'
+              durable === false
                 ? undefined
                 : fetch(`${base}/observe`, {
                     method: 'POST',

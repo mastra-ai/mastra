@@ -1,18 +1,18 @@
 import { it, describe, expect, beforeAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
 import { timeout, activeProcesses } from './helpers';
 
-describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   beforeAll(() => {
     process.env.pnpm_config_registry = inject('registry');
   });
 
-  describe.sequential('deployer module aliases', () => {
+  describe('deployer module aliases', { concurrent: false }, () => {
     it(
       'should replace aliased dependencies in every bundling pass',
       async () => {
@@ -118,7 +118,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('bundler options with file-based agents', () => {
+  describe('bundler options with file-based agents', { concurrent: false }, () => {
     // `mastra build` reads options from a generated wrapper when file-based agents exist; the
     // wrapper has no `new Mastra({...})`, so the `bundler` block was dropped for defaults (#29048).
     it(
@@ -157,7 +157,47 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('workspace subpath externals', () => {
+  describe('workspace subpath externals', { concurrent: false }, () => {
+    it(
+      'should copy the pnpm lockfile unchanged when packing workspace packages for an app outside the workspace root',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-lockfile-copy-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Skip only the output install, so the lockfile copy stays as the deployer wrote it.
+          // pnpm rewrites it on install and drops the importers outside the output directory.
+          const binDir = join(isolatedFixturePath, 'stub-bin');
+          await mkdir(binDir);
+          const realPackageManager = (await execa('which', [pkgManager])).stdout;
+          await writeFile(
+            join(binDir, pkgManager),
+            `#!/bin/sh\nif [ "$1" = install ]; then exit 0; fi\nexec "${realPackageManager}" "$@"\n`,
+          );
+          await chmod(join(binDir, pkgManager), 0o755);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const buildResult = await execa(join(appDir, 'node_modules', '.bin', 'mastra'), ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          expect(await readdir(join(outputDir, 'workspace-module'))).toContain('inner-subpath-only-1.0.0.tgz');
+          // An edited lockfile makes pnpm 11 recheck every entry against the registry, which fails
+          // without credentials for private registries (#29279).
+          expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe(
+            await readFile(join(isolatedFixturePath, 'pnpm-lock.yaml'), 'utf-8'),
+          );
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
     it(
       'should package an external workspace dependency without an optimized workspace parent',
       async () => {

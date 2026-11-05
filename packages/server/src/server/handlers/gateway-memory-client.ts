@@ -288,6 +288,10 @@ export function toLocalOMRecord(gr: GatewayOMRecord) {
   };
 }
 
+function isV2GatewayKey(key: string): boolean {
+  return key.startsWith('msk-gateway-') || key.startsWith('mskv2_');
+}
+
 // Singleton-ish lazy instance
 let _gatewayClient: GatewayMemoryClient | null | undefined;
 
@@ -298,7 +302,8 @@ export function getGatewayClient(): GatewayMemoryClient | null {
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;
-  if (!key) {
+  // v2 (organization) keys are served by a gateway without the memory API, so memory stays local.
+  if (!key || isV2GatewayKey(key)) {
     _gatewayClient = null;
     return null;
   }

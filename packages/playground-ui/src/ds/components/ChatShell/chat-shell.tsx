@@ -1,4 +1,5 @@
 import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
+import { useState } from 'react';
 
 import {
   MessageScroller,
@@ -14,6 +15,13 @@ import type {
   MessageScrollerViewportProps,
 } from '../MessageScroller';
 
+import {
+  ChatShellComposerInputContext,
+  ChatShellRegionsContext,
+  createChatShellRegions,
+  useChatShellRegions,
+} from './chat-shell-context';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
@@ -34,18 +42,22 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
  * the composer), `--chat-inset-end` (room an overlay panel claims on the end edge).
  */
 export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps) {
+  const [regions] = useState(createChatShellRegions);
+
   return (
     <MessageScrollerProvider {...scroller}>
-      <div
-        data-slot="chat-shell"
-        className={cn(
-          '@container relative isolate flex min-h-0 min-w-0 flex-col',
-          '[--chat-column:48rem] [--chat-edge:0.5rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-background)] [--chat-veil:100%]',
-          className,
-        )}
-        {...props}
-      />
+      <ChatShellRegionsContext.Provider value={regions}>
+        <div
+          data-slot="chat-shell"
+          className={cn(
+            '@container relative isolate flex min-h-0 min-w-0 flex-col',
+            '[--chat-column:48rem] [--chat-edge:0.5rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
+            '[--chat-surface:var(--color-background)] [--chat-veil:100%]',
+            className,
+          )}
+          {...props}
+        />
+      </ChatShellRegionsContext.Provider>
     </MessageScrollerProvider>
   );
 }
@@ -109,6 +121,12 @@ export function ChatShellColumn({ className, ...props }: ComponentProps<'div'>) 
   );
 }
 
+/** The conversation's reading column. Positioned, so overlays such as `TranscriptAnnotations` travel with the text. */
+export function ChatShellTranscript({ className, ref, ...props }: ComponentProps<'div'>) {
+  const { transcriptRef } = useChatShellRegions();
+  return <ChatShellColumn ref={mergeRefs(transcriptRef, ref)} className={cn('relative', className)} {...props} />;
+}
+
 export interface ChatShellTurnProps extends ComponentPropsWithoutRef<'div'> {
   /** Opened by a user message: the turn reserves room and releases it through a slow drift. */
   opensTurn?: boolean;
@@ -153,19 +171,26 @@ export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...pr
  * Behind it, one sheet of the page masked in over `--chat-fade` of air, reaching
  * `--chat-veil` at the dock's top edge. The transcript fades out above the
  * composer and nothing shows through around or under the card.
+ *
+ * Its `ComposerInput` is the conversation's composer, the one
+ * `TranscriptAnnotations` focuses.
  */
 export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+  const { composerInputRef } = useChatShellRegions();
+
   return (
-    <div
-      data-slot="chat-shell-dock"
-      className={cn(
-        'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
-        'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
-        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
-        className,
-      )}
-      {...props}
-    />
+    <ChatShellComposerInputContext.Provider value={composerInputRef}>
+      <div
+        data-slot="chat-shell-dock"
+        className={cn(
+          'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
+          'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
+          'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
+          className,
+        )}
+        {...props}
+      />
+    </ChatShellComposerInputContext.Provider>
   );
 }
 

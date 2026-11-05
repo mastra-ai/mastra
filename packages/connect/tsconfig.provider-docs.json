@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "scripts/generate-provider-docs.ts",
+    "scripts/provider-docs-lib.ts",
+    "scripts/provider-docs-metadata.ts",
+    "src/__tests__/provider-docs.test.ts"
+  ],
+  "exclude": ["node_modules"]
+}
