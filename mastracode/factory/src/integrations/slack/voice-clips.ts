@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { tenantOrgId } from '../../routes/provider-credentials.js';
 import type { ModelCredentialsStorage } from '../../storage/domains/credentials/base.js';
 import type { VoiceSettingsStorage } from '../../storage/domains/voice-settings/base.js';
-import type { STTSelection, VoiceFactory } from '../../voice/transcription.js';
+import type { STTChoice, STTSelection, VoiceFactory } from '../../voice/transcription.js';
 import {
   chooseSTTModel,
   MAX_TRANSCRIBE_AUDIO_BYTES,
@@ -18,6 +18,11 @@ import {
 
 type HandlerMessage = Parameters<ChannelHandler>[1];
 type HandlerAttachment = HandlerMessage['attachments'][number];
+
+/** Download plus provider call, per clip. The provider call isn't cancelled; a late result is dropped. */
+export const VOICE_CLIP_TIMEOUT_MS = 60_000;
+
+type ClipOutcome = { transcript: string } | { problem: string };
 
 export interface VoiceClipDeps {
   modelCredentials?: ModelCredentialsStorage;
@@ -78,7 +83,7 @@ async function transcribeClip(
   selection: STTSelection,
   fetchData: () => Promise<Buffer | ArrayBuffer>,
   mimeType: string,
-): Promise<{ transcript: string } | { problem: string }> {
+): Promise<ClipOutcome> {
   const data = await fetchData().catch((error: unknown) => {
     console.warn('[slack] voice clip download failed', { error });
     return undefined;
@@ -88,6 +93,21 @@ async function transcribeClip(
   if (audio.byteLength > MAX_TRANSCRIBE_AUDIO_BYTES) return { problem: 'the clip is too long' };
   const transcript = await transcribeAudio(selection, audio, mimeType);
   return transcript ? { transcript } : { problem: 'no speech was detected in the clip' };
+}
+
+async function withinTimeout(work: Promise<ClipOutcome>): Promise<ClipOutcome> {
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<ClipOutcome>(resolve => {
+    timer = setTimeout(
+      () => resolve({ problem: `transcription timed out after ${VOICE_CLIP_TIMEOUT_MS / 1000} seconds` }),
+      VOICE_CLIP_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([work, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function transcribeVoiceClips(
@@ -105,11 +125,19 @@ export async function transcribeVoiceClips(
     return;
   }
 
+  // Routing failures stay fatal: the message must not run under the wrong Factory.
+  const factory = await runFactory?.();
   const orgId = tenantOrgId(sender);
-  const records = await deps.modelCredentials.listCredentials(orgId, sender.userId);
-  const policy = voicePolicy(tenantVoiceCaller(records, orgId, sender.userId), await runFactory?.());
-  const saved = deps.voiceSettings ? await savedSTTModel(deps.voiceSettings, policy.settingsKey) : undefined;
-  const choice = chooseSTTModel(policy, saved);
+  let choice: STTChoice;
+  try {
+    const records = await deps.modelCredentials.listCredentials(orgId, sender.userId);
+    const policy = voicePolicy(tenantVoiceCaller(records, orgId, sender.userId), factory);
+    const saved = deps.voiceSettings ? await savedSTTModel(deps.voiceSettings, policy.settingsKey) : undefined;
+    choice = chooseSTTModel(policy, saved);
+  } catch (error) {
+    console.warn('[slack] voice clip settings lookup failed', { error });
+    choice = { error: 'speech-to-text settings could not be loaded, try again shortly' };
+  }
   if ('error' in choice) {
     for (const { message, clip } of clips) note(message, clip, choice.error);
     return;
@@ -125,7 +153,7 @@ export async function transcribeVoiceClips(
       continue;
     }
     try {
-      const outcome = await transcribeClip(choice, clip.fetchData, clip.mimeType ?? 'audio/mp4');
+      const outcome = await withinTimeout(transcribeClip(choice, clip.fetchData, clip.mimeType ?? 'audio/mp4'));
       if ('transcript' in outcome) replaceWithTranscript(message, clip, outcome.transcript);
       else note(message, clip, outcome.problem);
     } catch (error) {

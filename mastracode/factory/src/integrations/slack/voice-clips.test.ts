@@ -2,11 +2,11 @@ import type { ChannelHandler } from '@mastra/core/channels';
 import { stringifyMarkdown } from 'chat';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { transcribeVoiceClips } from './voice-clips.js';
+import { transcribeVoiceClips, VOICE_CLIP_TIMEOUT_MS } from './voice-clips.js';
 
 type Message = Parameters<ChannelHandler>[1];
 type Attachment = Message['attachments'][number];
@@ -189,6 +189,30 @@ describe('transcribeVoiceClips', () => {
     expect(calls.mistral).toEqual([]);
   });
 
+  it('keeps the clip with a note when the key lookup fails, so the message still dispatches', async () => {
+    const seed = await createFactoryStorageForTests();
+    vi.spyOn(seed.credentials, 'listCredentials').mockRejectedValueOnce(new Error('connection reset'));
+    const clip = voiceClip();
+    const msg = message('m1', [clip]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(msg.attachments).toEqual([clip]);
+    expect(agentReads(msg)).toMatch(/not transcribed: speech-to-text settings could not be loaded/);
+    expect(agentReads(msg)).not.toContain('connection reset');
+  });
+
+  it('lets a Factory routing failure propagate instead of guessing a Factory', async () => {
+    const seed = await createFactoryStorageForTests();
+    const msg = message('m1', [voiceClip()]);
+
+    await expect(
+      transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials }, async () => {
+        throw new Error('ambiguous Factory binding');
+      }),
+    ).rejects.toThrow('ambiguous Factory binding');
+  });
+
   it('notes an unlinked sender instead of using anyone else’s key', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1' }, 'mistral', { type: 'api_key', key: 'sk-org' });
@@ -257,9 +281,39 @@ describe('transcribeVoiceClips', () => {
     expect(agentReads(msg)).toMatch(/"huge\.m4a".*too long/);
   });
 
+  it('gives up on a clip whose download never finishes and says it timed out', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const download = Promise.withResolvers<void>();
+    const clip = voiceClip({
+      fetchData: () => {
+        download.resolve();
+        return new Promise<Buffer>(() => {});
+      },
+    });
+    const msg = message('m1', [clip]);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const done = transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+      await download.promise;
+      await vi.advanceTimersByTimeAsync(VOICE_CLIP_TIMEOUT_MS);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(msg.attachments).toEqual([clip]);
+    expect(agentReads(msg)).toBe(
+      'Voice clip "audio_message.m4a" not transcribed: transcription timed out after 60 seconds',
+    );
+    expect(calls.mistral).toEqual([]);
+  });
+
   it('keeps the provider response out of the note', async () => {
     server.use(
-      http.post(MISTRAL_URL, () => HttpResponse.json({ message: 'boom', account: 'acct-internal-42' }, { status: 500 })),
+      http.post(MISTRAL_URL, () =>
+        HttpResponse.json({ message: 'boom', account: 'acct-internal-42' }, { status: 500 }),
+      ),
     );
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
