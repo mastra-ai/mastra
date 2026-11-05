@@ -81,6 +81,15 @@ function storedJson<T>(state: T): T {
   return JSON.parse(JSON.stringify(state));
 }
 
+/**
+ * A storage v2 run's header as stored. Its request context is kept as JSON, like the SQL stores
+ * keep it: request contexts can hold live objects (a chat thread referencing this store, say), which
+ * every later write and read would otherwise copy.
+ */
+function storedRunHeader({ requestContext, ...header }: WorkflowRunHeader): WorkflowRunHeader {
+  return { ...cloneRunData(header), ...(requestContext && { requestContext: storedJson(requestContext) }) };
+}
+
 function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknown {
   if (value === null || typeof value !== 'object') return value;
   const cached = seen.get(value as object);
@@ -829,11 +838,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       run_id: runId,
       resourceId: resourceId ?? existing?.resourceId,
       header: header
-        ? cloneRunData(header)
+        ? storedRunHeader(header)
         : {
             ...existing!.header,
             ...(requestContext && {
-              requestContext: { ...existing!.header.requestContext, ...cloneRunData(requestContext) },
+              requestContext: { ...existing!.header.requestContext, ...storedJson(requestContext) },
             }),
           },
       lastSeq: seq,

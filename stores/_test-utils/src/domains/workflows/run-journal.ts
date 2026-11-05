@@ -435,6 +435,50 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await loadRun(id)).toMatchObject({ header: { activePaths: [0] }, steps: { a: ok({ list: [1] }) } });
       });
 
+      it('stores requestContext as JSON, keeping the JSON form of live values', async () => {
+        // A request context can hold live objects, like a chat thread that references a store.
+        class Live {
+          readonly store: { rows: Map<number, string> };
+          constructor(readonly name: string) {
+            this.store = { rows: new Map([[1, name]]) };
+          }
+          toJSON() {
+            return { live: this.name };
+          }
+        }
+        const id = runId();
+        const run = { workflowName, runId: id };
+        const live = new Live('header');
+        await store.writeWorkflowRunCheckpoint({
+          ...run,
+          header: makeHeader(id, { requestContext: { a: 1, live } }),
+          steps: {},
+          state: {},
+        });
+        await store.appendWorkflowRunEntries({
+          ...run,
+          steps: { a: ok(1) },
+          requestContext: { appended: new Live('a') },
+        });
+        await store.mergeWorkflowRunStepResult({
+          ...run,
+          stepId: 'b',
+          result: ok(2),
+          requestContext: { merged: new Live('b'), at: new Date(5) },
+        });
+        live.store.rows.set(2, 'later');
+
+        const requestContext = {
+          a: 1,
+          live: { live: 'header' },
+          appended: { live: 'a' },
+          merged: { live: 'b' },
+          at: new Date(5).toISOString(),
+        };
+        expect((await store.loadWorkflowRunHeader(run))!.header.requestContext).toEqual(requestContext);
+        expect((await loadRun(id))!.header.requestContext).toEqual(requestContext);
+      });
+
       it('keeps createdAt and resourceId when later writes omit resourceId', async () => {
         const id = runId();
         await checkpoint(id, makeSnapshot(id), { resourceId: 'res' });
