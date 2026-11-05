@@ -80,9 +80,9 @@ function initialDraft(server: McpServerInfo | undefined): Draft {
   };
 }
 
-function originOf(url: string): string | null {
+function parsedUrl(url: string): URL | null {
   try {
-    return new URL(url).origin;
+    return new URL(url);
   } catch {
     return null;
   }
@@ -184,8 +184,11 @@ export function McpServerDrawer({
   const saving = createMutation.isPending || updateMutation.isPending;
   const update = (patch: Partial<Draft>) => setDraft(current => ({ ...current, ...patch }));
 
-  const draftOrigin = originOf(draft.url.trim());
-  const originChanged = server !== undefined && draftOrigin !== null && draftOrigin !== originOf(server.url);
+  const draftUrl = parsedUrl(draft.url.trim());
+  const originChanged = server !== undefined && draftUrl !== null && draftUrl.origin !== parsedUrl(server.url)?.origin;
+  // OAuth tokens are issued for one exact server URL, so any change signs the server out.
+  const signsOut =
+    server?.authType === 'oauth' && draft.auth === 'oauth' && draftUrl !== null && draftUrl.href !== server.url;
   const savedHeaders =
     server?.authType === 'headers' && draft.auth === savedAuth(server) && !draft.replaceHeaders
       ? server.headerNames
@@ -262,11 +265,15 @@ export function McpServerDrawer({
               />
               <FieldDescription>Every member can see this address. Put keys in headers, not the URL.</FieldDescription>
             </Field>
-            {originChanged && (
+            {originChanged ? (
               <Notice variant="warning">
                 Changing the server address removes its saved credentials, sign-in, and tools. Enter the credentials
                 again.
               </Notice>
+            ) : (
+              signsOut && (
+                <Notice variant="warning">Changing the server URL signs it out. Sign in again after saving.</Notice>
+              )
             )}
             <div className="flex flex-col gap-1.5">
               <Txt as="span" variant="label" aria-hidden>

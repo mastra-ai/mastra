@@ -419,6 +419,20 @@ describe('McpServersSection', () => {
       expect(screen.getByText(/removes its saved credentials, sign-in, and tools/)).toBeInTheDocument();
     });
 
+    it('warns that changing the URL of an OAuth server signs it out', async () => {
+      mockMcpServersApi();
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(within(await row('CRM')).getByRole('button', { name: 'Edit' }));
+      const url = screen.getByRole('textbox', { name: 'Server URL' });
+      expect(screen.queryByText(/signs it out/)).not.toBeInTheDocument();
+      await user.clear(url);
+      await user.type(url, 'https://crm.example.com/v2/mcp');
+      expect(screen.getByText('Changing the server URL signs it out. Sign in again after saving.')).toBeInTheDocument();
+      expect(screen.queryByText(/removes its saved credentials/)).not.toBeInTheDocument();
+    });
+
     it('removes a server only after the admin confirms', async () => {
       const api = mockMcpServersApi();
       const user = userEvent.setup();

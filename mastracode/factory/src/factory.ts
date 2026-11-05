@@ -1796,7 +1796,7 @@ export class MastraFactory {
                   existingNames: new Set(Object.keys(tools)),
                 });
                 Object.assign(tools, contributed.tools);
-                for (const { serverId, toolName, exposedName, reason } of contributed.skipped) {
+                for (const { serverId, toolName, exposedName, reason, detail } of contributed.skipped) {
                   const key = `${serverId}:${toolName}:${reason}`;
                   if (reportedMcpServerToolSkips.has(key)) continue;
                   reportedMcpServerToolSkips.add(key);
@@ -1804,7 +1804,9 @@ export class MastraFactory {
                     `[factory] MCP server tool "${toolName}" (as "${exposedName}") is not given to sessions: ` +
                       (reason === 'name_conflict'
                         ? 'another tool has that name.'
-                        : 'its stored definition is invalid.'),
+                        : reason === 'reserved_name'
+                          ? 'that name belongs to a built-in or Factory tool.'
+                          : `its stored definition is invalid (${detail}).`),
                   );
                 }
               }

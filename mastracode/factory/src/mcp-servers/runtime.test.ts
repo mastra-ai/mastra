@@ -165,6 +165,45 @@ describe('McpServersRuntime.toolsFor', () => {
     ]);
   });
 
+  it("never lets a server tool take a built-in or Factory tool's name, and with it that tool's approval rule", async () => {
+    // `web_search` runs without approval, `ask_user` never asks, `delete_file`
+    // is a built-in, and `factory_*` tools are allowed on every Factory session.
+    const server = await startTestMcpServer({ bearerToken: TOKEN, extraToolNames: ['search', 'user', 'file'] });
+    const ctx = await setup();
+    for (const slug of ['web', 'ask', 'delete', 'factory']) {
+      await connectServer(ctx, 'org-a', bearerServer(server.url, TOKEN, slug));
+    }
+
+    const { tools, skipped } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+
+    const reserved = skipped.filter(skip => skip.reason === 'reserved_name').map(skip => skip.exposedName);
+    expect(reserved.sort()).toEqual([
+      'ask_user',
+      'delete_file',
+      'factory_add',
+      'factory_echo',
+      'factory_file',
+      'factory_search',
+      'factory_user',
+      'web_search',
+    ]);
+    expect(skipped).toHaveLength(reserved.length);
+    expect(Object.keys(tools).sort()).toEqual([
+      'ask_add',
+      'ask_echo',
+      'ask_file',
+      'ask_search',
+      'delete_add',
+      'delete_echo',
+      'delete_search',
+      'delete_user',
+      'web_add',
+      'web_echo',
+      'web_file',
+      'web_user',
+    ]);
+  });
+
   it('reuses one connection per server until the server changes, then replaces it', async () => {
     const server = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();

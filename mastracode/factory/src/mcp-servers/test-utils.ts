@@ -11,7 +11,7 @@ import { onTestFinished } from 'vitest';
 import { z } from 'zod';
 
 export interface TestMcpServerCall {
-  tool: 'echo' | 'add';
+  tool: string;
   args: unknown;
 }
 
@@ -28,7 +28,8 @@ export interface TestMcpServer {
 
 /**
  * Starts a real `@mastra/mcp` server over Streamable HTTP on `127.0.0.1:0` with
- * `echo` and `add` tools. With `bearerToken`, requests without
+ * `echo` and `add` tools, plus an echo-like tool for each of `extraToolNames`.
+ * With `bearerToken`, requests without
  * `Authorization: Bearer <token>` get a 401. With `authorizationServer`, the
  * server is an OAuth protected resource (RFC 9728) that accepts the access
  * tokens that authorization server issued. Closed when the test finishes.
@@ -36,7 +37,12 @@ export interface TestMcpServer {
 export async function startTestMcpServer({
   bearerToken,
   authorizationServer,
-}: { bearerToken?: string; authorizationServer?: TestAuthorizationServer } = {}): Promise<TestMcpServer> {
+  extraToolNames = [],
+}: {
+  bearerToken?: string;
+  authorizationServer?: TestAuthorizationServer;
+  extraToolNames?: string[];
+} = {}): Promise<TestMcpServer> {
   const calls: TestMcpServerCall[] = [];
   const methods: string[] = [];
   const mcp = new MCPServer({
@@ -62,6 +68,20 @@ export async function startTestMcpServer({
           return { sum: a + b };
         },
       }),
+      ...Object.fromEntries(
+        extraToolNames.map(name => [
+          name,
+          createTool({
+            id: name,
+            description: `Echo text back as ${name}.`,
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => {
+              calls.push({ tool: name, args: { text } });
+              return { text };
+            },
+          }),
+        ]),
+      ),
     },
   });
 
@@ -120,6 +140,11 @@ export interface TestAuthorizationServer {
   responseIssuer: string;
   /** Deny the next authorizations with `error=access_denied`. */
   deny: boolean;
+  /**
+   * Fail every token request, echoing the request (tokens, verifier, secret)
+   * back: as a plain-text 500, or as an `invalid_request` description.
+   */
+  echoTokenRequests: false | 'text' | 'oauth';
   /** Access tokens the protected MCP server accepts. */
   validTokens: Set<string>;
   /** Refresh tokens the token endpoint accepts. */
@@ -202,6 +227,12 @@ export async function startTestAuthorizationServer(): Promise<TestAuthorizationS
     }
     if (url.pathname === '/token' && req.method === 'POST') {
       const form = await readForm(req);
+      if (server.echoTokenRequests === 'text') {
+        return res.writeHead(500, { 'content-type': 'text/plain' }).end(`upstream rejected ${form.toString()}`);
+      }
+      if (server.echoTokenRequests === 'oauth') {
+        return send(res, 400, { error: 'invalid_request', error_description: `rejected ${form.toString()}` });
+      }
       const basic = req.headers.authorization?.startsWith('Basic ')
         ? Buffer.from(req.headers.authorization.slice(6), 'base64').toString('utf8').split(':').map(decodeURIComponent)
         : undefined;
@@ -246,6 +277,7 @@ export async function startTestAuthorizationServer(): Promise<TestAuthorizationS
     preregister: ({ clientId, ...client }) => void clients.set(clientId, client),
     responseIssuer: issuer,
     deny: false,
+    echoTokenRequests: false,
     validTokens: new Set(),
     refreshTokens: new Set(),
     authorizeClientIds: [],

@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
+import { getToolCategory } from '@mastra/code-sdk/permissions';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { Tool } from '@mastra/core/tools';
 import { MCPClient, UnauthorizedError } from '@mastra/mcp';
 import type { MastraMCPServerDefinition, MCPDiscoveryErrorDetails, SerializableMCPToolDefinition } from '@mastra/mcp';
 
 import type { McpServerAuthType, McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
-import { safeErrorText } from './errors.js';
+import { safeErrorText, describeOAuthErrorCode, findOAuthFailure } from './errors.js';
 import { createMcpOAuthProvider } from './oauth.js';
 import type { McpOAuthEndpoints } from './oauth.js';
 import { MCP_SERVER_LIMITS } from './schemas.js';
@@ -29,7 +31,21 @@ export interface SkippedMcpServerTool {
   serverId: string;
   toolName: string;
   exposedName: string;
-  reason: 'name_conflict' | 'invalid_definition';
+  reason: 'name_conflict' | 'reserved_name' | 'invalid_definition';
+  /** Why the definition is invalid; contains no secrets. */
+  detail?: string;
+}
+
+const BUILT_IN_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(MC_TOOLS));
+
+/**
+ * Names an MCP tool must never take, even when no tool has them this turn:
+ * approval is decided by tool name, so taking a built-in's name (`web_search`,
+ * `ask_user`) would also take its approval rule, and `factory_*` names are
+ * allowed without approval on every Factory session.
+ */
+function isReservedToolName(name: string): boolean {
+  return getToolCategory(name) !== 'mcp' || BUILT_IN_TOOL_NAMES.has(name) || name.startsWith('factory_');
 }
 
 interface CachedClient {
@@ -123,8 +139,9 @@ export class McpServersRuntime {
 
   /**
    * The selected tools of the organization's connected servers, keyed by
-   * their exposed names. Tools whose name is already taken are skipped, never
-   * thrown, so one misconfigured server cannot break a session.
+   * their exposed names. Tools whose name is already taken or reserved are
+   * skipped and reported, never thrown, so one misconfigured server cannot
+   * break a session.
    */
   async toolsFor({
     orgId,
@@ -146,12 +163,15 @@ export class McpServersRuntime {
       for (const toolName of record.selectedTools) {
         const entry = record.toolCatalog[toolName];
         if (!entry) continue;
-        const skip = (reason: SkippedMcpServerTool['reason'], detail: string) => {
-          skipped.push({ serverId: record.id, toolName, exposedName: entry.exposedName, reason });
-          console.warn(`[factory] skipping MCP tool "${entry.exposedName}" from server "${record.slug}": ${detail}`);
+        const skip = (reason: SkippedMcpServerTool['reason'], detail?: string) => {
+          skipped.push({ serverId: record.id, toolName, exposedName: entry.exposedName, reason, detail });
         };
+        if (isReservedToolName(entry.exposedName)) {
+          skip('reserved_name');
+          continue;
+        }
         if (taken.has(entry.exposedName)) {
-          skip('name_conflict', 'another tool already uses this name');
+          skip('name_conflict');
           continue;
         }
         try {
@@ -198,7 +218,8 @@ export class McpServersRuntime {
       try {
         return await execute(input, context);
       } catch (error) {
-        if (isUnauthorized(error)) {
+        const oauth = findOAuthFailure(error);
+        if (isUnauthorized(error) || oauth?.signInAgain) {
           await this.#storage
             .setStatus({
               orgId: record.orgId,
@@ -210,6 +231,8 @@ export class McpServersRuntime {
             .catch(() => undefined);
           this.invalidate(record.id);
         }
+        // The authorization server's own text can echo tokens; keep it out of the session.
+        if (oauth) throw new Error(`MCP server "${record.name}" sign-in failed: ${oauth.message}`);
         throw error;
       }
     };
@@ -243,6 +266,10 @@ function classifyFailure(
   policyError: McpServerNetworkPolicyError | undefined,
 ): Exclude<McpServerDiscoveryResult, { status: 'connected' }> {
   if (policyError) return { status: 'error', error: policyError.message };
+
+  // OAuth error codes are lowercase (`invalid_grant`); MCP SDK and network codes are not.
+  const oauth = describeOAuthErrorCode(failure.code);
+  if (oauth) return { status: oauth.signInAgain ? 'needs_auth' : 'error', error: oauth.message };
 
   const message = failure.message;
   const code = typeof failure.code === 'string' ? failure.code.toUpperCase() : '';

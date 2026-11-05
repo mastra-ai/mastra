@@ -2,7 +2,7 @@ import { auth, MCPOAuthClientProvider } from '@mastra/mcp';
 import type { OAuthClientInformation, OAuthDiscoveryState } from '@mastra/mcp';
 
 import type { McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
-import { safeErrorText } from './errors.js';
+import { findOAuthFailure, safeErrorText } from './errors.js';
 import { McpServerNetworkPolicyError } from './url-policy.js';
 import type { GuardedFetch } from './url-policy.js';
 
@@ -216,5 +216,7 @@ function describeFailure(record: McpServerRecord, error: unknown): string {
   for (let cause = error, depth = 0; cause && depth < 8; cause = (cause as { cause?: unknown }).cause, depth++) {
     if (cause instanceof McpServerNetworkPolicyError) return cause.message;
   }
+  const oauth = findOAuthFailure(error);
+  if (oauth) return `Sign-in failed: ${oauth.message}`;
   return `Sign-in failed: ${safeErrorText(record, error instanceof Error ? error.message : String(error))}`;
 }

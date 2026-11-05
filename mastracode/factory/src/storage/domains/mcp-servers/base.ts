@@ -394,10 +394,11 @@ export class McpServersStorage extends FactoryStorageDomain {
   /**
    * Apply an edit. Stored credentials never follow a server to a new origin:
    * changing the URL's origin requires re-sending headers and the client
-   * secret, and clears OAuth tokens, pending sign-ins, the authorization-server
-   * hosts, the tool catalog, and the selection. Changing how the server
-   * authenticates resets its status so it is connected again before sessions
-   * use it.
+   * secret, and clears the tool catalog and the selection. Any URL change, or
+   * a change to how the server authenticates, resets its status so it is
+   * connected again before sessions use it; for an OAuth server it also
+   * clears tokens, pending sign-ins, and the authorization-server hosts,
+   * because tokens are issued for one exact server URL.
    */
   async update({
     orgId,
@@ -414,6 +415,7 @@ export class McpServersStorage extends FactoryStorageDomain {
       ops.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, async current => {
         const url = input.url ?? current.url;
         const authType = input.authType ?? current.auth_type;
+        const urlChanged = url !== current.url;
         const originChanged = new URL(url).origin !== new URL(current.url).origin;
 
         let headers = current.headers;
@@ -448,16 +450,15 @@ export class McpServersStorage extends FactoryStorageDomain {
           }
         }
 
-        // OAuth tokens belong to one client at one origin.
+        // OAuth tokens belong to one client and one server URL.
         const clearsOAuth =
-          current.auth_type === 'oauth' &&
-          (originChanged || authType !== 'oauth' || clientId !== current.oauth_client_id);
+          current.auth_type === 'oauth' && (urlChanged || authType !== 'oauth' || clientId !== current.oauth_client_id);
         if (clearsOAuth) {
           await ops.deleteMany('mcp_server_oauth', { server_id: current.id });
           await ops.deleteMany('mcp_server_oauth_flows', { server_id: current.id });
         }
 
-        const reconnect = originChanged || authType !== current.auth_type || input.headers !== undefined || clearsOAuth;
+        const reconnect = urlChanged || authType !== current.auth_type || input.headers !== undefined || clearsOAuth;
         return {
           name: input.name ?? current.name,
           url,

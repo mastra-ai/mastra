@@ -53,6 +53,7 @@ describe('parseMcpServerUrl', () => {
     ['https://[fe80::1]/mcp', strict],
     ['https://[::ffff:127.0.0.1]/mcp', strict],
     ['https://[::ffff:169.254.169.254]/mcp', strict],
+    ['https://[64:ff9b::a9fe:a9fe]/latest/meta-data', strict], // NAT64 for 169.254.169.254
   ])('rejects %s', (raw, options) => {
     expect(() => parseMcpServerUrl(raw, options)).toThrow(McpServerUrlError);
   });
@@ -69,24 +70,48 @@ describe('isPrivateAddress', () => {
     address => expect(isPrivateAddress(address)).toBe(true),
   );
 
-  it.each(['8.8.8.8', '1.1.1.1', '100.128.0.1', '172.32.0.1', '2606:4700:4700::1111', '::ffff:8.8.8.8'])(
-    'treats %s as public',
-    address => expect(isPrivateAddress(address)).toBe(false),
-  );
+  // IPv6 addresses that reach a private IPv4 address: NAT64, 6to4, local-use NAT64, and Teredo.
+  it.each([
+    '64:ff9b::a9fe:a9fe',
+    '64:ff9b::127.0.0.1',
+    '64:FF9B:0:0:0:0:0a00:0001',
+    '2002:a9fe:a9fe::1',
+    '2002:c0a8:101::',
+    '64:ff9b:1::808:808',
+    '2001:0:4136:e378:8000:63bf:3fff:fdd2',
+  ])('treats %s as private', address => expect(isPrivateAddress(address)).toBe(true));
+
+  it.each([
+    '8.8.8.8',
+    '1.1.1.1',
+    '100.128.0.1',
+    '172.32.0.1',
+    '2606:4700:4700::1111',
+    '::ffff:8.8.8.8',
+    '64:ff9b::808:808',
+    '2002:808:808::1',
+    '2001:db8::1',
+  ])('treats %s as public', address => expect(isPrivateAddress(address)).toBe(false));
 });
 
 describe('createGuardedFetch', () => {
-  async function startServer() {
+  async function startServer({ redirectTo }: { redirectTo?: string } = {}) {
     let requests = 0;
-    const server = createServer((_req, res) => {
+    const apiKeys: string[] = [];
+    const server = createServer((req, res) => {
       requests++;
+      if (typeof req.headers['x-api-key'] === 'string') apiKeys.push(req.headers['x-api-key']);
+      if (redirectTo) {
+        res.writeHead(307, { location: redirectTo }).end();
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('mcp-ok');
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     onTestFinished(() => new Promise<void>(resolve => server.close(() => resolve())));
     const { port } = server.address() as AddressInfo;
-    return { port, requests: () => requests };
+    return { port, requests: () => requests, apiKeys };
   }
 
   it('refuses requests to loopback servers before they are sent when private networks are not allowed', async () => {
@@ -107,5 +132,27 @@ describe('createGuardedFetch', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('mcp-ok');
     expect(server.requests()).toBe(1);
+  });
+
+  it('refuses plain http to anything but loopback even when private networks are allowed', async () => {
+    await expect(createGuardedFetch(local)('http://192.0.2.1/mcp')).rejects.toThrow(/do not use https/);
+  });
+
+  it('never follows a redirect, so saved headers cannot reach a host nobody checked', async () => {
+    const elsewhere = await startServer();
+    const server = await startServer({ redirectTo: `http://localhost:${elsewhere.port}/collect` });
+    const guarded = createGuardedFetch(local);
+    const init = { method: 'POST', headers: { 'X-Api-Key': 'saved-key-61c2' }, body: '{}' };
+
+    await expect(guarded(`http://127.0.0.1:${server.port}/mcp`, init)).rejects.toThrow(
+      /redirect, which is not followed/,
+    );
+    // A caller handling redirects itself gets the redirect back to check the next hop.
+    const response = await guarded(`http://127.0.0.1:${server.port}/mcp`, { ...init, redirect: 'manual' });
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(`http://localhost:${elsewhere.port}/collect`);
+
+    expect(server.apiKeys).toEqual(['saved-key-61c2', 'saved-key-61c2']);
+    expect(elsewhere.requests()).toBe(0);
   });
 });

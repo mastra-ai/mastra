@@ -137,13 +137,13 @@ describe('McpServersStorage', () => {
       orgId: 'org-a',
       id: server.id,
       userId: 'other-admin',
-      input: { name: 'Docs search', url: 'https://mcp.example.com/v2/mcp' },
+      input: { name: 'Docs search' },
     });
 
     expect(renamed).toMatchObject({
       name: 'Docs search',
       slug: 'docs',
-      url: 'https://mcp.example.com/v2/mcp',
+      url: headersServer.url,
       headers: { Authorization: BEARER },
       selectedTools: ['search'],
       status: 'connected',
@@ -181,6 +181,53 @@ describe('McpServersStorage', () => {
       status: 'unknown',
       discoveredAt: null,
     });
+  });
+
+  it('makes a server connect again, keeping its headers, when only the URL path changes', async () => {
+    const { mcpServers } = await createFactoryStorageForTests();
+    const headers = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
+    await mcpServers.saveDiscovery({ orgId: 'org-a', id: headers.id, ifUrl: headers.url, tools: [tool('search')] });
+
+    // A gateway serving several MCP servers: the path picks a different one.
+    const moved = await mcpServers.update({
+      orgId: 'org-a',
+      id: headers.id,
+      userId: 'admin',
+      input: { url: 'https://mcp.example.com/crm/mcp' },
+    });
+    // Sessions get no tools from it until it is connected again; rediscovery
+    // keeps only selected tools the new endpoint still offers.
+    expect(moved).toMatchObject({
+      url: 'https://mcp.example.com/crm/mcp',
+      headers: { Authorization: BEARER },
+      status: 'unknown',
+      selectedTools: ['search'],
+    });
+
+    const oauth = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
+    await mcpServers.oauthStorage(oauth.id).set('tokens', '{"access_token":"t"}');
+    await mcpServers.saveDiscovery({ orgId: 'org-a', id: oauth.id, ifUrl: oauth.url, tools: [tool('issues')] });
+    await mcpServers.setAuthorizationServerHosts({
+      orgId: 'org-a',
+      id: oauth.id,
+      ifUrl: oauth.url,
+      hosts: ['auth.example.com'],
+    });
+
+    const repathed = await mcpServers.update({
+      orgId: 'org-a',
+      id: oauth.id,
+      userId: 'admin',
+      input: { url: 'https://tracker.example.com/v2/mcp' },
+    });
+    // Tokens are issued for one exact server URL: sign in again.
+    expect(repathed).toMatchObject({
+      status: 'unknown',
+      oauthClientSecret: CLIENT_SECRET,
+      authorizationServerHosts: [],
+    });
+    expect(await mcpServers.oauthStorage(oauth.id).get('tokens')).toBeUndefined();
+    expect(await mcpServers.hasOAuthTokens(oauth.id)).toBe(false);
   });
 
   it('clears OAuth tokens and requires the client secret again when the origin changes', async () => {

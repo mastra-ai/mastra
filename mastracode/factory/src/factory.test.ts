@@ -1773,7 +1773,7 @@ describe('MastraFactory.prepare', () => {
         expect(crm.calls).toEqual([]);
       });
 
-      it('skips a server tool named like a tool the session already has', async () => {
+      it('skips a server tool named like a tool the session has or a built-in one, and says so once', async () => {
         const integrationEcho = { description: 'integration echo' };
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         onTestFinished(() => warn.mockRestore());
@@ -1782,15 +1782,25 @@ describe('MastraFactory.prepare', () => {
             fakeIntegration({ id: 'custom', agentTools: vi.fn(async () => ({ docs_echo: integrationEcho }) as never) }),
           ],
         });
-        const server = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        const server = await startTestMcpServer({ bearerToken: MCP_TOKEN, extraToolNames: ['search'] });
         await addServer(storage, { orgId: 'org-1', slug: 'docs', url: server.url });
+        // `web_search` is the built-in web search's name, which runs without approval.
+        await addServer(storage, { orgId: 'org-1', slug: 'web', url: server.url });
 
         const tools = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
         expect(tools.docs_echo).toBe(integrationEcho);
         expect(tools).toHaveProperty('docs_add');
+        expect(tools).toHaveProperty('web_echo');
+        expect(tools).not.toHaveProperty('web_search');
         await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
-        // Reported once, not every turn.
-        expect(warn.mock.calls.filter(call => String(call[0]).includes('"echo" (as "docs_echo")'))).toHaveLength(1);
+        // Reported once, not every turn, and only by the Factory.
+        const warnings = (name: string) => warn.mock.calls.filter(call => call.map(String).join(' ').includes(name));
+        expect(warnings('docs_echo').map(call => call[0])).toEqual([
+          '[factory] MCP server tool "echo" (as "docs_echo") is not given to sessions: another tool has that name.',
+        ]);
+        expect(warnings('web_search').map(call => call[0])).toEqual([
+          '[factory] MCP server tool "search" (as "web_search") is not given to sessions: that name belongs to a built-in or Factory tool.',
+        ]);
       });
 
       it("keeps a session's other tools when a server is down or the servers cannot be read", async () => {

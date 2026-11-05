@@ -53,6 +53,8 @@ for (const [network, prefix] of [
   ['fe80::', 10], // link-local
   ['fec0::', 10], // site-local (deprecated)
   ['ff00::', 8], // multicast
+  ['64:ff9b:1::', 48], // local-use NAT64
+  ['2001::', 32], // Teredo, which tunnels to an IPv4 address that cannot be checked
 ] as const) {
   PRIVATE_ADDRESSES.addSubnet(network, prefix, 'ipv6');
 }
@@ -78,9 +80,44 @@ function checkAddress(list: BlockList, address: string): boolean {
   return list.check(normalized, family === 4 ? 'ipv4' : 'ipv6');
 }
 
-/** True for loopback, private, link-local, CGNAT, multicast, reserved, and IPv4-mapped forms of those. */
+/** The eight 16-bit groups of a valid IPv6 address. */
+function ipv6Groups(address: string): number[] {
+  let text = address.toLowerCase();
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number) as [number, number, number, number];
+    text = `${text.slice(0, dotted.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const parse = (part: string | undefined) => (part ? part.split(':').map(group => parseInt(group, 16)) : []);
+  if (!text.includes('::')) return parse(text);
+  const [head, tail] = text.split('::');
+  const before = parse(head);
+  const after = parse(tail);
+  return [...before, ...Array<number>(8 - before.length - after.length).fill(0), ...after];
+}
+
+/** The IPv4 address that NAT64 (`64:ff9b::/96`) or 6to4 (`2002::/16`) routes an IPv6 address to. */
+function embeddedIPv4(address: string): string | null {
+  const groups = ipv6Groups(address);
+  const ipv4 = (high: number, low: number) => `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+  if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every(group => group === 0)) {
+    return ipv4(groups[6]!, groups[7]!);
+  }
+  if (groups[0] === 0x2002) return ipv4(groups[1]!, groups[2]!);
+  return null;
+}
+
+/**
+ * True for loopback, private, link-local, CGNAT, multicast, and reserved
+ * addresses, including the IPv6 forms that reach one of those IPv4 addresses
+ * (IPv4-mapped, NAT64, 6to4) and Teredo.
+ */
 export function isPrivateAddress(address: string): boolean {
-  return checkAddress(PRIVATE_ADDRESSES, address);
+  if (checkAddress(PRIVATE_ADDRESSES, address)) return true;
+  const normalized = normalizeAddress(address);
+  if (isIP(normalized) !== 6) return false;
+  const embedded = embeddedIPv4(normalized);
+  return embedded !== null && checkAddress(PRIVATE_ADDRESSES, embedded);
 }
 
 function hostnameOf(url: URL): string {
@@ -147,20 +184,22 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 export type GuardedFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 /**
- * `fetch` that refuses non-https requests and requests to private addresses
- * unless private networks are allowed. Redirects are never followed
- * automatically: callers that pass `redirect: 'manual'` (the `@mastra/mcp`
- * transport under `allowedHosts`) re-enter this guard for every hop, and any
- * other redirect fails instead of reaching an unchecked host.
+ * `fetch` that refuses non-https requests (plain http only for loopback when
+ * private networks are allowed) and requests to private addresses unless they
+ * are allowed. Redirects are never followed automatically, in either mode: a
+ * caller that passes `redirect: 'manual'` gets the redirect back and re-enters
+ * this guard for the next hop (the MCP SDK does this for every transport and
+ * OAuth request, following only same-origin hops), and for any other caller a
+ * redirect fails, so saved headers never reach a host nobody checked.
  */
 export function createGuardedFetch({ allowPrivateNetwork }: McpServerNetworkOptions): GuardedFetch {
-  if (allowPrivateNetwork) return (input, init) => fetch(input, init);
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : input);
-    if (url.protocol !== 'https:') {
+    const plainHttpAllowed = allowPrivateNetwork && url.protocol === 'http:' && isLoopbackHost(hostnameOf(url));
+    if (url.protocol !== 'https:' && !plainHttpAllowed) {
       throw new McpServerNetworkPolicyError(`Requests to "${url.host}" were blocked because they do not use https.`);
     }
-    await assertPublicHost(url);
+    if (!allowPrivateNetwork) await assertPublicHost(url);
     const response = await fetch(input, { ...init, redirect: 'manual' });
     if (init?.redirect !== 'manual' && REDIRECT_STATUSES.has(response.status)) {
       await response.body?.cancel().catch(() => undefined);

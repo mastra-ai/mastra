@@ -322,6 +322,26 @@ describe('MCP server OAuth sign-in', () => {
     expect(await getServer(ctx, server.id)).toMatchObject({ oauth: { connected: false } });
   });
 
+  it("keeps a failed code exchange's response, which can echo the PKCE verifier, out of the logs", async () => {
+    const ctx = await setup();
+    const server = await addOAuthServer(ctx, ctx.mcp);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    ctx.authorizationServer.echoTokenRequests = 'text';
+    expect(await deliverCallback(ctx, await authorize(await startSignIn(ctx, server.id)))).toBe(
+      `/factories/proj-1/settings/mcp-servers?mcpServer=${server.id}&oauth=error&reason=failed`,
+    );
+
+    const logged = [...warn.mock.calls, ...error.mock.calls].map(args => args.join(' ')).join('\n');
+    expect(logged).toContain(
+      'MCP server OAuth sign-in for "orders" failed: Sign-in failed: The authorization server failed or is busy. Try again later.',
+    );
+    expect(logged).not.toMatch(/code_verifier|upstream rejected/);
+    expect(logged).not.toContain(CLIENT_SECRET);
+    expect(await getServer(ctx, server.id)).toMatchObject({ oauth: { connected: false } });
+  });
+
   it('only lets admins start a sign-in, and only for OAuth servers that can identify the Factory', async () => {
     const ctx = await setup();
     const server = await addOAuthServer(ctx, ctx.mcp);
@@ -397,6 +417,34 @@ describe('MCP server OAuth tokens in sessions', () => {
       lastError: 'Sign in to connect this server.',
     });
     expect((await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools).toEqual({});
+  });
+
+  it("keeps a refused token refresh's description, which can echo the refresh token, out of sessions and statuses", async () => {
+    const ctx = await signedIn();
+    const [refreshToken] = ctx.authorizationServer.refreshTokens;
+    await revokeAccessTokens(ctx.authorizationServer);
+    ctx.authorizationServer.echoTokenRequests = 'oauth';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { tools } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    const failure = await tools.orders_echo!.execute!({ text: 'refused' }, {} as never).catch(
+      (error: unknown) => error,
+    );
+    expect((failure as Error).message).toBe(
+      'MCP server "Orders" sign-in failed: The authorization server rejected the request (invalid_request).',
+    );
+    expect(ctx.mcp.calls).toEqual([]);
+
+    const discover = await ctx.request(admin, 'POST', `/web/config/mcp-servers/${ctx.server.id}/discover`);
+    const { server } = (await discover.json()) as { server: McpServerInfo };
+    expect(server).toMatchObject({
+      status: 'error',
+      lastError: 'The authorization server rejected the request (invalid_request).',
+    });
+    expect(JSON.stringify(server)).not.toContain(refreshToken!);
+    const logged = [...warn.mock.calls, ...error.mock.calls].map(args => args.join(' ')).join('\n');
+    expect(logged).not.toContain(refreshToken!);
   });
 
   it('signs the server out for the whole organization', async () => {
