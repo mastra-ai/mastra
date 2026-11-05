@@ -188,6 +188,8 @@ describe('loginAction', () => {
       const hintIndex = tokenHintCallIndex();
       expect(hintIndex).toBeGreaterThanOrEqual(0);
       expect(warnSpy.mock.calls[hintIndex]![0]).toContain('mastra auth tokens create');
+      expect(warnSpy.mock.calls[hintIndex]![0]).toContain('MASTRA_ORG_ID');
+      expect(warnSpy.mock.calls[hintIndex]![0]).toContain('mastra auth login');
       expect(mockLogin).toHaveBeenCalled();
       expect(warnSpy.mock.invocationCallOrder[hintIndex]).toBeLessThan(mockLogin.mock.invocationCallOrder[0]!);
     });
@@ -230,7 +232,7 @@ describe('loginAction', () => {
       mockLogin.mockRejectedValueOnce(new LoginCancelledError());
       const { loginAction } = await import('./login.js');
 
-      await expect(loginAction()).rejects.toThrow(/MASTRA_API_TOKEN/);
+      await expect(loginAction()).rejects.toThrow(/MASTRA_API_TOKEN and MASTRA_ORG_ID/);
       expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('Login cancelled.'));
     });
 

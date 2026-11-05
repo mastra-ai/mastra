@@ -21,9 +21,10 @@ export async function loginAction() {
   if (!interactive) {
     console.warn(
       '\nNo interactive terminal detected, so browser sign-in may not finish here.\n' +
-        'For agents, CI, and other headless shells, use an API token instead:\n' +
-        '  1. In an interactive terminal, run: mastra auth tokens create <NAME>\n' +
-        '  2. Set the printed token as MASTRA_API_TOKEN in this environment.\n',
+        'To authenticate agents, CI, and other headless shells, either:\n' +
+        '  - Run `mastra auth login` in your own terminal. Later commands here reuse that session.\n' +
+        "  - Or create an API token (`mastra auth tokens create <NAME>` where you're signed in, or in the dashboard),\n" +
+        '    then set MASTRA_API_TOKEN and MASTRA_ORG_ID in this environment.\n',
     );
   }
   try {
@@ -32,7 +33,7 @@ export async function loginAction() {
     if (!(error instanceof LoginCancelledError)) throw error;
     if (!interactive) {
       throw new Error(
-        'Browser sign-in did not complete in a non-interactive terminal. Set MASTRA_API_TOKEN instead (create one in an interactive terminal with: mastra auth tokens create <NAME>).',
+        "Browser sign-in did not complete in a non-interactive terminal. Run `mastra auth login` in your own terminal, or set MASTRA_API_TOKEN and MASTRA_ORG_ID (create a token with `mastra auth tokens create <NAME>` where you're signed in, or in the dashboard).",
       );
     }
     console.info('\nLogin cancelled.\n');
