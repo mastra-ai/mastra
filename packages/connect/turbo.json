@@ -15,7 +15,7 @@
         "!**/*.spec.ts",
         "!**/__tests__/**"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/docs/**"]
     },
     "build": {
       "dependsOn": ["build:lib", "generate:provider-docs"],
