@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { WorkspaceChangePatches } from '../../../../../api/types';
+import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { useWorkspacePanel } from '../../context/useWorkspacePanel';
 import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
@@ -81,11 +83,37 @@ afterEach(() => {
 
 function renderPanel() {
   const changesRequests: Array<string | null> = [];
+  const session: FactoryUserSession = {
+    id: 'row-1',
+    sessionId: WORKSPACE,
+    projectRepositoryId: 'link-1',
+    orgId: 'org-1',
+    userId: 'user-1',
+    visibility: 'org',
+    branch: 'factory/issue-1',
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: null,
+    createdAt: '2026-10-15T00:00:00.000Z',
+    updatedAt: '2026-10-15T00:00:00.000Z',
+  };
   server.use(
+    http.get(`${TEST_BASE_URL}/web/user-sessions/${WORKSPACE}`, () => HttpResponse.json({ session })),
     http.get(CHANGES_URL, ({ request }) => {
       changesRequests.push(new URL(request.url).searchParams.get('workspacePath'));
       return HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] });
     }),
+    http.get(`${CHANGES_URL}/patches`, () =>
+      HttpResponse.json<WorkspaceChangePatches>({
+        workspacePath: WORKSPACE,
+        available: true,
+        scope: 'branch',
+        changes: [],
+        patches: {},
+        omittedPatches: {},
+      }),
+    ),
   );
 
   const { client } = renderWithProviders(
@@ -137,7 +165,6 @@ describe('WorkspaceFiles on a user session route', () => {
         HttpResponse.json({ workspacePath: sessionId, available: true, additions: 0, deletions: 0, changes: [] }),
       ),
     );
-    const user = userEvent.setup();
     renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/factory-1/user/threads/${sessionId}`]}>
         <Routes>
@@ -154,31 +181,28 @@ describe('WorkspaceFiles on a user session route', () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole('button', { name: 'Workspace files' }));
-
     expect(await screen.findByRole('button', { name: /Recreate sandbox/ })).toBeInTheDocument();
   });
 });
 
 describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
-    it('leaves the card closed and off the network until the header toggle asks for it', async () => {
+    it('opens the overview immediately and lets the header toggle close it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
       const { client, changesRequests } = renderPanel();
 
       const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
-      expect(card).toHaveAttribute('inert');
-      expect(toggle).toHaveAttribute('aria-pressed', 'false');
-      expect(changesRequests).toEqual([]);
-
-      await user.click(toggle);
-
       expect(card).not.toHaveAttribute('inert');
+      expect(toggle).toHaveAttribute('aria-pressed', 'true');
       expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
       await waitForMutationsIdle(client);
       expect(changesRequests).toEqual([WORKSPACE]);
+
+      await user.click(toggle);
+      expect(card).toHaveAttribute('inert');
+      expect(toggle).toHaveAttribute('aria-pressed', 'false');
     });
   });
 
@@ -188,7 +212,6 @@ describe('WorkspaceFiles', () => {
       const user = userEvent.setup();
       const { client } = renderPanel();
 
-      await user.click(screen.getByRole('button', { name: 'Workspace files' }));
       await waitForMutationsIdle(client);
       await user.click(await screen.findByRole('button', { name: /^Changes/ }));
       await waitForMutationsIdle(client);
@@ -214,10 +237,11 @@ describe('WorkspaceFiles', () => {
     it('overlays the files in a popover instead of taking the transcript width', async () => {
       stubContainerWidth(900);
       const user = userEvent.setup();
-      renderPanel();
+      const { changesRequests } = renderPanel();
 
       expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Files/ })).not.toBeInTheDocument();
+      expect(changesRequests).toEqual([]);
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 

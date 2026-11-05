@@ -16,16 +16,17 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   const [toggled, setToggled] = useState<{ layoutRevision: number; open: boolean }>();
   const [sizing, setSizing] = useState<{ layoutRevision: number; size: WorkspacePanelSize }>();
 
-  // Toggle records the layout it was made in — crossing the threshold discards it, so a popover
-  // left open closes itself instead of reopening as a docked card.
-  // TODO(COR-1075): dock open by default again once file names and metadata come from the
-  // database — today the first paint would list the pod and wake a sandbox nobody asked for.
-  const open = toggled?.layoutRevision === layoutRevision ? toggled.open : false;
+  // Wide layouts reserve the panel from the first paint. Narrow layouts start
+  // with a closed popover; an explicit toggle lasts until the layout changes.
+  // The overview only reads changes passively; the file tree loads on demand.
+  const panelToggle = toggled?.layoutRevision === layoutRevision ? toggled : undefined;
+  const open = panelToggle?.open ?? canDock;
   const setOpen = (next: boolean) => setToggled({ layoutRevision, open: next });
   const size = sizing?.layoutRevision === layoutRevision ? sizing.size : 'compact';
   const setSize = (next: WorkspacePanelSize) => setSizing({ layoutRevision, size: next });
 
   const claimsSpace = open && canDock && Boolean(workspacePath);
+  const hasPanelInteraction = panelToggle !== undefined || sizing?.layoutRevision === layoutRevision;
 
   return (
     <WorkspacePanelContext.Provider value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock }}>
@@ -35,6 +36,7 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
           'flex h-full min-h-0 min-w-0 flex-col',
           threadGeometryClass,
           cardWidthClass[size],
+          hasPanelInteraction ? '[--workspace-files-transition:padding]' : '[--workspace-files-transition:none]',
           claimsSpace ? reservedSpaceClass.docked : reservedSpaceClass.none,
         )}
       >

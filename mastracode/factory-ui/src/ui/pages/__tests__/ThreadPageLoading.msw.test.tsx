@@ -1,13 +1,15 @@
 import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
@@ -16,12 +18,13 @@ const SESSION_ID = 'sess-1';
 const ROUTE_THREAD_ID = 'thread-2';
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const userSession = {
+const userSession: FactoryUserSession = {
   id: 'row-1',
   sessionId: SESSION_ID,
   projectRepositoryId: REPO_ID,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'private',
   branch: 'user/my-feature',
   baseBranch: 'main',
   sandboxId: null,
@@ -50,6 +53,8 @@ function stubThreadRoute({
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
+  const changesGate = deferred();
+  const onChanges = vi.fn();
   const onSwitchThread = vi.fn<(threadId: string) => void>();
   let activeThreadId = initialThreadId;
 
@@ -73,6 +78,9 @@ function stubThreadRoute({
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
@@ -120,9 +128,14 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/workspace/changes`, async () => {
+      onChanges();
+      await changesGate.promise;
+      return HttpResponse.json({ workspacePath: SESSION_ID, available: true, changes: [] });
+    }),
   );
 
-  return { sessionGate, messagesGate, onSwitchThread };
+  return { sessionGate, messagesGate, changesGate, onChanges, onSwitchThread };
 }
 
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
@@ -133,20 +146,45 @@ function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSI
 }
 
 describe('ThreadPage loading shell', () => {
-  it('keeps the sidebar mounted with a main-slot spinner while the session resolves, then shows the thread', async () => {
-    const { sessionGate, messagesGate } = stubThreadRoute();
-    messagesGate.resolve();
-    renderThreadRoute();
+  afterEach(() => vi.restoreAllMocks());
 
-    expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
+  it.each([
+    `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`,
+    `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`,
+  ])('shows a typable composer and open panel while session metadata loads at %s', async path => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+    const { sessionGate, messagesGate, changesGate, onChanges } = stubThreadRoute();
+    const user = userEvent.setup();
+    renderThreadRoute(path);
+
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
+    const textarea = within(composer).getByRole('textbox', { name: 'Message' });
+    const send = within(composer).getByRole('button', { name: 'Send message' });
+    const conversation = screen.getByRole('region', { name: 'Conversation' });
+    expect(within(conversation).getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(conversation).not.toContainElement(composer);
     expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workspace files' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('status', { name: 'Loading workspace details' })).toBeInTheDocument();
+    expect(onChanges).not.toHaveBeenCalled();
+    expect(send).toBeDisabled();
+    await user.type(textarea, 'Draft written while opening the session');
 
     sessionGate.resolve();
-    expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
+    await waitFor(() => expect(onChanges).toHaveBeenCalled());
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
+    expect(textarea).toHaveValue('Draft written while opening the session');
+    expect(send).toBeDisabled();
+
+    // Panel data and chat history resolve independently; neither remounts the input.
+    changesGate.resolve();
+    expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    messagesGate.resolve();
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
+    expect(textarea).toHaveValue('Draft written while opening the session');
+    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
   });
 
   it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {

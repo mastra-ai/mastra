@@ -9,7 +9,9 @@ export function useThreadWorkspacePath() {
   const userSession = useUserSessionQuery(isUserThreadRoute ? threadId : undefined);
 
   return {
-    workspacePath: isUserThreadRoute ? userSession.data?.sessionId : sessionId,
+    // A user route already names the session. Reserve its panel immediately;
+    // the panel waits for authorized metadata before requesting workspace data.
+    workspacePath: isUserThreadRoute ? (userSession.data?.sessionId ?? threadId) : sessionId,
     threadId,
     isPending: isUserThreadRoute && userSession.isPending,
     error: isUserThreadRoute ? (userSession.error ?? undefined) : undefined,
