@@ -39,7 +39,6 @@ import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
-import { matchesRunFence } from '@mastra/core/storage';
 import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -47,6 +46,7 @@ import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
+import { RESUME_CLAIM_DISPATCH_LEASE_MS } from '../durable-event-payload';
 import { init } from '../index';
 import { agentLoopTermination, generationUsage } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
@@ -170,7 +170,7 @@ export async function resumeClaimStore(mastra: Mastra | undefined) {
 export const setLoopStatus = (
   store: NonNullable<Awaited<ReturnType<typeof resumeClaimStore>>>,
   runId: string,
-  status: 'running' | 'suspended',
+  status: WorkflowRunState['status'],
   expectedStatus: WorkflowRunState['status'],
 ) =>
   store.updateWorkflowState({
@@ -180,14 +180,15 @@ export const setLoopStatus = (
   });
 
 /**
- * Releases the claim of a resumed segment Inngest failed or cancelled, which never reaches the
- * finalize step that releases it otherwise, parks the run again and ends its stream.
+ * Ends a resumed segment Inngest failed or cancelled, which never reaches the finalize step that
+ * would: marks the run failed or canceled, ends its stream and releases its claim. The run is not
+ * parked again, since a nested segment Inngest did not cancel can still be running its tools.
  */
 function createResumeClaimReleaseFunction(inngest: Inngest, workflow: InngestWorkflow) {
   const loopEvent = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
   return inngest.createFunction(
     {
-      id: `${InngestDurableStepIds.AGENTIC_LOOP}.resume-claim-release`,
+      id: `${loopEvent}.resume-claim-release`,
       triggers: [
         { event: 'inngest/function.failed', if: `event.data.event.name == '${loopEvent}'` },
         { event: 'inngest/function.cancelled', if: `event.data.event.name == '${loopEvent}'` },
@@ -199,13 +200,16 @@ function createResumeClaimReleaseFunction(inngest: Inngest, workflow: InngestWor
       const mastra = workflow.mastra;
       const store = await resumeClaimStore(mastra);
       if (!original?.runId || !claim || !store) return;
-      if (!matchesRunFence(await store.getRunOwnership({ runId: claim.runId }), claim)) return;
-      await setLoopStatus(store, original.runId, 'suspended', 'running');
-      const defaultPubsub = new InngestPubSub(inngest, workflow.id);
+      // Fails once finalize released the claim or a later resume took it over. A renewed claim also
+      // keeps a takeover out until this release is done.
+      const held = await store.renewRunOwnership({ ...claim, leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS });
+      if (!held.renewed) return;
+      const cancelled = event.name === 'inngest/function.cancelled';
+      await setLoopStatus(store, original.runId, cancelled ? 'canceled' : 'failed', 'running');
+      const defaultPubsub = new InngestPubSub(inngest, workflow.id, mastra?.getLogger?.());
       const pubsub = workflow.__getPubsubFactory()?.(defaultPubsub) ?? defaultPubsub;
-      // Published while the claim still holds, so a resume that claims the run next never sees it.
       try {
-        if (event.name === 'inngest/function.cancelled') {
+        if (cancelled) {
           await emitAbortEvent(pubsub, original.runId, { steps: [], text: '' });
         } else {
           const message = (event.data as { error?: { message?: string } }).error?.message;

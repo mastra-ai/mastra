@@ -139,6 +139,61 @@ describeForAllEngines(
       },
       30_000,
     );
+
+    // Technical: approval tools run one at a time, so call-b first parks while call-a's approval runs
+    // and publishes its own suspension. InngestAgent's resume() stream stays open across it, so a
+    // second report of call-b would reach onSuspended.
+    (engine === 'inngest' ? it : it.skip)(
+      'reports a call that first parks during a resume once',
+      async () => {
+        const llm = getMock();
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call-a', name: 'archive', arguments: { item: 'A' } },
+              { id: 'call-b', name: 'archive', arguments: { item: 'B' } },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Both done.' });
+        const archive = createTool({
+          id: 'archive',
+          description: 'Archive an item.',
+          inputSchema: z.object({ item: z.string() }),
+          requireApproval: true,
+          execute: async ({ item }) => ({ item }),
+        });
+        const { agent } = await createSharedAgent(llm, { engine, memory: new MockMemory(), tools: { archive } });
+        const memory = { thread: 'sequential-approvals', resource: 'reviewer' };
+        const initial = await agent.stream('Archive both items.', { maxSteps: 4, memory });
+        for await (const chunk of initial.fullStream) if (chunk.type === 'tool-call-approval') break;
+
+        const suspended: string[] = [];
+        const inngestAgent = agent as unknown as {
+          resume: (
+            runId: string,
+            resumeData: unknown,
+            options: { toolCallId: string; onSuspended: (data: { toolCallId: string }) => void },
+          ) => Promise<{ output: { fullStream: AsyncIterable<{ type: string }> }; cleanup?: () => void }>;
+        };
+        const resumed = await inngestAgent.resume(
+          initial.runId,
+          { approved: true },
+          { toolCallId: 'call-a', onSuspended: data => suspended.push(data.toolCallId) },
+        );
+        try {
+          for await (const chunk of resumed.output.fullStream) if (chunk.type === 'tool-call-approval') break;
+          // A second report would follow the first; only waiting can show it never comes.
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          expect(suspended).toEqual(['call-b']);
+        } finally {
+          resumed.cleanup?.();
+          initial.cleanup?.();
+        }
+      },
+      30_000,
+    );
   },
   { skip: ['fs'] },
 );

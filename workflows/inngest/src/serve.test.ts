@@ -150,7 +150,7 @@ describe('Multi-framework serve', () => {
       expect(getFunctionIds(serveOptions.functions)).toEqual([
         'workflow.inngest:durable-agentic-loop',
         'workflow.inngest:durable-agentic-execution',
-        'inngest:durable-agentic-loop.resume-claim-release',
+        'workflow.inngest:durable-agentic-loop.resume-claim-release',
       ]);
       expect(getFunctionIds(connectOptions.apps[0].functions)).toEqual(getFunctionIds(serveOptions.functions));
     });

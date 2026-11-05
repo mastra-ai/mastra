@@ -247,11 +247,14 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
     const workflows = await shared.mastra.getStorage().getStore('workflows');
     const loop = 'inngest:durable-agentic-loop';
     // Claims are only taken on the suspension written last, which has no active paths.
-    await vi.waitFor(async () => {
-      const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: loop, runId });
-      expect(snapshot).toMatchObject({ status: 'suspended', activePaths: [] });
-    });
-    // What a resume killed between claiming the run and sending its event leaves behind.
+    await vi.waitFor(
+      async () => {
+        const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: loop, runId });
+        expect(snapshot).toMatchObject({ status: 'suspended', activePaths: [] });
+      },
+      { timeout: 10_000 },
+    );
+    // What a resume that died before sending its event leaves behind once its lease lapsed.
     await workflows.updateWorkflowState({
       workflowName: loop,
       runId,
@@ -282,10 +285,11 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
     expect(llm.getRequests()).toHaveLength(2);
   });
 
-  // Technical: Inngest cancelling a resumed segment never reaches the finalize step that releases its
-  // claim. The `resume-claim-release` function releases it, parks the run again and ends the stream.
+  // Technical: Inngest cancelling a resumed segment never reaches the finalize step that ends the run
+  // and releases its claim. The `resume-claim-release` function does instead. The run is not parked
+  // again: Inngest does not cancel the nested segment, which finishes the tool on its own.
   (engine === 'inngest' ? it : it.skip)(
-    'can approve again after Inngest cancels the resumed run',
+    'ends the run when Inngest cancels the resumed segment',
     async () => {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
@@ -325,7 +329,7 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
 
       try {
         const first = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
-        await vi.waitFor(() => expect(executions).toBe(1));
+        await vi.waitFor(() => expect(executions).toBe(1), { timeout: 10_000 });
         await inngest.send({ name: 'cancel.workflow.inngest:durable-agentic-loop', data: { runId: output.runId } });
         const firstTypes: string[] = [];
         for await (const chunk of first.fullStream) firstTypes.push(chunk.type);
@@ -334,11 +338,10 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
         release();
       }
 
-      const second = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
-      for await (const _ of second.fullStream) {
-        // drain
-      }
-      expect(await second.text).toBe('Archived.');
+      await expect(shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' })).rejects.toThrow(
+        /not suspended \(status: canceled\)/,
+      );
+      expect(executions).toBe(1);
     },
     40_000,
   );

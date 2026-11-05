@@ -786,14 +786,26 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           // Published here, before the parent persists the suspension and the next resume can claim it.
           const agentInput: { __workflowKind?: string; runId?: string } | undefined = stepResults.input as any;
           const resumedCallFinished = isResume && !!resume?.label && !(result as any).resumeLabels?.[resume.label];
-          if (resumedCallFinished && agentInput?.__workflowKind === 'durable-agent' && agentInput.runId) {
-            const parked = (suspendedSteps[0]?.[1] as any)?.suspendPayload;
-            // An approval requested during execution (e.g. by a sub-agent) nests the call here.
-            const approval = parked?.requireToolApproval;
+          const parked = (suspendedSteps[0]?.[1] as any)?.suspendPayload;
+          // An approval requested during execution (e.g. by a sub-agent) nests the call here.
+          const approval = parked?.requireToolApproval;
+          const parkedToolCallId = parked?.toolCallId ?? approval?.toolCallId;
+          // A call that first parked in this segment (approval tools run one at a time) published its
+          // own suspension. The parent still holds the labels it parked on until it persists this one.
+          let parkedBefore = false;
+          if (resumedCallFinished && agentInput?.__workflowKind === 'durable-agent' && parkedToolCallId) {
+            const store = await this.mastra?.getStorage()?.getStore('workflows');
+            const parent = await store?.loadWorkflowSnapshot({
+              workflowName: executionContext.workflowId,
+              runId: executionContext.runId,
+            });
+            parkedBefore = !!parent?.resumeLabels?.[parkedToolCallId];
+          }
+          if (parkedBefore && agentInput?.runId) {
             // A tool's own suspension keeps no args; its call input is in the foreach output.
             const meta = parked?.__workflow_meta;
             await emitSuspendedEvent(pubsub, agentInput.runId, {
-              toolCallId: parked?.toolCallId ?? approval?.toolCallId,
+              toolCallId: parkedToolCallId,
               toolName: approval?.toolName ?? parked?.toolName,
               args: approval?.args ?? parked?.args ?? meta?.foreachOutput?.[meta.foreachIndex]?.payload?.args,
               suspendPayload: parked?.toolCallSuspended,

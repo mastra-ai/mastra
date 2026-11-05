@@ -956,15 +956,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         !owner?.live &&
         (snapshot?.status === 'suspended' ||
           (snapshot?.status === 'running' && Object.keys(snapshot.suspendedPaths ?? {}).length > 0));
-      if (parked) {
-        // Supersede a resume event that was sent but has not run, so it does not run on deleted rows.
-        const fence = await store?.claimRunOwnership({
-          runId: resumeClaimKey(runId),
-          ownerId: `${RESUME_CLAIM_PROCESS_ID}/${crypto.randomUUID()}/`,
-          leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS,
-          expectedGeneration: owner?.generation ?? 0,
-        });
-        if (fence?.acquired) await store?.releaseRunOwnership(fence.record);
+      // Supersede a resume event that was sent but has not run, so it does not run on deleted rows. A
+      // resume that claimed the run since it was read owns it now.
+      const fence =
+        parked && store
+          ? await store.claimRunOwnership({
+              runId: resumeClaimKey(runId),
+              ownerId: `${RESUME_CLAIM_PROCESS_ID}/${crypto.randomUUID()}/`,
+              leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS,
+              expectedGeneration: owner?.generation ?? 0,
+            })
+          : undefined;
+      if (fence?.acquired) await store?.releaseRunOwnership(fence.record);
+      if (parked && (!store || fence?.acquired)) {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
       }
@@ -1738,7 +1742,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           const owner = await liveResumeClaim(runId);
           if (owner) {
             held = true;
-            assertMayWaitFor(owner, runId, toolCallId);
+            // A `suspended` run under a live claim parked again and is about to release it.
+            if (s.status !== 'suspended') assertMayWaitFor(owner, runId, toolCallId);
             return false;
           }
           // A claim with no live lease never started its event, so this resume takes it over.
@@ -1856,8 +1861,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       );
 
       // Claimed before this resume touches the run's registry entry, which a concurrent winner uses.
-      // Marked before claiming, so a resume in this process that sees the claim also sees the mark.
-      const releaseToolCallMarker = markToolCallResume(runId, toolCallId ?? '');
+      // Marked before claiming, so a resume in this process that sees the claim also sees the mark. A
+      // resume without a tool call id is only told apart through a claim, so without one it stays unmarked.
+      const markKey = toolCallId ?? ((await resumeClaimStore(mastra)) ? '' : undefined);
+      const releaseToolCallMarker = markKey === undefined ? () => {} : markToolCallResume(runId, markKey);
       if (!releaseToolCallMarker) throw resumeAlreadyClaimedError(agent.name, runId, toolCallId);
       const claim = await claimSuspension(runId, suspendedSnapshot ?? {}, toolCallId);
       if (!claim) {
