@@ -429,7 +429,7 @@ On the default Chat Completions path, use the first segment of the model `id` as
 
 The exception is an `id` that starts with the prefix of an enabled gateway, where the key is the segment after the prefix. Netlify's gateway is always enabled, so for `id: "netlify/openai/gpt-4o"`, the key is `openai`. When `MASTRA_GATEWAY_API_KEY` is set or a `MastraGateway` with an API key is configured, `id: "mastra/google/gemini-2.5-flash"` uses `google`.
 
-Typed options such as `reasoningEffort` are mapped to their request field (`reasoning_effort`). Other keys, such as `parallel_tool_calls`, are copied into the request body as written. They replace any field of the same name that the AI SDK sets before them, including `model`, `temperature` from `modelSettings`, and the structured-output `response_format`. Only `reasoning_effort`, `verbosity`, `messages`, `tools`, and `tool_choice` are set after them, so those can't be replaced this way. Use `reasoningEffort` and `textVerbosity` instead of the first two.
+Typed options such as `reasoningEffort` are mapped to their request field (`reasoning_effort`). Other keys, such as `parallel_tool_calls`, are copied into the request body as written. They replace any field of the same name that the AI SDK sets before them, including `model`, `temperature` from `modelSettings`, and the structured-output `response_format`. `reasoning_effort`, `verbosity`, `messages`, `tools`, and `tool_choice` are set after them, as are `stream` and `stream_options` when streaming, so those can't be replaced this way. Use `reasoningEffort` and `textVerbosity` instead of the first two.
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
