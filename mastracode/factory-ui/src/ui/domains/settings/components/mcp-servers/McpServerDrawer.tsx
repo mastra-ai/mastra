@@ -143,6 +143,26 @@ function sameOrigin(a: string, b: string): boolean {
   return left !== null && left.origin === parsedUrl(b)?.origin;
 }
 
+/** What this edit does to a saved client secret: a new client ID drops it, and it never follows a server to another origin. */
+function savedSecret(server: McpServerInfo | undefined, draft: Draft): 'none' | 'kept' | 'reenter' {
+  if (
+    server?.authType !== 'oauth' ||
+    !server.oauth?.hasClientSecret ||
+    draft.auth !== 'oauth' ||
+    draft.clientId.trim() !== (server.oauth.clientId ?? '')
+  ) {
+    return 'none';
+  }
+  const url = parsedUrl(draft.url.trim());
+  return url && url.origin !== parsedUrl(server.url)?.origin ? 'reenter' : 'kept';
+}
+
+const SECRET_PLACEHOLDER = {
+  none: 'Optional',
+  kept: 'Saved. Enter a new secret to replace it',
+  reenter: 'Enter the client secret again',
+} as const;
+
 /** Only what changed: omitted credentials keep their saved values. */
 function updateBody(server: McpServerInfo, draft: Draft): UpdateMcpServerRequest | string {
   const body: UpdateMcpServerRequest = {};
@@ -173,6 +193,7 @@ function updateBody(server: McpServerInfo, draft: Draft): UpdateMcpServerRequest
     const clientId = draft.clientId.trim();
     if (clientId !== (server.oauth?.clientId ?? '')) oauth.clientId = clientId || null;
     if (draft.clientSecret.trim()) oauth.clientSecret = draft.clientSecret.trim();
+    else if (savedSecret(server, draft) === 'reenter') return 'Enter the client secret.';
     const scopes = parseScopes(draft.scopes);
     if (scopes.join(' ') !== (server.oauth?.scopes ?? []).join(' ')) oauth.scopes = scopes;
     if (Object.keys(oauth).length > 0) body.oauth = oauth;
@@ -390,9 +411,7 @@ export function McpServerDrawer({
                     size="sm"
                     type="password"
                     autoComplete="off"
-                    placeholder={
-                      server?.oauth?.hasClientSecret ? 'Saved. Enter a new secret to replace it' : 'Optional'
-                    }
+                    placeholder={SECRET_PLACEHOLDER[savedSecret(server, draft)]}
                     value={draft.clientSecret}
                     onChange={event => update({ clientSecret: event.target.value })}
                   />

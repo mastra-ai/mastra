@@ -505,6 +505,33 @@ describe('McpServersSection', () => {
       );
     });
 
+    it('asks for the client secret again when an OAuth server moves to another address', async () => {
+      const api = mockMcpServersApi();
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(within(await row('CRM')).getByRole('button', { name: 'Edit' }));
+      const secret = screen.getByLabelText('Client secret');
+      expect(secret).toHaveAttribute('placeholder', 'Saved. Enter a new secret to replace it');
+      const url = screen.getByRole('textbox', { name: 'Server URL' });
+      await user.clear(url);
+      await user.type(url, 'https://crm.example.org/mcp');
+      expect(secret).toHaveAttribute('placeholder', 'Enter the client secret again');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText('Enter the client secret.')).toBeInTheDocument();
+      expect(api.mutations()).toEqual([]);
+
+      await user.type(secret, 'moved-secret');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(api.mutations()[0]).toEqual({
+          method: 'PATCH',
+          path: `/${CRM_ID}`,
+          body: { url: 'https://crm.example.org/mcp', oauth: { clientSecret: 'moved-secret' } },
+        }),
+      );
+    });
+
     it('warns that changing the URL of an OAuth server signs it out', async () => {
       mockMcpServersApi();
       const user = userEvent.setup();
