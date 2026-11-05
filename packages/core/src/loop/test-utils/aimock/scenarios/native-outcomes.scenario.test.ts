@@ -116,11 +116,12 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       errorProcessorDefaults: false,
       defaultOptions: { maxRetries: 0 },
     });
-    await runLoopScenario({
+    const { output, chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
       observability,
       agents: { worker },
+      collectChunks: true,
       prompt: 'Delegate the task.',
       maxSteps: 5,
       errorProcessors: [],
@@ -162,6 +163,10 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(supervisor).toMatchObject({ outcome: failed ? 'interrupted' : 'success', stopReason: 'delegation_bail' });
     if (failed)
       expect(supervisor?.stopReasonContext).toMatchObject({ causeOutcome: 'error', causeStopReason: 'model_error' });
+    // The cause reaches the span through the loop state, never through the public steps or chunks.
+    const tracingFields = /tracingStopCause|tracingTermination|tracingDelegationFailure/;
+    expect(JSON.stringify(await output.steps)).not.toMatch(tracingFields);
+    expect(JSON.stringify(chunks)).not.toMatch(tracingFields);
   });
 
   it('records an output-result guardrail without losing usage or exporting terminal spans twice', async () => {
