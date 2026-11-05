@@ -114,19 +114,17 @@ export function DashboardRenderer({
             // Only a widget that parsed can be pinned: the host gets the widget as it renders.
             const pin =
               onPin && prepared.ok
-                ? {
-                    isPinned: isPinned(widget.id),
-                    onPin: (next: boolean) => onPin(prepared.widget, next),
-                    name: prepared.widget.title?.trim() || 'widget',
-                  }
+                ? { isPinned: isPinned(widget.id), onPin, name: prepared.widget.title?.trim() || 'widget' }
                 : undefined;
+            const errorPin =
+              pin && prepared.ok ? { ...pin, onPin: (next: boolean) => pin.onPin(prepared.widget, next) } : undefined;
             return (
               <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
                 <ErrorBoundary
                   resetKeys={[pageKey, JSON.stringify(widget)]}
                   variant="inline"
                   fallback={({ error }) => (
-                    <WidgetError widget={heading} message={error.message} dragHandle={handle} pin={pin} />
+                    <WidgetError widget={heading} message={error.message} dragHandle={handle} pin={errorPin} />
                   )}
                 >
                   {prepared.ok ? (
