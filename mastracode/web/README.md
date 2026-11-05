@@ -204,7 +204,7 @@ Deployments can instead use a service account or a Google Cloud runtime identity
 
 ### Mastra Connect tools
 
-Sessions in web chat, Slack and on work items get the tools of every provider connected in your Platform project through [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect), for example to answer questions about Linear in a Slack thread. Platform deploys get this automatically. Locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` in `mastracode/web/.env`. Every user and organization on the server shares the project's connections. See `@mastra/factory`'s README for what's left out and how to opt out.
+Sessions in web chat, Slack and on work items can use [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools, for example to answer questions about Linear in a Slack thread. None are on by default: connect a provider (MCP servers included) in **Settings → Tools**, then an organization admin turns it on there. Platform deploys already have the credentials. Locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` in `mastracode/web/.env`. Every organization on the server shares the project's connections. See `@mastra/factory`'s README for which tools are left out.
 
 ## Tests
 

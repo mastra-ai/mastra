@@ -20,6 +20,8 @@ export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGe
 export type StoredBoardInfo = StoredBoardResponse['board'];
 export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
 export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
+export type ConnectToolsSettings = z.infer<typeof FACTORY_ROUTE_CONTRACTS.connectToolsGet.responseSchema>;
+export type ConnectToolsUpdateBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.connectToolsUpdate.bodySchema>;
 
 import type {
   CustomProviderInfo,

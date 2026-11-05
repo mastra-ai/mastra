@@ -19,7 +19,15 @@ export function RetryRow({ label, errorMsg, onRetry }: { label: ReactNode; error
   );
 }
 
-export function NotConfiguredRow({ label, showAvailable }: { label: ReactNode; showAvailable: boolean }) {
+export function NotConfiguredRow({
+  label,
+  showAvailable,
+  description = 'Not configured on this server.',
+}: {
+  label: ReactNode;
+  showAvailable: boolean;
+  description?: ReactNode;
+}) {
   if (!showAvailable) return null;
-  return <SettingsRow label={label} description="Not configured on this server." />;
+  return <SettingsRow label={label} description={description} />;
 }

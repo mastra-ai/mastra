@@ -56,6 +56,7 @@ import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
+import type { ConnectToolSettingsStorage } from './storage/domains/connect-tools/base.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -955,6 +956,7 @@ describe('MastraFactory.prepare', () => {
       'work-item-comments',
       'skill-overrides',
       'voice-settings',
+      'connect-tools',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -1532,12 +1534,36 @@ describe('MastraFactory.prepare', () => {
         vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', url);
       }
 
-      it('gives every session the Linear tools without delete or archive ones, acting with the deploy token', async () => {
+      async function prepareWithEnabled(
+        enabledProviders: string[] | null,
+        options: { tools?: Record<string, never> } = {},
+      ) {
+        const storage = fakeStorage();
+        const config = await prepareFactory({ storage, ...options });
+        if (enabledProviders) {
+          const settings = storage.getDomain<ConnectToolSettingsStorage>('connect-tools');
+          await settings.ensureReady();
+          await settings.save({ orgId: 'org-1', enabledProviders, updatedBy: 'admin-1' });
+        }
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+        return (config.extraTools as ExtraTools)({ requestContext });
+      }
+
+      it('gives sessions no Connect tools until an admin turns a provider on', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-off');
+
+        const tools = await prepareWithEnabled(null);
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+      });
+
+      it('gives sessions the Linear tools the org turned on, without delete or archive ones, acting with the deploy token', async () => {
         const platform = await servePlatform({ listing: 'linear' });
         stubPlatform(platform.url, 'project-linear');
-        const config = await prepareFactory({ storage: fakeStorage() });
 
-        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+        const tools = await prepareWithEnabled(['linear']);
 
         expect(Object.keys(tools)).toEqual(expect.arrayContaining(['linear_list_teams', 'linear_list_issues']));
         expect(Object.keys(tools).filter(name => /_(delete|archive)_/.test(name))).toEqual([]);
@@ -1552,20 +1578,17 @@ describe('MastraFactory.prepare', () => {
         onTestFinished(() => warn.mockRestore());
         const platform = await servePlatform({ listing: 'down' });
         stubPlatform(platform.url, 'project-down');
-        const config = await prepareFactory({ storage: fakeStorage() });
 
-        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+        const tools = await prepareWithEnabled(['linear']);
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
       });
 
-      it("offers the host's own tools instead of the project's connections", async () => {
+      it("offers the host's own tools instead of the org's Connect providers", async () => {
         const platform = await servePlatform({ listing: 'linear' });
         stubPlatform(platform.url, 'project-host-tools');
-        const config = await prepareFactory({ storage: fakeStorage(), tools: {} });
-
-        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+        const tools = await prepareWithEnabled(['linear'], { tools: {} });
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
       });

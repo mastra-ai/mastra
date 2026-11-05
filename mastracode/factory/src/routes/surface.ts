@@ -36,6 +36,7 @@ import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
+import type { ConnectToolSettingsStorage } from '../storage/domains/connect-tools/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -65,6 +66,7 @@ import {
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
+import { ConnectToolRoutes } from './connect-tools.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
@@ -133,11 +135,14 @@ export interface FactoryApiRoutesDeps {
     comments: WorkItemCommentsStorage;
     skillOverrides: SkillOverridesStorage;
     voiceSettings: VoiceSettingsStorage;
+    connectTools: ConnectToolSettingsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
+  /** Platform credentials and a project id are set, so Mastra Connect can supply session tools. */
+  connectToolsAvailable: () => boolean;
   /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
   mcpEnabled: boolean;
   /** Providers the operator opted in to run on the server process's own credentials. */
@@ -845,6 +850,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ),
         }).routes()
       : []),
+    ...new ConnectToolRoutes({
+      auth: deps.auth,
+      audit: deps.audit,
+      storage: deps.domains.connectTools,
+      available: deps.connectToolsAvailable,
+    }).routes(),
     ...(deps.factoryReady && deps.knowledgeEnabled
       ? new KnowledgeRoutes({
           auth: deps.auth,

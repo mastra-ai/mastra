@@ -14,6 +14,7 @@ import {
   Palette,
   SlidersHorizontal,
   SquareKanban,
+  Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -85,6 +86,13 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.skills,
         icon: BookOpen,
         searchText: 'skills factory triage plan review agent instructions prompts stages',
+      },
+      {
+        id: 'tools',
+        label: SETTINGS_SECTION_LABELS.tools,
+        icon: Wrench,
+        searchText:
+          'tools mcp servers mastra connect providers integrations connections sessions slack web chat enable approval',
       },
       {
         id: 'behavior',

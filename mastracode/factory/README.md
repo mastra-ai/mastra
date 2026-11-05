@@ -1097,9 +1097,9 @@ The tools take their scope as an argument rather than reading the request, so th
 
 ### Mastra Connect and your own tools in sessions
 
-With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the tools of each provider connected in the Platform project through [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect). Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Connect Linear in the project, and a Slack thread, a web chat or a work item can ask about its issues.
+With Platform credentials and `MASTRA_PROJECT_ID`, an organization admin chooses which [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) providers their organization's sessions can use, in **Settings → Tools**. Nothing is on by default. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Turn on Linear, and a Slack thread, a web chat or a work item in that organization can ask about its issues.
 
-Every user and organization on the Factory shares the project's connections. Sessions approve tools automatically by default, so delete and archive tools are left out. When the Platform can't list the connections, the run goes on without them and Factory logs why.
+Sessions run these tools without asking for approval, so only turn on providers whose actions sessions may take. Delete and archive tools are always left out. The connections belong to the Platform project and every organization on the Factory shares them, but each organization chooses its own providers. When the Platform can't list the connections, the run goes on without them and Factory logs why. `GET`/`PUT /web/config/connect-tools` back the settings page.
 
 `tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none.
 
@@ -1113,7 +1113,20 @@ const factory = new MastraFactory({
 });
 ```
 
-A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error. Sessions run these tools without asking while automatic approval is on; when a person turns it off, they follow the `mcp` permission category. Factory doesn't read MCP servers from the host's `mcp.json` files: `tools` is the one place a Factory's MCP tools come from.
+A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error.
+
+Factory doesn't read MCP servers from the host's `mcp.json` files, and logs a warning at startup when `~/.mastracode/mcp.json` exists. Pass MCP tools through `tools` instead:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('https://tickets.example.com/mcp') } } });
+
+const factory = new MastraFactory({
+  // ...
+  tools: await mcp.listTools(),
+});
+```
 
 ### Voice input
 

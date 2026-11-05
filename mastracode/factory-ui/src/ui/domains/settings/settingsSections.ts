@@ -13,6 +13,7 @@ export type SettingsSection =
   | 'models'
   | 'memory'
   | 'skills'
+  | 'tools'
   | 'behavior';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
@@ -26,6 +27,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   models: 'Models',
   memory: 'Memory',
   skills: 'Skills',
+  tools: 'Tools',
   behavior: 'Behavior',
 };
 

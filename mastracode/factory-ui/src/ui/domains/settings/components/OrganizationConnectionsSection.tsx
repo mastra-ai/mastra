@@ -193,12 +193,13 @@ function PlatformAccountRows({
   connections: PlatformProviderConnection[];
   showAvailable: boolean;
 }) {
-  const name = PLATFORM_CONNECT_PROVIDERS[provider].displayName;
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const name = meta.displayName;
   if (connections.length === 0) {
     if (!showAvailable) return null;
     return (
       <SettingsRow label={<PlatformLabel provider={provider} />}>
-        <ProviderConnectControl provider={provider} label={`Connect ${name}`} icon={<Link2 />} />
+        <ProviderConnectControl provider={meta} label={`Connect ${name}`} icon={<Link2 />} />
       </SettingsRow>
     );
   }
@@ -212,7 +213,7 @@ function PlatformAccountRows({
     >
       <div className="flex flex-wrap items-center gap-2">
         <ProviderConnectControl
-          provider={provider}
+          provider={meta}
           reconnectConnectionId={connection.id}
           label={`Reconnect ${name}`}
           icon={<Link2 />}
@@ -230,7 +231,7 @@ function PlatformAccountRows({
             )}
             {showAvailable && (
               <ProviderConnectControl
-                provider={provider}
+                provider={meta}
                 label={`Connect another ${name} account`}
                 buttonLabel="Add account"
                 icon={<Plus />}

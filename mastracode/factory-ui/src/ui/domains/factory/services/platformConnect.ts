@@ -15,25 +15,41 @@ import type { AuthOptions } from '@nangohq/frontend';
 
 export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
 
-/** How the provider authorizes: OAuth consent popup or an API-key form. */
-export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
-
-export interface PlatformConnectProviderMeta {
-  id: PlatformConnectProviderId;
-  displayName: string;
-  authKind: PlatformConnectAuthKind;
+export interface PlatformConnectAuthField {
+  name: string;
+  target: 'credentials' | 'params';
+  label: string;
+  description: string | null;
+  placeholder: string | null;
+  secret: boolean;
+  required: boolean;
 }
 
-export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
-  jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
-  'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
-  gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+export interface PlatformCatalogProvider {
+  id: string;
+  displayName: string;
+  logoUrl: string | null;
+  authType: string | null;
+  mcp: boolean;
+  authFields: PlatformConnectAuthField[];
+}
+
+export type PlatformConnectProvider = Pick<PlatformCatalogProvider, 'id' | 'displayName' | 'authType' | 'authFields'>;
+
+export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProvider> = {
+  jira: { id: 'jira', displayName: 'Jira', authType: 'OAUTH2', authFields: [] },
+  'incident-io': { id: 'incident-io', displayName: 'incident.io', authType: 'API_KEY', authFields: [] },
+  gitlab: { id: 'gitlab', displayName: 'GitLab', authType: 'OAUTH2', authFields: [] },
 };
+
+function isPlatformConnectProviderId(id: string): id is PlatformConnectProviderId {
+  return Object.hasOwn(PLATFORM_CONNECT_PROVIDERS, id);
+}
 
 export interface PlatformProviderConnection {
   id: string;
   integrationId: string;
-  status: 'active' | 'needs_reauth';
+  status: string;
   accountLabel: string | null;
   displayName?: string | null;
 }
@@ -114,27 +130,71 @@ export async function listPlatformConnections(
   return connections;
 }
 
+export async function listAllPlatformConnections(baseUrl: string): Promise<PlatformProviderConnection[]> {
+  const { connections } = await requestJson<{ connections: PlatformProviderConnection[] }>(
+    baseUrl,
+    '/web/integrations/platform/connections',
+  );
+  return connections;
+}
+
+export async function listPlatformCatalog(baseUrl: string): Promise<PlatformCatalogProvider[]> {
+  const { providers } = await requestJson<{ providers: PlatformCatalogProvider[] }>(
+    baseUrl,
+    '/web/integrations/platform/catalog',
+  );
+  return providers;
+}
+
 /** Mint a Nango connect session for a new provider connection. */
-export async function createPlatformConnectSession(
-  baseUrl: string,
-  provider: PlatformConnectProviderId,
-): Promise<PlatformConnectSession> {
-  return requestJson<PlatformConnectSession>(baseUrl, `/web/integrations/platform/${provider}/connect-session`, {
-    method: 'POST',
-  });
+export async function createPlatformConnectSession(baseUrl: string, provider: string): Promise<PlatformConnectSession> {
+  return requestJson<PlatformConnectSession>(
+    baseUrl,
+    `/web/integrations/platform/${encodeURIComponent(provider)}/connect-session`,
+    { method: 'POST' },
+  );
 }
 
 /** Mint a Nango reconnect session for an existing provider connection. */
 export async function createPlatformReconnectSession(
   baseUrl: string,
-  provider: PlatformConnectProviderId,
+  provider: string,
   connectionId: string,
 ): Promise<PlatformConnectSession> {
   return requestJson<PlatformConnectSession>(
     baseUrl,
-    `/web/integrations/platform/${provider}/connections/${encodeURIComponent(connectionId)}/reconnect-session`,
+    `/web/integrations/platform/${encodeURIComponent(provider)}/connections/${encodeURIComponent(connectionId)}/reconnect-session`,
     { method: 'POST' },
   );
+}
+
+export interface HeadlessAuthInput {
+  authType?: string | null;
+  credentials?: Record<string, string>;
+  params?: Record<string, string>;
+}
+
+/**
+ * Complete a minted connect/reconnect session headlessly. OAuth providers get
+ * the provider's own consent popup; API-key providers submit the credential
+ * directly with no popup. Flow params (an MCP server URL) ride along either way.
+ */
+export async function runHeadlessAuth({
+  session,
+  authType,
+  credentials,
+  params,
+}: HeadlessAuthInput & { session: PlatformConnectSession }): Promise<void> {
+  const nango = new Nango({ connectSessionToken: session.sessionToken });
+  const options: AuthOptions = {};
+  if (credentials) options.credentials = authType === 'TWO_STEP' ? { type: 'TWO_STEP', ...credentials } : credentials;
+  else options.detectClosedAuthWindow = true;
+  if (params) options.params = params;
+  try {
+    await nango.auth(session.integrationId, options);
+  } catch (error) {
+    throw toHeadlessAuthError(error);
+  }
 }
 
 export type HeadlessAuthFailure = 'popup_blocked' | 'window_closed' | 'failed';
@@ -146,26 +206,6 @@ export class HeadlessAuthError extends Error {
   ) {
     super(message);
     this.name = 'HeadlessAuthError';
-  }
-}
-
-/**
- * Complete a minted connect/reconnect session headlessly. OAuth providers get
- * the provider's own consent popup; API-key providers submit the credential
- * directly with no popup. Mirrors Mastra Platform's own headless connect.
- */
-export async function runHeadlessAuth(input: {
-  session: PlatformConnectSession;
-  credentials?: Record<string, string>;
-}): Promise<void> {
-  const nango = new Nango({ connectSessionToken: input.session.sessionToken });
-  const options: AuthOptions = {};
-  if (input.credentials) options.credentials = input.credentials;
-  else options.detectClosedAuthWindow = true;
-  try {
-    await nango.auth(input.session.integrationId, options);
-  } catch (error) {
-    throw toHeadlessAuthError(error);
   }
 }
 
@@ -193,15 +233,18 @@ const ACTIVE_POLL_DEADLINE_MS = 60_000;
  */
 export async function waitForActiveConnection(
   baseUrl: string,
-  provider: PlatformConnectProviderId,
+  provider: string,
   connectionId: string,
   options: { intervalMs?: number; deadlineMs?: number } = {},
 ): Promise<PlatformProviderConnection | null> {
   const intervalMs = options.intervalMs ?? ACTIVE_POLL_INTERVAL_MS;
   const deadline = Date.now() + (options.deadlineMs ?? ACTIVE_POLL_DEADLINE_MS);
+  const list = isPlatformConnectProviderId(provider)
+    ? () => listPlatformConnections(baseUrl, provider)
+    : () => listAllPlatformConnections(baseUrl);
   for (;;) {
     try {
-      const connections = await listPlatformConnections(baseUrl, provider);
+      const connections = await list();
       const connection = connections.find(candidate => candidate.id === connectionId);
       if (connection?.status === 'active') return connection;
     } catch (error) {
