@@ -1871,7 +1871,8 @@ export class AgentController<TState = {}> {
    * Get available models from the configured gateways with use counts applied.
    *
    * Remote catalogs (models.dev, Netlify) are served from their last good
-   * download and refreshed in the background once it is a few minutes old.
+   * download and refreshed in the background once it is a few minutes old;
+   * calls wait for one only until it has downloaded once.
    * Configured gateways and auth are checked again after a few seconds, or on
    * the next call after {@link invalidateAvailableModelsCache}.
    */

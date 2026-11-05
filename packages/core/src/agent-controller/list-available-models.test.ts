@@ -332,6 +332,17 @@ describe('AgentController.listAvailableModels catalog refresh', () => {
     expect(modelsDev.calls).toBe(3);
   });
 
+  it('waits for models.dev while it has never answered, so the first call after an outage lists its models', async () => {
+    modelsDev.respond = async () => new Response('upstream unavailable', { status: 503 });
+    const controller = createController(createFakeGateway());
+    expect(ids(await controller.listAvailableModels())).not.toContain('acme-cloud/rocket-1');
+
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1']);
+    advance(11_000);
+    expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-1');
+    expect(modelsDev.calls).toBe(2);
+  });
+
   it('notices API key changes without downloading models.dev again', async () => {
     const controller = createController(createFakeGateway());
     expect(rocket(await controller.listAvailableModels())).toMatchObject({

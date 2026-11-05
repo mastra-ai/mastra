@@ -967,6 +967,16 @@ describe('AuthStorage.removeStoredApiKey', () => {
     expect(process.env[ENV]).toBeUndefined();
   });
 
+  it('unsets a key that replaced one loaded at startup, instead of restoring the replaced key', () => {
+    const { storage } = makeStorage({ 'apikey:acme-cloud': { type: 'api_key', key: 'sk-old' } });
+    storage.loadStoredApiKeysIntoEnv({ 'acme-cloud': ENV });
+    storage.setStoredApiKey('acme-cloud', 'sk-new', ENV);
+
+    storage.removeStoredApiKey('acme-cloud');
+
+    expect(process.env[ENV]).toBeUndefined();
+  });
+
   it('leaves a variable that changed after the export', () => {
     const { storage } = makeStorage();
     storage.setStoredApiKey('acme-cloud', 'sk-saved', ENV);

@@ -34,7 +34,8 @@ interface BuiltCatalog {
  * Remote gateways download public catalogs (models.dev's is ~6 MB). Once a
  * downloaded catalog is older than {@link REMOTE_CATALOG_REFRESH_MS}, the next
  * call refreshes it in the background and keeps serving the last good result,
- * including when the refresh fails. Only the very first build waits for them.
+ * including when the refresh fails. A call waits for a remote gateway only
+ * while it has nothing to serve: before its first successful download.
  *
  * Everything else (configured gateways and per-provider auth) is rebuilt at
  * most every {@link MODEL_CATALOG_TTL_MS}, or on the next call after
@@ -59,6 +60,7 @@ export class ModelCatalogCache {
   }
 
   async list(): Promise<GatewayModel[]> {
+    if (this.#mustWaitForRemote()) return this.#rebuild();
     if (this.#dueRemoteGateways().length > 0) {
       this.#refreshRemote().catch(() => {});
     }
@@ -92,11 +94,10 @@ export class ModelCatalogCache {
   async #buildCatalog(generation: number): Promise<GatewayModel[]> {
     const gateways = this.#manager.gateways;
     const local = gateways.filter(gateway => !this.#isRemote(gateway));
-    const remoteNeverFetched = gateways.some(gateway => this.#isRemote(gateway) && !this.#remote.has(gateway));
 
     const [localResults] = await Promise.all([
       Promise.all(local.map(gateway => this.#manager.fetchGatewayProviders(gateway))),
-      remoteNeverFetched ? this.#refreshRemote() : undefined,
+      this.#mustWaitForRemote() ? this.#refreshRemote() : undefined,
     ]);
 
     const localProviders = new Map(local.map((gateway, index) => [gateway, localResults[index]] as const));
@@ -118,6 +119,10 @@ export class ModelCatalogCache {
     return this.#manager.gateways.filter(
       gateway => this.#isRemote(gateway) && (this.#remote.get(gateway)?.nextFetchAt ?? 0) <= now,
     );
+  }
+
+  #mustWaitForRemote(): boolean {
+    return this.#dueRemoteGateways().some(gateway => !this.#remote.get(gateway)?.providers);
   }
 
   #refreshRemote(): Promise<void> {
