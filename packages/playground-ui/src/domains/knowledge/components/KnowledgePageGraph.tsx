@@ -18,7 +18,14 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { CSSProperties } from 'react';
 
 import { fitWords } from '../lib/circleText';
-import { fitAllViewport, fitDuration, fitViewport, INITIAL_SETTLE_MS, nudgeAxis } from '../lib/fitViewport';
+import {
+  fitAllViewport,
+  fitDuration,
+  fitViewport,
+  INITIAL_SETTLE_MS,
+  nudgeAxis,
+  uncoveredInsets,
+} from '../lib/fitViewport';
 import type { PaneInsets } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
@@ -1385,15 +1392,10 @@ function KnowledgePageGraphInner({
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
-    const {
-      nodes: current,
-      selectedPageId: selected,
-      centerId: centre,
-      reactFlow: flow,
-      insets: covered,
-    } = fitState.current;
+    const { nodes: current, selectedPageId: selected, centerId: centre, reactFlow: flow, insets } = fitState.current;
     const anchor = current.find(node => node.id === (selected ?? centre));
     if (!anchor || width === 0 || height === 0) return;
+    const covered = uncoveredInsets(width, insets);
     const view = flow.getViewport();
     const dx = nudgeAxis(
       anchor.position.x * view.zoom + view.x - covered.left,

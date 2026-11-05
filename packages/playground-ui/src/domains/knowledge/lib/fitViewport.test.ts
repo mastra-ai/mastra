@@ -42,6 +42,14 @@ describe('fitViewport', () => {
     expect(view.x).toBeCloseTo(insets.left + (WIDTH - insets.left - insets.right) / 2, 5);
   });
 
+  it('centres in the whole pane when the drawers are wider than it', () => {
+    const narrow = 600;
+    const insets = { left: 296, right: 392 };
+    expect(fitViewport({ bounds: ring, width: narrow, height: HEIGHT, anchor, insets })).toEqual(
+      fitViewport({ bounds: ring, width: narrow, height: HEIGHT, anchor }),
+    );
+  });
+
   it('keeps the readable floor for a focus without a ring, and centres on the focus when it bites', () => {
     const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, anchor });
     expect(view.zoom).toBe(READABLE_MIN_ZOOM);
@@ -141,6 +149,14 @@ describe('fitAllViewport', () => {
       expect(at.left).toBeGreaterThanOrEqual(insets.left);
       expect(at.right).toBeLessThanOrEqual(WIDTH - insets.right);
     }
+  });
+
+  it('fits the whole pane when the drawers are wider than it', () => {
+    const narrow = 600;
+    const insets = { left: 296, right: 392 };
+    expect(fitAllViewport({ bounds, nodes, width: narrow, height: HEIGHT, insets })).toEqual(
+      fitAllViewport({ bounds, nodes, width: narrow, height: HEIGHT }),
+    );
   });
 
   it('leaves the fit alone when nothing is under the legend', () => {

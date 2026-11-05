@@ -25,11 +25,16 @@ export interface PaneInsets {
 
 const NO_INSETS: PaneInsets = { left: 0, right: 0 };
 
+export function uncoveredInsets(width: number, insets: PaneInsets): PaneInsets {
+  return width - insets.left - insets.right > 0 ? insets : NO_INSETS;
+}
+
 /**
  * The viewport that frames `bounds`. Zoom stops at the readable floor, so what is cropped is the edge, not
  * the page being looked at; only Fit view, with an outer ring, goes lower so the whole ring shows.
  */
-export function fitViewport({ bounds, width, height, ring, anchor, insets = NO_INSETS }: FitInput): Viewport {
+export function fitViewport({ bounds, width, height, ring, anchor, insets: drawers = NO_INSETS }: FitInput): Viewport {
+  const insets = uncoveredInsets(width, drawers);
   const floor = ring ? RING_MIN_ZOOM : READABLE_MIN_ZOOM;
   const visible = width - insets.left - insets.right;
   const viewport = getViewportForBounds(bounds, visible, height, floor, 2, 0.1);
@@ -66,7 +71,7 @@ export function fitAllViewport({
   width,
   height,
   legend,
-  insets = NO_INSETS,
+  insets: drawers = NO_INSETS,
 }: {
   bounds: Rect;
   nodes: Rect[];
@@ -75,6 +80,7 @@ export function fitAllViewport({
   legend?: { right: number; bottom: number };
   insets?: PaneInsets;
 }): Viewport {
+  const insets = uncoveredInsets(width, drawers);
   const fitIn = (left: number, top: number): Viewport => {
     const view = getViewportForBounds(
       bounds,
