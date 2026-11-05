@@ -19,9 +19,13 @@ jobs:
     name: Full test suite
     if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
     uses: ./.github/workflows/prebuild.yml
+    # Must cover every permission the jobs inside prebuild.yml (and the workflows it calls)
+    # request, or GitHub refuses to start the run (startup_failure). `id-token: write` is
+    # for StarSling Disks (see .github/actions/setup-pnpm-node).
     permissions:
       actions: read
       contents: read
+      id-token: write
     secrets: inherit
 
   notify-test-failure:
