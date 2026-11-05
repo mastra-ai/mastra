@@ -3,7 +3,7 @@ import type { DashboardEnvironment } from '../lib/gate';
 import { preparedGate } from '../lib/plan-widget';
 import type { ReadyPreparedWidget } from '../lib/plan-widget';
 import type { DashboardResult } from '../lib/requests';
-import type { DashboardExpand, WidgetPin, WidgetState } from '../widget-kind';
+import type { DashboardAlert, DashboardExpand, WidgetPin, WidgetState } from '../widget-kind';
 import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 
 export type StatelessWidgetProps = {
@@ -25,6 +25,8 @@ export type StatelessWidgetProps = {
   expand?: DashboardExpand;
   dragHandle?: MetricsCardDragHandleProps;
   pin?: WidgetPin;
+  /** The card's Create alert button; see `DashboardAlert`. */
+  alert?: DashboardAlert;
 };
 
 /**

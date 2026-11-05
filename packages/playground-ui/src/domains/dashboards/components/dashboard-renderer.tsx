@@ -9,7 +9,7 @@ import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { describeIssue, prepareWidget } from '../lib/prepare-widget';
 import type { PreparedWidget, StoredWidget } from '../lib/prepare-widget';
-import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
+import type { AnyWidgetKind, DashboardAlert, DashboardExpand } from '../widget-kind';
 import { ConnectedWidget } from './connected-widget';
 import { DashboardGrid, DashboardGridCell, DashboardGridRow } from './dashboard-grid';
 import type { DashboardSpan } from './dashboard-grid';
@@ -33,6 +33,13 @@ export type DashboardRendererProps = {
    * widget's title. No grips without it.
    */
   dragHandle?: (widgetId: string) => MetricsCardDragHandleProps | undefined;
+  /**
+   * Turns a card's open view into an alert: each card shows a Create alert button, linking where
+   * `alert.action` says, or disabled with its reason. No buttons without it. Cards with a drag
+   * handle (a layout being edited) show none, and neither do error cards: their widget or query
+   * failed, so there is nothing checked to alert on.
+   */
+  alert?: DashboardAlert;
   className?: string;
 } & DashboardPinProps;
 
@@ -71,6 +78,7 @@ export function DashboardRenderer({
   dragHandle,
   onPin,
   isPinned,
+  alert,
   className,
 }: DashboardRendererProps) {
   // A widget that threw renders again once the page's range or filters change, or the widget does.
@@ -129,6 +137,7 @@ export function DashboardRenderer({
                       expand={expand}
                       dragHandle={handle}
                       pin={pin}
+                      alert={handle ? undefined : alert}
                     />
                   ) : (
                     <WidgetError widget={heading} message={prepared.message} dragHandle={handle} />
