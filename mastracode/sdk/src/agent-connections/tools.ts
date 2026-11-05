@@ -335,7 +335,7 @@ The target must already be saved and freshly advertise the same exact thread end
         if (!saved.some(peer => peer.id === targetId)) {
           const hint = suggestNearPeers(targetId, saved, 'Nothing was sent; resend with the exact id.');
           return {
-            content: `Cannot send: peer is not saved: ${targetId}${hint}`,
+            content: `Cannot send: no saved peer has id ${targetId}${hint}`,
             replyTo,
             ...(replyTo ? { replyOutcome: 'peer-unavailable' as const } : {}),
             isError: true,
@@ -640,11 +640,17 @@ function formatSignalResult({
   }
 }
 
-// A model copying a peer id can change a character or two, or send the peer's label instead.
-// Name the saved peers it most likely meant so the next attempt can use the exact id; never
-// send to a guess.
-const NEAR_PEER_MAX_THREAD_EDITS = 2;
+// A model copying a peer id can change a character or two, splice a stretch of another peer's id
+// into it, or send the peer's label instead. Name the saved peers it most likely meant so the next
+// attempt can use the exact id; never send to a guess.
+const NEAR_PEER_MIN_THREAD_EDITS = 2;
 const NEAR_PEER_MAX_SUGGESTIONS = 3;
+
+// A third of the thread id: catches a spliced stretch of a UUID (about 9 edits) while ids of two
+// different peers, which differ in 25 or more characters, never qualify.
+function maxNearPeerThreadEdits(a: string, b: string): number {
+  return Math.max(NEAR_PEER_MIN_THREAD_EDITS, Math.floor(Math.max(a.length, b.length) / 3));
+}
 
 type NearPeerCandidate = Pick<ConnectedAgentPeer, 'id' | 'resourceId' | 'threadId' | 'label' | 'title'>;
 
@@ -658,7 +664,11 @@ function suggestNearPeers(requestedId: string, candidates: NearPeerCandidate[], 
     if (peer.label && peer.label.trim().toLowerCase() === requestedLabel) {
       distance = 0;
     } else if (requested && requested.resourceId === peer.resourceId) {
-      const edits = boundedEditDistance(requested.threadId, peer.threadId, NEAR_PEER_MAX_THREAD_EDITS);
+      const edits = boundedEditDistance(
+        requested.threadId,
+        peer.threadId,
+        maxNearPeerThreadEdits(requested.threadId, peer.threadId),
+      );
       if (edits !== undefined) distance = edits;
     }
     if (distance === undefined) continue;
