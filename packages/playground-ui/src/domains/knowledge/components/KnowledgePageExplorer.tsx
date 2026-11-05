@@ -230,6 +230,12 @@ function explorerTab(view: KnowledgeExplorerView, showPage: boolean): KnowledgeE
 }
 
 const TREE_DRAWER_INSET = 296;
+const TREE_TOGGLE_INSET = 44;
+
+function treeInset(overlay: boolean, treeOpen: boolean): number {
+  if (!overlay) return 0;
+  return treeOpen ? TREE_DRAWER_INSET : TREE_TOGGLE_INSET;
+}
 const PAGE_DRAWER_INSET = 392;
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
@@ -1022,7 +1028,7 @@ export function KnowledgePageExplorer({
   const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
   const drawerShownId = drawerPageId ?? closingPageId;
   const graphInsets = {
-    left: overlay && treeOpen ? TREE_DRAWER_INSET : 0,
+    left: treeInset(overlay, treeOpen),
     right: drawerPageId ? PAGE_DRAWER_INSET : 0,
   };
   const clearSelection = () => {
