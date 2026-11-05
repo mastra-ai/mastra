@@ -271,9 +271,11 @@ describe('DashboardRenderer', () => {
           },
         ),
       );
-      const { container } = renderDashboard(definition(modelsWidget));
+      const { container, queryClient } = renderDashboard(definition(modelsWidget));
       const widget = cell(container, 'models');
       expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
+      // The table's other request may still be retrying; Retry once both have failed.
+      await waitForMutationsIdle(queryClient);
       failing = false;
       fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
       // The header row, then one per model.
@@ -899,6 +901,8 @@ describe('DashboardRenderer', () => {
 
       it('hands the host a series by its value over the range, where it has one', async () => {
         serveCapabilities(traceAggregateCapabilities);
+        // Answered, so no failed request is retried into a later test.
+        serveTraceAggregate(() => ({ rows: [], truncated: false }));
         const { alert, spy } = linkEach();
         const { container } = renderDashboard(definition(distinctIdsWidget), { alert });
         await openMenu(cell(container, 'distinct-ids'));
