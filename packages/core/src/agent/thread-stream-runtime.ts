@@ -6,7 +6,14 @@ import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../request-context';
+import { getRequestContextInputSource } from '../request-context/input-source';
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
@@ -358,6 +365,33 @@ function snapshotWireRequestContext(requestContext: RequestContext | undefined):
   if (!entries) return undefined;
   const { [MASTRA_SCOPES_KEY]: _scopes, ...rest } = entries;
   return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+/**
+ * The caller's request context, as a claimed owner's run uses it. The caller's thread and
+ * resource keys would override the owner's `memory` (Agent reads them first), so the run would
+ * execute and save on the caller's thread: the owner's own values (usually none) replace them.
+ * An owner with its own auth token keeps it; an owner without one acts with the caller's.
+ * The caller's context is returned as-is when nothing differs.
+ */
+function claimedOwnerRequestContext(caller: RequestContext, owner: RequestContext | undefined): RequestContext {
+  const ownerToken = owner?.getRaw(MASTRA_AUTH_TOKEN_KEY);
+  const replaced = [MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY]
+    .map(key => [key, owner?.getRaw(key)] as const)
+    .filter(([key, value]) => caller.getRaw(key) !== value);
+  if (ownerToken !== undefined && caller.getRaw(MASTRA_AUTH_TOKEN_KEY) !== ownerToken) {
+    replaced.push([MASTRA_AUTH_TOKEN_KEY, ownerToken]);
+  }
+  if (replaced.length === 0) return caller;
+  // Copy the input form, so a schema-transformed tool view is validated as its inputs again.
+  const restored: RequestContext = new RequestContext<unknown>(
+    (getRequestContextInputSource(caller) ?? caller).entries(),
+  );
+  for (const [key, value] of replaced) {
+    if (value === undefined) restored.deleteRaw(key);
+    else restored.setRaw(key, value);
+  }
+  return restored;
 }
 
 /** Unions scope lists, dropping duplicates. */
@@ -2952,9 +2986,14 @@ export class AgentThreadStreamRuntime {
       //
       // A caller in another process sends a snapshot instead of the live context.
       // It never holds an auth token, so the owner's own token is kept.
-      const incomingRequestContext = remoteRequestContextEntries
+      //
+      // Either way the run keeps the owner's thread and resource, and the owner's
+      // own auth token when it has one (see `claimedOwnerRequestContext`).
+      const callerRequestContext = remoteRequestContextEntries
         ? restoreRequestContext(remoteRequestContextEntries, ownerStreamOptions?.requestContext)
         : incomingStreamOptions?.requestContext;
+      const incomingRequestContext =
+        callerRequestContext && claimedOwnerRequestContext(callerRequestContext, ownerStreamOptions?.requestContext);
       streamOptions =
         incomingRequestContext === undefined
           ? ownerStreamOptions

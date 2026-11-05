@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { EventCallback } from '../../events/types';
 import { MockMemory } from '../../memory/mock';
-import { MASTRA_AUTH_TOKEN_KEY, MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+  RequestContext,
+} from '../../request-context';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -495,6 +501,129 @@ describe('Agent signals: claimed thread ownership', () => {
         claim.unsubscribe();
         subscription.unsubscribe();
       }
+    });
+  });
+
+  describe("a claimed owner keeps its own session identity from the caller's request context", () => {
+    // A caller running on another thread (an AgentController session, a sub-agent) carries that thread
+    // and resource in its request context. Agent reads those keys before `memory.thread`, so a wake
+    // that brought them along ran on the caller's thread instead of the owner's, and saved there.
+    const ids = { resourceId: 'owner-user', threadId: 'owner-thread' };
+    const callerIds = { resourceId: 'caller-user', threadId: 'caller-thread' };
+
+    function createOwner(id: string, pubsub: ControlledLeasePubSub) {
+      const seen: RequestContext[] = [];
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id,
+        name: id,
+        instructions: 'Test',
+        memory,
+        pubsub,
+        model: ({ requestContext }) => {
+          seen.push(requestContext);
+          return createTextStreamModel(`report for ${requestContext.get('tenant')}`);
+        },
+      });
+      return { agent, memory, seen };
+    }
+
+    function callerContext(token?: string) {
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'acme');
+      requestContext.setRaw(MASTRA_THREAD_ID_KEY, callerIds.threadId);
+      requestContext.setRaw(MASTRA_RESOURCE_ID_KEY, callerIds.resourceId);
+      if (token) requestContext.setRaw(MASTRA_AUTH_TOKEN_KEY, token);
+      return requestContext;
+    }
+
+    async function wakeClaimedOwner({
+      remote,
+      ownerToken,
+      callerToken,
+    }: {
+      remote: boolean;
+      ownerToken?: string;
+      callerToken?: string;
+    }) {
+      const pubsub = new ControlledLeasePubSub();
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const senderRuntime = remote ? new AgentThreadStreamRuntime() : ownerRuntime;
+      const owner = createOwner(remote ? 'remote-identity-owner' : 'local-identity-owner', pubsub);
+      const senderAgent = new Agent({
+        id: 'identity-sender',
+        name: 'Identity Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const subscription = await ownerRuntime.subscribeToThread(owner.agent, ids, pubsub);
+      const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+      const ownerContext = new RequestContext();
+      if (ownerToken) ownerContext.setRaw(MASTRA_AUTH_TOKEN_KEY, ownerToken);
+      const claim = await ownerRuntime.claimThreadOwnership(
+        owner.agent,
+        {
+          ...ids,
+          streamOptions: { memory: { resource: ids.resourceId, thread: ids.threadId }, requestContext: ownerContext },
+        },
+        pubsub,
+      );
+      expect(claim.claimed).toBe(true);
+      try {
+        const signalResult = senderRuntime.sendSignal(
+          senderAgent,
+          { type: 'user-message', contents: 'how did the export go?' },
+          {
+            ...ids,
+            ifIdle: {
+              behavior: 'wake',
+              requireClaimedOwner: true,
+              streamOptions: { requestContext: callerContext(callerToken) },
+            },
+          },
+          pubsub,
+        );
+        await signalResult.accepted;
+        const run = await withTimeout(nextRun, 'Timed out waiting for the claimed owner run');
+        return { owner, run };
+      } finally {
+        claim.unsubscribe();
+        subscription.unsubscribe();
+      }
+    }
+
+    async function assistantText(memory: MockMemory, target: { resourceId: string; threadId: string }) {
+      const { messages } = await memory.recall(target);
+      return JSON.stringify(messages.filter(message => message.role === 'assistant'));
+    }
+
+    for (const remote of [false, true]) {
+      it(`runs and saves on the owner's thread when the owner is ${remote ? 'in another process' : 'local'}`, async () => {
+        const { owner, run } = await wakeClaimedOwner({ remote });
+        expect(run.value.text).toBe('report for acme');
+
+        const context = owner.seen.at(-1)!;
+        expect(context.getRaw(MASTRA_THREAD_ID_KEY)).toBeUndefined();
+        expect(context.getRaw(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+        expect(await assistantText(owner.memory, ids)).toContain('report for acme');
+        expect(await assistantText(owner.memory, callerIds)).not.toContain('report for acme');
+      });
+    }
+
+    it("keeps a local owner's own auth token over the caller's", async () => {
+      const { owner } = await wakeClaimedOwner({
+        remote: false,
+        ownerToken: 'owner-token',
+        callerToken: 'sender-token',
+      });
+      expect(owner.seen.at(-1)?.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBe('owner-token');
+    });
+
+    it("keeps the caller's auth token when a local owner has none", async () => {
+      // A dispatcher waking a session for an authenticated caller: the owner has no token of its own.
+      const { owner } = await wakeClaimedOwner({ remote: false, callerToken: 'sender-token' });
+      expect(owner.seen.at(-1)?.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBe('sender-token');
     });
   });
 
