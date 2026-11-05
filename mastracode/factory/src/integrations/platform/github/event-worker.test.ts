@@ -1,7 +1,16 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { EventEmitterPubSub } from '@mastra/core/events';
 import type { LeaseProvider } from '@mastra/core/events';
 import type { WorkerDeps } from '@mastra/core/worker';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { publishSourceControlChange, subscribeSourceControlChanges } from '../../../source-control-changes.js';
+import { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
+import { SourceControlStorage } from '../../../storage/domains/source-control/base.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler } from '../../github/rules.js';
 import type { dispatchGithubWebhook } from '../../github/webhook.js';
@@ -747,6 +756,161 @@ describe('PlatformGithubEventWorker', () => {
 
       const eventPaths = pathsFrom(fetchImpl).filter(path => path.endsWith('/events'));
       expect(eventPaths).toEqual(['/v1/server/github-app/repositories/103/events']);
+    });
+  });
+
+  describe('repository discovery cache', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'platform-github-discovery-'));
+    const backends: LibSQLFactoryStorage[] = [];
+
+    afterEach(async () => {
+      await Promise.all(backends.splice(0).map(backend => backend.close()));
+    });
+
+    /** One replica's storage; replicas opened on the same `file` share the database. */
+    async function openReplica(file: string) {
+      const backend = new LibSQLFactoryStorage({ id: `discovery-${backends.length}`, url: `file:${join(dir, file)}` });
+      backends.push(backend);
+      const projects = backend.registerDomain(new FactoryProjectsStorage());
+      const domain = backend.registerDomain(new SourceControlStorage());
+      await backend.init();
+      return { projects, domain, github: domain.forIntegration('github') };
+    }
+
+    async function link(
+      replica: Awaited<ReturnType<typeof openReplica>>,
+      args: { factoryProjectId: string; repositoryId: number },
+    ) {
+      const installation = await replica.github.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+        accountName: 'acme',
+        accountType: 'organization',
+      });
+      const repository = await replica.github.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: installation.id,
+          externalId: String(args.repositoryId),
+          slug: `acme/repo-${args.repositoryId}`,
+          defaultBranch: 'main',
+          providerMetadata: {},
+        },
+      });
+      const connection =
+        (await replica.github.connections.list({ orgId: 'org-1', factoryProjectId: args.factoryProjectId }))[0] ??
+        (await replica.github.connections.create({
+          orgId: 'org-1',
+          factoryProjectId: args.factoryProjectId,
+          installationId: installation.id,
+          createdByUserId: 'user-1',
+        }));
+      await replica.github.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        branch: null,
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace/repo',
+      });
+    }
+
+    /** The worker wired to a replica's handle the way the Platform GitHub integration wires it. */
+    function workerOn(replica: Awaited<ReturnType<typeof openReplica>>, fetchImpl: typeof fetch) {
+      const handle = replica.github;
+      const listConfiguredExternalKeys = vi.spyOn(handle.projectRepositories, 'listConfiguredExternalKeys');
+      const worker = new PlatformGithubEventWorker({
+        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        controller: {} as never,
+        github: createGithub(),
+        storage: createSettingsStorage().storage,
+        intervalMs: 1_000,
+        sourceControl: {
+          onRepositoriesChanged: listener => handle.onRepositoriesChanged?.(listener),
+          projectRepositories: {
+            listConfiguredExternalKeys: () => handle.projectRepositories.listConfiguredExternalKeys(),
+            listByExternalRepository: args => handle.projectRepositories.listByExternalRepository(args),
+          },
+          repositories: { findByExternalId: args => handle.repositories.findByExternalId(args) },
+        },
+      });
+      return { worker, listConfiguredExternalKeys };
+    }
+
+    function polledRepositories(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
+      return [...new Set(fetchImpl.mock.calls.map(call => new URL(String(call[0])).pathname.split('/')[5]!))];
+    }
+
+    function eventsFetch() {
+      return vi.fn<typeof fetch>(async () => json({ events: [], nextCursor: null }));
+    }
+
+    it('stops reading repository links while idle and picks up a new link on the next tick', async () => {
+      const replica = await openReplica('idle.db');
+      const project = await replica.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+      await link(replica, { factoryProjectId: project.id, repositoryId: 101 });
+      const fetchImpl = eventsFetch();
+      const { worker, listConfiguredExternalKeys } = workerOn(replica, fetchImpl);
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(fetchImpl.mock.calls.length).toBeGreaterThanOrEqual(10);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(1);
+
+      await link(replica, { factoryProjectId: project.id, repositoryId: 102 });
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(polledRepositories(fetchImpl)).toEqual(['101', '102']);
+      expect(listConfiguredExternalKeys).toHaveBeenCalledTimes(2);
+      await worker.stop();
+    });
+
+    it('picks up a link written on another replica once that replica reports it', async () => {
+      const polling = await openReplica('replicas.db');
+      const other = await openReplica('replicas.db');
+      const pubsub = new EventEmitterPubSub();
+      other.domain.onRepositoryWrite(() => publishSourceControlChange(pubsub, 'other'));
+      const unsubscribe = await subscribeSourceControlChanges(pubsub, 'polling', () =>
+        polling.domain.repositoriesChanged(),
+      );
+      const project = await polling.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+      await link(polling, { factoryProjectId: project.id, repositoryId: 101 });
+      const fetchImpl = eventsFetch();
+      const { worker } = workerOn(polling, fetchImpl);
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await link(other, { factoryProjectId: project.id, repositoryId: 102 });
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(polledRepositories(fetchImpl)).toEqual(['101', '102']);
+      await worker.stop();
+      await unsubscribe();
+    });
+
+    it('re-reads repository links hourly when a change report never arrives', async () => {
+      const polling = await openReplica('lost.db');
+      const other = await openReplica('lost.db');
+      const project = await polling.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+      await link(polling, { factoryProjectId: project.id, repositoryId: 101 });
+      const fetchImpl = eventsFetch();
+      const { worker } = workerOn(polling, fetchImpl);
+
+      await worker.init(createDeps());
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await link(other, { factoryProjectId: project.id, repositoryId: 102 });
+      await vi.advanceTimersByTimeAsync(59 * 60_000);
+      expect(polledRepositories(fetchImpl)).toEqual(['101']);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(polledRepositories(fetchImpl)).toEqual(['101', '102']);
+      await worker.stop();
     });
   });
 
