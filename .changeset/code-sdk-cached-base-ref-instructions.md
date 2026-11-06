@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Instruction files read from a base branch, as on an untrusted pull request checkout, are now cached by git object. Each model step no longer runs a blocking git command per instruction file it checks, which stalled every other session in the same process, and a file left unchanged as the base branch moves is not read again.
+Improved responsiveness of sessions that load instruction files from a base branch, as on an untrusted pull request checkout. Repeated model steps reuse cached reads instead of running git again for each instruction file they check, which stalled every other session in the same process. After the base branch moves, only files whose content changed are read again.
