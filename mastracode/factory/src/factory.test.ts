@@ -3267,6 +3267,20 @@ describe('MastraFactory.finalize', () => {
     await expect(factory.finalize()).rejects.toThrow(/before prepare/);
   });
 
+  it('reports the boot time once, on the timing channel, when finalize() finishes', async () => {
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await factory.prepare();
+      await factory.finalize();
+      const boot = write.mock.calls.map(([line]) => String(line)).filter(line => / boot \d+ms/.test(line));
+      expect(boot).toHaveLength(1);
+      expect(boot[0]).toMatch(/^\[factory:timing\] boot \d+ms\n$/);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   it('runs the prepared finalize after prepare()', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await factory.prepare();

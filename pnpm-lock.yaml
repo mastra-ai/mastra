@@ -8850,6 +8850,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      msw:
+        specifier: ^2.15.0
+        version: 2.15.0(@types/node@22.19.15)(typescript@7.0.2)
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)

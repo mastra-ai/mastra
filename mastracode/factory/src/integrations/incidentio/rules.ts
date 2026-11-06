@@ -79,6 +79,12 @@ export class IncidentioRules {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
 
+    // A finished card may still be only in the legacy table; copy it so the issue finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+      sources: input.issues.map(issue => ({ integrationId: 'incidentio', type: 'issue', externalId: issue.id })),
+    });
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];

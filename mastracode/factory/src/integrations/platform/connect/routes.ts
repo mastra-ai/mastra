@@ -17,17 +17,13 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { PlatformApiClient} from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 import { offersSessionTools } from './session-tools.js';
 
 type RouteContext = Context;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export interface PlatformConnectProvider {
   /** Platform integration id used to mint connect sessions. */
