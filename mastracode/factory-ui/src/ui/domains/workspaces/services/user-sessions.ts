@@ -110,6 +110,11 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
   return normalizeUserSession(body.session);
 }
 
+/** The server answers a missing session and a teammate's private one with the same 404. */
+export function isSessionNotFound(error: Error): boolean {
+  return 'status' in error && error.status === 404;
+}
+
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
