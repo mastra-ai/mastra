@@ -377,10 +377,13 @@ export class OtelExporter extends BaseExporter {
         ? new DebugLogExporterWrapper(logExporter, msg => this.debugLog(msg))
         : logExporter;
 
-      const resource = resourceFromAttributes({
-        ...(this.config.resourceAttributes ?? {}),
-        [ATTR_SERVICE_NAME]: this.observabilityConfig?.serviceName || 'mastra-service',
-      });
+      const resource = resourceFromAttributes(
+        {
+          ...(this.config.resourceAttributes ?? {}),
+          [ATTR_SERVICE_NAME]: this.observabilityConfig?.serviceName || 'mastra-service',
+        },
+        { schemaUrl: this.config.resourceSchemaUrl },
+      );
 
       this.loggerProvider = new LoggerProvider({
         resource,

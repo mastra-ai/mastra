@@ -62,13 +62,16 @@ export class SpanConverter {
 
       const serviceVersion = (await getPackageVersion('@mastra/core')) ?? 'unknown';
 
-      let resource = resourceFromAttributes({
-        [ATTR_SERVICE_NAME]: this.params.serviceName || 'mastra-service',
-        [ATTR_SERVICE_VERSION]: serviceVersion,
-        [ATTR_TELEMETRY_SDK_NAME]: this.params.packageName,
-        [ATTR_TELEMETRY_SDK_VERSION]: packageVersion,
-        [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
-      });
+      let resource = resourceFromAttributes(
+        {
+          [ATTR_SERVICE_NAME]: this.params.serviceName || 'mastra-service',
+          [ATTR_SERVICE_VERSION]: serviceVersion,
+          [ATTR_TELEMETRY_SDK_NAME]: this.params.packageName,
+          [ATTR_TELEMETRY_SDK_VERSION]: packageVersion,
+          [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
+        },
+        { schemaUrl: this.params.config?.resourceSchemaUrl },
+      );
 
       if (this.params.config?.resourceAttributes) {
         resource = resource.merge(

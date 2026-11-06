@@ -83,6 +83,12 @@ export interface OtelExporterConfig extends BaseExporterConfig {
   // Override or provide additional resource attributes
   resourceAttributes?: DetectedResourceAttributes;
 
+  /**
+   * Semantic conventions schema URL declared on exported traces and logs,
+   * for example `https://opentelemetry.io/schemas/1.40.0`. Not set by default.
+   */
+  resourceSchemaUrl?: string;
+
   // Override or provide a custom span exporter
   exporter?: SpanExporter;
 

@@ -149,6 +149,31 @@ describe('OTLP exports', () => {
     });
   });
 
+  async function exportedSchemaUrls(config: Partial<OtelExporterConfig>) {
+    exporter = new OtelExporter({ provider: { custom: { endpoint: baseUrl, protocol: 'http/json' } }, ...config });
+    await sendSpan();
+    await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
+    await exporter.flush();
+    const body = (path: string) => JSON.parse(requests.find(request => request.path === path)!.body.toString());
+    return {
+      traces: body('/v1/traces').resourceSpans[0].schemaUrl,
+      logs: body('/v1/logs').resourceLogs[0].schemaUrl,
+    };
+  }
+
+  it('declares the configured schema URL on exported traces and logs', async () => {
+    const url = 'https://opentelemetry.io/schemas/1.40.0';
+    const schemaUrls = await exportedSchemaUrls({
+      resourceSchemaUrl: url,
+      resourceAttributes: { 'deployment.environment': 'test' },
+    });
+    expect(schemaUrls).toEqual({ traces: url, logs: url });
+  });
+
+  it('declares no schema URL on exported traces and logs by default', async () => {
+    expect(await exportedSchemaUrls({})).toEqual({ traces: undefined, logs: undefined });
+  });
+
   async function attributes(metadata?: Record<string, unknown>, metadataMapping?: Record<string, string>) {
     const config: OtelExporterConfig = {
       provider: { custom: { endpoint: baseUrl, protocol: 'http/json' } },
