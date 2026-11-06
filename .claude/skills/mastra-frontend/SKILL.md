@@ -5,6 +5,8 @@ description: How to build Mastra frontend interfaces with the @mastra/playground
 
 # Building Frontend Interfaces
 
+The design rules (which component, which variant, color, text, copy, charts, React code) live in `packages/playground-ui/design/README.md`. Read it first; this skill covers only Tailwind and token mechanics.
+
 Every Mastra application UI is assembled from the `@mastra/playground-ui` design system. Building a screen is composition work: pick existing components, arrange them with layout utilities, and let the design system provide the look. Writing colors, font sizes, shadows, or radii by hand means you have left the happy path. Changing the design system itself (tokens, `ds/` components, variants) is a separate, explicitly-approved task. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
 
 ## The boundary: look vs layout
@@ -27,11 +29,12 @@ Pick the highest rung that fits; each step down needs a reason:
 2. **Generated theme utility** from `theme.css`.
 3. **Dynamic v4 utility** when the value maps to the spacing scale (`min-w-100`, `size-6`, `grid-cols-15`).
 4. **Local CSS custom property** consumed via shorthand, for runtime values scoped to one component (`bg-(--row-bg)`, `text-(color:--agent-color-fg)`).
-5. **Square-bracket arbitrary value** only for a justified one-off (`max-h-[calc(100dvh-3rem)]`).
+
+Never a square-bracket arbitrary value (`p-[13px]`, `max-h-[calc(100dvh-3rem)]`): a missing value is a design-system question (`design/rules/core.md`).
 
 ## Theme contract
 
-- `theme.css` variables are API: adding one generates utilities for every consumer. Never modify `theme.css`, its layers in `packages/playground-ui/theme/`, or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for the design team.
+- `theme.css` variables are API: adding one generates utilities for every consumer. Never modify `theme.css`, its layers in `packages/playground-ui/theme/`, or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for a frontend code owner (`.github/CODEOWNERS`) to approve it.
 - Runtime-only or single-component values get a plain CSS custom property (which generates no utility) consumed via `bg-(--var)` — not a new `@theme` token.
 - When JavaScript needs a theme value, read the CSS variable (`var(--color-surface4)`, `getComputedStyle`) — never `resolveConfig` or JS token imports for styling.
 
@@ -59,4 +62,4 @@ Pick the highest rung that fits; each step down needs a reason:
 - Mono on text a person wrote or reads as language (labels, headings, status, prose): mono is for machine identifiers (IDs, hashes, log lines) and time (timestamps and durations). Other numbers, such as counts, costs, and scores, use the body face with `tabular-nums`. KPI values, chart axes, and chart tooltips stay in the body face even for time, so dashboards read in one face. See the Typography section of `packages/playground-ui/README.md`
 - Code as plain or mono text, or a hand-styled `<code className="rounded bg-…">`: use `InlineCode` in a sentence and a highlighted `CodeBlock` (with `lang`) for anything longer
 - Title Case on a button, link button, menu item, tab, tooltip, or `aria-label` ("Add Persistent Server"): actions use sentence case ("Add persistent server", "Open in Studio"). Capitalize only the first word and proper nouns: brands and products (Mastra, Studio, GitHub, MCP) and plan names ("Upgrade to Team"). Feature names are lowercase ("Edit working memory"). Lint (`mastra/sentence-case-labels`) catches static text; labels built in variables, props, or default values need the same care
-- A trailing ellipsis or Title Case in a placeholder ("Search agents...", "Search Issues"): placeholders read like the system search field on macOS and iOS, sentence case with no ending punctuation ("Search agents", "Filter by name"). Only progress text shown in the field keeps its ellipsis ("Loading agents…"). Lint (`playground-ui/placeholder-text`) checks string `placeholder` and `*Placeholder` values
+- A trailing ellipsis or Title Case in a placeholder ("Search agents...", "Search Issues"): placeholders read like the system search field on macOS and iOS, sentence case with no ending punctuation ("Search agents", "Filter by name"). Progress text has no ellipsis either ("Loading agents"). Lint (`playground-ui/placeholder-text`) checks string `placeholder` and `*Placeholder` values
