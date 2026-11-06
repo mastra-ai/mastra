@@ -48,9 +48,12 @@ describe('renderReviewStatusComment', () => {
       view({ state: state({ phase: 'reviewing', startedAt: '2026-11-05T10:01:00.123Z', head: HEAD }) }),
     );
     expect(body).toContain(
-      `<img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request">`,
+      `<img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request" width="360">`,
     );
     expect(body).not.toContain('<picture>');
+    // Shown smaller than the 468px asset; one width and no height keeps the aspect ratio.
+    expect(body.match(/<img [^>]*>/g)).toHaveLength(1);
+    expect(body).not.toMatch(/height=/);
     expect(body).toContain('Shipyard is reviewing this pull request on `aaaaaaa` since 2026-11-05T10:01:00Z.');
   });
 
@@ -61,12 +64,15 @@ describe('renderReviewStatusComment', () => {
       '> <picture>',
       `>   <source media="(prefers-color-scheme: dark)" srcset="${DARK_GIF}">`,
       `>   <source media="(prefers-color-scheme: light)" srcset="${GIF}">`,
-      `>   <img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request">`,
+      `>   <img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request" width="360">`,
       '> </picture>',
       '>',
     ].join('\n');
     // Blank quoted lines around the block keep GitHub from reading the markup as text inside the alert.
     expect(body).toContain(picture);
+    // The width sits on the fallback img, which sizes whichever source the theme picks.
+    expect(body.match(/width="360"/g)).toHaveLength(1);
+    expect(body).not.toMatch(/height=/);
     expect(body).toContain('Shipyard is reviewing this pull request.');
     for (const phase of ['queued', 'retrying', 'completed', 'failed', 'cancelled'] as const) {
       const ended = renderReviewStatusComment(view({ state: state({ phase }), gifDarkUrl: DARK_GIF }));

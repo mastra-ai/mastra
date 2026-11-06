@@ -193,9 +193,12 @@ function htmlAttribute(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** Display width for the 468px-wide animation; GitHub keeps the aspect ratio when only the width is set. */
+const ANIMATION_WIDTH = 360;
+
 /** The reviewing animation, matched to the reader's GitHub theme when a dark variant is configured. */
 function animation(view: ReviewStatusView): string[] {
-  const img = `<img src="${htmlAttribute(view.gifUrl)}" alt="${htmlAttribute(gifAltText(view.reviewerName))}">`;
+  const img = `<img src="${htmlAttribute(view.gifUrl)}" alt="${htmlAttribute(gifAltText(view.reviewerName))}" width="${ANIMATION_WIDTH}">`;
   if (!view.gifDarkUrl) return [img];
   return [
     '<picture>',
