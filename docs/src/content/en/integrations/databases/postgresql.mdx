@@ -320,10 +320,14 @@ const storage = new PostgresStore({
 
 try {
   await storage.init()
+  // Only needed if the application uses Knowledge
+  await storage.initKnowledge()
 } finally {
   await storage.close()
 }
 ```
+
+The runtime role needs read and write access to the tables this script creates. See [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html).
 
 Then set `disableInit: true` on the runtime store so it skips schema creation:
 
