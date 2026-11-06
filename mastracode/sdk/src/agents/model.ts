@@ -620,7 +620,7 @@ export function getGoalJudgeModel(
   settingsPath?: string,
 ): ResolvedModel | undefined {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel ?? controller?.session?.modelId;
+  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel || controller?.session?.modelId;
   if (!judgeModelId) return undefined;
   return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
 }

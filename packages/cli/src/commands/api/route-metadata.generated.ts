@@ -7298,7 +7298,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "judgeModelId",
       "maxRuns",
-      "objective"
+      "objective",
+      "start"
     ],
     "hasQuery": true,
     "hasBody": true,
@@ -7319,6 +7320,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "judgeModelId",
       "maxRuns",
+      "start",
       "status"
     ],
     "hasQuery": true,
