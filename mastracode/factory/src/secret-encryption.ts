@@ -56,24 +56,25 @@ export class FactorySecretDecryptionError extends Error {
 }
 
 /**
- * A client-safe sentence explaining a storage failure caused by an encryption
- * key mismatch, or `undefined` for any other failure (whose message may expose
- * database internals and stays in the server log).
+ * Client-safe copy for a storage failure caused by an encryption key problem,
+ * or `undefined` for any other failure (whose message may expose database
+ * internals and stays in the server log). `fix` marks env var names with backticks.
  */
-export function secretKeyMismatchHint(error: unknown): string | undefined {
+export function secretKeyProblem(error: unknown): { title: string; message: string; fix: string } | undefined {
   if (!(error instanceof FactorySecretDecryptionError)) return undefined;
-  if (error.missingKey) {
-    return (
-      "Factory can't decrypt its stored secrets because no encryption key is configured. " +
-      'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
-      'saved them, then redeploy Factory.'
-    );
-  }
-  return (
-    "Factory can't decrypt its stored secrets because they were saved with a different encryption key. " +
-    'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
-    'saved them, or add that key to FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS, then redeploy Factory.'
-  );
+  return {
+    title: "Factory can't unlock your secrets",
+    message: error.missingKey
+      ? 'No encryption key is set. Your secrets are safe.'
+      : 'The encryption key changed. Your secrets are safe.',
+    fix: 'Redeploy with the original `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
+  };
+}
+
+/** {@link secretKeyProblem} as one plain sentence, for API error messages. */
+export function secretKeyMismatchHint(error: unknown): string | undefined {
+  const problem = secretKeyProblem(error);
+  return problem && `${problem.title}. ${problem.message} ${problem.fix.replaceAll('`', '')}`;
 }
 
 function parseEnvelope(value: string): SecretEnvelopeV1 {
