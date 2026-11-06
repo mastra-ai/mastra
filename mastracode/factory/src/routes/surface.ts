@@ -138,6 +138,8 @@ export interface FactoryApiRoutesDeps {
   };
   /** Private credential entry for sessions; `credentials` is absent when they cannot be stored encrypted. */
   sessionCredentials?: Pick<SessionCredentialRoutesDeps, 'credentials' | 'notifyAvailable'>;
+  /** Drops a session's stored data (credentials) when the session is deleted; runs even when entry is disabled. */
+  purgeSessionData?: (session: { orgId: string; sessionId: string }) => Promise<void>;
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
@@ -708,13 +710,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
-          ...(deps.sessionCredentials?.credentials
-            ? {
-                purgeSessionData: deps.sessionCredentials.credentials.purgeSession.bind(
-                  deps.sessionCredentials.credentials,
-                ),
-              }
-            : {}),
+          ...(deps.purgeSessionData ? { purgeSessionData: deps.purgeSessionData } : {}),
           // A local sandbox's destroy keeps the session directory, so recreate
           // couldn't deliver the fresh checkout it promises there.
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',

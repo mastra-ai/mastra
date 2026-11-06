@@ -41,9 +41,15 @@ export function CredentialRequestPage() {
         <Txt variant="body-sm">Loading…</Txt>
       ) : query.isError || !data ? (
         <Txt variant="body-sm">This credential request does not exist or is not yours.</Txt>
-      ) : submit.isSuccess || data.request.status === 'fulfilled' ? (
+      ) : submit.isSuccess ? (
         <Txt variant="body-sm">
-          {data.request.name} was saved. The agent has been told it is available; you can close this page.
+          {data.request.name} was saved. The agent is notified it is available; if it does not pick it up, tell it in
+          the session. You can close this page.
+        </Txt>
+      ) : data.request.status === 'fulfilled' ? (
+        <Txt variant="body-sm">
+          This link was already used. Check with the agent whether {data.request.name} is available, or ask it to
+          request the credential again.
         </Txt>
       ) : data.request.status === 'expired' ? (
         <Txt variant="body-sm">This link has expired. Ask the agent to request the credential again.</Txt>
@@ -61,7 +67,10 @@ export function CredentialRequestPage() {
               autoComplete="off"
               spellCheck={false}
               value={value}
-              onChange={event => setValue(event.target.value)}
+              onChange={event => {
+                setValue(event.target.value);
+                if (submit.isError) submit.reset();
+              }}
             />
           </Field>
           <Field className="gap-1">

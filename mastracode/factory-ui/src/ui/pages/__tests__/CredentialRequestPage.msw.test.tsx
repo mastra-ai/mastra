@@ -92,6 +92,31 @@ describe('CredentialRequestPage', () => {
     expect(bodies).toEqual([{ value: SECRET, ttlMs: 4 * 60 * 60 * 1000, allowSandbox: false }]);
   });
 
+  it('given a rejected submission, when the owner edits the value, then the error clears', async () => {
+    server.use(
+      http.get(url, () => HttpResponse.json(pending())),
+      http.post(url, () => HttpResponse.json({ error: 'The credential is too large.' }, { status: 413 })),
+    );
+
+    const { container, client } = renderPage();
+    await screen.findByRole('button', { name: 'Save credential' });
+    const input = container.querySelector<HTMLInputElement>('input[type="password"]')!;
+    await userEvent.type(input, SECRET);
+    await userEvent.click(screen.getByRole('button', { name: 'Save credential' }));
+    await waitForMutationsIdle(client);
+    expect(await screen.findByText(/too large/)).toBeInTheDocument();
+
+    await userEvent.type(input, 'x');
+    expect(screen.queryByText(/too large/)).not.toBeInTheDocument();
+  });
+
+  it('given a request already used, when rendered, then it does not claim the value was saved', async () => {
+    server.use(http.get(url, () => HttpResponse.json(pending('fulfilled'))));
+    renderPage();
+    expect(await screen.findByText(/This link was already used/)).toBeInTheDocument();
+    expect(screen.queryByText(/was saved/)).not.toBeInTheDocument();
+  });
+
   it('given an expired request, when rendered, then no form is shown', async () => {
     server.use(http.get(url, () => HttpResponse.json(pending('expired'))));
     renderPage();

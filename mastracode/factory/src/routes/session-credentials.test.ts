@@ -181,4 +181,51 @@ describe('session credential routes', () => {
     const { as, submit } = await setup({ credentials: false });
     expect((await submit(as('alice'))).status).toBe(503);
   });
+
+  it('lets a local (auth-disabled) caller submit, but only when the session still belongs to the request org', async () => {
+    const { app, request, submit, rows, credentials } = await setup({ authEnabled: false });
+    expect((await app.request(`/web/credential-requests/${request.id}`)).status).toBe(200);
+    rows['sess-a']!.orgId = 'org-other';
+    expect((await app.request(`/web/credential-requests/${request.id}`)).status).toBe(404);
+    expect((await submit({})).status).toBe(404);
+    rows['sess-a']!.orgId = 'org-a';
+    expect((await submit({})).status).toBe(200);
+    expect((await credentials.list({ orgId: 'org-a', sessionId: 'sess-a' })).map(c => c.submittedBy)).toEqual([
+      'local',
+    ]);
+  });
+
+  it('rejects an oversized body with 413 without storing it', async () => {
+    const { submit, as, credentials } = await setup();
+    const response = await submit(as('alice'), { value: 'x'.repeat(64 * 1024), allowSandbox: true });
+    expect(response.status).toBe(413);
+    expect(await credentials.list({ orgId: 'org-a', sessionId: 'sess-a' })).toEqual([]);
+  });
+
+  it('still saves the credential when the session cannot be notified', async () => {
+    const { submit, as, notifyAvailable, credentials } = await setup();
+    notifyAvailable.mockRejectedValueOnce(new Error('offline'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const response = await submit(as('alice'));
+    expect(response.status).toBe(200);
+    expect(warn).toHaveBeenCalled();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(SECRET);
+    warn.mockRestore();
+    expect((await credentials.list({ orgId: 'org-a', sessionId: 'sess-a' })).map(c => c.name)).toEqual([
+      'FAKE_API_KEY',
+    ]);
+  });
+
+  it('audits a revocation', async () => {
+    const { app, submit, as, record } = await setup();
+    await submit(as('alice'));
+    const response = await app.request('/web/session-credentials/sess-a/FAKE_API_KEY', {
+      method: 'DELETE',
+      headers: as('alice'),
+    });
+    expect(response.status).toBe(200);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'factory.credential.revoked', orgId: 'org-a', actorId: 'alice' }),
+    );
+  });
 });
