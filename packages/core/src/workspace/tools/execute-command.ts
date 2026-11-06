@@ -111,7 +111,15 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   return `${output}${separator}${terminalLine}`;
 }
 
-const DEFAULT_FOREGROUND_DETACH_MS = 5 * 60_000;
+export const DEFAULT_FOREGROUND_DETACH_MS = 5 * 60_000;
+
+/** Processes whose exit will be reported to the agent that started them. */
+const exitNotified = new WeakSet<ProcessHandle>();
+
+/** Whether the agent that started this process will be notified when it exits. */
+export function willNotifyOnExit(handle: ProcessHandle): boolean {
+  return exitNotified.has(handle);
+}
 /** Output lines included in a process-exit notification. */
 const EXIT_NOTIFICATION_TAIL_LINES = 20;
 
@@ -129,6 +137,7 @@ function observeExit(
   const bgConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.backgroundProcesses;
   const target = exitNotificationTarget(context, bgConfig?.notifyOnExit);
   if (!bgConfig?.onExit && !target) return;
+  if (target) exitNotified.add(handle);
 
   void handle
     .wait()

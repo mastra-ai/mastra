@@ -155,7 +155,7 @@ describe('dynamic sandbox tools', () => {
     expect(pid).toBeDefined();
 
     const output = await tools[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT].execute(
-      { pid: pid!, wait: true },
+      { pid: pid!, waitSeconds: 10 },
       { requestContext },
     );
 
@@ -177,7 +177,7 @@ describe('dynamic sandbox tools', () => {
     expect(pid).toBeDefined();
 
     const output = await tools[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT].execute(
-      { pid: pid!, wait: true },
+      { pid: pid!, waitSeconds: 10 },
       { requestContext: new RequestContext() },
     );
 

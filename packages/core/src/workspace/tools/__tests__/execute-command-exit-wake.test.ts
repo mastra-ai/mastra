@@ -19,6 +19,7 @@ import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalSandbox } from '../../sandbox/local-sandbox';
 import { Workspace } from '../../workspace';
 import { executeCommandWithBackgroundTool } from '../execute-command';
+import { getProcessOutputTool } from '../get-process-output';
 import type { ExecuteCommandToolConfig } from '../types';
 
 const thread = { resourceId: 'user-1', threadId: 'thread-1' };
@@ -48,8 +49,10 @@ async function setup(config: ExecuteCommandToolConfig = {}) {
     agent: { agentId: 'builder', toolCallId: 'call-1', ...thread },
   } as any;
   const run = (input: Record<string, unknown>) => executeCommandWithBackgroundTool.execute!(input as any, context);
+  const read = (input: Record<string, unknown>) =>
+    getProcessOutputTool.execute!(input as any, context) as Promise<string>;
 
-  return { notifications, workspace, subscription, runs, run };
+  return { notifications, workspace, subscription, runs, run, read };
 }
 
 /** The notification signal that woke the next run. */
@@ -150,5 +153,44 @@ describe('execute_command: telling the agent when a process it stopped waiting o
     );
     await new Promise(resolve => setTimeout(resolve, 300));
     await expect(notifications.listNotifications({ threadId: thread.threadId })).resolves.toEqual([]);
+  });
+
+  it('stops waiting in get_process_output when waitSeconds runs out, then wakes the thread when the process exits', async () => {
+    const { run, read, runs, subscription, workspace } = await setup();
+    cleanup.push(
+      () => subscription.unsubscribe(),
+      () => workspace.destroy(),
+    );
+
+    const started = (await run({ command: 'echo working; sleep 2; echo all done', background: true })) as string;
+    const pid = started.match(/PID: (\d+)/)![1]!;
+
+    const startedAt = Date.now();
+    const output = await read({ pid, waitSeconds: 1 });
+    expect(Date.now() - startedAt).toBeLessThan(1_800);
+    expect(output).toBe(
+      "working\n\n\nStill running after 1 second. You'll be notified when it exits. Call get_process_output again to check on it, or kill_process to stop it.",
+    );
+
+    const signal = await nextWake(runs);
+    expect(signal.contents).toContain('exited with code 0');
+    expect(signal.contents).toContain('all done');
+  });
+
+  it('never waits in get_process_output longer than foregroundDetachMs', async () => {
+    const { run, read, subscription, workspace } = await setup({ foregroundDetachMs: 300 });
+    cleanup.push(
+      () => subscription.unsubscribe(),
+      () => workspace.destroy(),
+    );
+
+    const started = (await run({ command: 'sleep 30', background: true })) as string;
+    const pid = started.match(/PID: (\d+)/)![1]!;
+
+    const startedAt = Date.now();
+    const output = await read({ pid, waitSeconds: 60 });
+    expect(Date.now() - startedAt).toBeLessThan(900);
+    expect(output).toMatch(/^\(no output yet\)\n\nStill running after 1 second\./);
+    await workspace.sandbox!.processes!.kill(pid);
   });
 });
