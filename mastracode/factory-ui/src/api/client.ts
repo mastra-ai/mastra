@@ -7,7 +7,7 @@
  * server's absolute origin and (optionally) its own fetch.
  *
  * Error handling is centralized: a failing response is turned into an `Error`
- * whose message prefers the server's `{ error }` envelope and falls back to the
+ * whose message prefers the server's `{ message }`, then its `{ error }`, and falls back to the
  * HTTP status. Hooks surface this; they do not parse responses themselves.
  */
 
@@ -27,10 +27,10 @@ export interface ApiClient {
 
 async function extractError(res: Response): Promise<string> {
   try {
-    const data: unknown = await res.clone().json();
-    if (data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string') {
-      return (data as { error: string }).error;
-    }
+    const data = (await res.clone().json()) as { error?: unknown; message?: unknown } | null;
+    // `error` is often a machine code (`credentials_unavailable`); `message` is the sentence written for people.
+    if (data && typeof data.message === 'string' && data.message) return data.message;
+    if (data && typeof data.error === 'string') return data.error;
   } catch {
     // Non-JSON body — fall through to the status-based message.
   }
