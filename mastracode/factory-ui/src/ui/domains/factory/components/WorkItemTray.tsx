@@ -1,10 +1,12 @@
 import { useState } from 'react';
 
+import type { CardContextSession } from '../boardItems';
 import { itemBoard } from '../boardStages';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { factoryAttentionTargetPath } from '../services/attention';
 import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
+import { CardSessions } from './CardSessions';
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
@@ -21,6 +23,7 @@ export function WorkItemTray({
   highlightCommentId,
   events,
   actors,
+  contextSessions,
 }: {
   item: WorkItem;
   factoryId: string;
@@ -31,6 +34,7 @@ export function WorkItemTray({
   highlightCommentId?: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
+  contextSessions: readonly CardContextSession[];
 }) {
   const factoryProjectId = factoryId || undefined;
   const [quote, setQuote] = useState<CommentQuoteDraft>();
@@ -57,6 +61,7 @@ export function WorkItemTray({
               projectRepositoryId={projectRepositoryId}
               factoryProjectId={factoryProjectId}
             />
+            <CardSessions factoryId={factoryId} sessions={contextSessions} />
           </div>
         }
         commentUrl={commentId =>

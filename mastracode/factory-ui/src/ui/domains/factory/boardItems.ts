@@ -2,6 +2,7 @@ import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/
 import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
 import { isValid } from 'date-fns';
 
+import type { InstalledPhaseInfo } from '../../../api/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
@@ -250,6 +251,89 @@ export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>):
   return (
     sessions.triage ?? sessions.plan ?? sessions.work ?? sessions.review ?? sessions.chat ?? Object.values(sessions)[0]
   );
+}
+
+export type ContextPhase = Pick<InstalledPhaseInfo, 'id' | 'title' | 'name' | 'context' | 'role'>;
+
+export interface CardContextSession {
+  context: string;
+  label: string;
+  ref: WorkItemSessionRef;
+  /** The card's current phase runs in this context. */
+  current: boolean;
+}
+
+const CONTEXT_LABELS: Record<string, string> = {
+  triage: 'Triage',
+  work: 'Work',
+  review: 'Review',
+  plan: 'Planning',
+  chat: 'Chat',
+};
+
+/** The session context a phase runs in; `role` is its deprecated name. */
+export function phaseContext(phase: Pick<ContextPhase, 'context' | 'role'>): string | undefined {
+  return phase.context ?? phase.role;
+}
+
+/** A context named after its one phase, else by its well-known name, else by its key. */
+export function contextLabel(context: string, phases: readonly ContextPhase[] | undefined): string {
+  const running = phases?.filter(phase => phaseContext(phase) === context) ?? [];
+  if (running.length === 1) return running[0]!.name ?? running[0]!.title;
+  return CONTEXT_LABELS[context] ?? context.charAt(0).toUpperCase() + context.slice(1);
+}
+
+/** Contexts holding a session, by the card's current phase first, then its most recently visited phases. */
+function visitedContexts(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[],
+  columnStage: string,
+): string[] {
+  const contexts: string[] = [];
+  for (const stage of [columnStage, ...item.stageHistory.map(entry => entry.stage).reverse()]) {
+    const phase = phases.find(candidate => candidate.id === stage);
+    const context = phase && phaseContext(phase);
+    if (context !== undefined && item.sessions[context] && !contexts.includes(context)) contexts.push(context);
+  }
+  return contexts;
+}
+
+/**
+ * Every session a card holds, one per context: the context its current phase
+ * runs in first, then the contexts of its most recently visited phases, then
+ * the rest. A session filed under two keys is listed once, under the first.
+ */
+export function cardContextSessions(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[] | undefined,
+  columnStage: string,
+): CardContextSession[] {
+  const currentPhase = phases?.find(phase => phase.id === columnStage);
+  const currentContext = currentPhase && phaseContext(currentPhase);
+  const visited = phases ? visitedContexts(item, phases, columnStage) : [];
+  const order = [...new Set([...visited, ...Object.keys(item.sessions)])];
+  const seen = new Set<string>();
+  return order.flatMap(context => {
+    const ref = item.sessions[context]!;
+    const key = `${ref.sessionId}:${ref.threadId}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ context, label: contextLabel(context, phases), ref, current: context === currentContext }];
+  });
+}
+
+/**
+ * The session a card opens: its current phase's context, else the context of
+ * the phase it last visited. Without a board catalog, or when no visited phase
+ * holds a session, it keeps the lifecycle order of `itemThreadSession`.
+ */
+export function cardThreadSession(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[] | undefined,
+  columnStage: string,
+): WorkItemSessionRef | undefined {
+  const context = phases && visitedContexts(item, phases, columnStage)[0];
+  return context === undefined ? itemThreadSession(item.sessions) : item.sessions[context];
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
