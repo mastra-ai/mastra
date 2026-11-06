@@ -91,6 +91,17 @@ export function createSessionCredentialTools(
 ): IntegrationTools {
   const agentActor = { actorId: `agent:${scope.threadId}`, actorType: 'agent' as const };
 
+  // Credentials belong to the session owner. In a team-visible session another org member can drive the
+  // agent, so every tool re-checks the caller against the session's current owner (workers act as the owner).
+  const ownedSession = async () => {
+    const session = await deps.sessions.getBySessionId(scope.sessionId);
+    if (!session || session.orgId !== scope.orgId) throw new Error('This session is not available.');
+    if (session.userId !== scope.userId) {
+      throw new Error('Only the owner of this session can request or use its credentials.');
+    }
+    return session;
+  };
+
   const request = createTool({
     id: 'factory_request_credential',
     description: [
@@ -114,8 +125,7 @@ export function createSessionCredentialTools(
       })
       .strict(),
     execute: async ({ name, purpose }) => {
-      const session = await deps.sessions.getBySessionId(scope.sessionId);
-      if (!session || session.orgId !== scope.orgId) throw new Error('This session is not available.');
+      const session = await ownedSession();
       await deps.credentials.ensureReady();
       const record = await deps.credentials
         .createRequest({
@@ -152,6 +162,7 @@ export function createSessionCredentialTools(
       'List the credentials available to this session: names, expiry, and whether they can be passed to commands. Values are never shown.',
     inputSchema: z.object({}).strict(),
     execute: async () => {
+      await ownedSession();
       await deps.credentials.ensureReady();
       const credentials = await deps.credentials.list({ orgId: scope.orgId, sessionId: scope.sessionId });
       return {
@@ -180,6 +191,7 @@ export function createSessionCredentialTools(
       })
       .strict(),
     execute: async ({ command, credentials: names, cwd, timeoutMs }) => {
+      await ownedSession();
       const found = await deps.findSandbox({ orgId: scope.orgId, sessionId: scope.sessionId });
       if (!found) throw new Error('This session has no sandbox running yet. Run a command to start one.');
       await deps.credentials.ensureReady();
