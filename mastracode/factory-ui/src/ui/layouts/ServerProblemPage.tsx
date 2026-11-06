@@ -40,7 +40,7 @@ export function ServerProblemPage({ problem }: { problem: ServerStatusProblem })
         {problem.docsUrl ? (
           <div className="pt-1">
             <Button variant="primary" render={<a href={problem.docsUrl} target="_blank" rel="noreferrer" />}>
-              Read the fix guide
+              Read the docs
             </Button>
           </div>
         ) : null}

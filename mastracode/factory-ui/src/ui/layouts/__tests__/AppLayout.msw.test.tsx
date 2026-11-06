@@ -178,7 +178,7 @@ describe('AppLayout', () => {
     expect(within(alert).getByText('The encryption key changed. Your secrets are safe.')).toBeInTheDocument();
     expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
     expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
-    expect(within(alert).getByRole('link', { name: 'Read the fix guide' })).toHaveAttribute(
+    expect(within(alert).getByRole('link', { name: 'Read the docs' })).toHaveAttribute(
       'href',
       'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
     );
