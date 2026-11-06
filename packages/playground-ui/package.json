@@ -15,7 +15,8 @@
     "fonts",
     "theme",
     "oxlint",
-    "CENTRAL-ICONS-LICENSE.md"
+    "CENTRAL-ICONS-LICENSE.md",
+    "design"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
@@ -166,7 +167,7 @@
     "dev": "node scripts/prune-dist.mjs && vite build --watch --mode development",
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p design/examples",
     "icons:central": "node scripts/central-icons.mjs",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
