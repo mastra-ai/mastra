@@ -72,6 +72,8 @@ import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
+import { SessionCredentialRoutes } from './session-credentials.js';
+import type { SessionCredentialRoutesDeps } from './session-credentials.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
@@ -134,6 +136,8 @@ export interface FactoryApiRoutesDeps {
     skillOverrides: SkillOverridesStorage;
     voiceSettings: VoiceSettingsStorage;
   };
+  /** Private credential entry for sessions; `credentials` is absent when they cannot be stored encrypted. */
+  sessionCredentials?: Pick<SessionCredentialRoutesDeps, 'credentials' | 'notifyAvailable'>;
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
@@ -817,6 +821,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       voiceSettings: deps.domains.voiceSettings,
       factoryProjects: deps.domains.projects,
     }).routes(),
+    ...(deps.sessionCredentials
+      ? new SessionCredentialRoutes({
+          auth: deps.auth,
+          sessions: sourceControlSessions,
+          audit: deps.audit,
+          ...deps.sessionCredentials,
+        }).routes()
+      : []),
     ...new SkillRoutes({
       auth: deps.auth,
       controllerId: deps.controllerId,
