@@ -72,7 +72,7 @@ new MastraAuthNeon({
 })
 ```
 
-Signing out of Studio also revokes the session in Neon Auth.
+Signing out of Studio clears its session cookie and attempts to revoke the session in Neon Auth. If the Neon Auth request fails, the session may remain active.
 
 ## Client-side setup
 
