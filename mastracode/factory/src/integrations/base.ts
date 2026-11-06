@@ -37,12 +37,14 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
@@ -148,6 +150,10 @@ export interface IntegrationContext {
      * right user's credentials.
      */
     channelIdentity: ChannelIdentityStorage;
+    /** Tenant model credentials, so a channel can transcribe a voice clip with the sender's STT key. */
+    modelCredentials: ModelCredentialsStorage;
+    /** Per-user and per-Factory speech-to-text model choice (Settings → Models → Voice input). */
+    voiceSettings: VoiceSettingsStorage;
   };
   /**
    * Factory runtime available when the work-item domain is ready.

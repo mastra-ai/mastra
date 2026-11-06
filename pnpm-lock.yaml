@@ -2710,6 +2710,15 @@ importers:
       '@mastra/tavily':
         specifier: workspace:*
         version: link:../../integrations/tavily
+      '@mastra/voice-deepgram':
+        specifier: workspace:*
+        version: link:../../voice/deepgram
+      '@mastra/voice-mistral':
+        specifier: workspace:*
+        version: link:../../voice/mistral
+      '@mastra/voice-openai':
+        specifier: workspace:*
+        version: link:../../voice/openai
       ai:
         specifier: ^7.0.159
         version: 7.0.162(zod@4.6.7)
@@ -2849,12 +2858,6 @@ importers:
       '@mastra/tavily':
         specifier: workspace:*
         version: link:../../integrations/tavily
-      '@mastra/voice-deepgram':
-        specifier: workspace:*
-        version: link:../../voice/deepgram
-      '@mastra/voice-openai':
-        specifier: workspace:*
-        version: link:../../voice/openai
       ai:
         specifier: ^7.0.159
         version: 7.0.162(zod@4.6.7)
@@ -5451,9 +5454,6 @@ importers:
 
   packages/mcp-apps-components:
     devDependencies:
-      '@hono/node-server':
-        specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5466,9 +5466,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/hono':
-        specifier: workspace:*
-        version: link:../../server-adapters/hono
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../mcp
@@ -5478,9 +5475,6 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
-      '@mastra/server':
-        specifier: workspace:*
-        version: link:../server
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
@@ -5514,15 +5508,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.2
         version: 6.2.1(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-      hono:
-        specifier: ^4.13.13
-        version: 4.13.16
       jsdom:
         specifier: ^30.1.3
         version: 30.1.3(@noble/hashes@2.4.0)
-      msw:
-        specifier: ^2.15.0
-        version: 2.15.0(@types/node@22.19.15)(typescript@7.0.2)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -8859,6 +8847,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      msw:
+        specifier: ^2.15.0
+        version: 2.15.0(@types/node@22.19.15)(typescript@7.0.2)
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)

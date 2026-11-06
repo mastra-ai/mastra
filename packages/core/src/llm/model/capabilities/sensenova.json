@@ -16,12 +16,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -31,7 +25,7 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5.2": [
+    "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -43,10 +37,16 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "deepseek-v4-flash": [
+    "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

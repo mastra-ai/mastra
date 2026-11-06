@@ -1,5 +1,6 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { ChannelIdentityStorage } from '../../storage/domains/channel-identity/base.js';
@@ -106,14 +107,6 @@ export function createSlackConnectRoutes(deps: {
     consumedNonces.set(nonce, now + STATE_REPLAY_WINDOW_MS);
     return true;
   };
-
-  // mc-web can resolve a different hono version than @mastra/factory, so the
-  // registerApiRoute handler `Context` and the factory `RouteAuth` `Context`
-  // are structurally incompatible (private `[GET_MATCH_RESULT]` symbol). Cast
-  // through `unknown` at the seam — same `loose()` workaround the factory
-  // routes use internally.
-  type RouteAuthContext = Parameters<RouteAuth['ensureUser']>[0];
-  const loose = (c: unknown): RouteAuthContext => c as RouteAuthContext;
 
   return [
     registerApiRoute('/connect/slack', {

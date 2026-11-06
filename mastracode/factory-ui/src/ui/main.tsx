@@ -6,7 +6,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 
-import { ApiConfigProvider } from '../api/config';
+import { ApiConfigProvider, createApiConfig } from '../api/config';
 import { createQueryClient } from '../query-client';
 import { PwaInstallBanner } from './lib/pwa';
 import { createAppRouter } from './router';
@@ -22,7 +22,8 @@ import './tailwind.css';
 // entry mounts the same providers with its own absolute base URL and fetch
 // implementation.
 const queryClient = createQueryClient();
-const router = createAppRouter();
+const api = createApiConfig({ baseUrl: '' });
+const router = createAppRouter({ queryClient, api });
 
 if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
   void import('react-grab');
@@ -33,7 +34,7 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
-          <ApiConfigProvider baseUrl="">
+          <ApiConfigProvider config={api}>
             <RouterProvider router={router} />
             <PwaInstallBanner />
             <Toaster position="bottom-right" />
