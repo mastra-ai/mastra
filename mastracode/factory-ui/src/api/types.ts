@@ -46,7 +46,7 @@ import type {
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
 import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
-import type { TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
+import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
@@ -67,7 +67,7 @@ export type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 };
-export type { TranscribeResponse, VoiceSettingsResponse };
+export type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 

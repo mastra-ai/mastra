@@ -287,5 +287,21 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
       name: 'work_items_source_key_idx',
       columns: ['source_key'],
     },
+    {
+      // Finds the newest legacy write without a scan, so a finished split can be confirmed at boot.
+      name: 'work_items_updated_at_id_idx',
+      columns: ['updated_at', 'id'],
+    },
   ],
+};
+
+/** Records the newest legacy row a finished split pass covered; later boots skip unchanged legacy tables. */
+export const FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA: CollectionSchema = {
+  name: 'factory_work_item_split_state',
+  columns: {
+    id: { type: 'text', primaryKey: true },
+    legacy_updated_at: { type: 'timestamp', nullable: true },
+    legacy_id: { type: 'text', nullable: true },
+    completed_at: { type: 'timestamp' },
+  },
 };

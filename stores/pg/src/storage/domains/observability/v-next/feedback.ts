@@ -128,6 +128,19 @@ export async function batchCreateFeedback(
   await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, rows, partitioning, FEEDBACK_UPSERT_CLAUSE);
 }
 
+export async function getFeedbackById(
+  client: DbClient,
+  schema: string,
+  feedbackId: string,
+): Promise<FeedbackRecord | null> {
+  const row = await client.oneOrNone<Record<string, any>>(
+    `SELECT ${FEEDBACK_SELECT_COLUMNS} FROM ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
+     WHERE "feedbackId" = $1 ORDER BY "cursorId" DESC LIMIT 1`,
+    [feedbackId],
+  );
+  return row ? rowToFeedbackRecord(row) : null;
+}
+
 export async function updateFeedbackReviewStatus(
   client: DbClient,
   schema: string,

@@ -3,7 +3,7 @@ import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveJiraRules } from './default-rules.js';
 import type { JiraRuleOverrides } from './default-rules.js';
 import { JiraRules } from './rules.js';
@@ -58,7 +58,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
     (await seeded.workItems.list({ orgId: 'org-1', factoryProjectId })).filter(
       item => item.externalSource?.externalId === issue.id,
     );
-  return { project, other, service, workItems: seeded.workItems, drain, cardsFor };
+  return { project, other, service, workItems: seeded.workItems, storage: seeded.storage, drain, cardsFor };
 }
 
 describe('JiraRules', () => {
@@ -180,6 +180,32 @@ describe('JiraRules', () => {
     expect(evaluate).toHaveBeenCalledWith(
       expect.objectContaining({ workItemId: card!.id, decisions: [] }),
     );
+    const upserts = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      entry => entry.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(upserts).toHaveLength(1);
+    expect((await cardsFor(project.id)).map(item => item.id)).toEqual([card!.id]);
+  });
+
+  it('a reopened issue finds its finished card while that card is still being copied', async () => {
+    const { project, service, workItems, storage, drain, cardsFor } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    await ingest({ ...issue, state: 'Done', stateType: 'completed', updatedAt: '2026-07-03T00:00:00Z' });
+    await drain();
+    const [card] = await cardsFor(project.id);
+    expect(card?.stages).toEqual(['done']);
+    await demoteCardsToLegacyForTests(storage, [card!.id]);
+    expect(workItems.legacyBackfillPending).toBe(true);
+
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+    await ingest({ ...issue, state: 'To Do', stateType: 'unstarted', updatedAt: '2026-07-04T00:00:00Z' });
+    await drain();
+
+    // The rules saw the card: the observation asked for nothing, not for a new card.
+    expect(evaluate.mock.calls[0]?.[0]).toMatchObject({ workItemId: card!.id, decisions: [] });
     const upserts = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
       entry => entry.decision.type === 'upsertLinkedWorkItem',
     );
