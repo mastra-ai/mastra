@@ -169,9 +169,11 @@ type LinkedSenderResult =
   | { status: 'linked'; link: ChannelAccountLink; key: ChannelAccountLinkKey };
 
 /**
- * Resolve the sender's account link, posting an ephemeral "connect your
- * account" card (visible only to the sender) linking into the web UI's
- * Slack-connect flow when they're unlinked.
+ * Resolve the sender's account link, replying in the thread with a "connect
+ * your account" card linking into the web UI's Slack-connect flow when
+ * they're unlinked. The reply is public (and mentions the sender in channels)
+ * so the sender gets notified and everyone else in the thread can see why the
+ * agent didn't pick up the message.
  */
 export async function resolveLinkedSender({
   thread,
@@ -195,9 +197,10 @@ export async function resolveLinkedSender({
   const publicUrl = webPublicUrl();
   // A public origin is all the card needs. The link carries no identity: the
   // web app authenticates the visitor, then Slack's OIDC flow proves which
-  // Slack account they control. Without an origin, still block, just no card.
+  // Slack account they control, so posting it publicly leaks nothing. Without
+  // an origin, still block, just no card.
   if (publicUrl) {
-    await thread.postEphemeral(message.author, buildConnectCard(publicUrl, thread), { fallbackToDM: true });
+    await thread.post(buildConnectCard(publicUrl, thread, message.author.userId));
   }
   return { status: 'blocked' };
 }
@@ -209,11 +212,12 @@ const retryHint = (thread: HandlerThread) => (thread.isDM ? 'message me again' :
  * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
  * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
-function buildConnectCard(publicUrl: string, thread: HandlerThread) {
+function buildConnectCard(publicUrl: string, thread: HandlerThread, senderUserId: string) {
+  const greeting = thread.isDM ? '' : `${thread.mentionUser(senderUserId)} `;
   return Card({
     title: 'Connect your account',
     children: [
-      CardText(`Connect your account to use this agent, then ${retryHint(thread)}.`),
+      CardText(`${greeting}Connect your Slack account to this Factory to use this agent, then ${retryHint(thread)}.`),
       Actions([
         LinkButton({
           url: `${publicUrl}/connect/slack`,
