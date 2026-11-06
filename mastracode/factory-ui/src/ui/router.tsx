@@ -204,7 +204,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
                         // The Review board was retired: its pull requests live on Work.
-                        { path: 'review', element: <RetiredReviewBoardRedirect /> },
+                        { path: 'review', element: <RetiredReviewBoardRedirect />, ...loadOnEntry(prefetchBoard) },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
