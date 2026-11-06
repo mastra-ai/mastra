@@ -42,6 +42,12 @@ new MastraStorageExporter(config?: MastraStorageExporterConfig)
 
 ```typescript
 interface MastraStorageExporterConfig extends BaseExporterConfig {
+  /** Opt-in byte flush thresholds. Omit to keep count-based batching. */
+  byteBatching?: {
+    maxBatchBytes?: number // Default: 8 MiB
+    maxConcurrentWrites?: number // Default: 1
+  }
+
   /** Maximum number of spans per batch. Default: 1000 */
   maxBatchSize?: number
 
@@ -67,6 +73,39 @@ Extends `BaseExporterConfig`, which includes:
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
+## Byte batching
+
+Enable byte batching with `byteBatching: {}` or supply custom thresholds:
+
+```typescript
+new MastraStorageExporter({
+  byteBatching: {
+    maxBatchBytes: 8 * 1024 * 1024,
+    maxConcurrentWrites: 1,
+  },
+})
+```
+
+In this mode:
+
+- `maxBatchBytes` is a flush threshold measured in serialized buffered-event bytes. A batch is sent when it reaches or crosses this threshold. Individual records remain intact even when larger than the threshold.
+- `maxBatchSize` also triggers flushing by record count. `maxBufferSize` remains an emergency flush trigger. Neither discards records.
+- `maxConcurrentWrites` limits concurrent storage calls. Update-based tracing strategies always use one write at a time to preserve create, update, and end ordering.
+- Queued records and retries remain retained until handled by storage. The byte threshold never truncates or discards records, and pending bytes have no admission cap.
+- The exporter snapshots payloads at enqueue time and preserves Dates. Serialization errors propagate to the caller instead of silently discarding a record.
+
+Byte counts measure UTF-8 JSON representations of buffered events, including a separator. They aren't exact adapter request sizes or a process heap limit. Storage records, adapter encoding, payload snapshots, and temporary serialization allocations consume additional memory. If storage falls behind, queue memory can grow.
+
+Call `getByteBatchingStats()` to inspect `pendingBytes`, `pendingRecords`, and `activeWrites`. The method returns `undefined` when byte batching is disabled.
+
+`flush()` waits for queued work and retries to finish. `shutdown()` stops accepting new events and drains the queue. Existing unsupported-storage and retry-exhaustion behavior still applies. Configure connection and request timeouts on the storage adapter: the exporter can't safely cancel an arbitrary storage call while that call is still running.
+
+### ClickHouse tuning
+
+The storage defaults favor larger batches because this exporter writes directly to the storage adapter. The Platform exporter sends requests through a collection pipeline that batches independently before writing to ClickHouse.
+
+For ClickHouse, tune byte thresholds together with record counts, arrival rate, and flush interval. ClickHouse recommends at least 1,000 rows per synchronous insert, ideally 10,000 to 100,000 where practical. Large records can reach a byte threshold before that row count. For frequent small inserts, consider ClickHouse asynchronous inserts with `async_insert=1` and `wait_for_async_insert=1` on the client. Waiting for completion preserves failure reporting. See [ClickHouse insert strategies](https://clickhouse.com/docs/best-practices/selecting-an-insert-strategy) and [asynchronous inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts).
+
 ## `TracingStorageStrategy`
 
 ```typescript
@@ -77,7 +116,7 @@ type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
 
 - **realtime**: Immediately persists each event to storage
 - **batch-with-updates**: Batches creates and updates separately, applies in order
-- **insert-only**: Only processes SPAN_ENDED events, ignores updates
+- **insert-only**: Only processes SPAN\_ENDED events, ignores updates
 
 ## Properties
 

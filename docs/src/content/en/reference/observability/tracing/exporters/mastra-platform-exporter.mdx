@@ -50,6 +50,13 @@ interface MastraPlatformExporterConfig extends BaseExporterConfig {
   /** Maximum wait time before flushing in milliseconds. Default: 5000 */
   maxBatchWaitMs?: number
 
+  /** Opt into byte-triggered batches and upload concurrency control */
+  byteBatching?: {
+    maxBatchBytes?: number // Default: 8 MiB
+    maxConcurrentUploads?: number // Default: 2
+    uploadTimeoutMs?: number // Default: 30000
+  }
+
   /** Maximum retry attempts. Default: 3 */
   maxRetries?: number
 
@@ -260,6 +267,47 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 - Flushes when total buffered event count reaches `maxBatchSize`
 - Flushes when `maxBatchWaitMs` elapsed since the first buffered signal in the batch
 - Flushes on `shutdown()`
+
+### Byte batching
+
+Set `byteBatching` to flush by serialized byte size and control concurrent uploads:
+
+```typescript
+import { MastraPlatformExporter } from '@mastra/observability'
+
+const exporter = new MastraPlatformExporter({
+  byteBatching: {
+    maxBatchBytes: 8 * 1024 * 1024,
+    maxConcurrentUploads: 2,
+    uploadTimeoutMs: 30_000,
+  },
+})
+```
+
+Without `byteBatching`, the exporter keeps its existing count-based batching behavior.
+
+In byte mode:
+
+- `maxBatchBytes` is a flush threshold measured in UTF-8 JSON bytes, including the request envelope and separators. Crossing it makes a batch ready to send. It doesn't cap request size: records are never truncated, split, or dropped to meet the threshold. A single larger record is sent intact in its own request.
+- `maxConcurrentUploads` limits simultaneous uploads across all signal types. Retries occupy the same slot until the upload settles.
+- `uploadTimeoutMs` sets a deadline for each upload, including retries. Upload failures follow the exporter's retry and error handling behavior below.
+- `maxBatchSize` remains a secondary record-count flush trigger. `maxBatchWaitMs` makes partial batches ready to send. Waiting for an upload slot can add delay.
+- Records are serialized once when accepted, so later mutations don't affect the queued payload. Serialization errors propagate to the caller.
+- `flush()` and `shutdown()` wait for queued and active uploads to settle. Existing authentication, quota, and retry-exhaustion behavior still applies.
+
+All byte-mode settings must be positive safe integers. `maxBatchBytes` must be at least 32. Timer values must not exceed 2,147,483,647 milliseconds.
+
+Pending bytes have no admission cap. If exports fall behind, queued records are retained and memory can grow. Byte batching reduces typical request size and concurrent upload allocations; it doesn't guarantee bounded memory or durable delivery. The collector may apply its own payload processing after export.
+
+Inspect the current queue with `exporter.getByteBatchingStats()`:
+
+```typescript
+const stats = exporter.getByteBatchingStats()
+// undefined when byte mode is disabled
+// Otherwise: pendingBytes, activeUploads
+```
+
+`pendingBytes` measures serialized JSON retained across queued and active uploads, not total process memory. JavaScript strings, queue bookkeeping, temporary serialization, HTTP buffers, and agent execution consume additional memory.
 
 ### Error handling
 
