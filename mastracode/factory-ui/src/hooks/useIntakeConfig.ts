@@ -90,7 +90,7 @@ function serialWrite<TCache, TVariables>(
       if (lastInFlight()) queryClient.setQueryData(queryKey, saved);
       else patch(variables);
     },
-    rollback: (previous: TCache | undefined) => {
+    rollback: (previous?: TCache) => {
       if (!lastInFlight()) return;
       if (previous !== undefined) queryClient.setQueryData(queryKey, previous);
       void queryClient.invalidateQueries({ queryKey, exact: true });
@@ -214,7 +214,10 @@ export function useAddIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<Int
       invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
-    onError: (error, binding) => callbacks?.onFailed?.(error, binding),
+    onError: (error, binding) => {
+      write.rollback();
+      callbacks?.onFailed?.(error, binding);
+    },
   });
 }
 
@@ -269,6 +272,9 @@ export function useAddIntakeLabelRouteMutation(
       void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
       callbacks?.onSaved?.(route);
     },
-    onError: (error, route) => callbacks?.onFailed?.(error, route),
+    onError: (error, route) => {
+      write.rollback();
+      callbacks?.onFailed?.(error, route);
+    },
   });
 }
