@@ -36,8 +36,6 @@ export interface ReviewStatusStats {
   /** The commit the recorded verdict covers. */
   reviewedHeadSha?: string;
   durationMs?: number;
-  inlineFindings?: number;
-  filesWithFindings?: number;
 }
 
 export interface ReviewStatusView {
@@ -46,6 +44,8 @@ export interface ReviewStatusView {
   /** Why the run failed or will retry; already sanitized by the dispatcher. */
   reason?: string;
   reviewerName: string;
+  /** `owner/name` of the pull request's repository, used to link the commit in the footer. */
+  repository?: string;
   /** The animation shown while reviewing; also the fallback for readers without a theme preference. */
   gifUrl: string;
   /** The same animation drawn for GitHub's dark theme, swapped in with `prefers-color-scheme`. */
@@ -148,10 +148,6 @@ function inlineCode(text: string, max = 300): string {
   return `\`${clipped}\``;
 }
 
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`;
-}
-
 function stateLine(state: ReviewStatusState): string {
   return `${STATE_PREFIX}${JSON.stringify(state)}${STATE_SUFFIX}`;
 }
@@ -166,23 +162,29 @@ function finalHeading(view: ReviewStatusView): string {
   return '### ☑️ Review finished';
 }
 
-function statsTable(view: ReviewStatusView): string[] {
+const REPOSITORY_SLUG = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+function commitLink(sha: string, repository: string | undefined): string {
+  const code = `\`${shortSha(sha)}\``;
+  return repository && REPOSITORY_SLUG.test(repository)
+    ? `[${code}](https://github.com/${repository}/commit/${sha})`
+    : code;
+}
+
+/**
+ * A quiet line under a finished status: the commit and how long the run took. Only a recorded
+ * verdict's commit is called reviewed; otherwise it is the head the run started on.
+ */
+function footer(view: ReviewStatusView): string[] {
   const { stats = {}, state } = view;
-  const rows: Array<[string, string]> = [];
-  if (stats.verdict) rows.push(['Verdict', stats.verdict === 'approve' ? 'Approve' : 'Request changes']);
-  if (stats.reviewedHeadSha) rows.push(['Reviewed commit', `\`${shortSha(stats.reviewedHeadSha)}\``]);
-  else if (state.head) rows.push(['Head when the review started', `\`${shortSha(state.head)}\``]);
-  if (stats.durationMs !== undefined) rows.push(['Duration', formatDuration(stats.durationMs)]);
-  if (stats.inlineFindings !== undefined) {
-    const files =
-      stats.inlineFindings > 0 && stats.filesWithFindings !== undefined
-        ? ` across ${plural(stats.filesWithFindings, 'file')}`
-        : '';
-    rows.push(['Inline comments', `${stats.inlineFindings}${files}`]);
-  }
-  if (state.attempt > 1) rows.push(['Attempts', String(state.attempt)]);
-  if (rows.length === 0) return [];
-  return ['', '| | |', '| --- | --- |', ...rows.map(([label, value]) => `| ${label} | ${value} |`)];
+  const parts: string[] = [];
+  if (stats.reviewedHeadSha && stats.verdict && state.phase === 'completed')
+    parts.push(`Reviewed ${commitLink(stats.reviewedHeadSha, view.repository)}`);
+  else if (state.head) parts.push(`Started on ${commitLink(state.head, view.repository)}`);
+  if (stats.durationMs !== undefined) parts.push(`took ${formatDuration(stats.durationMs)}`);
+  if (parts.length === 0) return [];
+  const line = parts.join(' · ');
+  return ['', `<sub>${line.charAt(0).toUpperCase()}${line.slice(1)}</sub>`];
 }
 
 export function gifAltText(reviewerName: string): string {
@@ -241,7 +243,7 @@ function statusLines(view: ReviewStatusView): string[] {
       return [
         '### ⏳ Review queued for retry',
         '',
-        `Attempt ${state.attempt} did not finish${view.reason ? `: ${inlineCode(view.reason)}` : '.'}`,
+        `The last attempt did not finish${view.reason ? `: ${inlineCode(view.reason)}` : '.'}`,
         `${reviewerName} retries automatically; this comment updates when the next attempt starts.`,
       ];
     case 'reviewing': {
@@ -258,24 +260,24 @@ function statusLines(view: ReviewStatusView): string[] {
     case 'completed':
       return [
         finalHeading(view),
-        ...statsTable(view),
         ...(view.stats?.verdict ? [] : ['', 'The review run ended without recording a verdict for this pass.']),
+        ...footer(view),
       ];
     case 'failed':
       return [
         finalHeading(view),
         '',
         `The review did not finish${view.reason ? `: ${inlineCode(view.reason)}` : '.'}`,
-        ...statsTable(view),
         '',
         `Request a review from ${reviewerName} again to retry.`,
+        ...footer(view),
       ];
     case 'cancelled':
       return [
         finalHeading(view),
         '',
         'This review pass was replaced before it finished, either by a newer review request or because the pull request moved on.',
-        ...statsTable(view),
+        ...footer(view),
       ];
   }
 }

@@ -119,58 +119,86 @@ describe('renderReviewStatusComment', () => {
     expect(body).not.toContain('<script>');
   });
 
-  it('replaces the animation with measured stats on completion', () => {
+  it('ends a completed review with its verdict and a quiet footer linking the reviewed commit', () => {
+    const reviewed = 'b'.repeat(40);
     const body = renderReviewStatusComment(
       view({
+        repository: 'acme/app',
         state: state({ phase: 'completed', head: HEAD }),
-        stats: {
-          verdict: 'request changes',
-          reviewedHeadSha: 'b'.repeat(40),
-          durationMs: 125_000,
-          inlineFindings: 3,
-          filesWithFindings: 2,
-        },
+        stats: { verdict: 'request changes', reviewedHeadSha: reviewed, durationMs: 125_000 },
       }),
     );
     expect(body).not.toContain(GIF);
     expect(body).toContain('### 🔁 Review complete: changes requested');
-    expect(body).toContain('| Reviewed commit | `bbbbbbb` |');
-    expect(body).toContain('| Duration | 2m 5s |');
-    expect(body).toContain('| Inline comments | 3 across 2 files |');
-    expect(body).not.toContain('Head when the review started');
+    expect(body).toContain(
+      `> <sub>Reviewed [\`bbbbbbb\`](https://github.com/acme/app/commit/${reviewed}) · took 2m 5s</sub>`,
+    );
+    expect(body).not.toContain('Started on');
+    expect(body).not.toContain('|');
   });
 
-  it('omits stats it does not have instead of inventing them', () => {
-    const body = renderReviewStatusComment(view({ state: state({ phase: 'completed' }) }));
-    expect(body).toContain('### ☑️ Review finished');
-    expect(body).toContain('without recording a verdict');
-    expect(body).not.toContain('| Duration');
-    expect(body).not.toContain('| Inline comments');
-  });
-
-  it('ends failed runs with a sanitized single-line reason', () => {
+  it('never calls a commit reviewed without a verdict, and says when none was recorded', () => {
     const body = renderReviewStatusComment(
-      view({ state: state({ phase: 'failed', attempt: 5 }), reason: 'boom\n```\n<script>' }),
+      view({
+        state: state({ phase: 'completed', head: HEAD }),
+        stats: { reviewedHeadSha: 'b'.repeat(40), durationMs: 88_000 },
+      }),
+    );
+    expect(body).toContain('### ☑️ Review finished');
+    expect(body).toContain('The review run ended without recording a verdict for this pass.');
+    expect(body).toContain('> <sub>Started on `aaaaaaa` · took 1m 28s</sub>');
+    expect(body).not.toContain('Reviewed');
+  });
+
+  it('drops the footer, or the parts of it, that it has no data for', () => {
+    const bare = renderReviewStatusComment(view({ state: state({ phase: 'completed' }) }));
+    expect(bare).toContain('without recording a verdict');
+    expect(bare).not.toContain('<sub>');
+    const timed = renderReviewStatusComment(
+      view({ state: state({ phase: 'cancelled' }), stats: { durationMs: 41_000 } }),
+    );
+    expect(timed).toContain('> <sub>Took 41s</sub>');
+    const unlinked = renderReviewStatusComment(
+      view({ repository: 'not a slug', state: state({ phase: 'cancelled', head: HEAD }) }),
+    );
+    expect(unlinked).toContain('> <sub>Started on `aaaaaaa`</sub>');
+    expect(unlinked).not.toContain('](');
+  });
+
+  it('ends failed runs with a sanitized reason and how to retry, without attempt counts', () => {
+    const body = renderReviewStatusComment(
+      view({
+        state: state({ phase: 'failed', attempt: 5, head: HEAD }),
+        reason: 'boom\n```\n<script>',
+        stats: { reviewedHeadSha: 'b'.repeat(40), durationMs: 61_000 },
+      }),
     );
     expect(body).toContain('### ❌ Review failed');
     expect(body).toContain("The review did not finish: `boom ''' <script>`");
-    expect(body).toContain('| Attempts | 5 |');
+    expect(body).toContain('Request a review from Shipyard again to retry.');
+    expect(body).toContain('> <sub>Started on `aaaaaaa` · took 1m 1s</sub>');
+    expect(body).not.toMatch(/Reviewed|Attempt|\|/);
     expect(body).not.toContain(GIF);
   });
 
   it('ends cancelled runs without the animation', () => {
     const body = renderReviewStatusComment(view({ state: state({ phase: 'cancelled' }) }));
     expect(body).toContain('### ⏹️ Review cancelled');
+    expect(body).toContain('replaced before it finished');
     expect(body).not.toContain(GIF);
   });
 
-  it('does not claim a retry is running', () => {
+  it('does not claim a retry is running or count attempts', () => {
     const body = renderReviewStatusComment(
       view({ state: state({ phase: 'retrying', attempt: 2 }), reason: 'timeout' }),
     );
     expect(body).toContain('Review queued for retry');
-    expect(body).toContain('Attempt 2 did not finish: `timeout`');
+    expect(body).toContain('The last attempt did not finish: `timeout`');
+    expect(body).toContain('retries automatically');
+    expect(body).not.toMatch(/Attempt|<sub>/);
     expect(body).not.toContain(GIF);
+    const bare = renderReviewStatusComment(view({ state: state({ phase: 'retrying' }) }));
+    expect(bare).toContain('The last attempt did not finish.');
   });
 });
 

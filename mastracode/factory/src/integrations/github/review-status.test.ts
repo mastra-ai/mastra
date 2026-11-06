@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { PullRequestComment, PullRequestRef, ReviewComment } from '../../capabilities/version-control.js';
+import type { PullRequestComment, PullRequestRef } from '../../capabilities/version-control.js';
 import {
   parseReviewStatusState,
   renderReviewStatusComment,
   REVIEW_STATUS_COMMENT_MARKER,
 } from './review-status-comment.js';
 import type { ReviewStatusState } from './review-status-comment.js';
-import { countFactoryInlineFindings, publishReviewStatus } from './review-status.js';
+import { publishReviewStatus } from './review-status.js';
 import type { ReviewStatusStep } from './review-status.js';
 
 const ref: PullRequestRef = {
@@ -212,39 +212,5 @@ describe('publishReviewStatus', () => {
     expect(store.calls.created).toBe(0);
     await publishReviewStatus(store.port, ref, step({ phase: 'failed' }), isFactory);
     expect(store.calls.created).toBe(1);
-  });
-});
-
-describe('countFactoryInlineFindings', () => {
-  it('counts Factory thread roots left since the run started', async () => {
-    const review = (id: string, overrides: Partial<ReviewComment>): ReviewComment => ({
-      ...comment_(id, BOT, 'finding'),
-      path: 'src/a.ts',
-      line: 1,
-      side: 'right',
-      commitId: 'c'.repeat(40),
-      replyToId: null,
-      createdAt: '2026-11-05T10:05:00Z',
-      ...overrides,
-    });
-    const comments = [
-      review('1', {}),
-      review('2', { path: 'src/b.ts' }),
-      review('3', { path: 'src/b.ts' }),
-      review('4', { replyToId: '1' }),
-      review('5', { author: 'human' }),
-      review('6', { createdAt: '2026-11-05T09:00:00Z' }),
-    ];
-    const port = {
-      async listReviewComments({ cursor }: { cursor?: string }) {
-        return cursor
-          ? { comments: comments.slice(3), nextCursor: null }
-          : { comments: comments.slice(0, 3), nextCursor: '2' };
-      },
-    };
-    expect(await countFactoryInlineFindings(port as never, ref, '2026-11-05T10:00:00Z', isFactory)).toEqual({
-      inlineFindings: 3,
-      filesWithFindings: 2,
-    });
   });
 });

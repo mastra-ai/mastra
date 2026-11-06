@@ -4,7 +4,7 @@ import type { SourceControlStorageHandle } from '../../storage/domains/source-co
 import type { Card } from '../../storage/domains/work-items/base.js';
 import { resolveRepository } from './acceptance-labels.js';
 import type { ReviewStatusState, ReviewStatusStats } from './review-status-comment.js';
-import { countFactoryInlineFindings, publishReviewStatus } from './review-status.js';
+import { publishReviewStatus } from './review-status.js';
 
 const REVIEW_STATUS_ASSETS =
   'https://raw.githubusercontent.com/mastra-ai/mastra/main/mastracode/factory/assets/review-status';
@@ -88,11 +88,12 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
         {
           state,
           reviewerName: deps.reviewerName,
+          repository: target.slug,
           gifUrl: deps.gifUrl,
           ...(deps.gifDarkUrl ? { gifDarkUrl: deps.gifDarkUrl } : {}),
           ...(event.reason ? { reason: event.reason } : {}),
           ...(event.replayed ? { continuesRun: true } : {}),
-          ...(final ? { stats: recorded => readStats(deps, ref, item, event, recorded, isFactoryAuthor) } : {}),
+          ...(final ? { stats: recorded => readStats(item, event, recorded) } : {}),
         },
         isFactoryAuthor,
       );
@@ -103,14 +104,11 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
 }
 
 async function readStats(
-  deps: GithubReviewStatusReporterDeps,
-  ref: PullRequestRef,
   item: Card,
   event: FactoryReviewStatusEvent,
   state: ReviewStatusState,
-  isFactoryAuthor: (login: string | null | undefined) => boolean,
 ): Promise<ReviewStatusStats> {
-  // A run that never started reviewed nothing: no duration, verdict or findings to show.
+  // A run that never started reviewed nothing: no duration or verdict to show.
   if (!state.startedAt) return {};
   const startedAt = Date.parse(state.startedAt);
   const stats: ReviewStatusStats = {};
@@ -127,14 +125,6 @@ async function readStats(
     stats.verdict = verdict;
     const reviewedHeadSha = commitSha(item.metadata?.reviewedHeadSha);
     if (reviewedHeadSha) stats.reviewedHeadSha = reviewedHeadSha;
-  }
-  try {
-    Object.assign(
-      stats,
-      await countFactoryInlineFindings(deps.github.versionControl, ref, state.startedAt, isFactoryAuthor),
-    );
-  } catch (error) {
-    console.warn(`[factory] could not count review comments for work item ${item.id}:`, error);
   }
   return stats;
 }

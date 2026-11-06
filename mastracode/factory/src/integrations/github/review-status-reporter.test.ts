@@ -43,14 +43,6 @@ function setup(item: ReturnType<typeof card> | null) {
       return comment;
     }),
     deleteComment: vi.fn(async () => {}),
-    listReviewComments: vi.fn(async () => ({
-      comments: [
-        { id: 'r1', author: BOT, path: 'a.ts', replyToId: null, createdAt: '2026-11-05T10:01:00Z' },
-        { id: 'r2', author: BOT, path: 'a.ts', replyToId: 'r1', createdAt: '2026-11-05T10:02:00Z' },
-        { id: 'r3', author: BOT, path: 'b.ts', replyToId: null, createdAt: '2026-11-05T09:00:00Z' },
-      ],
-      nextCursor: null,
-    })),
   };
   const report = createGithubReviewStatusReporter({
     github: { versionControl: versionControl as never, isFactoryCommentAuthor: login => login === BOT },
@@ -93,10 +85,9 @@ describe('createGithubReviewStatusReporter', () => {
     await report(event('completed', { endedAt: new Date('2026-11-05T10:04:05Z') }));
     const body = comments[0]!.body;
     expect(body).toContain('Review complete: changes requested');
-    expect(body).toContain('bbbbbbb');
-    expect(body).toContain('4m 5s');
-    // r1 only: r2 is a reply, r3 predates this run.
-    expect(body).toContain('1 across 1 file');
+    expect(body).toContain(
+      `<sub>Reviewed [\`bbbbbbb\`](https://github.com/acme/app/commit/${REVIEWED}) · took 4m 5s</sub>`,
+    );
   });
 
   it('does not claim an older verdict as this run’s', async () => {
@@ -108,6 +99,10 @@ describe('createGithubReviewStatusReporter', () => {
     expect(comments[0]!.body).toContain('Review finished');
     expect(comments[0]!.body).not.toContain('approved');
     expect(comments[0]!.body).not.toContain('bbbbbbb');
+    expect(comments[0]!.body).toContain(
+      '<sub>Started on [`aaaaaaa`](https://github.com/acme/app/commit/' + 'a'.repeat(40) + ') · took 1m 0s</sub>',
+    );
+    expect(comments[0]!.body).not.toContain('Reviewed');
   });
 
   it('skips cards that are not GitHub pull requests and swallows provider errors', async () => {

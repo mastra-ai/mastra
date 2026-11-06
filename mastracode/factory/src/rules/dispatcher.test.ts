@@ -7674,7 +7674,7 @@ describe('review status comment lifecycle', () => {
     expect(comments()).toHaveLength(1);
     const body = comments()[0]!.body;
     expect(body).toContain('Review finished');
-    expect(body).toMatch(/\| Duration \| \d+s \|/);
+    expect(body).toMatch(/<sub>Took \d+s<\/sub>/);
     expect(body).not.toContain('reviewing.gif');
   });
 
@@ -7710,7 +7710,7 @@ describe('review status comment lifecycle', () => {
     expect(run.writes.created).toBe(1);
     expect(run.comments()).toHaveLength(1);
     expect(run.comments()[0]!.body).toContain('Review finished');
-    expect(run.comments()[0]!.body).toContain('| Attempts | 2 |');
+    expect(run.comments()[0]!.body).toContain('"attempt":2');
   });
 
   it('cancels the status when the card moves on before the review starts', async () => {

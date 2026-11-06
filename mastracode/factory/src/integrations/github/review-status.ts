@@ -13,7 +13,6 @@ import type {
 } from './review-status-comment.js';
 
 type CommentPort = Pick<VersionControl, 'listComments' | 'createComment' | 'updateComment' | 'deleteComment'>;
-type ReviewCommentPort = Pick<VersionControl, 'listReviewComments'>;
 
 export type ReviewStatusPublishResult =
   | { action: 'created' | 'updated'; commentId: string; url: string }
@@ -116,25 +115,4 @@ export async function publishReviewStatus(
     body,
   });
   return { action: 'updated', commentId: updated.id, url: updated.url };
-}
-
-/**
- * Inline comments Factory left on the diff since the run started. Replies in
- * existing threads are answers, not findings, so only thread roots count.
- */
-export async function countFactoryInlineFindings(
-  versionControl: ReviewCommentPort,
-  ref: PullRequestRef,
-  since: string,
-  isFactoryAuthor: (login: string | null | undefined) => boolean,
-): Promise<Pick<ReviewStatusStats, 'inlineFindings' | 'filesWithFindings'>> {
-  const sinceMs = Date.parse(since);
-  const comments = await listAll(async cursor => {
-    const page = await versionControl.listReviewComments({ ...ref, ...(cursor ? { cursor } : {}) });
-    return { items: page.comments, nextCursor: page.nextCursor };
-  });
-  const findings = comments.filter(
-    comment => !comment.replyToId && isFactoryAuthor(comment.author) && Date.parse(comment.createdAt) >= sinceMs,
-  );
-  return { inlineFindings: findings.length, filesWithFindings: new Set(findings.map(comment => comment.path)).size };
 }
