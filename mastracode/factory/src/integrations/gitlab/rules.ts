@@ -424,9 +424,11 @@ export class GitLabRules {
     // its description says it closes, and the project's intake routes decide, when it is filed,
     // whether it joins that card. An untrusted author's merge request never lands on another card.
     // A card with no source of its own (a manual card) never takes one: the merge request would
-    // become its only source and turn it into a merge request card.
+    // become its only source and turn it into a merge request card. A GitHub card keeps only
+    // GitHub pull requests, so a merge request on its session's branch gets its own card.
     const eligibleHome = (card: Card) =>
       card.externalSource !== null &&
+      card.externalSource.integrationId !== 'github' &&
       card.externalSource.type !== 'pull-request' &&
       !isTerminalWorkItem(this.options.boards, card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
