@@ -1103,7 +1103,7 @@ Sessions run these tools without asking while automatic approval is on, so only 
 
 Connect caches the connection list for 30 seconds. When a later refresh fails, sessions keep the last list it got, including a connection removed since, until a refresh succeeds. A run with no list yet waits at most 15 seconds for one, then goes on without Connect tools, and Factory logs why. If the Platform stalls instead of failing, later runs also go without them until that listing answers or fails.
 
-`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none.
+`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none. Factory doesn't filter the tools you pass: the example below includes `linear_delete_issue`, so narrow it with Connect's `allowTools` or `disallowTools`.
 
 ```typescript
 import { tools as connectTools } from '@mastra/connect';
