@@ -585,8 +585,17 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     expect(channels.decisions).toEqual([]);
     expect(reads).toHaveBeenCalledTimes(18);
 
+    // Answering the second thread's card reseeds it, as a resumed run does;
+    // that must not cost the first thread another read.
+    channels.whileResuming = async render => {
+      const { toolCallId, messageId } = render.approvalContext!;
+      render.onApprovalPosted(toolCallId, { messageId, displayName: '', argsSummary: '', startedAt: Date.now() });
+    };
     await click('tool_approve:deep-pending', 'alice', second);
     expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+
+    await click('tool_approve:deep-pending', 'mallory');
+    expect(channels.decisions).toHaveLength(1);
     expect(reads).toHaveBeenCalledTimes(18);
   });
 

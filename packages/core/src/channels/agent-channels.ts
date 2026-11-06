@@ -134,7 +134,6 @@ type ApprovalLookupResult =
   | { status: 'missing' };
 
 type CachedApprovalLookup = {
-  toolCallId: string;
   result: ApprovalLookupResult;
   expiresAt: number;
 };
@@ -244,7 +243,7 @@ export class AgentChannels {
    */
   private approvalClaims = new Set<string>();
   /** Lookups in progress, so concurrent clicks on one card share one read. */
-  private approvalLookupsInFlight = new Map<string, { toolCallId: string; promise: Promise<ApprovalLookupResult> }>();
+  private approvalLookupsInFlight = new Map<string, Promise<ApprovalLookupResult>>();
 
   /**
    * Platforms we've already warned about for misconfigured `toolDisplay` (e.g.
@@ -2130,10 +2129,6 @@ export class AgentChannels {
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
-      // A card posted for this id supersedes earlier lookups that found it
-      // pending or missing. Answered marks stay: resumed runs reseed the card
-      // they answer through here.
-      this.forgetApprovalLookups(toolCallId);
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
     const takePendingApproval = (id: string) => {
@@ -2438,32 +2433,21 @@ export class AgentChannels {
     const cached = this.getApprovalLookup(key);
     if (cached) return cached.result;
     const inFlight = this.approvalLookupsInFlight.get(key);
-    if (inFlight) return inFlight.promise;
+    if (inFlight) return inFlight;
 
-    const { toolCallId } = args.card;
-    const promise = this.readPersistedApproval({
-      mastra: args.mastra,
-      threadId: args.card.threadId,
-      toolCallId,
-      platform: args.platform,
-    });
-    this.approvalLookupsInFlight.set(key, { toolCallId, promise });
+    // Entries are per card, so a card posted later for a reused toolCallId
+    // gets its own key and needs no invalidation.
+    const promise = this.readPersistedApproval({ mastra: args.mastra, platform: args.platform, ...args.card });
+    this.approvalLookupsInFlight.set(key, promise);
     try {
       const result = await promise;
-      // Only store the result if no card was posted for this id meanwhile.
-      if (this.approvalLookupsInFlight.get(key)?.promise === promise) {
-        this.setApprovalLookup(key, {
-          toolCallId,
-          result,
-          expiresAt:
-            Date.now() + (result.status === 'missing' ? APPROVAL_LOOKUP_MISSING_TTL_MS : APPROVAL_LOOKUP_TTL_MS),
-        });
-      }
+      this.setApprovalLookup(key, {
+        result,
+        expiresAt: Date.now() + (result.status === 'missing' ? APPROVAL_LOOKUP_MISSING_TTL_MS : APPROVAL_LOOKUP_TTL_MS),
+      });
       return result;
     } finally {
-      if (this.approvalLookupsInFlight.get(key)?.promise === promise) {
-        this.approvalLookupsInFlight.delete(key);
-      }
+      this.approvalLookupsInFlight.delete(key);
     }
   }
 
@@ -2484,16 +2468,6 @@ export class AgentChannels {
     for (const oldest of this.approvalLookups.keys()) {
       if (this.approvalLookups.size <= APPROVAL_LOOKUP_CACHE_SIZE) break;
       this.approvalLookups.delete(oldest);
-    }
-  }
-
-  /** Drop pending, missing and in-progress lookups for every card with this toolCallId. */
-  private forgetApprovalLookups(toolCallId: string): void {
-    for (const [key, entry] of this.approvalLookups) {
-      if (entry.toolCallId === toolCallId && entry.result.status !== 'answered') this.approvalLookups.delete(key);
-    }
-    for (const [key, entry] of this.approvalLookupsInFlight) {
-      if (entry.toolCallId === toolCallId) this.approvalLookupsInFlight.delete(key);
     }
   }
 
@@ -2519,7 +2493,6 @@ export class AgentChannels {
         done = true;
         this.approvalClaims.delete(key);
         this.setApprovalLookup(key, {
-          toolCallId: card.toolCallId,
           result: { status: 'answered' },
           expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
         });
