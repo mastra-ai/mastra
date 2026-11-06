@@ -3317,7 +3317,11 @@ export class Workflow<
       run.workflowRunStatus = stored.status;
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
-    run.unstored = !lookUpStoredRun;
+    // Another instance creating this id under the workflow's own policy must not be able to store a row either.
+    run.unstored =
+      !lookUpStoredRun &&
+      (!options?.shouldPersistSnapshot ||
+        !this.#options.shouldPersistSnapshot({ workflowStatus: 'pending', stepResults: {} }));
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {

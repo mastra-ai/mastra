@@ -1716,6 +1716,10 @@ describe('run status reads for a run created without a stored row', () => {
       when: 'started unstored under a caller-supplied id',
       createRunOptions: { runId: 'caller-supplied-cancel-run', shouldPersistSnapshot: () => false },
     },
+    {
+      when: 'started unstored under a per-run policy its workflow does not share',
+      createRunOptions: { shouldPersistSnapshot: () => false },
+    },
   ])(
     'stops at the next step when another instance cancels a run $when',
     async ({ shouldPersistSnapshot, createRunOptions }) => {
