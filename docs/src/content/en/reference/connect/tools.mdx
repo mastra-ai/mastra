@@ -286,8 +286,19 @@ The method accepts every [`createCodeMode()` option](/reference/tools/create-cod
 
 Some tools stay direct agent tools instead of program functions, because they pause the agent run and a call from inside a program can't:
 
-- Tools that need approval through `requireApproval`. The agent still waits for the user to approve each call. For [MCP providers](#mcp-providers), a `requireApproval` list keeps all of that provider's tools direct.
+- Tools that need approval through `requireApproval`. The agent still waits for the user to approve each call.
 - The `request_connection` tool, so the connect prompt can still pause the run until the user connects.
+
+For [MCP providers](#mcp-providers), a `requireApproval` list keeps **all** of that provider's tools direct, including the ones the list doesn't name. Mastra discovers MCP tools at request time and checks the list on each call. Code Mode can't tell ahead of time which calls need approval, and it never runs a tool that might need approval inside a program. Generated HTTP tools don't have this limit: only the tools that match the list stay direct.
+
+```typescript
+// Every neon-mcp tool stays direct, not just neon-mcp_run_sql
+const ops = tools({
+  providers: { 'neon-mcp': { requireApproval: ['neon-mcp_run_sql'] } },
+}).codeMode({ sandbox })
+```
+
+To let a program call that provider's other tools, remove the gated tools with `disallowTools` instead of gating them. To keep them gated, accept that the agent calls the provider's tools one at a time.
 
 When there is nothing to orchestrate, for example when the project has no connections yet, `tools` returns only the direct tools and `instructions` returns an empty string.
 
