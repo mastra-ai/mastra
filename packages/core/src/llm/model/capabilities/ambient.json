@@ -23,17 +23,6 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "z-ai/glm-5.2": [
       {
         "type": "effort",
@@ -58,6 +47,17 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
       }
     ]
   }

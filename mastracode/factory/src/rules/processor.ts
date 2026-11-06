@@ -407,7 +407,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const boards = await this.boards.load(binding);
     const stage = ruleStage(boards, item);
     if (!item || !stage) return;
-    const allItems = await this.options.storage.list({
+    const allItems = await this.options.storage.listShared({
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
     });

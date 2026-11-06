@@ -3209,19 +3209,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
   }
 
-  /** List binding history, optionally narrowed to one work item. */
+  /** List binding history, optionally narrowed to one or some work items. */
   async listRunBindings(
     orgId: string,
     factoryProjectId: string,
-    workItemId?: string,
+    workItemId?: string | string[],
   ): Promise<FactoryRunBindingRecord[]> {
+    if (Array.isArray(workItemId) && workItemId.length === 0) return [];
     return (
       await this.#db.findMany<GovernanceDbRow>(
         'factory_run_bindings',
         {
           org_id: orgId,
           factory_project_id: factoryProjectId,
-          ...(workItemId ? { work_item_id: workItemId } : {}),
+          ...(workItemId ? { work_item_id: Array.isArray(workItemId) ? { in: workItemId } : workItemId } : {}),
         },
         { orderBy: [['created_at', 'asc']] },
       )
@@ -3551,11 +3552,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
     const now = new Date();
     const stages = input.stages ?? ['intake'];
-    validateParentRelation(
-      await this.#listWithOps(ops, orgId, factoryProjectId),
-      undefined,
-      input.parentWorkItemId ?? null,
-    );
+    if (input.parentWorkItemId != null) {
+      validateParentRelation(await this.#listWithOps(ops, orgId, factoryProjectId), undefined, input.parentWorkItemId);
+    }
     const row = await new Cards(ops, this.#legacyMode).insertOne({
       org_id: orgId,
       factory_project_id: factoryProjectId,

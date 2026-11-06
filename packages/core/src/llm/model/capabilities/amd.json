@@ -35,6 +35,12 @@
     "Qwen3.8-Flash-Next"
   ],
   "reasoning": {
+    "DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -60,12 +66,6 @@
       }
     ],
     "DeepSeek-V4-Flash-Vision-Exp": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
