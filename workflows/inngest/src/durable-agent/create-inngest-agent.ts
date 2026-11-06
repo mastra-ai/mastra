@@ -45,6 +45,7 @@ import {
   prepareForDurableExecution,
   persistDurableRunInput,
   createDurableAgentStream,
+  AgentStreamBus,
   createRunAbortController,
   emitChunkEvent,
   emitErrorEvent,
@@ -69,7 +70,6 @@ import type {
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
-import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
@@ -863,41 +863,37 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Set up pubsub with lazy CachingPubSub creation
   // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
-  let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
-  let _cachingPubsub: CachingPubSub | null = null;
+  const innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
 
-  // Resolve the cache that backs CachingPubSub history.
+  // The agent's run bus: the inner pubsub wrapped once in CachingPubSub, resolved
+  // lazily by the same AgentStreamBus core durable agents use. Without replay,
+  // `observe()` would only see live events: the bare InngestPubSub.subscribe streams
+  // from the current point in the realtime channel, so reconnects and late observers
+  // miss everything emitted before they attached.
   //
-  // Resolution order: user-provided > mastra's serverCache > InMemoryServerCache fallback.
-  // The fallback gives single-process observe replay parity with the in-memory durable agent.
-  // Cross-process observe still requires a shared cache backend (Redis, etc.) supplied via
-  // `cache` or `mastra.serverCache`.
-  function resolveCache(): MastraServerCache {
-    const resolved = _customCache ?? mastra?.serverCache ?? new InMemoryServerCache();
-    _customCache = resolved;
-    return resolved;
-  }
+  // Cache resolution: user-provided > mastra's serverCache > InMemoryServerCache.
+  // An inner pubsub that is already a CachingPubSub is reused, not double-wrapped
+  // (#18148). The inner pubsub is always passed as custom and the bus is never
+  // registered with Mastra, so InngestPubSub stays the transport (see __setMastra).
+  const streams = new AgentStreamBus(
+    { pubsub: innerPubsub, cache },
+    {
+      getMastra: () => mastra,
+      usesSharedRunLog: () => false,
+      warn: message => console.warn(`InngestAgent '${idOverride ?? agent.id}': ${message}`),
+    },
+  );
 
-  // Lazily create CachingPubSub for the agent.
-  //
-  // We always wrap the inner pubsub with CachingPubSub (mirroring the in-memory DurableAgent
-  // at packages/core/src/agent/durable/durable-agent.ts#ensurePubsubInitialized). Without it,
-  // `observe()` would only see live events: the bare InngestPubSub.subscribe streams from the
-  // current point in the realtime channel, with no history replay, so reconnects and late
-  // observers miss everything emitted before they attached.
-  //
-  // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
-  // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
+  let busResolved = false;
   function getPubsub(): CachingPubSub {
-    if (!_cachingPubsub) {
-      if (innerPubsub instanceof CachingPubSub) {
-        _cachingPubsub = innerPubsub;
-        _customCache = _customCache ?? mastra?.serverCache;
-      } else {
-        _cachingPubsub = new CachingPubSub(innerPubsub, resolveCache());
-      }
+    const pubsub = streams.pubsub as CachingPubSub;
+    if (!busResolved) {
+      busResolved = true;
+      // Keep the cache this agent reports (and forks with) as it was: the resolved
+      // replay cache, or for a reused CachingPubSub the configured/Mastra cache.
+      _customCache ??= innerPubsub instanceof CachingPubSub ? mastra?.serverCache : (streams.cache ?? undefined);
     }
-    return _cachingPubsub;
+    return pubsub;
   }
 
   async function getPubsubOffset(runId: string): Promise<number> {

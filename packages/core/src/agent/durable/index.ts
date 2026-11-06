@@ -129,6 +129,9 @@ export { agentThreadStreamRuntime } from '../thread-stream-runtime';
 // Per-segment abort controller, shared with durable-agent integrations outside core
 export { createRunAbortController, type RunAbortController } from './run-abort';
 
+// Run bus + replay cache resolution, shared with durable-agent integrations outside core
+export { AgentStreamBus } from '../streams/bus';
+
 // Stream adapter for pubsub-based streaming
 export {
   createDurableAgentStream,

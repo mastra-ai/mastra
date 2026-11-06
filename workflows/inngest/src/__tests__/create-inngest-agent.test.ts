@@ -262,6 +262,67 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
   });
 
+  it('reuses an inner CachingPubSub instead of double-wrapping it, reporting the configured cache', () => {
+    const wrapperCache = new InMemoryServerCache();
+    const configuredCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), wrapperCache);
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-caching'),
+      inngest,
+      pubsub: inner,
+      cache: configuredCache,
+    });
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(configuredCache);
+  });
+
+  it("reuses an inner CachingPubSub and reports Mastra's serverCache when no cache is configured", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-reuse-mastra'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache } as unknown as Mastra);
+
+    expect(durableAgent.pubsub).toBe(inner);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it("wraps with Mastra's serverCache when registered first, and keeps the resolved bus afterwards", () => {
+    const serverCache = new InMemoryServerCache();
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-mastra-cache'),
+      inngest,
+      pubsub: inner,
+    });
+    durableAgent.__setMastra({ serverCache, pubsub: new EventEmitterPubSub() } as unknown as Mastra);
+
+    const pubsub = durableAgent.pubsub as CachingPubSub;
+    expect(pubsub.getInner()).toBe(inner);
+    expect(pubsub.getCache()).toBe(serverCache);
+    expect(durableAgent.cache).toBe(serverCache);
+
+    durableAgent.__setMastra({ serverCache: new InMemoryServerCache(), pubsub: new EventEmitterPubSub() } as any);
+    expect(durableAgent.pubsub).toBe(pubsub);
+    expect(durableAgent.cache).toBe(serverCache);
+  });
+
+  it('forks onto the same inner pubsub and resolved cache', () => {
+    const inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-fork'), inngest, pubsub: inner });
+    const cache = durableAgent.cache;
+
+    const fork = durableAgent.__fork();
+    const forkPubsub = fork.pubsub as CachingPubSub;
+    expect(forkPubsub.getInner()).toBe(inner);
+    expect(forkPubsub.getCache()).toBe(cache);
+    expect(fork.cache).toBe(cache);
+  });
+
   // The next two tests mirror packages/core/src/agent/durable/__tests__/resumable-streams.test.ts
   // ("Late subscriber replay") to prove createInngestAgent wires the same replay semantics
   // that the in-memory DurableAgent provides. Without the CachingPubSub wrapper these would
