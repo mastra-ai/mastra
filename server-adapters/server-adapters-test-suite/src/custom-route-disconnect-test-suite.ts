@@ -86,6 +86,15 @@ async function startFakeLLM(): Promise<FakeLLM> {
   };
 }
 
+/** Rejects with a named error if `promise` does not settle within `ms`. */
+function withDeadline<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms waiting for ${what}`)), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
 let gcFn: (() => void) | undefined;
 
 /**
@@ -171,8 +180,14 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
           `${server.baseUrl}/chat`,
           { method: 'POST', headers: { 'content-type': 'application/json' } },
           res => {
-            res.once('data', () => resolve(res));
             res.on('error', () => {});
+            if (res.statusCode !== 200) {
+              res.resume();
+              reject(new Error(`Custom route responded with status ${res.statusCode}`));
+              return;
+            }
+            res.once('data', () => resolve(res));
+            res.once('end', () => reject(new Error('Custom route response ended before its first chunk')));
           },
         );
         clientRequest.on('error', reject);
@@ -182,9 +197,9 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
         clientRequest?.destroy();
       });
 
-      const response = await firstChunk;
+      const response = await withDeadline(firstChunk, 5_000, 'the first response chunk');
       expect(response.statusCode).toBe(200);
-      await llm.streaming;
+      await withDeadline(llm.streaming, 5_000, 'the model request to start streaming');
 
       await collectGarbage();
 
@@ -198,6 +213,7 @@ export function createCustomRouteDisconnectTestSuite(config: CustomRouteDisconne
         ),
       ]);
       expect(outcome).toBe('model request aborted');
-    });
+      // Setup, two 5s deadlines and the 3s abort race need more than the 5s default.
+    }, 20_000);
   });
 }
