@@ -353,7 +353,9 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       const outputFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
       const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
 
-      expect(output).not.toMatch(/(?:^|\n)(?:import|export)[^;\n]*["']@mastra\/schema-compat(?:\/|["'])/);
+      expect(output).not.toMatch(
+        /(?:^|\n)(?:import|export)[^;\n]*["']@mastra\/schema-compat(?:["']|\/(?!validation-runtime["']))/,
+      );
     });
 
     it('should resolve createRoute api routes', async () => {

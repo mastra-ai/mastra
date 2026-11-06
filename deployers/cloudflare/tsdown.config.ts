@@ -10,6 +10,9 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
+  deps: {
+    alwaysBundle: ['@cfworker/json-schema'],
+  },
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },
