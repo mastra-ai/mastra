@@ -1705,6 +1705,7 @@ describe('run status reads for a run created without a stored row', () => {
     when: string;
     shouldPersistSnapshot?: ShouldPersistSnapshotFn;
     createRunOptions: { runId?: string; shouldPersistSnapshot?: ShouldPersistSnapshotFn };
+    remoteStarts?: boolean;
   }>([
     {
       when: 'that stored a row after it started',
@@ -1720,9 +1721,15 @@ describe('run status reads for a run created without a stored row', () => {
       when: 'started unstored under a per-run policy its workflow does not share',
       createRunOptions: { shouldPersistSnapshot: () => false },
     },
+    {
+      when: 'that another instance also starts under a workflow storing only waiting snapshots',
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'waiting',
+      createRunOptions: {},
+      remoteStarts: true,
+    },
   ])(
     'stops at the next step when another instance cancels a run $when',
-    async ({ shouldPersistSnapshot, createRunOptions }) => {
+    async ({ shouldPersistSnapshot, createRunOptions, remoteStarts }) => {
       const workflowId = 'late-stored-cancel-wf';
       const storage = new MockStore();
       const buildWorkflow = (first: () => Promise<void>, later: () => Promise<void>) =>
@@ -1754,12 +1761,18 @@ describe('run status reads for a run created without a stored row', () => {
           ),
         },
       });
-      const other = new Mastra({ logger: false, storage, workflows: { [workflowId]: buildWorkflow(later, later) } });
+      const remoteStep = async () => {};
+      const other = new Mastra({
+        logger: false,
+        storage,
+        workflows: { [workflowId]: buildWorkflow(remoteStep, remoteStep) },
+      });
 
       const run = await owner.getWorkflow(workflowId).createRun(createRunOptions);
       const resultPromise = run.start({ inputData: {} });
       await firstStarted;
       const remoteRun = await other.getWorkflow(workflowId).createRun({ runId: run.runId });
+      if (remoteStarts) await remoteRun.startAsync({ inputData: {} });
       await remoteRun.cancel();
       releaseFirst();
 

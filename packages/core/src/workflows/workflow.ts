@@ -72,6 +72,7 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
+import { WORKFLOW_RUN_STATUSES } from '../storage/domains/workflows/run-statuses';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -3317,11 +3318,13 @@ export class Workflow<
       run.workflowRunStatus = stored.status;
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
-    // Another instance creating this id under the workflow's own policy must not be able to store a row either.
+    // Another instance creating or starting this id under the workflow's own policy must not be able
+    // to store a row either. Like the DurableAgent policy guardrail, this probes with no step results.
     run.unstored =
       !lookUpStoredRun &&
-      (!options?.shouldPersistSnapshot ||
-        !this.#options.shouldPersistSnapshot({ workflowStatus: 'pending', stepResults: {} }));
+      WORKFLOW_RUN_STATUSES.every(
+        workflowStatus => !this.#options.shouldPersistSnapshot({ workflowStatus, stepResults: {} }),
+      );
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {
