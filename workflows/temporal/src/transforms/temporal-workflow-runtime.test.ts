@@ -43,6 +43,19 @@ const succeeded = (output: unknown) =>
     endedAt: expect.any(Number),
   });
 
+let resumeClaimId = 0;
+const resumeWorkflow = (target: { step?: string; label?: string }, resumeData: unknown) => {
+  const token = `resume-claim-${++resumeClaimId}`;
+  const claimTarget = target.step ? { step: target.step } : { label: target.label };
+  signalHandlers.get('mastra.claimExecution')?.({
+    action: 'claim',
+    operation: 'resume',
+    token,
+    target: claimTarget,
+  });
+  signalHandlers.get('mastra.resume')?.({ ...target, resumeData, claimToken: token });
+};
+
 describe('temporal workflow runtime helper module', () => {
   beforeEach(() => {
     executeChild.mockReset();
@@ -215,7 +228,7 @@ describe('temporal workflow runtime helper module', () => {
       },
     });
 
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
+    resumeWorkflow({ step: 'approval' }, { approved: true });
     await expect(run).resolves.toMatchObject({
       status: 'success',
       result: { approved: true },
@@ -302,7 +315,7 @@ describe('temporal workflow runtime helper module', () => {
     expect(approval).toHaveBeenCalledTimes(1);
     expect(setHandler).toHaveBeenCalledWith('mastra.resume', expect.any(Function));
 
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
+    resumeWorkflow({ step: 'approval' }, { approved: true });
 
     await expect(run).resolves.toMatchObject({
       status: 'success',
@@ -346,9 +359,9 @@ describe('temporal workflow runtime helper module', () => {
     const run = workflow({ inputData: { orderId: 'order-1' }, runId: 'run-1' });
 
     await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(1));
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { attempt: 1 } });
+    resumeWorkflow({ step: 'approval' }, { attempt: 1 });
     await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(2));
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
+    resumeWorkflow({ step: 'approval' }, { approved: true });
 
     await expect(run).resolves.toMatchObject({
       status: 'success',
@@ -391,7 +404,7 @@ describe('temporal workflow runtime helper module', () => {
       requestContext: { tenant: 'source-tenant' },
       resumeLabels: { approveOrder: { stepId: 'approval' } },
     });
-    signalHandlers.get('mastra.resume')?.({ label: 'approveOrder', resumeData: { approved: true } });
+    resumeWorkflow({ label: 'approveOrder' }, { approved: true });
 
     await expect(run).resolves.toMatchObject({
       status: 'success',
@@ -417,16 +430,25 @@ describe('temporal workflow runtime helper module', () => {
     const run = workflow({ inputData: { orderId: 'order-1' }, runId: 'run-1' });
 
     await vi.waitFor(() => expect(condition).toHaveBeenCalledOnce());
-    const claimTimeTravel = signalHandlers.get('mastra.claimTimeTravel');
-    expect(claimTimeTravel).toBeTypeOf('function');
-    expect(claimTimeTravel?.({ action: 'claim', token: 'claim-1' })).toBe(true);
-    expect(claimTimeTravel?.({ action: 'claim', token: 'claim-2' })).toBe(false);
-    expect(claimTimeTravel?.({ action: 'release', token: 'claim-2' })).toBe(false);
-    expect(claimTimeTravel?.({ action: 'release', token: 'claim-1' })).toBe(true);
-    expect(claimTimeTravel?.({ action: 'claim', token: 'claim-2' })).toBe(true);
+    const claimExecution = signalHandlers.get('mastra.claimExecution');
+    expect(claimExecution).toBeTypeOf('function');
+    expect(claimExecution?.({ action: 'claim', operation: 'timeTravel', token: 'claim-1' })).toBe(true);
+    expect(claimExecution?.({ action: 'claim', operation: 'timeTravel', token: 'claim-2' })).toBe(false);
+    expect(claimExecution?.({ action: 'release', operation: 'timeTravel', token: 'claim-2' })).toBe(false);
+    expect(claimExecution?.({ action: 'release', operation: 'timeTravel', token: 'claim-1' })).toBe(true);
+    expect(claimExecution?.({ action: 'claim', operation: 'timeTravel', token: 'claim-2' })).toBe(true);
 
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
-    await run;
+    signalHandlers.get('mastra.resume')?.({
+      step: 'approval',
+      resumeData: { discarded: true },
+      claimToken: 'unowned-resume',
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(approval).toHaveBeenCalledTimes(1);
+
+    expect(claimExecution?.({ action: 'release', operation: 'timeTravel', token: 'claim-2' })).toBe(true);
+    resumeWorkflow({ step: 'approval' }, { approved: true });
+    await expect(run).resolves.toMatchObject({ status: 'success', result: { approved: true } });
   });
 
   it('preserves resume signals per concurrently suspended step', async () => {
@@ -451,9 +473,14 @@ describe('temporal workflow runtime helper module', () => {
 
     signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { stale: true } });
     await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(2));
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { duplicate: true } });
-    signalHandlers.get('mastra.resume')?.({ step: 'review', resumeData: { reviewed: true } });
+    resumeWorkflow({ step: 'approval' }, { approved: true });
+    signalHandlers.get('mastra.resume')?.({
+      step: 'approval',
+      resumeData: { duplicate: true },
+      claimToken: 'stale-resume',
+    });
+    await vi.waitFor(() => expect(approval).toHaveBeenCalledTimes(2));
+    resumeWorkflow({ step: 'review' }, { reviewed: true });
 
     await expect(run).resolves.toMatchObject({
       status: 'success',

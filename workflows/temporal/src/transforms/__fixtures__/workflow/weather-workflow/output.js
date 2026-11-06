@@ -1,9 +1,9 @@
 import { defineSignal, defineQuery, proxyActivities, setHandler, ApplicationFailure, isCancellation, TemporalFailure, condition, log, sleep, executeChild } from '@temporalio/workflow';
 
 const resumeSignal = defineSignal('mastra.resume');
-const claimTimeTravelSignal = defineSignal('mastra.claimTimeTravel');
+const claimExecutionSignal = defineSignal('mastra.claimExecution');
 const statusQuery = defineQuery('mastra.status');
-const timeTravelClaimQuery = defineQuery('mastra.timeTravelClaim');
+const executionClaimQuery = defineQuery('mastra.executionClaim');
 const authTokenKey = 'mastra__authToken';
 // The step error an Activity or child Workflow put in its failure details. Failures without them
 // (timeouts, Activities from an older Worker) give the innermost cause's type and message.
@@ -51,7 +51,7 @@ class TemporalExecutionEngine {
   resumeLabels = new Map();
   currentResult;
   queryRequestContext;
-  timeTravelClaim;
+  executionClaim;
   initData;
   initialState;
   constructor(params) {
@@ -63,26 +63,43 @@ class TemporalExecutionEngine {
       })
     });
     setHandler(resumeSignal, payload => {
+      const claim = this.executionClaim;
+      if (claim?.operation !== 'resume' || claim.token !== payload?.claimToken) return;
       const id = this.resumeTarget(payload);
-      if (id !== undefined && !this.resumePayloads.has(id)) {
-        this.resumePayloads.set(id, payload);
-      }
+      if (id !== claim.stepId || this.resumePayloads.has(id)) return;
+      this.resumePayloads.set(id, payload);
     });
-    const updateTimeTravelClaim = ({
+    const updateExecutionClaim = ({
       action,
-      token
+      operation,
+      token,
+      target
     }) => {
       if (action === 'release') {
-        if (this.timeTravelClaim !== token) return false;
-        this.timeTravelClaim = undefined;
+        if (this.executionClaim?.token !== token) return false;
+        this.executionClaim = undefined;
         return true;
       }
-      if (this.timeTravelClaim !== undefined) return false;
-      this.timeTravelClaim = token;
+      if (this.executionClaim !== undefined) return false;
+      if (operation === 'resume') {
+        const stepId = this.resumeTarget(target);
+        if (stepId === undefined) return false;
+        this.executionClaim = {
+          operation,
+          token,
+          stepId
+        };
+        return true;
+      }
+      if (operation !== 'timeTravel') return false;
+      this.executionClaim = {
+        operation,
+        token
+      };
       return true;
     };
-    setHandler(claimTimeTravelSignal, updateTimeTravelClaim);
-    setHandler(timeTravelClaimQuery, () => this.timeTravelClaim);
+    setHandler(claimExecutionSignal, updateExecutionClaim);
+    setHandler(executionClaimQuery, () => this.executionClaim);
     setHandler(statusQuery, () => this.currentResult ? {
       ...this.currentResult,
       ...(this.queryRequestContext !== undefined && {
@@ -242,8 +259,12 @@ class TemporalExecutionEngine {
         if (!this.resumePayloads.has(id)) {
           return output;
         }
-        resumeData = this.resumePayloads.get(id)?.resumeData;
+        const resumePayload = this.resumePayloads.get(id);
+        resumeData = resumePayload?.resumeData;
         this.resumePayloads.delete(id);
+        if (this.executionClaim?.operation === 'resume' && this.executionClaim.token === resumePayload?.claimToken) {
+          this.executionClaim = undefined;
+        }
       } finally {
         this.suspendedSteps.delete(id);
         for (const [label, stepId] of this.resumeLabels.entries()) {

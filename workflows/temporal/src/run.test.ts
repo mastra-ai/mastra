@@ -347,7 +347,7 @@ describe('TemporalRun', () => {
       query: vi.fn(),
     };
     const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
-      replacementHandle.query.mockResolvedValue(options.signalArgs[0].token);
+      replacementHandle.query.mockResolvedValue({ operation: 'timeTravel', token: options.signalArgs[0].token });
       return replacementHandle;
     });
     const getHandle = vi.fn().mockReturnValue(sourceHandle);
@@ -370,8 +370,8 @@ describe('TemporalRun', () => {
         workflowId: 'test-run',
         workflowIdReusePolicy: 'ALLOW_DUPLICATE',
         workflowIdConflictPolicy: 'USE_EXISTING',
-        signal: 'mastra.claimTimeTravel',
-        signalArgs: [expect.objectContaining({ action: 'claim', token: expect.any(String) })],
+        signal: 'mastra.claimExecution',
+        signalArgs: [expect.objectContaining({ action: 'claim', operation: 'timeTravel', token: expect.any(String) })],
         args: [
           expect.objectContaining({
             runId: 'test-run',
@@ -430,7 +430,13 @@ describe('TemporalRun', () => {
       }
     });
     const sourceHandle = {
-      query: vi.fn(async (query: string) => (query === 'mastra.status' ? sourceStatus : claimToken)),
+      query: vi.fn(async (query: string) =>
+        query === 'mastra.status'
+          ? sourceStatus
+          : claimToken
+            ? { operation: 'timeTravel', token: claimToken }
+            : undefined,
+      ),
       describe: vi.fn().mockResolvedValue({ runId: 'temporal-run-1' }),
       signal,
     };
@@ -486,7 +492,9 @@ describe('TemporalRun', () => {
     let claimToken: string | undefined;
     const replacementHandle = {
       result: vi.fn().mockResolvedValue({ status: 'success', input: { value: 1 }, state: {}, steps: {}, result: {} }),
-      query: vi.fn().mockImplementation(async () => claimToken),
+      query: vi
+        .fn()
+        .mockImplementation(async () => (claimToken ? { operation: 'timeTravel', token: claimToken } : undefined)),
     };
     const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
       claimToken ??= options.signalArgs[0].token;
@@ -547,7 +555,7 @@ describe('TemporalRun', () => {
       query: vi.fn(),
     };
     const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
-      replacementHandle.query.mockResolvedValue(options.signalArgs[0].token);
+      replacementHandle.query.mockResolvedValue({ operation: 'timeTravel', token: options.signalArgs[0].token });
       return replacementHandle;
     });
     const workflow = createWorkflow(
@@ -641,8 +649,20 @@ describe('TemporalRun', () => {
       resolveResult = resolve;
     });
     const result = vi.fn(() => terminalResult);
-    const query = vi.fn().mockImplementation(async () => status);
-    const signal = vi.fn().mockImplementation(async (_name, payload) => {
+    let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
+    const query = vi
+      .fn()
+      .mockImplementation(async name => (name === 'mastra.executionClaim' ? executionClaim : status));
+    const signal = vi.fn().mockImplementation(async (name, payload) => {
+      if (name === 'mastra.claimExecution') {
+        if (payload.action === 'claim') {
+          executionClaim ??= { operation: 'resume', token: payload.token, stepId: payload.target.step };
+        } else if (executionClaim?.token === payload.token) {
+          executionClaim = undefined;
+        }
+        return;
+      }
+      executionClaim = undefined;
       if (payload.step === 'firstApproval') {
         status = secondSuspension;
       } else {
@@ -724,14 +744,10 @@ describe('TemporalRun', () => {
     });
 
     expect(getHandle).toHaveBeenCalledTimes(2);
-    expect(signal).toHaveBeenNthCalledWith(1, 'mastra.resume', {
-      step: 'firstApproval',
-      resumeData: { approved: true },
-    });
-    expect(signal).toHaveBeenNthCalledWith(2, 'mastra.resume', {
-      step: 'secondApproval',
-      resumeData: { approved: true },
-    });
+    expect(signal.mock.calls.filter(([name]) => name === 'mastra.resume')).toEqual([
+      ['mastra.resume', { step: 'firstApproval', resumeData: { approved: true }, claimToken: expect.any(String) }],
+      ['mastra.resume', { step: 'secondApproval', resumeData: { approved: true }, claimToken: expect.any(String) }],
+    ]);
     expect(onFinish).toHaveBeenCalledTimes(3);
     expect(onFinish).toHaveBeenNthCalledWith(1, expect.objectContaining({ status: 'suspended' }));
     expect(onFinish).toHaveBeenNthCalledWith(2, expect.objectContaining({ status: 'suspended' }));
@@ -795,8 +811,17 @@ describe('TemporalRun', () => {
       },
       suspended: [['approval']],
     };
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn().mockResolvedValueOnce(suspended).mockRejectedValue(queryError);
+    let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
+    const signal = vi.fn().mockImplementation(async (name, payload) => {
+      if (name === 'mastra.claimExecution') {
+        executionClaim = { operation: 'resume', token: payload.token, stepId: payload.target.step };
+      }
+    });
+    const query = vi.fn().mockImplementation(async name => {
+      if (name === 'mastra.executionClaim') return executionClaim;
+      if (query.mock.calls.filter(([queryName]) => queryName === 'mastra.status').length === 1) return suspended;
+      throw queryError;
+    });
     const getHandle = vi.fn().mockReturnValue({
       signal,
       query,
@@ -819,7 +844,7 @@ describe('TemporalRun', () => {
         'Unable to determine Temporal workflow status for run "test-run" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.',
       cause: queryError,
     });
-    expect(signal).toHaveBeenCalledOnce();
+    expect(signal.mock.calls.filter(([name]) => name === 'mastra.resume')).toHaveLength(1);
   });
 
   it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
@@ -869,12 +894,21 @@ describe('TemporalRun', () => {
   });
 
   it('signals the matching Temporal workflow when resuming asynchronously', async () => {
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn().mockResolvedValue({
-      status: 'suspended',
-      steps: { approval: { status: 'suspended', suspendedAt: 1 } },
-      suspended: [['approval']],
+    let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
+    const signal = vi.fn().mockImplementation(async (name, payload) => {
+      if (name === 'mastra.claimExecution') {
+        executionClaim = { operation: 'resume', token: payload.token, stepId: payload.target.step };
+      }
     });
+    const query = vi.fn().mockImplementation(async name =>
+      name === 'mastra.executionClaim'
+        ? executionClaim
+        : {
+            status: 'suspended',
+            steps: { approval: { status: 'suspended', suspendedAt: 1 } },
+            suspended: [['approval']],
+          },
+    );
     const getHandle = vi.fn().mockReturnValue({ signal, query });
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
@@ -887,7 +921,11 @@ describe('TemporalRun', () => {
     });
 
     expect(getHandle).toHaveBeenCalledWith('test-run');
-    expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
+    expect(signal).toHaveBeenCalledWith('mastra.resume', {
+      step: 'approval',
+      resumeData: { approved: true },
+      claimToken: expect.any(String),
+    });
   });
 
   it('cancels the matching Temporal workflow before updating local state', async () => {
@@ -1078,12 +1116,21 @@ describe('TemporalRun', () => {
       const failure = new Error('activity failed after resume');
       const onFinish = vi.fn();
       const onError = vi.fn();
-      const signal = vi.fn().mockResolvedValue(undefined);
-      const query = vi.fn().mockResolvedValue({
-        status: 'suspended',
-        steps: { approval: { status: 'suspended', suspendedAt: 1 } },
-        suspended: [['approval']],
+      let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
+      const signal = vi.fn().mockImplementation(async (name, payload) => {
+        if (name === 'mastra.claimExecution') {
+          executionClaim = { operation: 'resume', token: payload.token, stepId: payload.target.step };
+        }
       });
+      const query = vi.fn().mockImplementation(async name =>
+        name === 'mastra.executionClaim'
+          ? executionClaim
+          : {
+              status: 'suspended',
+              steps: { approval: { status: 'suspended', suspendedAt: 1 } },
+              suspended: [['approval']],
+            },
+      );
       const getHandle = vi.fn().mockReturnValue({ signal, query, result: vi.fn().mockRejectedValue(failure) });
       const workflow = createWorkflow(
         {
@@ -1099,7 +1146,11 @@ describe('TemporalRun', () => {
       const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
 
       expect(result.status).toBe('failed');
-      expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
+      expect(signal).toHaveBeenCalledWith('mastra.resume', {
+        step: 'approval',
+        resumeData: { approved: true },
+        claimToken: expect.any(String),
+      });
       expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });

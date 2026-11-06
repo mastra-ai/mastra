@@ -306,6 +306,27 @@ export class TemporalRun<
     return { stepId, suspendedAt: stepResult.suspendedAt };
   }
 
+  private async claimExecution(handle: WorkflowHandle, operation: 'resume' | 'timeTravel', target?: { step: string }) {
+    const token = randomUUID();
+    await handle.signal('mastra.claimExecution', {
+      action: 'claim',
+      operation,
+      token,
+      ...(target !== undefined && { target }),
+    });
+    const claim = (await handle.query('mastra.executionClaim')) as
+      | { operation?: string; token?: string; stepId?: string }
+      | undefined;
+    if (claim?.operation !== operation || claim.token !== token) {
+      throw new Error(`Temporal ${operation} for run "${this.runId}" was already claimed.`);
+    }
+    return token;
+  }
+
+  private async releaseExecutionClaim(handle: WorkflowHandle, operation: 'resume' | 'timeTravel', token: string) {
+    await handle.signal('mastra.claimExecution', { action: 'release', operation, token });
+  }
+
   private async resumePayload(params: {
     step?:
       | Step<string, any, any, any, any, any, TemporalEngineType, any>
@@ -383,7 +404,13 @@ export class TemporalRun<
     const payload = await this.resumePayload(params);
     const status = await this.queryStatus(handle);
     const previousSuspension = this.resolveSuspendedStep(status, payload);
-    await handle.signal('mastra.resume', payload);
+    const claimToken = await this.claimExecution(handle, 'resume', { step: previousSuspension.stepId });
+    try {
+      await handle.signal('mastra.resume', { ...payload, step: previousSuspension.stepId, claimToken });
+    } catch (error) {
+      await this.releaseExecutionClaim(handle, 'resume', claimToken).catch(() => undefined);
+      throw error;
+    }
     return this.awaitResultOrSuspended(handle, undefined, undefined, requestContext, previousSuspension, true);
   }
 
@@ -413,8 +440,14 @@ export class TemporalRun<
     const handle = this.client.workflow.getHandle(this.runId);
     const payload = await this.resumePayload(params);
     const status = await this.queryStatus(handle);
-    this.resolveSuspendedStep(status, payload);
-    await handle.signal('mastra.resume', payload);
+    const suspension = this.resolveSuspendedStep(status, payload);
+    const claimToken = await this.claimExecution(handle, 'resume', { step: suspension.stepId });
+    try {
+      await handle.signal('mastra.resume', { ...payload, step: suspension.stepId, claimToken });
+    } catch (error) {
+      await this.releaseExecutionClaim(handle, 'resume', claimToken).catch(() => undefined);
+      throw error;
+    }
     return { runId: this.runId };
   }
 
@@ -551,14 +584,8 @@ export class TemporalRun<
     }
     await this._validateRequestContext(requestContext as RequestContext<unknown>);
 
-    const claimToken = status.status === 'suspended' ? randomUUID() : undefined;
-    if (claimToken) {
-      await sourceHandle.signal('mastra.claimTimeTravel', { action: 'claim', token: claimToken });
-      const claimedToken = await sourceHandle.query('mastra.timeTravelClaim');
-      if (claimedToken !== claimToken) {
-        throw new Error(`Temporal time travel for run "${this.runId}" was already claimed.`);
-      }
-    }
+    const claimToken =
+      status.status === 'suspended' ? await this.claimExecution(sourceHandle, 'timeTravel') : undefined;
 
     try {
       const previousTemporalRunId = (await sourceHandle.describe()).runId;
@@ -583,11 +610,13 @@ export class TemporalRun<
         handle = await this.client.workflow.signalWithStart(toWorkflowType(this.workflowId), {
           ...this.workflowStartOptions(workflowArgs, { workflowIdReusePolicy: 'ALLOW_DUPLICATE' }),
           workflowIdConflictPolicy: 'USE_EXISTING',
-          signal: 'mastra.claimTimeTravel',
-          signalArgs: [{ action: 'claim', token: replacementClaimToken }],
+          signal: 'mastra.claimExecution',
+          signalArgs: [{ action: 'claim', operation: 'timeTravel', token: replacementClaimToken }],
         });
-        const claimedToken = await handle.query('mastra.timeTravelClaim');
-        if (claimedToken !== replacementClaimToken) {
+        const claim = (await handle.query('mastra.executionClaim')) as
+          | { operation?: string; token?: string }
+          | undefined;
+        if (claim?.operation !== 'timeTravel' || claim.token !== replacementClaimToken) {
           throw new Error(`Temporal time travel for run "${this.runId}" was already claimed.`);
         }
       }
@@ -600,7 +629,7 @@ export class TemporalRun<
       ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
     } catch (error) {
       if (claimToken) {
-        await sourceHandle.signal('mastra.claimTimeTravel', { action: 'release', token: claimToken }).catch(() => {});
+        await this.releaseExecutionClaim(sourceHandle, 'timeTravel', claimToken).catch(() => undefined);
       }
       throw error;
     }
