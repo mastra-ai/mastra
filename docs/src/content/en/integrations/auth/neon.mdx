@@ -80,19 +80,18 @@ Frontends that use the Neon Auth SDK can request a short-lived JWT for the signe
 
 ### Retrieving a JWT
 
-Use `authClient.token()` from the [Neon Auth SDK](https://neon.com/docs/reference/javascript-sdk) after the user signs in:
+Use `authClient.getSession()` from the [Neon Auth SDK](https://neon.com/docs/reference/javascript-sdk) after the user signs in. The session includes the JWT to send to Mastra:
 
 ```typescript title="lib/auth.ts"
 import { createAuthClient } from '@neon/neon-js/auth'
 
-export const authClient = createAuthClient(import.meta.env.VITE_NEON_AUTH_URL, {
-  fetchOptions: { credentials: 'include' },
-})
+export const authClient = createAuthClient(import.meta.env.VITE_NEON_AUTH_URL)
 
 export async function getMastraToken() {
-  const { data, error } = await authClient.token()
+  const { data, error } = await authClient.getSession()
   if (error) throw error
-  return data.token
+  if (!data?.session) throw new Error('Not signed in to Neon Auth')
+  return data.session.token
 }
 ```
 

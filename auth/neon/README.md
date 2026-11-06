@@ -31,7 +31,7 @@ export const mastra = new Mastra({
 - [Neon Auth reference](https://mastra.ai/reference/auth/neon)
 - [Authentication overview](https://mastra.ai/docs/auth/overview)
 
-## Testing
+### Testing
 
 `pnpm test` runs the end-to-end suite against a local Neon Auth stand-in. To run the same suite against a live Neon project, enable Neon Auth (with email and password sign-in, sign-up, and **Allow localhost** on) and set `NEON_AUTH_LIVE_BASE_URL`:
 
