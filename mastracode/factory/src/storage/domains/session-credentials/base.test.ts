@@ -82,21 +82,36 @@ describe('SessionCredentialsStorage', () => {
     expect(raw?.value).not.toContain(SECRET);
 
     expect(
-      await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }),
+      await domain.resolveForCommand({
+        orgId: 'org-a',
+        sessionId: 'session-1',
+        names: ['STRIPE_TEST_KEY'],
+        submittedBy: 'user-1',
+      }),
     ).toEqual({
       STRIPE_TEST_KEY: SECRET,
     });
     expect(
       (
         await rejection(
-          domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-2', names: ['STRIPE_TEST_KEY'] }),
+          domain.resolveForCommand({
+            orgId: 'org-a',
+            sessionId: 'session-2',
+            names: ['STRIPE_TEST_KEY'],
+            submittedBy: 'user-1',
+          }),
         )
       ).code,
     ).toBe('missing');
     expect(
       (
         await rejection(
-          domain.resolveForCommand({ orgId: 'org-b', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }),
+          domain.resolveForCommand({
+            orgId: 'org-b',
+            sessionId: 'session-1',
+            names: ['STRIPE_TEST_KEY'],
+            submittedBy: 'user-1',
+          }),
         )
       ).code,
     ).toBe('missing');
@@ -115,7 +130,12 @@ describe('SessionCredentialsStorage', () => {
     );
     expect(replay.code).toBe('already_used');
     expect(
-      await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }),
+      await domain.resolveForCommand({
+        orgId: 'org-a',
+        sessionId: 'session-1',
+        names: ['STRIPE_TEST_KEY'],
+        submittedBy: 'user-1',
+      }),
     ).toEqual({
       STRIPE_TEST_KEY: SECRET,
     });
@@ -173,7 +193,10 @@ describe('SessionCredentialsStorage', () => {
     expect(
       (
         await rejection(
-          domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }, after),
+          domain.resolveForCommand(
+            { orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'], submittedBy: 'user-1' },
+            after,
+          ),
         )
       ).code,
     ).toBe('missing');
@@ -188,7 +211,12 @@ describe('SessionCredentialsStorage', () => {
     expect(
       (
         await rejection(
-          domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }),
+          domain.resolveForCommand({
+            orgId: 'org-a',
+            sessionId: 'session-1',
+            names: ['STRIPE_TEST_KEY'],
+            submittedBy: 'user-1',
+          }),
         )
       ).code,
     ).toBe('missing');
@@ -201,7 +229,12 @@ describe('SessionCredentialsStorage', () => {
     expect(
       (
         await rejection(
-          domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }),
+          domain.resolveForCommand({
+            orgId: 'org-a',
+            sessionId: 'session-1',
+            names: ['STRIPE_TEST_KEY'],
+            submittedBy: 'user-1',
+          }),
         )
       ).code,
     ).toBe('sandbox_not_allowed');
@@ -214,7 +247,12 @@ describe('SessionCredentialsStorage', () => {
     const second = await request(domain);
     await domain.fulfillRequest({ requestId: second.id, submittedBy: 'user-1', value: 'new', allowSandbox: true });
     expect(
-      await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }),
+      await domain.resolveForCommand({
+        orgId: 'org-a',
+        sessionId: 'session-1',
+        names: ['STRIPE_TEST_KEY'],
+        submittedBy: 'user-1',
+      }),
     ).toEqual({
       STRIPE_TEST_KEY: 'new',
     });
@@ -319,8 +357,43 @@ describe('SessionCredentialsStorage', () => {
     upsert.mockRestore();
 
     await domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET, allowSandbox: true });
-    const env = await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] });
+    const env = await domain.resolveForCommand({
+      orgId: 'org-a',
+      sessionId: 'session-1',
+      names: ['STRIPE_TEST_KEY'],
+      submittedBy: 'user-1',
+    });
     expect(env).toEqual({ STRIPE_TEST_KEY: SECRET });
+  });
+
+  it('drops a credential written after its session was purged mid-submit', async () => {
+    const { backend, domain } = await makeStore();
+    const req = await request(domain);
+    const upsert = backend.ops.upsertOne.bind(backend.ops);
+    vi.spyOn(backend.ops, 'upsertOne').mockImplementationOnce(async (...args: Parameters<typeof upsert>) => {
+      await domain.purgeSession({ orgId: 'org-a', sessionId: 'session-1' });
+      return upsert(...args);
+    });
+    await expect(
+      domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET, allowSandbox: true }),
+    ).rejects.toMatchObject({ code: 'not_found' });
+    expect(await backend.ops.findMany('session_credentials', {})).toEqual([]);
+  });
+
+  it('only resolves credentials the given submitter stored', async () => {
+    const { domain } = await makeStore();
+    const req = await request(domain);
+    await domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET, allowSandbox: true });
+    expect(
+      await rejection(
+        domain.resolveForCommand({
+          orgId: 'org-a',
+          sessionId: 'session-1',
+          names: ['STRIPE_TEST_KEY'],
+          submittedBy: 'user-2',
+        }),
+      ),
+    ).toMatchObject({ code: 'missing' });
   });
 
   it('does not claim the request when encryption fails', async () => {
@@ -371,7 +444,10 @@ describe('SessionCredentialsStorage', () => {
     });
     expect(deleted).toBe(0);
     expect(
-      await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }, t1),
+      await domain.resolveForCommand(
+        { orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'], submittedBy: 'user-1' },
+        t1,
+      ),
     ).toEqual({
       STRIPE_TEST_KEY: SECRET,
     });

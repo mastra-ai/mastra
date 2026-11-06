@@ -38,13 +38,14 @@ async function setup() {
   onTestFinished(() => sandbox._stop?.());
 
   const record = vi.fn(async () => null);
+  const owner = { userId: 'alice' };
   const tools = (s: FactoryToolScope) =>
     createSessionCredentialTools(s, {
       credentials,
       sessions: {
         getBySessionId: async (sessionId: string) =>
           (sessionId === 'sess-a' || sessionId === 'sess-b'
-            ? { sessionId, orgId: 'org-a', userId: 'alice' }
+            ? { sessionId, orgId: 'org-a', userId: owner.userId }
             : null) as never,
       },
       findSandbox: async () => ({ sandbox, workdir }),
@@ -71,7 +72,7 @@ async function setup() {
       stdout: string;
       stderr: string;
     }>;
-  return { credentials, tools, submit, run, record, sandbox };
+  return { credentials, tools, submit, run, record, sandbox, owner };
 }
 
 describe('session credential tools', () => {
@@ -150,6 +151,20 @@ describe('session credential tools', () => {
 
     await credentials.revoke({ orgId: 'org-a', sessionId: 'sess-a', name: 'FAKE_API_KEY' });
     await expect(run(scope('sess-a'), 'true', ['FAKE_API_KEY'])).rejects.toThrow(/No credential named/);
+  });
+
+  it('does not hand the previous owner credentials to a new owner after a transfer', async () => {
+    const { submit, run, tools, owner } = await setup();
+    await submit(scope('sess-a'), 'FAKE_API_KEY');
+    owner.userId = 'bob';
+    const bob = scope('sess-a', 'org-a', 'bob');
+    await expect(run(bob, 'echo "$FAKE_API_KEY"', ['FAKE_API_KEY'])).rejects.toThrow(
+      'No credential named FAKE_API_KEY',
+    );
+    expect(
+      ((await tools(bob).factory_list_credentials!.execute!({}, {} as never)) as { credentials: unknown[] })
+        .credentials,
+    ).toEqual([]);
   });
 
   it('refuses command use unless the owner allowed it', async () => {
