@@ -1346,6 +1346,7 @@ describe('session sandbox recreate', () => {
       abortSettleTimeoutMs?: number;
       caller?: { workosId: string; organizationId: string };
       filesystem?: RouteOptions['filesystem'];
+      purgeSessionData?: RouteOptions['purgeSessionData'];
     } = {},
   ) {
     const app = new Hono();
@@ -1365,6 +1366,7 @@ describe('session sandbox recreate', () => {
         sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
         ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
         ...(options.filesystem ? { filesystem: options.filesystem } : {}),
+        ...(options.purgeSessionData ? { purgeSessionData: options.purgeSessionData } : {}),
       }),
     );
     return app;
@@ -1470,6 +1472,18 @@ describe('session sandbox recreate', () => {
       expect(response.status).toBe(500);
       await expect(response.json()).resolves.toEqual({ error: 'setup failed' });
     });
+  });
+
+  it('purges session data (credentials) when the owner deletes a session without a retirement coordinator', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const purgeSessionData = vi.fn();
+    const app = buildRecreateApp(seed, sourceControl, { purgeSessionData });
+
+    const response = await app.request(`/web/user-sessions/${session.sessionId}`, { method: 'DELETE' });
+
+    expect(response.status).toBe(200);
+    expect(purgeSessionData).toHaveBeenCalledWith({ orgId: 'org-1', sessionId: session.sessionId });
+    expect(await sourceControl.sessions.getBySessionId(session.sessionId)).toBeNull();
   });
 
   it('recreates the owner session with the public session id, without an admin check', async () => {

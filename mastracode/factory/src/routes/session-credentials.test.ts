@@ -23,8 +23,9 @@ async function setup(options: { credentials?: boolean; authEnabled?: boolean } =
     new SessionCredentialsStorage(createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } })),
   );
   await storage.init();
+  const rows: Record<string, (typeof SESSIONS)[keyof typeof SESSIONS]> = structuredClone(SESSIONS);
   const sessions = {
-    getBySessionId: async (id: string) => SESSIONS[id as keyof typeof SESSIONS] ?? null,
+    getBySessionId: async (id: string) => rows[id] ?? null,
   } as unknown as SourceControlSessionLookup;
   const notifyAvailable = vi.fn<SessionCredentialRoutesDeps['notifyAvailable']>(async () => {});
   const record = vi.fn(async () => null);
@@ -61,7 +62,7 @@ async function setup(options: { credentials?: boolean; authEnabled?: boolean } =
       headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
-  return { app, credentials, request, notifyAvailable, record, as, submit };
+  return { app, credentials, request, notifyAvailable, record, as, submit, rows };
 }
 
 describe('session credential routes', () => {
@@ -107,6 +108,25 @@ describe('session credential routes', () => {
       credentials.resolveForCommand({ orgId: 'org-a', sessionId: 'sess-a', names: ['FAKE_API_KEY'] }),
     ).resolves.toEqual({ FAKE_API_KEY: SECRET });
     expect(request.id).toBeTruthy();
+  });
+
+  it('follows the current session owner after an ownership transfer', async () => {
+    const { app, request, as, submit, rows, credentials } = await setup();
+    rows['sess-a']!.userId = 'bob';
+
+    expect((await app.request(`/web/credential-requests/${request.id}`, { headers: as('alice') })).status).toBe(404);
+    expect((await submit(as('alice'))).status).toBe(404);
+    expect((await app.request(`/web/credential-requests/${request.id}`, { headers: as('bob') })).status).toBe(200);
+    expect((await submit(as('bob'))).status).toBe(200);
+    const stored = await credentials.list({ orgId: 'org-a', sessionId: 'sess-a' });
+    expect(stored.map(credential => credential.submittedBy)).toEqual(['bob']);
+  });
+
+  it('hides a request whose session no longer exists', async () => {
+    const { app, request, as, submit, rows } = await setup();
+    delete rows['sess-a'];
+    expect((await app.request(`/web/credential-requests/${request.id}`, { headers: as('alice') })).status).toBe(404);
+    expect((await submit(as('alice'))).status).toBe(404);
   });
 
   it('refuses non-JSON bodies, malformed bodies and expired requests', async () => {

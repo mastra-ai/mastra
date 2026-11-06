@@ -708,6 +708,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
+          ...(deps.sessionCredentials?.credentials
+            ? {
+                purgeSessionData: deps.sessionCredentials.credentials.purgeSession.bind(
+                  deps.sessionCredentials.credentials,
+                ),
+              }
+            : {}),
           // A local sandbox's destroy keeps the session directory, so recreate
           // couldn't deliver the fresh checkout it promises there.
           sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',

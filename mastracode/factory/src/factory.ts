@@ -1119,6 +1119,7 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            purgeSessionData: scope => sessionCredentialsStorage.purgeSession(scope),
             sandbox: sandboxConfig,
           })
         : undefined;

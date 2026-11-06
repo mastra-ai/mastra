@@ -109,9 +109,14 @@ export class SessionCredentialRoutes extends Route<SessionCredentialRoutesDeps> 
     };
   }
 
-  /** Only the person who owns the session the request belongs to may see or answer it; anyone else gets 404. */
-  #ownsRequest(viewer: Viewer, request: CredentialRequestRecord): boolean {
-    return viewer.kind === 'local' || (request.orgId === viewer.orgId && request.ownerUserId === viewer.userId);
+  /**
+   * The request's session as its current owner sees it. Ownership is read from
+   * the live session row, not the request, so a transfer after the link was
+   * issued moves the right to answer it. Anyone else gets 404.
+   */
+  async #requestSession(viewer: Viewer, request: CredentialRequestRecord) {
+    const session = await this.#ownedSession(viewer, request.sessionId);
+    return session && session.orgId === request.orgId ? session : null;
   }
 
   /** The session owner manages its credentials. */
@@ -141,11 +146,11 @@ export class SessionCredentialRoutes extends Route<SessionCredentialRoutesDeps> 
           if ('response' in storage) return storage.response;
           await storage.ensureReady();
           const request = await storage.getRequest(c.req.param('requestId') ?? '');
-          if (!request || !this.#ownsRequest(viewer, request)) return c.json({ error: 'Request not found' }, 404);
-          const session = await this.deps.sessions.getBySessionId(request.sessionId);
+          const session = request ? await this.#requestSession(viewer, request) : null;
+          if (!request || !session) return c.json({ error: 'Request not found' }, 404);
           return c.json({
             request: requestView(request, new Date()),
-            session: session ? { id: session.sessionId, title: session.title } : null,
+            session: { id: session.sessionId, title: session.title },
             defaultTtlMs: DEFAULT_CREDENTIAL_TTL_MS,
             maxTtlMs: MAX_CREDENTIAL_TTL_MS,
           });
@@ -163,7 +168,9 @@ export class SessionCredentialRoutes extends Route<SessionCredentialRoutesDeps> 
           if ('response' in storage) return storage.response;
           await storage.ensureReady();
           const request = await storage.getRequest(c.req.param('requestId') ?? '');
-          if (!request || !this.#ownsRequest(viewer, request)) return c.json({ error: 'Request not found' }, 404);
+          if (!request || !(await this.#requestSession(viewer, request))) {
+            return c.json({ error: 'Request not found' }, 404);
+          }
 
           // A JSON body forces a CORS preflight, so a cross-site form post cannot submit on the owner's behalf.
           if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json')) {

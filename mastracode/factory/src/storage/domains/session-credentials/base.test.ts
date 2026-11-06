@@ -256,4 +256,41 @@ describe('SessionCredentialsStorage', () => {
     expect(await domain.list({ orgId: 'org-a', sessionId: 'session-1' })).toEqual([]);
     expect(await domain.getRequest(req.id)).toBeNull();
   });
+
+  it('deletes expired credentials and stale requests instead of only hiding them', async () => {
+    const { backend, domain } = await makeStore();
+    const t0 = new Date('2026-01-01T00:00:00Z');
+    const req = await request(domain, { now: t0 });
+    await domain.fulfillRequest({
+      requestId: req.id,
+      submittedBy: 'user-1',
+      value: SECRET,
+      allowSandbox: true,
+      ttlMs: 60 * 60_000,
+      now: t0,
+    });
+    const rows = () => backend.ops.findMany('session_credentials', {});
+
+    // Listing a session drops its expired rows.
+    await domain.list({ orgId: 'org-a', sessionId: 'session-1' }, new Date(t0.getTime() + 2 * 60 * 60_000));
+    expect(await rows()).toHaveLength(0);
+
+    // The sweep drops expired credentials of any session, and requests a day past expiry.
+    const other = await request(domain, { sessionId: 'session-2', now: t0 });
+    await domain.fulfillRequest({
+      requestId: other.id,
+      submittedBy: 'user-1',
+      value: SECRET,
+      allowSandbox: true,
+      ttlMs: 60 * 60_000,
+      now: t0,
+    });
+    expect(await rows()).toHaveLength(1);
+    await domain.purgeExpired(new Date(t0.getTime() + 2 * 60 * 60_000));
+    expect(await rows()).toHaveLength(0);
+    expect(await domain.getRequest(other.id)).not.toBeNull();
+    await domain.purgeExpired(new Date(t0.getTime() + 25 * 60 * 60_000));
+    expect(await domain.getRequest(other.id)).toBeNull();
+    expect(await domain.getRequest(req.id)).toBeNull();
+  });
 });
