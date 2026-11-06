@@ -67,7 +67,6 @@ describe('one-button REST assessment in the real console', () => {
     expect(before.networks).toEqual([]);
     const seed = await initializeExampleData(baseSettings.root);
     const example = await startExampleTransport(baseSettings, 'vulnerable');
-    const boundary = await readExampleBoundary(baseSettings);
     const settings = loadSettings(
       {
         DATABASE_URL: `file:./data/bola-browser-${randomUUID()}.db`,
@@ -81,6 +80,7 @@ describe('one-button REST assessment in the real console', () => {
     let server: Awaited<ReturnType<typeof startControlPlane>> | undefined;
     let browser: Browser | undefined;
     try {
+      const boundary = await readExampleBoundary(baseSettings);
       expect(boundary).toBeTruthy();
       await setup(settings);
       server = await startControlPlane(settings, 0, undefined, boundary!, undefined, undefined, models);
