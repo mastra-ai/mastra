@@ -111,14 +111,11 @@ const APPROVAL_LOOKUP_TTL_MS = 10 * 60_000;
 
 /**
  * Resume errors meaning the card's approval can no longer be applied: the run
- * finished, was aborted, or no longer waits on this tool call. Workflow-backed
- * resumes report a missing run as a plain `No snapshot found` error instead.
+ * finished or was aborted. Workflow-backed resumes report a missing run as a
+ * plain `No snapshot found` error instead. `AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED`
+ * is left out because core also throws it when its durability wait times out.
  */
-const ANSWERED_RESUME_ERROR_IDS = new Set([
-  'AGENT_RESUME_NO_SNAPSHOT_FOUND',
-  'AGENT_RESUME_ABORTED_RUN',
-  'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
-]);
+const ANSWERED_RESUME_ERROR_IDS = new Set(['AGENT_RESUME_NO_SNAPSHOT_FOUND', 'AGENT_RESUME_ABORTED_RUN']);
 
 /** How a failed approval resume should be treated. */
 const classifyResumeError = (err: unknown): 'answered' | 'in-progress' | undefined => {
@@ -255,6 +252,12 @@ export class AgentChannels {
    * entries expire per the `APPROVAL_LOOKUP_*_TTL_MS` constants.
    */
   private approvalLookups = new Map<string, CachedApprovalLookup>();
+  /**
+   * Cards a click is answering right now: from its card edit until its resume
+   * is dispatched. Another click on the same card meanwhile is ignored, so it
+   * cannot overwrite the card with a decision core is about to refuse.
+   */
+  private approvalsInFlight = new Set<string>();
   /** Lookups in progress, so concurrent clicks on one card share one read. */
   private approvalLookupsInFlight = new Map<string, Promise<ApprovalLookupResult>>();
 
@@ -787,6 +790,8 @@ export class AgentChannels {
             };
             // Set once the card's Mastra thread is known.
             let card: ApprovalCardKey | undefined;
+            // Set while this click owns the card's in-flight mark.
+            let inFlightKey: string | undefined;
             try {
               const approved = actionId.startsWith('tool_approve:');
               const toolCallId = actionEventContext.toolCallId;
@@ -819,6 +824,10 @@ export class AgentChannels {
                 return;
               }
               card = { threadId: mastraThread.id, messageId, toolCallId };
+              if (this.getApprovalLookup(approvalCardKey(card))?.result.status === 'answered') {
+                this.log('info', 'Tool approval already answered', actionEventContext);
+                return;
+              }
 
               // Look up the runId for this toolCallId. Prefer the in-memory
               // `pendingApprovalCards` map (set when the approval card was posted)
@@ -873,6 +882,18 @@ export class AgentChannels {
                 });
                 return;
               }
+
+              const cardKey = approvalCardKey(card);
+              if (this.approvalsInFlight.has(cardKey)) {
+                this.log(
+                  'info',
+                  'Ignoring tool approval action: the card is already being answered',
+                  actionEventContext,
+                );
+                return;
+              }
+              this.approvalsInFlight.add(cardKey);
+              inFlightKey = cardKey;
 
               // Build the card header with tool name and args
               const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
@@ -1054,6 +1075,8 @@ export class AgentChannels {
               } catch (err) {
                 this.log('warn', 'Failed to post error message for action', { ...actionEventContext, error: err });
               }
+            } finally {
+              if (inFlightKey) this.approvalsInFlight.delete(inFlightKey);
             }
           };
 

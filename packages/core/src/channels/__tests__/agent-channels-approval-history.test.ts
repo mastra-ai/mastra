@@ -14,6 +14,7 @@ import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import type { ChatChannelRenderContext } from '../output-processor';
+import type { PendingApprovalRecord } from '../stream-helpers';
 
 // A user clicks Approve/Deny on a tool-approval card after the bot rebuilt (or
 // restarted) its AgentChannels. The new instance has no in-memory record of the
@@ -715,57 +716,99 @@ describe('approval clicks that resume a real agent run', () => {
       ],
     });
 
-    // A fresh AgentChannels, as after a restart: the card is not cached.
-    const adapter = createAdapter();
     const posts: unknown[] = [];
-    Object.assign(adapter, {
-      async postMessage(_threadId: string, message: unknown) {
-        posts.push(message);
-        return { id: `post-${posts.length}`, threadId: EXTERNAL_THREAD_ID, raw: {} };
-      },
-      async startTyping() {},
-    });
-    const channels = new AgentChannels({
-      adapters: { mock: { adapter, gateway: false } },
-      state: createState(),
-      tools: false,
-    });
-    agent.setChannels(channels);
-    await channels.initialize(mastra);
+    const edits: unknown[] = [];
+    const instances: AgentChannels[] = [];
+    // A fresh AgentChannels, as after a restart: the card is not cached.
+    // Each instance has its own adapter, as separate processes would.
+    const startInstance = async () => {
+      const adapter = createAdapter();
+      Object.assign(adapter, {
+        async postMessage(_threadId: string, message: unknown) {
+          posts.push(message);
+          return { id: `post-${posts.length}`, threadId: EXTERNAL_THREAD_ID, raw: {} };
+        },
+        async editMessage(_threadId: string, _messageId: string, message: unknown) {
+          edits.push(message);
+          return { id: 'approval-card', threadId: EXTERNAL_THREAD_ID, raw: {} };
+        },
+        async startTyping() {},
+      });
+      const channels = new AgentChannels({
+        adapters: { mock: { adapter, gateway: false } },
+        state: createState(),
+        tools: false,
+      });
+      agent.setChannels(channels);
+      await channels.initialize(mastra);
+      instances.push(channels);
+      const click = (actionId: string, userId: string) =>
+        adapter.chat!.processAction(
+          {
+            actionId,
+            adapter,
+            threadId: EXTERNAL_THREAD_ID,
+            messageId: 'approval-card',
+            user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
+            raw: {},
+          },
+          undefined,
+        );
+      return { channels, click };
+    };
+    const { channels, click } = await startInstance();
     cleanup = async () => {
-      await channels.sdk?.shutdown();
+      for (const instance of instances) await instance.sdk?.shutdown();
       await mastra.shutdown();
     };
-
-    const click = (actionId: string, userId: string) =>
-      adapter.chat!.processAction(
-        {
-          actionId,
-          adapter,
-          threadId: EXTERNAL_THREAD_ID,
-          messageId: 'approval-card',
-          user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
-          raw: {},
-        },
-        undefined,
-      );
     const runStatus = async () =>
       (await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId }))?.status;
     const errorPosts = () => posts.filter(p => JSON.stringify(p).includes('Error'));
+    // Card edits that record a decision (the tool result edits the card too).
+    const decisionEdits = () => edits.filter(e => /Approved|Denied/.test(JSON.stringify(e)));
     // How each resume this test spied on ended: 'resumed' or the core error id.
     const outcomes = async (...spies: { mock: { results: { value: unknown }[] } }[]) =>
       (await Promise.allSettled(spies.flatMap(spy => spy.mock.results.map(r => r.value)))).map(r =>
         r.status === 'fulfilled' ? 'resumed' : (r.reason as { id?: string }).id,
       );
 
-    return { agent, workflows, runId, refunds, click, runStatus, errorPosts, outcomes };
+    return {
+      agent,
+      channels,
+      workflows,
+      runId,
+      refunds,
+      decisionEdits,
+      click,
+      startInstance,
+      runStatus,
+      errorPosts,
+      outcomes,
+    };
   }
 
   it('runs the refund once when the requester clicks Approve twice at the same time', async () => {
-    const { agent, refunds, click, runStatus, errorPosts, outcomes } = await setup();
+    const { agent, refunds, decisionEdits, click, runStatus, errorPosts, outcomes } = await setup();
     const approve = vi.spyOn(agent, 'approveToolCall');
 
     await Promise.all([click(`tool_approve:${TOOL_CALL_ID}`, 'alice'), click(`tool_approve:${TOOL_CALL_ID}`, 'alice')]);
+    await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
+
+    expect(await outcomes(approve)).toEqual(['resumed']);
+    expect(decisionEdits()).toHaveLength(1);
+    expect(refunds).toEqual([10]);
+    expect(errorPosts()).toEqual([]);
+  });
+
+  it('runs the refund once when two instances get the Approve click at the same time', async () => {
+    const { agent, refunds, click, startInstance, runStatus, errorPosts, outcomes } = await setup();
+    const other = await startInstance();
+    const approve = vi.spyOn(agent, 'approveToolCall');
+
+    await Promise.all([
+      click(`tool_approve:${TOOL_CALL_ID}`, 'alice'),
+      other.click(`tool_approve:${TOOL_CALL_ID}`, 'alice'),
+    ]);
     await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
 
     // Both clicks reach core; core lets one resume run and refuses the other.
@@ -775,16 +818,18 @@ describe('approval clicks that resume a real agent run', () => {
   });
 
   it('applies only one answer when the requester clicks Approve and Deny at the same time', async () => {
-    const { agent, refunds, click, runStatus, errorPosts, outcomes } = await setup();
+    const { agent, refunds, decisionEdits, click, runStatus, errorPosts, outcomes } = await setup();
     const approve = vi.spyOn(agent, 'approveToolCall');
     const decline = vi.spyOn(agent, 'declineToolCall');
 
     await Promise.all([click(`tool_approve:${TOOL_CALL_ID}`, 'alice'), click(`tool_deny:${TOOL_CALL_ID}`, 'alice')]);
     await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
 
+    // The losing click neither resumes nor edits the card the winner resolved.
     const [approved, denied] = [await outcomes(approve), await outcomes(decline)];
-    expect([...approved, ...denied].sort()).toEqual(['AGENT_RESUME_ALREADY_CLAIMED', 'resumed']);
-    expect(refunds).toEqual(approved[0] === 'resumed' ? [10] : []);
+    expect([...approved, ...denied]).toEqual(['resumed']);
+    expect(decisionEdits()).toHaveLength(1);
+    expect(refunds).toEqual(approved.length ? [10] : []);
     expect(errorPosts()).toEqual([]);
   });
 
@@ -809,6 +854,40 @@ describe('approval clicks that resume a real agent run', () => {
     await click(`tool_deny:${TOOL_CALL_ID}`, 'alice');
 
     // Only the first click reaches core, which reports the run as gone.
+    expect(await outcomes(approve)).toEqual(['AGENT_RESUME_NO_SNAPSHOT_FOUND']);
+    expect(refunds).toEqual([10]);
+    expect(errorPosts()).toEqual([]);
+  });
+
+  it('stops resuming a card this instance posted once another instance answered it', async () => {
+    const { agent, channels, runId, refunds, click, startInstance, errorPosts, outcomes } = await setup();
+    // This instance posted the card, so it holds the approval in memory.
+    const cards = (channels as unknown as { pendingApprovalCards: Map<string, PendingApprovalRecord> })
+      .pendingApprovalCards;
+    cards.set(TOOL_CALL_ID, {
+      messageId: 'approval-card',
+      displayName: 'refund',
+      argsSummary: '',
+      startedAt: Date.now(),
+      runId,
+      toolName: 'refund',
+      args: { amount: 10 },
+      requesterId: 'alice',
+    });
+    // Another instance answers it; the agent now renders through that instance.
+    await startInstance();
+    await (
+      await agent.approveToolCall({
+        runId,
+        toolCallId: TOOL_CALL_ID,
+        memory: { thread: THREAD_ID, resource: RESOURCE_ID },
+      })
+    ).consumeStream();
+
+    const approve = vi.spyOn(agent, 'approveToolCall');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+
     expect(await outcomes(approve)).toEqual(['AGENT_RESUME_NO_SNAPSHOT_FOUND']);
     expect(refunds).toEqual([10]);
     expect(errorPosts()).toEqual([]);
