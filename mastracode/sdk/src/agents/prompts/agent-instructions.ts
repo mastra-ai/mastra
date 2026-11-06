@@ -85,7 +85,7 @@ function gitObjectRead(projectPath: string, args: string[]): string | null {
   const cached = gitObjectOutputs.get(key);
   if (cached !== undefined) return cached;
   try {
-    const output = execFileSync('git', ['-C', projectPath, '--literal-pathspecs', ...args], {
+    const output = execFileSync('git', ['--no-replace-objects', '-C', projectPath, '--literal-pathspecs', ...args], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
       maxBuffer: 1024 * 1024,

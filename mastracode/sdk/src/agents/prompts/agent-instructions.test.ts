@@ -431,6 +431,23 @@ describe('git-ref instruction readers', () => {
     expect(loadAtRef('main', clone)).toEqual(['instructions behind a fetch']);
   });
 
+  it("keeps a replace ref in one checkout out of another checkout's instructions", () => {
+    writeFileSync(join(repo, 'AGENTS.md'), 'instructions both checkouts share');
+    git('commit', '-am', 'shared');
+    const clone = join(root, 'clone');
+    execFileSync('git', ['clone', '--quiet', '--no-checkout', repo, clone], { stdio: 'ignore' });
+    const blob = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD:AGENTS.md'], { encoding: 'utf-8' }).trim();
+    const replacement = execFileSync('git', ['-C', repo, 'hash-object', '-w', '--stdin'], {
+      encoding: 'utf-8',
+      input: 'INJECTED through a replace ref',
+    }).trim();
+    git('replace', blob, replacement);
+    expect([loadAtRef(), loadAtRef('main', clone)]).toEqual([
+      ['instructions both checkouts share'],
+      ['instructions both checkouts share'],
+    ]);
+  });
+
   it('reminder reader resolves project paths at the ref and falls back to fs outside the project', () => {
     const reader = createGitRefReminderReader(repo, 'main');
 
