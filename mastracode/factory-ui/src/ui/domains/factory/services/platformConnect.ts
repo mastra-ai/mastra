@@ -116,6 +116,27 @@ export async function listPlatformConnections(
   return connections;
 }
 
+export interface ConnectToolConnection {
+  id: string;
+  integrationId: string;
+  providerName: string;
+  logoUrl: string | null;
+  accountLabel: string | null;
+  status: string;
+}
+
+export function isConnectToolsOffError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'connect_tools_off';
+}
+
+export async function listConnectTools(baseUrl: string): Promise<ConnectToolConnection[]> {
+  const { connections } = await requestJson<{ connections: ConnectToolConnection[] }>(
+    baseUrl,
+    '/web/integrations/platform/connect-tools',
+  );
+  return connections;
+}
+
 /** Mint a Nango connect session for a new provider connection. */
 export async function createPlatformConnectSession(
   baseUrl: string,

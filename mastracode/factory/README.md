@@ -1099,6 +1099,41 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
+### Mastra Connect and your own tools in sessions
+
+With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of each connection attached to the Platform project. Attach and remove connections in Mastra Platform, on the project's **Connect** page. The organization's other connections reach sessions only once they're attached, and a new project has none. **Settings → Tools** lists what sessions get, read from the same Platform list. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Attach Linear, and a Slack thread, a web chat or a work item can ask about its issues.
+
+Sessions run these tools without asking while automatic approval is on, so only attach accounts whose actions sessions may take. When a person turns approval off, the tools follow the `mcp` permission category, except in Slack with `adapterOptions.toolDisplay: 'text'`, where every tool call is approved automatically. Tools with `delete` or `archive` anywhere in their name, in any case, are left out. That check goes by name only, so it can't catch every destructive action, such as a SQL tool running a `DROP`. GitHub and GitLab Connect tools are left out too: Factory's own source-control tools enforce repository scope and self-review, and Connect's would skip both. Every user and organization on the Factory shares the project's connections, and a connection attached for another app on the same project reaches Factory sessions too. `GET /web/integrations/platform/connect-tools` backs the settings page.
+
+Connect caches the connection list for 30 seconds. When a later refresh fails, sessions keep the last list it got, including a connection removed since, until a refresh succeeds. A run with no list yet waits at most 15 seconds for one, then goes on without Connect tools, and Factory logs why. If the Platform stalls instead of failing, later runs also go without them until that listing answers or fails.
+
+`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none. Factory doesn't filter the tools you pass: the example below includes `linear_delete_issue`, so narrow it with Connect's `allowTools` or `disallowTools`.
+
+```typescript
+import { tools as connectTools } from '@mastra/connect';
+import { MastraFactory } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  // ...
+  tools: connectTools({ providers: ['linear'] }),
+});
+```
+
+A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error.
+
+Factory doesn't read MCP servers from the host's `mcp.json` files, and logs a warning at startup when `~/.mastracode/mcp.json` exists. Pass MCP tools through `tools` instead:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('https://tickets.example.com/mcp') } } });
+
+const factory = new MastraFactory({
+  // ...
+  tools: await mcp.listTools(),
+});
+```
+
 ### Voice input
 
 The composer mic first asks `POST /web/voice/live-session`. When the chosen model has a realtime model (Mistral Voxtral), the server mints a short-lived Mistral `rt_` token with the selected key and the browser streams 16 kHz PCM to Mistral's realtime socket, so words appear in the draft while you speak. Every other provider answers `{ mode: 'batch' }`, and so does Mistral when it won't mint a token for a key that can still transcribe (for example one without the `create_client_session` permission): the browser records a clip and posts it to `POST /web/voice/transcribe`, where the server transcribes it with a provider from the Mastra Code speech-to-text registry (`@mastra/code-sdk/voice/stt-registry`). A rejected or out-of-credit Mistral key answers 502 before anything is recorded; other providers report a bad key only when the clip is transcribed. API keys never reach the browser. Each member can start 20 live sessions or transcriptions a minute on each server process (the counters are in memory); past that both routes answer 429 `voice_rate_limited` with `Retry-After`, before anything is recorded. Only a minted live session or a transcription counts, so when Mistral won't mint a token and the browser records a clip instead, that dictation counts once.

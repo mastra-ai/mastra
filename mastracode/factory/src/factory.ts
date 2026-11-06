@@ -19,9 +19,12 @@
  * and the storage domains those capabilities require.
  */
 
+import { existsSync } from 'node:fs';
+
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -76,7 +79,8 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -192,6 +196,11 @@ type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage
 /** Constructor args for the `new Mastra(...)` literal in the deploy entry. */
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
+/** Tools for every Factory session, or a resolver called per run. */
+export type FactoryTools =
+  | IntegrationTools
+  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+
 export interface MastraFactoryConfig {
   /**
    * Auth provider instance — `MastraAuthStudio` (`@mastra/auth-studio`),
@@ -284,6 +293,20 @@ export interface MastraFactoryConfig {
    * approval cannot bypass that gate.
    */
   disableBuiltinTools?: BuiltinToolId[];
+  /**
+   * Tools offered to every Factory session, such as an MCP server's tools
+   * (`await mcpClient.listTools()`) or Mastra Connect's (`tools()` from
+   * `@mastra/connect`). Credentials built into these tools are shared by every
+   * user of the instance. Pass a function to resolve tools per run instead, for
+   * example to use the run's org credentials. A name Factory already gives the
+   * session keeps Factory's tool; the configured one is skipped with a warning.
+   *
+   * Defaults, with Platform credentials and `MASTRA_PROJECT_ID`, to the Mastra
+   * Connect tools of every connection attached to the Platform project, minus
+   * tools named for deleting or archiving and GitHub or GitLab tools. Pass `{}`
+   * to offer none.
+   */
+  tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -433,6 +456,26 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   }
   const { PlatformFactorySandbox } = await import('@mastra/platform-workspace');
   return new PlatformFactorySandbox();
+}
+
+function platformConnectProjectId(): string | undefined {
+  if (!hasPlatformCredentials()) return undefined;
+  const projectId = process.env.MASTRA_PROJECT_ID?.trim();
+  if (!projectId) {
+    console.warn(
+      'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
+    );
+    return undefined;
+  }
+  return projectId;
+}
+
+function warnIgnoredMcpConfig(): void {
+  const mcpPath = getGlobalMcpPath();
+  if (!existsSync(mcpPath)) return;
+  console.warn(
+    `MastraFactory: ${mcpPath} is ignored; Factory sessions don't load mcp.json. Pass MCP tools through the \`tools\` option or attach a Mastra Connect connection to the Platform project.`,
+  );
 }
 
 /**
@@ -657,6 +700,7 @@ export class MastraFactory {
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
     this.#prepareStartedAt = performance.now();
+    warnIgnoredMcpConfig();
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
@@ -1514,6 +1558,10 @@ export class MastraFactory {
           ]
         : [],
     );
+    const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
+    const sessionTools =
+      this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
+    const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
@@ -1553,6 +1601,8 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // Host mcp.json files never belong to a hosted session; MCP tools come through `tools`.
+        disableMcp: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
         // session's owner in its org.
@@ -1874,6 +1924,21 @@ export class MastraFactory {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
             }
           }
+          if (sessionTools) {
+            const contributed =
+              typeof sessionTools === 'function' ? await sessionTools({ requestContext }) : sessionTools;
+            for (const [name, tool] of Object.entries(contributed)) {
+              const owner = toolOwners.get(name);
+              if (!owner) {
+                tools[name] = tool;
+              } else if (!warnedConfiguredToolClashes.has(name)) {
+                warnedConfiguredToolClashes.add(name);
+                console.warn(
+                  `[factory] configured tool '${name}' is not offered to sessions: '${owner}' already provides a tool with that name.`,
+                );
+              }
+            }
+          }
           return tools;
         },
         postToolObserver: async (toolContext: IntegrationPostToolContext) => {
@@ -2046,6 +2111,12 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
+          buildConnectToolsRoute(
+            routeAuth,
+            connectToolsProjectId
+              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
+              : undefined,
+          ),
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
