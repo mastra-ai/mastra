@@ -197,6 +197,17 @@ describe('Pull requests on the Work board', () => {
     expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
   });
 
+  it('shows only pull requests for an old Review board link that picked another source', async () => {
+    stubBoards({ items: [issueWithPullRequest, plainIssue] });
+    const { router } = renderBoard('review', '?source=github');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
+    const prReview = await screen.findByRole('region', { name: 'PR review' });
+    expect(await within(prReview).findByText(issueWithPullRequest.title)).toBeVisible();
+    expect(screen.queryByText(plainIssue.title)).toBeNull();
+  });
+
   it("lists an issue card carrying a pull request under the pull request filter, with that PR's status", async () => {
     stubBoards({ items: [issueWithPullRequest, plainIssue] });
     const { router } = renderBoard('review');
