@@ -9,7 +9,7 @@ import { ObservabilityWidget } from '../apps/observability-widget/observability-
 import { OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY, observabilityWidgetPins } from '../host';
 import type { McpAppRef, ObservabilityWidgetPin } from '../host';
 import { serveAndConnect } from './greeting-server';
-import { agentRunsKpi, observabilityServer } from './observability-server';
+import { agentRunsChart, agentRunsKpi, observabilityServer } from './observability-server';
 
 const hosts: Awaited<ReturnType<typeof serveAndConnect>>[] = [];
 afterEach(async () => {
@@ -143,20 +143,28 @@ function pinningHost() {
   };
 }
 
-it('pins and unpins the widget through the host, which hears the widget and its window', async () => {
-  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+it.each([
+  ['KPI group', agentRunsKpi, 'agent-runs'],
+  ['chart', agentRunsChart, 'Agent runs over time'],
+])('pins and unpins a %s through the host, which hears the widget and its window', async (_, widget, name) => {
+  const mcp = observabilityServer({
+    answers: {
+      getMetricAggregate: { data: { value: 1 } },
+      getMetricTimeSeries: { data: { series: [] } },
+    },
+  });
   const host = pinningHost();
 
-  host.connect(await openWidget(mcp, { widget: agentRunsKpi, datePreset: '7d' }, host.hostContext(), PINNING));
+  host.connect(await openWidget(mcp, { widget, datePreset: '7d' }, host.hostContext(), PINNING));
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Pin agent-runs' }));
-  expect(await screen.findByRole('button', { name: 'Unpin agent-runs' })).toBeTruthy();
-  expect(host.pins).toEqual([{ widget: agentRunsKpi, datePreset: '7d' }]);
-  expect(host.pinnedIds()).toEqual([agentRunsKpi.id]);
+  fireEvent.click(await screen.findByRole('button', { name: `Pin ${name}` }));
+  expect(await screen.findByRole('button', { name: `Unpin ${name}` })).toBeTruthy();
+  expect(host.pins).toEqual([{ widget, datePreset: '7d' }]);
+  expect(host.pinnedIds()).toEqual([widget.id]);
 
-  fireEvent.click(screen.getByRole('button', { name: 'Unpin agent-runs' }));
-  expect(await screen.findByRole('button', { name: 'Pin agent-runs' })).toBeTruthy();
-  expect(host.unpins).toEqual([agentRunsKpi.id]);
+  fireEvent.click(screen.getByRole('button', { name: `Unpin ${name}` }));
+  expect(await screen.findByRole('button', { name: `Pin ${name}` })).toBeTruthy();
+  expect(host.unpins).toEqual([widget.id]);
   expect(host.pinnedIds()).toEqual([]);
 });
 
