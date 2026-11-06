@@ -38,10 +38,18 @@ export const EVENT_RULE_FIELDS = ['event.type', 'event.reason'] as const;
  * Facts a route can test about the issue an arriving pull request closes (see
  * `closedIssueRuleFacts`). Only arrivals have them, so phase conditions can't name them.
  */
-export const CLOSED_ISSUE_RULE_FIELDS = ['pullRequest.closesIssue', 'closedIssue.phase', 'closedIssue.hasPullRequest'] as const;
+export const CLOSED_ISSUE_RULE_FIELDS = [
+  'pullRequest.closesIssue',
+  'closedIssue.phase',
+  'closedIssue.hasPullRequest',
+] as const;
 
 /** Every field an intake route's `when` may name. */
-export const INTAKE_ROUTE_RULE_FIELDS = [...CARD_RULE_FIELDS, ...EVENT_RULE_FIELDS, ...CLOSED_ISSUE_RULE_FIELDS] as const;
+export const INTAKE_ROUTE_RULE_FIELDS = [
+  ...CARD_RULE_FIELDS,
+  ...EVENT_RULE_FIELDS,
+  ...CLOSED_ISSUE_RULE_FIELDS,
+] as const;
 
 function isStatusEvent(value: string): value is StatusEvent {
   return (STATUS_EVENTS as readonly string[]).includes(value);

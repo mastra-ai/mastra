@@ -223,7 +223,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
 
     const added = (await boards.listIntakeRoutes(scope)).find(row => row.name === PULL_REQUEST_INTAKE_ROUTE.name)!;
     await boards.deleteIntakeRoute(scope, added.id, { expectedRevision: added.revision });
-    expect(await names(boards, scope)).toEqual([CLOSES_ISSUE_INTAKE_ROUTE.name, DEFAULT_INTAKE_ROUTE.name, 'Mine', ...EVENT_ROUTE_NAMES]);
+    expect(await names(boards, scope)).toEqual([
+      CLOSES_ISSUE_INTAKE_ROUTE.name,
+      DEFAULT_INTAKE_ROUTE.name,
+      'Mine',
+      ...EVENT_ROUTE_NAMES,
+    ]);
   });
 
   it('adds the pull request route once when two clients read an older project at once', async () => {
