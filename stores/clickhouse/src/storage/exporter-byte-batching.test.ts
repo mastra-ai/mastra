@@ -4,16 +4,17 @@ import { createServer, request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createClient } from '@clickhouse/client';
 import { Mastra } from '@mastra/core';
+import { SpanType } from '@mastra/core/observability';
 import { MastraStorage } from '@mastra/core/storage';
+import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MastraStorageExporter } from '../../../../observability/mastra/src/exporters/mastra-storage';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
 
-// Opt in: creates and removes only a unique database owned by this suite.
-describe.skipIf(!process.env.CLICKHOUSE_URL)('Storage exporter byte batching with ClickHouse', () => {
+// Uses the package test server and creates/removes only a database owned by this suite.
+describe('Storage exporter byte batching with ClickHouse', () => {
   const database = `byte_batch_${randomUUID().replaceAll('-', '')}`;
   const connection = {
-    url: process.env.CLICKHOUSE_URL!,
+    url: process.env.CLICKHOUSE_URL ?? 'http://localhost:8123',
     username: process.env.CLICKHOUSE_USERNAME ?? 'default',
     password: process.env.CLICKHOUSE_PASSWORD ?? 'password',
   };
@@ -126,7 +127,7 @@ describe.skipIf(!process.env.CLICKHOUSE_URL)('Storage exporter byte batching wit
         await exporter.flush();
         expect(exporter.getByteBatchingStats()).toMatchObject({ pendingBytes: 0, pendingRecords: 0, activeWrites: 0 });
         const result = await allLogs();
-        expect(result.logs.filter(row => row.logId.startsWith(`bounded-${iteration}-`))).toHaveLength(100);
+        expect(result.logs.filter(row => row.logId?.startsWith(`bounded-${iteration}-`))).toHaveLength(100);
         expect(insertRequests - before).toBe(11);
       } finally {
         hold = false;
@@ -194,11 +195,51 @@ describe.skipIf(!process.env.CLICKHOUSE_URL)('Storage exporter byte batching wit
       // Two events cross the byte threshold, before the 1,000-record limit.
       expect(insertRequests - before).toBe(4);
       const result = await allLogs();
-      expect(result.logs.filter(row => row.logId.startsWith('split-'))).toHaveLength(8);
+      expect(result.logs.filter(row => row.logId?.startsWith('split-'))).toHaveLength(8);
     } finally {
       hold = false;
       for (const release of releases.splice(0)) release();
       await exporter.shutdown();
     }
   });
+  it.each(Array.from({ length: 20 }, (_, i) => i))(
+    'keeps events arriving during shutdown (iteration %i)',
+    async iteration => {
+      const exporter = new MastraStorageExporter({ maxBatchSize: 1, byteBatching: {} });
+      const observability = new Observability({
+        configs: { default: { serviceName: 'shutdown-test', exporters: [exporter] } },
+      });
+      const localMastra = new Mastra({ storage: mastra.getStorage(), observability, logger: false });
+      await exporter.init({ mastra: localMastra });
+      const tracing = observability.getDefaultInstance()!;
+      const span = tracing.startSpan({ type: SpanType.GENERIC, name: 'ends during shutdown' });
+      hold = true;
+      let shutdown: Promise<void> | undefined;
+      try {
+        await exporter.onLogEvent({
+          type: 'log',
+          log: { logId: `shutdown-start-${iteration}`, timestamp: new Date(), level: 'info', message: 'before drain' },
+        });
+        await expect.poll(() => releases.length).toBe(1);
+        shutdown = exporter.shutdown();
+        span.end({ output: { result: 'completed during drain' } });
+        await expect.poll(() => exporter.getByteBatchingStats()?.pendingRecords).toBe(2);
+        await exporter.onLogEvent({
+          type: 'log',
+          log: { logId: `shutdown-end-${iteration}`, timestamp: new Date(), level: 'info', message: 'during drain' },
+        });
+        hold = false;
+        for (const release of releases.splice(0)) release();
+        await shutdown;
+        const result = await allLogs();
+        expect(result.logs.some(row => row.logId === `shutdown-end-${iteration}`)).toBe(true);
+        const persisted = await storage.getSpan({ traceId: span.traceId, spanId: span.id });
+        expect(persisted?.span.output).toEqual({ result: 'completed during drain' });
+      } finally {
+        hold = false;
+        for (const release of releases.splice(0)) release();
+        await (shutdown ?? exporter.shutdown());
+      }
+    },
+  );
 });

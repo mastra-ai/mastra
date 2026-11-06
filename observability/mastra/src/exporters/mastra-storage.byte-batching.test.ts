@@ -73,7 +73,7 @@ describe('Storage byte batching', () => {
     const { exporter, storage } = await setup();
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    await expect(exporter.onLogEvent({ ...log(1), log: { ...log(1).log, attributes: circular } })).rejects.toThrow();
+    await expect(exporter.onLogEvent({ ...log(1), log: { ...log(1).log, data: circular } })).rejects.toThrow();
     await exporter.onLogEvent(log(2));
     await exporter.flush();
     const result = await storage.listLogs({ pagination: { page: 0, perPage: 100 } });
@@ -86,6 +86,15 @@ describe('Storage byte batching', () => {
       expect(() => new MastraStorageExporter({ byteBatching })).toThrow();
     },
   );
+
+  it('ignores byte batching for realtime and persists before the handler resolves', async () => {
+    const { exporter, storage } = await setup('realtime');
+    await exporter.onLogEvent(log(1));
+    expect(exporter.getByteBatchingStats()).toBeUndefined();
+    expect((await storage.listLogs({ pagination: { page: 0, perPage: 100 } })).logs.map(row => row.logId)).toEqual([
+      'log-1',
+    ]);
+  });
 
   it.each(['batch-with-updates', 'realtime'] as const)('preserves create, update and end with %s', async strategy => {
     const { exporter, storage, tracing } = await setup(strategy, { maxBatchBytes: 4000 });

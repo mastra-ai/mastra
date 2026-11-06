@@ -34,6 +34,7 @@ export class EventBuffer {
   #storageStrategy?: ObservabilityStorageStrategy;
   #maxRetries: number;
   #byteTracker?: StorageByteTracker;
+  #preferUpdates = false;
 
   constructor(args: { maxRetries: number; byteTracker?: StorageByteTracker }) {
     this.#maxRetries = args.maxRetries;
@@ -64,17 +65,14 @@ export class EventBuffer {
     }
   }
 
-  private pushCreate(event: ObservabilityEvent): boolean {
+  private pushCreate(event: ObservabilityEvent): void {
     const buffered = this.#byteTracker ? this.#byteTracker.capture(event) : { ...event, retryCount: 0 };
-    if (!buffered) return false;
     this.setFirstEventTime();
     this.#creates.push(buffered);
-    return true;
   }
 
   private pushUpdate(event: ObservabilityEvent): void {
     const buffered = this.#byteTracker ? this.#byteTracker.capture(event) : { ...event, retryCount: 0 };
-    if (!buffered) return;
     this.setFirstEventTime();
     this.#updates.push(buffered);
   }
@@ -92,7 +90,8 @@ export class EventBuffer {
         switch (this.#storageStrategy) {
           case 'realtime':
           case 'batch-with-updates':
-            if (this.pushCreate(event) && !event.exportedSpan.isEvent) {
+            this.pushCreate(event);
+            if (!event.exportedSpan.isEvent) {
               this.#pendingCreateSpans.add(this.exportedSpanKey(event.exportedSpan));
             }
             break;
@@ -179,26 +178,39 @@ export class EventBuffer {
     return dropped;
   }
 
-  /** Take a bounded batch, keeping its byte reservation until it settles. */
+  /** Alternate creates and eligible updates so either queue can make progress under load. */
   takeByteBatch(maxRecords: number): { creates: BufferedEvent[]; updates: BufferedEvent[] } {
-    const budget = this.#byteTracker!;
+    const tracker = this.#byteTracker!;
+    const creates: BufferedEvent[] = [];
+    const updates: BufferedEvent[] = [];
+    const selectedUpdates = new Set<number>();
+    let updateIndex = 0;
     let bytes = 0;
-    let count = 0;
-    const take = (queue: BufferedEvent[]) => {
-      let length = 0;
-      for (const event of queue) {
-        const size = budget.size(event);
-        if (count >= maxRecords || bytes >= budget.config.maxBatchBytes) break;
-        bytes += size;
-        count++;
-        length++;
-        budget.dequeue(event);
+    while (creates.length + updates.length < maxRecords && bytes < tracker.config.maxBatchBytes) {
+      // Waiting on a create isn't a failed storage operation. Leave these entries
+      // in place, with their retry count unchanged, until their create settles.
+      while (updateIndex < this.#updates.length) {
+        const event = this.#updates[updateIndex]!;
+        if (!('exportedSpan' in event) || !this.isAwaitingCreate(event.exportedSpan)) break;
+        updateIndex++;
       }
-      return queue.splice(0, length);
-    };
-    const creates = take(this.#creates);
-    // Don't let an end overtake its create while the latter is still queued.
-    const updates = this.#creates.length ? [] : take(this.#updates);
+      const create = this.#creates[creates.length];
+      const update = this.#updates[updateIndex];
+      if (!create && !update) break;
+      const takeUpdate = !!update && (!create || this.#preferUpdates);
+      const event = takeUpdate ? update! : create!;
+      if (takeUpdate) {
+        updates.push(event);
+        selectedUpdates.add(updateIndex++);
+      } else {
+        creates.push(event);
+      }
+      this.#preferUpdates = !takeUpdate;
+      tracker.dequeue(event);
+      bytes += tracker.size(event);
+    }
+    this.#creates.splice(0, creates.length);
+    this.#updates = this.#updates.filter((_, index) => !selectedUpdates.has(index));
     if (this.totalSize === 0) this.#firstEventTime = undefined;
     return { creates, updates };
   }

@@ -749,7 +749,8 @@ export class MastraPlatformExporter extends BaseExporter {
     if (isObservabilityDisabled(response)) {
       this.enterQuotaPause(parseQuotaRetryAfterSeconds(response));
     }
-    if (this.byteBatcher) await response.body?.cancel().catch(() => {});
+    // Publish responses carry no payload; release the response stream in both modes.
+    await response.body?.cancel().catch(() => {});
   }
 
   /**

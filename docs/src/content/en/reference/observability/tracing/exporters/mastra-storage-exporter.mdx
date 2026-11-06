@@ -75,7 +75,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Byte batching
 
-Enable byte batching with `byteBatching: {}` or supply custom thresholds:
+Enable byte batching with `byteBatching: {}` or supply custom thresholds. The exporter ignores byte batching when the resolved strategy is `realtime`, which keeps its immediate, awaited writes:
 
 ```typescript
 new MastraStorageExporter({

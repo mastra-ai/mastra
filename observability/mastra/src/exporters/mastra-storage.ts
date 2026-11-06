@@ -89,9 +89,9 @@ export class MastraStorageExporter extends BaseExporter {
   #wasUnavailable = false;
   #eventBuffer: EventBuffer;
   #byteTracker?: StorageByteTracker;
+  // Back off the shared storage connection across signals after a failed write.
   #byteRetryAt = 0;
   #byteDrainers = 0;
-  #shuttingDown = false;
 
   #storage?: MastraCompositeStore;
   #observabilityStorage?: ObservabilityStorage;
@@ -178,6 +178,12 @@ export class MastraStorageExporter extends BaseExporter {
       this.logger,
     );
 
+    if (this.#resolvedStrategy === 'realtime' && this.#byteTracker) {
+      // Strategy is resolved before any event is accepted. Keep realtime's
+      // existing immediate, awaited writes even when byte batching is configured.
+      this.#byteTracker = undefined;
+      this.#eventBuffer = new EventBuffer({ maxRetries: this.#config.maxRetries! });
+    }
     this.#eventBuffer.init({ strategy: this.#resolvedStrategy });
     this.logger.debug('tracing storage exporter initialized', {
       strategy: this.#resolvedStrategy,
@@ -674,7 +680,6 @@ export class MastraStorageExporter extends BaseExporter {
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
     await this.ensureInitialized();
-    if (this.#byteTracker && this.#shuttingDown) return;
     if (!this.#observabilityStorage) {
       this.logger.debug('Cannot store traces. Observability storage is not initialized');
       return;
@@ -689,7 +694,6 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async onMetricEvent(event: MetricEvent): Promise<void> {
     await this.ensureInitialized();
-    if (this.#byteTracker && this.#shuttingDown) return;
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -701,7 +705,6 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async onLogEvent(event: LogEvent): Promise<void> {
     await this.ensureInitialized();
-    if (this.#byteTracker && this.#shuttingDown) return;
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -713,7 +716,6 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async onScoreEvent(event: ScoreEvent): Promise<void> {
     await this.ensureInitialized();
-    if (this.#byteTracker && this.#shuttingDown) return;
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -725,7 +727,6 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     await this.ensureInitialized();
-    if (this.#byteTracker && this.#shuttingDown) return;
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -782,7 +783,6 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    this.#shuttingDown = true;
     // Clear any pending timer
     if (this.#flushTimer) {
       clearTimeout(this.#flushTimer);
