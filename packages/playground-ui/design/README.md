@@ -14,7 +14,7 @@ Each kind of decision has one source. When a rule here disagrees with the code, 
 | Which components and variants exist                         | each component's `cva` block or variant map in `src/ds/`                             |
 | Which part to use for which job, and why                    | `design/rules/*.md`                                                                  |
 | How React code is written                                   | `design/rules/react.md`, and the full set in `.claude/skills/react-best-practices/`  |
-| Why a rule exists                                           | `design/decisions/`                                                                  |
+| Why a rule exists                                           | the rule's own why sentence, and the PR it links                                     |
 | What a machine enforces                                     | `oxlint/` (shipped as `@mastra/playground-ui/oxlint`) and `src/theme-export.test.ts` |
 | Who approves a change                                       | the frontend code owners for `packages/playground-ui/` in `.github/CODEOWNERS`       |
 
@@ -56,10 +56,15 @@ Write the decision in the PR description in one sentence. A good call that leave
 
 ## How a rule changes
 
-1. Open a PR that changes the rule and adds a note in `decisions/`, following `decisions/README.md`: the decision, its scope, why, the evidence, and what it replaced.
-2. A frontend code owner who did not write the proposal approves it. The same review covers the design decision and the code.
-3. When a value or API changes, the code and the rule change in the same PR. The rule never describes code that has not merged.
-4. Fix every copy of the old rule in the same PR, then run the note's `Reaches` command and check each place it lands. Tokens change every screen at once; usage does not.
+Every rule carries its reason in the same place: the rule, one sentence on what breaks without it, its scope and named exceptions, and a link to the PR that decided it. The PR description holds the evidence, the alternatives that lost, and the search that finds every place the rule applies. The code-owner review on that PR is the approval. There is no separate decision log to keep in sync.
+
+To add or change a rule, follow `.claude/skills/design-rules/SKILL.md`. In short:
+
+1. Name the evidence: two independent examples, one costly failure, or an explicit call from a frontend code owner. One reviewer's taste on one PR is not a rule yet.
+2. Edit the rule file that owns the topic (the Files list below). Change the existing rule rather than adding an exception somewhere else, and end the rule with a link to your PR.
+3. When a value or API changes, change the code and the rule in the same PR. A rule never describes code that has not merged.
+4. Fix every copy of the old rule in the same PR, including `examples/`, and search for every place the rule lands. Tokens change every screen at once; usage does not.
+5. A frontend code owner who did not write the proposal approves the PR. The same review covers the design call and the code.
 
 A rule names what two screens share, not what they look like. If the only reason to copy a pattern is that two screens look alike, it is not a rule yet.
 
@@ -75,7 +80,7 @@ A rule names what two screens share, not what they look like. If the only reason
 
 Lint does not catch a class that names no token, such as a misspelled role. It renders nothing and raises no error, so check every role and color name against `theme/`.
 
-To test the guidance itself, give a fresh agent only this repository and ask for a page nobody has designed, such as "an index of evaluation runs in Studio with filters." Every choice it invents is a missing rule. Fix the rule, not just the page. The same goes for review: when a reviewer flags something on a rendered page, ask which rule would have prevented it, then fix the page, change or add that rule, and record the call in `decisions/`. Decisions 0004 to 0006 came from one review of `examples/pages/billing-overview.tsx`.
+To test the guidance itself, give a fresh agent only this repository and ask for a page nobody has designed, such as "an index of evaluation runs in Studio with filters." Every choice it invents is a missing rule. Fix the rule, not just the page. The same goes for review: when a reviewer flags something on a rendered page, ask which rule would have prevented it, then fix the page and change or add that rule in the same PR.
 
 ## Files
 
@@ -90,4 +95,3 @@ To test the guidance itself, give a fresh agent only this repository and ask for
 - `rules/interface.md`: shared behavior and component props
 - `build-component.md`: adding a component to `src/ds/`
 - `examples/`: whole pages to copy
-- `decisions/`: why each rule exists
