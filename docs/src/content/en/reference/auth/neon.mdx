@@ -202,7 +202,7 @@ Validates the session through Neon Auth. Neon Auth refreshes sessions automatica
 await auth.destroySession(sessionId)
 ```
 
-Attempts to revoke the session through the Neon Auth sign-out endpoint. A network error or non-2xx response can leave the session active. `destroySession()` doesn't throw for these failures. `getClearSessionHeaders()` returns the header that clears the session cookie in the browser.
+Attempts to revoke the session through the Neon Auth sign-out endpoint. A network error or non-2xx response can leave the session active. `destroySession()` doesn't throw for these failures. When Mastra sends the header from `getClearSessionHeaders()`, it clears the matching cookie on the Mastra host, not a cookie on a separate Neon Auth host. A separate Neon Auth session can remain active after Studio sign-out.
 
 ## `MastraRBACNeon`
 
