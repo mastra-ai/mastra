@@ -9,7 +9,7 @@ import {
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { findMastraEntryFile } from '../../utils/find-mastra-entry';
 import { createLogger } from '../../utils/logger';
-import { getMastraPackages } from '../../utils/mastra-packages';
+import { getMastraPackages, writeMastraPackagesManifest } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
 import { buildFactoryUI, copyFactorySkills } from './factory-ui-build';
@@ -92,6 +92,8 @@ export async function build({
       // fs-routed agents start with those files on disk.
       await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
       if (projectType === 'factory') await copyFactorySkills(mastraDir, join(outputDirectory, 'output'), logger);
+      // Ship the resolved package versions so the deployed server can report them.
+      await writeMastraPackagesManifest(join(outputDirectory, 'output'), mastraPackages);
 
       // Write build manifest with source hash for staleness detection
       const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);
@@ -128,6 +130,8 @@ export async function build({
     // fs-routed agents start with those files on disk.
     await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
     if (projectType === 'factory') await copyFactorySkills(mastraDir, join(outputDirectory, 'output'), logger);
+    // Ship the resolved package versions so the deployed server can report them.
+    await writeMastraPackagesManifest(join(outputDirectory, 'output'), mastraPackages);
 
     // Write build manifest with source hash for staleness detection
     const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);

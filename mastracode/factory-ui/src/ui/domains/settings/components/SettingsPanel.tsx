@@ -11,6 +11,7 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { AboutSection } from './AboutSection';
 import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { ConnectToolsSection } from './ConnectToolsSection';
@@ -74,6 +75,7 @@ export function SettingsPanel() {
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
       {section === 'tools' && <ConnectToolsSection />}
+      {section === 'about' && <AboutSection />}
       {section === 'behavior' && (
         <BehaviorSettings
           settings={settings}

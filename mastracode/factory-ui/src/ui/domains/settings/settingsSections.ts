@@ -14,7 +14,8 @@ export type SettingsSection =
   | 'memory'
   | 'skills'
   | 'tools'
-  | 'behavior';
+  | 'behavior'
+  | 'about';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
@@ -29,6 +30,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   skills: 'Skills',
   tools: 'Tools',
   behavior: 'Behavior',
+  about: 'About',
 };
 
 export const MODEL_DEFAULTS_ANCHORS = {

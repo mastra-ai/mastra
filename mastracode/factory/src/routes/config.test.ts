@@ -68,6 +68,43 @@ describe('GET /web/config/features', () => {
   });
 });
 
+describe('GET /web/config/versions', () => {
+  const packages = [
+    { name: '@mastra/core', version: '1.83.0' },
+    { name: '@mastra/factory', version: '0.28.0' },
+  ];
+
+  function appWith(user?: { workosId: string; organizationId: string }) {
+    const app = new Hono();
+    app.use(async (c, next) => {
+      if (user) c.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller: makeAgentController([]),
+        readPackages: () => packages,
+      }).routes(),
+    );
+    return app;
+  }
+
+  it('reports the packages and Node version the server runs to a signed-in user', async () => {
+    const response = await appWith({ workosId: 'user-a', organizationId: 'org1' }).request('/web/config/versions');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ packages, nodeVersion: process.version });
+  });
+
+  it('refuses anonymous requests when auth is on', async () => {
+    const response = await appWith().request('/web/config/versions');
+
+    expect(response.status).toBe(401);
+  });
+});
+
 describe('listProviders', () => {
   const prevAnthropicKey = process.env.ANTHROPIC_API_KEY;
 

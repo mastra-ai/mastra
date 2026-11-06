@@ -11,6 +11,7 @@ import {
   CircleUserRound,
   GitBranch,
   Inbox,
+  Info,
   Palette,
   SlidersHorizontal,
   SquareKanban,
@@ -130,6 +131,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Building2,
         searchText:
           'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'about',
+        label: SETTINGS_SECTION_LABELS.about,
+        icon: Info,
+        searchText: 'about versions packages release build debug node mastra core factory installed running',
       },
     ],
   },

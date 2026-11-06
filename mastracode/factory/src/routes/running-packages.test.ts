@@ -1,0 +1,55 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { packagesManifestCandidates, readRunningPackages } from './running-packages.js';
+
+describe('readRunningPackages', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'factory-running-packages-'));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reads the manifest `mastra build` writes next to the server entry', () => {
+    const outputDir = join(dir, '.mastra', 'output');
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(
+      join(outputDir, 'mastra-packages.json'),
+      JSON.stringify([
+        { name: '@mastra/factory', version: '0.28.0' },
+        { name: '@mastra/core', version: '1.83.0' },
+      ]),
+    );
+
+    const candidates = packagesManifestCandidates({}, join(outputDir, 'index.mjs'), join(dir, 'elsewhere'));
+
+    expect(readRunningPackages(candidates)).toEqual([
+      { name: '@mastra/core', version: '1.83.0' },
+      { name: '@mastra/factory', version: '0.28.0' },
+    ]);
+  });
+
+  it('prefers the file `mastra dev` points at', () => {
+    const devFile = join(dir, 'dev-packages.json');
+    writeFileSync(devFile, JSON.stringify([{ name: 'mastra', version: '1.39.0' }]));
+
+    const candidates = packagesManifestCandidates({ MASTRA_PACKAGES_FILE: devFile }, undefined, dir);
+
+    expect(candidates[0]).toBe(devFile);
+    expect(readRunningPackages(candidates)).toEqual([{ name: 'mastra', version: '1.39.0' }]);
+  });
+
+  it('returns no packages when the manifest is missing or malformed', () => {
+    expect(readRunningPackages([join(dir, 'missing.json')])).toEqual([]);
+
+    const bad = join(dir, 'bad.json');
+    writeFileSync(bad, '{"not":"a list"}');
+    expect(readRunningPackages([bad])).toEqual([]);
+  });
+});
