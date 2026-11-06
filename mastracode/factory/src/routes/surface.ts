@@ -670,28 +670,30 @@ export interface FactoryStatusProblem {
 const SECRET_DOMAINS = ['integrations', 'model-credentials', 'custom-providers'];
 
 /**
- * `GET /web/status`: problems found at startup that stop the whole Factory from
- * working, so the UI shows one blocking error instead of every page failing on
- * its own. Only a key problem counts: it can't clear until Factory is
- * redeployed with the right key, so the snapshot taken here stays true for
- * the life of the process. Only client-safe copy goes out.
+ * `GET /web/status`: problems that stop the whole Factory from working, so the
+ * UI shows one blocking error instead of every page failing on its own. Only a
+ * key problem counts, since only a redeploy with the right key clears it. Read
+ * from the latest storage init result, so a key failure found by a later init
+ * retry shows up too. Only client-safe copy goes out.
  */
 function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
-  const problem = SECRET_DOMAINS.map(domain => secretKeyProblem(storage?.domainInitError(domain))).find(Boolean);
-  const problems: FactoryStatusProblem[] = problem
-    ? [
-        {
-          code: 'secret_key_mismatch',
-          ...problem,
-          docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
-        },
-      ]
-    : [];
   return [
     registerApiRoute('/web/status', {
       method: 'GET',
       requiresAuth: false,
-      handler: c => c.json({ problems }),
+      handler: c => {
+        const problem = SECRET_DOMAINS.map(domain => secretKeyProblem(storage?.domainInitError(domain))).find(Boolean);
+        const problems: FactoryStatusProblem[] = problem
+          ? [
+              {
+                code: 'secret_key_mismatch',
+                ...problem,
+                docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
+              },
+            ]
+          : [];
+        return c.json({ problems });
+      },
     }),
   ];
 }

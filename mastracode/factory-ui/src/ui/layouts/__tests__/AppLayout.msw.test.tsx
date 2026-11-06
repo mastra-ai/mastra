@@ -1,4 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { focusManager } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -209,6 +210,27 @@ describe('AppLayout', () => {
 
     expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows the startup problem once the tab regains focus after a redeploy with a bad key', async () => {
+    stubFactory();
+    let problems: unknown[] = [];
+    server.use(http.get(`${TEST_BASE_URL}/web/status`, () => HttpResponse.json({ problems })));
+    renderApp();
+    expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+
+    problems = [
+      {
+        code: 'secret_key_mismatch',
+        title: "Factory can't unlock your secrets",
+        message: 'The encryption key changed. Your secrets are safe.',
+      },
+    ];
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+
+    expect(await screen.findByRole('heading', { name: "Factory can't unlock your secrets" })).toBeInTheDocument();
+    focusManager.setFocused(undefined);
   });
 
   it('leaves retired Factory pages out of the sidebar', async () => {
