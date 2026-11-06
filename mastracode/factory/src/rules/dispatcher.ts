@@ -176,8 +176,9 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
 /** A pull request review run: the only runs that keep a status comment on the pull request. */
 function isReviewRun(decision: unknown): boolean {
   if (!decision || typeof decision !== 'object') return false;
-  const value = decision as { type?: unknown; role?: unknown };
-  return value.type === 'invokeSkill' && value.role === 'review';
+  const value = decision as { type?: unknown; role?: unknown; skillName?: unknown };
+  // A builder checking its own work reviews no pull request, even on a card that carries one.
+  return value.type === 'invokeSkill' && value.role === 'review' && value.skillName !== 'factory-self-review';
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.

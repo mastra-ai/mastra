@@ -42,3 +42,5 @@ new MastraFactory({ storage, includeDefaultBoards: false, boards: [workBoard] })
 ```
 
 Pull requests filed before this change keep their own cards.
+
+The review-status comment on a GitHub pull request also appears when the pull request is reviewed on the issue card it belongs to. A builder checking its own work posts no status comment.

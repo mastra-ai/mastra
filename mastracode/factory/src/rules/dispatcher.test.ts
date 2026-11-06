@@ -8019,6 +8019,29 @@ describe('review status comment lifecycle', () => {
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
     expect(reportReviewStatus).not.toHaveBeenCalled();
 
+    // A builder checking its own work reviews no pull request, even on a card that carries one.
+    const selfReview = await (async () => {
+      const store = (await createFactoryStorageForTests()).workItems;
+      const queued = await queueDecision(store, {
+        type: 'invokeSkill',
+        role: 'review',
+        skillName: 'factory-self-review',
+        idempotencyKey: 'review-status-self-review',
+      });
+      await bindReviewRun(store, queued.item.id);
+      return { store, queued };
+    })();
+    const selfReviewStatus = vi.fn(async () => {});
+    await new FactoryDecisionDispatcher({
+      controller: createSession(undefined, { agentEndReason: 'complete' }).controller as never,
+      transitionService: selfReview.queued.transitionService,
+      storage: selfReview.store,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      reportReviewStatus: selfReviewStatus,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(selfReviewStatus).not.toHaveBeenCalled();
+
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const failing = await (async () => {
       const store = (await createFactoryStorageForTests()).workItems;
