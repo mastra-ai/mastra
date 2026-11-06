@@ -1,20 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
-import {
-  useIntakeBindingsQuery,
-  useIntakeConfigQuery,
-  useSaveIntakeConfigMutation,
-} from '../../../../hooks/useIntakeConfig';
+import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { IntakeConfig } from '../../factory/services/intake';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
@@ -33,7 +27,6 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
 
 export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
-  const saveMutation = useSaveIntakeConfigMutation();
   useIntakeBindingsQuery();
   const github = useGithubStatusQuery();
   const gitlab = useGitLabStatusQuery();
@@ -43,7 +36,7 @@ export function IntakeSection() {
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
 
   if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
-  if (configQuery.isError || !configQuery.data) {
+  if (!configQuery.data) {
     return (
       <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
         <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
@@ -64,15 +57,7 @@ export function IntakeSection() {
     return <SkeletonRows label="Loading intake sources" rows={4} />;
   }
 
-  const update = async (next: IntakeConfig) => {
-    try {
-      await saveMutation.mutateAsync(next);
-      toast.success('Intake sources updated');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save intake sources');
-    }
-  };
-  const props = { config: configQuery.data, busy: saveMutation.isPending, update };
+  const props = { config: configQuery.data };
   const incidentioDirect = isIncidentioDirectConfigured(incidentio.data);
   const incidentioPlatformUnavailable =
     incidentioConnections.isError && isPlatformConnectUnavailableError(incidentioConnections.error);

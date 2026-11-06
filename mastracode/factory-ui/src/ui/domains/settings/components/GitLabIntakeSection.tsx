@@ -5,6 +5,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useGitLabProjectsQuery } from '../../../../hooks/useGitLabData';
 import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
 import type { GitLabStatus } from '../../factory/services/gitlab';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
@@ -14,11 +15,10 @@ import { IntakeSyncControl } from './common/IntakeSyncControl';
 
 export function GitLabIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<GitLabStatus> }) {
+  const selection = useIntakeSelection('gitlab');
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const statusUnavailable = statusQuery.isError || status?.reason === 'unavailable';
@@ -55,8 +55,8 @@ export function GitLabIntakeSection({
           accessibleLabel="Sync GitLab issues"
           description="Open issues from selected projects feed your board."
           checked={config.gitlab.enabled}
-          disabled={busy || !configured}
-          onCheckedChange={enabled => update({ ...config, gitlab: { ...config.gitlab, enabled } })}
+          disabled={!configured}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -77,15 +77,12 @@ export function GitLabIntakeSection({
           itemIcon={<SettingsIntegrationIcon provider="gitlab" />}
           groups={groupGitLabProjectsByAccount(projects)}
           selectedIds={projectsQuery.isPending ? [] : config.gitlab.sourceIds}
-          pending={busy}
+          saving={selection.saving}
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}
           onRetry={() => void projectsQuery.refetch()}
           onToggleItem={id =>
-            update({
-              ...config,
-              gitlab: { ...config.gitlab, sourceIds: toggleSourceId(config.gitlab.sourceIds, id) },
-            })
+            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
           }
         />
       )}

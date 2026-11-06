@@ -5,7 +5,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { boardCatalogQueryOptions } from '../../../../hooks/useBoardCatalog';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import { useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../../../../hooks/useIntakeConfig';
 import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
@@ -36,7 +36,8 @@ export function useCreateFactoryFromDraft({
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
-  const saveIntakeConfig = useSaveIntakeConfigMutation();
+  const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
+  const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
   // Issues belong on Work. An app that replaced the built-in boards leaves the
   // source routed but boardless, so intake settings prompt for a board instead
@@ -71,7 +72,7 @@ export function useCreateFactoryFromDraft({
     const config = await fetchIntakeConfig(baseUrl);
     const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
     if (selection === config[input.integrationId]) return;
-    await saveIntakeConfig.mutateAsync({ ...config, [input.integrationId]: selection });
+    await (input.integrationId === 'linear' ? saveLinearSelection : saveJiraSelection).mutateAsync(selection);
   };
 
   return useMutation({

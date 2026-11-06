@@ -5,6 +5,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useJiraProjectsQuery } from '../../../../hooks/useJiraData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraStatus } from '../../factory/services/jira';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
@@ -14,11 +15,10 @@ import { IntakeSyncControl } from './common/IntakeSyncControl';
 
 export function JiraIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<JiraStatus> }) {
+  const selection = useIntakeSelection('jira');
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const configured = Boolean(status?.enabled && status.configured);
@@ -56,8 +56,8 @@ export function JiraIntakeSection({
           accessibleLabel="Sync Jira issues"
           description="Active issues from selected projects feed your board."
           checked={config.jira.enabled}
-          disabled={busy || !configured}
-          onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          disabled={!configured}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -76,12 +76,12 @@ export function JiraIntakeSection({
           itemIcon={<SettingsIntegrationIcon provider="jira" />}
           groups={groupJiraProjectsBySite(projects)}
           selectedIds={projectsQuery.isPending ? [] : config.jira.sourceIds}
-          pending={busy}
+          saving={selection.saving}
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
           onRetry={() => void projectsQuery.refetch()}
           onToggleItem={id =>
-            update({ ...config, jira: { ...config.jira, sourceIds: toggleSourceId(config.jira.sourceIds, id) } })
+            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
           }
         />
       )}

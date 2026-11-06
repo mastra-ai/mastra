@@ -7,6 +7,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import type { IncidentioStatus } from '../../factory/services/incidentio';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
@@ -20,8 +21,6 @@ export function isIncidentioDirectConfigured(status: IncidentioStatus | undefine
 
 export function IncidentioIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
   connectionsQuery,
@@ -29,6 +28,7 @@ export function IncidentioIntakeSection({
   statusQuery: UseQueryResult<IncidentioStatus>;
   connectionsQuery: UseQueryResult<PlatformProviderConnection[]>;
 }) {
+  const selection = useIntakeSelection('incidentio');
   const factories = useFactoriesQuery().data ?? [];
   const directConfigured = isIncidentioDirectConfigured(statusQuery.data);
   const connections = connectionsQuery.data ?? [];
@@ -62,8 +62,8 @@ export function IncidentioIntakeSection({
           accessibleLabel="Sync incident.io follow-ups"
           description="Outstanding follow-ups feed your board. Incidents stay out of intake."
           checked={config.incidentio.enabled}
-          disabled={busy || !credentialActive}
-          onCheckedChange={enabled => update({ ...config, incidentio: { ...config.incidentio, enabled } })}
+          disabled={!credentialActive}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -107,7 +107,7 @@ export function IncidentioIntakeSection({
             },
           ]}
           selectedIds={config.incidentio.sourceIds}
-          pending={busy}
+          saving={selection.saving}
           loading={credentialActive && sourcesQuery.isPending}
           error={
             !credentialActive
@@ -118,10 +118,7 @@ export function IncidentioIntakeSection({
           }
           onRetry={credentialActive ? () => void sourcesQuery.refetch() : undefined}
           onToggleItem={id =>
-            update({
-              ...config,
-              incidentio: { ...config.incidentio, sourceIds: toggleSourceId(config.incidentio.sourceIds, id) },
-            })
+            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
           }
         />
       )}

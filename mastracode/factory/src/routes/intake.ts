@@ -840,11 +840,14 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
+          const requested = c.req.query('integrationId');
           const { pages, failures } = await settleByIntegration(
-            integrations.map(integration => ({
-              integrationId: integration.id,
-              read: () => integration.intake.listSources(tenant),
-            })),
+            (requested ? integrations.filter(integration => integration.id === requested) : integrations).map(
+              integration => ({
+                integrationId: integration.id,
+                read: () => integration.intake.listSources(tenant),
+              }),
+            ),
           );
           return c.json({
             sources: pages.flatMap(({ integrationId, value }) => value.map(source => ({ integrationId, ...source }))),

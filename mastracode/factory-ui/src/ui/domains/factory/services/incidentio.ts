@@ -46,6 +46,7 @@ export interface IncidentioIssuePage {
 
 interface IntakeSourceResponse {
   sources?: Array<IncidentioSource & { integrationId: string }>;
+  failures?: Array<{ integrationId: string; message: string }>;
 }
 
 async function requestJson<T>(url: string): Promise<T> {
@@ -99,7 +100,9 @@ export async function getIncidentioIssue(
 }
 
 export async function listIncidentioFollowUpSources(baseUrl: string): Promise<IncidentioSource[]> {
-  const response = await requestJson<IntakeSourceResponse>(`${baseUrl}/web/intake/sources`);
+  const response = await requestJson<IntakeSourceResponse>(`${baseUrl}/web/intake/sources?integrationId=incidentio`);
+  const failure = response.failures?.find(entry => entry.integrationId === 'incidentio');
+  if (failure) throw new Error(failure.message);
   return (response.sources ?? []).filter(
     source => source.integrationId === 'incidentio' && source.type === 'follow-up',
   );

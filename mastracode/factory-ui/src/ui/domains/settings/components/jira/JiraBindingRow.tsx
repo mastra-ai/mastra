@@ -21,7 +21,6 @@ export function JiraBindingRow({
   binding,
   othersTakeLabels,
   error,
-  saving,
   onBoardChange,
   onLabelsChange,
   onTakeAllIssues,
@@ -32,7 +31,6 @@ export function JiraBindingRow({
   binding: IntakeSourceBinding;
   othersTakeLabels: boolean;
   error?: string;
-  saving: boolean;
   onBoardChange: (board: string | null) => void;
   onLabelsChange: (labels: string[]) => void;
   onTakeAllIssues: () => void;
@@ -63,10 +61,9 @@ export function JiraBindingRow({
           name={`${project} in ${factory}`}
           factoryProjectId={binding.factoryProjectId}
           board={binding.board}
-          disabled={saving}
           onChange={onBoardChange}
         />
-        <Select value={labelled ? LABELLED : ALL_ISSUES} disabled={saving} onValueChange={pickFilter}>
+        <Select value={labelled ? LABELLED : ALL_ISSUES} onValueChange={pickFilter}>
           <SelectTrigger
             size="sm"
             aria-label={`Issues from ${project} for ${factory}`}
@@ -86,14 +83,13 @@ export function JiraBindingRow({
           variant="ghost"
           tooltip={`Remove ${factory}`}
           aria-label={`Remove ${factory} from ${project}`}
-          disabled={saving}
           onClick={onRemove}
           className="ml-auto"
         >
           <X />
         </Button>
       </div>
-      {labelled && <JiraLabelEditor factory={factory} labels={labels} saving={saving} onChange={onLabelsChange} />}
+      {labelled && <JiraLabelEditor factory={factory} labels={labels} onChange={onLabelsChange} />}
       <RoutingNote error={error} hint={routingGap({ board: binding.board, labelled, labels })} />
     </li>
   );

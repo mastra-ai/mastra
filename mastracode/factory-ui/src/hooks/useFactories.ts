@@ -19,7 +19,7 @@ import type {
 } from '../ui/domains/workspaces/services/github';
 import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab';
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
-import { useSaveIntakeConfigMutation } from './useIntakeConfig';
+import { useSaveIntakeSelectionMutation } from './useIntakeConfig';
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -81,7 +81,8 @@ export const useAddFactoryMutation = useCreateFactoryMutation;
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const saveIntakeConfig = useSaveIntakeConfigMutation();
+  const saveGithubSelection = useSaveIntakeSelectionMutation('github');
+  const saveGitlabSelection = useSaveIntakeSelectionMutation('gitlab');
   return useMutation({
     mutationFn: async ({
       factoryProjectId,
@@ -109,12 +110,10 @@ export function useLinkRepositoryMutation() {
         const config = await fetchIntakeConfig(baseUrl);
         if (gitlab) {
           const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
-          if (gitlabSelection !== config.gitlab)
-            await saveIntakeConfig.mutateAsync({ ...config, gitlab: gitlabSelection });
+          if (gitlabSelection !== config.gitlab) await saveGitlabSelection.mutateAsync(gitlabSelection);
         } else {
           const githubSelection = selectIntakeSource(config.github, repo.fullName);
-          if (githubSelection !== config.github)
-            await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+          if (githubSelection !== config.github) await saveGithubSelection.mutateAsync(githubSelection);
         }
       } finally {
         await refreshed;

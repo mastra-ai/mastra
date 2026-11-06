@@ -26,21 +26,14 @@ export function RoutedSourcePicker({
   ...picker
 }: SourcePickerProps & { integrationId: string; routingLabel: string; factories: Factory[] }) {
   const bindingsQuery = useIntakeBindingsQuery();
-  const saveBinding = useSaveIntakeBindingMutation();
+  const saveBinding = useSaveIntakeBindingMutation({
+    onSaved: () => toast.success(`${routingLabel} routing updated`, { id: `${integrationId}-routing-saved` }),
+    onFailed: error => toast.error(error.message, { id: `${integrationId}-routing-failed` }),
+  });
   const bindings = bindingsQuery.data;
   const bindingBySource = new Map(
     bindings?.filter(binding => binding.integrationId === integrationId).map(binding => [binding.sourceId, binding]),
   );
-
-  const route = (sourceId: string, factoryProjectId: string | null, board: string | null) => {
-    saveBinding.mutate(
-      { integrationId, sourceId, factoryProjectId, board },
-      {
-        onSuccess: () => toast.success(`${routingLabel} routing updated`),
-        onError: err => toast.error(err instanceof Error ? err.message : `Failed to save ${routingLabel} routing`),
-      },
-    );
-  };
 
   return (
     <>
@@ -61,8 +54,9 @@ export function RoutedSourcePicker({
               item={item}
               binding={bindingBySource.get(item.id)}
               factories={factories}
-              disabled={saveBinding.isPending}
-              onRoute={(factoryProjectId, board) => route(item.id, factoryProjectId, board)}
+              onRoute={(factoryProjectId, board) =>
+                saveBinding.mutate({ integrationId, sourceId: item.id, factoryProjectId, board })
+              }
             />
           )
         }
@@ -82,13 +76,11 @@ function SourceRoute({
   item,
   binding,
   factories,
-  disabled,
   onRoute,
 }: {
   item: SourcePickerItem;
   binding: IntakeSourceBinding | undefined;
   factories: Factory[];
-  disabled: boolean;
   onRoute: (factoryProjectId: string | null, board: string | null) => void;
 }) {
   const routedFactory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
@@ -97,7 +89,7 @@ function SourceRoute({
     <>
       <Select
         value={routedFactory?.id ?? UNROUTED}
-        disabled={disabled || factories.length === 0}
+        disabled={factories.length === 0}
         onValueChange={value => {
           const next = value === UNROUTED ? null : value;
           onRoute(next, next === routedFactory?.id ? board : null);
@@ -126,7 +118,6 @@ function SourceRoute({
           name={sourcePickerItemText(item)}
           factoryProjectId={routedFactory.id}
           board={board}
-          disabled={disabled}
           onChange={next => onRoute(routedFactory.id, next)}
         />
       )}
@@ -144,7 +135,7 @@ export function BoardPicker({
   name: string;
   factoryProjectId: string;
   board: string | null;
-  disabled: boolean;
+  disabled?: boolean;
   onChange: (board: string | null) => void;
 }) {
   const catalog = useBoardCatalog(factoryProjectId);
