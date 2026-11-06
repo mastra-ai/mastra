@@ -72,54 +72,42 @@
     "z-ai/glm-5.1"
   ],
   "reasoning": {
-    "deepseek/deepseek-v4-pro": [
+    "google/gemini-2.5-flash": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 24576
       }
     ],
-    "x-ai/grok-4.3": [
+    "google/gemini-3.1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "x-ai/grok-build-0.1": [
+    "google/gemini-3.5-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "anthropic/claude-opus-4.8": [
+    "google/gemini-3.1-flash-image-preview": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "anthropic/claude-opus-4.1": [
+    "google/gemini-2.5-pro": [
       {
         "type": "budget_tokens",
-        "min": 1024,
-        "max": 32000
+        "min": 128,
+        "max": 32768
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 32000
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
+    "openai/gpt-5-nano": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -131,13 +119,25 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "openai/gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "openai/gpt-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5-mini": [
+    "openai/gpt-5.5-pro": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -155,13 +155,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.5-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5-nano": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -170,6 +164,18 @@
     "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
+      }
+    ],
+    "x-ai/grok-build-0.1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "x-ai/grok-4.3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "z-ai/glm-5.1": [
@@ -182,39 +188,33 @@
         "type": "toggle"
       }
     ],
-    "google/gemini-2.5-pro": [
+    "anthropic/claude-opus-4.1": [
       {
         "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
+        "min": 1024,
+        "max": 32000
       }
     ],
-    "google/gemini-2.5-flash": [
+    "anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 32000
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 24576
-      }
-    ],
-    "google/gemini-3.1-flash-image-preview": [
-      {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }
