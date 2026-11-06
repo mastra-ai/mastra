@@ -1,5 +1,5 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
-import { needsApproval } from '../rules/types.js';
+import { needsApproval, SELF_REVIEW_ROUND_LIMIT } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
@@ -143,9 +143,6 @@ function planWorkItem(context: FactoryStageRuleContext) {
     arguments: context.item.url ? `Work item (${context.item.url})` : context.item.title,
   } as const;
 }
-
-/** Request-changes rounds from self-review before the card parks in Intake for a person. */
-export const SELF_REVIEW_ROUND_LIMIT = 3;
 
 function changeRequestNoun(item: FactoryRuleItemContext): string {
   return item.source?.startsWith('gitlab') ? 'merge request' : 'pull request';

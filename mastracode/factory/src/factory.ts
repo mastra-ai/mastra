@@ -140,6 +140,7 @@ import { createSourceControlTools } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
+import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -1518,6 +1519,9 @@ export class MastraFactory {
           },
         })
       : undefined;
+    const workItemProcessor = workItemsReady
+      ? new FactoryWorkItemStateProcessor({ storage: workItemsStorage, boards, projects: factoryProjectsStorage })
+      : undefined;
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
     // replica-stable signer — a per-process random secret silently breaks the
@@ -1738,8 +1742,8 @@ export class MastraFactory {
         // rather than following the host's Mastra Code settings toggle.
         knowledge: this.#config.knowledge ?? false,
         // The environment signal tells the agent which repositories its
-        // sandbox holds and where; the phase signal, when work items are on,
-        // comes after it.
+        // sandbox holds and where; the phase and work-item signals, when work
+        // items are on, come after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
           const sessionsProcessor =
@@ -1765,7 +1769,13 @@ export class MastraFactory {
               : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [...integrationInputProcessors, environmentProcessor, ...sessionsProcessor, factoryProcessor];
+            return [
+              ...integrationInputProcessors,
+              environmentProcessor,
+              ...sessionsProcessor,
+              factoryProcessor,
+              ...(workItemProcessor ? [workItemProcessor] : []),
+            ];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {

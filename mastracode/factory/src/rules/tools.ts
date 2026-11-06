@@ -13,14 +13,13 @@ import {
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { workItemSource } from './types.js';
+import { SELF_REVIEW_ROUND_LIMIT, workItemSource } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
