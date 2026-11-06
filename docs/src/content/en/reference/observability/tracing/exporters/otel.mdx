@@ -83,7 +83,7 @@ interface OtelExporterConfig {
     name: 'resourceSchemaUrl',
     type: 'string',
     description:
-      'OpenTelemetry schema URL declared on exported traces and logs, for example `https://opentelemetry.io/schemas/1.40.0`. Not set by default. See Resource schema URL below.',
+      'OpenTelemetry schema URL declared on exported traces and logs, for example `https://opentelemetry.io/schemas/1.40.0`. Not set by default.',
     isOptional: true,
   },
 ]}
@@ -109,23 +109,6 @@ A span with metadata `{ userId: 'user-123', tenantId: 'acme' }` exports both `us
 Mapped values are strings. Objects and arrays are JSON-encoded. Missing keys, `null`, `undefined`, and empty strings are omitted. `0` and `false` become `"0"` and `"false"`. Keys are matched literally, so a key containing a dot doesn't select a nested property. Empty destination names are ignored.
 
 Explicit mappings overwrite existing attributes with the same destination name. If multiple metadata keys map to the same name, the last mapping with a non-empty value wins. Mapping doesn't affect log records or resource attributes.
-
-## Resource schema URL
-
-Use `resourceSchemaUrl` when your backend reads attributes according to a declared OpenTelemetry semantic conventions version:
-
-```typescript
-import { OtelExporter } from '@mastra/otel-exporter'
-
-const exporter = new OtelExporter({
-  provider: {
-    custom: { endpoint: 'https://collector.example.com' },
-  },
-  resourceSchemaUrl: 'https://opentelemetry.io/schemas/1.40.0',
-})
-```
-
-The URL applies to both traces and logs. Mastra sends the value you set without checking it, and doesn't change span attributes to match that version. Without this option, exports don't declare a schema URL.
 
 ## Provider configurations
 
