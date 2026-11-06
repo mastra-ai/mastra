@@ -69,6 +69,10 @@ const CreateFactoryPage = lazyPage(
   () => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage),
   <AppPageLoader />,
 );
+const CredentialRequestPage = lazyPage(
+  () => import('./pages/CredentialRequestPage').then(module => module.CredentialRequestPage),
+  <AppPageLoader />,
+);
 const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage), <AppPageLoader />);
 const OnboardingPage = lazyPage(
   () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
@@ -233,6 +237,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
             },
             // Server-built thread deep links without a factory id (Slack cards).
             { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
+            // One-time private credential entry links built by the agent tool (no factory id).
+            { path: 'credentials/:requestId', ...lazyRoute(CredentialRequestPage) },
             { path: 'settings/connections', element: <ConnectionsRedirect /> },
             // Legacy deep links (the app used to serve everything at any path).
             { path: '*', element: <Navigate to="/" replace /> },
