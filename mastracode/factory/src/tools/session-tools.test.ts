@@ -25,7 +25,12 @@ import { createSessionRunEndReporter } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
-import { FACTORY_TOOLS_OWNER_ID, FOLLOW_UP_APPROVAL_TTL_MS, createFactorySessionTools } from './session-tools.js';
+import {
+  FACTORY_TOOLS_OWNER_ID,
+  FOLLOW_UP_APPROVAL_TTL_MS,
+  FOLLOW_UP_HANDOFF_WINDOW_MS,
+  createFactorySessionTools,
+} from './session-tools.js';
 import { createFactoryTools } from './index.js';
 import type { FactoryToolDependencies } from './index.js';
 
@@ -1596,6 +1601,45 @@ describe('a follow-up approved in a turn the person started', () => {
     await expect(env.woken.start({ prompt: 'Go.', workItem: followUp.id, role: 'work' })).resolves.toMatchObject({
       mode: 'work-item',
     });
+  });
+
+  it('refuses on a turn something other than the report woke, even after the report', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved();
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    // A webhook comment on a followed PR wakes the coordinator, as its owner, after the handoff.
+    await env.notifications.createNotification({
+      threadId: env.scope.threadId,
+      resourceId: env.scope.sessionId,
+      source: 'github',
+      kind: 'issue-comment-created',
+      priority: 'high',
+      summary: 'Someone commented on the PR.',
+      sourceId: crypto.randomUUID(),
+    });
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const item = await env.file('Something the webhook comment asked for');
+
+    const refusal = env.woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' });
+    await expect(refusal).rejects.toThrow(
+      "a github notification reached this session after the side session's report, so this turn may not be the one the report woke",
+    );
+    await expect(refusal).rejects.toThrow('is filed but nothing was started on it');
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeNull();
+  });
+
+  it('refuses on a later turn once the handoff window after the report has passed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved();
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const item = await env.file();
+    vi.setSystemTime(new Date(Date.now() + FOLLOW_UP_HANDOFF_WINDOW_MS + 60_000));
+
+    await expect(env.woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' })).rejects.toThrow(
+      "the side session's report came too long ago for this turn to be the one it woke",
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
   });
 
   it('refuses once the approval expires', async () => {
