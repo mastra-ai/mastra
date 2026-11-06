@@ -3,6 +3,7 @@ import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thre
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
+import type { MastraDBMessage } from '../agent/message-list';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
@@ -90,6 +91,9 @@ type ChannelAgent = Pick<
   Agent<any, any, any, any>,
   'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'getWorkspace'
 >;
+
+/** Messages read per page when recovering a pending approval from Memory. */
+const APPROVAL_LOOKUP_PAGE_SIZE = 50;
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
@@ -758,60 +762,99 @@ export class AgentChannels {
                   throw new Error('Storage is required for tool approval lookups');
                 }
 
-                const { messages } = await memoryStore.listMessages({
-                  threadId: mastraThread.id,
-                  perPage: 50,
-                  orderBy: { field: 'createdAt', direction: 'DESC' },
-                });
-
-                for (const [index, msg] of messages.entries()) {
-                  const pending = msg.content?.metadata?.pendingToolApprovals as
-                    | Record<
-                        string,
-                        {
-                          toolCallId: string;
-                          runId: string;
-                          parentRunId?: string;
-                          toolName: string;
-                          args: Record<string, unknown>;
-                        }
-                      >
-                    | undefined;
-                  if (pending) {
-                    for (const toolData of Object.values(pending)) {
-                      if (toolData.toolCallId === toolCallId) {
-                        runId = toolData.parentRunId ?? toolData.runId;
-                        toolName = toolData.toolName;
-                        toolArgs = toolData.args;
-                        // Recover the card's owner from the user turn that led to it
-                        // (messages are newest-first). If that turn has messages from
-                        // more than one author we can't tell who triggered the tool,
-                        // so no one may answer the card.
-                        const earlier = messages.slice(index + 1);
-                        const turnStart = earlier.findIndex(m => m.role === 'user');
-                        const turnEnd = earlier.findIndex((m, i) => i > turnStart && m.role !== 'user');
-                        const authors = new Set(
-                          (turnStart === -1 ? [] : earlier.slice(turnStart, turnEnd === -1 ? undefined : turnEnd))
-                            .map(
-                              m =>
-                                (
-                                  m.content?.providerMetadata?.mastra as
-                                    | { channels?: Record<string, { author?: { userId?: string } }> }
-                                    | undefined
-                                )?.channels?.[platform]?.author?.userId,
-                            )
-                            .filter((id): id is string => !!id),
-                        );
-                        if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
-                          this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
-                          return;
-                        }
-                        requesterId ??= [...authors][0];
+                // Read history newest-first, one page at a time, until the
+                // approval is found. A rebuilt or restarted AgentChannels has no
+                // card cache, so an approval followed by a long thread must still
+                // be reachable (#29186). Storage cannot filter on the nested
+                // `pendingToolApprovals` entries, so this scans; it only runs on
+                // a cache miss and holds at most the pages it needs. A click whose
+                // tool call is nowhere in the thread reads the whole thread on
+                // purpose: any fixed limit would strand approvals behind it again.
+                type PendingApprovalEntry = {
+                  toolCallId: string;
+                  runId: string;
+                  parentRunId?: string;
+                  toolName: string;
+                  args: Record<string, unknown>;
+                };
+                let found: PendingApprovalEntry | undefined;
+                // Set when the scan reaches the message that carries this tool
+                // call but holds no pending entry: the approval was answered.
+                let answered = false;
+                // Messages older than the approval, newest-first.
+                let earlier: MastraDBMessage[] = [];
+                const turnBounds = () => {
+                  const start = earlier.findIndex(m => m.role === 'user');
+                  const end = earlier.findIndex((m, i) => i > start && m.role !== 'user');
+                  return { start, end };
+                };
+                for (let page = 0; ; page++) {
+                  const { messages, hasMore } = await memoryStore.listMessages({
+                    threadId: mastraThread.id,
+                    page,
+                    perPage: APPROVAL_LOOKUP_PAGE_SIZE,
+                    orderBy: { field: 'createdAt', direction: 'DESC' },
+                    includeTotal: false,
+                  });
+                  if (found) {
+                    earlier.push(...messages);
+                  } else {
+                    for (const [index, msg] of messages.entries()) {
+                      const pending = msg.content?.metadata?.pendingToolApprovals as
+                        | Record<string, PendingApprovalEntry>
+                        | undefined;
+                      found = pending && Object.values(pending).find(entry => entry.toolCallId === toolCallId);
+                      if (found) {
+                        earlier = messages.slice(index + 1);
                         break;
                       }
+                      // Agents store the pending entry on the newest assistant
+                      // message that carries the tool call, so older history
+                      // cannot hold it.
+                      answered =
+                        msg.role === 'assistant' &&
+                        (msg.content?.parts ?? []).some(
+                          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+                        );
+                      if (answered) break;
                     }
-                    if (runId) break;
                   }
+                  if (answered) break;
+                  // Stop once the user turn that led to the approval is fully read.
+                  const turn = turnBounds();
+                  if (found && turn.start !== -1 && turn.end !== -1) break;
+                  if (!hasMore || messages.length === 0) break;
+                }
+
+                if (found) {
+                  runId = found.parentRunId ?? found.runId;
+                  toolName = found.toolName;
+                  toolArgs = found.args;
+                  // Recover the card's owner from the user turn that led to it.
+                  // If that turn has messages from more than one author we can't
+                  // tell who triggered the tool, so no one may answer the card.
+                  const turn = turnBounds();
+                  const authors = new Set(
+                    (turn.start === -1 ? [] : earlier.slice(turn.start, turn.end === -1 ? undefined : turn.end))
+                      .map(
+                        m =>
+                          (
+                            m.content?.providerMetadata?.mastra as
+                              | { channels?: Record<string, { author?: { userId?: string } }> }
+                              | undefined
+                          )?.channels?.[platform]?.author?.userId,
+                      )
+                      .filter((id): id is string => !!id),
+                  );
+                  if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
+                    this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
+                    return;
+                  }
+                  requesterId ??= [...authors][0];
+                }
+                if (answered) {
+                  this.log('info', 'Tool approval already answered', actionEventContext);
+                  return;
                 }
               }
 
