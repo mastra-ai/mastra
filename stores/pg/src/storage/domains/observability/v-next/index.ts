@@ -708,6 +708,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     });
   }
 
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.#run(
+      'GET_FEEDBACK_BY_ID',
+      () => feedbackOps.getFeedbackById(this.#readClient, this.#schema, feedbackId),
+      {
+        feedbackId,
+      },
+    );
+  }
+
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return this.#run('LIST_FEEDBACK', () => feedbackOps.listFeedback(this.#readClient, this.#schema, args));
   }
