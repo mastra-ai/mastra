@@ -1648,11 +1648,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     } catch (error) {
       // A concurrent attach or upsert of the same record won the unique index.
       if (error instanceof UniqueViolationError && error.collection === FACTORY_WORK_ITEM_SOURCES_SCHEMA.name) {
-        const owner = await this.#db.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {
-          org_id: orgId,
-          source_key: externalSourceKey(source),
-        });
+        // Sources are unique per project, so another project's copy of the record is no owner here.
         const card = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
+        const owner = card
+          ? await this.#db.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {
+              org_id: orgId,
+              factory_project_id: card.factory_project_id,
+              source_key: externalSourceKey(source),
+            })
+          : null;
         if (owner && card && owner.work_item_id === card.work_item?.id)
           return { item: toWorkItem(card), attached: false };
         throw new WorkItemSourceConflictError(owner?.work_item_id ?? 'unknown');
