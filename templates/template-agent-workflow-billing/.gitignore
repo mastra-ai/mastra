@@ -8,3 +8,8 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+!package-lock.json
+data/
+*.db
+*.db-shm
+*.db-wal

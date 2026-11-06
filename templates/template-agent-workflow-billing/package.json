@@ -13,15 +13,20 @@
     "build": "mastra build",
     "start": "mastra start",
     "check": "tsc --noEmit && oxfmt --check .",
-    "format": "oxfmt ."
+    "format": "oxfmt .",
+    "test:unit": "vitest run tests/billing/policies.test.ts",
+    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts"
   },
   "dependencies": {
-    "@mastra/core": "latest"
+    "@libsql/client": "0.18.0",
+    "@mastra/core": "latest",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "mastra": "latest",
     "oxfmt": "latest",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "5.1.0"
   }
 }

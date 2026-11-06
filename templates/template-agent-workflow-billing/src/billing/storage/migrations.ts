@@ -1,0 +1,101 @@
+import { createHash } from 'node:crypto';
+import type { Transaction } from '@libsql/client/node';
+import { BillingError } from '../contracts.js';
+
+const safeInteger = 'BETWEEN 0 AND 9007199254740991';
+const historySql = `CREATE TABLE billing_migrations (
+  version INTEGER PRIMARY KEY CHECK (version > 0),
+  checksum TEXT NOT NULL,
+  applied_at TEXT NOT NULL
+) STRICT`;
+
+const initialStatements = [
+  `CREATE TABLE billing_accounts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL CHECK (provider = 'local'),
+    external_reference TEXT NOT NULL,
+    UNIQUE (provider, external_reference)
+  ) STRICT`,
+  `CREATE TABLE commercial_state (
+    account_id TEXT PRIMARY KEY REFERENCES billing_accounts(id),
+    version INTEGER NOT NULL CHECK (version ${safeInteger})
+  ) STRICT`,
+  `CREATE TABLE commercial_grants (
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    kind TEXT NOT NULL CHECK (kind IN ('entitlement', 'subscription')),
+    key TEXT NOT NULL,
+    valid_from TEXT NOT NULL,
+    valid_until TEXT,
+    PRIMARY KEY (account_id, kind, key),
+    CHECK (valid_until IS NULL OR julianday(valid_until) > julianday(valid_from))
+  ) STRICT`,
+  `CREATE TABLE commercial_meters (
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    key TEXT NOT NULL,
+    funding TEXT NOT NULL CHECK (funding IN ('prepaid', 'metered')),
+    balance INTEGER CHECK (balance ${safeInteger}),
+    consumed INTEGER NOT NULL CHECK (consumed ${safeInteger}),
+    period_start TEXT,
+    period_end TEXT,
+    PRIMARY KEY (account_id, key),
+    CHECK ((funding = 'prepaid' AND balance IS NOT NULL) OR (funding = 'metered' AND balance IS NULL)),
+    CHECK ((period_start IS NULL AND period_end IS NULL) OR (period_start IS NOT NULL AND period_end IS NOT NULL AND julianday(period_end) > julianday(period_start)))
+  ) STRICT`,
+  `CREATE TABLE immutable_usage (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    meter TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    units INTEGER NOT NULL CHECK (units BETWEEN 1 AND 9007199254740991),
+    occurred_at TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    FOREIGN KEY (account_id, meter) REFERENCES commercial_meters(account_id, key)
+  ) STRICT`,
+  `CREATE TRIGGER immutable_usage_no_update BEFORE UPDATE ON immutable_usage BEGIN SELECT RAISE(ABORT, 'Usage is immutable'); END`,
+  `CREATE TRIGGER immutable_usage_no_delete BEFORE DELETE ON immutable_usage BEGIN SELECT RAISE(ABORT, 'Usage is immutable'); END`,
+];
+
+const migrations = [{ version: 1, statements: initialStatements }].map(migration => ({
+  ...migration,
+  checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
+}));
+
+const normalizedSql = (sql: string) => sql.replace(/\s+/g, ' ').trim();
+
+export async function migrateStorage(transaction: Transaction): Promise<void> {
+  const catalog = await transaction.execute(
+    "SELECT name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND type IN ('table', 'trigger', 'view', 'index') AND sql IS NOT NULL",
+  );
+  const hasHistory = catalog.rows.some(row => row.name === 'billing_migrations');
+  if (!hasHistory && catalog.rows.length > 0) throw new BillingError('storage_incompatible');
+  const userVersion = (await transaction.execute('PRAGMA user_version')).rows[0].user_version;
+  if (!hasHistory) {
+    if (userVersion !== 0n) throw new BillingError('storage_incompatible');
+    await transaction.execute(historySql);
+  }
+  const history = await transaction.execute('SELECT version, checksum FROM billing_migrations ORDER BY version');
+  for (const [index, row] of history.rows.entries()) {
+    const expected = migrations[index];
+    if (!expected || row.version !== BigInt(expected.version) || row.checksum !== expected.checksum)
+      throw new BillingError('storage_incompatible');
+  }
+  if (hasHistory && userVersion !== BigInt(history.rows.length)) throw new BillingError('storage_incompatible');
+  for (const migration of migrations.slice(history.rows.length)) {
+    for (const sql of migration.statements) await transaction.execute(sql);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (?, ?, ?)',
+      args: [migration.version, migration.checksum, new Date().toISOString()],
+    });
+    await transaction.execute(`PRAGMA user_version = ${migration.version}`);
+  }
+  const schema = await transaction.execute(
+    "SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY name",
+  );
+  const actual = schema.rows.map(row => normalizedSql(String(row.sql))).sort();
+  const expected = [historySql, ...migrations.flatMap(migration => migration.statements)].map(normalizedSql).sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new BillingError('storage_incompatible');
+  if ((await transaction.execute('PRAGMA foreign_key_check')).rows.length > 0)
+    throw new BillingError('storage_incompatible');
+}
