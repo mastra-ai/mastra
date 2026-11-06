@@ -7911,4 +7911,44 @@ describe('review status comment lifecycle', () => {
       vi.useRealTimers();
     }
   });
+
+  it('never reports a review handed on mid-run as finished, even when the cancellation write fails', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const queued = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      prompt: 'Review this pull request.',
+      idempotencyKey: 'review-status-handed-on',
+    });
+    await bindReviewRun(storage, queued.item.id);
+    const conversation = pullRequestConversation();
+    const reportReviewStatus = vi.fn(async (event: FactoryReviewStatusEvent) => {
+      if (event.phase === 'cancelled') throw new Error('GitHub 502');
+      await conversation.reportReviewStatus(event);
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { controller, emitAgentEnd, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    try {
+      const tick = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService: queued.transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        reportReviewStatus,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+      await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+      // Another role takes the shared session over before the review's turn ends.
+      await bindWorkRun(storage, queued.item.id);
+      emitAgentEnd('error');
+      await tick;
+    } finally {
+      warn.mockRestore();
+    }
+
+    expect(reportReviewStatus.mock.calls.map(([event]) => event.phase)).toEqual(['queued', 'reviewing', 'cancelled']);
+    expect(conversation.comments()[0]!.body).not.toContain('Review finished');
+  });
 });

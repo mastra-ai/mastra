@@ -1479,6 +1479,7 @@ export class FactoryDecisionDispatcher {
               // terminal event arrives so a later hand-on cannot erase our failure.
               const superseded = (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role));
               if (!superseded) throw error;
+              this.#reviewWatched.delete(record);
               await this.#reviewStatus(record, decision, { phase: 'cancelled', endedAt: new Date() });
             }
           } finally {
