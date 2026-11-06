@@ -63,7 +63,7 @@ export function GithubLabelRouting({
     </Txt>
   );
 
-  if (routesQuery.isError) {
+  if (routesQuery.isError && !routesQuery.data) {
     return (
       <SettingsRow
         label={label}
