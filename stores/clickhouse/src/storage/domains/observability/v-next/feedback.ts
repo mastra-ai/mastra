@@ -330,6 +330,19 @@ async function hasFeedbackDeletionRequest(
   return rows.length > 0;
 }
 
+/** Retrieves the latest feedback record with this ID, or null when missing. */
+export async function getFeedbackById(client: ClickHouseClient, feedbackId: string): Promise<FeedbackRecord | null> {
+  const rows = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+     WHERE feedbackId = {feedbackId:String}
+     ORDER BY writeVersion DESC, timestamp DESC LIMIT 1`,
+    { feedbackId },
+    FINAL_SKIP_INDEX_SETTINGS,
+  );
+  return rows[0] ? rowToFeedbackRecord(rows[0]) : null;
+}
+
 /**
  * Review updates insert a replacement row, so they need only `INSERT` and the
  * insert materialized view publishes the delta cursor.

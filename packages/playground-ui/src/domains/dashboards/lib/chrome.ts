@@ -2,8 +2,14 @@ import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ChartCardProps } from '../../metrics/components/chart-card';
 import type { DashboardExpand } from '../widget-kind';
 
-/** What a widget's card shows as its title: `title`, and `titleMenu` with several views or an expand link. */
-export type ViewHeading = Pick<ChartCardProps, 'title' | 'titleMenu' | 'href' | 'LinkComponent' | 'dragHandle'>;
+/**
+ * What a widget's card shows in its top bar: `title`, and `titleMenu` with several views or an
+ * expand link, plus the widget's own actions (its pin button; always shown once pinned).
+ */
+export type ViewHeading = Pick<
+  ChartCardProps,
+  'title' | 'titleMenu' | 'href' | 'LinkComponent' | 'dragHandle' | 'actions' | 'persistentActions'
+>;
 
 /** Filters a gate can't apply, named as the filter bar names them. */
 const FILTER_NAMES: Record<string, string> = {

@@ -1,4 +1,4 @@
-import type { DashboardDefinition } from '@mastra/client-js';
+import type { DashboardDefinition, DashboardWidget } from '@mastra/client-js';
 import {
   DASHBOARD_WIDGET_SPANS,
   dashboardDefinitionEnvelopeSchema,
@@ -9,7 +9,8 @@ import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { describeIssue, prepareWidget } from '../lib/prepare-widget';
 import type { PreparedWidget, StoredWidget } from '../lib/prepare-widget';
-import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
+import type { AnyWidgetKind, DashboardAlert, DashboardExpand } from '../widget-kind';
+import { ConnectedWidget } from './connected-widget';
 import { DashboardGrid, DashboardGridCell, DashboardGridRow } from './dashboard-grid';
 import type { DashboardSpan } from './dashboard-grid';
 import { WidgetError } from './widget-error';
@@ -32,8 +33,28 @@ export type DashboardRendererProps = {
    * widget's title. No grips without it.
    */
   dragHandle?: (widgetId: string) => MetricsCardDragHandleProps | undefined;
+  /**
+   * Turns a card's open view into an alert: each card shows a Create alert button, linking where
+   * `alert.action` says, or disabled with its reason. No buttons without it. Cards with a drag
+   * handle (a layout being edited) show none, and neither do error cards: their widget or query
+   * failed, so there is nothing checked to alert on.
+   */
+  alert?: DashboardAlert;
   className?: string;
-};
+} & DashboardPinProps;
+
+/** Both or neither: a host that pins widgets says which are pinned, so a pinned one can be unpinned. */
+type DashboardPinProps =
+  | {
+      /**
+       * Pins or unpins a widget, called with the widget and the state the user asked for. The host
+       * owns that state and passes it back through `isPinned`. No pin buttons without it.
+       */
+      onPin: (widget: DashboardWidget, isPinned: boolean) => void;
+      /** Whether the host has a widget pinned, by widget id. */
+      isPinned: (widgetId: string) => boolean;
+    }
+  | { onPin?: never; isPinned?: never };
 
 /** Whether a stored widget's `span` is one the grid lays out. */
 const isDashboardSpan = (span: unknown): span is DashboardSpan => DASHBOARD_WIDGET_SPANS.some(s => s === span);
@@ -55,6 +76,9 @@ export function DashboardRenderer({
   expand,
   kinds = [],
   dragHandle,
+  onPin,
+  isPinned,
+  alert,
   className,
 }: DashboardRendererProps) {
   // A widget that threw renders again once the page's range or filters change, or the widget does.
@@ -87,21 +111,31 @@ export function DashboardRenderer({
             // Unparsed, the title may be anything; the error card shows it only when it's text.
             const heading = { id: widget.id, title: typeof widget.title === 'string' ? widget.title : undefined };
             const handle = dragHandle?.(widget.id);
+            // Only a widget that parsed can be pinned: the host gets the widget as it renders.
+            const pin =
+              onPin && prepared.ok
+                ? { isPinned: isPinned(widget.id), onPin, name: prepared.widget.title?.trim() || 'widget' }
+                : undefined;
+            const errorPin =
+              pin && prepared.ok ? { ...pin, onPin: (next: boolean) => pin.onPin(prepared.widget, next) } : undefined;
             return (
               <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
                 <ErrorBoundary
                   resetKeys={[pageKey, JSON.stringify(widget)]}
                   variant="inline"
-                  fallback={({ error }) => <WidgetError widget={heading} message={error.message} dragHandle={handle} />}
+                  fallback={({ error }) => (
+                    <WidgetError widget={heading} message={error.message} dragHandle={handle} pin={errorPin} />
+                  )}
                 >
                   {prepared.ok ? (
-                    <prepared.kind.component
-                      widget={prepared.widget}
-                      views={prepared.views}
+                    <ConnectedWidget
+                      prepared={prepared}
                       scope={scope}
                       onDrilldown={onDrilldown}
                       expand={expand}
                       dragHandle={handle}
+                      pin={pin}
+                      alert={handle ? undefined : alert}
                     />
                   ) : (
                     <WidgetError widget={heading} message={prepared.message} dragHandle={handle} />

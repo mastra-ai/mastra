@@ -62,7 +62,7 @@ const processor = new ModerationProcessor({
             name: 'threshold',
             type: 'number',
             description:
-              'Confidence threshold for flagging (0-1). Content is flagged if any category score exceeds this threshold',
+              'Confidence threshold for flagging (0-1). Content is flagged if any category score is greater than or equal to this threshold',
             isOptional: true,
             default: '0.5',
           },

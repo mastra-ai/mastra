@@ -101,7 +101,7 @@ const processor = new TokenLimiterProcessor({
   },
   {
     name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+    type: '(args: ProcessInputArgs) => Promise<MessageList>',
     description:
       "Trims stored history to fit within the token limit before the agentic loop starts in 'memory-only' trim mode, prioritizing recent messages while preserving system messages and the current turn",
     isOptional: true,

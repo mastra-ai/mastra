@@ -11,21 +11,6 @@
   ],
   "structuredOutput": ["deepseek-v4.1-flash", "glm-5.3", "glm-5.3-flash", "kimi-k3", "qwen3.8-flash"],
   "reasoning": {
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.8-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
     "qwen3.8-max": [
       {
         "type": "toggle"
@@ -40,7 +25,7 @@
         "max": 262144
       }
     ],
-    "kimi-k3": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -55,7 +40,27 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3": [
       {
         "type": "toggle"
       },
@@ -64,15 +69,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "hy4-preview": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

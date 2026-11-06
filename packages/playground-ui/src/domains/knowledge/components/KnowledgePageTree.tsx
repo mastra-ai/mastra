@@ -1,11 +1,14 @@
-import { ChevronRight, Pin } from 'lucide-react';
+import { FileText, Folder, Pin } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
+import { scopeTitle } from '../lib/pageAddress';
 import { buildPageTree, childCountLabel, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
 import { prefersMotion } from '../lib/useLeavingNodes';
 import type { KnowledgePagePayload } from '../pageTypes';
+import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
 
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { cn } from '@/utils/cn';
 
 /**
@@ -233,35 +236,44 @@ export function KnowledgePageTree({
                 if (row.hasChildren) toggle(row.page.id, true);
               }}
               className={cn(
-                'flex min-h-8 cursor-pointer items-center gap-1 rounded-md pr-2 outline-none focus-visible:ring-1 focus-visible:ring-border-focus',
-                selected ? 'bg-fill text-foreground' : 'text-foreground hover:bg-fill',
+                'flex h-8 cursor-pointer items-center gap-2 rounded-md pr-2 text-body-sm text-foreground outline-none focus-visible:bg-fill-subtle',
+                selected ? 'bg-fill-hover' : 'hover:bg-fill-subtle',
               )}
-              style={{ paddingLeft: `${row.depth * 16 + 4}px` }}
+              style={{ paddingLeft: `${row.depth * 12 + 4}px` }}
             >
               {row.hasChildren ? (
                 <button
                   type="button"
                   tabIndex={-1}
                   aria-label={row.expanded ? `Collapse ${row.page.name}` : `Expand ${row.page.name}`}
-                  className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                  className="flex size-3 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
                   onClick={event => {
                     event.stopPropagation();
                     toggle(row.page.id, !row.expanded);
                   }}
                 >
-                  <ChevronRight size={14} className={cn('transition-transform', row.expanded && 'rotate-90')} />
+                  <DisclosureChevron direction="right" open={row.expanded} className="size-3" />
                 </button>
               ) : (
-                <span className="size-5 shrink-0" aria-hidden />
+                <span className="size-3 shrink-0" aria-hidden />
               )}
-              <span className={cn('min-w-0 flex-1 truncate text-body', row.page.isScope && 'font-medium')}>
-                {row.page.name}
+              <span className="flex shrink-0 items-center text-muted-foreground [&>svg]:size-3.5" aria-hidden>
+                {row.page.isScope && scopeTitle(row.page) !== row.page.name ? (
+                  <KnowledgeSourceIcon page={row.page} />
+                ) : row.hasChildren ? (
+                  <Folder />
+                ) : (
+                  <FileText />
+                )}
+              </span>
+              <span className={cn('min-w-0 flex-1 truncate', row.page.isScope && 'font-medium')}>
+                {scopeTitle(row.page)}
               </span>
               {row.page.childCount ? (
                 <span
                   data-testid="knowledge-tree-count"
                   aria-label={`${childCountLabel(row.page)} below`}
-                  className="shrink-0 text-caption text-muted-foreground tabular-nums"
+                  className="shrink-0 text-caption text-placeholder tabular-nums"
                 >
                   {childCountLabel(row.page)}
                 </span>
@@ -284,8 +296,8 @@ export function KnowledgePageTree({
                 <button
                   key={`more-${parentId}`}
                   type="button"
-                  className="flex min-h-7 w-full items-center text-left text-caption text-muted-foreground hover:text-foreground"
-                  style={{ paddingLeft: `${depth * 16 + 28}px` }}
+                  className="flex h-8 w-full items-center text-left text-caption text-muted-foreground hover:text-foreground"
+                  style={{ paddingLeft: `${depth * 12 + 42}px` }}
                   onClick={more}
                 >
                   Load more

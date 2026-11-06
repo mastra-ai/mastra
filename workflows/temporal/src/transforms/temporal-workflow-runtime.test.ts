@@ -1,3 +1,4 @@
+import { ApplicationFailure } from '@temporalio/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const executeChild = vi.fn();
@@ -14,18 +15,24 @@ const condition = vi.fn(async (predicate: () => boolean) => {
   await vi.waitFor(() => expect(predicate()).toBe(true));
 });
 
-vi.mock('@temporalio/workflow', () => ({
-  condition,
-  defineQuery,
-  defineSignal,
-  executeChild,
-  proxyActivities,
-  setHandler,
-  sleep,
-  log: {
-    info: logInfo,
-  },
-}));
+vi.mock('@temporalio/workflow', async importOriginal => {
+  const { ApplicationFailure, TemporalFailure } = await importOriginal<typeof import('@temporalio/workflow')>();
+  return {
+    ApplicationFailure,
+    TemporalFailure,
+    isCancellation: () => false,
+    condition,
+    defineQuery,
+    defineSignal,
+    executeChild,
+    proxyActivities,
+    setHandler,
+    sleep,
+    log: {
+      info: logInfo,
+    },
+  };
+});
 
 const succeeded = (output: unknown) =>
   expect.objectContaining({
@@ -245,6 +252,38 @@ describe('temporal workflow runtime helper module', () => {
     });
     expect(approval).toHaveBeenNthCalledWith(2, expect.objectContaining({ resumeData: { approved: true } }));
     expect(review).toHaveBeenNthCalledWith(2, expect.objectContaining({ resumeData: { reviewed: true } }));
+  });
+
+  // A local run fails a `.parallel()` with a failed branch even when another branch suspended.
+  // Waiting for every branch must not keep the run open until someone resumes the suspended one.
+  it('fails a parallel run whose sibling branch is suspended without waiting for a resume', async () => {
+    const approval = vi.fn().mockResolvedValue({ __temporalSuspension: true, suspendPayload: { reason: 'approval' } });
+    const check = vi.fn(async () => {
+      await vi.waitFor(() => expect(condition).toHaveBeenCalled());
+      throw ApplicationFailure.nonRetryable('check failed');
+    });
+    proxyActivities.mockReturnValue({ approval, check });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow')
+      .parallel([
+        { type: 'step', step: { id: 'approval' } },
+        { type: 'step', step: { id: 'check' } },
+      ])
+      .commit();
+
+    await expect(workflow({ inputData: {} })).rejects.toMatchObject({
+      message: 'check failed',
+      details: [
+        {
+          steps: {
+            approval: expect.objectContaining({ status: 'suspended' }),
+            check: expect.objectContaining({ status: 'failed' }),
+          },
+        },
+      ],
+    });
+    expect(approval).toHaveBeenCalledOnce();
   });
 
   it('executes mapping entries through proxy activities', async () => {
