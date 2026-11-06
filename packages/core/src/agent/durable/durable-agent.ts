@@ -871,8 +871,6 @@ export class DurableAgent<
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
       notifications: agent.__getNotificationConfig(),
-      // Runs publish through this wrapper's own stream bus.
-      durable: false,
     });
 
     this.#wrappedAgent = agent;
@@ -956,6 +954,11 @@ export class DurableAgent<
   /** Durable runs always publish on their stream topic. */
   override hasResumableStreams(): boolean {
     return true;
+  }
+
+  /** Runs publish through this wrapper's own stream bus, never the plain Agent publisher. @internal */
+  protected override __ownsPlainStreamPublisher(): boolean {
+    return false;
   }
 
   /** @internal */
