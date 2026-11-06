@@ -42,6 +42,25 @@ function validateKey({ id, key }: FactorySecretEncryptionKey): Buffer {
   return buffer;
 }
 
+/** A stored secret can't be read with the keys this instance was configured with. */
+export class FactorySecretDecryptionError extends Error {
+  override name = 'FactorySecretDecryptionError';
+}
+
+/**
+ * A client-safe sentence explaining a storage failure caused by an encryption
+ * key mismatch, or `undefined` for any other failure (whose message may expose
+ * database internals and stays in the server log).
+ */
+export function secretKeyMismatchHint(error: unknown): string | undefined {
+  if (!(error instanceof FactorySecretDecryptionError)) return undefined;
+  return (
+    "Factory can't decrypt its stored secrets because they were saved with a different encryption key. " +
+    'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
+    'saved them, or add that key to FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS, then restart Factory.'
+  );
+}
+
 function parseEnvelope(value: string): SecretEnvelopeV1 {
   let parsed: unknown;
   try {
@@ -111,7 +130,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
 
     const envelope = parseEnvelope(value);
     const key = keys.get(envelope.keyId);
-    if (!key) throw new Error(`[FactorySecretEncryption] Unknown key id "${envelope.keyId}".`);
+    if (!key) throw new FactorySecretDecryptionError(`[FactorySecretEncryption] Unknown key id "${envelope.keyId}".`);
 
     let decoded: unknown;
     try {
@@ -123,7 +142,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
       ]).toString('utf8');
       decoded = JSON.parse(plaintext);
     } catch {
-      throw new Error('[FactorySecretEncryption] Unable to decrypt encrypted value.');
+      throw new FactorySecretDecryptionError('[FactorySecretEncryption] Unable to decrypt encrypted value.');
     }
     const nested = await unwrapNestedEnvelope<T>(decoded, depth);
     if (nested !== undefined) return { value: nested, needsReencryption: true };
@@ -165,7 +184,7 @@ export function createPlaintextFactorySecretEncryption(): FactorySecretEncryptio
         } catch {
           return { value: value as T, needsReencryption: true };
         }
-        throw new Error(
+        throw new FactorySecretDecryptionError(
           '[FactorySecretEncryption] Value is encrypted, but this instance has no secret encryption key configured. ' +
             "Configure 'secretEncryption' with the same key on every Factory instance.",
         );

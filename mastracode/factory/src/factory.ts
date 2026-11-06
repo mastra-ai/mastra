@@ -870,6 +870,14 @@ export class MastraFactory {
     await timedPhase('prepare.storage.init', () => storage.init());
     const workItemsInitError = storage.domainInitError('work-items');
     if (workItemsInitError instanceof WorkItemSplitModeError) throw workItemsInitError;
+    for (const domain of storage.domainNames()) {
+      const error = storage.domainInitError(domain);
+      if (error === undefined) continue;
+      console.error(
+        `[factory] storage domain "${domain}" failed to initialize; features that use it stay unavailable until it does:`,
+        error,
+      );
+    }
 
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.

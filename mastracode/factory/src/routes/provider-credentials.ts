@@ -18,6 +18,7 @@ import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
 import { providerDisplayName } from '../provider-display-name.js';
+import { secretKeyMismatchHint } from '../secret-encryption.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -66,12 +67,12 @@ export async function getTenantCredentialsStorage(
   credentials: ModelCredentialsStorage | undefined,
 ): Promise<ModelCredentialsStorage | undefined> {
   if (!credentials) return undefined;
-  const failedAt = failedInitAt.get(credentials);
-  if (failedAt !== undefined && Date.now() - failedAt < INIT_RETRY_MS) return undefined;
+  const failed = failedInit.get(credentials);
+  if (failed && Date.now() - failed.at < INIT_RETRY_MS) return undefined;
   try {
     await credentials.ensureReady();
   } catch (error) {
-    failedInitAt.set(credentials, Date.now());
+    failedInit.set(credentials, { at: Date.now(), error });
     // Callers degrade to "no credentials", so this log is the only trace of why.
     if (error !== lastReportedInitError) {
       lastReportedInitError = error;
@@ -79,13 +80,14 @@ export async function getTenantCredentialsStorage(
     }
     return undefined;
   }
+  failedInit.delete(credentials);
   return credentials;
 }
 
 let lastReportedInitError: unknown;
 /** Init is a full table scan and callers run per request and per model call, so a failure retries at most this often. */
 const INIT_RETRY_MS = 15_000;
-const failedInitAt = new WeakMap<ModelCredentialsStorage, number>();
+const failedInit = new WeakMap<ModelCredentialsStorage, { at: number; error: unknown }>();
 
 /**
  * Org key for tenant rows. Personal accounts get an org bootstrapped by the
@@ -126,7 +128,10 @@ export async function resolveCredentialContext({
       response: c.json(
         {
           error: 'credentials_unavailable',
-          message: 'Tenant credential storage is unavailable — the app database is not configured or failed to start.',
+          message: `Provider credentials are unavailable. ${
+            secretKeyMismatchHint(credentials && failedInit.get(credentials)?.error) ??
+            'The app database is not configured or failed to start. The server log line "[factory] model credential storage is unavailable" has the cause.'
+          }`,
         },
         503,
       ),
