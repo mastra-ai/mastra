@@ -308,7 +308,7 @@ function getComparisonDateRange(
 export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackArgs): Promise<void> {
   const f = args.feedback as LegacyFeedbackRecord;
   const feedbackSource = f.feedbackSource ?? f.source ?? '';
-  const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
+  const feedbackUserId = f.feedbackUserId !== undefined ? f.feedbackUserId : (f.userId ?? null);
   await db.execute(
     `INSERT INTO feedback_events (
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
@@ -370,7 +370,8 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
   const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
-    const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
+    const feedbackUserId =
+      legacyFeedback.feedbackUserId !== undefined ? legacyFeedback.feedbackUserId : (legacyFeedback.userId ?? null);
     return `(${[
       v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
@@ -446,6 +447,15 @@ export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackA
     params.push(args.resourceId);
   }
   await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
+}
+
+/** Retrieves the latest feedback record with this ID, or null when missing. */
+export async function getFeedbackById(db: DuckDBConnection, feedbackId: string): Promise<FeedbackRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT * FROM feedback_events WHERE feedbackId = ? ORDER BY timestamp DESC LIMIT 1`,
+    [feedbackId],
+  );
+  return rows[0] ? rowToFeedbackRecord(rows[0]) : null;
 }
 
 /** Update the review workflow status of a single feedback event. */

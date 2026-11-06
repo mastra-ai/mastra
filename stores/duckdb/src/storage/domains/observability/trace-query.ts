@@ -22,7 +22,7 @@ import type {
 
 import type { DuckDBConnection } from '../../db/index';
 import { timeToFirstChunkSupported, timeToFirstTokenSupported, traceQueryOutcomeFieldsSupported } from '../../features';
-import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
+import { apiPreview, parseJson, payloadColumnSql, previewFromPayload, timeRangeOf } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { needsPreview } from './preview-compat';
 
@@ -953,7 +953,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
   );
   if (flagged.length === 0) return;
 
-  const values: unknown[] = [];
+  const values: unknown[] = timeRangeOf(flagged.map(row => row.rootTimestamp as Date));
   const where = flagged
     .map(row => {
       values.push(row.traceId, row.rootSpanId, row.rootEventType, row.rootTimestamp, row.rootCursorId);
@@ -966,7 +966,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
       ${payloadColumnSql('output')} AS output,
       error
     FROM span_events
-    WHERE parentSpanId IS NULL AND (${where})`,
+    WHERE parentSpanId IS NULL AND timestamp BETWEEN ? AND ? AND (${where})`,
     values,
   );
   const byTrace = new Map(payloads.map(payload => [String(payload.traceId), payload]));

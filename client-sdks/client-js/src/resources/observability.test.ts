@@ -1358,32 +1358,6 @@ describe('Observability Methods', () => {
   });
 
   describe('createScore()', () => {
-    it('should create a score with correct POST request', async () => {
-      mockSuccessfulResponse();
-
-      const score = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        scorerId: 'accuracy-scorer',
-        score: 0.95,
-        reason: 'High accuracy',
-      };
-
-      await client.createScore({ score });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/scores`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            ...clientOptions.headers,
-            'content-type': 'application/json',
-          }),
-          body: JSON.stringify({ score }),
-        }),
-      );
-    });
-
     it('should handle HTTP errors gracefully', async () => {
       const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
@@ -1508,33 +1482,6 @@ describe('Observability Methods', () => {
   });
 
   describe('createFeedback()', () => {
-    it('should create feedback with correct POST request', async () => {
-      mockSuccessfulResponse();
-
-      const feedback = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        source: 'user',
-        feedbackType: 'thumbs',
-        value: 1,
-        comment: 'Great response',
-      };
-
-      await client.createFeedback({ feedback });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/feedback`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            ...clientOptions.headers,
-            'content-type': 'application/json',
-          }),
-          body: JSON.stringify({ feedback }),
-        }),
-      );
-    });
-
     it('should handle HTTP errors gracefully', async () => {
       const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);

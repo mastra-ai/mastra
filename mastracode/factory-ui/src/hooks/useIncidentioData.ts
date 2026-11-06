@@ -1,4 +1,4 @@
-import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -25,13 +25,13 @@ export function useIncidentioSourcesQuery(enabled: boolean = true) {
  * failures throw, so a failed background refetch keeps the last known status
  * instead of collapsing the feed. Pass `enabled: false` to gate the request.
  */
+export function incidentioStatusQueryOptions(baseUrl: string) {
+  return queryOptions({ queryKey: queryKeys.incidentioStatus(), queryFn: () => fetchIncidentioStatus(baseUrl) });
+}
+
 export function useIncidentioStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.incidentioStatus(),
-    queryFn: () => fetchIncidentioStatus(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...incidentioStatusQueryOptions(baseUrl), enabled });
 }
 
 /**

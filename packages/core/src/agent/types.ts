@@ -7,7 +7,6 @@ import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
-import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
@@ -77,7 +76,6 @@ import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { IMastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
@@ -86,6 +84,7 @@ import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentScopesConfig } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
+import type { AgentStreamsConfig } from './streams/types';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -618,41 +617,8 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
-/**
- * Options for opting an {@link Agent} into durable execution via
- * {@link AgentConfigBase.durable}.
- *
- * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
- * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
- *
- * See `packages/core/src/agent/durable/create-durable-agent.ts`.
- */
-export type AgentDurableOption =
-  | boolean
-  | {
-      /** See createDurableAgent options: cache backend for resumable streams. */
-      cache?: MastraServerCache | false;
-      /** See createDurableAgent options: pubsub instance for streaming events. */
-      pubsub?: PubSub;
-      /** See createDurableAgent options: maximum steps for the agentic loop. */
-      maxSteps?: number;
-      /** Auto-cleanup timer for durable stream state (ms). */
-      cleanupTimeoutMs?: number;
-      /** See createDurableAgent options: per-topic opt-out of the replay cache. */
-      shouldCache?: (topic: string) => boolean;
-      /**
-       * See createDurableAgent options: overrides the snapshot-persistence
-       * policy. By default `pending | paused | suspended` are always
-       * persisted and `running` checkpoints only when the Mastra instance
-       * sets `recovery: { durableAgents: 'auto' }`.
-       */
-      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
-      /** Optional id override (defaults to agent.id). */
-      id?: string;
-      /** Optional name override (defaults to agent.name). */
-      name?: string;
-    };
+/** Resumable stream configuration. Durable execution requires createDurableAgent(). */
+export type AgentDurableOption = boolean | AgentStreamsConfig;
 
 interface AgentConfigBase<
   TAgentId extends string = string,
@@ -785,21 +751,15 @@ interface AgentConfigBase<
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
   /**
-   * Opt this agent into durable execution.
+   * Resumable streams: publish run events so observe() and reconnecting clients
+   * can follow a run. This does not enable durable execution or checkpoints.
+   * Use createDurableAgent() for durable execution.
    *
-   * - `true` → wraps with `createDurableAgent` using defaults when the agent is
-   *   registered on a `Mastra` instance.
-   * - object → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
-   *   cleanupTimeoutMs, id, name).
-   *
-   * Ignored when the agent is used standalone (not attached to a `Mastra`
-   * instance). See {@link AgentDurableOption}.
-   *
-   * @example
-   * ```typescript
-   * new Agent({ id: 'my-agent', instructions: '…', model, durable: true });
-   * new Agent({ id: 'my-agent', instructions: '…', model, durable: { maxSteps: 10 } });
-   * ```
+   * - Omitted: on when registered on Mastra, off standalone.
+   * - true: on, using the Mastra pubsub and server cache when registered.
+   * - false: off; HTTP disconnects abort the run.
+   * - An object: on, with custom pubsub, cache, shouldCache or cleanupTimeoutMs.
+   *   cache: false keeps publishing but disables replay.
    */
   durable?: AgentDurableOption;
   /**
@@ -1443,4 +1403,15 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     typeof obj.recover === 'function' &&
     typeof obj.recoverActiveRuns === 'function'
   );
+}
+
+/**
+ * Whether runs of `agent` publish on their stream topic, so another reader can
+ * follow them with `observe()`. True for durable wrappers and for agents with
+ * streams on.
+ */
+export function hasResumableStreams(agent: any): boolean {
+  if (!agent) return false;
+  if (typeof agent.hasResumableStreams === 'function') return agent.hasResumableStreams();
+  return isDurableAgentLike(agent);
 }

@@ -1510,6 +1510,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    try {
+      return await feedbackOps.getFeedbackById(this.#client, feedbackId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_FEEDBACK_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId },
+        },
+        error,
+      );
+    }
+  }
+
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     try {
       await feedbackOps.createFeedback(this.#client, args);

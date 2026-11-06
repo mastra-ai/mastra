@@ -157,7 +157,7 @@ describe('KnowledgePageDetail', () => {
       />,
     );
     const detail = screen.getByRole('article', { name: 'Refunds' });
-    expect(within(detail).getByText('in org:acme')).toBeTruthy();
+    expect(within(detail).getByText('In Acme')).toBeTruthy();
     expect(within(detail).getByText('How refunds work')).toBeTruthy();
     expect(within(detail).getByText('Pinned for org:acme')).toBeTruthy();
     expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
@@ -198,10 +198,24 @@ describe('KnowledgePageDetail', () => {
     expect(marked.map(item => item.textContent)).toEqual([expect.stringContaining('See Billing')]);
   });
 
-  it('says so when a page has no notes', () => {
+  it('keeps the notes section when the first batch is empty but more notes follow', () => {
+    renderWithProviders(
+      <KnowledgePageDetail
+        page={orgPage}
+        notes={[]}
+        notesMore={<button type="button">Load more notes</button>}
+        pagesById={pagesById}
+        onPageClick={() => {}}
+      />,
+    );
+    const notes = within(screen.getByRole('region', { name: 'Notes' }));
+    expect(notes.getByRole('button', { name: 'Load more notes' })).toBeTruthy();
+  });
+
+  it('leaves out the notes section when a page has none', () => {
     renderWithProviders(<KnowledgePageDetail page={orgPage} notes={[]} pagesById={pagesById} onPageClick={() => {}} />);
     expect(screen.getByText('Scope')).toBeTruthy();
-    expect(screen.getByText('org:acme')).toBeTruthy();
-    expect(screen.getByText('No notes on this page.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Acme' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Notes' })).toBeNull();
   });
 });

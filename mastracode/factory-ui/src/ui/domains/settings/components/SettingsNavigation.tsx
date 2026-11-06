@@ -13,6 +13,7 @@ import {
   Inbox,
   Palette,
   SlidersHorizontal,
+  SquareKanban,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -35,34 +36,31 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
-export const ACCOUNT_SETTINGS_GROUP = {
-  id: 'account',
-  label: 'Account',
-  items: [
-    {
-      id: 'account',
-      label: SETTINGS_SECTION_LABELS.account,
-      icon: CircleUserRound,
-      searchText: 'my account profile identity email authentication session log out sign out user',
-    },
-    {
-      id: 'preferences',
-      label: SETTINGS_SECTION_LABELS.preferences,
-      icon: Palette,
-      searchText: 'preferences general theme appearance color scheme completion sound',
-    },
-    {
-      id: 'connections',
-      label: SETTINGS_SECTION_LABELS.connections,
-      icon: Cable,
-      searchText:
-        'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
-    },
-  ],
-} satisfies SettingsNavGroup;
-
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  ACCOUNT_SETTINGS_GROUP,
+  {
+    id: 'account',
+    label: 'Account',
+    items: [
+      {
+        id: 'account',
+        label: SETTINGS_SECTION_LABELS.account,
+        icon: CircleUserRound,
+        searchText: 'my account profile identity email authentication session log out sign out user',
+      },
+      {
+        id: 'preferences',
+        label: SETTINGS_SECTION_LABELS.preferences,
+        icon: Palette,
+        searchText: 'preferences general theme appearance color scheme completion sound',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
+      },
+    ],
+  },
   {
     id: 'agent',
     label: 'Agent',
@@ -111,6 +109,13 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'board',
+        label: SETTINGS_SECTION_LABELS.board,
+        icon: SquareKanban,
+        searchText:
+          'work board phases triage planning building review pr review auto start auto approve plans next phases runner instructions reset default',
       },
       {
         id: 'factory',

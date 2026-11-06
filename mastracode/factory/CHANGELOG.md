@@ -1,5 +1,83 @@
 # @mastra/factory
 
+## 0.28.0-alpha.0
+
+### Minor Changes
+
+- Factory pages load faster. The project list now returns each project's linked repositories, so the web UI makes one request before it renders instead of one more per project, and the repositories are read in a fixed handful of database queries however many projects there are. ([#29322](https://github.com/mastra-ai/mastra/pull/29322))
+
+  ```ts
+  const { projects } = await (await fetch('/web/factory/projects')).json();
+
+  projects[0].repositories;
+  // [{ projectRepositoryId, connectionId, integrationId, repositoryId, externalId, slug, defaultBranch, branch, sandboxWorkdir }]
+  ```
+
+  The list includes no installation details. `GET /web/factory/projects/:id/source-control-connections` returns the same response as before, using the same faster read.
+
+- Added Slack tools for Factory sessions started from Slack. A session can read channels and threads, post messages, search recent messages, and find channels and people by name. The tools act as the Slack app, and posting needs no approval, so they also work on runs nobody is watching. ([#29293](https://github.com/mastra-ai/mastra/pull/29293))
+
+  **Access**
+
+  By default a session can read and post only in its own channel, and can't send direct messages. Use the new `tools` option to grant more:
+
+  ```ts
+  new SlackIntegration({
+    signingSecret,
+    tools: {
+      channels: 'all', // or 'selected' with channelIds: ['C0123456']
+      channelAccess: 'post', // or 'read' to post only in the session's own channel
+      directMessages: 'anyone',
+    },
+  });
+  ```
+
+  Even with `channels: 'all'`, a session can only read channels the Slack app has been added to.
+
+### Patch Changes
+
+- Added annotations to Studio and Factory chat, so you can point the agent at parts of a reply and comment on them. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+  - Select text in a message and choose **Add to chat**, or press Tab to reach it from the keyboard.
+  - The passage gets a numbered bubble that stays with the text as you scroll. Select the bubble to comment on the passage or remove it.
+  - The composer counts what you added, for example **2 annotations**. Open the count to jump to a passage.
+  - When you send, the agent receives a numbered list of the passages, each quoted with its comment, ahead of what you typed. You can send annotations without typing anything.
+  - If a message fails to send, its annotations come back.
+
+- Factory starts serving sooner on projects with many open decisions. It no longer checks every failed or proposed decision, one card at a time, before it accepts requests. ([#29450](https://github.com/mastra-ai/mastra/pull/29450))
+
+- Fixed Factory pages slowing down while several boards show a repository's open GitHub issues, as Work Intake and triage do. Boards no longer repeat the same issue checks on every poll: each page of issues is checked by one board at a time and then left alone for a short while, the same way pull request lists already work. ([#29421](https://github.com/mastra-ai/mastra/pull/29421))
+
+- Added a `plansDir` option to `createMastraCode` and `prepareAgentControllerMount` that sets where agents write plan files. When set, the prompts, the plan-mode write guard, and build-mode `submit_plan` guidance all use it instead of the per-session default. ([#29132](https://github.com/mastra-ai/mastra/pull/29132))
+
+  ```ts
+  const code = await createMastraCode({ plansDir: '.artifacts/plans' });
+  ```
+
+  Factory now sets `plansDir: '.artifacts/plans'` for every session. Plans written from Factory user sessions previously landed in `.mastracode/plans/`, which the Factory UI can't read, so the plan card showed "The plan could not be loaded" and Approve was disabled.
+
+- Factory sessions can now read CI results on GitHub. Repository tokens include read-only access to checks, workflow runs and commit statuses, so `gh pr checks` and `gh run view` work instead of failing with "Resource not accessible by integration". ([#29338](https://github.com/mastra-ai/mastra/pull/29338))
+
+- Stop an idle Factory from querying its database every second. The decision dispatcher now sleeps when there is no work and wakes when a run start or decision is queued, when a retry or expired lease comes due, or when another replica queues work through the Factory pubsub. Serverless Postgres such as Neon can now suspend while the Factory is idle. ([#29228](https://github.com/mastra-ai/mastra/pull/29228))
+
+- Factory chats now show how a tool call failed and what it reported: ([#29314](https://github.com/mastra-ai/mastra/pull/29314))
+
+  - A failed command's row shows how it ended: `exit N`, `killed`, `timed out`, or `error` when the sandbox could not run it. Its output keeps everything it printed and ends with the exit code, plus the full error when the command could not run. Before, a command that printed something before failing showed only that output.
+  - Failed results are shown in red, and results are no longer cut off at 800 characters.
+  - A successful file edit shows what the edit reported, such as diagnostics, next to the change.
+  - While a command runs, you can scroll up through its output without it jumping back to the latest line on every update.
+
+- Merged pull request announcements in chat threads now use a randomly chosen celebratory message (for example "🎉 Merged! <url> is officially in.") instead of the plain "Pull request merged: <url>". ([#29340](https://github.com/mastra-ai/mastra/pull/29340))
+
+- Factory board cards, search results, pickers, and chat details show metadata as separate fields instead of joining them with `·` or `—` separators. Card and menu metadata stays on one line and truncates, so cards keep their height. ([#29312](https://github.com/mastra-ai/mastra/pull/29312))
+
+- Fixed Linear workspace recovery in Factory. Connections keep disconnected workspaces visible by name, separate management from adding a workspace, and verify the intended workspace after authorization. Work Intake preserves paused sources and routing, reports workspace loading failures, and keeps healthy workspaces available during partial outages. ([#29399](https://github.com/mastra-ai/mastra/pull/29399))
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`6650c26`](https://github.com/mastra-ai/mastra/commit/6650c2687c44e3d37f985a8ba7f58ab255ea9a48), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`d8f11cb`](https://github.com/mastra-ai/mastra/commit/d8f11cb21eb6a809ab7969de47b9abd2f098d2f5), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`944d4bc`](https://github.com/mastra-ai/mastra/commit/944d4bcb13c98c326f326b5a9d870b8a613bf4f5), [`944d4bc`](https://github.com/mastra-ai/mastra/commit/944d4bcb13c98c326f326b5a9d870b8a613bf4f5), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5)]:
+  - @mastra/core@1.83.0-alpha.0
+  - @mastra/code-sdk@1.19.0-alpha.0
+  - @mastra/mcp@2.9.0-alpha.0
+
 ## 0.27.0
 
 ### Minor Changes

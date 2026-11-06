@@ -1,8 +1,11 @@
 import {
+  ApplicationFailure,
+  TemporalFailure,
   condition,
   defineQuery,
   defineSignal,
   executeChild,
+  isCancellation,
   proxyActivities,
   log,
   setHandler,
@@ -11,6 +14,39 @@ import {
 
 const resumeSignal = defineSignal('mastra.resume');
 const statusQuery = defineQuery('mastra.status');
+
+// The step error an Activity or child Workflow put in its failure details. Failures without them
+// (timeouts, Activities from an older Worker) give the innermost cause's type and message.
+function readStepFailure(error) {
+  let current = error;
+  while (current) {
+    const details = current.details?.[0];
+
+    if (details?.error) {
+      return { error: details.error, ...(details.tripwire && { tripwire: details.tripwire }) };
+    }
+
+    if (!current.cause) {
+      break;
+    }
+
+    current = current.cause;
+  }
+
+  return { error: { name: current?.type ?? current?.name ?? 'Error', message: current?.message ?? String(error) } };
+}
+
+// Records a step as failed, in the core StepResult shape, before its failure ends the run.
+function recordFailure(stepResults, id, payload, startedAt, error) {
+  stepResults[id] = {
+    __temporalStepResult: true,
+    status: 'failed',
+    payload,
+    ...readStepFailure(error),
+    startedAt,
+    endedAt: Date.now(),
+  };
+}
 
 export class TemporalExecutionEngine {
   startToCloseTimeout;
@@ -56,8 +92,26 @@ export class TemporalExecutionEngine {
       steps: stepResults,
     };
 
-    for (const entry of params.graph.steps) {
-      result = await this.executeEntry(entry, result, stepResults);
+    try {
+      for (const entry of params.graph.steps) {
+        result = await this.executeEntry(entry, result, stepResults);
+      }
+    } catch (error) {
+      // An error that isn't a Temporal failure comes from Workflow code. It fails only the Workflow
+      // Task, which Temporal retries, so a fixed Worker can still finish the run.
+      if (isCancellation(error) || !(error instanceof TemporalFailure)) {
+        throw error;
+      }
+
+      // The run still fails in Temporal. The details let start() return step records and the
+      // step's own error, which a thrown ActivityFailure would lose.
+      const failure = readStepFailure(error);
+      throw ApplicationFailure.create({
+        message: failure.error.message,
+        type: failure.error.name,
+        cause: error,
+        details: [{ ...failure, steps: stepResults }],
+      });
     }
 
     this.currentResult = {
@@ -82,9 +136,17 @@ export class TemporalExecutionEngine {
   }
 
   // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
-  async recordStep(stepResults, id, payload, run) {
+  async recordStep(stepResults, id, payload, run, group) {
     const startedAt = Date.now();
-    let output = await run();
+    const attempt = async resumeData => {
+      try {
+        return await run(resumeData);
+      } catch (error) {
+        recordFailure(stepResults, id, payload, startedAt, error);
+        throw error;
+      }
+    };
+    let output = await attempt();
     let suspendPayload;
     let resumeData;
 
@@ -114,7 +176,11 @@ export class TemporalExecutionEngine {
 
       this.suspendedSteps.add(id);
       try {
-        await condition(() => this.resumePayloads.has(id));
+        await condition(() => this.resumePayloads.has(id) || group?.failed === true);
+        // A failed sibling branch ends the run, so the step stays suspended in the records.
+        if (!this.resumePayloads.has(id)) {
+          return output;
+        }
         resumeData = this.resumePayloads.get(id)?.resumeData;
         this.resumePayloads.delete(id);
       } finally {
@@ -131,7 +197,7 @@ export class TemporalExecutionEngine {
         state: this.initialState,
         steps: stepResults,
       };
-      output = await run(resumeData);
+      output = await attempt(resumeData);
     }
 
     stepResults[id] = {
@@ -157,17 +223,22 @@ export class TemporalExecutionEngine {
     return { inputData, ...extra, ...this.executionContext };
   }
 
-  async executeEntry(entry, inputData, stepResults) {
+  async executeEntry(entry, inputData, stepResults, group) {
     switch (entry.type) {
       case 'step': {
         log.info('step', { stepId: entry.step.id });
-        return this.recordStep(stepResults, entry.step.id, inputData, resumeData =>
-          this.activityHandle[entry.step.id](
-            this.activityParams(inputData, {
-              initData: this.initData,
-              ...(resumeData !== undefined && { resumeData }),
-            }),
-          ),
+        return this.recordStep(
+          stepResults,
+          entry.step.id,
+          inputData,
+          resumeData =>
+            this.activityHandle[entry.step.id](
+              this.activityParams(inputData, {
+                initData: this.initData,
+                ...(resumeData !== undefined && { resumeData }),
+              }),
+            ),
+          group,
         );
       }
 
@@ -213,11 +284,34 @@ export class TemporalExecutionEngine {
         const entryId = parallelEntry =>
           parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
         log.info('parallel', { steps: entry.steps.map(entryId) });
-        const results = await Promise.all(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
+        // Waits for every branch, as a local run does, so a failed run keeps the others' records.
+        // A failed branch also ends the wait of a suspended one, which would otherwise keep the run
+        // open until a resume. The flag is per group so a later parallel starts clean.
+        const group = { failed: false };
+        const settled = await Promise.allSettled(
+          entry.steps.map(step =>
+            this.executeEntry(step, inputData, stepResults, group).catch(error => {
+              group.failed = true;
+              throw error;
+            }),
+          ),
+        );
+        const failures = settled.filter(outcome => outcome.status === 'rejected');
+        // Same order as in execute(), whatever the branch order: a cancelled run ends Canceled, and
+        // an error from Workflow code wins so Temporal retries the Workflow Task.
+        const rejected =
+          failures.find(outcome => isCancellation(outcome.reason)) ??
+          failures.find(outcome => !(outcome.reason instanceof TemporalFailure)) ??
+          failures[0];
+
+        if (rejected) {
+          throw rejected.reason;
+        }
+
         const out = {};
 
         entry.steps.forEach((step, i) => {
-          out[entryId(step)] = results[i];
+          out[entryId(step)] = settled[i].value;
         });
 
         return out;
@@ -301,7 +395,12 @@ export class TemporalExecutionEngine {
           }
         });
 
-        await Promise.all(workers);
+        try {
+          await Promise.all(workers);
+        } catch (error) {
+          recordFailure(stepResults, entry.step.id, inputData, startedAt, error);
+          throw error;
+        }
         stepResults[entry.step.id] = {
           __temporalStepResult: true,
           status: 'success',
