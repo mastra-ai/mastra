@@ -45,6 +45,14 @@ function validateKey({ id, key }: FactorySecretEncryptionKey): Buffer {
 /** A stored secret can't be read with the keys this instance was configured with. */
 export class FactorySecretDecryptionError extends Error {
   override name = 'FactorySecretDecryptionError';
+
+  constructor(
+    message: string,
+    /** True when this instance has no key at all, rather than the wrong one. */
+    readonly missingKey = false,
+  ) {
+    super(message);
+  }
 }
 
 /**
@@ -54,6 +62,13 @@ export class FactorySecretDecryptionError extends Error {
  */
 export function secretKeyMismatchHint(error: unknown): string | undefined {
   if (!(error instanceof FactorySecretDecryptionError)) return undefined;
+  if (error.missingKey) {
+    return (
+      "Factory can't decrypt its stored secrets because no encryption key is configured. " +
+      'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
+      'saved them, then restart Factory.'
+    );
+  }
   return (
     "Factory can't decrypt its stored secrets because they were saved with a different encryption key. " +
     'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
@@ -187,6 +202,7 @@ export function createPlaintextFactorySecretEncryption(): FactorySecretEncryptio
         throw new FactorySecretDecryptionError(
           '[FactorySecretEncryption] Value is encrypted, but this instance has no secret encryption key configured. ' +
             "Configure 'secretEncryption' with the same key on every Factory instance.",
+          true,
         );
       }
       try {
