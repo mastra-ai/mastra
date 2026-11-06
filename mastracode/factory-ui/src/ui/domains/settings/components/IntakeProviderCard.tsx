@@ -11,8 +11,6 @@ import { SettingsSectionHeader } from './common/SettingsSectionHeader';
 
 export interface IntakeSectionProps {
   config: IntakeConfig;
-  busy: boolean;
-  update: (next: IntakeConfig) => Promise<void>;
   listed: boolean;
 }
 

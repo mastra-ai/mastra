@@ -1202,6 +1202,15 @@ describe('aggregated intake', () => {
     });
   });
 
+  it("lists only the requested integration's sources without asking the others", async () => {
+    const response = await buildApp(orgUser).request('/web/intake/sources?integrationId=github');
+    expect(await response.json()).toEqual({
+      sources: [{ integrationId: 'github', id: 'repo-1', name: 'acme/app', type: 'repository' }],
+      failures: [],
+    });
+    expect(vi.mocked(linear.listSources)).not.toHaveBeenCalled();
+  });
+
   it('lists selected items with generic external-source references and per-integration cursors', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',

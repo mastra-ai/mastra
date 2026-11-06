@@ -61,6 +61,27 @@ describe('IntakeSection incidentio', () => {
     });
   });
 
+  describe('given incident.io cannot list follow-up sources', () => {
+    it('reports a follow-up listing failure instead of an empty picker', async () => {
+      seedFactories();
+      useIncidentioHandlers();
+      server.use(
+        http.get(INTAKE_SOURCES_URL, () =>
+          HttpResponse.json({
+            sources: [],
+            failures: [{ integrationId: 'incidentio', message: 'incident.io did not answer within 15s' }],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io' });
+      expect(await within(section).findByText("Couldn't load follow-up sources.")).toBeInTheDocument();
+      expect(within(section).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+  });
+
   describe('given a deployment API key serves incident.io without Platform connections', () => {
     it('keeps the section usable for source selection and routing', async () => {
       seedFactories();
