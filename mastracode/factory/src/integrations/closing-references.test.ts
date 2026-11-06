@@ -73,6 +73,7 @@ describe('closingIssueNumbers', () => {
       `Closes #1 ${'`'.repeat(262_000)}${` ${'`'.repeat(261_999)}`.repeat(3)}`,
       gitlab,
     ],
+    ['1 MB of short code fences', `Closes #1 ${'```a```'.repeat(150_000)}`, gitlab],
   ])('reads %s in linear time', (_, body, options) => {
     const started = performance.now();
     expect(closingIssueNumbers(body, options)).toEqual([1]);
