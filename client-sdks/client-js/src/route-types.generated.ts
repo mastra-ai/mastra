@@ -25074,6 +25074,8 @@ export type PostAgentControllerControllerIdSessionsSessionIdGoal_Body = {
   objective: string;
   judgeModelId?: string | undefined;
   maxRuns?: number | undefined;
+  /** Start working on the goal right away by sending the agent a goal reminder. */
+  start?: boolean | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsSessionIdGoal_Response =
@@ -25117,6 +25119,8 @@ export type PutAgentControllerControllerIdSessionsSessionIdGoal_Body = {
   judgeModelId?: string | undefined;
   maxRuns?: number | undefined;
   status?: ('active' | 'paused' | 'done') | undefined;
+  /** When the goal ends up active, start working on it right away by sending the agent a goal reminder. */
+  start?: boolean | undefined;
 };
 
 export type PutAgentControllerControllerIdSessionsSessionIdGoal_Response =

@@ -1752,11 +1752,16 @@ const setGoalBodySchema = z.object({
   objective: z.string(),
   judgeModelId: z.string().optional(),
   maxRuns: z.number().optional(),
+  start: z.boolean().optional().describe('Start working on the goal right away by sending the agent a goal reminder.'),
 });
 const updateGoalBodySchema = z.object({
   judgeModelId: z.string().optional(),
   maxRuns: z.number().optional(),
   status: z.enum(['active', 'paused', 'done']).optional(),
+  start: z
+    .boolean()
+    .optional()
+    .describe('When the goal ends up active, start working on it right away by sending the agent a goal reminder.'),
 });
 const goalRecordSchema = z.object({
   id: z.string().optional(),
@@ -1773,6 +1778,43 @@ const goalResponseSchema = z.object({ goal: goalRecordSchema.optional() });
 
 function getAgentForSession(controller: AgentController<any>, session: Session<any>): Agent {
   return controller.getCurrentAgent(session);
+}
+
+type GoalRecord = z.infer<typeof goalRecordSchema>;
+
+/**
+ * Setting a goal only stores it; the judge grades turns that happen afterwards.
+ * Send the same goal reminder the TUI sends so the agent starts a turn on it
+ * (or picks it up in the run already going). If that fails, park the goal as
+ * paused so it doesn't sit "active" with nothing working on it.
+ */
+async function startGoal({
+  agent,
+  session,
+  threadId,
+  goal,
+  requestContext,
+}: {
+  agent: Agent;
+  session: Session<any>;
+  threadId: string;
+  goal: GoalRecord;
+  requestContext: RequestContext;
+}): Promise<void> {
+  try {
+    await session.sendSignal(
+      {
+        type: 'system-reminder',
+        contents: goal.objective,
+        attributes: { type: 'goal' },
+        metadata: { goalId: goal.id, goalMaxTurns: goal.maxRuns, judgeModelId: goal.judgeModelId },
+      },
+      { requestContext, requireDelivery: true },
+    ).accepted;
+  } catch (error) {
+    await agent.updateObjectiveOptions({ threadId, status: 'paused' });
+    throw error;
+  }
 }
 
 export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
@@ -1812,15 +1854,16 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   responseSchema: goalResponseSchema,
   summary: 'Set a goal',
   description:
-    'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn.',
+    'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn. Pass `start: true` to have the agent start working on it right away.',
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, sessionId, objective, judgeModelId, maxRuns, requestContext }) => {
+  handler: async ({ mastra, controllerId, sessionId, objective, judgeModelId, maxRuns, start, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
-      const threadId = session.thread.getId();
+      // A goal is often the first thing set on a new session, before any message has created its thread.
+      const threadId = start ? await session.thread.ensureId({ requestContext }) : session.thread.getId();
       if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
       const record = await agent.setObjective(objective, {
@@ -1829,6 +1872,7 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
         ...(judgeModelId ? { judgeModelId } : {}),
         ...(maxRuns != null ? { maxRuns } : {}),
       });
+      if (start && record) await startGoal({ agent, session, threadId, goal: record, requestContext });
       return { goal: record ?? undefined };
     } catch (error) {
       return handleError(error, 'error setting controller goal');
@@ -1849,7 +1893,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, sessionId, judgeModelId, maxRuns, status, requestContext }) => {
+  handler: async ({ mastra, controllerId, sessionId, judgeModelId, maxRuns, status, start, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
@@ -1862,6 +1906,9 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
         ...(maxRuns !== undefined ? { maxRuns } : {}),
         ...(status !== undefined ? { status } : {}),
       });
+      if (start && record?.status === 'active') {
+        await startGoal({ agent, session, threadId, goal: record, requestContext });
+      }
       return { goal: record ?? undefined };
     } catch (error) {
       return handleError(error, 'error updating controller goal');

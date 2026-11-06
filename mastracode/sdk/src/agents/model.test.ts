@@ -23,6 +23,7 @@ import {
   createRequestScopedCredentialStore,
   getActiveRouteMemoryModelId,
   getDynamicModel,
+  getGoalJudgeModel,
   resolveModel,
 } from './model.js';
 
@@ -211,6 +212,23 @@ describe('Kimi and Copilot model ids', () => {
       expect(model.modelId).toBe('gpt-4.1');
     },
   );
+});
+
+describe('getGoalJudgeModel', () => {
+  it("judges with the session's model when no goal judge model is configured", () => {
+    expect(loadSettings().models.goalJudgeModel).toBeNull();
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modelId: 'github-copilot/gpt-4.1' } });
+
+    const judge = getGoalJudgeModel({ requestContext }) as unknown as { provider: string; modelId: string };
+
+    expect(judge.provider).toMatch(/^github-copilot/);
+    expect(judge.modelId).toBe('gpt-4.1');
+  });
+
+  it('stays off when neither a judge model nor a session model resolves', () => {
+    expect(getGoalJudgeModel({ requestContext: new RequestContext() })).toBeUndefined();
+  });
 });
 
 describe('getDynamicModel error branches', () => {
