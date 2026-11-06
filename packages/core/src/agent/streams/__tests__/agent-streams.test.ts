@@ -209,6 +209,74 @@ describe('Agent durable resumable streams option', () => {
       expect(tail.types.at(-1)).toBe('finish');
     });
 
+    it.each([
+      ['at the next index', (last: number) => last + 1],
+      ['far past the end', () => 100],
+    ])('closes a finished run resumed %s', async (_label, offsetFor) => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+
+      const runId = await run(agent);
+      await waitForFinish(pubsub, runId);
+
+      const indexes: number[] = [];
+      for await (const chunk of (await agent.observe(runId)).fullStream) {
+        if (chunk.index !== undefined) indexes.push(chunk.index);
+      }
+
+      const observed = await agent.observe(runId, { offset: offsetFor(indexes.at(-1)!) });
+      const timeout = new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 2_000).unref());
+      const result = await Promise.race([collect(observed.fullStream), timeout]);
+      expect(result).toEqual({ types: [], text: '' });
+    });
+
+    it('returns a resumed observation while the past-end history read is still pending', async () => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+
+      const runId = await run(agent);
+      await waitForFinish(pubsub, runId);
+
+      // A cache that lost its connection queues reads until it reconnects.
+      vi.spyOn(agent.__getStreamBus()!.pubsub, 'getHistory').mockReturnValue(new Promise(() => {}));
+      const timeout = new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 2_000).unref());
+      const observed = await Promise.race([agent.observe(runId, { offset: 100 }), timeout]);
+      expect(observed).not.toBe('hung');
+      if (observed !== 'hung') observed.detach();
+    });
+
+    it.each([
+      ['at the next index', (last: number) => last + 1],
+      ['far past the end', () => 100],
+    ])('closes a run that ended in an error event when resumed %s', async (_label, offsetFor) => {
+      const pubsub = new RecordingPubSub();
+      // Throwing mid-stream ends the run without a finish, so its log ends in an error event.
+      const agent = makeAgent({
+        outputProcessors: [
+          {
+            id: 'boom',
+            processOutputStream: () => {
+              throw new Error('PROCESSOR_BOOM');
+            },
+          },
+        ],
+      });
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+
+      const output = await agent.stream('Say hello.');
+      await output.consumeStream().catch(() => {});
+      await vi.waitFor(() => expect(pubsub.types(output.runId)).toContain(AgentStreamEventTypes.ERROR));
+      const log = await agent.__getStreamBus()!.pubsub.getHistory(AGENT_STREAM_TOPIC(output.runId), 0);
+      expect(log.at(-1)?.type).toBe(AgentStreamEventTypes.ERROR);
+
+      const observed = await agent.observe(output.runId, { offset: offsetFor(log.at(-1)!.index!) });
+      const timeout = new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 2_000).unref());
+      const result = await Promise.race([collect(observed.fullStream), timeout]);
+      expect(result).toEqual({ types: [], text: '' });
+    });
+
     it('stays open across a tool-approval suspension and follows the approved run to its finish', async () => {
       const pubsub = new RecordingPubSub();
       getMock().on(
