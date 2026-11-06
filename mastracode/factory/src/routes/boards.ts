@@ -23,7 +23,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface BoardRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -43,10 +43,6 @@ class Refusal {
     readonly status: 400 | 401 | 403 | 404 | 409 | 422,
     readonly body: Record<string, unknown>,
   ) {}
-}
-
-function loose(context: unknown): Context {
-  return context as Context;
 }
 
 export class BoardRoutes extends Route<BoardRoutesDeps> {

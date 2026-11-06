@@ -10,7 +10,7 @@ export { AlertAction, AlertMenu, DrilldownAction, PinAction } from './components
 export type { AlertEntry } from './components/widget-controls';
 export { METRICS_DASHBOARD } from './metrics-dashboard';
 export { StatelessWidget } from './components/stateless-widget';
-export type { StatelessWidgetProps } from './components/stateless-widget';
+export type { StatelessWidgetPin, StatelessWidgetProps } from './components/stateless-widget';
 export { useDashboardRequests, useDashboardResults, toDashboardResult } from './hooks/use-dashboard-requests';
 export { useDashboardEnvironment } from './hooks/use-dashboard-environment';
 export { hasDrilldownAction, useDrilldown, useViewMenu, viewMenu } from './hooks/use-widget-views';

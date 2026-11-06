@@ -1750,6 +1750,8 @@ class AliasDeployer extends Deployer {
           );
           expect(output).toContain('MASTRA_BROWSER_CJS_ALIAS_SHIM');
           expect(output).not.toContain('MASTRA_NODE_ALIAS_SHIM');
+          // #29572: the deployer is stripped from the entry
+          expect(output).not.toContain('alias-test');
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
           expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');
