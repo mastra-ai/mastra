@@ -45,6 +45,10 @@
       "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.33",
       "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.1"
     },
-    "compression": "1.8.2"
+    "compression": "1.8.2",
+    "image-size": "2.0.4",
+    "@modelcontextprotocol/sdk": {
+      "@hono/node-server": "2.1.6"
+    }
   }
 }
