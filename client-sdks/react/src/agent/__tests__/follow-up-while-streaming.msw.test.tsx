@@ -174,6 +174,26 @@ describe('useChat follow-up sent while the answer is still streaming (#29163)', 
     await waitFor(() => expect(chat.result.current.isRunning).toBe(false));
   });
 
+  it('finishes the answer when the run delivers a user message the chat did not send', async () => {
+    thread = useDurableThread();
+    const chat = renderChat();
+    await startFirstAnswer(chat);
+    await sendFollowUp(chat);
+    await thread.emit(thread.userEcho('run-1', 1, 'pending'));
+
+    // A message from another client or a server-side signal reaches the run at
+    // its step boundary before the follow-up does. Its echo matches no bubble here.
+    await thread.emit({
+      type: 'data-user-message',
+      runId: 'run-1',
+      data: { id: 'signal-other', type: 'user', contents: 'from another tab', metadata: {} },
+    });
+
+    const answer = chat.result.current.messages.find(message => message.id === 'answer-1')!;
+    expect(textOf(answer)).toBe('partially streamed answer');
+    expect(textStates(answer)).toEqual(['done']);
+  });
+
   it('keeps a tool call the answer makes after the follow-up in the same row', async () => {
     thread = useDurableThread();
     const chat = renderChat();

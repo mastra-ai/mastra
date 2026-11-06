@@ -615,16 +615,6 @@ const userMessageEchoIds = (chunk: ChunkType): { signalId?: string; clientMessag
   return { signalId, clientMessageId: typeof clientMessageId === 'string' ? clientMessageId : undefined };
 };
 
-/** Whether `chunk` is the delivery echo of one of `bubbles` (matched by signal id or client message id). */
-const isUserMessageEchoFor = (chunk: ChunkType, bubbles: MastraDBMessage[]): boolean => {
-  const { signalId, clientMessageId } = userMessageEchoIds(chunk);
-  return bubbles.some(
-    bubble =>
-      (signalId !== undefined && bubble.id === signalId) ||
-      (clientMessageId !== undefined && bubble.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId),
-  );
-};
-
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   let result = [...conversation];
 
@@ -669,9 +659,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     if (!isUserMessagePresentationChunk(chunk)) {
       return [...accumulateChunk({ chunk, conversation: result.slice(0, pendingTailStart), metadata }), ...pendingTail];
     }
-    // The step-boundary echo delivers a follow-up from the tail: the answer above
-    // it is complete, so finish it before the echo reconciles the bubble below.
-    if (isUserMessageEchoFor(chunk, pendingTail) && pendingTailOwner.content.parts.length > 0) {
+    // A user-message echo from this run marks its step boundary, whether it
+    // delivers a follow-up from the tail or a message sent from elsewhere: the
+    // answer above is complete, so finish it before the echo is applied.
+    if (chunk.type === 'data-user-message' && pendingTailOwner.content.parts.length > 0) {
       result = [...finishStreamingAssistantMessage(result.slice(0, pendingTailStart)), ...pendingTail];
     }
   }
@@ -1489,8 +1480,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       // Workflow stream output: accumulate into watch-result state
       if (payloadOutput?.type?.startsWith('workflow-')) {
         const existingWorkflowState = (toolPart.toolInvocation as any).result as
-          | WorkflowStreamResult<any, any, any, any>
-          | undefined;
+          WorkflowStreamResult<any, any, any, any> | undefined;
         const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
 
         parts[toolPartIndex] = {
