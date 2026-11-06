@@ -184,15 +184,19 @@ export class MastraController {
     }
 
     // JsonBodyMiddleware only applies the global limit, so enforce the route's own
-    // (usually smaller) limit here. Chunked bodies have no Content-Length, so fall
-    // back to the parsed size.
+    // (usually smaller) limit here. Prefer the raw bytes captured during parsing so
+    // chunked whitespace padding cannot shrink past the check after JSON.stringify.
     if (route.maxBodySize !== undefined) {
+      const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
       const contentLength = parseInt(req.headers['content-length'] ?? '', 10);
-      const size = Number.isNaN(contentLength)
-        ? req.body === undefined
-          ? 0
-          : Buffer.byteLength(JSON.stringify(req.body), 'utf8')
-        : contentLength;
+      const size =
+        rawBody !== undefined
+          ? rawBody.byteLength
+          : Number.isNaN(contentLength)
+            ? req.body === undefined
+              ? 0
+              : Buffer.byteLength(JSON.stringify(req.body), 'utf8')
+            : contentLength;
       if (size > route.maxBodySize) {
         throw new PayloadTooLargeException('Request body too large');
       }
