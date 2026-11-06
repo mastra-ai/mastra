@@ -348,6 +348,14 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
 
+    it('bundles schema validation dependencies into development output', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
+
+      expect(output).not.toMatch(/(?:^|\n)(?:import|export)[^;\n]*["']@mastra\/schema-compat(?:\/|["'])/);
+    });
+
     it('should resolve createRoute api routes', async () => {
       const res = await fetch(`http://localhost:${port}/create-route`);
       const body = await res.json();

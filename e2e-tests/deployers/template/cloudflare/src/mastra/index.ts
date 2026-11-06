@@ -4,7 +4,7 @@ import { weatherWorkflow } from './workflows/weather-workflow';
 import { weatherAgent } from './agents/weather-agent';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 import { testRoute } from './api/route/test';
-import { mcpInputValidationRoute } from './api/route/mcp-input-validation';
+import { jsonSchemaInputValidationRoute, mcpInputValidationRoute } from './api/route/mcp-input-validation';
 import { PostgresStore } from '@mastra/pg';
 
 const storage = new PostgresStore({
@@ -30,7 +30,7 @@ export const mastra = new Mastra({
     },
   }),
   server: {
-    apiRoutes: [testRoute, mcpInputValidationRoute],
+    apiRoutes: [testRoute, mcpInputValidationRoute, jsonSchemaInputValidationRoute],
   },
   storage,
 });

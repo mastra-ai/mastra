@@ -34,6 +34,9 @@ export async function getInputOptions(
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
+  const alias = {
+    '@mastra/schema-compat/validation-runtime': '@mastra/schema-compat/validation-runtime',
+  };
 
   const outputDir = outputDirOption ? slash(outputDirOption) : posix.join(process.cwd(), '.mastra', '.build');
 
@@ -45,7 +48,7 @@ export async function getInputOptions(
       projectRoot: workspaceRoot || process.cwd(),
       platform,
       isDev: true,
-      bundlerOptions,
+      bundlerOptions: { ...bundlerOptions, alias },
       env,
     },
     noopLogger,
@@ -68,7 +71,7 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
+    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true, alias },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

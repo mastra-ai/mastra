@@ -118,6 +118,30 @@ describe('watcher', () => {
       );
     });
 
+    it('bundles the default schema validation runtime during development', async () => {
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
+      const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+      const alias = {
+        '@mastra/schema-compat/validation-runtime': '@mastra/schema-compat/validation-runtime',
+      };
+
+      await getInputOptions('test-entry.js', 'node');
+
+      expect(analyzeBundle).toHaveBeenCalledWith(
+        ['test-entry.js'],
+        'test-entry.js',
+        expect.objectContaining({ bundlerOptions: expect.objectContaining({ alias }) }),
+        expect.anything(),
+      );
+      expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+        expect.stringMatching('test-entry.js'),
+        expect.anything(),
+        'node',
+        undefined,
+        expect.objectContaining({ alias }),
+      );
+    });
+
     it('should not pass NODE_ENV to bundler when not provided', async () => {
       // Act
       await getInputOptions('test-entry.js', 'node');

@@ -55,6 +55,27 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
       await expect(res.json()).resolves.toEqual({ valid: true, value: { city: 'Utrecht' } });
     });
 
+    it('should validate non-MCP JSON Schema input without dynamic code generation', async () => {
+      const valid = await fetch(`http://localhost:${port}/json-schema-input-validation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ city: 'Utrecht' }),
+      });
+      const invalid = await fetch(`http://localhost:${port}/json-schema-input-validation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ city: 42 }),
+      });
+
+      expect(valid.status).toBe(200);
+      await expect(valid.json()).resolves.toEqual({ valid: true, value: { city: 'Utrecht' } });
+      expect(invalid.status).toBe(400);
+      await expect(invalid.json()).resolves.toMatchObject({
+        valid: false,
+        issues: expect.arrayContaining([expect.objectContaining({ path: ['city'] })]),
+      });
+    });
+
     it('should reject invalid hydrated MCP tool input', async () => {
       const invalidType = await fetch(`http://localhost:${port}/mcp-input-validation`, {
         method: 'POST',

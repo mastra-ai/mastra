@@ -25,7 +25,8 @@ export default defineConfig({
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
   deps: {
     neverBundle: ['@mastra/schema-compat/validation-runtime', 'typescript'],
-    alwaysBundle: ['@internal/core', '@internal/voice'],
+    // Keep the private validation-runtime import replaceable by deployers while bundling every other schema-compat entry.
+    alwaysBundle: ['@internal/core', '@internal/voice', /^@mastra\/schema-compat(?:$|\/(?!validation-runtime$).+)/],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd(), new Set(['@internal/core', '@mastra/schema-compat', '@internal/voice']));

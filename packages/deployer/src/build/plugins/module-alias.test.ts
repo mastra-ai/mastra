@@ -118,6 +118,26 @@ describe('moduleAlias', () => {
     expect(code).not.toContain('root-replacement');
   });
 
+  it('bundles an external package when its alias target is the same specifier', async () => {
+    const root = await createTempDir();
+    const packageDir = join(root, 'node_modules', 'replacement');
+    const entry = join(root, 'entry.mjs');
+    await mkdir(packageDir, { recursive: true });
+    await Promise.all([
+      writeFile(entry, `import value from 'replacement'; export { value };`),
+      writeFile(
+        join(packageDir, 'package.json'),
+        JSON.stringify({ name: 'replacement', type: 'module', main: 'index.js' }),
+      ),
+      writeFile(join(packageDir, 'index.js'), `export default 'bundled-replacement';`),
+    ]);
+
+    const code = await generate(entry, { replacement: 'replacement' }, entry);
+
+    expect(code).toContain('bundled-replacement');
+    expect(code).not.toContain("from 'replacement'");
+  });
+
   it('resolves bare targets with export conditions for the target platform', async () => {
     const root = await createTempDir();
     const packageDir = join(root, 'node_modules', 'replacement');
