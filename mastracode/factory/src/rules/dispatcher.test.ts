@@ -7598,6 +7598,7 @@ describe('review status comment lifecycle', () => {
           reviewerName: 'Shipyard',
           gifUrl: 'https://assets.test/reviewing.gif',
           ...(event.reason ? { reason: event.reason } : {}),
+          ...(event.replayed ? { continuesRun: true } : {}),
           stats: async state =>
             state.startedAt && event.endedAt
               ? { durationMs: event.endedAt.getTime() - Date.parse(state.startedAt) }
@@ -7805,16 +7806,16 @@ describe('review status comment lifecycle', () => {
     warn.mockRestore();
   });
 
-  it('leaves a running review alone when a re-claimed delivery finds its kickoff already landed', async () => {
+  /** A worker claimed the review, delivered its kickoff and said `reviewing`, then was lost. */
+  async function lostReview(key: string) {
     const storage = (await createFactoryStorageForTests()).workItems;
     const queued = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'review',
       prompt: 'Review this pull request.',
-      idempotencyKey: 'review-status-replay',
+      idempotencyKey: key,
     });
     await bindReviewRun(storage, queued.item.id);
-    // A worker claimed the review, delivered its kickoff and said `reviewing`, then lost its lease.
     const lostAt = new Date('2030-01-01T00:00:00Z');
     const [lost] = await storage.claimDeferredDecisions({
       ownerId: 'lost-worker',
@@ -7834,29 +7835,71 @@ describe('review status comment lifecycle', () => {
       phase: 'reviewing',
       startedAt: lostAt,
     });
+    const reclaim = async (
+      ownerId: string,
+      at: Date,
+      options: Partial<ConstructorParameters<typeof FactoryDecisionDispatcher>[0]> = {},
+    ) => {
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'complete',
+        initialDeliveredSignalIds: [lost!.id],
+      });
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService: queued.transitionService,
+        storage,
+        ownerId,
+        isAutoRunEnabled: async () => true,
+        reportReviewStatus: conversation.reportReviewStatus,
+        ...options,
+      }).runOnce(at);
+    };
+    return { storage, lostAt, conversation, reclaim };
+  }
 
-    const { controller } = createSession(undefined, {
-      agentEndReason: 'complete',
-      initialDeliveredSignalIds: [lost!.id],
-    });
-    await new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService: queued.transitionService,
-      storage,
-      ownerId: 'worker-2',
-      isAutoRunEnabled: async () => true,
-      reportReviewStatus: conversation.reportReviewStatus,
-    }).runOnce(new Date(lostAt.getTime() + 2_000));
+  it('finalizes a review whose worker was lost once a re-claim finds the landed run over', async () => {
+    const { storage, lostAt, conversation, reclaim } = await lostReview('review-status-replay');
+
+    await reclaim('worker-2', new Date(lostAt.getTime() + 125_000));
 
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record).toMatchObject({ status: 'succeeded', attempts: 2 });
-    expect(conversation.events).toEqual([]);
+    expect(conversation.events).toEqual([expect.objectContaining({ phase: 'completed', attempt: 2, replayed: true })]);
     expect(conversation.comments()).toHaveLength(1);
-    expect(conversation.comments()[0]!.body).toContain('Reviewing…');
-    expect(conversation.comments()[0]!.body).not.toContain('Review finished');
+    const body = conversation.comments()[0]!.body;
+    expect(body).toContain('Review finished');
+    expect(body).not.toContain('Reviewing…');
+    // Timing still runs from the lost attempt's recorded start, not from the re-claim.
+    expect(body).toContain('"startedAt":"2030-01-01T00:00:00.000Z"');
   });
 
-  it('keeps reviewing when a status write hangs, and still lands later writes in order', async () => {
+  it('never lets a re-claim that fails before its replay guard speak over the live run', async () => {
+    const { storage, lostAt, conversation, reclaim } = await lostReview('review-status-reclaim-fails');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await reclaim('worker-2', new Date(lostAt.getTime() + 2_000), {
+        primeCredentials: async () => {
+          throw new Error('credential store unavailable');
+        },
+      });
+    } finally {
+      warn.mockRestore();
+    }
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });
+    expect(conversation.events).toEqual([]);
+    expect(conversation.comments()[0]!.body).toContain('Reviewing…');
+
+    // The retry takes over the same comment and ends it on its own result.
+    await reclaim('worker-3', new Date('2030-01-01T01:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect(conversation.events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
+    expect(conversation.comments()).toHaveLength(1);
+    expect(conversation.comments()[0]!.body).toContain('Review finished');
+    expect(conversation.comments()[0]!.body).not.toContain('failed');
+  });
+
+  it('keeps reviewing when a status write hangs, and later writes do not wait on it forever', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -7897,13 +7940,14 @@ describe('review status comment lifecycle', () => {
         await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.reviewStatusTimeoutMs);
         expect(dispatched).toBe(true);
       });
-      // The run finished without the stuck `queued` write, and nothing overtook it.
-      expect(conversation.events).toEqual([]);
+      // The run finished without the stuck `queued` write, and the later writes went ahead after one timeout.
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('still pending'));
+      await vi.waitFor(() => expect(conversation.events.map(event => event.phase)).toEqual(['reviewing', 'completed']));
 
+      // When the stuck write finally lands, it is older than what the comment shows and is dropped.
       releaseQueued();
-      await vi.waitFor(() => expect(conversation.events.map(event => event.phase)).toHaveLength(3));
-      expect(conversation.events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
+      await vi.waitFor(() => expect(conversation.events).toHaveLength(3));
+      expect(conversation.events.map(event => event.phase)).toEqual(['reviewing', 'completed', 'queued']);
       expect(conversation.comments()).toHaveLength(1);
       expect(conversation.comments()[0]!.body).toContain('Review finished');
     } finally {
@@ -7949,6 +7993,42 @@ describe('review status comment lifecycle', () => {
     }
 
     expect(reportReviewStatus.mock.calls.map(([event]) => event.phase)).toEqual(['queued', 'reviewing', 'cancelled']);
+    expect(conversation.comments()[0]!.body).not.toContain('Review finished');
+  });
+
+  it('reports a review handed on mid-run as cancelled when the shared run ends cleanly', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const queued = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      prompt: 'Review this pull request.',
+      idempotencyKey: 'review-status-handed-on-clean',
+    });
+    await bindReviewRun(storage, queued.item.id);
+    const conversation = pullRequestConversation();
+    const { controller, emitAgentEnd, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    const tick = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService: queued.transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      reportReviewStatus: conversation.reportReviewStatus,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+    await bindWorkRun(storage, queued.item.id);
+    emitAgentEnd('complete');
+    await tick;
+
+    expect(conversation.reportReviewStatus.mock.calls.map(([event]) => event.phase)).toEqual([
+      'queued',
+      'reviewing',
+      'cancelled',
+    ]);
+    expect(conversation.comments()).toHaveLength(1);
+    expect(conversation.comments()[0]!.body).toContain('Review cancelled');
     expect(conversation.comments()[0]!.body).not.toContain('Review finished');
   });
 });

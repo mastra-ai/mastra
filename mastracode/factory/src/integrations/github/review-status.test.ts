@@ -157,6 +157,23 @@ describe('publishReviewStatus', () => {
     expect(seen?.head).toBeUndefined();
   });
 
+  it('keeps the start time when a re-claim only ends the run an earlier attempt started', async () => {
+    const startedAt = '2026-11-05T10:01:00.000Z';
+    const store = fakeComments([existing('5', state({ phase: 'reviewing', startedAt, head: 'c'.repeat(40) }))]);
+    let seen: ReviewStatusState | undefined;
+    await publishReviewStatus(
+      store.port,
+      ref,
+      step(
+        { attempt: 2, phase: 'completed' },
+        { continuesRun: true, stats: async recorded => ((seen = recorded), {}) },
+      ),
+      isFactory,
+    );
+    expect(seen).toMatchObject({ attempt: 2, phase: 'completed', startedAt, head: 'c'.repeat(40) });
+    expect(store.all()[0]!.body).not.toContain('continuesRun');
+  });
+
   it('lets a re-review take over the comment and forget the old start time', async () => {
     const store = fakeComments([existing('5', state({ phase: 'completed', startedAt: '2026-11-05T10:01:00.000Z' }))]);
     await publishReviewStatus(

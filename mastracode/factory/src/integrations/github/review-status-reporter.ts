@@ -71,6 +71,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
           reviewerName: deps.reviewerName,
           gifUrl: deps.gifUrl,
           ...(event.reason ? { reason: event.reason } : {}),
+          ...(event.replayed ? { continuesRun: true } : {}),
           ...(final ? { stats: recorded => readStats(deps, ref, item, event, recorded, isFactoryAuthor) } : {}),
         },
         isFactoryAuthor,

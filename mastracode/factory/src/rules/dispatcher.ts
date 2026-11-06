@@ -436,6 +436,8 @@ export interface FactoryReviewStatusEvent {
   endedAt?: Date;
   /** Why the run failed or will retry, already sanitized. */
   reason?: string;
+  /** A final step for a run an earlier attempt started: the comment's recorded start still applies. */
+  replayed?: true;
 }
 
 export type FactoryReviewStatusReporter = (event: FactoryReviewStatusEvent) => Promise<void>;
@@ -673,6 +675,8 @@ export class FactoryDecisionDispatcher {
   /** Review attempts that already said `queued`, and those that watched their run start. */
   readonly #reviewQueued = new WeakSet<FactoryDeferredDecisionRecord>();
   readonly #reviewWatched = new WeakSet<FactoryDeferredDecisionRecord>();
+  /** Re-claims that found an earlier attempt's kickoff landed and its run already over. */
+  readonly #reviewReplayed = new WeakSet<FactoryDeferredDecisionRecord>();
   /** Last pending status-comment write per run, so writes stay ordered. */
   readonly #reviewStatusTail = new Map<string, Promise<void>>();
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
@@ -1018,10 +1022,14 @@ export class FactoryDecisionDispatcher {
       executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
-      // A replayed delivery returns without watching the run; only the attempt that saw
-      // the run end may say it finished.
-      if (this.#reviewWatched.has(record)) {
-        await this.#reviewStatus(record, decision, { phase: 'completed', endedAt: new Date() });
+      // Only an attempt that saw the run end may say it finished: the one that watched
+      // it, or a re-claim that found the landed run already over (its worker was lost).
+      if (this.#reviewWatched.has(record) || this.#reviewReplayed.has(record)) {
+        await this.#reviewStatus(record, decision, {
+          phase: 'completed',
+          endedAt: new Date(),
+          ...(this.#reviewReplayed.has(record) ? { replayed: true } : {}),
+        });
       }
     } catch (error) {
       if (error instanceof FactoryDecisionSuperseded) {
@@ -1041,11 +1049,15 @@ export class FactoryDecisionDispatcher {
         advanceDeliveryGeneration: !executionCompleted,
       });
       if (terminal && failed) await this.#supersedeFailureOnSettledCard(failed);
-      await this.#reviewStatus(failed ?? record, record.decision, {
-        phase: terminal ? 'failed' : 'retrying',
-        endedAt: new Date(),
-        reason: factoryDispatchFailureMetadata(failureCode).label,
-      });
+      // A re-claim that failed before proving its kickoff never landed may be racing
+      // an earlier attempt's live run; only a terminal failure may speak over it.
+      if (terminal || this.#reviewQueued.has(record)) {
+        await this.#reviewStatus(failed ?? record, record.decision, {
+          phase: terminal ? 'failed' : 'retrying',
+          endedAt: new Date(),
+          reason: factoryDispatchFailureMetadata(failureCode).label,
+        });
+      }
     }
   }
 
@@ -1076,7 +1088,15 @@ export class FactoryDecisionDispatcher {
     // Writes for one run go out in order even when the run stops waiting on a
     // slow one, so an earlier step can never land on top of a later one.
     const previous = this.#reviewStatusTail.get(record.id) ?? Promise.resolve();
-    const delivered = previous.then(() =>
+    // A write that never settles holds the next one back for one timeout, not forever.
+    let waited: ReturnType<typeof setTimeout> | undefined;
+    const turn = Promise.race([
+      previous,
+      new Promise<void>(resolve => {
+        waited = setTimeout(resolve, REVIEW_STATUS_TIMEOUT_MS);
+      }),
+    ]).finally(() => clearTimeout(waited));
+    const delivered = turn.then(() =>
       report(event).catch(error => {
         console.warn('Factory review status update failed', sanitizeDispatchError(error));
       }),
@@ -1328,7 +1348,8 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          if (await kickoffLanded()) return;
+          // The open-run wait above means a landed kickoff's run is over by now.
+          if (await kickoffLanded()) return void this.#reviewReplayed.add(record);
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
@@ -1348,7 +1369,8 @@ export class FactoryDecisionDispatcher {
                 }
               : { type: 'user' as const, tagName: 'user' };
           // The feed read is async storage I/O; the card can move while it runs.
-          if (await kickoffLanded()) return;
+          // The open-run wait above means a landed kickoff's run is over by now.
+          if (await kickoffLanded()) return void this.#reviewReplayed.add(record);
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           await this.#reviewQueuedOnce(record, decision);
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
@@ -1471,6 +1493,12 @@ export class FactoryDecisionDispatcher {
                 },
                 () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
               );
+              // Handed on before the turn ended: the run's clean end is the successor's, not
+              // a finished review. A move after the turn ended (a merge) keeps the completion.
+              if (await run.supersededAtEnd()) {
+                this.#reviewWatched.delete(record);
+                await this.#reviewStatus(record, decision, { phase: 'cancelled', endedAt: new Date() });
+              }
             } catch (error) {
               // Roles share one session. When this role handed the card on
               // mid-turn, the next role's kickoff was delivered onto the same

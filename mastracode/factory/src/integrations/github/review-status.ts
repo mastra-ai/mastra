@@ -26,6 +26,8 @@ const FRESH_ATTEMPT_PHASES = new Set<ReviewStatusPhase>(['queued', 'retrying']);
 export interface ReviewStatusStep extends Omit<ReviewStatusView, 'stats'> {
   /** Stats for a final step, read once the start time and head of the run are known. */
   stats?: (state: ReviewStatusState) => Promise<ReviewStatusStats>;
+  /** Ends the run an earlier attempt started, so that attempt's start time and head still apply. */
+  continuesRun?: boolean;
 }
 
 async function listAll<T>(page: (cursor?: string) => Promise<{ items: T[]; nextCursor: string | null }>): Promise<T[]> {
@@ -83,10 +85,11 @@ export async function publishReviewStatus(
   }
   // Later steps of an attempt carry only what changed; the start time and head
   // come from the step that recorded them. A new attempt (queued or waiting to
-  // retry) starts clean, so it never reports an earlier attempt's timing.
+  // retry) starts clean, so it never reports an earlier attempt's timing, unless
+  // it is only ending the run that earlier attempt started.
   const state =
     existing?.run === step.state.run &&
-    existing.attempt === step.state.attempt &&
+    (existing.attempt === step.state.attempt || step.continuesRun === true) &&
     !FRESH_ATTEMPT_PHASES.has(step.state.phase)
       ? {
           ...step.state,
@@ -99,7 +102,7 @@ export async function publishReviewStatus(
   // A run only ends a comment it opened: a run cancelled or finished before it
   // ever showed progress leaves no trace, and never replaces another run's result.
   if (!CREATING_PHASES.has(state.phase) && existing?.run !== state.run) return { action: 'skipped' };
-  const { stats: readStats, ...view } = step;
+  const { stats: readStats, continuesRun: _continuesRun, ...view } = step;
   const stats = readStats ? await readStats(state) : undefined;
   const body = renderReviewStatusComment({ ...view, state, ...(stats ? { stats } : {}) });
   if (!canonical) {
