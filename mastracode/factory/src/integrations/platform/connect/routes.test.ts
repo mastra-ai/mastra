@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
@@ -50,12 +50,16 @@ function buildApp(
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
-  it("lists the project's connections that sessions use, not the organization's", async () => {
+  it("lists the project's connections that sessions use, not the organization's or GitHub's", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
       if (url.endsWith('/v2/projects/proj_1/connections')) {
         return json({
-          connections: [connection('conn-mcp', 'neon-mcp', 'needs_reauth'), connection('conn-linear', 'linear')],
+          connections: [
+            connection('conn-mcp', 'neon-mcp', 'needs_reauth'),
+            connection('conn-linear', 'linear'),
+            connection('conn-github', 'github'),
+          ],
         });
       }
       if (url.endsWith('/v2/connections')) return json({ connections: [connection('conn-snowflake', 'snowflake')] });
@@ -92,6 +96,23 @@ describe('platform connect routes', () => {
           status: 'needs_reauth',
         },
       ],
+    });
+  });
+
+  it('still lists the attached connections on a local Factory without auth when the catalog is down', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input =>
+      String(input).endsWith('/v2/projects/proj_1/connections')
+        ? json({ connections: [connection('conn-linear', 'linear')] })
+        : json({ detail: 'catalog unavailable' }, 503),
+    );
+    const app = buildApp(null, fetchImpl, { authEnabled: false, connectToolsProjectId: 'proj_1' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      connections: [expect.objectContaining({ id: 'conn-linear', providerName: 'linear', logoUrl: null })],
     });
   });
 

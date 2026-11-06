@@ -26,7 +26,6 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import { tools as connectTools } from '@mastra/connect';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -77,6 +76,7 @@ import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -292,7 +292,8 @@ export interface MastraFactoryConfig {
    *
    * Defaults, with Platform credentials and `MASTRA_PROJECT_ID`, to the Mastra
    * Connect tools of every connection attached to the Platform project, minus
-   * delete and archive tools. Pass `{}` to offer none.
+   * tools named for deleting or archiving and GitHub or GitLab tools. Pass `{}`
+   * to offer none.
    */
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
@@ -456,21 +457,6 @@ function platformConnectProjectId(): string | undefined {
     return undefined;
   }
   return projectId;
-}
-
-function platformConnectTools(projectId: string): FactoryTools {
-  // Sessions auto-approve tools by default, so destructive Connect tools stay out.
-  const resolve = connectTools({ projectId, disallowTools: ['*_delete_*', '*_archive_*'] });
-  return async ({ requestContext }) => {
-    try {
-      return await resolve({ requestContext });
-    } catch (error) {
-      console.warn(
-        `MastraFactory: Mastra Connect tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return {};
-    }
-  };
 }
 
 function warnIgnoredMcpConfig(): void {

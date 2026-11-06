@@ -1502,7 +1502,13 @@ describe('MastraFactory.prepare', () => {
             json({ connections: [] });
           } else if (req.url?.startsWith('/v2/projects/')) {
             if (listing === 'down') res.writeHead(503).end();
-            else json({ connections: [{ id: 'conn-linear', integrationId: 'linear', status: 'active' }] });
+            else
+              json({
+                connections: [
+                  { id: 'conn-linear', integrationId: 'linear', status: 'active' },
+                  { id: 'conn-github', integrationId: 'github', status: 'active' },
+                ],
+              });
           } else if (req.url === '/v2/integrations') {
             json({ integrations: [] });
           } else if (req.method === 'POST' && req.url === '/v2/connections/conn-linear/proxy/graphql') {
@@ -1532,7 +1538,7 @@ describe('MastraFactory.prepare', () => {
         vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', url);
       }
 
-      it('gives every session the Linear tools without delete or archive ones, acting with the deploy token', async () => {
+      it('gives every session the Linear tools without destructive or GitHub ones, acting with the deploy token', async () => {
         const platform = await servePlatform({ listing: 'linear' });
         stubPlatform(platform.url, 'project-linear');
         const config = await prepareFactory({ storage: fakeStorage() });
@@ -1540,7 +1546,8 @@ describe('MastraFactory.prepare', () => {
         const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
 
         expect(Object.keys(tools)).toEqual(expect.arrayContaining(['linear_list_teams', 'linear_list_issues']));
-        expect(Object.keys(tools).filter(name => /_(delete|archive)_/.test(name))).toEqual([]);
+        expect(Object.keys(tools).filter(name => /delete|archive/i.test(name))).toEqual([]);
+        expect(Object.keys(tools).filter(name => name.startsWith('github_'))).toEqual([]);
         const teams = await tools.linear_list_teams.execute({}, { requestContext: new RequestContext() });
         expect(teams).toEqual({ items: [{ id: 'team-1', name: 'Factory', key: 'FACT' }] });
         const proxied = platform.requests.find(request => request.url === '/v2/connections/conn-linear/proxy/graphql');

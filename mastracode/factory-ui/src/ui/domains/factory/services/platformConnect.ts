@@ -123,6 +123,10 @@ export interface ConnectToolConnection {
   status: string;
 }
 
+export function isConnectToolsOffError(error: unknown): boolean {
+  return error instanceof Error && 'status' in error && error.status === 404;
+}
+
 export async function listConnectTools(baseUrl: string): Promise<ConnectToolConnection[]> {
   const { connections } = await requestJson<{ connections: ConnectToolConnection[] }>(
     baseUrl,

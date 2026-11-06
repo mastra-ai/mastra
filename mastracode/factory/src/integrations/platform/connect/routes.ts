@@ -20,6 +20,7 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { PlatformApiClient} from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
+import { offersSessionTools } from './session-tools.js';
 
 type RouteContext = Context;
 
@@ -83,27 +84,17 @@ export interface BuildPlatformConnectRoutesOptions {
   connectToolsProjectId?: string;
 }
 
-async function resolveTenant(
+async function resolveOrgTenant(
   c: RouteContext,
   auth: RouteAuth,
-): Promise<{ tenant: { orgId?: string; userId: string } } | { response: Response }> {
+): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
   if (!auth.enabled()) {
     return { response: c.json({ error: 'auth_disabled', message: 'Factory auth is not enabled.' }, 403) };
   }
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
-  return { tenant };
-}
-
-async function resolveOrgTenant(
-  c: RouteContext,
-  auth: RouteAuth,
-): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
-  const resolved = await resolveTenant(c, auth);
-  if ('response' in resolved) return resolved;
-  const { orgId, userId } = resolved.tenant;
-  if (!orgId) {
+  if (!tenant.orgId) {
     return {
       response: c.json(
         {
@@ -114,7 +105,7 @@ async function resolveOrgTenant(
       ),
     };
   }
-  return { tenant: { orgId, userId } };
+  return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
 }
 
 function providerFromParam(c: RouteContext): PlatformConnectProvider | null {
@@ -140,18 +131,26 @@ function buildConnectToolsRoute(auth: RouteAuth, client: PlatformApiClient, proj
     requiresAuth: false,
     handler: async rawContext => {
       const c = loose(rawContext);
-      const resolved = await resolveTenant(c, auth);
-      if ('response' in resolved) return resolved.response;
+      if (auth.enabled()) {
+        await auth.ensureUser(c);
+        if (!auth.tenant(c)) return c.json({ error: 'unauthorized' }, 401);
+      }
       try {
         const [listed, catalog] = await Promise.all([
           client.request<{ connections: ProjectConnectionRow[] }>(
             'GET',
             `/v2/projects/${encodeURIComponent(projectId)}/connections`,
           ),
-          client.request<{ integrations: CatalogEntry[] }>('GET', '/v2/integrations'),
+          client.request<{ integrations: CatalogEntry[] }>('GET', '/v2/integrations').catch((error: unknown) => {
+            console.warn(
+              `MastraFactory: listing connections without provider names; the Platform catalog failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return { integrations: [] };
+          }),
         ]);
         const entries = new Map(catalog.integrations.map(entry => [entry.id, entry]));
         const connections = listed.connections
+          .filter(connection => offersSessionTools(connection.integrationId))
           .map(connection => {
             const entry = entries.get(connection.integrationId);
             return {

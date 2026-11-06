@@ -63,4 +63,16 @@ describe('Mastra Connect tools settings', () => {
 
     expect(await screen.findByText(/Sessions on this Factory don't get Mastra Connect tools/)).toBeInTheDocument();
   });
+
+  it('offers a retry, not setup guidance, when the Platform refuses the listing', async () => {
+    server.use(
+      http.get(CONNECT_TOOLS, () =>
+        HttpResponse.json({ error: 'platform_forbidden', message: 'forbidden' }, { status: 403 }),
+      ),
+    );
+    renderWithProviders(<ConnectToolsSection />);
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByText(/Sessions on this Factory don't get Mastra Connect tools/)).not.toBeInTheDocument();
+  });
 });

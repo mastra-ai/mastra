@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
-import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
+import { isConnectToolsOffError } from '../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
@@ -17,13 +17,13 @@ const SECTION_LABEL = 'Mastra Connect';
 
 export function ConnectToolsSection() {
   const query = useConnectToolsQuery();
-  const unavailable = query.isError && isPlatformConnectUnavailableError(query.error);
+  const unavailable = query.isError && isConnectToolsOffError(query.error);
 
   return (
     <SettingsSubsection
       scope="deployment"
       title="Mastra Connect tools"
-      description="Sessions can use the Mastra Connect tools of every connection attached to this Factory's Platform project. They run without asking for approval; delete and archive tools are left out."
+      description="Sessions can use the Mastra Connect tools of every connection attached to this Factory's Platform project. They run without asking for approval. Tools named for deleting or archiving, and GitHub and GitLab tools, are left out."
       action={!unavailable && <ManageLink />}
     >
       {query.isPending ? (
