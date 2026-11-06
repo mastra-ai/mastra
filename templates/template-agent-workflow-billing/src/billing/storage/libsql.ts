@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { setTimeout } from 'node:timers/promises';
-import { createClient } from '@libsql/client/node';
-import type { Client, Row, Transaction } from '@libsql/client/node';
+import type { Row, Transaction } from '@libsql/client/node';
 import { z } from 'zod';
 import {
   BillingError,
@@ -23,26 +21,7 @@ import type {
 } from '../contracts.js';
 import { localAccountSeedSchema } from '../configuration.js';
 import type { LocalAccountSeed } from '../configuration.js';
-import { migrateStorage } from './migrations.js';
-
-const storageOptionsSchema = z.strictObject({
-  url: z.string().refine(value => {
-    try {
-      const url = new URL(value);
-      return (
-        url.protocol === 'file:' &&
-        !url.host &&
-        url.pathname.startsWith('/') &&
-        url.pathname !== '/' &&
-        !url.search &&
-        !url.hash &&
-        !url.pathname.includes(':memory:')
-      );
-    } catch {
-      return false;
-    }
-  }),
-});
+import { BillingDatabase } from './database.js';
 
 function publicInteger(value: unknown): number {
   if (typeof value !== 'bigint' || value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER))
@@ -59,78 +38,19 @@ function accountFromRow(row: Row): ProviderAccount {
   });
 }
 
-const isBusy = (error: unknown) =>
-  error !== null &&
-  typeof error === 'object' &&
-  'code' in error &&
-  ['SQLITE_BUSY', 'SQLITE_BUSY_SNAPSHOT', 'SQLITE_LOCKED', 'TRANSACTION_ACTIVE'].includes(String(error.code));
-
-function storageError(error: unknown): BillingError {
-  return error instanceof BillingError ? error : new BillingError('storage_unavailable');
-}
-
 export class LocalBillingStorage {
-  private closed = false;
-
-  private constructor(private readonly url: string) {}
+  private constructor(private readonly database: BillingDatabase) {}
 
   static async open(options: { url: string }): Promise<LocalBillingStorage> {
-    const parsed = storageOptionsSchema.safeParse(options);
-    if (!parsed.success) throw new BillingError('invalid_configuration');
-    const storage = new LocalBillingStorage(parsed.data.url);
-    await storage.write(migrateStorage);
-    return storage;
+    return new LocalBillingStorage(await BillingDatabase.open(options));
   }
 
   close(): void {
-    this.closed = true;
+    this.database.close();
   }
 
-  private async write<T>(operation: (transaction: Transaction) => Promise<T>): Promise<T> {
-    // Retry only complete aborted SQL transactions, never external work.
-    for (let attempt = 0; attempt < 50; attempt++) {
-      if (this.closed) throw new BillingError('storage_unavailable');
-      let client: Client | undefined;
-      let transaction: Transaction | undefined;
-      try {
-        // Every attempt owns one connection and establishes its constraints.
-        // libsql can retain a failed BEGIN statement until connection disposal;
-        // retrying on that connection can prevent a later COMMIT from succeeding.
-        client = createClient({ url: this.url, intMode: 'bigint', concurrency: 1, timeout: 0 });
-        const journal = await client.execute('PRAGMA journal_mode');
-        if (journal.rows[0].journal_mode !== 'wal') {
-          const configured = await client.execute('PRAGMA journal_mode = WAL');
-          if (configured.rows[0].journal_mode !== 'wal') throw new BillingError('storage_incompatible');
-        }
-        await client.execute('PRAGMA foreign_keys = ON');
-        await client.execute('PRAGMA busy_timeout = 0');
-        transaction = await client.transaction('write');
-        const enforcement = await transaction.execute('PRAGMA foreign_keys');
-        if (enforcement.rows[0].foreign_keys !== 1n) throw new BillingError('storage_incompatible');
-        const result = await operation(transaction);
-        await transaction.commit();
-        return result;
-      } catch (error) {
-        if (transaction && !transaction.closed) {
-          try {
-            await transaction.rollback();
-          } catch {
-            /* Closing the owned connection below aborts any remaining transaction. */
-          }
-        }
-        if (!isBusy(error) || attempt === 49) throw storageError(error);
-      } finally {
-        try {
-          transaction?.close();
-        } catch {
-          // Always attempt disposal of the owned client after rollback errors.
-        } finally {
-          client?.close();
-        }
-      }
-      await setTimeout(20);
-    }
-    throw new BillingError('storage_unavailable');
+  private write<T>(operation: (transaction: Transaction) => Promise<T>): Promise<T> {
+    return this.database.write(operation);
   }
 
   async ensureAccount(profile: OrganizationBillingProfile, initialState?: LocalAccountSeed): Promise<ProviderAccount> {

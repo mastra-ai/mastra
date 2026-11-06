@@ -10,6 +10,8 @@ export const positiveQuantitySchema = quantitySchema.refine(value => value > 0);
 export const timestampSchema = z.iso.datetime({ offset: true });
 
 export type BillingErrorCode =
+  | 'unauthenticated'
+  | 'forbidden'
   | 'invalid_configuration'
   | 'invalid_input'
   | 'unsupported'
@@ -20,6 +22,8 @@ export type BillingErrorCode =
   | 'storage_unavailable';
 
 const messages: Record<BillingErrorCode, string> = {
+  unauthenticated: 'Valid credentials are required.',
+  forbidden: 'This operation is not permitted.',
   invalid_configuration: 'Billing configuration is invalid or unsupported.',
   invalid_input: 'Billing input is invalid.',
   unsupported: 'This billing operation is unavailable.',

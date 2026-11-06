@@ -15,11 +15,13 @@
     "check": "tsc --noEmit && oxfmt --check .",
     "format": "oxfmt .",
     "test:unit": "vitest run tests/billing/policies.test.ts",
-    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts"
+    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
     "@mastra/core": "latest",
+    "hono": "4.13.16",
+    "jose": "6.2.15",
     "zod": "4.6.7"
   },
   "devDependencies": {

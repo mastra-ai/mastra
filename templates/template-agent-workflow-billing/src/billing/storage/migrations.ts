@@ -57,7 +57,62 @@ const initialStatements = [
   `CREATE TRIGGER immutable_usage_no_delete BEFORE DELETE ON immutable_usage BEGIN SELECT RAISE(ABORT, 'Usage is immutable'); END`,
 ];
 
-const migrations = [{ version: 1, statements: initialStatements }].map(migration => ({
+const organizationStatements = [
+  `CREATE TABLE identities (
+    id TEXT PRIMARY KEY,
+    issuer TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('local', 'jwt')),
+    display_name TEXT NOT NULL,
+    active INTEGER NOT NULL CHECK (active IN (0, 1)),
+    UNIQUE (issuer, subject)
+  ) STRICT`,
+  `CREATE TABLE local_credentials (
+    hash TEXT PRIMARY KEY,
+    identity_id TEXT NOT NULL REFERENCES identities(id),
+    active INTEGER NOT NULL CHECK (active IN (0, 1))
+  ) STRICT`,
+  `CREATE TABLE workspaces (
+    id TEXT PRIMARY KEY,
+    personal_identity_id TEXT NOT NULL UNIQUE REFERENCES identities(id),
+    kind TEXT NOT NULL CHECK (kind IN ('personal', 'shared'))
+  ) STRICT`,
+  `CREATE TABLE memberships (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    identity_id TEXT NOT NULL REFERENCES identities(id),
+    role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+    PRIMARY KEY (workspace_id, identity_id)
+  ) STRICT`,
+  `CREATE TABLE invitations (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    recipient_id TEXT NOT NULL REFERENCES identities(id),
+    role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    accepted_at TEXT
+  ) STRICT`,
+  `CREATE TABLE organization_operations (
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    operation TEXT NOT NULL,
+    key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    result TEXT NOT NULL,
+    PRIMARY KEY (actor_id, workspace_id, operation, key)
+  ) STRICT`,
+  `CREATE TABLE private_records (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    result TEXT NOT NULL
+  ) STRICT`,
+];
+
+const migrations = [
+  { version: 1, statements: initialStatements },
+  { version: 2, statements: organizationStatements },
+].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
 }));
