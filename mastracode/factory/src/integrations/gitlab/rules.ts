@@ -1,3 +1,5 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -6,12 +8,13 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -88,11 +91,58 @@ function labelColors(value: unknown): Record<string, string> {
   );
 }
 
+/**
+ * Points the card's session at a new comment on its issue, or at an edit to
+ * the issue's title or description. Only pointers travel (who, where, a link).
+ * An edited comment (a Note Hook with action `update`, GitLab 16.11+) is no new comment.
+ * GitLab deliveries don't say whether Factory wrote the comment, so the
+ * message waits in the session's notifications instead of waking it: a session
+ * that comments must not wake itself.
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGitLabRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'note'>,
+  delivery: { edited: boolean; noteEdited: boolean },
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommented' && !delivery.noteEdited
+      ? ('work_item.commented' as const)
+      : context.event === 'issueUpdated' && delivery.edited
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'gitlab' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.note?.url : undefined) ?? context.issue.url,
+    ...(context.actor.username ? { author: context.actor.username } : {}),
+    authorTrusted: context.actor.trusted,
+    idleBehavior: 'persist',
+  };
+}
+
+/** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
+export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed':
+      return { type: 'work_item.closed', reason: closeReason(false) };
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
   const attributes = object(parsed.payload.object_attributes);
   const action = string(attributes?.action)?.toLowerCase();
   if (parsed.event === 'Issue Hook') {
-    if (action === 'open' || action === 'reopen') return 'issueOpened';
+    if (action === 'open') return 'issueOpened';
+    if (action === 'reopen') return 'issueReopened';
     if (action === 'close') return 'issueClosed';
     return 'issueUpdated';
   }
@@ -675,6 +725,8 @@ export class GitLabRules {
           }
         : {}),
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
     const boardRules = boardEventHandlers(
       this.options.boards,
       input.mergeRequestOpenedScope === 'intake' ? undefined : eventBoardId(context),
@@ -689,7 +741,8 @@ export class GitLabRules {
     // Without a board handler the authoring card has nothing to answer; skip
     // recording an empty evaluation for it.
     if (input.mergeRequestOpenedScope === 'board' && !rule) return { status: 'ignored' };
-    let decision: FactoryRuleDecision | void;
+    const ownedByDeployment = deploymentOwnsEvent(this.options.gitlab.rules, boardRules, input.event);
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -717,6 +770,20 @@ export class GitLabRules {
             ? error.message.slice(0, 2_000)
             : 'Factory GitLab rule failed.',
       };
+    }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+    if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+      const changes = object(input.parsed.payload.changes);
+      const routed =
+        (await routeEventDecision(context, this.options.storage, {
+          orgId: input.orgId,
+          factoryProjectId: input.factoryProjectId,
+        })) ??
+        activitySignalFor(context, {
+          edited: Boolean(object(changes?.title) || object(changes?.description)),
+          noteEdited: string(object(input.parsed.payload.object_attributes)?.action)?.toLowerCase() === 'update',
+        });
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

@@ -1280,6 +1280,18 @@ describe('FactoryDecisionDispatcher', () => {
         },
         { sourceKey: 'github-issue:2', ingress: 'move-2' },
       );
+      // An issue close is a board move: the close of another card never waits behind a run.
+      const { item: closed } = await queueDecision(
+        storage,
+        {
+          type: 'transition',
+          idempotencyKey: 'close-1',
+          board: 'work',
+          stage: 'done',
+          event: { type: 'work_item.closed', reason: 'completed' },
+        },
+        { sourceKey: 'github-issue:3', ingress: 'move-4' },
+      );
       await vi.advanceTimersByTimeAsync(3_000);
 
       const find = async (key: string) =>
@@ -1288,6 +1300,8 @@ describe('FactoryDecisionDispatcher', () => {
       // run-bearing decision waits, but board bookkeeping is not blocked.
       expect(await find('run-2')).toMatchObject({ status: 'pending' });
       expect(await find('fast-1')).toMatchObject({ status: 'succeeded' });
+      expect(await find('close-1')).toMatchObject({ status: 'succeeded' });
+      expect((await storage.get({ orgId: 'org-1', id: closed.id }))?.stages).toEqual(['done']);
 
       accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await vi.advanceTimersByTimeAsync(2_000);
@@ -2190,6 +2204,115 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
+  describe('an intake route moving a card with a run in flight', () => {
+    async function runningCard(phaseKey: string) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const item = await createItem(storage);
+      const binding = await bindWorkRun(storage, item.id);
+      const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+      // Only this test's route: the seeded close route would otherwise answer first.
+      for (const seeded of (await seed.boards.listIntakeRoutes(scope)).reverse()) {
+        await seed.boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
+      }
+      await seed.boards.createIntakeRoute(
+        scope,
+        { name: 'Closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey }, allowWorkingPhase: true },
+        'admin',
+      );
+      const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+        streamActive: true,
+      });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'running-kickoff',
+            bindingId: binding.id,
+            role: binding.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            workItemId: binding.workItemId,
+            sessionId: binding.sessionId,
+            threadId: binding.threadId,
+            branch: binding.branch,
+          },
+        ],
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      const running = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+      await storage.commitRuleEvaluation({
+        ...scope,
+        workItemId: item.id,
+        ingress: { identity: 'closed-while-running', triggerType: 'github.issueClosed' },
+        configVersion: 'rules-v1',
+        expectedRevision: running.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'routeEvent',
+            idempotencyKey: 'closed-while-running:event-route',
+            event: { type: 'work_item.closed', reason: 'completed' },
+          },
+        ],
+        causalChain: [],
+        now: new Date('2030-01-01T00:00:00Z'),
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService: new FactoryTransitionService({
+          storage,
+          configVersion: 'rules-v1',
+          boards: createBoardRegistry(),
+        }),
+        storage,
+        intakeRoutes: seed.boards,
+        ownerId: 'worker-1',
+      });
+      return { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount };
+    }
+
+    it("waits for the card's run to end before moving it into a working phase, without holding a dispatch slot", async () => {
+      const { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount } =
+        await runningCard('triage');
+      const routeMove = async () =>
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(entry => entry.decision.type === 'routeEvent');
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      // Handed back to the queue rather than waiting inline: nothing listens for the run's end,
+      // and the claim did not count as an attempt.
+      expect(getAgentEndListenerCount()).toBe(1);
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+      expect(await routeMove()).toMatchObject({ status: 'pending', attempts: 0, lastError: null });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:20Z'));
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:40Z'));
+
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['triage'] });
+      expect(await routeMove()).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('moves it into a terminal phase at once, so terminal cleanup stops the run as a close always has', async () => {
+      const { storage, item, dispatcher, getAgentEndListenerCount } = await runningCard('done');
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      // The run is still in flight: nobody waited for it.
+      expect(getAgentEndListenerCount()).toBe(1);
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['done'] });
+      const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(decisions.find(entry => entry.decision.type === 'routeEvent')).toMatchObject({ status: 'succeeded' });
+    });
   });
 
   describe('open-run ledger across dispatchers', () => {

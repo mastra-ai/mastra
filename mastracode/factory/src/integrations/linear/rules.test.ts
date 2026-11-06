@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryLinearRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveLinearRules } from './default-rules.js';
@@ -37,10 +39,63 @@ async function setup(overrides?: LinearRuleOverrides, boards = createBoardRegist
     boards,
     linearRules: resolveLinearRules(overrides),
   });
-  return { project, service, workItems: seeded.workItems, storage: seeded.storage };
+  return { project, service, workItems: seeded.workItems, storage: seeded.storage, storedBoards: seeded.boards };
 }
 
 describe('LinearRules', () => {
+  it.each([
+    { stateType: 'completed', stage: 'done', route: 'Closed issues go to Done' },
+    { stateType: 'canceled', stage: 'canceled', route: 'Issues closed as not planned go to Canceled' },
+  ])('moves a card whose Linear issue is $stateType by the default close route', async ({ stateType, stage, route }) => {
+    const boards = createBoardRegistry();
+    const { project, service, workItems, storedBoards } = await setup(undefined, boards);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: workItems,
+      boards,
+      transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion: 'factory-config-v1' }),
+      intakeRoutes: storedBoards,
+      isAutoRunEnabled: async () => false,
+      ownerId: 'linear-close-routes',
+    });
+    const linearIssue = {
+      id: 'issue-1',
+      identifier: 'ENG-42',
+      title: 'Issue',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      state: stateType,
+      stateType,
+      priorityLabel: 'High',
+      assignee: null,
+      author: null,
+      labels: [],
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    };
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: 'Issue',
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: linearIssue.url },
+        },
+      })
+    ).item;
+    await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [linearIssue] });
+    await dispatcher.runOnce(new Date(Date.now() + 60_000));
+    const routes = await storedBoards.listIntakeRoutes({ orgId: 'org-1', factoryProjectId: project.id });
+    const moved = (await workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect(moved.stages).toEqual([stage]);
+    expect(moved.stageHistory.at(-1)).toMatchObject({
+      stage,
+      by: `intake-route:${routes.find(candidate => candidate.name === route)!.id}`,
+    });
+  });
+
   it.each([
     { name: 'the bound custom board initial phase', sourceId: 'proj-release', board: 'release', stage: 'queued' },
     { name: 'Work Intake when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'intake' },
@@ -685,5 +740,46 @@ describe('LinearRules', () => {
       expect(boardHandler).not.toHaveBeenCalled();
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     });
+  });
+});
+
+describe('Linear board events', () => {
+  it('reports a first sighting as created and a completed or canceled Linear issue as closed for that reason', async () => {
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryLinearRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    const { project, service, workItems } = await setup({ issueObserved: record, issueClosed: record });
+    const ingest = (stateType: string, updatedAt: string) =>
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType, updatedAt }],
+      });
+    await ingest('unstarted', '2026-07-02T00:00:00Z');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+        title: issue.title,
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await ingest('started', '2026-07-03T00:00:00Z');
+    await ingest('completed', '2026-07-04T00:00:00Z');
+    await ingest('canceled', '2026-07-05T00:00:00Z');
+
+    expect(seen).toEqual([
+      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      // A later sighting of an open Linear issue is not a status change.
+      { event: 'issueObserved', boardEvent: undefined },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+    ]);
   });
 });

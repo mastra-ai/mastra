@@ -20,9 +20,12 @@ function route(overrides: Partial<Parameters<typeof resolveIntakePlacement>[0][n
     enabled: true,
     when: null,
     target: { boardKey: 'work', phaseKey: 'triage' },
+    on: ['work_item.created'],
     ...overrides,
-  } as const;
+  } as Parameters<typeof resolveIntakePlacement>[0][number];
 }
+
+const placing = (target: { boardKey: string; phaseKey: string }) => ({ target, on: ['work_item.created'] });
 
 const issue = (labels: string[] = []) =>
   cardRuleFacts({
@@ -68,10 +71,10 @@ describe('resolveIntakePlacement', () => {
       phase: 'reported',
       routeId: 'route',
     });
-    expect(intakeTargetProblem(stepwise, { boardKey: 'stepwise', phaseKey: 'fixing' })).toMatchObject({
+    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'fixing' }))).toMatchObject({
       code: 'unreachable_phase',
     });
-    expect(intakeTargetProblem(stepwise, { boardKey: 'stepwise', phaseKey: 'triaged' })).toBeUndefined();
+    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'triaged' }))).toBeUndefined();
   });
 
   it('places nothing without routes', () => {
@@ -137,5 +140,37 @@ describe('resolveIntakePlacement', () => {
       phase: 'review',
       routeId: 'route',
     });
+  });
+
+  it('places new cards only by routes that handle work_item.created', () => {
+    const reopened = route({
+      id: 'reopened',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'intake' },
+    });
+    const both = route({ id: 'both', on: ['work_item.reopened', 'work_item.created'] });
+    expect(resolveIntakePlacement([reopened], issue(), registry)).toBeUndefined();
+    expect(resolveIntakePlacement([reopened, both], issue(), registry)).toEqual({
+      board: 'work',
+      phase: 'triage',
+      routeId: 'both',
+    });
+  });
+});
+
+describe('intakeTargetProblem', () => {
+  it('lets a route that only moves existing cards name a terminal or unreachable phase', () => {
+    const closes = (boardKey: string, phaseKey: string) => ({
+      target: { boardKey, phaseKey },
+      on: ['work_item.closed'],
+    });
+    expect(intakeTargetProblem(registry, closes('work', 'done'))).toBeUndefined();
+    expect(intakeTargetProblem(stepwise, closes('stepwise', 'fixing'))).toBeUndefined();
+    expect(intakeTargetProblem(registry, placing({ boardKey: 'work', phaseKey: 'done' }))).toMatchObject({
+      code: 'terminal_phase',
+    });
+    // The board and phase must still exist.
+    expect(intakeTargetProblem(registry, closes('work', 'gone'))).toMatchObject({ code: 'unknown_phase' });
+    expect(intakeTargetProblem(registry, closes('gone', 'done'))).toMatchObject({ code: 'unknown_board' });
   });
 });

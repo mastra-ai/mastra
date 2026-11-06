@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -12,12 +14,13 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
@@ -119,6 +122,49 @@ function parseFactoryReviewCommand(
   return undefined;
 }
 
+/**
+ * Points the card's session at a new comment or an edit on its issue. Only
+ * pointers travel (who, where, a link); Factory's own comments are skipped so
+ * a session is not woken by what it wrote.
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGithubRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'>,
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommentCreated'
+      ? ('work_item.commented' as const)
+      : context.event === 'issueEdited'
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'github' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.issueComment?.url : undefined) ?? context.issue.url,
+    ...(context.actor.login ? { author: context.actor.login } : {}),
+    authorTrusted: context.actor.trusted,
+  };
+}
+
+/** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
+export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed': {
+      const stateReason = context.issue?.stateReason;
+      return { type: 'work_item.closed', reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate') };
+    }
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -127,6 +173,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     return object(changes?.title) || object(changes?.body) ? 'issueEdited' : undefined;
   }
   if (parsed.event === 'issues' && action === 'closed') return 'issueClosed';
+  if (parsed.event === 'issues' && action === 'reopened') return 'issueReopened';
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
     // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
@@ -830,13 +877,20 @@ export class GithubRules {
             }
           : {}),
       };
+      const boardEvent = boardEventFor(context);
+      if (boardEvent) context.boardEvent = boardEvent;
 
+      const ownedByDeployment = deploymentOwnsEvent(
+        this.options.github.rules,
+        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        event,
+      );
       const rule = selectEventRule(
         this.options.github.rules,
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
         event,
       );
-      let decision: FactoryRuleDecision | void;
+      let decision: FactoryRuleDecision | void = undefined;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
       try {
@@ -860,6 +914,15 @@ export class GithubRules {
               ? error.message.slice(0, 2_000)
               : 'Factory GitHub rule failed.',
         };
+      }
+      if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+      if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+        const routed =
+          (await routeEventDecision(context, this.options.storage, {
+            orgId: project.orgId,
+            factoryProjectId: project.factoryProjectId,
+          })) ?? activitySignalFor(context);
+        if (routed) decisions = [{ ...routed }];
       }
 
       const committed = await this.options.storage.commitRuleEvaluation({
