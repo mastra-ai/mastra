@@ -11,7 +11,7 @@
  * @example Using Auth0 for auth + Okta for RBAC
  * ```typescript
  * import { MastraAuthAuth0 } from '@mastra/auth-auth0';
- * import { MastraRBACOkta } from '@mastra/auth-okta';
+ * import { MastraRBACOkta } from '@mastra/auth-okta/ee';
  *
  * const mastra = new Mastra({
  *   server: {
@@ -30,7 +30,8 @@
  *
  * @example Full Okta setup (auth + RBAC)
  * ```typescript
- * import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta';
+ * import { MastraAuthOkta } from '@mastra/auth-okta';
+ * import { MastraRBACOkta } from '@mastra/auth-okta/ee';
  *
  * const mastra = new Mastra({
  *   server: {
@@ -47,8 +48,15 @@
  * ```
  */
 
-// RBAC provider (primary export)
-export { MastraRBACOkta } from './rbac-provider';
+import { MastraRBACOkta as EEMastraRBACOkta } from './rbac-provider';
+
+/**
+ * @deprecated Import `MastraRBACOkta` from `@mastra/auth-okta/ee` instead.
+ * RBAC requires a Mastra Enterprise Edition license in production.
+ */
+export const MastraRBACOkta = EEMastraRBACOkta;
+/** @deprecated Import `MastraRBACOkta` from `@mastra/auth-okta/ee` instead. */
+export type MastraRBACOkta = EEMastraRBACOkta;
 
 // Auth provider (for complete Okta setup)
 export { MastraAuthOkta } from './auth-provider';

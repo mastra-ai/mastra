@@ -15,7 +15,8 @@
  * toggle modes; never hand-edit this file.
  */
 
-import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { MastraRBACWorkos } from '@mastra/auth-workos/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 interface AuthBundle {

@@ -80,7 +80,7 @@ interface CacheEntry {
  *
  * @example Static mapping
  * ```typescript
- * import { MastraRBACNeon } from '@mastra/auth-neon';
+ * import { MastraRBACNeon } from '@mastra/auth-neon/ee';
  *
  * const rbac = new MastraRBACNeon({
  *   roleMapping: {

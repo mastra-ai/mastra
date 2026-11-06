@@ -75,7 +75,8 @@ Add `MastraRBACOkta` to map Okta groups to Mastra permissions:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta'
+import { MastraAuthOkta } from '@mastra/auth-okta'
+import { MastraRBACOkta } from '@mastra/auth-okta/ee'
 
 export const mastra = new Mastra({
   server: {
@@ -99,7 +100,7 @@ Use a different auth provider (Auth0, Clerk, etc.) for login and Okta for RBAC. 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
-import { MastraRBACOkta } from '@mastra/auth-okta'
+import { MastraRBACOkta } from '@mastra/auth-okta/ee'
 
 export const mastra = new Mastra({
   server: {

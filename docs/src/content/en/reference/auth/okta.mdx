@@ -272,7 +272,8 @@ Use `MastraRBACOkta` alongside an auth provider by passing it to the `rbac` opti
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta'
+import { MastraAuthOkta } from '@mastra/auth-okta'
+import { MastraRBACOkta } from '@mastra/auth-okta/ee'
 
 export const mastra = new Mastra({
   server: {
@@ -293,7 +294,7 @@ To use Okta RBAC with a different auth provider, pass a `getUserId` function to 
 
 ```typescript title="src/mastra/index.ts"
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
-import { MastraRBACOkta } from '@mastra/auth-okta'
+import { MastraRBACOkta } from '@mastra/auth-okta/ee'
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({

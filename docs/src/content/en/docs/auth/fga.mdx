@@ -33,7 +33,8 @@ Configure FGA in your Mastra server config alongside authentication and RBAC:
 ```typescript
 import { Mastra } from '@mastra/core/mastra'
 import { MastraFGAPermissions } from '@mastra/core/auth/ee'
-import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+import { MastraFGAWorkos } from '@mastra/auth-workos/ee'
 
 const mastra = new Mastra({
   server: {

@@ -7,7 +7,8 @@
  *
  * @example Full Google Workspace setup
  * ```typescript
- * import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google';
+ * import { MastraAuthGoogle } from '@mastra/auth-google';
+ * import { MastraRBACGoogle } from '@mastra/auth-google/ee';
  *
  * const auth = new MastraAuthGoogle({
  *   allowedDomains: ['example.com'],
@@ -28,9 +29,18 @@
  * ```
  */
 
+import { MastraRBACGoogle as EEMastraRBACGoogle } from './rbac-provider';
+
 export { MastraAuthGoogle } from './auth-provider';
-export { MastraRBACGoogle } from './rbac-provider';
 export { mapGoogleClaimsToUser } from './types';
+
+/**
+ * @deprecated Import `MastraRBACGoogle` from `@mastra/auth-google/ee` instead.
+ * RBAC requires a Mastra Enterprise Edition license in production.
+ */
+export const MastraRBACGoogle = EEMastraRBACGoogle;
+/** @deprecated Import `MastraRBACGoogle` from `@mastra/auth-google/ee` instead. */
+export type MastraRBACGoogle = EEMastraRBACGoogle;
 
 export type {
   GoogleSessionOptions,

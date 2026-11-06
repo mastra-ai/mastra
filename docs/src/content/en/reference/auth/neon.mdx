@@ -24,7 +24,8 @@ RBAC requires a Mastra Enterprise Edition (EE) license in production. It works w
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon'
+import { MastraAuthNeon } from '@mastra/auth-neon'
+import { MastraRBACNeon } from '@mastra/auth-neon/ee'
 
 const auth = new MastraAuthNeon()
 

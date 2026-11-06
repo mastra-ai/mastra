@@ -20,7 +20,7 @@ import type { WorkOSUser, MastraRBACWorkosOptions } from './types';
  *
  * @example Basic usage
  * ```typescript
- * import { MastraRBACWorkos } from '@mastra/auth-workos';
+ * import { MastraRBACWorkos } from '@mastra/auth-workos/ee';
  *
  * const rbac = new MastraRBACWorkos({
  *   apiKey: process.env.WORKOS_API_KEY,

@@ -14,7 +14,15 @@ import { MastraAuthProvider } from '@mastra/core/server';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 
-export { MastraRBACNeon } from './rbac-provider';
+import { MastraRBACNeon as EEMastraRBACNeon } from './rbac-provider';
+
+/**
+ * @deprecated Import `MastraRBACNeon` from `@mastra/auth-neon/ee` instead.
+ * RBAC requires a Mastra Enterprise Edition license in production.
+ */
+export const MastraRBACNeon = EEMastraRBACNeon;
+/** @deprecated Import `MastraRBACNeon` from `@mastra/auth-neon/ee` instead. */
+export type MastraRBACNeon = EEMastraRBACNeon;
 export type { MastraRBACNeonOptions, NeonRoleMappingOptions } from './rbac-provider';
 
 function stripTrailingSlashes(url: string): string {
@@ -136,7 +144,8 @@ export interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAut
  *
  * @example With RBAC
  * ```typescript
- * import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon';
+ * import { MastraAuthNeon } from '@mastra/auth-neon';
+ * import { MastraRBACNeon } from '@mastra/auth-neon/ee';
  *
  * const mastra = new Mastra({
  *   server: {
