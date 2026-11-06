@@ -8,14 +8,33 @@
     "node": "^22.19.0 || >=24.11.0"
   },
   "scripts": {
-    "format": "oxfmt ."
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/run.mjs dev",
+    "build": "node scripts/run.mjs build",
+    "start": "node scripts/run.mjs start",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --import tsx --test tests/config.test.ts",
+    "test:integration": "node --import tsx --test tests/assistant.test.ts",
+    "test:runtime": "node --import tsx --test tests/runtime.test.ts"
   },
   "dependencies": {
     "@mastra/connect": "latest",
-    "@mastra/core": "latest"
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "mastra": "latest",
-    "oxfmt": "0.59.0"
+    "oxfmt": "0.59.0",
+    "@types/node": "^24.10.9",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "@mastra/hono": "latest",
+    "hono": "^4.10.6",
+    "@hono/node-server": "^1.19.9"
   }
 }
