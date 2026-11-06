@@ -1,15 +1,23 @@
 import type { ToolsInput } from '@mastra/core/agent';
-import { createCodeMode } from '@mastra/core/tools';
+import { createCodeMode, createCodeModeTool, generateStubs } from '@mastra/core/tools';
 import type { CodeModeConfig, CodeModeTransport } from '@mastra/core/tools';
 
+import { createFunctionSearchTool, searchModeInstructions } from './function-search.js';
 import type { ToolsResolverContext } from './tools.js';
 
-type ResolvedToolsRecord = Record<string, { id: string }>;
+type ResolvedToolsRecord = Record<string, { id: string; description?: string }>;
 
 /** Options for {@link ToolsResolver.codeMode}: everything `createCodeMode()` takes except `tools`. */
 export interface CodeModeOptions extends Omit<CodeModeConfig, 'tools'> {
   /** Transport passed to `createCodeMode()`. Defaults to its stdio transport, which needs a sandbox. */
   transport?: CodeModeTransport;
+  /**
+   * List only function names in the instructions and give the model a
+   * `search_functions` tool that returns the declarations it needs. Saves
+   * context when many providers are connected. By default it turns on when
+   * declaring every function would take more than about 10k tokens.
+   */
+  toolSearch?: boolean;
 }
 
 /**
@@ -43,6 +51,9 @@ interface Build {
  */
 const REQUEST_BUILD_MS = 30_000;
 
+/** Declarations above this size (about 10k tokens) switch to tool search unless `toolSearch` says otherwise. */
+const SEARCH_THRESHOLD_CHARS = 40_000;
+
 /**
  * Tools that only work as direct agent tools: approval and suspension are
  * handled by the agent loop, and a call from inside a program bypasses it. A
@@ -64,7 +75,7 @@ export function connectCodeMode(
   resolve: (ctx?: ToolsResolverContext) => Promise<ResolvedToolsRecord>,
   options: CodeModeOptions = {},
 ): ConnectCodeMode {
-  const { transport, ...config } = options;
+  const { transport, toolSearch, ...config } = options;
   const builds = new WeakMap<object, { build: Promise<Build>; startedAt: number }>();
 
   const build = async (ctx?: ToolsResolverContext): Promise<Build> => {
@@ -74,8 +85,21 @@ export function connectCodeMode(
       (needsAgentLoop(tool) ? direct : orchestrated)[key] = tool;
     }
     if (Object.keys(orchestrated).length === 0) return { tools: direct, instructions: '' };
-    const codeMode = createCodeMode({ ...config, tools: orchestrated as ToolsInput }, transport);
-    return { tools: { ...direct, [codeMode.tool.id]: codeMode.tool }, instructions: codeMode.instructions };
+    const stubs = generateStubs(orchestrated as ToolsInput);
+    const search =
+      toolSearch ?? stubs.reduce((size, stub) => size + stub.declaration.length, 0) > SEARCH_THRESHOLD_CHARS;
+    if (!search) {
+      const codeMode = createCodeMode({ ...config, tools: orchestrated as ToolsInput }, transport);
+      return { tools: { ...direct, [codeMode.tool.id]: codeMode.tool }, instructions: codeMode.instructions };
+    }
+    // Every function stays callable from the program; only the declarations
+    // move out of the instructions and behind the search tool.
+    const codeTool = createCodeModeTool({ ...config, tools: orchestrated as ToolsInput }, transport);
+    const searchTool = createFunctionSearchTool(orchestrated, stubs, codeTool.id);
+    return {
+      tools: { ...direct, [codeTool.id]: codeTool, [searchTool.id]: searchTool },
+      instructions: searchModeInstructions(stubs, codeTool.id),
+    };
   };
 
   const buildFor = (ctx?: ToolsResolverContext): Promise<Build> => {

@@ -13,15 +13,19 @@ import type { ToolsOptions } from '../tools.js';
 type Row = Record<string, unknown>;
 
 function linearConnection(resourceId: string | null = null): Row {
+  return { ...connection('linear', 'c_lin1'), resourceId };
+}
+
+function connection(integrationId: string, id: string): Row {
   return {
-    id: 'c_lin1',
-    integrationId: 'linear',
+    id,
+    integrationId,
     status: 'active',
     connectedByUserId: null,
     connectedAt: '2026-09-01T00:00:00Z',
     createdAt: '2026-09-01T00:00:00Z',
     accountLabel: null,
-    resourceId,
+    resourceId: null,
   };
 }
 
@@ -39,6 +43,8 @@ function platform(connections: () => Row[]) {
         integrations: [
           { id: 'linear', capabilities: {}, displayName: 'Linear', authType: 'OAUTH2' },
           { id: 'slack', capabilities: {}, displayName: 'Slack', authType: 'OAUTH2' },
+          { id: 'github', capabilities: {}, displayName: 'GitHub', authType: 'OAUTH2' },
+          { id: 'stripe', capabilities: {}, displayName: 'Stripe', authType: 'OAUTH2' },
         ],
       });
     }
@@ -259,5 +265,66 @@ describe('connect tools in code mode', () => {
 
     expect(await code.tools()).toEqual({});
     expect(await code.instructions()).toBe('');
+  });
+
+  describe('with tool search', () => {
+    const manyProviders = () => [linearConnection(), connection('github', 'c_gh1'), connection('stripe', 'c_str1')];
+
+    it('lets the model look up the functions it needs, then call them from a program', async () => {
+      const { options, graphql } = platform(() => [linearConnection()]);
+      const { model, calls } = scriptedModel([
+        toolCall('search_functions', { query: 'list linear teams' }),
+        toolCall('execute_typescript', {
+          code: `const teams = await external_linear_list_teams({}); return teams.items.map(t => t.key);`,
+        }),
+      ]);
+      const code = connect(options).codeMode({ sandbox: new LocalSandbox(), toolSearch: true });
+
+      await run(codeModeAgent(code, model), 'Which Linear teams do we have?');
+
+      // Only names go in the instructions; declarations come from the search.
+      expect(calls[0]!.tools.sort()).toEqual(['execute_typescript', 'search_functions']);
+      expect(systemPrompt(calls[0]!)).toContain('external_linear_list_teams');
+      expect(systemPrompt(calls[0]!)).not.toContain('declare function');
+      const found = toolResults(calls[1]!);
+      expect(found).toContain('declare function external_linear_list_teams(');
+      expect(found).not.toContain('external_linear_archive_cycle');
+      // Undeclared functions are still callable from the program.
+      expect(toolResults(calls[2]!)).toContain('"result":["ENG","DES"]');
+      expect(graphql).toHaveLength(1);
+    });
+
+    it('returns exactly the functions asked for by name', async () => {
+      const { options } = platform(() => [linearConnection()]);
+      const names = ['linear_create_issue', 'linear_get_cycle', 'linear_list_users', 'linear_unarchive_project'];
+      const { model, calls } = scriptedModel([
+        toolCall('search_functions', { query: names.map(name => `external_${name}`).join(' '), limit: 4 }),
+      ]);
+      const code = connect(options).codeMode({ sandbox: new LocalSandbox(), toolSearch: true });
+
+      await run(codeModeAgent(code, model), 'Look up these functions');
+
+      const found = [...toolResults(calls[1]!).matchAll(/declare function external_(\w+)\(/g)].map(m => m[1]);
+      expect(found).toEqual(names);
+    });
+
+    it('turns on by itself when declaring every function would flood the context', async () => {
+      const { options } = platform(manyProviders);
+      const code = connect(options).codeMode({ sandbox: new LocalSandbox() });
+
+      const instructions = await code.instructions();
+      expect(Object.keys(await code.tools()).sort()).toEqual(['execute_typescript', 'search_functions']);
+      expect(instructions).not.toContain('declare function');
+      expect(instructions).toContain('external_github_');
+      expect(instructions).toContain('external_stripe_');
+    });
+
+    it('declares everything up front when turned off', async () => {
+      const { options } = platform(manyProviders);
+      const code = connect(options).codeMode({ sandbox: new LocalSandbox(), toolSearch: false });
+
+      expect(Object.keys(await code.tools())).toEqual(['execute_typescript']);
+      expect(await code.instructions()).toContain('declare function external_stripe_');
+    });
   });
 });

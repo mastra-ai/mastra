@@ -282,7 +282,7 @@ export const opsAgent = new Agent({
 
 `codeMode()` returns two functions, `tools` and `instructions`. Pass both to the agent. Like the resolver, they resolve the current connections on every request. The functions the program can call change as providers are connected or disconnected. Within one request both use the same resolution, and the instructions never declare a function the program can't call.
 
-The method accepts every [`createCodeMode()` option](/reference/tools/create-code-mode) except `tools` (`sandbox`, `timeout`, `id`), plus `transport` for a [remote sandbox](/docs/agents/code-mode#remote-sandboxes) or [in-process isolation](/docs/agents/code-mode#in-process-isolation). Every resolver provides it, including the callback form and resolvers returned by `with()`. Extra tools from `with()` join the program's functions.
+The method accepts every [`createCodeMode()` option](/reference/tools/create-code-mode) except `tools` (`sandbox`, `timeout`, `id`), plus `transport` for a [remote sandbox](/docs/agents/code-mode#remote-sandboxes) or [in-process isolation](/docs/agents/code-mode#in-process-isolation), and `toolSearch` for [tool search](#tool-search). Every resolver provides it, including the callback form and resolvers returned by `with()`. Extra tools from `with()` join the program's functions.
 
 Some tools stay direct agent tools instead of program functions, because they pause the agent run and a call from inside a program can't:
 
@@ -290,6 +290,20 @@ Some tools stay direct agent tools instead of program functions, because they pa
 - The `request_connection` tool, so the connect prompt can still pause the run until the user connects.
 
 When there is nothing to orchestrate, for example when the project has no connections yet, `tools` returns only the direct tools and `instructions` returns an empty string.
+
+### Tool search
+
+Declaring every function in the instructions uses context on every request: about 4,000 tokens for Linear alone and over 20,000 for Linear, GitHub, and Stripe together. With tool search, the instructions list only the function names, and the agent gets a `search_functions` tool that returns the TypeScript declarations for the functions it needs. The agent searches by what it wants to do or by exact names from the list, then writes the program. The program can still call every function. Only the declarations move behind the search.
+
+Tool search turns on by itself when declaring every function would take more than about 10,000 tokens. Set `toolSearch` to choose:
+
+```typescript title="src/mastra/agents/ops.ts"
+// Always list names only and search for declarations
+const searching = tools().codeMode({ sandbox: new LocalSandbox(), toolSearch: true })
+
+// Always declare every function up front
+const declared = tools().codeMode({ sandbox: new LocalSandbox(), toolSearch: false })
+```
 
 ## Choosing providers
 
