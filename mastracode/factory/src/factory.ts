@@ -1994,6 +1994,7 @@ export class MastraFactory {
               ...(sessionCredentials ? { credentials: sessionCredentials } : {}),
               notifyAvailable: notifyCredentialAvailable,
             },
+            purgeSessionData: scope => sessionCredentialsStorage.purgeSession(scope),
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {

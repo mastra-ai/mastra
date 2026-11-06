@@ -1,5 +1,5 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import {
@@ -292,5 +292,88 @@ describe('SessionCredentialsStorage', () => {
     await domain.purgeExpired(new Date(t0.getTime() + 25 * 60 * 60_000));
     expect(await domain.getRequest(other.id)).toBeNull();
     expect(await domain.getRequest(req.id)).toBeNull();
+  });
+
+  it('lets exactly one of two concurrent submissions claim a request', async () => {
+    const { domain } = await makeStore();
+    const req = await request(domain);
+    const results = await Promise.allSettled(
+      ['first', 'second'].map(suffix =>
+        domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET + suffix, allowSandbox: true }),
+      ),
+    );
+    const fulfilled = results.filter(result => result.status === 'fulfilled');
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected.map(result => (result.reason as SessionCredentialError).code)).toEqual(['already_used']);
+  });
+
+  it('leaves the request usable when the credential cannot be stored', async () => {
+    const { backend, domain } = await makeStore();
+    const req = await request(domain);
+    const upsert = vi.spyOn(backend.ops, 'upsertOne').mockRejectedValueOnce(new Error('disk full'));
+    await expect(
+      domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET, allowSandbox: true }),
+    ).rejects.toThrow('disk full');
+    expect((await domain.getRequest(req.id))?.status).toBe('pending');
+    upsert.mockRestore();
+
+    await domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET, allowSandbox: true });
+    const env = await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] });
+    expect(env).toEqual({ STRIPE_TEST_KEY: SECRET });
+  });
+
+  it('does not claim the request when encryption fails', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'session-credentials-test', url: ':memory:' });
+    const domain = backend.registerDomain(
+      new SessionCredentialsStorage({
+        ...encryption,
+        encrypt: () => Promise.reject(new Error('key unavailable')),
+      }),
+    );
+    await backend.init();
+    onTestFinished(() => backend.close());
+    const req = await request(domain);
+    await expect(
+      domain.fulfillRequest({ requestId: req.id, submittedBy: 'user-1', value: SECRET, allowSandbox: true }),
+    ).rejects.toThrow('key unavailable');
+    expect((await domain.getRequest(req.id))?.status).toBe('pending');
+  });
+
+  it('keeps a value resubmitted after an expired copy was read', async () => {
+    const { backend, domain } = await makeStore();
+    const t0 = new Date('2026-11-06T12:00:00Z');
+    const first = await request(domain, { now: t0 });
+    await domain.fulfillRequest({
+      requestId: first.id,
+      submittedBy: 'user-1',
+      value: 'old-value-123',
+      allowSandbox: true,
+      ttlMs: 60_000,
+      now: t0,
+    });
+    const stale = await backend.ops.findMany('session_credentials', {});
+
+    const t1 = new Date(t0.getTime() + 120_000);
+    const second = await request(domain, { now: t1 });
+    await domain.fulfillRequest({
+      requestId: second.id,
+      submittedBy: 'user-1',
+      value: SECRET,
+      allowSandbox: true,
+      now: t1,
+    });
+
+    // A reader that saw the expired row deletes only that observed version.
+    const deleted = await backend.ops.deleteMany('session_credentials', {
+      id: stale[0]!.id as string,
+      expires_at: stale[0]!.expires_at as Date,
+    });
+    expect(deleted).toBe(0);
+    expect(
+      await domain.resolveForCommand({ orgId: 'org-a', sessionId: 'session-1', names: ['STRIPE_TEST_KEY'] }, t1),
+    ).toEqual({
+      STRIPE_TEST_KEY: SECRET,
+    });
   });
 });

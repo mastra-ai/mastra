@@ -281,6 +281,8 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
     if (!UUID_PATTERN.test(input.requestId))
       throw new SessionCredentialError('not_found', 'Credential request not found.');
     const now = input.now ?? new Date();
+    // Encrypt before claiming, so an encryption failure leaves the link usable.
+    const encrypted = await this.encryption.encrypt(input.value);
     const outcome: { failure?: SessionCredentialError } = {};
     const claimed = await this.#db.updateAtomic<RequestRow>(REQUESTS, { id: input.requestId }, row => {
       if (row.status !== 'pending') {
@@ -302,18 +304,30 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
     const request = toRequest(claimed);
     const values = {
       factory_project_id: request.factoryProjectId,
-      value: await this.encryption.encrypt(input.value),
+      value: encrypted,
       submitted_by: input.submittedBy,
       allow_sandbox: input.allowSandbox,
       created_at: now,
       expires_at: new Date(now.getTime() + credentialTtlMs(input.ttlMs)),
     };
-    const row = await this.#db.upsertOne<CredentialRow>(CREDENTIALS, ['org_id', 'session_id', 'name'], {
-      org_id: request.orgId,
-      session_id: request.sessionId,
-      name: request.name,
-      ...values,
-    });
+    let row: CredentialRow;
+    try {
+      row = await this.#db.upsertOne<CredentialRow>(CREDENTIALS, ['org_id', 'session_id', 'name'], {
+        org_id: request.orgId,
+        session_id: request.sessionId,
+        name: request.name,
+        ...values,
+      });
+    } catch (error) {
+      // The storage layer has no multi-collection transaction: release this
+      // claim so the owner can retry the same link instead of getting 409.
+      await this.#db.updateAtomic<RequestRow>(REQUESTS, { id: input.requestId }, current =>
+        current.status === 'fulfilled' && current.fulfilled_at?.getTime() === now.getTime()
+          ? { status: 'pending', fulfilled_at: null }
+          : null,
+      );
+      throw error;
+    }
     return { request, credential: toCredential(row) };
   }
 
@@ -323,8 +337,7 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
       org_id: scope.orgId,
       session_id: scope.sessionId,
     });
-    const expired = rows.filter(row => row.expires_at.getTime() <= now.getTime()).map(row => row.id);
-    if (expired.length > 0) await this.#db.deleteMany(CREDENTIALS, { id: { in: expired } });
+    await this.#deleteExpired(rows, now);
     return rows
       .filter(row => row.expires_at.getTime() > now.getTime())
       .map(toCredential)
@@ -349,12 +362,22 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
    */
   async purgeExpired(now = new Date()): Promise<void> {
     const credentials = await this.#db.findMany<CredentialRow>(CREDENTIALS, {});
-    const expiredCredentials = credentials.filter(row => row.expires_at.getTime() <= now.getTime()).map(row => row.id);
-    if (expiredCredentials.length > 0) await this.#db.deleteMany(CREDENTIALS, { id: { in: expiredCredentials } });
+    await this.#deleteExpired(credentials, now);
     const requestCutoff = now.getTime() - REQUEST_RETENTION_MS;
     const requests = await this.#db.findMany<RequestRow>(REQUESTS, {});
     const staleRequests = requests.filter(row => row.expires_at.getTime() <= requestCutoff).map(row => row.id);
     if (staleRequests.length > 0) await this.#db.deleteMany(REQUESTS, { id: { in: staleRequests } });
+  }
+
+  /**
+   * Delete rows that were expired when read. Matching on the observed expiry
+   * keeps a value resubmitted in the meantime (the upsert keeps the row id).
+   */
+  async #deleteExpired(rows: CredentialRow[], now: Date): Promise<void> {
+    for (const row of rows) {
+      if (row.expires_at.getTime() > now.getTime()) continue;
+      await this.#db.deleteMany(CREDENTIALS, { id: row.id, expires_at: row.expires_at });
+    }
   }
 
   /** Drop every credential and request of a session (session deleted or closed). */
@@ -380,9 +403,7 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
         session_id: scope.sessionId,
         name,
       });
-      if (row && row.expires_at.getTime() <= now.getTime()) {
-        await this.revoke({ orgId: scope.orgId, sessionId: scope.sessionId, name });
-      }
+      if (row) await this.#deleteExpired([row], now);
       if (!row || row.expires_at.getTime() <= now.getTime()) {
         throw new SessionCredentialError(
           'missing',
