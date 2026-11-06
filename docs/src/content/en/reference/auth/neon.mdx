@@ -205,7 +205,7 @@ if (sessionId) await auth.destroySession(sessionId)
 
 Pass the signed session cookie value from `getSessionIdFromRequest()`, not the `id` returned by `validateSession()`. `destroySession()` attempts to revoke that session through the Neon Auth sign-out endpoint. A network error or non-2xx response can leave the session active, and the method doesn't throw for these failures. When Mastra sends the header from `getClearSessionHeaders()`, it clears the matching cookie on the Mastra host, not a cookie on a separate Neon Auth host. A separate Neon Auth session can remain active after Studio sign-out.
 
-Revoking a session doesn't invalidate an already-issued JWT. Bearer tokens that still pass JWT verification can authenticate until they expire because JWT verification doesn't check the Neon Auth session.
+Revoking a session doesn't invalidate an already-issued JWT. Bearer tokens that pass JWT verification can still authenticate because verification doesn't check the Neon Auth session. JWT verification doesn't require an expiration claim, so a token without one may remain usable after sign-out.
 
 ## `MastraRBACNeon`
 
