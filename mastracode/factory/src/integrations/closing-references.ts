@@ -13,10 +13,7 @@ export function closingIssueNumbers(
   options: { provider: 'github' | 'gitlab'; repository: string },
 ): number[] {
   if (!text) return [];
-  const prose = text
-    .replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
-    .replace(/(`{3,}|~{3,})[\s\S]*?(?:\1|$)/g, ' ')
-    .replace(/`[^`\n]*`/g, ' ');
+  const prose = withoutFences(text.replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')).replace(/`[^`\n]*`/g, ' ');
   const keywords =
     options.provider === 'gitlab'
       ? 'close[sd]?|closing|fix(?:e[sd]|ing)?|resolve[sd]?|resolving|implement(?:s|ed|ing)?'
@@ -39,4 +36,43 @@ export function closingIssueNumbers(
     }
   }
   return numbers;
+}
+
+/** The end of the run of `char` starting at `start`. */
+function runEnd(text: string, char: string, start: number): number {
+  let end = start;
+  while (text[end] === char) end++;
+  return end;
+}
+
+/**
+ * `text` with each code fence replaced by a space: a run of three or more backticks or tildes up
+ * to the first run of the same character at least as long, or to the end. A scan rather than a
+ * backreference regex, which compares the whole opening run at every position and so takes
+ * quadratic time on long runs. Each character is read once.
+ */
+function withoutFences(text: string): string {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const backtick = text.indexOf('```', from);
+    const tilde = text.indexOf('~~~', from);
+    const start = backtick < 0 ? tilde : tilde < 0 ? backtick : Math.min(backtick, tilde);
+    if (start < 0) return out + text.slice(from);
+    out += `${text.slice(from, start)} `;
+    const char = text[start]!;
+    const openEnd = runEnd(text, char, start);
+    const length = openEnd - start;
+    let next = text.indexOf(char, openEnd);
+    from = text.length;
+    while (next >= 0) {
+      const end = runEnd(text, char, next);
+      if (end - next >= length) {
+        // The closing run ends the fence after as many characters as opened it.
+        from = next + length;
+        break;
+      }
+      next = text.indexOf(char, end);
+    }
+  }
 }
