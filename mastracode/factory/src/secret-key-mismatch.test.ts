@@ -12,6 +12,7 @@ import {
   createFactorySecretEncryption,
   FactorySecretDecryptionError,
   secretKeyMismatchHint,
+  secretKeyProblem,
 } from './secret-encryption.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
@@ -96,8 +97,7 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
     problems: [
       {
         code: 'secret_key_mismatch',
-        title: "Factory can't read its stored secrets",
-        message: secretKeyMismatchHint(new FactorySecretDecryptionError('')),
+        ...secretKeyProblem(new FactorySecretDecryptionError('')),
         docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
       },
     ],
@@ -110,7 +110,7 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
     error: 'integration_unavailable',
     message: `github integration is unavailable. ${secretKeyMismatchHint(new FactorySecretDecryptionError(''))}`,
   });
-  expect(issuesBody.message).toContain('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS');
+  expect(issuesBody.message).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining('github integration is unavailable'),
     expect.any(FactorySecretDecryptionError),

@@ -25,6 +25,17 @@ export interface ApiClient {
   del<T>(path: string, body?: unknown): Promise<T>;
 }
 
+/** A non-2xx response. `status` lets callers treat specific statuses (like 404) differently. */
+export class ApiError extends Error {
+  override name = 'ApiError';
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function extractError(res: Response): Promise<string> {
   try {
     const data = (await res.clone().json()) as { error?: unknown; message?: unknown } | null;
@@ -54,7 +65,7 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiCli
       init.body = JSON.stringify(body);
     }
     const res = await doFetch(`${baseUrl}${path}`, init);
-    if (!res.ok) throw new Error(await extractError(res));
+    if (!res.ok) throw new ApiError(await extractError(res), res.status);
     return (await res.json()) as T;
   }
 

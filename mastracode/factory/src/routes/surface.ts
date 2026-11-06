@@ -21,7 +21,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
-import { secretKeyMismatchHint } from '../secret-encryption.js';
+import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -660,7 +660,9 @@ export interface FactoryStatusProblem {
   code: 'secret_key_mismatch';
   title: string;
   message: string;
-  /** Where an operator reads how to fix it. */
+  /** The one step that fixes it. Env var names are wrapped in backticks. */
+  fix: string;
+  /** Where an operator reads more, such as how to rotate keys. */
   docsUrl: string;
 }
 
@@ -675,13 +677,12 @@ const SECRET_DOMAINS = ['integrations', 'model-credentials', 'custom-providers']
  * the life of the process. Only client-safe copy goes out.
  */
 function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
-  const hint = SECRET_DOMAINS.map(domain => secretKeyMismatchHint(storage?.domainInitError(domain))).find(Boolean);
-  const problems: FactoryStatusProblem[] = hint
+  const problem = SECRET_DOMAINS.map(domain => secretKeyProblem(storage?.domainInitError(domain))).find(Boolean);
+  const problems: FactoryStatusProblem[] = problem
     ? [
         {
           code: 'secret_key_mismatch',
-          title: "Factory can't read its stored secrets",
-          message: hint,
+          ...problem,
           docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
         },
       ]

@@ -153,8 +153,9 @@ describe('AppLayout', () => {
           problems: [
             {
               code: 'secret_key_mismatch',
-              title: "Factory can't read its stored secrets",
-              message: 'They were saved with a different encryption key. Redeploy Factory with that key.',
+              title: "Factory can't unlock your secrets",
+              message: 'The encryption key changed. Your secrets are safe.',
+              fix: 'Redeploy with the original `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
               docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
             },
           ],
@@ -164,16 +165,50 @@ describe('AppLayout', () => {
     renderApp();
 
     const alert = await screen.findByRole('alert');
-    expect(within(alert).getByRole('heading', { name: "Factory can't read its stored secrets" })).toBeInTheDocument();
-    expect(within(alert).getByText(/Redeploy Factory with that key/)).toBeInTheDocument();
-    expect(within(alert).getByRole('link', { name: 'How to fix this' })).toHaveAttribute(
+    expect(within(alert).getByRole('heading', { name: "Factory can't unlock your secrets" })).toBeInTheDocument();
+    expect(within(alert).getByText('The encryption key changed. Your secrets are safe.')).toBeInTheDocument();
+    expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
+    expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
+    expect(within(alert).getByRole('link', { name: 'Rotating keys on purpose?' })).toHaveAttribute(
       'href',
       'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
     );
-    expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    // Nothing to retry: only a redeploy fixes it, so the copy button is the only control.
+    expect(within(alert).getAllByRole('button')).toHaveLength(1);
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
     // The sidebar stays, so the account menu is still reachable.
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
+  });
+
+  it('still shows the startup problem when the first status check fails', async () => {
+    stubFactory();
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'internal' }, { status: 500 });
+        return HttpResponse.json({
+          problems: [{ code: 'secret_key_mismatch', title: "Factory can't unlock your secrets", message: 'm' }],
+        });
+      }),
+    );
+    renderApp();
+
+    expect(
+      await screen.findByRole('heading', { name: "Factory can't unlock your secrets" }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it('shows the page as usual when the server has no status endpoint', async () => {
+    stubFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+    );
+    renderApp();
+
+    expect(await screen.findByRole('heading', { name: 'Page A' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('leaves retired Factory pages out of the sidebar', async () => {
