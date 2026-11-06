@@ -11,7 +11,7 @@ export interface ProviderModels {
   retry: () => void;
 }
 
-function preferredFactoryModel(providerId: string): string | undefined {
+export function preferredFactoryModel(providerId: string): string | undefined {
   switch (providerId) {
     case 'openai':
       return 'openai/gpt-5.6-sol';

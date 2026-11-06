@@ -9,7 +9,7 @@ import type { ProviderInfo } from '../../../../../api/types';
 import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { SharedCredentialNotice } from '../../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { useProviderModels } from '../../hooks/useProviderModels';
+import { preferredFactoryModel, useProviderModels } from '../../hooks/useProviderModels';
 import { MastraGatewayCreditsNotice } from '../MastraGatewayCreditsNotice';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -40,13 +40,20 @@ export function CreateFactoryModelRows({
   if (catalog.catalogError)
     return <CreateFactoryPaletteAlert>{catalog.catalogError.message}</CreateFactoryPaletteAlert>;
 
+  const preferredModelId = preferredFactoryModel(provider.provider);
   const normalizedQuery = query.trim().toLowerCase();
   const models = catalog.models
     .filter(
       model =>
         model.id.toLowerCase().includes(normalizedQuery) || model.modelName.toLowerCase().includes(normalizedQuery),
     )
-    .sort((a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.modelName.localeCompare(b.modelName));
+    .sort(
+      (a, b) =>
+        // The provider's preferred model leads, so a catalog as large as the gateway's opens on it.
+        Number(b.id === preferredModelId) - Number(a.id === preferredModelId) ||
+        compareModelReleaseDates(a.releaseDate, b.releaseDate) ||
+        a.modelName.localeCompare(b.modelName),
+    );
   const saving = savingModelId !== undefined;
 
   return (

@@ -111,12 +111,28 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
   }
 }
 
-/** The Mastra Gateway answered: a `mastra/…` model, or its billing reply (which links to `gateway.mastra.ai`). */
+const MASTRA_GATEWAY_HOST = /(?:^|\.)gateway(?:-api)?\.mastra\.ai$/;
+
+/**
+ * The Mastra Gateway answered: a `mastra/…` model, a request sent to its host, or its billing reply
+ * (which links to `gateway.mastra.ai`). The request reaches the gateway without the `mastra/` prefix.
+ */
 function isMastraGatewayError(error: RunErrorIdentity): boolean {
   return (
     providerModelId(error)?.startsWith(MASTRA_GATEWAY_PREFIX) === true ||
+    MASTRA_GATEWAY_HOST.test(requestHost(error) ?? '') ||
     /gateway\.mastra\.ai/.test(providerErrorReason(error) ?? error.message)
   );
+}
+
+function requestHost(error: RunErrorIdentity): string | undefined {
+  const url = (error as { url?: unknown }).url;
+  if (typeof url !== 'string') return undefined;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
 }
 
 function afterProviderReason(error: RunErrorIdentity, next: string, fallback?: string): string {
