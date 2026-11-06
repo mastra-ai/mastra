@@ -1648,6 +1648,46 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(moved).toMatchObject({ status: 'accepted' });
     });
 
+    it('never files a merge request on a GitHub issue card whose session builds on its branch', async () => {
+      const h = await harness();
+      const github = (
+        await h.seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: h.project.id,
+          input: {
+            board: 'work',
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId: 'github-issue:42',
+              url: 'https://github.com/acme/app/issues/42',
+            },
+            title: 'GitHub issue 42',
+            stages: ['execute'],
+            sessions: {
+              work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/github-issue-42', startedBy: 'user-1' },
+            },
+            metadata: { authorTrusted: true, state: 'open' },
+          },
+        })
+      ).item;
+
+      await h.ingest(mergeRequest(17, 'Implements the fix.', { sourceBranch: 'factory/github-issue-42' }));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const card = cards.find(item => item.id === github.id)!;
+      expect(sourceTypes(card)).toEqual(['issue']);
+      expect(card.externalSource).toMatchObject({ integrationId: 'github', type: 'issue' });
+      // It still records the merge request its builder has out, as any card that can't hold one does.
+      expect(card).toMatchObject({ stages: ['execute'], metadata: { openPullRequestNumber: 17 } });
+      expect(cards.find(item => item.id !== github.id)).toMatchObject({
+        externalSource: { integrationId: 'gitlab', type: 'pull-request' },
+        board: 'work',
+      });
+    });
+
     it('starts a reviewer when a Linear card carrying a merge request moves to PR review', async () => {
       const h = await harness();
       const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
