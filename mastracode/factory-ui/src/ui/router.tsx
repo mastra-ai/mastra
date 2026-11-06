@@ -105,12 +105,12 @@ function RootLanding() {
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
 }
 
-/** The retired Review board's links (`/review?item=…`) open Work filtered to pull requests, keeping their query. */
+/** The retired Review board's links (`/review?item=…`) open Work filtered to pull requests alone, keeping the rest of their query. */
 function RetiredReviewBoardRedirect() {
   const { search } = useLocation();
   const params = new URLSearchParams(search);
-  if (!params.getAll('source').includes(PULL_REQUEST_SOURCE_FILTER))
-    params.append('source', PULL_REQUEST_SOURCE_FILTER);
+  // Picked sources widen the filter, so any other source would show cards the Review board never held.
+  params.set('source', PULL_REQUEST_SOURCE_FILTER);
   return <Navigate to={`../work?${params}`} relative="path" replace />;
 }
 
