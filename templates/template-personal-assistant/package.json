@@ -1,0 +1,21 @@
+{
+  "name": "template-personal-assistant",
+  "version": "1.0.0",
+  "description": "A foundation for a configurable personal assistant powered by Mastra and Mastra Connect.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.11.0"
+  },
+  "scripts": {
+    "format": "oxfmt ."
+  },
+  "dependencies": {
+    "@mastra/connect": "latest",
+    "@mastra/core": "latest"
+  },
+  "devDependencies": {
+    "mastra": "latest",
+    "oxfmt": "0.59.0"
+  }
+}
