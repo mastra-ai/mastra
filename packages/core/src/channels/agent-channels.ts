@@ -104,12 +104,31 @@ const APPROVAL_LOOKUP_CACHE_SIZE = 1000;
 const APPROVAL_LOOKUP_MISSING_TTL_MS = 60_000;
 /**
  * How long a pending or answered lookup is trusted. Another instance may answer
- * a pending approval meanwhile; resuming a run that is no longer suspended
- * fails as stale, so this only bounds how long that state is reused. Answered
- * cards also keep this mark after a click resumes them: the base dispatch
- * returns before the resumed stream ends, so the claim cannot follow the run.
+ * a pending approval meanwhile; the next resume then fails as stale and marks
+ * the card answered, so this only bounds how long that state is reused.
  */
 const APPROVAL_LOOKUP_TTL_MS = 10 * 60_000;
+
+/**
+ * Resume errors meaning the card's approval can no longer be applied: the run
+ * finished, was aborted, or no longer waits on this tool call. Workflow-backed
+ * resumes report a missing run as a plain `No snapshot found` error instead.
+ */
+const ANSWERED_RESUME_ERROR_IDS = new Set([
+  'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+  'AGENT_RESUME_ABORTED_RUN',
+  'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+]);
+
+/** How a failed approval resume should be treated. */
+const classifyResumeError = (err: unknown): 'answered' | 'in-progress' | undefined => {
+  if (err instanceof MastraError) {
+    if (ANSWERED_RESUME_ERROR_IDS.has(err.id)) return 'answered';
+    // Another click (here or on another instance) is resuming the run right now.
+    if (err.id === 'AGENT_RESUME_ALREADY_CLAIMED') return 'in-progress';
+  }
+  return err instanceof Error && err.message.includes('No snapshot found') ? 'answered' : undefined;
+};
 
 /** The persisted pending-approval entry an agent stores on its assistant message. */
 type PersistedPendingApproval = {
@@ -231,17 +250,11 @@ export class AgentChannels {
    * Approval state per card (thread, card message, toolCallId). A click that
    * misses `pendingApprovalCards` may have to read the whole thread, so the
    * result is kept: repeat clicks (including rejected ones from other users)
-   * reuse it with no storage read. Cards answered by a click are marked here
-   * too. Bounded by `APPROVAL_LOOKUP_CACHE_SIZE`; entries expire per the
-   * `APPROVAL_LOOKUP_*_TTL_MS` constants.
+   * reuse it with no storage read. Cards whose resume fails because the run was
+   * already answered are marked here too. Bounded by `APPROVAL_LOOKUP_CACHE_SIZE`;
+   * entries expire per the `APPROVAL_LOOKUP_*_TTL_MS` constants.
    */
   private approvalLookups = new Map<string, CachedApprovalLookup>();
-  /**
-   * Cards a click is answering right now (see `claimApproval`). Kept apart from
-   * `approvalLookups` so eviction or a reseeded card cannot drop a live claim;
-   * holds at most one entry per in-progress click.
-   */
-  private approvalClaims = new Set<string>();
   /** Lookups in progress, so concurrent clicks on one card share one read. */
   private approvalLookupsInFlight = new Map<string, Promise<ApprovalLookupResult>>();
 
@@ -772,8 +785,8 @@ export class AgentChannels {
               toolCallId: actionId.slice(actionId.indexOf(':') + 1),
               actorId: event.user?.userId,
             };
-            // Set once this click answers the card; see `claimApproval`.
-            let claim: { release: () => void; settle: () => void } | undefined;
+            // Set once the card's Mastra thread is known.
+            let card: ApprovalCardKey | undefined;
             try {
               const approved = actionId.startsWith('tool_approve:');
               const toolCallId = actionEventContext.toolCallId;
@@ -805,6 +818,7 @@ export class AgentChannels {
                 this.log('warn', 'No mapped channel thread found for tool approval action', actionEventContext);
                 return;
               }
+              card = { threadId: mastraThread.id, messageId, toolCallId };
 
               // Look up the runId for this toolCallId. Prefer the in-memory
               // `pendingApprovalCards` map (set when the approval card was posted)
@@ -824,11 +838,7 @@ export class AgentChannels {
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
               } else {
-                const lookup = await this.lookupPersistedApproval({
-                  mastra,
-                  card: { threadId: mastraThread.id, messageId, toolCallId },
-                  platform,
-                });
+                const lookup = await this.lookupPersistedApproval({ mastra, card, platform });
                 if (lookup.status === 'answered') {
                   this.log('info', 'Tool approval already answered', actionEventContext);
                   return;
@@ -861,14 +871,6 @@ export class AgentChannels {
                   ...actionEventContext,
                   requesterId,
                 });
-                return;
-              }
-
-              // From here this click answers the approval. Claim it so repeat or
-              // concurrent clicks are ignored without reading history again.
-              claim = this.claimApproval({ threadId: mastraThread.id, messageId, toolCallId });
-              if (!claim) {
-                this.log('info', 'Tool approval already answered', actionEventContext);
                 return;
               }
 
@@ -963,13 +965,6 @@ export class AgentChannels {
                       resource: mastraThread.resourceId,
                     },
                   });
-                } catch (err) {
-                  const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
-                  if (isStaleApproval) {
-                    this.log('info', 'Ignoring stale tool denial action (runId already consumed)', actionEventContext);
-                  } else {
-                    throw err;
-                  }
                 } finally {
                   // Stash entry is no longer needed; the resumed decline stream
                   // won't emit a tool-result for this call.
@@ -1019,13 +1014,22 @@ export class AgentChannels {
                 },
               });
             } catch (err) {
-              const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
-              if (isStaleApproval) {
-                this.log('info', 'Ignoring stale tool approval action (runId already consumed)', actionEventContext);
+              const resumeError = classifyResumeError(err);
+              if (resumeError === 'answered') {
+                // Remember it, so later clicks on this card neither resume nor read history.
+                if (card) {
+                  this.setApprovalLookup(approvalCardKey(card), {
+                    result: { status: 'answered' },
+                    expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+                  });
+                }
+                this.log('info', 'Ignoring stale tool approval action (run already answered)', actionEventContext);
                 return;
               }
-              // The run was not resumed, so the card is still answerable.
-              claim?.release();
+              if (resumeError === 'in-progress') {
+                this.log('info', 'Ignoring tool approval action: the run is already resuming', actionEventContext);
+                return;
+              }
               // The resolver also runs on approval continuations, so a refusal
               // here means this clicker isn't allowed to act — same silence as the
               // inbound path (see handleChatMessage).
@@ -1050,8 +1054,6 @@ export class AgentChannels {
               } catch (err) {
                 this.log('warn', 'Failed to post error message for action', { ...actionEventContext, error: err });
               }
-            } finally {
-              claim?.settle();
             }
           };
 
@@ -2465,35 +2467,6 @@ export class AgentChannels {
       if (this.approvalLookups.size <= APPROVAL_LOOKUP_CACHE_SIZE) break;
       this.approvalLookups.delete(oldest);
     }
-  }
-
-  /**
-   * Claim a card for the click that is about to answer it. Returns undefined
-   * when another click is answering it or already did. `settle` marks the card
-   * answered once its run was resumed (or found already consumed); `release`
-   * drops the claim when the resume failed and the card must stay usable.
-   */
-  private claimApproval(card: ApprovalCardKey): { release: () => void; settle: () => void } | undefined {
-    const key = approvalCardKey(card);
-    if (this.approvalClaims.has(key) || this.getApprovalLookup(key)?.result.status === 'answered') return undefined;
-    this.approvalClaims.add(key);
-    let done = false;
-    return {
-      release: () => {
-        if (done) return;
-        done = true;
-        this.approvalClaims.delete(key);
-      },
-      settle: () => {
-        if (done) return;
-        done = true;
-        this.approvalClaims.delete(key);
-        this.setApprovalLookup(key, {
-          result: { status: 'answered' },
-          expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
-        });
-      },
-    };
   }
 
   /**

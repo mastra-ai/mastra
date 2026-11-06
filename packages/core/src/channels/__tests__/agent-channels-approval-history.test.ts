@@ -1,12 +1,16 @@
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { Adapter, ChatInstance, StateAdapter } from 'chat';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import type { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import type { MemoryStorage } from '../../storage';
+import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import type { ChatChannelRenderContext } from '../output-processor';
@@ -524,17 +528,6 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     expect(reads).toHaveBeenCalledTimes(9);
   });
 
-  it('does not let an approval be answered twice', async () => {
-    const { channels, reads, click } = await setup(deepApproval());
-
-    await click('tool_approve:deep-pending', 'alice');
-    await click('tool_approve:deep-pending', 'alice');
-    await click('tool_deny:deep-pending', 'alice');
-
-    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
-    expect(reads).toHaveBeenCalledTimes(9);
-  });
-
   it('keeps the card answerable when resuming the run fails', async () => {
     const { channels, reads, click } = await setup(deepApproval());
     channels.failNextApproval = true;
@@ -563,15 +556,6 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     vi.setSystemTime(Date.now() + 61_000);
     await click('tool_approve:late-pending', 'alice');
     expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'late-pending', runId: 'late-run' }]);
-  });
-
-  it('resumes the run once when the requester clicks Approve and Deny at the same time', async () => {
-    const { channels, reads, click } = await setup(deepApproval());
-
-    await Promise.all([click('tool_approve:deep-pending', 'alice'), click('tool_deny:deep-pending', 'alice')]);
-
-    expect(channels.decisions).toHaveLength(1);
-    expect(reads).toHaveBeenCalledTimes(9);
   });
 
   it('keeps one lookup per card when two threads reuse the same tool call id', async () => {
@@ -622,31 +606,235 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     await click('tool_approve:call_0', 'bob', { card: 'second-card' });
     expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'call_0', runId: 'second-run' }]);
   });
+});
 
-  it('ignores a second click while the run resumes, even after the resumed run reseeds its card', async () => {
-    const { channels, click } = await setup(deepApproval());
-    channels.whileResuming = async render => {
-      // What the output processor does when the resumed run starts streaming.
-      const { toolCallId, messageId } = render.approvalContext!;
-      render.onApprovalPosted(toolCallId, { messageId, displayName: '', argsSummary: '', startedAt: Date.now() });
-      await click('tool_deny:deep-pending', 'alice');
-    };
+// The clicks below resume a real Agent run through `approveToolCall` and
+// `declineToolCall`, so core's own resume rules decide what a second answer
+// does: only one resume of a suspended run can execute it, and a resume that
+// fails before the run starts hands the suspension back.
+describe('approval clicks that resume a real agent run', () => {
+  let cleanup: (() => Promise<void>) | undefined;
 
-    await click('tool_approve:deep-pending', 'alice');
-    await click('tool_deny:deep-pending', 'alice');
-
-    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanup?.();
+    cleanup = undefined;
   });
 
-  it('keeps a claim while the run resumes, however many other cards are looked up meanwhile', async () => {
-    const { channels, click } = await setup(deepApproval());
-    channels.whileResuming = async () => {
-      for (let i = 0; i < 1001; i++) await click(`tool_approve:unknown-${i}`, 'alice', { card: `card-${i}` });
-      await click('tool_deny:deep-pending', 'alice');
+  const TOOL_CALL_ID = 'refund-call';
+
+  async function setup() {
+    const refunds: number[] = [];
+    const refund = createTool({
+      id: 'refund',
+      description: 'Refund an order. Requires approval.',
+      inputSchema: z.object({ amount: z.number() }),
+      requireApproval: true,
+      execute: async ({ amount }) => {
+        refunds.push(amount);
+        return { refunded: amount };
+      },
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        const answered = JSON.stringify(prompt).includes('tool-result');
+        const chunks = answered
+          ? [
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'Done.' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]
+          : [
+              { type: 'tool-call', toolCallId: TOOL_CALL_ID, toolName: 'refund', input: '{"amount":10}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...chunks] as any),
+        };
+      },
+    });
+    const store = new InMemoryStore({ id: 'approval-real-agent' });
+    const agent = new Agent({
+      id: 'approval-owner',
+      name: 'Approval owner',
+      instructions: 'Refund orders when asked.',
+      model,
+      tools: { refund },
+      memory: new MockMemory({ storage: store }),
+    });
+    const mastra = new Mastra({
+      agents: { [agent.id]: agent },
+      storage: store,
+      workers: false,
+      scheduler: { enabled: false },
+      logger: false,
+    });
+    const memory = (await store.getStore('memory')) as MemoryStorage;
+    const workflows = (await store.getStore('workflows'))!;
+    await memory.saveThread({
+      thread: {
+        id: THREAD_ID,
+        resourceId: RESOURCE_ID,
+        title: 'Support thread',
+        createdAt: when(0),
+        updatedAt: when(0),
+        metadata: {
+          channel_platform: 'mock',
+          channel_externalThreadId: EXTERNAL_THREAD_ID,
+          channel_externalChannelId: 'mock:room',
+          channel_ownerId: agent.id,
+        },
+      },
+    });
+
+    // Alice asks for a refund; the run suspends on the approval and the agent
+    // stores the pending entry with its assistant message.
+    const stream = await agent.stream('Refund my order', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } });
+    await stream.consumeStream();
+    const runId = stream.runId;
+    expect((await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId }))?.status).toBe('suspended');
+    // Mark the request as Alice's, as an inbound channel message would be.
+    const { messages } = await memory.listMessages({ threadId: THREAD_ID, perPage: false });
+    const ask = messages.find(m => m.role === 'user')!;
+    await memory.saveMessages({
+      messages: [
+        {
+          ...ask,
+          content: {
+            ...ask.content,
+            providerMetadata: { mastra: { channels: { mock: { author: { userId: 'alice' } } } } },
+          },
+        },
+      ],
+    });
+
+    // A fresh AgentChannels, as after a restart: the card is not cached.
+    const adapter = createAdapter();
+    const posts: unknown[] = [];
+    Object.assign(adapter, {
+      async postMessage(_threadId: string, message: unknown) {
+        posts.push(message);
+        return { id: `post-${posts.length}`, threadId: EXTERNAL_THREAD_ID, raw: {} };
+      },
+      async startTyping() {},
+    });
+    const channels = new AgentChannels({
+      adapters: { mock: { adapter, gateway: false } },
+      state: createState(),
+      tools: false,
+    });
+    agent.setChannels(channels);
+    await channels.initialize(mastra);
+    cleanup = async () => {
+      await channels.sdk?.shutdown();
+      await mastra.shutdown();
     };
 
-    await click('tool_approve:deep-pending', 'alice');
+    const click = (actionId: string, userId: string) =>
+      adapter.chat!.processAction(
+        {
+          actionId,
+          adapter,
+          threadId: EXTERNAL_THREAD_ID,
+          messageId: 'approval-card',
+          user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
+          raw: {},
+        },
+        undefined,
+      );
+    const runStatus = async () =>
+      (await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId }))?.status;
+    const errorPosts = () => posts.filter(p => JSON.stringify(p).includes('Error'));
+    // How each resume this test spied on ended: 'resumed' or the core error id.
+    const outcomes = async (...spies: { mock: { results: { value: unknown }[] } }[]) =>
+      (await Promise.allSettled(spies.flatMap(spy => spy.mock.results.map(r => r.value)))).map(r =>
+        r.status === 'fulfilled' ? 'resumed' : (r.reason as { id?: string }).id,
+      );
 
-    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+    return { agent, workflows, runId, refunds, click, runStatus, errorPosts, outcomes };
+  }
+
+  it('runs the refund once when the requester clicks Approve twice at the same time', async () => {
+    const { agent, refunds, click, runStatus, errorPosts, outcomes } = await setup();
+    const approve = vi.spyOn(agent, 'approveToolCall');
+
+    await Promise.all([click(`tool_approve:${TOOL_CALL_ID}`, 'alice'), click(`tool_approve:${TOOL_CALL_ID}`, 'alice')]);
+    await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
+
+    // Both clicks reach core; core lets one resume run and refuses the other.
+    expect((await outcomes(approve)).sort()).toEqual(['AGENT_RESUME_ALREADY_CLAIMED', 'resumed']);
+    expect(refunds).toEqual([10]);
+    expect(errorPosts()).toEqual([]);
+  });
+
+  it('applies only one answer when the requester clicks Approve and Deny at the same time', async () => {
+    const { agent, refunds, click, runStatus, errorPosts, outcomes } = await setup();
+    const approve = vi.spyOn(agent, 'approveToolCall');
+    const decline = vi.spyOn(agent, 'declineToolCall');
+
+    await Promise.all([click(`tool_approve:${TOOL_CALL_ID}`, 'alice'), click(`tool_deny:${TOOL_CALL_ID}`, 'alice')]);
+    await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
+
+    const [approved, denied] = [await outcomes(approve), await outcomes(decline)];
+    expect([...approved, ...denied].sort()).toEqual(['AGENT_RESUME_ALREADY_CLAIMED', 'resumed']);
+    expect(refunds).toEqual(approved[0] === 'resumed' ? [10] : []);
+    expect(errorPosts()).toEqual([]);
+  });
+
+  it('stops resuming an approval that another instance already answered', async () => {
+    const { agent, runId, refunds, click, runStatus, errorPosts, outcomes } = await setup();
+    // Mallory's click is refused, but this instance now knows the card is pending.
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'mallory');
+
+    // Another instance answers the approval and the run finishes.
+    const resumed = await agent.approveToolCall({
+      runId,
+      toolCallId: TOOL_CALL_ID,
+      memory: { thread: THREAD_ID, resource: RESOURCE_ID },
+    });
+    await resumed.consumeStream();
+    expect(await runStatus()).toBeUndefined();
+    expect(refunds).toEqual([10]);
+
+    const approve = vi.spyOn(agent, 'approveToolCall');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await click(`tool_deny:${TOOL_CALL_ID}`, 'alice');
+
+    // Only the first click reaches core, which reports the run as gone.
+    expect(await outcomes(approve)).toEqual(['AGENT_RESUME_NO_SNAPSHOT_FOUND']);
+    expect(refunds).toEqual([10]);
+    expect(errorPosts()).toEqual([]);
+  });
+
+  it('lets the requester approve again when the resumed run fails before it starts', async () => {
+    const { workflows, refunds, click, runStatus } = await setup();
+    // One storage failure while the resumed run starts. Core hands the
+    // suspension back, after the click has already returned.
+    const update = workflows.updateWorkflowState.bind(workflows);
+    let failed = false;
+    vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(async args => {
+      if (!failed && args.opts.status === 'running' && args.opts.expectedStatus === 'pending') {
+        failed = true;
+        throw new Error('storage unavailable');
+      }
+      return update(args);
+    });
+
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await vi.waitFor(async () => expect(await runStatus()).toBe('suspended'));
+    expect(failed).toBe(true);
+    expect(refunds).toEqual([]);
+
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
+    expect(refunds).toEqual([10]);
   });
 });
