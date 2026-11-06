@@ -692,10 +692,14 @@ export function createFactorySessionTools(
       );
     }
     // Anything that reached the thread after the report woke a turn of its own, or will; that turn didn't come
-    // from the report, and this one can't tell them apart, so the approval stays for the person.
+    // from the report, and this one can't tell them apart, so the approval stays for the person. A record that
+    // coalesced a later event keeps its first createdAt, so its updatedAt stands in for that event.
     const since = notifications
       ? (await notifications.listNotifications({ threadId: scope.threadId, limit: FOLLOW_UP_NOTIFICATION_SCAN })).find(
-          record => record.id !== latest.report.id && record.createdAt > latest.report.createdAt,
+          record =>
+            record.id !== latest.report.id &&
+            (record.createdAt > latest.report.createdAt ||
+              ((record.coalescedCount ?? 1) > 1 && record.updatedAt > latest.report.createdAt)),
         )
       : undefined;
     if (since) {

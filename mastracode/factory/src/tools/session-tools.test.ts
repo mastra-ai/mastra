@@ -1629,6 +1629,33 @@ describe('a follow-up approved in a turn the person started', () => {
     expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeNull();
   });
 
+  it('refuses when a later event coalesces into a notification from before the report', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved({ report: false });
+    const comment = {
+      threadId: env.scope.threadId,
+      resourceId: env.scope.sessionId,
+      source: 'github',
+      kind: 'issue-comment-created',
+      priority: 'high' as const,
+      summary: 'Someone commented on the PR.',
+      coalesceKey: 'pr-comments',
+    };
+    await env.notifications.createNotification({ ...comment, sourceId: crypto.randomUUID() });
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    await reportFrom(env, env.side.sessionId);
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    // A second comment folds into the pending record, which keeps its first createdAt.
+    await env.notifications.createNotification({ ...comment, sourceId: crypto.randomUUID() });
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const item = await env.file('Something the second comment asked for');
+
+    const refusal = env.woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' });
+    await expect(refusal).rejects.toThrow("a github notification reached this session after the side session's report");
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeNull();
+  });
+
   it('refuses on a later turn once the handoff window after the report has passed', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
     const env = await approved();
