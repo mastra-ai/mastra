@@ -7,6 +7,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import type { IncidentioStatus } from '../../factory/services/incidentio';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
+import { connectionName, PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
@@ -47,7 +48,7 @@ export function IncidentioIntakeSection({
   }
   const account = directConfigured
     ? 'incident.io API key configured on this server'
-    : connections.map(connection => connection.accountLabel ?? connection.id).join(', ');
+    : connections.map(connectionName).join(', ');
   const unavailable = !directConfigured && (connectionsQuery.isError || statusQuery.isError);
   return (
     <IntakeProviderCard
@@ -56,6 +57,15 @@ export function IncidentioIntakeSection({
       account={account}
       listed={listed}
       description={description}
+      connection={
+        !directConfigured &&
+        !unavailable &&
+        (listed ? (
+          <PlatformConnectionActions provider="incident-io" connections={connections} />
+        ) : (
+          <PlatformConnectButton provider="incident-io" />
+        ))
+      }
       syncControl={
         <IntakeSyncControl
           label="Sync follow-ups"

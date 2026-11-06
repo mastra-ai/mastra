@@ -19,6 +19,7 @@ import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupLinearSourcesByTeam, partitionLinearSources } from './intakeSourceGroups';
 import { DisconnectedLinearWorkspaces } from './DisconnectedLinearWorkspaces';
+import { LinearConnectButton } from './LinearConnectionControls';
 import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
@@ -116,13 +117,20 @@ export function LinearIntakeSection({
     return repositorySlugs.length ? [{ project, repositorySlugs }] : [];
   });
 
+  function linearConnection() {
+    if (status?.enabled === false || statusUnavailable) return null;
+    if (!listed) return <LinearConnectButton />;
+    if (reauthRequired) return <LinearConnectButton action="Reconnect" />;
+    if (!connected && paused.length === 0) return <LinearConnectButton />;
+    return null;
+  }
   return (
     <IntakeProviderCard
       name="Linear"
       icon={<SettingsIntegrationIcon provider="linear" />}
       account={status?.workspace?.name ?? undefined}
       listed={listed}
-      connectable={status?.enabled !== false}
+      connection={linearConnection()}
       description={description}
       syncControl={
         <IntakeSyncControl

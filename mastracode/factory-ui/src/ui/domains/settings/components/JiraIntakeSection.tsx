@@ -10,6 +10,7 @@ import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
 import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
+import { PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
@@ -35,7 +36,7 @@ export function JiraIntakeSection({
     if (reauthRequired) return 'A connected Jira account needs to be reconnected.';
     if (authError)
       return platformManaged
-        ? 'Jira rejected a connected account. Reconnect it to resume syncing.'
+        ? 'Jira rejected a connected account. Reauthorize it from Manage to resume syncing.'
         : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.';
     if (!configured)
       return platformManaged
@@ -49,7 +50,14 @@ export function JiraIntakeSection({
       icon={<SettingsIntegrationIcon provider="jira" />}
       account={account}
       listed={listed}
-      connectable={platformManaged}
+      connection={
+        platformManaged &&
+        (listed ? (
+          <PlatformConnectionActions provider="jira" connections={status?.connections ?? []} />
+        ) : (
+          <PlatformConnectButton provider="jira" />
+        ))
+      }
       description={description}
       syncControl={
         <IntakeSyncControl

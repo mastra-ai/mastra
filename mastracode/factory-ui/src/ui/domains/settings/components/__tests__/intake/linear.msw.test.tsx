@@ -50,6 +50,8 @@ describe('IntakeSection linear', () => {
       expect(screen.getByText(/1 project or team paused/)).toBeInTheDocument();
       expect(screen.queryByText(/linear-project:/)).not.toBeInTheDocument();
       if (connected) expect(await screen.findByText('Labs roadmap')).toBeInTheDocument();
+      if (connected) expect(screen.getByRole('button', { name: 'Connect another Linear workspace' })).toBeEnabled();
+      else expect(screen.queryByRole('button', { name: /^Connect .*Linear/ })).not.toBeInTheDocument();
       await userEvent.click(paused);
       await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject]));
     },
@@ -482,18 +484,20 @@ describe('IntakeSection linear', () => {
     });
   });
 
-  describe('given Linear is connected', () => {
-    it('shows the workspace with a link to connection management', async () => {
-      useIntakeHandlers();
+  describe('given Linear workspaces are connected through Mastra Platform', () => {
+    it('keeps the card free of connect prompts and offers another workspace under Add a source', async () => {
+      useIntakeHandlers({ status: linearWorkspaceStatus });
 
       renderIntakeSection();
 
-      expect(await screen.findByText('Acme')).toBeInTheDocument();
-      const linearSection = screen.getByRole('region', { name: 'Linear' });
-      expect(within(linearSection).getByRole('link', { name: 'Manage connection' })).toHaveAttribute(
-        'href',
-        '/factories/fp-1/settings/connections',
-      );
+      const linearSection = await screen.findByRole('region', { name: 'Linear' });
+      expect(await within(linearSection).findByText('Mastra Labs')).toBeInTheDocument();
+      expect(within(linearSection).queryByRole('button', { name: /connect/i })).not.toBeInTheDocument();
+      expect(
+        within(screen.getByRole('region', { name: 'Add a source' })).getByRole('button', {
+          name: 'Connect another Linear workspace',
+        }),
+      ).toBeEnabled();
     });
   });
 
@@ -510,8 +514,8 @@ describe('IntakeSection linear', () => {
         await screen.findByText('Linear authorization expired. Reconnect to keep syncing issues.'),
       ).toBeInTheDocument();
       expect(
-        within(screen.getByRole('region', { name: 'Linear' })).getByRole('link', { name: 'Manage connection' }),
-      ).toBeInTheDocument();
+        within(screen.getByRole('region', { name: 'Linear' })).getByRole('button', { name: 'Reconnect Linear' }),
+      ).toBeEnabled();
       expect(screen.queryByRole('button', { name: 'Add Q3 Roadmap' })).not.toBeInTheDocument();
     });
   });
@@ -525,10 +529,9 @@ describe('IntakeSection linear', () => {
       renderIntakeSection();
 
       expect(await screen.findByText('Connect a Linear workspace to sync its issues.')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Connect Linear' })).toHaveAttribute(
-        'href',
-        '/factories/fp-1/settings/connections?add=1',
-      );
+      expect(
+        within(screen.getByRole('region', { name: 'Add a source' })).getByRole('button', { name: 'Connect Linear' }),
+      ).toBeEnabled();
       expect(screen.queryByRole('button', { name: 'Add Q3 Roadmap' })).not.toBeInTheDocument();
       expect(screen.queryByRole('switch', { name: 'Sync Linear issues' })).not.toBeInTheDocument();
     });
@@ -541,7 +544,7 @@ describe('IntakeSection linear', () => {
       renderIntakeSection();
 
       expect(await screen.findByText('Linear is not configured on this server.')).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Connect Linear' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect Linear' })).not.toBeInTheDocument();
     });
   });
 });

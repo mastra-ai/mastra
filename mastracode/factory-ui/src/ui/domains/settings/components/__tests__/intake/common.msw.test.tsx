@@ -121,8 +121,7 @@ describe('IntakeSection common', () => {
 
       releaseStatus();
 
-      const connect = await screen.findByRole('link', { name: 'Connect Linear' });
-      expect(connect).toHaveAttribute('href', '/factories/fp-1/settings/connections?add=1');
+      const connect = await screen.findByRole('button', { name: 'Connect Linear' });
       expect(screen.getByRole('region', { name: 'Add a source' })).toContainElement(connect);
       expect(screen.getByRole('region', { name: 'Connected sources' })).not.toContainElement(connect);
       expect(screen.queryByRole('switch', { name: 'Sync Linear issues' })).not.toBeInTheDocument();
@@ -314,7 +313,8 @@ describe('IntakeSection common', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByRole('region', { name: 'Add a source' })).toBeInTheDocument();
+      const addSource = await screen.findByRole('region', { name: 'Add a source' });
+      expect(within(addSource).getByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
       expect(screen.queryByRole('region', { name: 'Connected sources' })).not.toBeInTheDocument();
       expect(screen.queryByText('Connected sources')).not.toBeInTheDocument();
     });

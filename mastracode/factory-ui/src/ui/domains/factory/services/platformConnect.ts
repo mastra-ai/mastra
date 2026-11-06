@@ -15,6 +15,8 @@ import type { AuthOptions } from '@nangohq/frontend';
 
 export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
 
+export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
+
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
 
