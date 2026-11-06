@@ -111,16 +111,21 @@ const APPROVAL_LOOKUP_TTL_MS = 10 * 60_000;
 
 /**
  * Resume errors meaning the card's approval can no longer be applied: the run
- * finished or was aborted. Workflow-backed resumes report a missing run as a
- * plain `No snapshot found` error instead. `AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED`
- * is left out because core also throws it when its durability wait times out.
+ * finished, was aborted, or no longer waits on this tool call. Workflow-backed
+ * resumes report a missing run as a plain `No snapshot found` error instead.
  */
-const ANSWERED_RESUME_ERROR_IDS = new Set(['AGENT_RESUME_NO_SNAPSHOT_FOUND', 'AGENT_RESUME_ABORTED_RUN']);
+const ANSWERED_RESUME_ERROR_IDS = new Set([
+  'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+  'AGENT_RESUME_ABORTED_RUN',
+  'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+]);
 
 /** How a failed approval resume should be treated. */
 const classifyResumeError = (err: unknown): 'answered' | 'in-progress' | undefined => {
   if (err instanceof MastraError) {
-    if (ANSWERED_RESUME_ERROR_IDS.has(err.id)) return 'answered';
+    // A not-suspended error that only timed out waiting for the suspension to
+    // persist leaves the card answerable, so it takes the normal error path.
+    if (ANSWERED_RESUME_ERROR_IDS.has(err.id)) return err.details?.timedOut === true ? undefined : 'answered';
     // Another click (here or on another instance) is resuming the run right now.
     if (err.id === 'AGENT_RESUME_ALREADY_CLAIMED') return 'in-progress';
   }

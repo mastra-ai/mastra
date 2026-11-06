@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { RequestContext } from '../../request-context';
@@ -623,8 +624,10 @@ describe('approval clicks that resume a real agent run', () => {
   });
 
   const TOOL_CALL_ID = 'refund-call';
+  const SECOND_TOOL_CALL_ID = 'second-refund-call';
 
-  async function setup() {
+  /** `secondApproval`: once the first refund runs, the agent asks to approve another. */
+  async function setup({ secondApproval = false }: { secondApproval?: boolean } = {}) {
     const refunds: number[] = [];
     const refund = createTool({
       id: 'refund',
@@ -638,22 +641,32 @@ describe('approval clicks that resume a real agent run', () => {
     });
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
-        const answered = JSON.stringify(prompt).includes('tool-result');
-        const chunks = answered
-          ? [
-              { type: 'text-start', id: 't' },
-              { type: 'text-delta', id: 't', delta: 'Done.' },
-              { type: 'text-end', id: 't' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-            ]
-          : [
-              { type: 'tool-call', toolCallId: TOOL_CALL_ID, toolName: 'refund', input: '{"amount":10}' },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ];
+        const results = JSON.stringify(prompt).split('tool-result').length - 1;
+        const chunks =
+          secondApproval && results === 1
+            ? [
+                { type: 'tool-call', toolCallId: SECOND_TOOL_CALL_ID, toolName: 'refund', input: '{"amount":20}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : results > 0
+              ? [
+                  { type: 'text-start', id: 't' },
+                  { type: 'text-delta', id: 't', delta: 'Done.' },
+                  { type: 'text-end', id: 't' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+                ]
+              : [
+                  { type: 'tool-call', toolCallId: TOOL_CALL_ID, toolName: 'refund', input: '{"amount":10}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ];
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -891,6 +904,51 @@ describe('approval clicks that resume a real agent run', () => {
     expect(await outcomes(approve)).toEqual(['AGENT_RESUME_NO_SNAPSHOT_FOUND']);
     expect(refunds).toEqual([10]);
     expect(errorPosts()).toEqual([]);
+  });
+
+  it('stops resuming an answered approval once the run waits on a newer one', async () => {
+    const { agent, runId, refunds, click, startInstance, runStatus, errorPosts, outcomes } = await setup({
+      secondApproval: true,
+    });
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'mallory');
+    // Another instance approves the first refund; the run then asks to approve a second one.
+    await startInstance();
+    await (
+      await agent.approveToolCall({
+        runId,
+        toolCallId: TOOL_CALL_ID,
+        memory: { thread: THREAD_ID, resource: RESOURCE_ID },
+      })
+    ).consumeStream();
+    expect(await runStatus()).toBe('suspended');
+
+    const approve = vi.spyOn(agent, 'approveToolCall');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+
+    expect(await outcomes(approve)).toEqual(['AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED']);
+    expect(refunds).toEqual([10]);
+    expect(errorPosts()).toEqual([]);
+  });
+
+  it('keeps the card answerable when core times out waiting for the suspension to persist', async () => {
+    const { agent, refunds, click, runStatus } = await setup();
+    const approve = vi.spyOn(agent, 'approveToolCall').mockRejectedValueOnce(
+      new MastraError({
+        id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'not suspended',
+        details: { timedOut: true },
+      }),
+    );
+
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
+
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(refunds).toEqual([10]);
   });
 
   it('lets the requester approve again when the resumed run fails before it starts', async () => {
