@@ -40,6 +40,8 @@ export function useSubmitCredential(requestId: string) {
         `/web/credential-requests/${encodeURIComponent(requestId)}`,
         body,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: credentialRequestKey(requestId) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: credentialRequestKey(requestId) });
+    },
   });
 }

@@ -29,7 +29,9 @@ export function CredentialRequestPage() {
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!value) return;
-    submit.mutate({ value, ttlMs: effectiveTtl, allowSandbox }, { onSettled: () => setValue('') });
+    // Take the value out of the page as soon as it is sent, whatever the outcome.
+    submit.mutate({ value, ttlMs: effectiveTtl, allowSandbox });
+    setValue('');
   };
 
   return (
@@ -42,10 +44,12 @@ export function CredentialRequestPage() {
       ) : query.isError || !data ? (
         <Txt variant="body-sm">This credential request does not exist or is not yours.</Txt>
       ) : submit.isSuccess ? (
-        <Txt variant="body-sm">
-          {data.request.name} was saved. The agent is notified it is available; if it does not pick it up, tell it in
-          the session. You can close this page.
-        </Txt>
+        <div role="status" className="border-border1 rounded-md border p-3">
+          <Txt variant="body-sm">
+            {data.request.name} was saved. The agent will be told it is available; if it does not pick it up, tell it in
+            the session. You can close this page.
+          </Txt>
+        </div>
       ) : data.request.status === 'fulfilled' ? (
         <Txt variant="body-sm">
           This link was already used. Check with the agent whether {data.request.name} is available, or ask it to
@@ -101,7 +105,7 @@ export function CredentialRequestPage() {
           </div>
           {submit.isError && <Txt variant="body-sm">{submit.error.message}</Txt>}
           <Button type="submit" disabled={!value || submit.isPending}>
-            Save credential
+            {submit.isPending ? 'Saving…' : 'Save credential'}
           </Button>
         </form>
       )}

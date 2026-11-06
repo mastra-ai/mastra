@@ -72,6 +72,34 @@ describe('CredentialRequestPage', () => {
     expect(container.innerHTML).not.toContain(SECRET);
   });
 
+  it('given a slow save, when the owner submits, then the value leaves the page at once and it shows saving, then a confirmation', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    server.use(
+      http.get(url, () => HttpResponse.json(pending())),
+      http.post(url, async () => {
+        await gate;
+        return HttpResponse.json({ credential: { name: 'STRIPE_TEST_KEY', expiresAt: '2026-11-06T22:00:00.000Z' } });
+      }),
+    );
+
+    const { container, client } = renderPage();
+    await screen.findByRole('button', { name: 'Save credential' });
+    const input = container.querySelector<HTMLInputElement>('input[type="password"]')!;
+    await userEvent.type(input, SECRET);
+    await userEvent.click(screen.getByRole('button', { name: 'Save credential' }));
+
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(input.value).toBe('');
+    expect(container.innerHTML).not.toContain(SECRET);
+
+    release();
+    await waitForMutationsIdle(client);
+    expect(await screen.findByRole('status')).toHaveTextContent('STRIPE_TEST_KEY was saved');
+    expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+  });
+
   it('given a pending request, when the owner submits without opting in, then sandbox use stays off', async () => {
     const bodies: unknown[] = [];
     server.use(

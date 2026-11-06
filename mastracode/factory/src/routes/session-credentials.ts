@@ -213,7 +213,8 @@ export class SessionCredentialRoutes extends Route<SessionCredentialRoutesDeps> 
               expiresAt: result.credential.expiresAt.toISOString(),
             },
           });
-          await this.deps.notifyAvailable(result).catch((error: unknown) => {
+          // Delivery can wake or start the session's agent; the owner's form must not wait on that.
+          void this.deps.notifyAvailable(result).catch((error: unknown) => {
             console.warn('[session-credentials] Could not notify the session', {
               sessionId: request.sessionId,
               name: request.name,

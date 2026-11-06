@@ -216,6 +216,23 @@ describe('session credential routes', () => {
     ]);
   });
 
+  it('answers the submit without waiting for the session notification to be delivered', async () => {
+    const { submit, as, notifyAvailable, credentials } = await setup();
+    // Waking a session that is not live (or mid-run) can take a long time; the form must not hang on it.
+    notifyAvailable.mockImplementationOnce(() => new Promise(() => {}));
+
+    const res = await Promise.race([
+      submit(as('alice')),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 1000)),
+    ]);
+    expect(res).not.toBe('timeout');
+    expect((res as Response).status).toBe(200);
+    expect(notifyAvailable).toHaveBeenCalledTimes(1);
+    expect(
+      await credentials.resolveForCommand({ orgId: 'org-a', sessionId: 'sess-a', names: ['FAKE_API_KEY'] }),
+    ).toEqual({ FAKE_API_KEY: SECRET });
+  });
+
   it('audits a revocation', async () => {
     const { app, submit, as, record } = await setup();
     await submit(as('alice'));
