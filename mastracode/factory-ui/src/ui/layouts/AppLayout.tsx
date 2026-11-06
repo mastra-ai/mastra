@@ -6,8 +6,10 @@ import { Outlet } from 'react-router';
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { OverlaysProvider } from '../lib/overlays';
 import { AppSidebar } from '../AppSidebar';
+import { ServerProblemPage } from './ServerProblemPage';
 
 /**
  * Mobile-only bar above the page frame: the drawer trigger and global search.
@@ -37,11 +39,12 @@ function SidebarShortcuts() {
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
+  const problem = useServerStatus().data?.problems[0];
 
   return (
     <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Outlet />
+        {problem ? <ServerProblemPage problem={problem} /> : <Outlet />}
       </MainCard>
     </AppShell>
   );

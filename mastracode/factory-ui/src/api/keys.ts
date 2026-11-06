@@ -27,6 +27,7 @@ export interface AvailableModelsFilter {
 
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
+  serverStatus: () => ['server-status'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,

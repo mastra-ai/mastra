@@ -89,6 +89,20 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
   });
   const app = new Hono();
   mountApiRoutes(app as never, routes);
+  // One blocking status for the whole UI, readable before sign-in.
+  const status = await app.request('/web/status');
+  expect(status.status).toBe(200);
+  expect(await status.json()).toEqual({
+    problems: [
+      {
+        code: 'secret_key_mismatch',
+        title: "Factory can't read its stored secrets",
+        message: secretKeyMismatchHint(new FactorySecretDecryptionError('')),
+        docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+      },
+    ],
+  });
+
   const issues = await app.request('/web/github/projects/repo-1/issues');
   const issuesBody = await issues.json();
   expect(issues.status).toBe(503);
