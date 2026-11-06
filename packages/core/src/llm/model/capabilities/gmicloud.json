@@ -56,10 +56,10 @@
         "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.7": [
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["high", "max"]
       }
     ],
     "anthropic/claude-opus-4.6": [
@@ -69,11 +69,10 @@
         "max": 127999
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
+    "anthropic/claude-opus-4.7": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [
@@ -82,10 +81,11 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
+    "anthropic/claude-sonnet-4.6": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ]
   }

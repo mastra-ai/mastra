@@ -6671,7 +6671,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const streamResult = shouldResumeSubAgent
+                const subAgentStream = shouldResumeSubAgent
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -6696,17 +6696,24 @@ export class Agent<
                       context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
+                      // Durable sub-agents keep their stream open across a suspension by
+                      // default; end it so the supervisor can suspend with the worker.
+                      closeOnSuspend: true,
                       backgroundTaskPolicy: {
                         allowToolDispatch: true,
                         allowDelegationDispatch: false,
                       },
                     });
+                // Some sub-agents (e.g. durable stream()) return their MastraModelOutput nested
+                // under `output` next to fullStream/runId; others return the output itself.
+                const nestedStreamOutput = (subAgentStream as { output?: typeof subAgentStream }).output;
+                const streamResult = nestedStreamOutput ?? subAgentStream;
 
                 let requireToolApproval;
                 let suspendedPayload;
                 let resumeSchema;
                 let delegatedPause: DelegatedPauseIdentity = {};
-                for await (const chunk of streamResult.fullStream) {
+                for await (const chunk of subAgentStream.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
@@ -6748,7 +6755,9 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
-                const agentResponseMessages = streamResult.messageList.get.response.db();
+                // Every response message of the run, including ones the worker already saved to
+                // its own memory (e.g. a durable run flushes on finish), not just the unsaved ones.
+                const agentResponseMessages = streamResult.messageList.getPersisted.response.db();
                 // On resume the run continued on the thread persisted by the suspended run
                 // (backfilled from the snapshot), so target that thread for the transcript
                 // save and skip re-saving the prompt — it was already persisted (with its
@@ -6790,8 +6799,10 @@ export class Agent<
                       });
                     }
 
+                    // Apply tool transcript transforms, as the worker's own saves do, so this
+                    // same-id re-save can't overwrite redacted rows with raw tool payloads.
                     await streamMemory.saveMessages({
-                      messages: fullSubAgentMessages,
+                      messages: streamResult.messageList.transformMessagesForTranscript(fullSubAgentMessages),
                     });
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
@@ -6835,7 +6846,7 @@ export class Agent<
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
-                    runId: streamResult.runId,
+                    runId: subAgentStream.runId,
                     isAgentSuspend: true,
                     ...delegatedPause,
                   });
