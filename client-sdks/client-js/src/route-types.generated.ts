@@ -8861,7 +8861,7 @@ export type GetMemoryStatus_QueryParams = {
 
 export type GetMemoryStatus_Response = {
   result: boolean;
-  memoryType?: ('local' | 'gateway') | undefined;
+  memoryType?: ('local' | 'gateway' | 'platform') | undefined;
   observationalMemory?:
     | {
         enabled: boolean;
@@ -8903,7 +8903,7 @@ export type GetMemoryConfig_QueryParams = {
 };
 
 export type GetMemoryConfig_Response = {
-  memoryType?: ('local' | 'gateway') | undefined;
+  memoryType?: ('local' | 'gateway' | 'platform') | undefined;
   config: {
     lastMessages?: (number | false) | undefined;
     messageHistory?:

@@ -67,7 +67,23 @@ export interface MemoryContext {
 export interface MemoryObservationRecord {
   activeObservations: string | null;
   lastObservedAt: string | null;
-  [key: string]: unknown;
+  /** Older servers return only the fields above; the rest are optional for them. */
+  id?: string;
+  scope?: 'thread' | 'resource';
+  threadId?: string | null;
+  resourceId?: string;
+  /** `initial`, or `reflection` when a reflection started this generation. */
+  originType?: string;
+  generationCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  observationTokenCount?: number;
+  totalTokensObserved?: number;
+  pendingMessageTokens?: number;
+  isObserving?: boolean;
+  isReflecting?: boolean;
+  isBufferingObservation?: boolean;
+  isBufferingReflection?: boolean;
 }
 
 type SerializedMessageList = ReturnType<import('@mastra/core/agent').MessageList['serialize']>;
@@ -242,11 +258,24 @@ export class PlatformMemoryClient {
 
   /** Current observational-memory record for the thread, or null before the first observation. */
   async getObservations(threadId: string): Promise<MemoryObservationRecord | null> {
-    const res = await this.request<{ record: MemoryObservationRecord | null }>(
+    return (await this.getObservationHistory(threadId)).record;
+  }
+
+  /** The current record plus, with `historyLimit`, its generations newest first. */
+  async getObservationHistory(
+    threadId: string,
+    options: { historyLimit?: number } = {},
+  ): Promise<{ record: MemoryObservationRecord | null; history?: MemoryObservationRecord[] }> {
+    return this.request<{ record: MemoryObservationRecord | null; history?: MemoryObservationRecord[] }>(
       'GET',
       `/threads/${encodeURIComponent(threadId)}/observations`,
+      { query: options.historyLimit ? { historyLimit: options.historyLimit } : undefined },
     );
-    return res.record;
+  }
+
+  /** The instance's observation thresholds, before any thread overrides them. */
+  getInstanceConfig() {
+    return this.request<MemoryThreadConfig>('GET', '/config');
   }
 
   /** Runs the instance's memory processors for one agent phase on a serialized message list. */

@@ -430,3 +430,111 @@ describe('PlatformMemoryClient', () => {
     expect(() => new PlatformMemoryClient({ accessToken: 't' })).toThrow(/instanceId/);
   });
 });
+
+describe('PlatformMemory observational-memory inspector', () => {
+  function inspectorWith(routes: Record<string, (url: URL) => Response>) {
+    const memory = new PlatformMemory({
+      accessToken: 'tok_1',
+      instanceId: 'mem_1',
+      apiUrl: 'https://platform.test',
+      fetch: async input => {
+        const url = new URL(String(input));
+        const handler = routes[url.pathname.replace(/^\/v1\/memory\/mem_1/, '')];
+        return handler ? handler(url) : new Response('{"title":"Not found"}', { status: 404 });
+      },
+    });
+    return memory.getObservationalMemoryInspector();
+  }
+  const json = (data: unknown) => new Response(JSON.stringify(data));
+  const record = (generationCount: number, text: string) => ({
+    id: `om_${generationCount}`,
+    scope: 'thread',
+    threadId: 't1',
+    resourceId: 'r1',
+    originType: generationCount ? 'reflection' : 'initial',
+    generationCount,
+    createdAt: '2026-11-05T07:00:00.000Z',
+    updatedAt: '2026-11-05T07:39:00.000Z',
+    activeObservations: text,
+    lastObservedAt: '2026-11-05T07:39:23.547Z',
+    observationTokenCount: 2004,
+    totalTokensObserved: 9000,
+    pendingMessageTokens: 120,
+    isObserving: false,
+    isReflecting: true,
+    isBufferingObservation: false,
+    isBufferingReflection: false,
+  });
+
+  it('reports the instance thresholds as thread-scoped OM, and honest display settings', async () => {
+    const inspector = inspectorWith({
+      '/config': () =>
+        json({
+          observationTokens: 500,
+          reflectionTokens: 1000,
+          overrides: { observationTokens: null, reflectionTokens: null },
+        }),
+    });
+    expect(inspector.kind).toBe('platform');
+    expect(await inspector.getConfig()).toEqual({ scope: 'thread', messageTokens: 500, observationTokens: 1000 });
+    expect(inspector.getDisplayConfig?.()).toEqual({
+      lastMessages: false,
+      semanticRecall: false,
+      workingMemory: { enabled: true },
+    });
+  });
+
+  it('falls back to the Platform defaults on servers without the config route', async () => {
+    expect(await inspectorWith({}).getConfig()).toEqual({
+      scope: 'thread',
+      messageTokens: 30_000,
+      observationTokens: 40_000,
+    });
+  });
+
+  it('returns the record and its generations as Studio records', async () => {
+    let historyLimit: string | null = null;
+    const inspector = inspectorWith({
+      '/threads/t1/observations': url => {
+        historyLimit = url.searchParams.get('historyLimit');
+        return json({ record: record(1, '- reflected'), history: [record(1, '- reflected'), record(0, '- first')] });
+      },
+    });
+    const { record: current, history } = await inspector.getRecord({
+      threadId: 't1',
+      resourceId: 'r1',
+      historyLimit: 5,
+    });
+    expect(historyLimit).toBe('5');
+    expect(current).toMatchObject({
+      originType: 'reflection',
+      generationCount: 1,
+      activeObservations: '- reflected',
+      totalTokensObserved: 9000,
+      isReflecting: true,
+      lastObservedAt: new Date('2026-11-05T07:39:23.547Z'),
+    });
+    expect(history?.map(h => h.generationCount)).toEqual([1, 0]);
+  });
+
+  it('has no resource-level record', async () => {
+    expect(await inspectorWith({}).getRecord({ threadId: null, resourceId: 'r1' })).toEqual({ record: null });
+  });
+
+  it('waits for buffering to settle on the Platform', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const inspector = inspectorWith({
+        '/threads/t1/observations': () =>
+          json({ record: { ...record(0, '- x'), isBufferingObservation: ++calls < 3 } }),
+      });
+      const done = inspector.waitForBuffering({ threadId: 't1', resourceId: 'r1' });
+      await vi.advanceTimersByTimeAsync(2_000);
+      await done;
+      expect(calls).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

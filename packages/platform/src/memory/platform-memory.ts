@@ -1,6 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MastraMemory, parseMemoryRequestContext } from '@mastra/core/memory';
-import type { MemoryConfig, MemoryConfigInternal, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type {
+  MemoryConfig,
+  MemoryConfigInternal,
+  ObservationalMemoryInspector,
+  StorageThreadType,
+  WorkingMemoryTemplate,
+} from '@mastra/core/memory';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -10,6 +16,7 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
+  ObservationalMemoryRecord,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageListMessagesInput,
@@ -21,10 +28,11 @@ import type { ToolAction } from '@mastra/core/tools';
 
 import { z } from 'zod';
 
-import { PlatformMemoryClient } from './client';
+import { PlatformMemoryApiError, PlatformMemoryClient } from './client';
 import type {
   MemoryMessage,
   MemoryMessageInput,
+  MemoryObservationRecord,
   MemoryProcessorsResult,
   MemoryThread,
   PlatformMemoryClientOptions,
@@ -151,6 +159,55 @@ export class PlatformMemory extends MastraMemory {
           return { success: true };
         },
       }),
+    };
+  }
+
+  /** Observational Memory runs on the Platform instance; this reports it to Studio from there. */
+  override getObservationalMemoryInspector(): ObservationalMemoryInspector {
+    const client = this.client;
+    const workingMemory = this.workingMemoryMode;
+    const getRecord: ObservationalMemoryInspector['getRecord'] = async ({ threadId, historyLimit }) => {
+      // Platform OM is thread-scoped; there is no resource-level record.
+      if (!threadId) return { record: null };
+      const res = await client.getObservationHistory(threadId, { historyLimit });
+      return {
+        record: res.record ? toObservationalMemoryRecord(res.record, threadId) : null,
+        history: res.history?.map(r => toObservationalMemoryRecord(r, threadId)),
+      };
+    };
+    return {
+      kind: 'platform',
+      async getConfig() {
+        const config = await client.getInstanceConfig().catch(error => {
+          // Servers before the instance config route: report the Platform defaults.
+          if (error instanceof PlatformMemoryApiError && error.status === 404) {
+            return { observationTokens: 30_000, reflectionTokens: 40_000 };
+          }
+          throw error;
+        });
+        return {
+          scope: 'thread',
+          messageTokens: config.observationTokens,
+          observationTokens: config.reflectionTokens,
+        };
+      },
+      // History is assembled on the Platform from unobserved messages, not a recent-message
+      // window, and there is no semantic recall.
+      getDisplayConfig: () => ({
+        lastMessages: false,
+        semanticRecall: false,
+        workingMemory: { enabled: workingMemory !== 'off' },
+      }),
+      getRecord,
+      // Buffering runs on the Platform; poll its record until the flags clear (30s cap).
+      async waitForBuffering({ threadId, resourceId }) {
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          const { record } = await getRecord({ threadId, resourceId });
+          if (!record || (!record.isBufferingObservation && !record.isBufferingReflection)) return;
+          await new Promise(resolve => setTimeout(resolve, 1_000));
+        }
+      },
     };
   }
 
@@ -387,4 +444,32 @@ export class PlatformMemory extends MastraMemory {
   async cloneThread(_args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
     throw new Error('PlatformMemory does not support cloning threads yet');
   }
+}
+
+function toObservationalMemoryRecord(r: MemoryObservationRecord, threadId: string): ObservationalMemoryRecord {
+  const at = (v: string | null | undefined) => (v ? new Date(v) : undefined);
+  const lastObservedAt = at(r.lastObservedAt);
+  return {
+    id: r.id ?? threadId,
+    scope: r.scope ?? 'thread',
+    threadId: r.threadId ?? threadId,
+    resourceId: r.resourceId ?? '',
+    createdAt: at(r.createdAt) ?? lastObservedAt ?? new Date(0),
+    updatedAt: at(r.updatedAt) ?? lastObservedAt ?? new Date(0),
+    lastObservedAt,
+    originType: (r.originType ?? 'initial') as 'initial' | 'reflection',
+    generationCount: r.generationCount ?? 0,
+    activeObservations: r.activeObservations ?? '',
+    totalTokensObserved: r.totalTokensObserved ?? 0,
+    observationTokenCount: r.observationTokenCount ?? 0,
+    pendingMessageTokens: r.pendingMessageTokens ?? 0,
+    isObserving: r.isObserving ?? false,
+    isReflecting: r.isReflecting ?? false,
+    isBufferingObservation: r.isBufferingObservation ?? false,
+    isBufferingReflection: r.isBufferingReflection ?? false,
+    // Buffering watermarks stay on the Platform; Studio doesn't read them.
+    lastBufferedAtTokens: 0,
+    lastBufferedAtTime: null,
+    config: {},
+  };
 }
