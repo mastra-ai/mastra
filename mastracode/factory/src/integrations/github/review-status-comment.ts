@@ -206,62 +206,79 @@ function animation(view: ReviewStatusView): string[] {
   ];
 }
 
-/** The whole comment body for one lifecycle step. */
-export function renderReviewStatusComment(view: ReviewStatusView): string {
+type AlertType = 'NOTE' | 'TIP' | 'IMPORTANT' | 'WARNING' | 'CAUTION';
+
+/** The GitHub alert that colors each status: blue while waiting or running, green for approval, purple for a result to act on, yellow for a retry or cancellation, red for a failure. */
+function alertType(view: ReviewStatusView): AlertType {
+  switch (view.state.phase) {
+    case 'queued':
+    case 'reviewing':
+      return 'NOTE';
+    case 'retrying':
+    case 'cancelled':
+      return 'WARNING';
+    case 'failed':
+      return 'CAUTION';
+    case 'completed':
+      return view.stats?.verdict === 'approve' ? 'TIP' : 'IMPORTANT';
+  }
+}
+
+/** The status content for one lifecycle step, before it is wrapped in its alert. */
+function statusLines(view: ReviewStatusView): string[] {
   const { state, reviewerName } = view;
-  const lines = [REVIEW_STATUS_COMMENT_MARKER, stateLine(state)];
   switch (state.phase) {
     case 'queued':
-      lines.push(
+      return [
         '### ⏳ Review queued',
         '',
         `${reviewerName} accepted the review request. The review has not started yet; this comment updates when it does.`,
-      );
-      break;
+      ];
     case 'retrying':
-      lines.push(
+      return [
         '### ⏳ Review queued for retry',
         '',
         `Attempt ${state.attempt} did not finish${view.reason ? `: ${inlineCode(view.reason)}` : '.'}`,
         `${reviewerName} retries automatically; this comment updates when the next attempt starts.`,
-      );
-      break;
+      ];
     case 'reviewing': {
       const since = state.startedAt ? ` since ${state.startedAt.replace(/\.\d+Z$/, 'Z')}` : '';
       const head = state.head ? ` on \`${shortSha(state.head)}\`` : '';
-      lines.push(
+      return [
         '### Reviewing…',
         '',
         ...animation(view),
         '',
         `${reviewerName} is reviewing this pull request${head}${since}. This comment updates when the review finishes.`,
-      );
-      break;
+      ];
     }
     case 'completed':
-      lines.push(finalHeading(view), ...statsTable(view));
-      if (!view.stats?.verdict) {
-        lines.push('', 'The review run ended without recording a verdict for this pass.');
-      }
-      break;
+      return [
+        finalHeading(view),
+        ...statsTable(view),
+        ...(view.stats?.verdict ? [] : ['', 'The review run ended without recording a verdict for this pass.']),
+      ];
     case 'failed':
-      lines.push(
+      return [
         finalHeading(view),
         '',
         `The review did not finish${view.reason ? `: ${inlineCode(view.reason)}` : '.'}`,
         ...statsTable(view),
         '',
         `Request a review from ${reviewerName} again to retry.`,
-      );
-      break;
+      ];
     case 'cancelled':
-      lines.push(
+      return [
         finalHeading(view),
         '',
         'This review pass was replaced before it finished, either by a newer review request or because the pull request moved on.',
         ...statsTable(view),
-      );
-      break;
+      ];
   }
-  return `${lines.join('\n')}\n`;
+}
+
+/** The whole comment body for one lifecycle step: the hidden markers, then the status inside a GitHub alert. */
+export function renderReviewStatusComment(view: ReviewStatusView): string {
+  const quoted = statusLines(view).map(line => (line ? `> ${line}` : '>'));
+  return `${[REVIEW_STATUS_COMMENT_MARKER, stateLine(view.state), `> [!${alertType(view)}]`, ...quoted].join('\n')}\n`;
 }

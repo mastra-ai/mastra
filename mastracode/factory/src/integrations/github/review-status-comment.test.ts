@@ -57,21 +57,42 @@ describe('renderReviewStatusComment', () => {
   it("matches the animation to the reader's GitHub theme", () => {
     const body = renderReviewStatusComment(view({ state: state({ phase: 'reviewing' }), gifDarkUrl: DARK_GIF }));
     const picture = [
-      '',
-      '<picture>',
-      `  <source media="(prefers-color-scheme: dark)" srcset="${DARK_GIF}">`,
-      `  <source media="(prefers-color-scheme: light)" srcset="${GIF}">`,
-      `  <img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request">`,
-      '</picture>',
-      '',
+      '>',
+      '> <picture>',
+      `>   <source media="(prefers-color-scheme: dark)" srcset="${DARK_GIF}">`,
+      `>   <source media="(prefers-color-scheme: light)" srcset="${GIF}">`,
+      `>   <img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request">`,
+      '> </picture>',
+      '>',
     ].join('\n');
-    // Blank lines around the block keep GitHub from reading the markup as text.
+    // Blank quoted lines around the block keep GitHub from reading the markup as text inside the alert.
     expect(body).toContain(picture);
     expect(body).toContain('Shipyard is reviewing this pull request.');
     for (const phase of ['queued', 'retrying', 'completed', 'failed', 'cancelled'] as const) {
       const ended = renderReviewStatusComment(view({ state: state({ phase }), gifDarkUrl: DARK_GIF }));
       expect(ended).not.toContain('<picture>');
       expect(ended).not.toContain(DARK_GIF);
+    }
+  });
+
+  it('colors each status with a GitHub alert and keeps the hidden markers outside it', () => {
+    const cases: Array<[Partial<ReviewStatusView>, string]> = [
+      [{ state: state({ phase: 'queued' }) }, 'NOTE'],
+      [{ state: state({ phase: 'reviewing' }) }, 'NOTE'],
+      [{ state: state({ phase: 'retrying' }) }, 'WARNING'],
+      [{ state: state({ phase: 'completed' }), stats: { verdict: 'approve' } }, 'TIP'],
+      [{ state: state({ phase: 'completed' }), stats: { verdict: 'request changes' } }, 'IMPORTANT'],
+      [{ state: state({ phase: 'completed' }) }, 'IMPORTANT'],
+      [{ state: state({ phase: 'failed' }), stats: { durationMs: 1_000 } }, 'CAUTION'],
+      [{ state: state({ phase: 'cancelled' }) }, 'WARNING'],
+    ];
+    for (const [overrides, type] of cases) {
+      const lines = renderReviewStatusComment(view(overrides)).trimEnd().split('\n');
+      expect(lines[0]).toBe(REVIEW_STATUS_COMMENT_MARKER);
+      expect(parseReviewStatusState(lines.join('\n'))).toEqual(overrides.state);
+      expect(lines[2]).toBe(`> [!${type}]`);
+      // Every visible line stays inside the alert, so GitHub draws one box.
+      expect(lines.slice(3).every(line => line === '>' || line.startsWith('> '))).toBe(true);
     }
   });
 
