@@ -13,10 +13,10 @@ import { createSessionCredentialTools, redactCredentialValues, REDACTED } from '
 
 const SECRET = 'sk_test_fake_throwaway_0123456789';
 
-const scope = (sessionId: string, orgId = 'org-a'): FactoryToolScope => ({
+const scope = (sessionId: string, orgId = 'org-a', userId = 'alice'): FactoryToolScope => ({
   orgId,
   factoryProjectId: 'fac-a',
-  userId: 'alice',
+  userId,
   sessionId,
   resourceId: 'res',
   threadId: `thread-${sessionId}`,
@@ -72,6 +72,19 @@ async function setup() {
 }
 
 describe('session credential tools', () => {
+  it("refuses another org member driving the owner's shared session", async () => {
+    const { tools, submit, run } = await setup();
+    await submit(scope('sess-a'), 'FAKE_API_KEY');
+    const bob = scope('sess-a', 'org-a', 'bob');
+
+    await expect(run(bob, 'echo "$FAKE_API_KEY"', ['FAKE_API_KEY'])).rejects.toThrow('Only the owner');
+    await expect(tools(bob).factory_list_credentials!.execute!({}, {} as never)).rejects.toThrow('Only the owner');
+    await expect(
+      tools(bob).factory_request_credential!.execute!({ name: 'OTHER_KEY', purpose: 'x' }, {} as never),
+    ).rejects.toThrow('Only the owner');
+    expect((await run(scope('sess-a'), 'test -n "$FAKE_API_KEY" && echo ok', ['FAKE_API_KEY'])).stdout).toContain('ok');
+  });
+
   it('requests by link, then runs a real shell command with the credential in its env only', async () => {
     const { tools, submit, run, record, sandbox } = await setup();
     const a = scope('sess-a');
