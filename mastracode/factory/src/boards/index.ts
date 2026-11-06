@@ -18,6 +18,7 @@ export type {
 export {
   boardEventHandlers,
   boardForWorkItem,
+  boundChangeRequestNumber,
   eventBoardId,
   cardOwnsBranch,
   hasPullRequest,

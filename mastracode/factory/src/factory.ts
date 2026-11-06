@@ -54,14 +54,7 @@ import {
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
-import {
-  boardForWorkItem,
-  createBoardRegistry,
-  isTerminalWorkItem,
-  PULL_REQUEST_REVIEW_PHASE,
-  pullRequestSourceNumber,
-  reviewedPullRequest,
-} from './boards/index.js';
+import { boardForWorkItem, boundChangeRequestNumber, createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
@@ -1828,15 +1821,7 @@ export class MastraFactory {
                           resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
                         if (binding?.role !== 'review') return undefined;
                         const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                        const source = item?.externalSource;
-                        if (source && /pull-request|merge-request/.test(source.type)) {
-                          return /(\d+)$/.exec(source.externalId)?.[1];
-                        }
-                        // An issue card in PR review reviews the pull request attached to it.
-                        if (!item || item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return undefined;
-                        const attached = reviewedPullRequest(item);
-                        const number = attached ? pullRequestSourceNumber(attached) : undefined;
-                        return number === undefined ? undefined : String(number);
+                        return item ? boundChangeRequestNumber(item) : undefined;
                       },
                     }
                   : {}),
