@@ -22,7 +22,7 @@ export function MetricsCardActions({
       className={cn(
         '-my-1 flex shrink-0 items-center gap-1 self-start',
         reveal === 'hover' &&
-          'opacity-0 transition-opacity duration-150 group-hover/metrics-card:opacity-100 focus-within:opacity-100',
+          'opacity-0 transition-opacity duration-150 group-hover/metrics-card:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100',
         className,
       )}
     >

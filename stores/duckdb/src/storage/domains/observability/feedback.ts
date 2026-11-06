@@ -449,6 +449,15 @@ export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackA
   await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
 }
 
+/** Retrieves the latest feedback record with this ID, or null when missing. */
+export async function getFeedbackById(db: DuckDBConnection, feedbackId: string): Promise<FeedbackRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT * FROM feedback_events WHERE feedbackId = ? ORDER BY timestamp DESC LIMIT 1`,
+    [feedbackId],
+  );
+  return rows[0] ? rowToFeedbackRecord(rows[0]) : null;
+}
+
 /** Update the review workflow status of a single feedback event. */
 export async function updateFeedbackReviewStatus(
   db: DuckDBConnection,
