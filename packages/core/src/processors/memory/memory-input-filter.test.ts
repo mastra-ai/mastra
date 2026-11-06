@@ -20,7 +20,19 @@ function message(
 }
 
 function setup(storedMessages: MastraDBMessage[], retainFullInput = false) {
-  const listMessages = vi.fn(async () => ({ messages: storedMessages }));
+  const listMessages = vi.fn(
+    async ({
+      orderBy,
+      filter,
+    }: {
+      orderBy?: { direction?: 'ASC' | 'DESC' };
+      filter?: { dateRange?: { start?: Date } };
+    }) => {
+      const start = filter?.dateRange?.start?.getTime() ?? -Infinity;
+      const inRange = storedMessages.filter(message => message.createdAt.getTime() >= start);
+      return { messages: orderBy?.direction === 'DESC' ? inRange.toReversed() : inRange };
+    },
+  );
   const listMessagesById = vi.fn(async ({ messageIds }: { messageIds: string[] }) => ({
     messages: storedMessages.filter(message => messageIds.includes(message.id)),
   }));
@@ -260,6 +272,85 @@ describe('MemoryInputFilter', () => {
 
       expect(listMessagesById).toHaveBeenCalledWith({ messageIds: ['f1'] });
       expect(messageList.get.input.db().map(item => item.id)).toEqual(['u2']);
+    });
+
+    describe('when a state signal stored the rest of the response in a later row', () => {
+      const at = (row: MastraDBMessage, second: number): MastraDBMessage => ({
+        ...row,
+        createdAt: new Date(`2026-01-01T00:00:${String(second).padStart(2, '0')}Z`),
+      });
+      const firstRow = at(message('a1', 'assistant', [{ type: 'text', text: 'checking' }]), 1);
+      const signalRow = at(message('s1', 'signal', [{ type: 'text', text: 'state' }]), 2);
+      const laterRow = (call: Record<string, unknown>) =>
+        at(message('a2', 'assistant', [{ type: 'text', text: 'calling' }, toolPart(call)]), 3);
+      // The AI SDK client folds both rows into one UI message under the first row's id.
+      const echoed = () =>
+        message('a1', 'assistant', [
+          { type: 'text', text: 'checking' },
+          { type: 'text', text: 'calling' },
+          toolPart(update),
+        ]);
+
+      it('moves an update sent with the next user message to the row that holds the call', async () => {
+        const { messageList, processor } = setup([firstRow, signalRow, laterRow({ state: 'call' })]);
+        messageList.add([echoed(), message('u2', 'user', [{ type: 'text', text: 'next' }])], 'input');
+
+        await process(processor, messageList);
+
+        const retained = messageList.get.input.db();
+        expect(retained.map(item => item.id)).toEqual(['a2', 'u2']);
+        expect(retained[0]?.content.parts).toMatchObject([{ toolInvocation: update }]);
+      });
+
+      it('moves an update sent on its own to the row that holds the call', async () => {
+        const { messageList, processor } = setup([firstRow, signalRow, laterRow({ state: 'call' })]);
+        messageList.add(echoed(), 'input');
+
+        await process(processor, messageList);
+
+        const retained = messageList.get.input.db();
+        expect(retained.map(item => item.id)).toEqual(['a2']);
+        expect(retained[0]?.content.parts).toMatchObject([{ toolInvocation: update }]);
+      });
+
+      it('drops the update when the later row already finished the call', async () => {
+        const { messageList, processor } = setup([
+          firstRow,
+          signalRow,
+          laterRow({ state: 'result', result: 'server' }),
+        ]);
+        messageList.add([echoed(), message('u2', 'user', [{ type: 'text', text: 'next' }])], 'input');
+
+        await process(processor, messageList);
+
+        expect(messageList.get.input.db().map(item => item.id)).toEqual(['u2']);
+      });
+
+      it('drops the update when a later user message comes before the row that holds the call', async () => {
+        const { messageList, processor } = setup([
+          firstRow,
+          at(message('u1', 'user', [{ type: 'text', text: 'meanwhile' }]), 2),
+          laterRow({ state: 'call' }),
+        ]);
+        messageList.add([echoed(), message('u2', 'user', [{ type: 'text', text: 'next' }])], 'input');
+
+        await process(processor, messageList);
+
+        expect(messageList.get.input.db().map(item => item.id)).toEqual(['u2']);
+      });
+    });
+
+    it('does not read later rows when the first row holds the call', async () => {
+      const { listMessages, messageList, processor } = setup([storedPending]);
+      messageList.add(
+        [message('a1', 'assistant', [toolPart(update)]), message('u2', 'user', [{ type: 'text', text: 'next' }])],
+        'input',
+      );
+
+      await process(processor, messageList);
+
+      expect(listMessages).toHaveBeenCalledTimes(1);
+      expect(listMessages).toHaveBeenCalledWith(expect.objectContaining({ perPage: 1 }));
     });
   });
 
