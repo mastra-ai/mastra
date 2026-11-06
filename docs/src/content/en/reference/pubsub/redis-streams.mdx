@@ -309,7 +309,7 @@ Keep `reclaimIdleMs` above 30 seconds (the default is 60 seconds). A lower value
 
 Runs started on older versions can finish after upgrading, but don't have guaranteed crash recovery. Saved steps without occurrence identifiers keep their existing unguarded behavior. Other storage adapters keep distributed internal orchestration on the worker process.
 
-An interrupted step can execute again, so make external side effects idempotent. Completed step occurrences are protected against stale redeliveries, and a completed loop iteration reuses its saved result and loop decision. Guarded execution persists the records needed for recovery even when `shouldPersistSnapshot` returns `false`. Resume, time travel, restart races, and individual `foreach` items aren't covered by these occurrence guards.
+An interrupted step can execute again, so make external side effects idempotent. Completed step occurrences are protected against stale redeliveries, and a completed loop iteration reuses its saved result and loop decision. Guarded execution persists the records needed for recovery even when `shouldPersistSnapshot` returns `false`. Resume, time travel, restart races, and individual `foreach` items aren't covered by these occurrence guards. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat) for agent tools.
 
 ## Distributed leasing
 

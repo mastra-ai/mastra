@@ -518,6 +518,10 @@ To exclude a workflow from automatic boot-time restarts triggered by `Mastra.res
 
 While a run executes, Mastra holds a storage lease on it and renews it in the background. `restart()` refuses to take over a run whose lease hasn't expired: it throws a `WORKFLOW_RESTART_RUN_OWNED` error and the sweep skips the run. The lease is advisory and doesn't fence writes. If a process stops renewing its lease but keeps executing a step, for example because its event loop is blocked for longer than the lease TTL, recovery can run that step a second time. The boot-time sweep, `mastra.restartAllActiveWorkflowRuns()`, rechecks a skipped run once its lease could have expired, so a run whose process crashed is still recovered. `workflow.restartAllActiveWorkflowRuns()` skips the run without a recheck, so call it after the lease expires if you need to recover that run. Storage adapters without run-ownership support keep the previous behavior and restart every active run.
 
+A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step also runs again when its event is redelivered to a worker. Make steps with side effects idempotent, so a repeated step has no additional effect.
+
+A step's `execute` function receives `runId`, which stays the same when the step repeats. Combine it with the `id` you gave the step in `createStep()` to build an idempotency key. Inside `foreach` or a loop, the same step runs more than once in a run. Add an item ID from the step's input or an iteration counter kept in [workflow state](#workflow-state) to the key. For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
+
 ### Restarting an active workflow run with `restart()`
 
 Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.
