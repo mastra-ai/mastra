@@ -2,7 +2,7 @@ import type { TripwireMetadata } from '@mastra/react';
 import { ChevronDown, ChevronRight, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Code } from '@/ds/components/Code';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
 
@@ -67,15 +67,10 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                     <Txt as="span" variant="caption" className="opacity-70">
                       Metadata
                     </Txt>
-                    <CodeEditor
-                      value={JSON.stringify(tripwire.metadata, null, 2)}
-                      language="json"
-                      editable={false}
-                      lineNumbers={false}
-                      showCopyButton={false}
-                      variant="embedded"
-                      aria-label="Tripwire metadata"
-                      className="rounded-lg bg-current/10 p-2"
+                    <Code
+                      code={JSON.stringify(tripwire.metadata, null, 2)}
+                      lang="json"
+                      className="rounded-lg bg-current/10 p-2 text-caption break-words whitespace-pre-wrap"
                     />
                   </div>
                 )}

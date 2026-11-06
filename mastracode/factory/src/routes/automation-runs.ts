@@ -26,12 +26,8 @@ import { auditRequestContext } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /** The invokeSkill payload this route commits, matched against a prior replay. */
 interface AutomationInvokeSkillDecision {
