@@ -291,6 +291,8 @@ describe('useChat follow-up sent while the answer is still streaming (#29163)', 
     });
 
     const ids = chat.result.current.messages.map(message => message.id);
+    // No empty assistant row is left behind for the answer that has not streamed yet.
+    expect(ids).toEqual(['signal-1', 'signal-other', 'signal-2']);
     expect(ids.indexOf('signal-other')).toBeGreaterThan(-1);
     expect(ids.indexOf('signal-other')).toBeLessThan(ids.indexOf('signal-2'));
     expect(chat.result.current.messages.at(-1)!.content.metadata?.status).toBe('pending');
