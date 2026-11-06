@@ -63,6 +63,8 @@ export interface SourceControlSessionRoutesOptions {
   audit?: AuditRecorder;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Drops session-scoped data (such as stored credentials) when a session is deleted without a retirement coordinator. */
+  purgeSessionData?: (session: { orgId: string; sessionId: string }) => Promise<void>;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
   /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
@@ -798,6 +800,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           });
         } else {
           await options.workItems?.clearSessionReferences({ orgId: session.orgId, sessionId: session.sessionId });
+          await options.purgeSessionData?.({ orgId: session.orgId, sessionId: session.sessionId });
           await match.sourceControl.sessions.delete(session.id);
           void reclaimDeletedSessionSandbox({ session }).catch((error: unknown) => {
             console.error('[Factory Sessions] Failed to reclaim sandbox for deleted session', {

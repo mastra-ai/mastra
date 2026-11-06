@@ -82,6 +82,7 @@ import { PlatformApiClient, platformApiClientConfigFromEnv } from './integration
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { factoryUiOrigin } from './links.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
@@ -93,6 +94,7 @@ import {
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
+import type { SessionCredentialRoutesDeps } from './routes/session-credentials.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import { TelemetryRoutes } from './routes/telemetry.js';
@@ -162,6 +164,7 @@ import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
+import { SessionCredentialsStorage } from './storage/domains/session-credentials/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
@@ -186,6 +189,7 @@ import {
 import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
+import { createSessionCredentialTools } from './tools/session-credential-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { backfillUntilDone } from './work-items/split-backfill.js';
 import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
@@ -837,6 +841,9 @@ export class MastraFactory {
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
+    const sessionCredentialsStorage = storage.registerDomain(new SessionCredentialsStorage(secretEncryption));
+    // Session credentials exist to hold test secrets, so with auth on they are only offered when they can be stored encrypted.
+    const sessionCredentials = !auth || this.#config.secretEncryption ? sessionCredentialsStorage : undefined;
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -1112,6 +1119,7 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            purgeSessionData: scope => sessionCredentialsStorage.purgeSession(scope),
             sandbox: sandboxConfig,
           })
         : undefined;
@@ -1183,6 +1191,31 @@ export class MastraFactory {
             ...options,
           }),
       };
+    };
+    const notifyCredentialAvailable: SessionCredentialRoutesDeps['notifyAvailable'] = async ({
+      request,
+      credential,
+    }) => {
+      const reporting = await factoryReporting();
+      if (!reporting) return;
+      await reporting.deliver(
+        { sessionId: request.sessionId, threadId: request.threadId },
+        {
+          kind: 'credential-available',
+          priority: 'high',
+          summary: `Credential ${credential.name} is ready until ${credential.expiresAt.toISOString()}. ${
+            credential.allowSandbox
+              ? 'Use factory_run_with_credentials to run commands with it.'
+              : 'It was submitted without sandbox use allowed, so commands cannot use it.'
+          }`,
+          payload: {
+            name: credential.name,
+            allowSandbox: credential.allowSandbox,
+            expiresAt: credential.expiresAt.toISOString(),
+          },
+          sourceId: request.id,
+        },
+      );
     };
     const sessionReports = {
       sessions: sourceControlSessions,
@@ -1891,6 +1924,27 @@ export class MastraFactory {
                     deps: factoryToolDeps,
                   }),
                 );
+                if (sessionCredentials) {
+                  mergeTools(
+                    'factory-session-credentials',
+                    createSessionCredentialTools(scope, {
+                      credentials: sessionCredentials,
+                      sessions: sourceControlSessions,
+                      findSandbox: async ({ orgId, sessionId }) => {
+                        const session = await sourceControlSessions.getBySessionId(sessionId);
+                        if (!session || session.orgId !== orgId) return undefined;
+                        const entry = peekSessionSandbox(session.id);
+                        if (!entry?.sandbox.executeCommand) return undefined;
+                        return {
+                          sandbox: { executeCommand: entry.sandbox.executeCommand.bind(entry.sandbox) },
+                          ...(entry.workdir ? { workdir: entry.workdir } : {}),
+                        };
+                      },
+                      publicOrigin: factoryUiOrigin() ?? publicOrigin,
+                      audit: auditDomain,
+                    }),
+                  );
+                }
                 if (sessionRetirement && sandboxConfig && SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)) {
                   mergeTools(
                     'factory-sandbox-tools',
@@ -2001,6 +2055,11 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
+            sessionCredentials: {
+              ...(sessionCredentials ? { credentials: sessionCredentials } : {}),
+              notifyAvailable: notifyCredentialAvailable,
+            },
+            purgeSessionData: scope => sessionCredentialsStorage.purgeSession(scope),
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {

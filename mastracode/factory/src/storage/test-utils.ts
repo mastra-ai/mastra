@@ -21,6 +21,7 @@ import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
+import { SessionCredentialsStorage } from './domains/session-credentials/base.js';
 import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
@@ -129,6 +130,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   boards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
   voiceSettings: VoiceSettingsStorage;
+  sessionCredentials: SessionCredentialsStorage;
 }
 
 /**
@@ -165,6 +167,7 @@ export async function createFactoryStorageForTests(
   const boards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
+  const sessionCredentials = storage.registerDomain(new SessionCredentialsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -185,5 +188,6 @@ export async function createFactoryStorageForTests(
     boards,
     skillOverrides,
     voiceSettings,
+    sessionCredentials,
   };
 }
