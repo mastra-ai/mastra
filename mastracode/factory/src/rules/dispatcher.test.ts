@@ -7543,7 +7543,8 @@ describe('review status comment lifecycle', () => {
   };
 
   /** One pull request's conversation, fed by the real publisher from the dispatcher's own events. */
-  function pullRequestConversation() {
+  /** `holdUpdate` stalls an edit after its read, like a slow GitHub PATCH. */
+  function pullRequestConversation(holdUpdate?: (body: string) => Promise<void>) {
     let comments: Array<{
       id: string;
       url: string;
@@ -7573,6 +7574,7 @@ describe('review status comment lifecycle', () => {
         return comment;
       },
       async updateComment({ commentId, body }: { commentId: string; body: string }) {
+        await holdUpdate?.(body);
         writes.updated++;
         comments = comments.map(comment => (comment.id === commentId ? { ...comment, body } : comment));
         return comments.find(comment => comment.id === commentId)!;
@@ -7854,7 +7856,7 @@ describe('review status comment lifecycle', () => {
         ...options,
       }).runOnce(at);
     };
-    return { storage, lostAt, conversation, reclaim };
+    return { storage, lostAt, conversation, reclaim, transitionService: queued.transitionService };
   }
 
   it('finalizes a review whose worker was lost once a re-claim finds the landed run over', async () => {
@@ -7871,6 +7873,36 @@ describe('review status comment lifecycle', () => {
     expect(body).not.toContain('Reviewing…');
     // Timing still runs from the lost attempt's recorded start, not from the re-claim.
     expect(body).toContain('"startedAt":"2030-01-01T00:00:00.000Z"');
+  });
+
+  it('waits out a landed run that never reached the open-run ledger before finalizing it', async () => {
+    const { storage, lostAt, conversation, transitionService } = await lostReview('review-status-replay-live');
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    // The lost worker delivered the kickoff but died before recording the run start, and the run is still going here.
+    const { controller, emitAgentEnd } = createSession(undefined, { initialDeliveredSignalIds: [record!.id] });
+    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
+    let dispatched = false;
+    const tick = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-2',
+      isAutoRunEnabled: async () => true,
+      reportReviewStatus: conversation.reportReviewStatus,
+    })
+      .runOnce(new Date(lostAt.getTime() + 2_000))
+      .then(() => (dispatched = true));
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(dispatched).toBe(false);
+    expect(conversation.events).toEqual([]);
+    expect(conversation.comments()[0]!.body).toContain('Reviewing…');
+
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    emitAgentEnd('complete');
+    await tick;
+    expect(conversation.events).toEqual([expect.objectContaining({ phase: 'completed', attempt: 2, replayed: true })]);
+    expect(conversation.comments()[0]!.body).toContain('Review finished');
   });
 
   it('never lets a re-claim that fails before its replay guard speak over the live run', async () => {
@@ -7899,7 +7931,7 @@ describe('review status comment lifecycle', () => {
     expect(conversation.comments()[0]!.body).not.toContain('failed');
   });
 
-  it('keeps reviewing when a status write hangs, and later writes do not wait on it forever', async () => {
+  it('keeps reviewing when a status write hangs, and repairs the comment when it lands late', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -7912,13 +7944,14 @@ describe('review status comment lifecycle', () => {
         idempotencyKey: 'review-status-hung',
       });
       await bindReviewRun(storage, queued.item.id);
-      const conversation = pullRequestConversation();
-      let releaseQueued!: () => void;
-      const queuedHeld = new Promise<void>(resolve => (releaseQueued = resolve));
-      const reportReviewStatus = vi.fn(async (event: FactoryReviewStatusEvent) => {
-        if (event.phase === 'queued') await queuedHeld;
-        await conversation.reportReviewStatus(event);
+      let releaseReviewing!: () => void;
+      const reviewingHeld = new Promise<void>(resolve => (releaseReviewing = resolve));
+      // The `reviewing` edit has already read the comment when it stalls, so
+      // nothing in the publisher can stop it once it lands.
+      const conversation = pullRequestConversation(async body => {
+        if (body.includes('Reviewing…')) await reviewingHeld;
       });
+      const reportReviewStatus = conversation.reportReviewStatus;
       const { controller } = createSession(undefined, { agentEndReason: 'complete' });
       const dispatch = new FactoryDecisionDispatcher({
         controller: controller as never,
@@ -7940,16 +7973,23 @@ describe('review status comment lifecycle', () => {
         await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.reviewStatusTimeoutMs);
         expect(dispatched).toBe(true);
       });
-      // The run finished without the stuck `queued` write, and the later writes went ahead after one timeout.
+      // The run finished without the stuck `reviewing` write, and `completed` went ahead after one timeout.
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('still pending'));
-      await vi.waitFor(() => expect(conversation.events.map(event => event.phase)).toEqual(['reviewing', 'completed']));
+      await vi.waitFor(() => expect(conversation.comments()[0]?.body).toContain('Review finished'));
 
-      // When the stuck write finally lands, it is older than what the comment shows and is dropped.
-      releaseQueued();
-      await vi.waitFor(() => expect(conversation.events).toHaveLength(3));
-      expect(conversation.events.map(event => event.phase)).toEqual(['reviewing', 'completed', 'queued']);
+      // The stuck edit lands on top of the finished status; the dispatcher restates the newest step.
+      releaseReviewing();
+      await vi.waitFor(() =>
+        expect(conversation.events.map(event => event.phase)).toEqual([
+          'queued',
+          'reviewing',
+          'completed',
+          'completed',
+        ]),
+      );
+      await vi.waitFor(() => expect(conversation.comments()[0]!.body).toContain('Review finished'));
       expect(conversation.comments()).toHaveLength(1);
-      expect(conversation.comments()[0]!.body).toContain('Review finished');
+      expect(conversation.comments()[0]!.body).not.toContain('Reviewing…');
     } finally {
       warn.mockRestore();
       vi.useRealTimers();

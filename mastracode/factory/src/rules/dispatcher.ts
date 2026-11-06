@@ -678,7 +678,15 @@ export class FactoryDecisionDispatcher {
   /** Re-claims that found an earlier attempt's kickoff landed and its run already over. */
   readonly #reviewReplayed = new WeakSet<FactoryDeferredDecisionRecord>();
   /** Last pending status-comment write per run, so writes stay ordered. */
-  readonly #reviewStatusTail = new Map<string, Promise<void>>();
+  /**
+   * Per review run: the write chain, the newest step issued, and how many
+   * writes were issued and how far the landed ones reach, so a write that
+   * outlived its wait and landed after a newer one can be repaired.
+   */
+  readonly #reviewStatusRuns = new Map<
+    string,
+    { tail: Promise<void>; issued: number; landed: number; latest: FactoryReviewStatusEvent }
+  >();
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
@@ -1061,6 +1069,35 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * An earlier attempt's kickoff already landed, so this attempt only has to
+   * see that run end before a review's status can be finalized. The open-run
+   * wait covers runs in the ledger; a run that landed but died before
+   * registering there can still be live in this process, so wait it out too.
+   */
+  async #replayLanded(
+    record: FactoryDeferredDecisionRecord,
+    decision: unknown,
+    session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
+    runStillActive: () => boolean,
+  ): Promise<void> {
+    if (!isReviewRun(decision)) return;
+    if (runStillActive()) {
+      const run = watchRun(session, {
+        timeoutMs: this.#skillCompletionObservationTimeoutMs,
+        approvePlans: false,
+        label: 'Factory skill run',
+        runStillActive,
+      });
+      try {
+        if (runStillActive()) await run.wait();
+      } finally {
+        run.close();
+      }
+    }
+    this.#reviewReplayed.add(record);
+  }
+
   async #reviewQueuedOnce(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<void> {
     if (this.#reviewQueued.has(record)) return;
     this.#reviewQueued.add(record);
@@ -1087,7 +1124,20 @@ export class FactoryDecisionDispatcher {
     };
     // Writes for one run go out in order even when the run stops waiting on a
     // slow one, so an earlier step can never land on top of a later one.
-    const previous = this.#reviewStatusTail.get(record.id) ?? Promise.resolve();
+    const run = this.#reviewStatusRuns.get(record.id) ?? {
+      tail: Promise.resolve(),
+      issued: 0,
+      landed: 0,
+      latest: event,
+    };
+    this.#reviewStatusRuns.set(record.id, run);
+    const previous = run.tail;
+    const seq = ++run.issued;
+    run.latest = event;
+    const send = (next: FactoryReviewStatusEvent) =>
+      report(next).catch(error => {
+        console.warn('Factory review status update failed', sanitizeDispatchError(error));
+      });
     // A write that never settles holds the next one back for one timeout, not forever.
     let waited: ReturnType<typeof setTimeout> | undefined;
     const turn = Promise.race([
@@ -1096,14 +1146,18 @@ export class FactoryDecisionDispatcher {
         waited = setTimeout(resolve, REVIEW_STATUS_TIMEOUT_MS);
       }),
     ]).finally(() => clearTimeout(waited));
-    const delivered = turn.then(() =>
-      report(event).catch(error => {
-        console.warn('Factory review status update failed', sanitizeDispatchError(error));
-      }),
-    );
-    this.#reviewStatusTail.set(record.id, delivered);
+    const delivered = turn.then(async () => {
+      await send(event);
+      // This write outlived its wait and a newer one landed first: it may have
+      // put an older step back on the comment, so restate the newest one.
+      if (run.landed > seq) await send(run.latest);
+      run.landed = Math.max(run.landed, seq);
+    });
+    run.tail = delivered;
     void delivered.then(() => {
-      if (this.#reviewStatusTail.get(record.id) === delivered) this.#reviewStatusTail.delete(record.id);
+      if (run.tail === delivered && run.landed >= run.issued && this.#reviewStatusRuns.get(record.id) === run) {
+        this.#reviewStatusRuns.delete(record.id);
+      }
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<'timeout'>(resolve => {
@@ -1348,8 +1402,7 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          // The open-run wait above means a landed kickoff's run is over by now.
-          if (await kickoffLanded()) return void this.#reviewReplayed.add(record);
+          if (await kickoffLanded()) return this.#replayLanded(record, decision, session, runStillActive);
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
@@ -1369,8 +1422,7 @@ export class FactoryDecisionDispatcher {
                 }
               : { type: 'user' as const, tagName: 'user' };
           // The feed read is async storage I/O; the card can move while it runs.
-          // The open-run wait above means a landed kickoff's run is over by now.
-          if (await kickoffLanded()) return void this.#reviewReplayed.add(record);
+          if (await kickoffLanded()) return this.#replayLanded(record, decision, session, runStillActive);
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           await this.#reviewQueuedOnce(record, decision);
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
