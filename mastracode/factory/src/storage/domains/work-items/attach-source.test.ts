@@ -114,6 +114,44 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('one card for an
     expect(pullRequestAfter!.workItem.sources.map(source => source.sourceType)).toEqual(['pull-request']);
   });
 
+  it('treats losing a race to attach the same pull request as already filed, while another project holds it too', async () => {
+    const { workItems, scope, file } = await setup();
+    // The same repository can feed two projects in one org, so each carries its own copy of the record.
+    await workItems.upsert({
+      ...scope,
+      factoryProjectId: 'other-project',
+      input: { title: 'other', board: 'work', stages: ['intake'], externalSource: pullRequest34, metadata: {} },
+    });
+    const cards = await Promise.all(
+      Array.from({ length: 5 }, (_, n) =>
+        file({ ...issue12, externalId: `github:10:issue:${n + 1}` }, { state: 'open' }),
+      ),
+    );
+
+    const results = await Promise.all(
+      cards.flatMap(card =>
+        [0, 1].map(() =>
+          workItems.attachSource({ orgId: scope.orgId, id: card.id, source: pullRequest34, metadata: {} }).then(
+            result => ({ card: card.id, attached: result?.attached }),
+            (error: unknown) => ({ card: card.id, error }),
+          ),
+        ),
+      ),
+    );
+
+    // Only one card in this project can take the pull request; every other attempt is refused.
+    const winner = results.find(result => 'attached' in result && result.attached)!;
+    expect(winner).toBeDefined();
+    for (const result of results.filter(result => result.card === winner.card && result !== winner)) {
+      expect(result).toEqual({ card: winner.card, attached: false });
+    }
+    const winnerWorkItem = cards.find(card => card.id === winner.card)!.workItemId;
+    for (const result of results.filter(result => result.card !== winner.card)) {
+      expect('error' in result && result.error).toBeInstanceOf(WorkItemSourceConflictError);
+      expect((result as { error: WorkItemSourceConflictError }).error.ownerWorkItemId).toBe(winnerWorkItem);
+    }
+  });
+
   it("writes a pull request's state to its own source, never to the issue's", async () => {
     const { workItems, scope, file } = await setup();
     const card = await file(issue12, { state: 'open' });
