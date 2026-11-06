@@ -1701,7 +1701,7 @@ describe('run status reads for a run created without a stored row', () => {
     expect(statusSpy).not.toHaveBeenCalled();
   });
 
-  it('runs a workflow whose persistence policy reads step results', async () => {
+  it('runs a workflow whose persistence policy reads step results, keeping its status reads', async () => {
     const storage = new MockStore();
     const workflow = createWorkflow({
       id: 'step-results-policy-wf',
@@ -1715,10 +1715,13 @@ describe('run status reads for a run created without a stored row', () => {
       .then(noopStep('first'))
       .commit();
     new Mastra({ logger: false, storage, workflows: { 'step-results-policy-wf': workflow } });
+    const workflowsStore = await storage.getStore('workflows');
+    const statusSpy = vi.spyOn(workflowsStore!, 'loadWorkflowRunStatus');
 
     const run = await workflow.createRun();
 
     expect((await run.start({ inputData: {} })).status).toBe('success');
+    expect(statusSpy).toHaveBeenCalled();
   });
 
   it.each<{
