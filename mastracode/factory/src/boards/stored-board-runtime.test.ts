@@ -19,8 +19,8 @@ import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { compileBoardDefinition } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
@@ -498,7 +498,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // The stubbed model answers only OpenAI; keep observational memory from calling its observer model.
         await replica.storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
           orgId,
-          userId: factoryMemorySettingsUserId(projectId),
+          userId: factoryProjectSettingsUserId(projectId),
           patch: { observationThreshold: 1_000_000 },
         });
         const sourceControl = replica.github.sourceControlStorage;

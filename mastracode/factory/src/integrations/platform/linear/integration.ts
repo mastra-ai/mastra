@@ -2,10 +2,10 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
-import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '../../../capabilities/intake.js';
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
@@ -101,10 +101,6 @@ const PAGE_SIZE = 30;
 const MAX_REFERENCE_PAGES = 20;
 const MAX_COMMENT_PAGES = 20;
 const PLATFORM_MANAGED_CONNECTION_TOKEN = 'platform-managed';
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
   return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
