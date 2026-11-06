@@ -937,6 +937,20 @@ describe('useAgentControllerConnection', () => {
         expect(await page.settled()).toBe(reads);
       },
     );
+
+    it('given the stream reconnects to a recreated session numbered lower, when a later event skips a number, then the message window is read again', async () => {
+      const page = await openThreadPage({ running: true });
+      await page.deliver(snapshot(900, true));
+
+      page.streams[0].drop();
+      await waitFor(() => expect(page.streams).toHaveLength(2), { timeout: 2500 });
+      await page.deliver(snapshot(5, true), page.streams[1]);
+      expect(await page.settled()).toBe(2);
+
+      await page.deliver({ type: 'agent_start', seq: 6 }, page.streams[1]);
+      await page.deliver({ type: 'message_end', id: 'assistant-1', seq: 8 }, page.streams[1]);
+      expect(await page.settled()).toBe(3);
+    });
   });
 
   it('reports the thread a switch bound the session to, not the thread its state is read for', async () => {

@@ -6,15 +6,18 @@ Agent controller session streams now number their events. Every event on `GET /a
 
 ```ts
 let lastSeq: number | undefined;
-let reconnecting = false;
+let opening = true; // set back to true when the stream reconnects
 
 function onStreamEvent(event: { type: string; seq?: number }) {
-  if (reconnecting && event.type === 'display_state_changed') {
-    reconnecting = false;
-    if (event.seq !== lastSeq) {
+  if (event.seq === undefined) return;
+  if (opening) {
+    opening = false;
+    if (lastSeq !== undefined && event.seq !== lastSeq) {
       // events were missed while disconnected: re-read the thread
     }
+    lastSeq = event.seq;
+  } else if (lastSeq === undefined || event.seq > lastSeq) {
+    lastSeq = event.seq;
   }
-  lastSeq = event.seq;
 }
 ```

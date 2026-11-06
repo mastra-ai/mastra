@@ -136,7 +136,7 @@ export function useAgentControllerConnection({
     const seq = typeof event.seq === 'number' ? event.seq : undefined;
     const stream = trackedStream();
     const last = stream.seq;
-    if (seq !== undefined) stream.seq = Math.max(seq, last ?? seq);
+    if (seq !== undefined) stream.seq = opensStream ? seq : Math.max(seq, last ?? seq);
     const missed = opensStream
       ? stream.dropped && (seq === undefined || seq !== last)
       : last !== undefined && seq !== undefined && seq > last + 1;
