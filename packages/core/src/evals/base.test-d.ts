@@ -21,3 +21,8 @@ test('judge instructions accept the same forms as agent instructions', () => {
     createScorer({ id: 'report-judge', description: 'Scores a report', judge });
   }
 });
+
+test('judge instructions reject other types', () => {
+  // @ts-expect-error instructions must be text, system messages, or a function that returns them
+  createScorer({ id: 'report-judge', description: 'Scores a report', judge: { model, instructions: 42 } });
+});

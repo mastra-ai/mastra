@@ -149,7 +149,7 @@ export interface ScorerJudgeConfig {
    * agent has memory with OM observers that read dynamic model config from controller
    * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
    * correct observer model and provider credentials. Values from the run's `requestContext`
-   * override these values.
+   * override these values, except for reserved Mastra keys and `MastraMemory`.
    */
   requestContext?: RequestContext<any>;
 }
@@ -158,7 +158,7 @@ export interface ScorerJudgeConfig {
  * Step-level fields override scorer-level judge fields. Processor arrays replace
  * the scorer-level arrays; omit maxProcessorRetries to inherit its numeric cap.
  */
-export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
+export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions' | 'requestContext'> & {
   /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
   memory?: AgentMemoryOption;
 };
@@ -990,7 +990,9 @@ class MastraScorer<
     runRequestContext?: Record<string, any> | RequestContext,
   ): RequestContext<any> | undefined {
     const scorerRequestContext = this.config.judge?.requestContext;
-    // Reserved keys and the memory binding would put the judge on the caller's thread.
+    // Only the caller's own data passes from the run to the judge. Thread, resource, and scope keys and the
+    // memory binding would put the judge on the caller's thread. The other reserved keys, such as the auth token,
+    // stay out by least privilege. A judge that needs one can set it on `judge.requestContext`.
     const runEntries = [...(this.normalizeRunRequestContext(runRequestContext)?.entries() ?? [])].filter(
       ([key]) => key !== 'MastraMemory' && !isReservedRequestContextKey(key),
     );
@@ -1524,11 +1526,7 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(
-      modelConfig,
-      this.config.judge?.requestContext ?? undefined,
-      this.#mastra,
-    );
+    const resolvedModel = await resolveModelConfig(modelConfig, judgeRequestContext, this.#mastra);
     const judgeModel = resolvedModel.modelId;
     const telemetry: ScorerJudgeTelemetryAccumulator = {
       usage: {},

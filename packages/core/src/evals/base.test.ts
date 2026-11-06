@@ -9,6 +9,7 @@ import { StreamErrorRetryProcessor } from '../processors';
 import {
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
   RequestContext,
 } from '../request-context';
@@ -1313,6 +1314,26 @@ describe('createScorer', () => {
       expect(scorerContext.has('runOnly')).toBe(false);
     });
 
+    it('lets a dynamic judge model read values from the run', async () => {
+      const fast = createJudgeModel([SCORE]);
+      const fallback = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          // The public type has no function form, but the model resolver accepts one at runtime.
+          model: (({ requestContext }: { requestContext: RequestContext<any> }) =>
+            requestContext.get('judgeTier') === 'fast' ? fast.model : fallback.model) as any,
+          instructions: 'Score the report.',
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { judgeTier: 'fast' } });
+
+      expect(fast.getCallCount()).toBe(1);
+      expect(fallback.getCallCount()).toBe(0);
+    });
+
     it('gives the judge a report that a preprocess step loads into the run context', async () => {
       const { model, getPrompts } = createJudgeModel([SCORE]);
       const scorer = createScorer({
@@ -1335,35 +1356,43 @@ describe('createScorer', () => {
       expect(systemText(getPrompts()[0])).toContain('REPORT: loaded-report');
     });
 
-    it('keeps a judge with memory on its own thread when the run names the caller thread', async () => {
-      const memory = new MockMemory();
-      const { model } = createJudgeModel([SCORE]);
-      const scorer = createScorer({
-        id: 'report-judge',
-        description: 'Scores a report',
-        judge: {
-          model,
-          memory,
-          defaultMemoryOptions: { thread: 'judge-thread', resource: 'judge-user' },
-          instructions: reportInstructions,
-        },
-      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
-
-      await scorer.run({
-        input: 'q',
-        output: 'a',
-        requestContext: new RequestContext<any>([
+    it.each<[string, [string, unknown][]]>([
+      [
+        'thread and resource keys',
+        [
           [MASTRA_THREAD_ID_KEY, 'caller-thread'],
           [MASTRA_RESOURCE_ID_KEY, 'caller-user'],
-          ['report', 'report-A'],
-        ]),
-      });
+        ],
+      ],
+      ['scopes', [[MASTRA_SCOPES_KEY, ['thread:caller-thread', 'resource:caller-user']]]],
+    ])(
+      'keeps a judge with memory on its own thread when the run names the caller thread by %s',
+      async (_, identity) => {
+        const memory = new MockMemory();
+        const { model } = createJudgeModel([SCORE]);
+        const scorer = createScorer({
+          id: 'report-judge',
+          description: 'Scores a report',
+          judge: {
+            model,
+            memory,
+            defaultMemoryOptions: { thread: 'judge-thread', resource: 'judge-user' },
+            instructions: reportInstructions,
+          },
+        }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
 
-      const judgeThread = await memory.recall({ threadId: 'judge-thread', resourceId: 'judge-user' });
-      const callerThread = await memory.recall({ threadId: 'caller-thread', resourceId: 'caller-user' });
-      expect(judgeThread.messages.length).toBeGreaterThan(0);
-      expect(callerThread.messages).toEqual([]);
-    });
+        await scorer.run({
+          input: 'q',
+          output: 'a',
+          requestContext: new RequestContext<any>([...identity, ['report', 'report-A']]),
+        });
+
+        const judgeThread = await memory.recall({ threadId: 'judge-thread', resourceId: 'judge-user' });
+        const callerThread = await memory.recall({ threadId: 'caller-thread', resourceId: 'caller-user' });
+        expect(judgeThread.messages.length).toBeGreaterThan(0);
+        expect(callerThread.messages).toEqual([]);
+      },
+    );
 
     it("leaves the run's memory binding and reserved keys out of the judge", async () => {
       const { model, getPrompts } = createJudgeModel([SCORE]);
