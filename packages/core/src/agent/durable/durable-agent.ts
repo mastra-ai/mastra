@@ -54,7 +54,7 @@ import { AgentStreamBus } from '../streams/bus';
 import type { AgentStreamsConfig } from '../streams/types';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConfig, ToolsInput } from '../types';
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
@@ -958,6 +958,11 @@ export class DurableAgent<
 
   /** Runs publish through this wrapper's own stream bus, never the plain Agent publisher. @internal */
   protected override __ownsPlainStreamPublisher(): boolean {
+    return false;
+  }
+
+  /** Kept `false`, the value this getter has always reported for durable agents. */
+  override get durable(): AgentDurableOption | undefined {
     return false;
   }
 

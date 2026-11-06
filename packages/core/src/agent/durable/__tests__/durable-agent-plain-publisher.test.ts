@@ -89,4 +89,11 @@ describe('DurableAgent never uses the plain Agent stream publisher', () => {
     expect((bus.pubsub as CachingPubSub).getInner()).toBe(mastra.pubsub);
     expect(durableAgent.hasResumableStreams()).toBe(true);
   });
+
+  it('keeps reporting durable as false', () => {
+    const { durableAgent, mastra } = setup();
+    mastras.push(mastra);
+
+    expect(durableAgent.durable).toBe(false);
+  });
 });
