@@ -66,13 +66,13 @@ export function secretKeyMismatchHint(error: unknown): string | undefined {
     return (
       "Factory can't decrypt its stored secrets because no encryption key is configured. " +
       'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
-      'saved them, then restart Factory.'
+      'saved them, then redeploy Factory.'
     );
   }
   return (
     "Factory can't decrypt its stored secrets because they were saved with a different encryption key. " +
     'The stored secrets were not changed. To fix this, set FACTORY_CREDENTIAL_ENCRYPTION_KEY to the key that ' +
-    'saved them, or add that key to FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS, then restart Factory.'
+    'saved them, or add that key to FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS, then redeploy Factory.'
   );
 }
 

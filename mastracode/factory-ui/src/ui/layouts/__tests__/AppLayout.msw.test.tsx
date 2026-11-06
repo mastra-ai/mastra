@@ -153,6 +153,37 @@ describe('AppLayout', () => {
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
   });
 
+  it('replaces every page with one blocking error when the server reports a startup problem', async () => {
+    stubFactory();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/status`, () =>
+        HttpResponse.json({
+          problems: [
+            {
+              code: 'secret_key_mismatch',
+              title: "Factory can't read its stored secrets",
+              message: 'They were saved with a different encryption key. Redeploy Factory with that key.',
+              docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+            },
+          ],
+        }),
+      ),
+    );
+    renderApp();
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByRole('heading', { name: "Factory can't read its stored secrets" })).toBeInTheDocument();
+    expect(within(alert).getByText(/Redeploy Factory with that key/)).toBeInTheDocument();
+    expect(within(alert).getByRole('link', { name: 'How to fix this' })).toHaveAttribute(
+      'href',
+      'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+    );
+    expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
+    // The sidebar stays, so the account menu is still reachable.
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
+  });
+
   it('leaves retired Factory pages out of the sidebar', async () => {
     stubFactory();
     renderApp();

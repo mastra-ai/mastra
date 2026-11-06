@@ -656,6 +656,45 @@ function absentSlackChannelAccountsRoutes(): ApiRoute[] {
   ];
 }
 
+export interface FactoryStatusProblem {
+  code: 'secret_key_mismatch';
+  title: string;
+  message: string;
+  /** Where an operator reads how to fix it. */
+  docsUrl: string;
+}
+
+/** Domains that hold encrypted secrets; Factory can't run if they can't be read. */
+const SECRET_DOMAINS = ['integrations', 'model-credentials', 'custom-providers'];
+
+/**
+ * `GET /web/status`: problems found at startup that stop the whole Factory from
+ * working, so the UI shows one blocking error instead of every page failing on
+ * its own. Only a key problem counts: it can't clear until Factory is
+ * redeployed with the right key, so the snapshot taken here stays true for
+ * the life of the process. Only client-safe copy goes out.
+ */
+function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
+  const hint = SECRET_DOMAINS.map(domain => secretKeyMismatchHint(storage?.domainInitError(domain))).find(Boolean);
+  const problems: FactoryStatusProblem[] = hint
+    ? [
+        {
+          code: 'secret_key_mismatch',
+          title: "Factory can't read its stored secrets",
+          message: hint,
+          docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+        },
+      ]
+    : [];
+  return [
+    registerApiRoute('/web/status', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => c.json({ problems }),
+    }),
+  ];
+}
+
 /**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
@@ -794,6 +833,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
+    ...factoryStatusRoutes(deps.factoryStorage),
     ...buildFsRoutes({
       root: deps.fsRoot,
       sessionFs: {

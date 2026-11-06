@@ -5,9 +5,11 @@ import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { OverlaysProvider } from '../lib/overlays';
 import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
+import { ServerProblemPage } from './ServerProblemPage';
 
 /** `[` toggles the sidebar, as the trigger's tooltip says. Needs the `Sidebar.Provider` context. */
 function SidebarShortcuts() {
@@ -19,11 +21,12 @@ function SidebarShortcuts() {
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
+  const problem = useServerStatus().data?.problems[0];
 
   return (
     <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Outlet />
+        {problem ? <ServerProblemPage problem={problem} /> : <Outlet />}
       </MainCard>
     </AppShell>
   );
