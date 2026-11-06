@@ -4,7 +4,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { PlatformApiClient } from '../api-client.js';
-import { buildPlatformConnectRoutes } from './routes.js';
+import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
 
 const SESSION = {
   connectionId: 'conn-new',
@@ -32,18 +32,17 @@ function buildApp(
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(
-    app,
-    buildPlatformConnectRoutes({
-      auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
-      client: new PlatformApiClient({
-        baseUrl: 'https://integrations.example.com',
-        accessToken: 'platform-secret',
-        fetchImpl,
-      }),
-      connectToolsProjectId: options.connectToolsProjectId,
-    }),
-  );
+  const auth = fakeRouteAuth({ enabled: options.authEnabled ?? true });
+  const client = new PlatformApiClient({
+    baseUrl: 'https://integrations.example.com',
+    accessToken: 'platform-secret',
+    fetchImpl,
+  });
+  const projectId = options.connectToolsProjectId;
+  mountApiRoutes(app, [
+    ...buildPlatformConnectRoutes({ auth, client }),
+    buildConnectToolsRoute(auth, projectId ? { client, projectId } : undefined),
+  ]);
   return app;
 }
 
@@ -114,6 +113,16 @@ describe('platform connect routes', () => {
     await expect(response.json()).resolves.toEqual({
       connections: [expect.objectContaining({ id: 'conn-linear', providerName: 'linear', logoUrl: null })],
     });
+  });
+
+  it("answers JSON the settings page can read when this Factory's sessions get no Connect tools", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const app = buildApp(org1(), fetchImpl);
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ error: 'connect_tools_off' });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('lists Jira connections and hides other providers', async () => {

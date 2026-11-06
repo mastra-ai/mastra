@@ -124,7 +124,7 @@ export interface ConnectToolConnection {
 }
 
 export function isConnectToolsOffError(error: unknown): boolean {
-  return error instanceof Error && 'status' in error && error.status === 404;
+  return error instanceof Error && 'code' in error && error.code === 'connect_tools_off';
 }
 
 export async function listConnectTools(baseUrl: string): Promise<ConnectToolConnection[]> {

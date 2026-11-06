@@ -75,7 +75,7 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
@@ -2052,9 +2052,14 @@ export class MastraFactory {
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
-                connectToolsProjectId,
               })
             : []),
+          buildConnectToolsRoute(
+            routeAuth,
+            connectToolsProjectId
+              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
+              : undefined,
+          ),
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and

@@ -81,7 +81,11 @@ interface CatalogEntry {
 export interface BuildPlatformConnectRoutesOptions {
   auth: RouteAuth;
   client: PlatformApiClient;
-  connectToolsProjectId?: string;
+}
+
+export interface ConnectToolsSource {
+  client: PlatformApiClient;
+  projectId: string;
 }
 
 async function resolveOrgTenant(
@@ -125,16 +129,23 @@ function platformError(c: RouteContext, err: unknown) {
   return c.json({ error: 'platform_request_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
-function buildConnectToolsRoute(auth: RouteAuth, client: PlatformApiClient, projectId: string): ApiRoute {
+export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSource | undefined): ApiRoute {
   return registerApiRoute('/web/integrations/platform/connect-tools', {
     method: 'GET',
     requiresAuth: false,
     handler: async rawContext => {
       const c = loose(rawContext);
+      if (!source) {
+        return c.json(
+          { error: 'connect_tools_off', message: "This Factory's sessions don't get Mastra Connect tools." },
+          404,
+        );
+      }
       if (auth.enabled()) {
         await auth.ensureUser(c);
         if (!auth.tenant(c)) return c.json({ error: 'unauthorized' }, 401);
       }
+      const { client, projectId } = source;
       try {
         const [listed, catalog] = await Promise.all([
           client.request<{ connections: ProjectConnectionRow[] }>(
@@ -176,10 +187,9 @@ function buildConnectToolsRoute(auth: RouteAuth, client: PlatformApiClient, proj
  * when Platform machine credentials are configured.
  */
 export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
-  const { auth, client, connectToolsProjectId } = options;
+  const { auth, client } = options;
 
   return [
-    ...(connectToolsProjectId ? [buildConnectToolsRoute(auth, client, connectToolsProjectId)] : []),
     registerApiRoute('/web/integrations/platform/:provider/connections', {
       method: 'GET',
       requiresAuth: false,

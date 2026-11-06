@@ -57,8 +57,8 @@ describe('Mastra Connect tools settings', () => {
     );
   });
 
-  it('says sessions get no Connect tools when the route is not mounted', async () => {
-    server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ error: 'not_found' }, { status: 404 })));
+  it("says sessions get no Connect tools when this Factory doesn't give them any", async () => {
+    server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ error: 'connect_tools_off' }, { status: 404 })));
     renderWithProviders(<ConnectToolsSection />);
 
     expect(await screen.findByText(/Sessions on this Factory don't get Mastra Connect tools/)).toBeInTheDocument();
