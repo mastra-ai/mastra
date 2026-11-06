@@ -174,6 +174,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 
+    let readerCanceled = false;
+    const cancelReaderOnClose = () => {
+      if (readerCanceled) return;
+      readerCanceled = true;
+      void reader.cancel('request aborted').catch(() => {});
+    };
+    res.on('close', cancelReaderOnClose);
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -210,6 +218,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
+      res.off('close', cancelReaderOnClose);
       res.end();
     }
   }
