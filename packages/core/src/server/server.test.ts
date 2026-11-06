@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import { describe, expect, it } from 'vitest';
-import { flattenApiRoutes, registerApiRoute, registerApiRouteGroup } from './index';
+import { registerApiRoute } from './index';
 
 const mockHandler = (c: Context) => c.text('OK');
 const mockCreateHandler = async () => (c: Context) => c.text('OK');
@@ -79,18 +79,5 @@ describe('registerApiRoute', () => {
     }).toThrow(
       /Invalid options for route "\/test", you can only define one of the following properties: "handler" or "createHandler"/,
     );
-  });
-});
-
-describe('route groups', () => {
-  it('keeps the primary route shape and recursively flattens additional routes', () => {
-    const postRoute = registerApiRoute('/chat', { method: 'POST', handler: mockHandler });
-    const getRoute = registerApiRoute('/chat/runs/:runId', { method: 'GET', handler: mockHandler });
-    const nestedRoute = registerApiRoute('/chat/status', { method: 'GET', handler: mockHandler });
-    const nestedGroup = registerApiRouteGroup(getRoute, [nestedRoute]);
-    const group = registerApiRouteGroup(postRoute, [nestedGroup]);
-
-    expect(group).toMatchObject({ path: '/chat', method: 'POST', handler: mockHandler });
-    expect(flattenApiRoutes([group])).toEqual([postRoute, getRoute, nestedRoute]);
   });
 });

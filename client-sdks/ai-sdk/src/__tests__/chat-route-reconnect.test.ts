@@ -131,11 +131,15 @@ function createRouteFetch(mastra: Mastra) {
 }
 
 describe('chatRoute reconnect', () => {
-  it('expands reconnect-enabled chat routes into POST and GET server routes', () => {
-    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+  it('returns explicit POST and GET routes and normalizes them in server config', () => {
+    const routes = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    expect(routes.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'POST /chat/:agentId',
+      'GET /chat/:agentId/runs/:runId',
+    ]);
     const mastra = new Mastra({
       logger: false,
-      server: { apiRoutes: [route] },
+      server: { apiRoutes: [routes] },
     });
 
     expect(mastra.getServer()?.apiRoutes?.map(({ method, path }) => `${method} ${path}`)).toEqual([
@@ -143,8 +147,8 @@ describe('chatRoute reconnect', () => {
       'GET /chat/:agentId/runs/:runId',
     ]);
 
-    const fixedRoute = chatRoute({ path: '/fixed-chat', agent: 'test-agent', reconnect: true });
-    const fixedMastra = new Mastra({ logger: false, server: { apiRoutes: [fixedRoute] } });
+    const fixedRoutes = chatRoute({ path: '/fixed-chat', agent: 'test-agent', reconnect: true });
+    const fixedMastra = new Mastra({ logger: false, server: { apiRoutes: [fixedRoutes] } });
     expect(fixedMastra.getServer()?.apiRoutes?.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'POST /fixed-chat',
       'GET /fixed-chat/runs/:runId',

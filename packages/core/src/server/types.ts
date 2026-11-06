@@ -28,8 +28,6 @@ type ApiRouteBase = {
   fga?: RouteFGAConfig;
   /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
   _mastraInternal?: true;
-  /** Additional routes contributed by a route factory. Mastra flattens these before server registration. */
-  _mastraRouteGroup?: ApiRoute[];
 };
 
 type HonoApiRoute = ApiRouteBase & {
@@ -518,6 +516,14 @@ export type ServerConfig = {
    * ```
    */
   onValidationError?: ValidationErrorHook;
+};
+
+/** A custom API route or a route factory's explicit list of routes. */
+export type ApiRouteInput = ApiRoute | ApiRoute[];
+
+/** Server configuration accepted during Mastra construction and updates. */
+export type ServerConfigInput = Omit<ServerConfig, 'apiRoutes'> & {
+  apiRoutes?: ApiRouteInput[];
 };
 
 /**

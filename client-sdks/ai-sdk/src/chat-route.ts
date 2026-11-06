@@ -18,7 +18,7 @@ import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/c
 import type { Mastra } from '@mastra/core/mastra';
 import { MastraMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import { registerApiRoute, registerApiRouteGroup } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
 import { APPROVAL_ID_SEPARATOR } from './helpers';
 import type {
@@ -686,7 +686,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
  * @param {Function} [options.messageMetadata] - Maps stream parts to metadata attached to AI SDK start and finish message parts. Receives `{ part, traceId }`.
  *
- * @returns {ReturnType<typeof registerApiRoute>} A registered API route handler
+ * @returns A POST route, or `[postRoute, reconnectRoute]` when `reconnect: true`
  *
  * @throws {Error} When path doesn't include `:agentId` and no fixed agent is specified
  * @throws {RangeError} When `heartbeatMs` is `NaN`, positive infinity, or greater than 2,147,483,647
@@ -718,6 +718,18 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * - With `reconnect: true`, scoped runs can only be reconnected with matching resource and thread IDs in request context
  * - Reconnect returns 204 when the run is unknown, expired, or already finished
  */
+type ChatApiRoute = ReturnType<typeof registerApiRoute>;
+type ReconnectChatApiRoutes = [postRoute: ChatApiRoute, reconnectRoute: ChatApiRoute];
+
+export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>(
+  options: chatRouteOptions<OUTPUT, UI_MESSAGE> & { reconnect: true },
+): ReconnectChatApiRoutes;
+export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>(
+  options: chatRouteOptions<OUTPUT, UI_MESSAGE> & { reconnect?: false },
+): ChatApiRoute;
+export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>(
+  options: chatRouteOptions<OUTPUT, UI_MESSAGE>,
+): ChatApiRoute | ReconnectChatApiRoutes;
 export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>({
   path = '/chat/:agentId',
   agent,
@@ -734,7 +746,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
   heartbeatMs,
   onError,
   messageMetadata,
-}: chatRouteOptions<OUTPUT, UI_MESSAGE>): ReturnType<typeof registerApiRoute> {
+}: chatRouteOptions<OUTPUT, UI_MESSAGE>): ChatApiRoute | ReconnectChatApiRoutes {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
@@ -1048,5 +1060,5 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
     },
   });
 
-  return registerApiRouteGroup(postRoute, [reconnectRoute]) as ReturnType<typeof registerApiRoute>;
+  return [postRoute, reconnectRoute];
 }

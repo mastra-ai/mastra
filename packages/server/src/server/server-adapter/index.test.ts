@@ -6,7 +6,7 @@ import { Agent } from '@mastra/core/agent';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { registerApiRoute, registerApiRouteGroup } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
@@ -53,10 +53,6 @@ class TestMastraServer extends MastraServer<any, any, any> {
 
   validateCustomRoutePathsForTest(routes: Parameters<typeof this.validateCustomRoutePaths>[0]) {
     return this.validateCustomRoutePaths(routes);
-  }
-
-  getCustomApiRoutesForTest() {
-    return this.customApiRoutes;
   }
 
   warnIfUnregisteredChannelWebhookForTest(path: string, method: string, status: number) {
@@ -271,23 +267,6 @@ describe.each([
 });
 
 describe('custom route forwarding', () => {
-  it('flattens grouped routes passed directly to the adapter', () => {
-    const handler = async () => new Response();
-    const post = registerApiRoute('/chat', { method: 'POST', handler });
-    const get = registerApiRoute('/chat/runs/:runId', { method: 'GET', handler });
-    const grouped = registerApiRouteGroup(post, [get]);
-    const adapter = new TestMastraServer({
-      app: {},
-      mastra: { getServer: () => undefined, setMastraServer: vi.fn() } as unknown as Mastra,
-      customApiRoutes: [grouped],
-    });
-
-    expect(adapter.getCustomApiRoutesForTest()?.map(route => `${route.method} ${route.path}`)).toEqual([
-      'POST /chat',
-      'GET /chat/runs/:runId',
-    ]);
-  });
-
   it('should forward DELETE JSON bodies to custom routes', async () => {
     const mastra = new Mastra({
       logger: false,
