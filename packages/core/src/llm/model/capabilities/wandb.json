@@ -65,9 +65,15 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+    "zai-org/GLM-5.2": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
@@ -75,12 +81,17 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
       }
@@ -95,32 +106,12 @@
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ibm-granite/granite-4.2-8b": [
+    "google/gemma-4-31B-it": [
       {
         "type": "toggle"
       }
     ],
     "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-it": [
       {
         "type": "toggle"
       }
@@ -131,13 +122,22 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "ibm-granite/granite-4.2-8b": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2": [
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
       {
         "type": "toggle"
       }
