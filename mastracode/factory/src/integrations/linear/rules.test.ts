@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import type { FactoryLinearRuleContext } from '../../rules/types.js';
-import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';
 import { LinearRules } from './rules.js';
@@ -357,6 +357,33 @@ describe('LinearRules', () => {
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     expect(await workItems.get({ orgId: 'org-1', id: item.id })).toEqual(item);
+  });
+
+  it('evaluates a reopened issue against its finished card while that card is still being copied', async () => {
+    const seen: Array<string | undefined> = [];
+    const { project, service, workItems, storage } = await setup({
+      issueObserved: context => {
+        seen.push(context.item?.id);
+      },
+    });
+    const { item: card } = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['done'],
+        sessions: {},
+        metadata: { linearIssueId: issue.id },
+      },
+    });
+    await demoteCardsToLegacyForTests(storage, [card.id]);
+    expect(workItems.legacyBackfillPending).toBe(true);
+
+    await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] });
+
+    expect(seen).toEqual([card.id]);
   });
 
   it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {

@@ -28,7 +28,7 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, ExternalWorkItemSource, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
@@ -193,6 +193,19 @@ function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number):
 
 function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
   return `github:${repositoryId}:${kind}:${itemNumber}`;
+}
+
+/** Every source a card for this issue or pull request may be filed under. */
+export function githubItemSources(
+  repositoryId: number,
+  kind: 'issue' | 'pull-request',
+  itemNumber: number,
+): ExternalWorkItemSource[] {
+  return [canonicalSourceKey(kind, itemNumber), legacySourceKey(repositoryId, kind, itemNumber)].map(externalId => ({
+    integrationId: 'github',
+    type: kind,
+    externalId,
+  }));
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -1054,12 +1067,17 @@ export class GithubRules {
     pullRequestNumber: number,
     resolved: Card,
   ): Promise<Card | undefined> {
+    await this.options.storage.copyLegacyCards({
+      orgId,
+      factoryProjectId: projectId,
+      sources: githubItemSources(repositoryId, 'pull-request', pullRequestNumber),
+    });
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const linked =
       resolved.externalSource?.type === 'pull-request'
         ? // Bound to the pull request's own Review card: follow the recorded
           // link back to the work item that authored it.
-          items.find(item => item.id === resolved.parentWorkItemId)
+          await this.#parentItem(orgId, projectId, items, resolved)
         : // Bound to the work item (provenance): find the Review card this pull
           // request opened, and only when it names this item as its parent — a
           // card for the same number in another repository is not this one's.
@@ -1084,6 +1102,16 @@ export class GithubRules {
     provenance: FactoryPullRequestProvenanceData | null,
     preferAuthoringItem = false,
   ): Promise<Card | undefined> {
+    // A finished card may still be only in the legacy table; copy it so the event finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId,
+      factoryProjectId: projectId,
+      sources: [
+        ...(issueNumber ? githubItemSources(repositoryId, 'issue', issueNumber) : []),
+        ...(pullRequestNumber ? githubItemSources(repositoryId, 'pull-request', pullRequestNumber) : []),
+      ],
+    });
+    if (provenance) await this.options.storage.getForProject(orgId, projectId, provenance.workItemId);
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const resolved = this.#resolveItem(
       items,
@@ -1102,9 +1130,19 @@ export class GithubRules {
     // `parentWorkItemId`, so follow that link back rather than relaxing the
     // guard, which would let a Review card react to its own posted review.
     if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
-      return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
+      return (await this.#parentItem(orgId, projectId, items, resolved)) ?? resolved;
     }
     return resolved;
+  }
+
+  /** The card `child` was filed from; read on its own when the board list lacks it (not copied yet). */
+  async #parentItem(orgId: string, projectId: string, items: Card[], child: Card): Promise<Card | undefined> {
+    if (!child.parentWorkItemId) return undefined;
+    return (
+      items.find(item => item.id === child.parentWorkItemId) ??
+      (await this.options.storage.getForProject(orgId, projectId, child.parentWorkItemId)) ??
+      undefined
+    );
   }
 
   #resolveItem(

@@ -276,6 +276,15 @@ export class GitLabRules {
       ? encodeIssueReference({ host, projectId: String(projectId), issueIid })
       : undefined;
     const mergeRequestKey = mergeRequestIid ? mergeRequestSourceKey(host, projectId, mergeRequestIid) : undefined;
+    // A finished card may still be only in the legacy table; copy it so the event finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: target.target.orgId,
+      factoryProjectId: target.target.factoryProjectId,
+      sources: [
+        ...(issueSourceKey ? [{ integrationId: 'gitlab', type: 'issue', externalId: issueSourceKey }] : []),
+        ...(mergeRequestKey ? [{ integrationId: 'gitlab', type: 'pull-request', externalId: mergeRequestKey }] : []),
+      ],
+    });
     const items = await this.options.storage.list({
       orgId: target.target.orgId,
       factoryProjectId: target.target.factoryProjectId,

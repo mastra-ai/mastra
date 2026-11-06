@@ -60,7 +60,11 @@ Each work item has one board item. Factory's card-to-card parent link is `parent
 
 #### Migration and dry run
 
-Factory migrates existing cards before the work-items storage domain becomes ready. It keeps the legacy `work_items` table, copies each card into the new tables, and checks again on every startup. Unchanged legacy rows are no-ops; newer legacy rows are recopied. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source conflicts with another card ID is skipped and logged rather than preventing startup. Review the `skipped` entries in the boot log and reconcile those card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
+Factory keeps the legacy `work_items` table and copies each card into the new tables. Before it starts serving, it copies only open cards. Done and canceled cards are copied in the background afterwards and appear on the board shortly after startup. While that runs, opening a card, or receiving a Linear, Jira, GitHub, GitLab, or incident.io event for it, copies that card on demand, so a reopened issue keeps its original card. Board lists, such as the Done column, fill in as the background copy progresses.
+
+Once the background copy finishes, Factory records it, and later startups skip the copy. A card that an older Factory version changes in the legacy table afterwards is recopied at the next startup. Unchanged legacy rows are no-ops. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source conflicts with another card ID, or that was edited on both sides, is skipped rather than preventing startup; the copy still counts as finished.
+
+Each copy pass logs one summary line with its counts and up to ten skipped card IDs with their reasons, for example `[factory] work item split (background pass): 9,837 cards checked, 0 copied, 106 recopied, 9,581 unchanged, 0 deferred, 150 skipped — <id> (Split board item changed after migration); … and 140 more`. A pass that runs longer than ten seconds also logs a progress line every ten seconds. When startup completes, Factory writes `[factory:timing] boot <n>ms` to stderr, regardless of the log level. Reconcile skipped card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
 
 For a database that has not cut over yet, inspect the migration without switching storage by setting this environment variable before starting Factory:
 
@@ -967,7 +971,7 @@ Both integrations expose incidents and incident follow-ups as separate Intake so
 
 ### Linear workspace connections
 
-For Platform-managed Linear connections, Settings → Connections lists each workspace, including disconnected workspaces. Healthy workspaces offer **Manage**; disconnected workspaces offer **Reconnect**. To add another workspace, open **Add connection**, then choose **Add workspace**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
+For Platform-managed Linear connections, **Settings → Work Intake** connects and repairs workspaces in place. A disconnected workspace with saved sources shows **Reconnect** on the Linear card; healthy ones need no action. A disconnected workspace without saved sources has nothing paused, so it has no Reconnect; authorize it again with **Connect**. To add another workspace, choose **Connect** next to Linear under **Add a source**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
 
 Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources and polling from healthy workspaces remain available when another workspace's source request fails.
 
@@ -1094,6 +1098,41 @@ Running entries come first, and the list shows at most 20 rows with a "+N more" 
 Spawned sessions get a one-line signal instead: a side session sees which session started it, and a work-item session sees the item, its role, and how many sessions follow it (nothing when nobody does).
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
+
+### Mastra Connect and your own tools in sessions
+
+With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of each connection attached to the Platform project. Attach and remove connections in Mastra Platform, on the project's **Connect** page. The organization's other connections reach sessions only once they're attached, and a new project has none. **Settings → Tools** lists what sessions get, read from the same Platform list. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Attach Linear, and a Slack thread, a web chat or a work item can ask about its issues.
+
+Sessions run these tools without asking while automatic approval is on, so only attach accounts whose actions sessions may take. When a person turns approval off, the tools follow the `mcp` permission category, except in Slack with `adapterOptions.toolDisplay: 'text'`, where every tool call is approved automatically. Tools with `delete` or `archive` anywhere in their name, in any case, are left out. That check goes by name only, so it can't catch every destructive action, such as a SQL tool running a `DROP`. GitHub and GitLab Connect tools are left out too: Factory's own source-control tools enforce repository scope and self-review, and Connect's would skip both. Every user and organization on the Factory shares the project's connections, and a connection attached for another app on the same project reaches Factory sessions too. `GET /web/integrations/platform/connect-tools` backs the settings page.
+
+Connect caches the connection list for 30 seconds. When a later refresh fails, sessions keep the last list it got, including a connection removed since, until a refresh succeeds. A run with no list yet waits at most 15 seconds for one, then goes on without Connect tools, and Factory logs why. If the Platform stalls instead of failing, later runs also go without them until that listing answers or fails.
+
+`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none. Factory doesn't filter the tools you pass: the example below includes `linear_delete_issue`, so narrow it with Connect's `allowTools` or `disallowTools`.
+
+```typescript
+import { tools as connectTools } from '@mastra/connect';
+import { MastraFactory } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  // ...
+  tools: connectTools({ providers: ['linear'] }),
+});
+```
+
+A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error.
+
+Factory doesn't read MCP servers from the host's `mcp.json` files, and logs a warning at startup when `~/.mastracode/mcp.json` exists. Pass MCP tools through `tools` instead:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('https://tickets.example.com/mcp') } } });
+
+const factory = new MastraFactory({
+  // ...
+  tools: await mcp.listTools(),
+});
+```
 
 ### Voice input
 

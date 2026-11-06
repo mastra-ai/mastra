@@ -29,6 +29,13 @@ export interface DurableDisconnectTestConfig {
     close: () => Promise<void>;
   }>;
   observeWithClient?: (baseUrl: string, runId: string, offset?: number) => Promise<ChunkType<unknown>[]>;
+  /** Streams through client-js; implement together with observeWithClient. */
+  streamWithClient?: (baseUrl: string, body: { messages: string; runId: string }) => Promise<ChunkType<unknown>[]>;
+  /**
+   * Skips the durable and evented untilIdle disconnect-then-replay cases. Express answers /observe
+   * with 404 "Run not found" after the client drops an untilIdle stream; the same on main.
+   */
+  skipUntilIdleDisconnectReplay?: boolean;
   startServer: (
     mastra: Mastra,
     onDisconnect: (path: string) => void,
@@ -271,6 +278,18 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             expect(await collectPublicFrames(response)).toEqual(expected);
           }
           expect(expected).toHaveLength(terminal === 'error' ? 1 : 2);
+          // The terminal log entry is index 2. Only its finish frame carries that index: the
+          // abort frame synthesized before it has none, so the last indexed frame is always
+          // the finish, and resuming past the entry returns nothing and closes (COR-1506).
+          expect(expected.map(frame => (frame as { index?: number }).index)).toEqual(
+            terminal === 'error' ? [2] : [undefined, 2],
+          );
+          const pastEnd = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runId, offset: 3 }),
+          });
+          expect(await collectPublicFrames(pastEnd)).toEqual([]);
           if (config.observeWithClient) expect(await config.observeWithClient(server.baseUrl, runId)).toEqual(expected);
         },
       );
@@ -417,7 +436,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         });
         expect(response.status).toBe(200);
         const wire = await response.text();
-        expect(wire).toContain(JSON.stringify(prefix));
+        expect(wire).toContain(JSON.stringify({ ...prefix, index: 0 }));
         expect(wire).not.toContain('[DONE]');
         expect(wire).not.toContain('"type":"error"');
       });
@@ -527,6 +546,289 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           await original;
         }
       });
+
+      it('resumes a multi-step tool loop after the last frame index received from /stream (COR-1506)', async () => {
+        fixture = await config.setupModel();
+        const tool = createTool({
+          id: 'lookup',
+          description: 'Look up a value',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ value: n * 10 }),
+        });
+        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+          agent: new Agent({
+            id: 'resume-agent',
+            name: 'Resume agent',
+            instructions: 'Look up values.',
+            model: fixture.model,
+            tools: { lookup: tool },
+          }),
+          cleanupTimeoutMs: 60_000,
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        fixture.addResponse(0, {
+          content: 'First',
+          toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { n: 1 } }],
+        });
+        fixture.addResponse(1, {
+          content: 'Second',
+          toolCalls: [{ id: 'call-2', name: 'lookup', arguments: { n: 2 } }],
+        });
+        fixture.addResponse(2, { content: 'Done: 10 and 20.' });
+        // For the client-js stream below; aimock only sequences fixtures registered before the first request.
+        fixture.addResponse(3, { content: 'Again: 30.' });
+        const runId = `observe-resume-${kind}`;
+        const post = async (route: string, body: object) => {
+          const response = await fetch(`${server!.baseUrl}/api/agents/agent/${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          return response;
+        };
+        const frames = await collectPublicFrames(
+          await post('stream', { messages: 'Look up 1 then 2', runId, maxSteps: 5 }),
+        );
+        expect(frames.filter(frame => frame.type === 'step-start')).toHaveLength(3);
+        expect(frames.at(-1)).toMatchObject({ type: 'finish' });
+        // Every frame carries its run-log index, and the tool loop's lifecycle records leave gaps.
+        expect(frames.every(frame => typeof frame.index === 'number')).toBe(true);
+        expect(frames.at(-1)!.index).toBeGreaterThan(frames.length - 1);
+
+        // Replay from 0 is the first connection again, frame for frame.
+        expect(await collectPublicFrames(await post('observe', { runId, offset: 0 }))).toEqual(frames);
+
+        // A client that lost its connection after `cut` frames resumes after the last index it saw.
+        const resumeAt = (cut: number) => (cut === 0 ? 0 : frames[cut - 1]!.index! + 1);
+        const mismatches: string[] = [];
+        for (let cut = 0; cut <= frames.length; cut++) {
+          const resumed = await collectPublicFrames(await post('observe', { runId, offset: resumeAt(cut) }));
+          const combined = [...frames.slice(0, cut), ...resumed];
+          if (JSON.stringify(combined) !== JSON.stringify(frames)) {
+            mismatches.push(`cut ${cut}/${frames.length}: ${combined.length - frames.length} extra`);
+          }
+        }
+        expect(mismatches).toEqual([]);
+
+        const cuts = [0, Math.floor(frames.length / 2), frames.length - 1, frames.length];
+        if (config.observeWithClient) {
+          for (const cut of cuts) {
+            expect([
+              ...frames.slice(0, cut),
+              ...(await config.observeWithClient(server.baseUrl, runId, resumeAt(cut))),
+            ]).toEqual(frames);
+          }
+        }
+        if (config.streamWithClient) {
+          const clientRunId = `${runId}-client`;
+          const clientFrames = await config.streamWithClient(server.baseUrl, {
+            messages: 'Say it again',
+            runId: clientRunId,
+          });
+          expect(clientFrames.at(-1)).toMatchObject({ type: 'finish' });
+          expect(clientFrames.some(frame => frame.type === 'error')).toBe(false);
+          expect(clientFrames.every(frame => typeof frame.index === 'number')).toBe(true);
+          const mid = Math.floor(clientFrames.length / 2);
+          expect([
+            ...clientFrames.slice(0, mid),
+            ...(await config.observeWithClient!(server.baseUrl, clientRunId, clientFrames[mid - 1]!.index! + 1)),
+          ]).toEqual(clientFrames);
+        }
+      });
+
+      it('keeps numbering and resuming by index across a tool-approval suspend (COR-1506)', async () => {
+        fixture = await config.setupModel();
+        const storage = new InMemoryStore();
+        const authorize = createTool({
+          id: 'authorize',
+          description: 'Authorize the lookup',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ approved: true }),
+        });
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look up a value',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ value: n * 10 }),
+        });
+        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+          agent: new Agent({
+            id: 'suspend-agent',
+            name: 'Suspend agent',
+            instructions: 'Authorize, then look up.',
+            model: fixture.model,
+            memory: new MockMemory({ storage }),
+            tools: { authorize, lookup },
+          }),
+          cleanupTimeoutMs: 60_000,
+        });
+        mastra = new Mastra({ agents: { agent }, storage, logger: false });
+        server = await config.startServer(mastra, () => {});
+        fixture.addResponse(0, {
+          content: 'Asking',
+          toolCalls: [{ id: 'authorize-1', name: 'authorize', arguments: {} }],
+        });
+        fixture.addResponse(1, {
+          content: 'Looking',
+          toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { n: 1 } }],
+        });
+        fixture.addResponse(2, { content: 'Done: 10.' });
+        const runId = `observe-suspend-${kind}`;
+        const memory = { thread: runId, resource: 'suspend-user' };
+        const post = async (route: string, body: object) => {
+          const response = await fetch(`${server!.baseUrl}/api/agents/agent/${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          return response;
+        };
+
+        // Before the suspend: /stream stays open, so read up to the approval request and drop it.
+        const suspended: ChunkType<unknown>[] = [];
+        const dropped = new AbortController();
+        const streaming = await fetch(`${server.baseUrl}/api/agents/agent/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          signal: dropped.signal,
+          body: JSON.stringify({ messages: 'Authorize then look up 1', runId, memory, maxSteps: 5 }),
+        });
+        expect(streaming.status).toBe(200);
+        await collectPublicFrames(streaming, frame => {
+          suspended.push(frame);
+          if (frame.type === 'tool-call-approval') dropped.abort();
+        }).catch(error => {
+          if (error.name !== 'AbortError') throw error;
+        });
+        expect(suspended.at(-1)).toMatchObject({ type: 'tool-call-approval' });
+        expect(suspended.every(frame => typeof frame.index === 'number')).toBe(true);
+
+        // While the run is parked, a client that saw everything up to the approval request, and
+        // one that dropped earlier, each resume after their last index and stay attached.
+        const mid = Math.floor(suspended.length / 2);
+        const parkedObservers = [suspended.length, mid].map(async cut => ({
+          cut,
+          frames: await collectPublicFrames(await post('observe', { runId, offset: suspended[cut - 1]!.index! + 1 })),
+        }));
+        // Let both subscriptions settle on the parked run before approving.
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        const approved = await collectPublicFrames(
+          await post('approve-tool-call', { runId, toolCallId: 'authorize-1', memory, maxSteps: 5 }),
+        );
+        expect(approved.at(-1)).toMatchObject({ type: 'finish' });
+        // The resumed execution keeps numbering the same run log past the suspend.
+        expect(approved.every(frame => typeof frame.index === 'number')).toBe(true);
+        expect(approved[0]!.index!).toBeGreaterThan(suspended.at(-1)!.index!);
+        const frames = [...suspended, ...approved];
+        expect(frames.map(frame => frame.index)).toEqual([...frames.map(frame => frame.index!)].sort((a, b) => a - b));
+
+        for (const { cut, frames: resumed } of await Promise.all(parkedObservers)) {
+          expect([...suspended.slice(0, cut), ...resumed]).toEqual(frames);
+        }
+
+        // Replay from 0 is both connections joined, and every cut across the suspend resumes cleanly.
+        expect(await collectPublicFrames(await post('observe', { runId, offset: 0 }))).toEqual(frames);
+        const mismatches: string[] = [];
+        for (let cut = 0; cut <= frames.length; cut++) {
+          const offset = cut === 0 ? 0 : frames[cut - 1]!.index! + 1;
+          const combined = [
+            ...frames.slice(0, cut),
+            ...(await collectPublicFrames(await post('observe', { runId, offset }))),
+          ];
+          if (JSON.stringify(combined) !== JSON.stringify(frames)) {
+            mismatches.push(`cut ${cut}/${frames.length}: ${combined.length - frames.length} extra`);
+          }
+        }
+        expect(mismatches).toEqual([]);
+      }, 30_000);
+    }
+
+    if (kind === 'plain') {
+      // Plain-agent /stream doesn't carry `index` yet (COR-1510): the caller gets each chunk
+      // before the cache numbers it. /observe reads the numbered log, so its frames do.
+      it('numbers every /observe frame with the index its log entry holds (COR-1506)', async () => {
+        fixture = await config.setupModel();
+        const tool = createTool({
+          id: 'lookup',
+          description: 'Look up a value',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ value: n * 10 }),
+        });
+        const agent = new Agent({
+          id: 'plain-resume-agent',
+          name: 'Plain resume agent',
+          instructions: 'Look up values.',
+          model: fixture.model,
+          tools: { lookup: tool },
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        fixture.addResponse(0, {
+          content: 'First',
+          toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { n: 1 } }],
+        });
+        fixture.addResponse(1, {
+          content: 'Second',
+          toolCalls: [{ id: 'call-2', name: 'lookup', arguments: { n: 2 } }],
+        });
+        fixture.addResponse(2, { content: 'Done: 10 and 20.' });
+        const runId = 'observe-resume-plain';
+        const post = async (route: string, body: object) => {
+          const response = await fetch(`${server!.baseUrl}/api/agents/agent/${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          return response;
+        };
+        const streamed = await collectPublicFrames(
+          await post('stream', { messages: 'Look up 1 then 2', runId, maxSteps: 5 }),
+        );
+        expect(streamed.filter(frame => frame.type === 'step-start')).toHaveLength(3);
+
+        const pubsub = agent.__getStreamBus()!.pubsub;
+        const topic = AGENT_STREAM_TOPIC(runId);
+        await expect
+          .poll(async () => (await pubsub.getHistory(topic)).some(event => event.type === 'finish'), { timeout: 5000 })
+          .toBe(true);
+        const history = await pubsub.getHistory(topic);
+        const frames = await collectPublicFrames(await post('observe', { runId }));
+        // Same sequence of chunks as /stream, now numbered. Plain agents' replayed step-finish and
+        // finish payloads already differ from the live ones (separate from numbering, see COR-1510),
+        // so only frame types are compared against /stream.
+        expect(frames.map(frame => frame.type)).toEqual(streamed.map(frame => frame.type));
+        expect(frames.every(frame => typeof frame.index === 'number')).toBe(true);
+        for (const frame of frames) {
+          const entry = history.find(event => event.index === frame.index);
+          expect(entry, `log entry ${frame.index}`).toBeDefined();
+          if (entry!.type === 'chunk') expect(entry!.data.type).toBe(frame.type);
+          else expect(entry!.type).toBe(frame.type);
+        }
+        expect(frames.every((frame, i) => i === 0 || frame.index! > frames[i - 1]!.index!)).toBe(true);
+
+        const resumeAt = (cut: number) => (cut === 0 ? 0 : frames[cut - 1]!.index! + 1);
+        const mismatches: string[] = [];
+        for (let cut = 0; cut <= frames.length; cut++) {
+          const resumed = await collectPublicFrames(await post('observe', { runId, offset: resumeAt(cut) }));
+          if (JSON.stringify([...frames.slice(0, cut), ...resumed]) !== JSON.stringify(frames)) {
+            mismatches.push(`cut ${cut}/${frames.length}`);
+          }
+        }
+        expect(mismatches).toEqual([]);
+        if (config.observeWithClient) {
+          const mid = Math.floor(frames.length / 2);
+          expect([
+            ...frames.slice(0, mid),
+            ...(await config.observeWithClient(server.baseUrl, runId, resumeAt(mid))),
+          ]).toEqual(frames);
+        }
+      }, 30_000);
     }
 
     for (const route of [
@@ -545,219 +847,226 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         if (typeof explicitAbort === 'string' && (kind === 'plain' || !['stream', 'stream-alias'].includes(route)))
           continue;
         const threadless = explicitAbort === 'threadless';
-        it(`${route}${durable === false ? ' (durable:false)' : ''}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`, async () => {
-          fixture = await config.setupModel();
-          const entered = deferred();
-          const gate = deferred();
-          const disconnected = deferred();
-          const calls: number[] = [];
-          let toolSignal: AbortSignal | undefined;
-          const storage = new InMemoryStore();
-          const memory = new MockMemory({ storage });
-          const slow = createTool({
-            id: 'slow',
-            description: 'Execute a numbered step',
-            inputSchema: z.object({ n: z.number() }),
-            execute: async ({ n }, context) => {
-              calls.push(n);
-              if (n === 1) {
-                toolSignal = context?.abortSignal;
-                entered.resolve();
-                await Promise.race([
-                  gate.promise,
-                  new Promise<void>(resolve => {
-                    if (toolSignal?.aborted) return resolve();
-                    toolSignal?.addEventListener('abort', () => resolve(), { once: true });
-                  }),
-                ]);
-              }
-              return { n };
-            },
-          });
-          const research = createTool({
-            id: 'research',
-            description: 'Background research',
-            inputSchema: z.object({}),
-            background: { enabled: true },
-            execute: async () => ({ done: true }),
-          });
-          let authorizations = 0;
-          const authorize = createTool({
-            id: 'authorize',
-            description: 'Authorize the steps',
-            inputSchema: z.object({}),
-            requireApproval: true,
-            execute: async () => {
-              authorizations++;
-              return { approved: true };
-            },
-          });
-          const resumed = route.startsWith('resume') || route.endsWith('tool-call');
-          const offset = resumed ? 1 : 0;
-          const inner = new Agent({
-            id: 'disconnect-agent',
-            name: 'Disconnect agent',
-            durable,
-            instructions: 'Execute three steps.',
-            model: fixture.model,
-            ...(threadless ? {} : { memory }),
-            tools: { slow, research, authorize },
-            backgroundTasks: { tools: { research: true } },
-          });
-          const agent =
-            kind === 'durable'
-              ? createDurableAgent({ agent: inner })
-              : kind === 'evented'
-                ? createEventedAgent({ agent: inner })
-                : inner;
-          const otherAgent = createDurableAgent({
-            agent: new Agent({
-              id: 'other-agent',
-              name: 'Other agent',
-              instructions: 'Do not run.',
+        const untilIdle = ['stream-alias', 'stream-until-idle', 'resume-alias', 'resume-stream-until-idle'].includes(
+          route,
+        );
+        it.skipIf(config.skipUntilIdleDisconnectReplay && untilIdle && kind !== 'plain' && !explicitAbort)(
+          `${route}${durable === false ? ' (durable:false)' : ''}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`,
+          async () => {
+            fixture = await config.setupModel();
+            const entered = deferred();
+            const gate = deferred();
+            const disconnected = deferred();
+            const calls: number[] = [];
+            let toolSignal: AbortSignal | undefined;
+            const storage = new InMemoryStore();
+            const memory = new MockMemory({ storage });
+            const slow = createTool({
+              id: 'slow',
+              description: 'Execute a numbered step',
+              inputSchema: z.object({ n: z.number() }),
+              execute: async ({ n }, context) => {
+                calls.push(n);
+                if (n === 1) {
+                  toolSignal = context?.abortSignal;
+                  entered.resolve();
+                  await Promise.race([
+                    gate.promise,
+                    new Promise<void>(resolve => {
+                      if (toolSignal?.aborted) return resolve();
+                      toolSignal?.addEventListener('abort', () => resolve(), { once: true });
+                    }),
+                  ]);
+                }
+                return { n };
+              },
+            });
+            const research = createTool({
+              id: 'research',
+              description: 'Background research',
+              inputSchema: z.object({}),
+              background: { enabled: true },
+              execute: async () => ({ done: true }),
+            });
+            let authorizations = 0;
+            const authorize = createTool({
+              id: 'authorize',
+              description: 'Authorize the steps',
+              inputSchema: z.object({}),
+              requireApproval: true,
+              execute: async () => {
+                authorizations++;
+                return { approved: true };
+              },
+            });
+            const resumed = route.startsWith('resume') || route.endsWith('tool-call');
+            const offset = resumed ? 1 : 0;
+            const inner = new Agent({
+              id: 'disconnect-agent',
+              name: 'Disconnect agent',
+              durable,
+              instructions: 'Execute three steps.',
               model: fixture.model,
-            }),
-          });
-          mastra = new Mastra({
-            agents: { agent, otherAgent },
-            storage,
-            logger: false,
-            backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
-          });
-          server = await config.startServer(mastra, path => {
-            if (!resumed || !path.endsWith('/stream')) disconnected.resolve();
-          });
-          const base = `${server.baseUrl}/api/agents/agent`;
-          if (resumed)
-            fixture.addResponse(0, {
-              toolCalls: [{ id: 'authorize-1', name: 'authorize', arguments: {} }],
+              ...(threadless ? {} : { memory }),
+              tools: { slow, research, authorize },
+              backgroundTasks: { tools: { research: true } },
             });
-          for (let n = 1; n <= 3; n++)
-            fixture.addResponse(offset + n - 1, {
-              toolCalls: [{ id: `slow-${n}`, name: 'slow', arguments: { n } }],
+            const agent =
+              kind === 'durable'
+                ? createDurableAgent({ agent: inner })
+                : kind === 'evented'
+                  ? createEventedAgent({ agent: inner })
+                  : inner;
+            const otherAgent = createDurableAgent({
+              agent: new Agent({
+                id: 'other-agent',
+                name: 'Other agent',
+                instructions: 'Do not run.',
+                model: fixture.model,
+              }),
             });
-          fixture.addResponse(offset + 3, { content: 'done: 3 results' });
-          const runId = `disconnect-${kind}-${route}-${explicitAbort}`;
-          const thread = { thread: runId, resource: 'disconnect-user' };
-          if (resumed) {
-            const parked = await fetch(`${base}/stream`, {
+            mastra = new Mastra({
+              agents: { agent, otherAgent },
+              storage,
+              logger: false,
+              backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
+            });
+            server = await config.startServer(mastra, path => {
+              if (!resumed || !path.endsWith('/stream')) disconnected.resolve();
+            });
+            const base = `${server.baseUrl}/api/agents/agent`;
+            if (resumed)
+              fixture.addResponse(0, {
+                toolCalls: [{ id: 'authorize-1', name: 'authorize', arguments: {} }],
+              });
+            for (let n = 1; n <= 3; n++)
+              fixture.addResponse(offset + n - 1, {
+                toolCalls: [{ id: `slow-${n}`, name: 'slow', arguments: { n } }],
+              });
+            fixture.addResponse(offset + 3, { content: 'done: 3 results' });
+            const runId = `disconnect-${kind}-${route}-${explicitAbort}`;
+            const thread = { thread: runId, resource: 'disconnect-user' };
+            if (resumed) {
+              const parked = await fetch(`${base}/stream`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ messages: 'Start', runId, memory: thread, maxSteps: 6 }),
+              });
+              expect(parked.status).toBe(200);
+              const reader = parked.body!.getReader();
+              let received = '';
+              while (!received.includes('tool-call-approval')) {
+                const { done, value } = await reader.read();
+                expect(done).toBe(false);
+                received += new TextDecoder().decode(value);
+              }
+              await reader.cancel();
+            }
+            const client = new AbortController();
+            const endpoint = route === 'stream-alias' ? 'stream' : route === 'resume-alias' ? 'resume-stream' : route;
+            const request = fetch(`${base}/${endpoint}`, {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ messages: 'Start', runId, memory: thread, maxSteps: 6 }),
-            });
-            expect(parked.status).toBe(200);
-            const reader = parked.body!.getReader();
-            let received = '';
-            while (!received.includes('tool-call-approval')) {
-              const { done, value } = await reader.read();
-              expect(done).toBe(false);
-              received += new TextDecoder().decode(value);
-            }
-            await reader.cancel();
-          }
-          const client = new AbortController();
-          const endpoint = route === 'stream-alias' ? 'stream' : route === 'resume-alias' ? 'resume-stream' : route;
-          const request = fetch(`${base}/${endpoint}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            signal: client.signal,
-            body: JSON.stringify({
-              ...(resumed ? { resumeData: { approved: true }, toolCallId: 'authorize-1' } : { messages: 'Start' }),
-              runId,
-              ...(threadless ? {} : { memory: thread }),
-              maxSteps: 6,
-              ...(['stream-alias', 'resume-alias'].includes(route) ? { untilIdle: true } : {}),
-            }),
-          })
-            .then(async response => {
-              expect(response.status).toBe(200);
-              await response.text();
+              signal: client.signal,
+              body: JSON.stringify({
+                ...(resumed ? { resumeData: { approved: true }, toolCallId: 'authorize-1' } : { messages: 'Start' }),
+                runId,
+                ...(threadless ? {} : { memory: thread }),
+                maxSteps: 6,
+                ...(['stream-alias', 'resume-alias'].includes(route) ? { untilIdle: true } : {}),
+              }),
             })
-            .catch(error => {
-              if (error.name !== 'AbortError') throw error;
-            });
-          try {
-            await entered.promise;
-            client.abort();
-            await disconnected.promise;
-            await request;
-            if (durable !== false && explicitAbort) {
-              const runScoped = typeof explicitAbort === 'string';
-              if (runScoped) {
-                const denied = await fetch(`${server.baseUrl}/api/agents/otherAgent/runs/${runId}/abort`, {
-                  method: 'POST',
-                });
-                expect(denied.status).toBe(403);
-                expect(toolSignal?.aborted).toBe(false);
-              }
-              const response = await fetch(`${base}/${runScoped ? `runs/${runId}/abort` : 'threads/abort'}`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                ...(runScoped
-                  ? {}
-                  : { body: JSON.stringify({ threadId: runId, resourceId: thread.resource, expectedRunId: runId }) }),
+              .then(async response => {
+                expect(response.status).toBe(200);
+                await response.text();
+              })
+              .catch(error => {
+                if (error.name !== 'AbortError') throw error;
               });
-              const result = await response.json();
-              expect(response.status).toBe(200);
-              expect(result).toEqual({ aborted: true });
-            }
-            const completes = durable !== false && !explicitAbort;
-            if (!completes) await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
-            else expect(toolSignal?.aborted).toBe(false);
-            const observing =
-              durable === false
-                ? undefined
-                : fetch(`${base}/observe`, {
+            try {
+              await entered.promise;
+              client.abort();
+              await disconnected.promise;
+              await request;
+              if (durable !== false && explicitAbort) {
+                const runScoped = typeof explicitAbort === 'string';
+                if (runScoped) {
+                  const denied = await fetch(`${server.baseUrl}/api/agents/otherAgent/runs/${runId}/abort`, {
                     method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ runId }),
                   });
-            gate.resolve();
-            if (observing) {
-              const response = await observing;
-              expect(response.status).toBe(200);
-              const replay = await response.text();
-              expect(replay).toContain('finish');
-              if (completes) expect(replay).toContain('done: 3 results');
-              else expect(replay).toContain('abort');
-            }
-            await vi.waitFor(() => expect(calls).toEqual(completes ? [1, 2, 3] : [1]));
-            expect(fixture.getRequestCount()).toBe(offset + (completes ? 4 : 1));
-            if (resumed) expect(authorizations).toBe(route === 'decline-tool-call' ? 0 : 1);
-            if (kind !== 'plain') {
-              const workflows = (await storage.getStore('workflows'))!;
-              await vi.waitFor(async () => {
-                for (const workflowName of ['durable-agentic-loop', 'durable-agentic-execution']) {
-                  expect(await workflows.loadWorkflowSnapshot({ workflowName, runId })).toBeFalsy();
+                  expect(denied.status).toBe(403);
+                  expect(toolSignal?.aborted).toBe(false);
                 }
-              });
+                const response = await fetch(`${base}/${runScoped ? `runs/${runId}/abort` : 'threads/abort'}`, {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  ...(runScoped
+                    ? {}
+                    : { body: JSON.stringify({ threadId: runId, resourceId: thread.resource, expectedRunId: runId }) }),
+                });
+                const result = await response.json();
+                expect(response.status).toBe(200);
+                expect(result).toEqual({ aborted: true });
+              }
+              const completes = durable !== false && !explicitAbort;
+              if (!completes) await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
+              else expect(toolSignal?.aborted).toBe(false);
+              const observing =
+                durable === false
+                  ? undefined
+                  : fetch(`${base}/observe`, {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ runId }),
+                    });
+              gate.resolve();
+              if (observing) {
+                const response = await observing;
+                expect(response.status).toBe(200);
+                const replay = await response.text();
+                expect(replay).toContain('finish');
+                if (completes) expect(replay).toContain('done: 3 results');
+                else expect(replay).toContain('abort');
+              }
+              await vi.waitFor(() => expect(calls).toEqual(completes ? [1, 2, 3] : [1]));
+              expect(fixture.getRequestCount()).toBe(offset + (completes ? 4 : 1));
+              if (resumed) expect(authorizations).toBe(route === 'decline-tool-call' ? 0 : 1);
+              if (kind !== 'plain') {
+                const workflows = (await storage.getStore('workflows'))!;
+                await vi.waitFor(async () => {
+                  for (const workflowName of ['durable-agentic-loop', 'durable-agentic-execution']) {
+                    expect(await workflows.loadWorkflowSnapshot({ workflowName, runId })).toBeFalsy();
+                  }
+                });
+              }
+              if (completes) {
+                await vi.waitFor(async () => {
+                  const { messages } = await memory.recall({ threadId: runId, resourceId: thread.resource });
+                  expect(
+                    messages
+                      .flatMap(m => m.content.parts ?? [])
+                      .some(p => p.type === 'text' && p.text === 'done: 3 results'),
+                  ).toBe(true);
+                });
+                const replay = await fetch(`${base}/observe`, {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ runId }),
+                }).then(response => response.text());
+                expect(replay).toContain('done: 3 results');
+                expect(replay).toContain('finish');
+                const lateAbort = await fetch(`${base}/runs/${runId}/abort`, { method: 'POST' });
+                expect(lateAbort.status).toBe(200);
+                expect(await lateAbort.json()).toEqual({ aborted: false });
+                expect(fixture.getRequestCount()).toBe(offset + 4);
+              }
+            } finally {
+              gate.resolve();
+              client.abort();
             }
-            if (completes) {
-              await vi.waitFor(async () => {
-                const { messages } = await memory.recall({ threadId: runId, resourceId: thread.resource });
-                expect(
-                  messages
-                    .flatMap(m => m.content.parts ?? [])
-                    .some(p => p.type === 'text' && p.text === 'done: 3 results'),
-                ).toBe(true);
-              });
-              const replay = await fetch(`${base}/observe`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ runId }),
-              }).then(response => response.text());
-              expect(replay).toContain('done: 3 results');
-              expect(replay).toContain('finish');
-              const lateAbort = await fetch(`${base}/runs/${runId}/abort`, { method: 'POST' });
-              expect(lateAbort.status).toBe(200);
-              expect(await lateAbort.json()).toEqual({ aborted: false });
-              expect(fixture.getRequestCount()).toBe(offset + 4);
-            }
-          } finally {
-            gate.resolve();
-            client.abort();
-          }
-        }, 30_000);
+          },
+          30_000,
+        );
       }
     }
   });
