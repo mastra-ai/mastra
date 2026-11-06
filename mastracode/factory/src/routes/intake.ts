@@ -25,7 +25,7 @@ import type {
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface IntakeIntegration {
   id: string;
@@ -375,10 +375,6 @@ type ParsedLabelRoute = z.output<typeof labelRouteBodySchema>;
 export function parseIntakeLabelRoute(body: unknown): ParsedLabelRoute | null {
   const parsed = labelRouteBodySchema.safeParse(body);
   return parsed.success ? parsed.data : null;
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 function sanitizeIdList(value: unknown): string[] | null | undefined {

@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
+
+@source '.';
+
+/* The host draws the surface around the iframe and frames it in its chat: the widget drops its card
+   surface (corners, fill and shadow) and sits directly on the host's background. */
+html,
+body {
+  background-color: transparent;
+}
+
+.bg-card.rounded-xl {
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}

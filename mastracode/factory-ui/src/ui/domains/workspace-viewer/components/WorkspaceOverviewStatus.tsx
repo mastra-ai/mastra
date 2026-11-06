@@ -1,5 +1,6 @@
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ReactNode } from 'react';
+
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 interface WorkspaceOverviewStatusProps {
   loading: boolean;
@@ -8,7 +9,7 @@ interface WorkspaceOverviewStatusProps {
 }
 
 export function WorkspaceOverviewStatus({ loading, error, children }: WorkspaceOverviewStatusProps) {
-  if (loading) return <Spinner size="sm" />;
+  if (loading) return <SkeletonRows label="Loading changes" rows={1} rowClassName="h-3 w-16" />;
   if (error) return <span className="text-muted-foreground">Unavailable</span>;
 
   return children;

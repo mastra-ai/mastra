@@ -15,7 +15,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { detectRecorder, MicRecording } from '../mic-capture.js';
 import type { RecorderInfo } from '../mic-capture.js';
-import { createTranscriber, hasProviderCredential } from '../transcribe.js';
+import { createTranscriber, hasProviderCredential, voiceCredentialMessage } from '../transcribe.js';
 import type { ReusableTranscriber } from '../transcribe.js';
 import type { STTEngine, STTSession, STTSessionCallbacks } from './types.js';
 
@@ -57,15 +57,8 @@ class CloudSession implements STTSession {
     private readonly options: CloudEngineOptions,
     private readonly callbacks: STTSessionCallbacks,
   ) {
-    // Build the provider client once and reuse it across ticks so its HTTP
-    // connection stays warm (keep-alive). This removes the DNS + TLS handshake
-    // cost from every request — the main reason the first dictation streamed in
-    // slowly while later ones felt instant.
-    this.transcriber = createTranscriber({
-      provider: this.options.provider,
-      model: this.options.model,
-      authStorage: this.options.authStorage,
-    });
+    // One client per session keeps its connection warm across live ticks.
+    this.transcriber = createTranscriber(this.options);
     try {
       this.recording = new MicRecording(recorder);
     } catch {
@@ -178,9 +171,7 @@ export class CloudSTTEngine implements STTEngine {
   checkReady(): string | null {
     if (!detectRecorder()) return missingRecorderMessage();
     if (!hasProviderCredential(this.options.provider, this.options.authStorage)) {
-      const env =
-        this.options.provider === 'openai' ? 'OPENAI_API_KEY' : `${this.options.provider.toUpperCase()}_API_KEY`;
-      return `Voice input needs a ${this.options.provider} API key. Set ${env} or add one with /api-keys.`;
+      return voiceCredentialMessage(this.options.provider);
     }
     return null;
   }

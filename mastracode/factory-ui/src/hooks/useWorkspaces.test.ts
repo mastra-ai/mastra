@@ -125,7 +125,7 @@ describe('updateCachedSessionTitle', () => {
     client.setQueryData(queryKey, current);
 
     let resolveFetch!: (value: WorkspacesData) => void;
-    const fetch = client.fetchQuery({
+    const fetch = client.query({
       queryKey,
       queryFn: () =>
         new Promise<WorkspacesData>(resolve => {

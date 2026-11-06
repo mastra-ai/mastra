@@ -9,14 +9,12 @@ import {
 } from '@mastra/playground-ui/components/Drawer';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
-import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
+import { useSidePanelDrawer } from '../../../../../lib/hooks/useSidePanelDrawer';
 import {
   CREDENTIAL_LABEL,
   SHARED_SOURCE,
@@ -26,6 +24,7 @@ import {
   signInRequest,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
+import { ProviderOptionRow } from './ProviderRows';
 
 const AUDIENCE: Record<CredentialScope, string> = {
   user: 'Only you can use it.',
@@ -72,7 +71,7 @@ export function AddProviderDrawer({
   onAddKey: (provider: ProviderInfo) => void;
   onClose: () => void;
 }) {
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   const startOAuthMutation = useStartProviderOAuth();
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
@@ -99,14 +98,7 @@ export function AddProviderDrawer({
   };
 
   return (
-    <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
-      open={open}
-      onOpenChange={closeUnlessStarting}
-      onOpenChangeComplete={resetOnceHidden}
-    >
+    <Drawer {...sidePanel} open={open} onOpenChange={closeUnlessStarting} onOpenChangeComplete={resetOnceHidden}>
       <DrawerContent aria-busy={startingProvider !== undefined || undefined}>
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>
@@ -172,21 +164,9 @@ function AddProviderRow({
   onAddKey: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
-  const label = connectionLabel(provider, credentialScope);
   const starting = startingProvider !== undefined;
   return (
-    <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="caption" className="truncate">
-          {displayName}
-        </Txt>
-        {label && (
-          <Txt as="span" variant="meta" tone="muted">
-            {label}
-          </Txt>
-        )}
-      </span>
+    <ProviderOptionRow provider={provider.provider} label={connectionLabel(provider, credentialScope)}>
       {takesApiKey(provider) && (
         <Button size="sm" aria-label={`Add API key for ${displayName}`} disabled={starting} onClick={onAddKey}>
           API key
@@ -203,6 +183,6 @@ function AddProviderRow({
           {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
         </Button>
       )}
-    </li>
+    </ProviderOptionRow>
   );
 }

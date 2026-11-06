@@ -79,7 +79,7 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import { HTTPException } from '../http-exception';
-import { listFeedbackResponseSchema } from '../schemas/feedback';
+import { feedbackResponseSchema, listFeedbackResponseSchema } from '../schemas/feedback';
 import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -1281,6 +1281,29 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 // Feedback Routes
 // ============================================================================
 
+export const GET_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  responseSchema: z.object({ feedback: feedbackResponseSchema.nullable() }),
+  handler: async ({ mastra, requestContext, request, feedbackId }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    if (typeof observabilityStore.getFeedbackById !== 'function') {
+      throw new HTTPException(501, {
+        message: 'This storage provider does not support single-feedback reads; please upgrade @mastra/core.',
+      });
+    }
+    const feedback = await observabilityStore.getFeedbackById(feedbackId);
+    if (!feedback) return { feedback: null };
+    const authors = await prepareAuthorEnrichment(
+      mastra,
+      requestContext,
+      [feedback.feedbackUserId],
+      isStudioClientTypeHeader(request?.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined),
+    );
+    const author = feedback.feedbackUserId ? authors?.get(feedback.feedbackUserId) : undefined;
+    return { feedback: author ? { ...feedback, author } : feedback };
+  },
+});
+
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
@@ -1615,6 +1638,7 @@ export const NEW_ROUTES = {
   GET_SCORE_TIME_SERIES,
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
+  GET_FEEDBACK,
   CREATE_FEEDBACK,
   DELETE_FEEDBACK,
   UPDATE_FEEDBACK_REVIEW_STATUS,
