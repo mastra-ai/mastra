@@ -89,7 +89,14 @@ export interface ChannelLogContext {
 
 type ChannelAgent = Pick<
   Agent<any, any, any, any>,
-  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'getWorkspace'
+  | 'id'
+  | 'getMastraInstance'
+  | 'sendMessage'
+  | 'approveToolCall'
+  | 'declineToolCall'
+  | 'listSuspendedRuns'
+  | 'getMemory'
+  | 'getWorkspace'
 >;
 
 /** Messages read per page when recovering a pending approval from Memory. */
@@ -855,14 +862,19 @@ export class AgentChannels {
               let toolName: string | undefined;
               let toolArgs: Record<string, unknown> | undefined;
 
+              // Whether the run/tool target was remembered rather than just read
+              // from history, so it may be stale (see isAnsweredElsewhere).
+              let remembered = false;
               const stashed = this.pendingApprovalCards.get(toolCallId);
               let requesterId = stashed?.requesterId;
               if (stashed?.runId) {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
+                remembered = true;
               } else {
-                const lookup = await this.lookupPersistedApproval({ mastra, card, platform });
+                const { result: lookup, cached } = await this.lookupPersistedApproval({ mastra, card, platform });
+                remembered = cached;
                 if (lookup.status === 'answered') {
                   this.log('info', 'Tool approval already answered', actionEventContext);
                   return;
@@ -909,6 +921,27 @@ export class AgentChannels {
               }
               this.approvalsInFlight.add(cardKey);
               inFlightKey = cardKey;
+
+              if (
+                remembered &&
+                (await this.isAnsweredElsewhere({
+                  runId,
+                  toolCallId,
+                  memory: { thread: mastraThread.id, resource: mastraThread.resourceId },
+                }))
+              ) {
+                // Resuming would answer the run's newer tool call instead.
+                this.setApprovalLookup(cardKey, {
+                  result: { status: 'answered' },
+                  expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+                });
+                if (stashed) this.pendingApprovalCards.delete(toolCallId);
+                this.log('info', 'Ignoring stale tool approval action (run waits on another tool call)', {
+                  ...actionEventContext,
+                  runId,
+                });
+                return;
+              }
 
               // Build the card header with tool name and args
               const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
@@ -2464,12 +2497,12 @@ export class AgentChannels {
     mastra: Mastra;
     card: ApprovalCardKey;
     platform: string;
-  }): Promise<ApprovalLookupResult> {
+  }): Promise<{ result: ApprovalLookupResult; cached: boolean }> {
     const key = approvalCardKey(args.card);
     const cached = this.getApprovalLookup(key);
-    if (cached) return cached.result;
+    if (cached) return { result: cached.result, cached: true };
     const inFlight = this.approvalLookupsInFlight.get(key);
-    if (inFlight) return inFlight;
+    if (inFlight) return { result: await inFlight, cached: false };
 
     // Entries are per card, so a card posted later for a reused toolCallId
     // gets its own key and needs no invalidation.
@@ -2481,10 +2514,40 @@ export class AgentChannels {
         result,
         expiresAt: Date.now() + (result.status === 'missing' ? APPROVAL_LOOKUP_MISSING_TTL_MS : APPROVAL_LOOKUP_TTL_MS),
       });
-      return result;
+      return { result, cached: false };
     } finally {
       this.approvalLookupsInFlight.delete(key);
     }
+  }
+
+  /**
+   * Whether a remembered card's tool call was answered elsewhere: its run is
+   * suspended again, but on other tool calls. A card target taken from the
+   * lookup cache or from posting the card can outlive its approval, and a
+   * `DurableAgent` resume would apply the old answer to the run's newer tool
+   * call. One read of the thread's suspended runs, no history scan.
+   *
+   * A run that is not suspended (finished, aborted, still resuming, or whose
+   * suspension is not stored yet) is left to the resume, which reports those
+   * cases itself. This matches core's own rule for a stale `toolCallId`.
+   */
+  private async isAnsweredElsewhere(args: {
+    runId: string;
+    toolCallId: string;
+    memory: { thread: string; resource: string };
+  }): Promise<boolean> {
+    // AgentControllerChannels sets no agent: its session's armed approval gate
+    // rejects a stale target itself.
+    const agent = this.getDispatchAgent() as ChannelAgent | undefined;
+    if (!agent) return false;
+    const { runs } = await agent.listSuspendedRuns({
+      threadId: args.memory.thread,
+      resourceId: args.memory.resource,
+    });
+    const suspendedToolCallIds = (runs.find(run => run.runId === args.runId)?.toolCalls ?? [])
+      .map(toolCall => toolCall.toolCallId)
+      .filter((id): id is string => id !== undefined);
+    return suspendedToolCallIds.length > 0 && !suspendedToolCallIds.includes(args.toolCallId);
   }
 
   /** The cached entry for a card, or undefined when missing or expired. */

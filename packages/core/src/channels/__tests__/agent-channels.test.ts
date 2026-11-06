@@ -70,6 +70,7 @@ function createMockAgent(name = 'test-agent') {
       unsubscribe: vi.fn(),
     }),
     getMemory: vi.fn().mockResolvedValue(null),
+    listSuspendedRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
     logger: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
   } as any;
 }

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
+import { createDurableAgent, DurableAgent } from '../../agent/durable';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { Mastra } from '../../mastra';
@@ -11,6 +12,7 @@ import { MockMemory } from '../../memory/mock';
 import type { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import type { MemoryStorage } from '../../storage';
+import type { MastraModelOutput } from '../../stream';
 import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
@@ -626,8 +628,14 @@ describe('approval clicks that resume a real agent run', () => {
   const TOOL_CALL_ID = 'refund-call';
   const SECOND_TOOL_CALL_ID = 'second-refund-call';
 
-  /** `secondApproval`: once the first refund runs, the agent asks to approve another. */
-  async function setup({ secondApproval = false }: { secondApproval?: boolean } = {}) {
+  /**
+   * `secondApproval`: once the first refund runs, the agent asks to approve another.
+   * `durable`: run the agent through a `DurableAgent` wrapper.
+   */
+  async function setup({
+    secondApproval = false,
+    durable = false,
+  }: { secondApproval?: boolean; durable?: boolean } = {}) {
     const refunds: number[] = [];
     const refund = createTool({
       id: 'refund',
@@ -675,7 +683,7 @@ describe('approval clicks that resume a real agent run', () => {
       },
     });
     const store = new InMemoryStore({ id: 'approval-real-agent' });
-    const agent = new Agent({
+    const baseAgent = new Agent({
       id: 'approval-owner',
       name: 'Approval owner',
       instructions: 'Refund orders when asked.',
@@ -683,6 +691,8 @@ describe('approval clicks that resume a real agent run', () => {
       tools: { refund },
       memory: new MockMemory({ storage: store }),
     });
+    const agent = durable ? createDurableAgent({ agent: baseAgent }) : baseAgent;
+    const loopWorkflowName = durable ? 'durable-agentic-loop' : 'agentic-loop';
     const mastra = new Mastra({
       agents: { [agent.id]: agent },
       storage: store,
@@ -710,10 +720,28 @@ describe('approval clicks that resume a real agent run', () => {
 
     // Alice asks for a refund; the run suspends on the approval and the agent
     // stores the pending entry with its assistant message.
-    const stream = await agent.stream('Refund my order', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } });
-    await stream.consumeStream();
-    const runId = stream.runId;
-    expect((await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId }))?.status).toBe('suspended');
+    const memoryOptions = { memory: { thread: THREAD_ID, resource: RESOURCE_ID } };
+    const loopStatus = async (id: string) =>
+      (await workflows.loadWorkflowSnapshot({ workflowName: loopWorkflowName, runId: id }))?.status;
+    // Read a run's stream until it waits on an approval or finishes. A durable
+    // stream stays open while its run is suspended, so stop at the approval.
+    const untilWaiting = async (id: string, output: MastraModelOutput<any>) => {
+      for await (const chunk of output.fullStream) {
+        if (durable && chunk.type === 'tool-call-approval') break;
+      }
+      await vi.waitFor(async () => expect([undefined, 'suspended']).toContain(await loopStatus(id)));
+    };
+    let runId: string;
+    if (agent instanceof DurableAgent) {
+      const started = await agent.stream('Refund my order', memoryOptions);
+      runId = started.runId;
+      await untilWaiting(runId, started.output);
+    } else {
+      const started = await agent.stream('Refund my order', memoryOptions);
+      runId = started.runId;
+      await untilWaiting(runId, started);
+    }
+    expect(await loopStatus(runId)).toBe('suspended');
     // Mark the request as Alice's, as an inbound channel message would be.
     const { messages } = await memory.listMessages({ threadId: THREAD_ID, perPage: false });
     const ask = messages.find(m => m.role === 'user')!;
@@ -774,8 +802,14 @@ describe('approval clicks that resume a real agent run', () => {
       for (const instance of instances) await instance.sdk?.shutdown();
       await mastra.shutdown();
     };
-    const runStatus = async () =>
-      (await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId }))?.status;
+    const runStatus = () => loopStatus(runId);
+    // Another instance approves the card through the agent and its run goes on
+    // until it waits again or finishes.
+    const approveElsewhere = async (toolCallId: string) =>
+      untilWaiting(
+        runId,
+        await agent.approveToolCall({ runId, toolCallId, memory: { thread: THREAD_ID, resource: RESOURCE_ID } }),
+      );
     const errorPosts = () => posts.filter(p => JSON.stringify(p).includes('Error'));
     // Card edits that record a decision (the tool result edits the card too).
     const decisionEdits = () => edits.filter(e => /Approved|Denied/.test(JSON.stringify(e)));
@@ -795,6 +829,7 @@ describe('approval clicks that resume a real agent run', () => {
       click,
       startInstance,
       runStatus,
+      approveElsewhere,
       errorPosts,
       outcomes,
     };
@@ -906,30 +941,74 @@ describe('approval clicks that resume a real agent run', () => {
     expect(errorPosts()).toEqual([]);
   });
 
-  it('stops resuming an answered approval once the run waits on a newer one', async () => {
-    const { agent, runId, refunds, click, startInstance, runStatus, errorPosts, outcomes } = await setup({
-      secondApproval: true,
-    });
-    await click(`tool_approve:${TOOL_CALL_ID}`, 'mallory');
-    // Another instance approves the first refund; the run then asks to approve a second one.
-    await startInstance();
-    await (
-      await agent.approveToolCall({
+  // The first card's run/tool target is remembered on this instance, from its
+  // history lookup or because it posted the card. Another instance answers the
+  // card and the same run then suspends on a second refund. A late click on the
+  // first card must not resume the run: a DurableAgent would apply it to the
+  // second refund.
+  it.each([
+    { agentKind: 'Agent', durable: false, remembered: 'history lookup' },
+    { agentKind: 'Agent', durable: false, remembered: 'posted card' },
+    { agentKind: 'DurableAgent', durable: true, remembered: 'history lookup' },
+    { agentKind: 'DurableAgent', durable: true, remembered: 'posted card' },
+  ])(
+    'ignores a stale card once the run waits on a newer approval ($agentKind, $remembered)',
+    async ({ durable, remembered }) => {
+      const {
+        agent,
+        channels,
         runId,
-        toolCallId: TOOL_CALL_ID,
-        memory: { thread: THREAD_ID, resource: RESOURCE_ID },
-      })
-    ).consumeStream();
-    expect(await runStatus()).toBe('suspended');
+        refunds,
+        click,
+        startInstance,
+        runStatus,
+        approveElsewhere,
+        errorPosts,
+        outcomes,
+      } = await setup({ secondApproval: true, durable });
+      if (remembered === 'history lookup') {
+        // Mallory's click is refused, but this instance now caches the card as pending.
+        await click(`tool_approve:${TOOL_CALL_ID}`, 'mallory');
+      } else {
+        (channels as unknown as { pendingApprovalCards: Map<string, PendingApprovalRecord> }).pendingApprovalCards.set(
+          TOOL_CALL_ID,
+          {
+            messageId: 'approval-card',
+            displayName: 'refund',
+            argsSummary: '',
+            startedAt: Date.now(),
+            runId,
+            toolName: 'refund',
+            args: { amount: 10 },
+            requesterId: 'alice',
+          },
+        );
+      }
+      // Another instance approves the first refund; the run then asks to approve a second one.
+      await startInstance();
+      await approveElsewhere(TOOL_CALL_ID);
+      expect(await runStatus()).toBe('suspended');
+      expect(refunds).toEqual([10]);
 
-    const approve = vi.spyOn(agent, 'approveToolCall');
-    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
-    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+      const approve = vi.spyOn(agent, 'approveToolCall');
+      const decline = vi.spyOn(agent, 'declineToolCall');
+      await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+      await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+      await click(`tool_deny:${TOOL_CALL_ID}`, 'alice');
+      // The stale clicks reach no resume and leave the second refund waiting.
+      expect(await outcomes(approve, decline)).toEqual([]);
+      expect(refunds).toEqual([10]);
+      expect(await runStatus()).toBe('suspended');
+      expect(errorPosts()).toEqual([]);
 
-    expect(await outcomes(approve)).toEqual(['AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED']);
-    expect(refunds).toEqual([10]);
-    expect(errorPosts()).toEqual([]);
-  });
+      // The second refund's card still works.
+      await click(`tool_approve:${SECOND_TOOL_CALL_ID}`, 'alice');
+      await vi.waitFor(async () => expect(await runStatus()).toBeUndefined());
+      expect(await outcomes(approve)).toEqual(['resumed']);
+      expect(refunds).toEqual([10, 20]);
+      expect(errorPosts()).toEqual([]);
+    },
+  );
 
   it('keeps the card answerable when core times out waiting for the suspension to persist', async () => {
     const { agent, refunds, click, runStatus } = await setup();
@@ -956,7 +1035,7 @@ describe('approval clicks that resume a real agent run', () => {
     ['missing cold run', 'AGENT_RESUME_NO_SNAPSHOT_FOUND', {}],
     ['run finished by recovery', 'AGENT_RESUME_RUN_FINISHED', {}],
     ['completed run', 'AGENT_RESUME_RUN_NOT_SUSPENDED', { status: 'success' }],
-  ])('stops resuming a durable approval after a %s', async (_case, id, details) => {
+  ] as const)('stops resuming a durable approval after a %s', async (_case, id, details) => {
     const { agent, click, errorPosts } = await setup();
     const approve = vi.spyOn(agent, 'approveToolCall').mockRejectedValue(
       new MastraError({
