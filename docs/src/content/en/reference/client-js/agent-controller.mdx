@@ -277,7 +277,7 @@ Returns: `Promise<MastraDBMessage[]>`
 
 ### `getGoal()`, `setGoal(objective, options?)`, `updateGoal(options)`, `clearGoal()`
 
-Read, set, update, and clear the goal for the session's thread. `setGoal` accepts `{ judgeModelId?, maxRuns? }`. `updateGoal` also accepts `status: 'active' | 'paused' | 'done'`. The agent's in-loop judge evaluates progress after each turn and reports it as `goal_evaluation` events.
+Read, set, update, and clear the goal for the session's thread. `setGoal` accepts `{ judgeModelId?, maxRuns?, start? }`. `updateGoal` also accepts `status: 'active' | 'paused' | 'done'`. Pass `start: true` to have the agent begin working on the goal right away; on `updateGoal` it only starts when the resulting status is `active`. If the turn can't start, the goal is paused. The agent's in-loop judge evaluates progress after each turn and reports it as `goal_evaluation` events.
 
 ### `getPermissions()`, `setPermissionForCategory(category, policy)`, `setPermissionForTool(toolName, policy)`
 
