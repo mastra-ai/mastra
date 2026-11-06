@@ -29,7 +29,7 @@ const knowledge = new PlatformKnowledge();
 
 ### Hosted browser
 
-Provide a Mastra Platform project ID and access token to create a Browserbase-backed Stagehand browser. Browserbase credentials stay on the Platform server.
+Create a hosted browser from your Mastra Platform project's browser page, then pass its CDP URL to `PlatformBrowser`. Treat the CDP URL as a secret: anyone holding it can connect to that browser. Keep it server-side, do not commit it, and use a secure environment variable such as `MASTRA_BROWSER_CDP_URL`.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
@@ -38,11 +38,17 @@ import { PlatformBrowser } from '@mastra/platform';
 const agent = new Agent({
   name: 'browser-agent',
   model: 'openai/gpt-4o-mini',
-  browser: new PlatformBrowser({ projectId: 'your-project-id' }),
+  browser: new PlatformBrowser({ cdpUrl: process.env.MASTRA_BROWSER_CDP_URL! }),
 });
 ```
 
-`PlatformBrowser` uses `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` and `MASTRA_PROJECT_ID` when the corresponding options are omitted. It POSTs `{ projectId }` to `https://platform.mastra.ai/v1/browsers/sessions` (overridable with `apiUrl` or `MASTRA_BROWSER_API_URL`) and connects to the returned CDP URL with shared browser scope. A project access token must be authorized for that project; the Browserbase session is provisioned on demand.
+Alternatively, provide a Mastra Platform project ID and access token to provision a new Browserbase-backed session on demand. Browserbase credentials stay on the Platform server.
+
+```ts
+const browser = new PlatformBrowser({ projectId: 'your-project-id' });
+```
+
+`PlatformBrowser` uses `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` and `MASTRA_PROJECT_ID` when the corresponding options are omitted for on-demand provisioning. It POSTs `{ projectId }` to `https://platform.mastra.ai/v1/browsers/sessions` (overridable with `apiUrl` or `MASTRA_BROWSER_API_URL`) and connects to the returned CDP URL with shared browser scope. A project access token must be authorized for that project. Supplying `cdpUrl` skips provisioning and does not require a Platform token or project ID.
 
 ### Knowledge transport contract
 

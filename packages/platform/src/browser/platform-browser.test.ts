@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/stagehand', () => ({
   StagehandBrowser: class {
-    constructor(private readonly config: { cdpUrl: () => Promise<string>; scope: string }) {}
+    constructor(private readonly config: { cdpUrl: string | (() => Promise<string>); scope: string }) {}
     async ensureReady() {
-      return this.config.cdpUrl();
+      return typeof this.config.cdpUrl === 'string' ? this.config.cdpUrl : this.config.cdpUrl();
     }
   },
 }));
@@ -17,6 +17,16 @@ afterEach(() => {
 });
 
 describe('PlatformBrowser provisioning', () => {
+  it('connects to a supplied CDP URL without provisioning or Platform credentials', async () => {
+    delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+    delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    delete process.env.MASTRA_PROJECT_ID;
+    const fetchImpl = vi.fn<typeof fetch>();
+    const browser = new PlatformBrowser({ cdpUrl: 'wss://connect.browserbase.com/session-existing', fetch: fetchImpl });
+    expect(await browser.ensureReady()).toBe('wss://connect.browserbase.com/session-existing');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('provisions a shared remote browser through Platform without sending Browserbase credentials to the client', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
       expect(url).toBe('https://platform.mastra.ai/v1/browsers/sessions');
