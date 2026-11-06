@@ -1648,6 +1648,56 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(moved).toMatchObject({ status: 'accepted' });
     });
 
+    it('starts a reviewer when a Linear card carrying a merge request moves to PR review', async () => {
+      const h = await harness();
+      const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+      const linear = (
+        await h.seeded.workItems.upsert({
+          ...scope,
+          userId: 'user-1',
+          input: {
+            board: 'work',
+            externalSource: { integrationId: 'linear', type: 'issue', externalId: 'ENG-7' },
+            title: 'ENG-7',
+            stages: ['review'],
+            sessions: {},
+            metadata: { authorTrusted: true },
+          },
+        })
+      ).item;
+      await h.seeded.workItems.attachSource({
+        orgId: 'org-1',
+        id: linear.id,
+        source: {
+          integrationId: 'gitlab',
+          type: 'pull-request',
+          externalId: `gitlab-pr:${Buffer.from(
+            JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+            'utf8',
+          ).toString('base64url')}`,
+          url: 'https://gitlab.example.com/acme/app/-/merge_requests/17',
+        },
+        metadata: { state: 'open', gitlabMergeRequestIid: 17 },
+      });
+      const card = (await h.seeded.workItems.get({ orgId: 'org-1', id: linear.id }))!;
+      expect(sourceTypes(card)).toEqual(['issue', 'pull-request']);
+
+      const moved = await h.transitionService.transition({
+        ...scope,
+        workItemId: card.id,
+        board: 'work',
+        stage: 'pr-review',
+        expectedRevision: card.revision,
+        actor: { type: 'human', id: 'user-1' },
+        ingress: { type: 'human', identity: 'human-review-linear' },
+        cause: 'board_drag',
+      });
+      expect(moved).toMatchObject({ status: 'accepted' });
+      expect((moved as { decisions?: unknown[] }).decisions).toContainEqual(
+        expect.objectContaining({ type: 'invokeSkill', role: 'review' }),
+      );
+    });
+
     it('gives a second merge request its own card once the first is under review, and moves the card to Done when the first merges', async () => {
       const h = await harness();
       const issue = await h.issueCard('intake');
