@@ -520,9 +520,15 @@ While a run executes, Mastra holds a storage lease on it and renews it in the ba
 
 A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step also runs again when its event is redelivered to a worker. Make steps with side effects idempotent, so a repeated step has no additional effect.
 
-A step's `execute` function receives `runId` and `workflowId`, which stay the same when the step repeats. Combine them with the `id` you gave the step in `createStep()` to build an idempotency key. Nested workflows share the parent's `runId`, and `workflowId` keeps their steps apart.
+A step's `execute` function receives `runId` and `workflowId`. Combine them with the `id` you gave the step in `createStep()`, plus a name for each side effect when the step performs more than one, to build an idempotency key.
 
-Inside `foreach`, add an ID from the step's input that identifies the item. For a nested workflow that runs inside `foreach`, leave `runId` out of the key and use that item ID instead, because recovery can give the nested workflow a new `runId`. In a sequential loop, you can instead add an iteration counter kept in [workflow state](#workflow-state). Don't use a shared counter for concurrent `foreach` items, because concurrent items can read the same value. For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
+Some steps need part of the key to come from their input:
+
+- A nested workflow can receive a new `runId` when it's recovered or redelivered. Pass the parent's `runId` into the nested workflow's input and use it in place of the nested `runId`.
+- `foreach` runs the same step once per item. Add an ID from the step's input that identifies the item.
+- A loop runs the same step on every iteration. Return an iteration number from the step and read it from the input on the next iteration. A repeated or resumed iteration receives the same input, so the number doesn't change.
+
+For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
 
 ### Restarting an active workflow run with `restart()`
 

@@ -476,10 +476,10 @@ export const refundPayment = createTool({
 
 `context.agent` is only set when an agent runs the tool, which is why the example checks for it. The tool call ID comes from the model provider, and some providers reuse IDs across responses. Adding the payment ID keeps two different refunds from sharing a key. Stripe can remove an idempotency key once it's 24 hours old, so a run recovered after that can create a second refund.
 
-If a service doesn't accept idempotency keys, record the tool call ID together with the change:
+If a service doesn't accept idempotency keys, build the key the same way and record it together with the change:
 
-- In a database, write the ID to a column with a unique constraint in the same transaction as the change, and skip the change when the ID already exists, for example with `INSERT ... ON CONFLICT DO NOTHING` in Postgres. Store the tool's result with the ID so a repeated call can return the same result to the model.
-- With other services, attach the ID to the request and check for it before you perform the action, for example by searching for an email that carries the ID in a header. When executions overlap, each one can pass this check before the other sends its request.
+- In a database, write the key to a column with a unique constraint in the same transaction as the change, and skip the change when the key already exists, for example with `INSERT ... ON CONFLICT DO NOTHING` in Postgres. Store the tool's result with the key so a repeated call can return the same result to the model.
+- With other services, attach the key to the request and check for it before you perform the action, for example by searching for an email that carries the key in a header. When executions overlap, each one can pass this check before the other sends its request.
 
 ### Protect tools inside subagents
 
