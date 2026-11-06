@@ -17,8 +17,16 @@ const FONT = {
   i: ['..#..', '.....', '.##..', '..#..', '..#..', '..#..', '.###.'],
   w: ['.....', '.....', '#...#', '#...#', '#.#.#', '#.#.#', '.#.#.'],
   n: ['.....', '.....', '#.##.', '##..#', '#...#', '#...#', '#...#'],
-  g: ['.....', '.....', '.####', '#...#', '.####', '....#', '.###.'],
+  // g and y take an eighth row so their descenders don't read as 9 and 4.
+  g: ['.....', '.....', '.####', '#...#', '#...#', '.####', '....#', '.###.'],
   o: ['.....', '.....', '.###.', '#...#', '#...#', '#...#', '.###.'],
+  m: ['.....', '.....', '##.#.', '#.#.#', '#.#.#', '#.#.#', '#.#.#'],
+  a: ['.....', '.....', '.###.', '....#', '.####', '#...#', '.####'],
+  s: ['.....', '.....', '.####', '#....', '.###.', '....#', '####.'],
+  t: ['.#...', '.#...', '####.', '.#...', '.#...', '.#..#', '..##.'],
+  f: ['..##.', '.#..#', '.#...', '###..', '.#...', '.#...', '.#...'],
+  c: ['.....', '.....', '.###.', '#....', '#....', '#...#', '.###.'],
+  y: ['.....', '.....', '#...#', '#...#', '#...#', '.####', '....#', '.###.'],
   O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
   '[': ['.###.', '.#...', '.#...', '.#...', '.#...', '.#...', '.###.'],
   ']': ['.###.', '...#.', '...#.', '...#.', '...#.', '...#.', '.###.'],
@@ -27,7 +35,6 @@ const FONT = {
   '|': ['..#..', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
   '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
   '\\': ['#....', '#....', '.#...', '..#..', '...#.', '....#', '....#'],
-  $: ['..#..', '.####', '#.#..', '.###.', '..#.#', '####.', '..#..'],
 };
 
 // Color slots: 0 background, 1 faded, 2 building, 3 prompt, 4 lit window,
@@ -53,11 +60,13 @@ const ART = [
   '',
   '',
 ];
-const CHIMNEYS = [4, 11];
+const CHIMNEYS = [5, 12];
 const SCALE = 3;
 const CELL_W = 6;
 const CELL_H = 10;
-const COLS = 24;
+const CAPTION = 'mastra factory reviewing';
+// One blank column on each side of the 24-column art and caption.
+const COLS = 26;
 const ROWS = ART.length;
 const WIDTH = COLS * CELL_W * SCALE;
 const HEIGHT = ROWS * CELL_H * SCALE;
@@ -73,7 +82,7 @@ function frame(index) {
   // smoke can move smoothly between character cells.
   const glyph = (char, left, top, color) => {
     const rows = FONT[char];
-    for (let y = 0; y < 7; y++) {
+    for (let y = 0; y < rows.length; y++) {
       for (let x = 0; x < 5; x++) {
         if (rows[y][x] !== '#') continue;
         const px = (left + x) * SCALE;
@@ -83,8 +92,8 @@ function frame(index) {
       }
     }
   };
-  const text = (line, col, row, color) => {
-    [...line].forEach((char, offset) => glyph(char, (col + offset) * CELL_W, row * CELL_H + 2, color(char, offset)));
+  const text = (line, col, row, color, top = 2) => {
+    [...line].forEach((char, offset) => glyph(char, (col + offset) * CELL_W, row * CELL_H + top, color(char, offset)));
   };
 
   // Smoke: each chimney sends up evenly spaced puffs that grow, drift with the
@@ -111,16 +120,15 @@ function frame(index) {
   // The building, with a few windows dimming and relighting as the shift runs.
   let windowCell = 0;
   ART.forEach((line, row) =>
-    text(line, 0, row, char => {
+    text(line, 1, row, char => {
       if (char !== '[' && char !== ']') return 2;
       const pane = Math.floor(windowCell++ / 2);
       return (pane * 3 + Math.floor(index / 6)) % 4 === 0 ? 1 : 4;
     }),
   );
 
-  const dots = '.'.repeat(Math.floor(index / 6) % 4).padEnd(3, ' ');
-  text('$', 0, ROWS - 1, () => 3);
-  text(`reviewing${dots}`, 2, ROWS - 1, () => 2);
+  // The name in the prompt green; raised a pixel so descenders fit the cell.
+  text(CAPTION, 1, ROWS - 1, (_char, offset) => (offset < 'mastra factory'.length ? 3 : 2), 1);
   return pixels;
 }
 
