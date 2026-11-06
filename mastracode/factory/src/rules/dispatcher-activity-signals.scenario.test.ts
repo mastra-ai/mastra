@@ -12,6 +12,8 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
+import { dispatchDueNotifications } from '@mastra/core/notifications';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
@@ -73,13 +75,15 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
       return { stream: textStream('noted') };
     },
   });
+  const memoryStorage = new InMemoryStore();
   const agent = new Agent({
     id: 'factory-agent',
     name: 'factory agent',
     instructions: 'You work Factory cards.',
     model,
+    // Real thread memory, so whatever a signal persists is in the next run's prompt.
+    memory: new MockMemory({ storage: memoryStorage }),
   });
-  const memoryStorage = new InMemoryStore();
   const mastra = new Mastra({ agents: { 'factory-agent': agent }, logger: false, storage: memoryStorage });
   const controller = new AgentController({
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
@@ -171,6 +175,24 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     return store!.listNotifications({ threadId, source: 'factory' });
   };
   const decisions = () => storage.listDeferredDecisions('org-1', PROJECT_ID);
+  /** One pass of core's notification dispatcher, which delivers scheduled records and summaries. */
+  const dispatchNotifications = async () => {
+    const store = await memoryStorage.getStore('notifications');
+    await dispatchDueNotifications({ mastra, storage: store!, now: new Date(Date.now() + 60_000) });
+  };
+  /** Runs `beforeUpdate` once, just before core first updates a factory notification record. */
+  const onFirstNotificationUpdate = async (beforeUpdate: () => Promise<void>) => {
+    const store = (await memoryStorage.getStore('notifications'))!;
+    const update = store.updateNotification.bind(store);
+    let fired = false;
+    store.updateNotification = async input => {
+      if (!fired) {
+        fired = true;
+        await beforeUpdate();
+      }
+      return update(input);
+    };
+  };
 
   return {
     session,
@@ -178,6 +200,8 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     signal,
     notifications,
     decisions,
+    dispatchNotifications,
+    onFirstNotificationUpdate,
     prompts,
     agentEnds,
     holdNextRun: () => {
@@ -206,31 +230,65 @@ describe('scenario: source activity reaches the card session as pointers', () =>
   });
 
   it.each([
-    { provider: 'GitHub', decision: {} },
+    { case: 'an untrusted GitHub comment', decision: {} },
     {
-      provider: 'GitLab',
+      case: 'an untrusted GitLab comment',
       decision: {
         reference: 'group/project#42',
         url: 'https://gitlab.example.com/group/project/-/issues/42#note_98',
         idleBehavior: 'persist' as const,
       },
     },
-  ])(
-    'starts no run for an untrusted $provider comment on an idle session, and keeps the pointer in its notifications',
-    async ({ decision }) => {
-      const factory = await mountFactory();
-
-      await factory.signal(decision);
-      // Give a wrongly started run time to reach the model.
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Nothing calls the model; the pointer stays in the session's notifications.
-      expect(factory.prompts).toEqual([]);
-      expect((await factory.decisions()).map(entry => entry.status)).toEqual(['succeeded']);
-      const [record] = await factory.notifications();
-      expect(record?.summary).toContain('@contributor (untrusted author)');
+    {
+      // GitLab can't say whether Factory wrote a comment, so even a trusted one must not wake.
+      case: 'a trusted GitLab comment',
+      decision: {
+        reference: 'group/project#42',
+        url: 'https://gitlab.example.com/group/project/-/issues/42#note_98',
+        author: 'maintainer',
+        authorTrusted: true,
+        idleBehavior: 'persist' as const,
+      },
     },
-  );
+  ])('starts no run for $case on an idle session, and tells its next run', async ({ decision }) => {
+    const factory = await mountFactory();
+
+    await factory.signal(decision);
+    await factory.dispatchNotifications();
+    // Give a wrongly started run time to reach the model.
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(factory.prompts).toEqual([]);
+    expect((await factory.decisions()).map(entry => entry.status)).toEqual(['succeeded']);
+    const [record] = await factory.notifications();
+    expect(record).toMatchObject({ kind: 'source-activity', status: 'pending' });
+    expect(record?.summary).toMatch(/^New comment by @\S+ .*on (acme\/repo|group\/project)#42: https:/);
+
+    // The next run, started by a person, is told the notification is waiting.
+    await factory.session.sendMessage({ content: 'carry on' });
+    await waitFor(() => factory.prompts.length === 1, 'the next run to reach the model');
+    expect(factory.prompts[0]).toContain('notification-summary');
+    expect(factory.prompts[0]).toContain('factory: 1');
+  });
+
+  it('starts no run for an untrusted comment when the busy run ends while core is still routing it', async () => {
+    const factory = await mountFactory();
+    factory.holdNextRun();
+    void factory.session.sendMessage({ content: 'keep working' }).catch(() => {});
+    await waitFor(() => factory.prompts.length === 1, 'the busy run to reach the model');
+    // Core decides how to deliver while the run is busy; the run ends before it sends.
+    await factory.onFirstNotificationUpdate(async () => {
+      factory.releaseBusyRun();
+      await waitFor(() => factory.agentEnds() >= 1 && !factory.session.run.isRunning(), 'the busy run to end');
+    });
+
+    await factory.signal();
+    await factory.dispatchNotifications();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(factory.prompts).toHaveLength(1);
+    expect((await factory.decisions()).map(entry => entry.status)).toEqual(['succeeded']);
+  });
 
   it('keeps comments that arrive while the session is busy as one pending notification that counts them', async () => {
     const factory = await mountFactory();

@@ -17,7 +17,7 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$REOPENE
 
 **Closes are editable default routes.** Every project gets three new default routes, added once: `Closed issues go to Done`, `Issues closed as not planned go to Canceled` and `Reopened issues go back to Intake`. GitHub, GitLab, Linear, Jira and incident.io closes land where they did before, but you can now edit, disable or delete the move. A deleted default is not added back. Disabling both close routes leaves closed Work cards where they are. A board with no route for an event still uses its `sourceClosed` mapping, so custom boards keep closing as before.
 
-**Comments and edits reach the card's session.** A new comment on a card's GitHub or GitLab issue, or an edit to its title or description, sends the card's session a short message such as `New comment by @alice on acme/repo#42: <link>`. The message never includes the comment's text or the issue's title. Authors without write access are marked `(untrusted author)`. An idle session wakes up for GitHub activity from trusted authors only; untrusted activity and GitLab activity waits for the session's next run. Comments that arrive while the session is busy are combined into one notification. Cards nobody is working ignore them, and Triage still runs only once.
+**Comments and edits reach the card's session.** A new comment on a card's GitHub or GitLab issue, or an edit to its title or description, sends the card's session a short message such as `New comment by @alice on acme/repo#42: <link>`. The message never includes the comment's text or the issue's title. Authors without write access are marked `(untrusted author)`. An idle session wakes up for GitHub activity from trusted authors only; untrusted activity and GitLab activity stay in the session's notifications as a low-priority notice, and its next run is told they are waiting. Comments that arrive while the session is busy are combined into one notification. Cards nobody is working ignore them, and Triage still runs only once.
 
 **Behavior changes**
 
@@ -25,4 +25,4 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$REOPENE
 - An explicit handler or `null` for an event in an integration's `rules`, or `null` on a board's handlers, keeps routes and activity messages out of that event entirely.
 - GitLab reopens now arrive as their own `issueReopened` event. A custom `issueOpened` override no longer sees reopens. Override `issueReopened` to handle them.
 - GitHub `issues` webhooks with action `reopened` now reach rules as `issueReopened`.
-- Factory can't yet tell its own GitLab comments apart from other people's, so GitLab activity never wakes an idle session; it waits for the session's next run.
+- Factory can't yet tell its own GitLab comments apart from other people's, so GitLab activity never wakes an idle session; it waits in the session's notifications.

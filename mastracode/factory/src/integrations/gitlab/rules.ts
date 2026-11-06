@@ -95,7 +95,7 @@ function labelColors(value: unknown): Record<string, string> {
  * Points the card's session at a new comment on its issue, or at an edit to
  * the issue's title or description. Only pointers travel (who, where, a link).
  * GitLab deliveries don't say whether Factory wrote the comment, so the
- * message waits for the session's next run instead of waking it: a session
+ * message waits in the session's notifications instead of waking it: a session
  * that comments must not wake itself.
  */
 export function activitySignalFor(

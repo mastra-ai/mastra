@@ -2047,21 +2047,24 @@ export class FactoryDecisionDispatcher {
       decision.event === 'work_item.commented'
         ? `New comment${author ? ` by ${author}` : ''} on ${decision.reference}: ${decision.url}`
         : `${decision.reference} was edited${author ? ` by ${author}` : ''}: ${decision.url}`;
+    // An untrusted author never starts a run, nor does a source that can't tell Factory's own
+    // comments apart. Core never wakes a thread for a low-priority notification on any path;
+    // a medium one can still wake it through a summary if the busy run ends mid-delivery.
+    const wakes = decision.authorTrusted && decision.idleBehavior !== 'persist';
     await awaitNotification(() =>
       session.sendNotificationSignal(
         {
           source: 'factory',
           kind: 'source-activity',
           summary: message,
-          priority: 'medium',
+          priority: wakes ? 'medium' : 'low',
           sourceId: record.id,
           dedupeKey: record.idempotencyKey,
           coalesceKey: `${record.workItemId}:${decision.event}`,
         },
         {
           ifActive: { behavior: 'persist' },
-          // An untrusted author never starts a run: the pointer waits for the session's next one.
-          ifIdle: { behavior: decision.authorTrusted ? (decision.idleBehavior ?? 'wake') : 'persist' },
+          ifIdle: { behavior: wakes ? 'wake' : 'persist' },
           requestContext: factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId }),
         },
       ),
