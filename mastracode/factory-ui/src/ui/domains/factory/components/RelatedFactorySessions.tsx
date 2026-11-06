@@ -74,7 +74,10 @@ function sessionContextCrumb(
   );
   if (!entry) return undefined;
   const currentPhase = phases?.find(phase => phase.id === stage);
-  if (entry.current || !currentPhase || phaseContext(currentPhase) === undefined) return entry.label;
+  // A context no phase runs in (self-review's `review`, legacy `plan`) is not
+  // one the card moves out of, so the card being elsewhere says nothing.
+  const phaseRunsHere = phases?.some(phase => phaseContext(phase) === entry.context);
+  if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) return entry.label;
   return `${entry.label} · card is now in ${currentPhase.name ?? currentPhase.title}`;
 }
 
