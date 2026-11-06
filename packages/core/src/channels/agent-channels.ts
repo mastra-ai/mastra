@@ -1083,6 +1083,18 @@ export class AgentChannels {
                 },
               });
             } catch (err) {
+              // The resolver also runs on approval continuations, so a refusal
+              // here means this clicker isn't allowed to act — same silence as the
+              // inbound path (see handleChatMessage).
+              // Checked first: a refusal is about this click, not the run, so it must
+              // never mark the card answered.
+              if (err instanceof ChannelSessionRejectedError) {
+                this.log('info', 'Session resolver refused the tool approval action', {
+                  ...actionEventContext,
+                  reason: err.message,
+                });
+                return;
+              }
               const resumeError = classifyResumeError(err);
               if (resumeError === 'answered') {
                 // Remember it, so later clicks on this card neither resume nor read history.
@@ -1097,16 +1109,6 @@ export class AgentChannels {
               }
               if (resumeError === 'in-progress') {
                 this.log('info', 'Ignoring tool approval action: the run is already resuming', actionEventContext);
-                return;
-              }
-              // The resolver also runs on approval continuations, so a refusal
-              // here means this clicker isn't allowed to act — same silence as the
-              // inbound path (see handleChatMessage).
-              if (err instanceof ChannelSessionRejectedError) {
-                this.log('info', 'Session resolver refused the tool approval action', {
-                  ...actionEventContext,
-                  reason: err.message,
-                });
                 return;
               }
               this.log('error', 'Error handling tool approval action', { ...actionEventContext, error: err });

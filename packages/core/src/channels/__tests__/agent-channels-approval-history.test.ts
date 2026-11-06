@@ -15,6 +15,7 @@ import type { MemoryStorage } from '../../storage';
 import type { MastraModelOutput } from '../../stream';
 import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
+import { ChannelSessionRejectedError } from '../errors';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import type { ChatChannelRenderContext } from '../output-processor';
 import type { PendingApprovalRecord } from '../stream-helpers';
@@ -33,8 +34,8 @@ type Decision = { kind: 'approve' | 'deny'; toolCallId: string; runId: string };
 // mapping, Memory lookup, requester check) runs for real.
 class RecordingChannels extends AgentChannels {
   readonly decisions: Decision[] = [];
-  /** Makes the next approval resume fail, as a storage or model outage would. */
-  failNextApproval = false;
+  /** Makes the next approval resume fail, as a storage or model outage would, or with the given error. */
+  failNextApproval: boolean | Error = false;
   /** Runs while an approval is resuming, before it is recorded. */
   whileResuming?: (render: ChatChannelRenderContext) => Promise<void>;
 
@@ -44,8 +45,9 @@ class RecordingChannels extends AgentChannels {
     requestContext: RequestContext;
   }): Promise<void> {
     if (this.failNextApproval) {
+      const failure = this.failNextApproval;
       this.failNextApproval = false;
-      throw new Error('resume failed');
+      throw failure instanceof Error ? failure : new Error('resume failed');
     }
     const whileResuming = this.whileResuming;
     this.whileResuming = undefined;
@@ -542,6 +544,18 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     await click('tool_approve:deep-pending', 'alice');
     expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
     expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('keeps the card answerable when the session resolver refuses a click', async () => {
+    const { channels, click } = await setup(deepApproval());
+    // A refusal is about this click, not the run, even if its message reads like a missing snapshot.
+    channels.failNextApproval = new ChannelSessionRejectedError('No snapshot found for this session');
+
+    await click('tool_approve:deep-pending', 'alice');
+    expect(channels.decisions).toEqual([]);
+
+    await click('tool_approve:deep-pending', 'alice');
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
   });
 
   it('finds an approval saved after an earlier click missed it, once the miss expires', async () => {
