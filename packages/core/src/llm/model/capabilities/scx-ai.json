@@ -9,10 +9,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "GLM-5.2": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "Qwen3.8-Max": [
@@ -21,10 +21,10 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "gpt-oss-120b": [
+    "GLM-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high", "max"]
       }
     ]
   }
