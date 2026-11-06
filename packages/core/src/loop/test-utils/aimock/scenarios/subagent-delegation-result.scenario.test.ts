@@ -371,3 +371,88 @@ describe.each(['durable', 'evented'] as const)(
     });
   },
 );
+
+/**
+ * A worker tool's transcript transform must still hold on the worker thread
+ * after a streaming supervisor saves the delegated transcript there.
+ */
+describe.each(['plain', 'durable', 'evented'] as const)(
+  'AIMock scenario: delegated transcript keeps a %s sub-agent tool transcript transform',
+  kind => {
+    const getMock = useLoopScenarioAimock();
+
+    it('stores the transformed tool output, not the raw payload, on the sub-agent thread', async () => {
+      const llm = getMock();
+      const lookupOrder = createTool({
+        id: 'lookup-order',
+        description: 'Look up an order',
+        inputSchema: z.object({ orderId: z.string() }),
+        execute: async ({ orderId }) => ({ orderId, status: 'shipped', trackingToken: 'RAW-TRACKING-TOKEN' }),
+        transform: {
+          transcript: {
+            output: ({ output }) => ({ orderId: (output as { orderId: string }).orderId, status: 'shipped' }),
+          },
+        },
+      });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const inner = new Agent({
+        id: 'worker',
+        name: 'worker',
+        description: 'Looks up orders',
+        instructions: 'You look up orders.',
+        model: openai(SCENARIO_MODEL_ID),
+        tools: { 'lookup-order': lookupOrder },
+      });
+      const worker =
+        kind === 'plain'
+          ? inner
+          : kind === 'durable'
+            ? createDurableAgent({ agent: inner })
+            : createEventedAgent({ agent: inner });
+
+      llm.on(
+        { endpoint: 'chat', predicate: req => isWorkerSupervisor(req) && !lastIsToolResult(req) },
+        { toolCalls: [{ id: 'call-worker-1', name: 'agent-worker', arguments: { prompt: 'Where is order 42?' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && !lastIsToolResult(req) },
+        { toolCalls: [{ id: 'call-lookup-1', name: 'lookup-order', arguments: { orderId: '42' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { content: 'Order 42 has shipped.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { content: 'Your order 42 has shipped.' },
+      );
+
+      const memory = new MockMemory();
+      const { agent, mastra } = await createSharedAgent(llm, {
+        agents: { worker: worker as unknown as Agent },
+        memory,
+      });
+      if (kind !== 'plain') mastra.addAgent(worker, 'worker');
+
+      const output = await agent.stream('Where is order 42?', {
+        memory: { thread: `delegated-transform-${kind}`, resource: 'delegated-transform-user' },
+        maxSteps: 3,
+      });
+      expect(await output.text).toBe('Your order 42 has shipped.');
+
+      const [delegation] = await output.toolResults;
+      const { subAgentThreadId, subAgentResourceId } = delegation!.payload.result as {
+        subAgentThreadId: string;
+        subAgentResourceId: string;
+      };
+      const { messages } = await memory.recall({ threadId: subAgentThreadId, resourceId: subAgentResourceId });
+      const results = messages.flatMap(m =>
+        m.content.parts.flatMap(part =>
+          part.type === 'tool-invocation' && part.toolInvocation.state === 'result' ? [part.toolInvocation.result] : [],
+        ),
+      );
+      expect(results).toEqual([{ orderId: '42', status: 'shipped' }]);
+      expect(JSON.stringify(messages)).not.toContain('RAW-TRACKING-TOKEN');
+    });
+  },
+);
