@@ -6755,7 +6755,9 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
-                const agentResponseMessages = streamResult.messageList.get.response.db();
+                // Every response message of the run, including ones the worker already saved to
+                // its own memory (e.g. a durable run flushes on finish), not just the unsaved ones.
+                const agentResponseMessages = streamResult.messageList.getPersisted.response.db();
                 // On resume the run continued on the thread persisted by the suspended run
                 // (backfilled from the snapshot), so target that thread for the transcript
                 // save and skip re-saving the prompt — it was already persisted (with its
