@@ -41,8 +41,9 @@ async function main() {
   process.env.pnpm_config_registry = providedContext.registry;
   await setupTemplate(fixturePath, 'pnpm');
 
-  try {
-    spawnSync('pnpm', ['vitest', 'run'], {
+  // Every check runs even if an earlier one fails, so one CI run shows all failures.
+  const check = (label: string, args: string[]) => {
+    const result = spawnSync('pnpm', args, {
       cwd: fixturePath,
       stdio: 'inherit',
       env: {
@@ -50,18 +51,21 @@ async function main() {
         pnpm_config_registry: providedContext.registry,
       },
     });
+    if (result.error) throw result.error;
+    if (result.signal) throw new Error(`${label} terminated by ${result.signal}`);
+    if (result.status !== 0) {
+      console.error(`${label} failed with exit code ${result.status}`);
+      process.exitCode = result.status ?? 1;
+    }
+  };
 
-    const mcpResult = spawnSync('pnpm', ['vitest', 'run', '--config', 'vitest.mcp.config.ts'], {
-      cwd: fixturePath,
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        pnpm_config_registry: providedContext.registry,
-      },
-    });
-    if (mcpResult.error) throw mcpResult.error;
-    if (mcpResult.signal) throw new Error(`MCP type checks terminated by ${mcpResult.signal}`);
-    if (mcpResult.status !== 0) process.exitCode = mcpResult.status ?? 1;
+  try {
+    check('Type tests', ['vitest', 'run']);
+    check('MCP type tests', ['vitest', 'run', '--config', 'vitest.mcp.config.ts']);
+    // vitest only reports type errors located inside a test, so errors in imports or
+    // describe bodies (shared fixtures) need a plain tsc run.
+    check('tsc', ['exec', 'tsc', '-p', 'tsconfig.json']);
+    check('tsc (exactOptionalPropertyTypes)', ['exec', 'tsc', '-p', 'tsconfig.exact-optional.json']);
   } finally {
     await teardown();
   }
