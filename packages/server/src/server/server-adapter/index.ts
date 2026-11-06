@@ -5,7 +5,7 @@ import { hasPermission } from '@mastra/core/auth/ee';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { flattenApiRoutes, MastraServerBase } from '@mastra/core/server';
+import { MastraServerBase } from '@mastra/core/server';
 import type {
   ApiRoute,
   HttpLoggingConfig,
@@ -484,6 +484,20 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
   return queryParams;
 }
 
+type GroupedApiRoute = ApiRoute & {
+  _mastraRouteGroup?: ApiRoute[];
+};
+
+/**
+ * Expands route groups without requiring the matching @mastra/core export at runtime.
+ */
+function flattenGroupedApiRoutes(routes: ApiRoute[]): ApiRoute[] {
+  return routes.flatMap(route => {
+    const group = (route as GroupedApiRoute)._mastraRouteGroup;
+    return group ? flattenGroupedApiRoutes(group) : [route];
+  });
+}
+
 /**
  * Abstract base class for server adapters that handle HTTP requests.
  *
@@ -568,7 +582,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
-    this.customApiRoutes = customApiRoutes ? flattenApiRoutes(customApiRoutes) : undefined;
+    this.customApiRoutes = customApiRoutes ? flattenGroupedApiRoutes(customApiRoutes) : undefined;
     this.mcpOptions = mcpOptions;
 
     // Parse HTTP logging configuration
