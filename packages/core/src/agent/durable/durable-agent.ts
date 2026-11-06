@@ -3737,7 +3737,9 @@ export class DurableAgent<
             ? resolvedOptions.delegation
             : (entry.delegation ?? resolvedOptions.delegation),
           hooks: resolvedOptions.hooks,
-          methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
+          // Build for the method that started the run. `closeOnSuspend` is also a
+          // stream() option and resumeStream() always sets it, so it cannot tell (#29436).
+          methodType: entry.methodType ?? 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
           model: entry.model,
