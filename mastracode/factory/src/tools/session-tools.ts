@@ -99,7 +99,7 @@ export const FOLLOW_UP_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
 export const FOLLOW_UP_HANDOFF_WINDOW_MS = 30 * 60 * 1000;
 
 /** Notifications read on the thread to check that nothing woke it after the handoff report. */
-const FOLLOW_UP_NOTIFICATION_SCAN = 100;
+export const FOLLOW_UP_NOTIFICATION_SCAN = 100;
 
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
@@ -694,14 +694,29 @@ export function createFactorySessionTools(
     // Anything that reached the thread after the report woke a turn of its own, or will; that turn didn't come
     // from the report, and this one can't tell them apart, so the approval stays for the person. A record that
     // coalesced a later event keeps its first createdAt, so its updatedAt stands in for that event.
-    const since = notifications
-      ? (await notifications.listNotifications({ threadId: scope.threadId, limit: FOLLOW_UP_NOTIFICATION_SCAN })).find(
-          record =>
-            record.id !== latest.report.id &&
-            (record.createdAt > latest.report.createdAt ||
-              ((record.coalescedCount ?? 1) > 1 && record.updatedAt > latest.report.createdAt)),
-        )
-      : undefined;
+    const recent = notifications
+      ? await notifications.listNotifications({ threadId: scope.threadId, limit: FOLLOW_UP_NOTIFICATION_SCAN })
+      : [];
+    const since = recent.find(
+      record =>
+        record.id !== latest.report.id &&
+        (record.createdAt > latest.report.createdAt ||
+          ((record.coalescedCount ?? 1) > 1 && record.updatedAt > latest.report.createdAt)),
+    );
+    // The list is newest-updated first and can't page, so a full scan that never reaches back to the report may
+    // have cut off a later arrival; refuse rather than guess.
+    if (
+      !since &&
+      recent.length >= FOLLOW_UP_NOTIFICATION_SCAN &&
+      recent[recent.length - 1]!.updatedAt > latest.report.createdAt
+    ) {
+      throw new Error(
+        notStartedError(
+          label,
+          "too many notifications reached this session after the side session's report to tell whether this turn is the one it woke",
+        ),
+      );
+    }
     if (since) {
       throw new Error(
         notStartedError(

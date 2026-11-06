@@ -29,6 +29,7 @@ import {
   FACTORY_TOOLS_OWNER_ID,
   FOLLOW_UP_APPROVAL_TTL_MS,
   FOLLOW_UP_HANDOFF_WINDOW_MS,
+  FOLLOW_UP_NOTIFICATION_SCAN,
   createFactorySessionTools,
 } from './session-tools.js';
 import { createFactoryTools } from './index.js';
@@ -1652,6 +1653,42 @@ describe('a follow-up approved in a turn the person started', () => {
 
     const refusal = env.woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' });
     await expect(refusal).rejects.toThrow("a github notification reached this session after the side session's report");
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeNull();
+  });
+
+  it('refuses when the notification scan fills up before reaching back to the report', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved({ report: false });
+    const older = [];
+    for (let i = 0; i < FOLLOW_UP_NOTIFICATION_SCAN; i++) {
+      older.push(
+        await env.notifications.createNotification({
+          threadId: env.scope.threadId,
+          resourceId: env.scope.sessionId,
+          source: 'github',
+          kind: 'issue-comment-created',
+          priority: 'low',
+          summary: `Comment ${i}`,
+          sourceId: crypto.randomUUID(),
+        }),
+      );
+    }
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    await reportFrom(env, env.side.sessionId);
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    // Reading the inbox bumps every older record past the report, so the scan can't see back to it.
+    await env.notifications.updateNotificationsStatus({
+      threadId: env.scope.threadId,
+      ids: older.map(record => record.id),
+      status: 'seen',
+    });
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const item = await env.file();
+
+    await expect(env.woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' })).rejects.toThrow(
+      "too many notifications reached this session after the side session's report",
+    );
     expect(env.prepare).not.toHaveBeenCalled();
     expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeNull();
   });
