@@ -336,16 +336,11 @@ export function generateTableSQL({
 function indexColumnsSQL(columns: string[], opclass?: string): string {
   return columns
     .map(col => {
-      if (col.includes(' DESC') || col.includes(' ASC')) {
-        const [colName, ...modifiers] = col.split(' ');
-        if (!colName) {
-          throw new Error(`Invalid column specification: ${col}`);
-        }
-        const quotedCol = `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
-        return opclass ? `${quotedCol} ${opclass}` : quotedCol;
+      const [colName, ...modifiers] = col.includes(' DESC') || col.includes(' ASC') ? col.split(' ') : [col];
+      if (!colName) {
+        throw new Error(`Invalid column specification: ${col}`);
       }
-      const quotedCol = `"${parseSqlIdentifier(col, 'column name')}"`;
-      return opclass ? `${quotedCol} ${opclass}` : quotedCol;
+      return [`"${parseSqlIdentifier(colName, 'column name')}"`, opclass, ...modifiers].filter(Boolean).join(' ');
     })
     .join(', ');
 }
