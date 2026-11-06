@@ -14,7 +14,7 @@ export function closingIssueNumbers(
 ): number[] {
   if (!text) return [];
   const prose = text
-    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
     .replace(/(`{3,}|~{3,})[\s\S]*?(?:\1|$)/g, ' ')
     .replace(/`[^`\n]*`/g, ' ');
   const keywords =
@@ -22,7 +22,7 @@ export function closingIssueNumbers(
       ? 'close[sd]?|closing|fix(?:e[sd]|ing)?|resolve[sd]?|resolving|implement(?:s|ed|ing)?'
       : 'close[sd]?|fix(?:e[sd])?|resolve[sd]?';
   const target = '(?:[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)?#\\d+';
-  const separator = options.provider === 'gitlab' ? '(?:\\s*,\\s*|\\s*,?\\s+and\\s+)' : '(?!)';
+  const separator = options.provider === 'gitlab' ? '(?:\\s*,(?:\\s+and)?\\s*|\\s+and\\s+)' : '(?!)';
   const reference = new RegExp(
     `(?<![\\w/#])(?:${keywords}):?\\s+(${target}(?:${separator}${target})*)(?![\\w/])`,
     'gi',

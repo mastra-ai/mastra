@@ -36,6 +36,34 @@ describe('closingIssueNumbers', () => {
     expect(closingIssueNumbers('Implements other/project#9', gitlab)).toEqual([]);
   });
 
+  it.each([
+    ['#1, #2 and #3', [1, 2, 3]],
+    ['#1,#2, and #3', [1, 2, 3]],
+    ['#1 , and #2', [1, 2]],
+    ['#1  and  #2', [1, 2]],
+    ['#1,and #2', [1]],
+    ['#1 or #2', [1]],
+    ['group/sub/project#4, #5', [4, 5]],
+  ])('reads the GitLab list "Closes %s"', (list, expected) => {
+    expect(closingIssueNumbers(`Closes ${list}`, gitlab)).toEqual(expected);
+  });
+
+  it("drops an unclosed HTML comment's tail, like an unclosed code fence", () => {
+    expect(closingIssueNumbers('Closes #1\n<!-- Closes #2', github)).toEqual([1]);
+  });
+
+  // A description is attacker-shaped text from anyone with Developer access, read on every delivery
+  // and replay, so it must take linear time. Each body here took seconds to minutes before.
+  it.each([
+    ['40k spaces after a GitLab list', `Closes #1${' '.repeat(40_000)}`, gitlab],
+    ['1 MB of unclosed HTML comments', `Closes #1 ${'<!--'.repeat(262_144)}`, github],
+    ['1 MB of unclosed HTML comments on GitLab', `Closes #1 ${'<!--'.repeat(262_144)}`, gitlab],
+  ])('reads %s in linear time', (_, body, options) => {
+    const started = performance.now();
+    expect(closingIssueNumbers(body, options)).toEqual([1]);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
   it('has nothing to read in an empty description', () => {
     expect(closingIssueNumbers(null, github)).toEqual([]);
     expect(closingIssueNumbers('', gitlab)).toEqual([]);
