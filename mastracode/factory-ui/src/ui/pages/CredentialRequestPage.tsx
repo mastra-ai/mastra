@@ -21,7 +21,7 @@ export function CredentialRequestPage() {
   const submit = useSubmitCredential(requestId);
   const [value, setValue] = useState('');
   const [ttlMs, setTtlMs] = useState<number | null>(null);
-  const [allowSandbox, setAllowSandbox] = useState(true);
+  const [allowSandbox, setAllowSandbox] = useState(false);
 
   const data = query.data;
   const effectiveTtl = ttlMs ?? data?.defaultTtlMs ?? 4 * HOUR;
@@ -53,13 +53,6 @@ export function CredentialRequestPage() {
             An agent in {data.session?.title ? `“${data.session.title}”` : 'your session'} asked for{' '}
             <code>{data.request.name}</code>: {data.request.purpose}
           </Txt>
-          <div className="border-border1 rounded-md border p-3">
-            <Txt variant="body-sm">
-              Only use a short-lived, least-privilege test credential. When passed to a command, the value is placed in
-              that command&apos;s environment inside the sandbox, so code running there can read or send it elsewhere.
-              Output redaction is best-effort. Revoke it when you are done.
-            </Txt>
-          </div>
           <Field className="gap-1">
             <FieldLabel>Value</FieldLabel>
             <Input
@@ -85,10 +78,18 @@ export function CredentialRequestPage() {
               ))}
             </select>
           </Field>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={allowSandbox} onChange={event => setAllowSandbox(event.target.checked)} />
-            <Txt variant="body-sm">Allow the agent to pass it to commands in its sandbox</Txt>
-          </label>
+          <div className="border-border1 flex flex-col gap-2 rounded-md border p-3">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={allowSandbox} onChange={event => setAllowSandbox(event.target.checked)} />
+              <Txt variant="body-sm">Allow the agent to pass it to commands in its sandbox</Txt>
+            </label>
+            <Txt variant="body-sm">
+              Only use a short-lived, least-privilege test credential. When passed to a command, the value is placed in
+              that command&apos;s environment inside the sandbox, so any code running there (agent commands, repository
+              or dependency scripts) can read or send it elsewhere. Output redaction is best-effort. Without this option
+              the agent cannot use the credential yet. Revoke it when you are done.
+            </Txt>
+          </div>
           {submit.isError && <Txt variant="body-sm">{submit.error.message}</Txt>}
           <Button type="submit" disabled={!value || submit.isPending}>
             Save credential

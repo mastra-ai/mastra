@@ -102,6 +102,7 @@ export interface SessionCredentialRecord extends SessionCredentialScope {
 }
 
 const REQUESTS = 'session_credential_requests';
+const REQUEST_RETENTION_MS = 24 * 60 * 60_000;
 const CREDENTIALS = 'session_credentials';
 
 export const SESSION_CREDENTIAL_REQUESTS_SCHEMA: CollectionSchema = {
@@ -211,6 +212,7 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     await this.ensureCollections([SESSION_CREDENTIAL_REQUESTS_SCHEMA, SESSION_CREDENTIALS_SCHEMA]);
+    await this.purgeExpired();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -235,6 +237,7 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
     const problem = credentialNameProblem(input.name);
     if (problem) throw new SessionCredentialError('invalid_name', problem);
     const now = input.now ?? new Date();
+    await this.purgeExpired(now);
     const row = await this.#db.insertOne<RequestRow>(REQUESTS, {
       org_id: input.orgId,
       factory_project_id: input.factoryProjectId,
@@ -320,6 +323,8 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
       org_id: scope.orgId,
       session_id: scope.sessionId,
     });
+    const expired = rows.filter(row => row.expires_at.getTime() <= now.getTime()).map(row => row.id);
+    if (expired.length > 0) await this.#db.deleteMany(CREDENTIALS, { id: { in: expired } });
     return rows
       .filter(row => row.expires_at.getTime() > now.getTime())
       .map(toCredential)
@@ -335,6 +340,21 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
         name: scope.name,
       })) > 0
     );
+  }
+
+  /**
+   * Delete every expired credential, and requests a day past their expiry
+   * (kept that long so an expired link still says "expired"). Runs at startup
+   * and before each new request, so expired values do not linger in storage.
+   */
+  async purgeExpired(now = new Date()): Promise<void> {
+    const credentials = await this.#db.findMany<CredentialRow>(CREDENTIALS, {});
+    const expiredCredentials = credentials.filter(row => row.expires_at.getTime() <= now.getTime()).map(row => row.id);
+    if (expiredCredentials.length > 0) await this.#db.deleteMany(CREDENTIALS, { id: { in: expiredCredentials } });
+    const requestCutoff = now.getTime() - REQUEST_RETENTION_MS;
+    const requests = await this.#db.findMany<RequestRow>(REQUESTS, {});
+    const staleRequests = requests.filter(row => row.expires_at.getTime() <= requestCutoff).map(row => row.id);
+    if (staleRequests.length > 0) await this.#db.deleteMany(REQUESTS, { id: { in: staleRequests } });
   }
 
   /** Drop every credential and request of a session (session deleted or closed). */

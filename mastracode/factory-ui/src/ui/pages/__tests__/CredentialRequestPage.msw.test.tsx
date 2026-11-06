@@ -58,14 +58,38 @@ describe('CredentialRequestPage', () => {
     expect(await screen.findByText(/least-privilege test credential/)).toBeInTheDocument();
     expect(screen.getByText('STRIPE_TEST_KEY')).toBeInTheDocument();
 
+    const sandboxToggle = screen.getByRole('checkbox', { name: /pass it to commands in its sandbox/ });
+    expect(sandboxToggle).not.toBeChecked();
+
     const input = container.querySelector<HTMLInputElement>('input[type="password"]')!;
     await userEvent.type(input, SECRET);
+    await userEvent.click(sandboxToggle);
     await userEvent.click(screen.getByRole('button', { name: 'Save credential' }));
     await waitForMutationsIdle(client);
 
     expect(bodies).toEqual([{ value: SECRET, ttlMs: 4 * 60 * 60 * 1000, allowSandbox: true }]);
     expect(await screen.findByText(/STRIPE_TEST_KEY was saved/)).toBeInTheDocument();
     expect(container.innerHTML).not.toContain(SECRET);
+  });
+
+  it('given a pending request, when the owner submits without opting in, then sandbox use stays off', async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      http.get(url, () => HttpResponse.json(pending())),
+      http.post(url, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ credential: { name: 'STRIPE_TEST_KEY', expiresAt: '2026-11-06T22:00:00.000Z' } });
+      }),
+    );
+
+    const { container, client } = renderPage();
+    await screen.findByRole('button', { name: 'Save credential' });
+    const input = container.querySelector<HTMLInputElement>('input[type="password"]')!;
+    await userEvent.type(input, SECRET);
+    await userEvent.click(screen.getByRole('button', { name: 'Save credential' }));
+    await waitForMutationsIdle(client);
+
+    expect(bodies).toEqual([{ value: SECRET, ttlMs: 4 * 60 * 60 * 1000, allowSandbox: false }]);
   });
 
   it('given an expired request, when rendered, then no form is shown', async () => {
