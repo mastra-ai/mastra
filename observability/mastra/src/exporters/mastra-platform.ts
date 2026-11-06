@@ -993,9 +993,9 @@ export class MastraPlatformExporter extends BaseExporter {
           id: `MASTRA_PLATFORM_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
           domain: ErrorDomain.MASTRA_OBSERVABILITY,
           category: ErrorCategory.SYSTEM,
-          details: {
-            remainingEvents: this.buffer.totalSize,
-          },
+          details: this.byteBatcher
+            ? { pendingBytes: this.byteBatcher.getStats().pendingBytes }
+            : { remainingEvents: this.buffer.totalSize },
         },
         error,
       );
