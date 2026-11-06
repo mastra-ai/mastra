@@ -9,12 +9,12 @@ import {
 } from '@mastra/playground-ui/components/Drawer';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
+import { useSidePanelDrawer } from '../../../../../lib/hooks/useSidePanelDrawer';
 import {
   CREDENTIAL_LABEL,
   SHARED_SOURCE,
@@ -71,7 +71,7 @@ export function AddProviderDrawer({
   onAddKey: (provider: ProviderInfo) => void;
   onClose: () => void;
 }) {
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   const startOAuthMutation = useStartProviderOAuth();
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
@@ -98,14 +98,7 @@ export function AddProviderDrawer({
   };
 
   return (
-    <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
-      open={open}
-      onOpenChange={closeUnlessStarting}
-      onOpenChangeComplete={resetOnceHidden}
-    >
+    <Drawer {...sidePanel} open={open} onOpenChange={closeUnlessStarting} onOpenChangeComplete={resetOnceHidden}>
       <DrawerContent aria-busy={startingProvider !== undefined || undefined}>
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>

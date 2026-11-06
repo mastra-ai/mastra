@@ -101,11 +101,9 @@ export interface CreateDurableAgentOptions<
 /**
  * Create a DurableAgent that wraps an existing Agent.
  *
- * This factory function is the recommended way to add durable execution
- * capabilities to an agent when you need to customize the cache, pubsub, or
- * other advanced options. For the common case, prefer the `durable` config
- * flag on `AgentConfig` — attaching an agent constructed with `durable: true`
- * (or `durable: { … }`) to a `Mastra` instance auto-wraps it at registration.
+ * This factory function is the recommended way to add checkpoint-backed durable
+ * execution to an agent. The `durable` option on `AgentConfig` only configures
+ * resumable streams and never wraps the agent.
  *
  * @param options - Configuration options
  * @returns A DurableAgent instance
