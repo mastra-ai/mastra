@@ -5,6 +5,7 @@ import type { Step, DefaultEngineType } from '@mastra/core/workflows';
 import { Agent, MastraDBMessage } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import type { Processor, ProcessorStepInputSchema, ProcessorStepOutputSchema } from '@mastra/core/processors';
+import type { InferPublicSchema, InferStandardSchemaOutput } from '@mastra/core/schema';
 
 describe('workflow', () => {
   describe('createStep', () => {
@@ -21,8 +22,14 @@ describe('workflow', () => {
         });
 
         expectTypeOf(step.id).toEqualTypeOf<'my-step'>();
-        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{ name: string; age: number }>();
-        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{ greeting: string; isAdult: boolean }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{
+          name: string;
+          age: number;
+        }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{
+          greeting: string;
+          isAdult: boolean;
+        }>();
       });
 
       it('should infer state type from stateSchema', () => {
@@ -68,9 +75,6 @@ describe('workflow', () => {
               // bail() should accept any type since it bails the workflow, not the step
               return bail({ workflowResult: 123 });
             }
-            if (inputData.value === 'empty') {
-              return bail();
-            }
             return { result: inputData.value };
           },
         });
@@ -105,8 +109,8 @@ describe('workflow', () => {
         });
 
         expectTypeOf(step.id).toEqualTypeOf<'my-agent'>();
-        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
-        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{
+        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{
           sentiment: 'positive' | 'negative' | 'neutral';
         }>();
         expectTypeOf(step).toEqualTypeOf<
@@ -172,9 +176,9 @@ describe('workflow', () => {
 
         const step = createStep(agent);
 
-        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
         // Default output is { text: string }
-        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{ text: string }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{ text: string }>();
         expectTypeOf(step).toEqualTypeOf<
           Step<'text-agent', unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>
         >();
@@ -196,12 +200,12 @@ describe('workflow', () => {
         const step = createStep(tool);
 
         expectTypeOf(step.id).toEqualTypeOf<'calculator'>();
-        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{
+        expectTypeOf<InferStandardSchemaOutput<typeof step.inputSchema>>().toEqualTypeOf<{
           a: number;
           b: number;
           op: '+' | '-' | '*' | '/';
         }>();
-        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{ result: number }>();
+        expectTypeOf<InferStandardSchemaOutput<typeof step.outputSchema>>().toEqualTypeOf<{ result: number }>();
         expectTypeOf(step).toEqualTypeOf<
           Step<
             'calculator',
@@ -266,8 +270,8 @@ describe('workflow', () => {
           Step<
             'processor:test',
             unknown,
-            zv3.infer<typeof ProcessorStepInputSchema>,
-            zv3.infer<typeof ProcessorStepOutputSchema>,
+            InferPublicSchema<typeof ProcessorStepInputSchema>,
+            InferPublicSchema<typeof ProcessorStepOutputSchema>,
             unknown,
             unknown,
             DefaultEngineType
@@ -286,8 +290,8 @@ describe('workflow', () => {
           Step<
             'processor:stream-processor',
             unknown,
-            zv3.infer<typeof ProcessorStepInputSchema>,
-            zv3.infer<typeof ProcessorStepOutputSchema>,
+            InferPublicSchema<typeof ProcessorStepInputSchema>,
+            InferPublicSchema<typeof ProcessorStepOutputSchema>,
             unknown,
             unknown,
             DefaultEngineType

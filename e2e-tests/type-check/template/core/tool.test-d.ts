@@ -1,6 +1,7 @@
 import { expectTypeOf, describe, it } from 'vitest';
 import { createTool, Tool } from '@mastra/core/tools';
 import type { ToolExecutionContext, ToolAction } from '@mastra/core/tools';
+import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import { z as zv3 } from 'zod-v3';
 import { z as zv4 } from 'zod-v4';
 
@@ -46,7 +47,7 @@ describe('createTool', () => {
         },
       });
 
-      expectTypeOf(tool.inputSchema).toExtend<typeof inputSchema>();
+      expectTypeOf(tool.inputSchema).toEqualTypeOf<StandardSchemaWithJSON<{ name: string; age: number }> | undefined>();
     });
 
     it('should type execute inputData parameter correctly', () => {
@@ -126,7 +127,9 @@ describe('createTool', () => {
         },
       });
 
-      expectTypeOf(tool.outputSchema).toExtend<typeof outputSchema>();
+      expectTypeOf(tool.outputSchema).toEqualTypeOf<
+        StandardSchemaWithJSON<{ success: boolean; data: string }> | undefined
+      >();
     });
 
     it('should infer output type from outputSchema (zod v4)', () => {
@@ -169,7 +172,9 @@ describe('createTool', () => {
         },
       });
 
-      expectTypeOf(tool.suspendSchema).toExtend<typeof suspendSchema>();
+      expectTypeOf(tool.suspendSchema).toEqualTypeOf<
+        StandardSchemaWithJSON<{ reason: string; pendingAction: 'approve' | 'reject' }> | undefined
+      >();
     });
 
     it('should type resumeSchema correctly', () => {
@@ -192,7 +197,9 @@ describe('createTool', () => {
         },
       });
 
-      expectTypeOf(tool.resumeSchema).toExtend<typeof resumeSchema>();
+      expectTypeOf(tool.resumeSchema).toEqualTypeOf<
+        StandardSchemaWithJSON<{ approved: boolean; comment?: string | undefined }> | undefined
+      >();
     });
   });
 
@@ -269,7 +276,9 @@ describe('createTool', () => {
         execute: async () => ({ done: true }),
       });
 
-      expectTypeOf(tool.requireApproval).toEqualTypeOf<boolean | undefined>();
+      // requireApproval also accepts a per-call predicate
+      expectTypeOf(tool.requireApproval).exclude<Function>().toEqualTypeOf<boolean | undefined>();
+      expectTypeOf(tool.requireApproval).extract<Function>().toBeFunction();
     });
 
     it('should accept providerOptions', () => {
@@ -372,10 +381,16 @@ describe('createTool', () => {
         },
       });
 
-      expectTypeOf(tool.inputSchema).toExtend<typeof inputSchema>();
-      expectTypeOf(tool.outputSchema).toExtend<typeof outputSchema>();
-      expectTypeOf(tool.suspendSchema).toExtend<typeof suspendSchema>();
-      expectTypeOf(tool.resumeSchema).toExtend<typeof resumeSchema>();
+      expectTypeOf(tool.inputSchema).toEqualTypeOf<
+        StandardSchemaWithJSON<{ action: 'create' | 'update' | 'delete'; itemId: string }> | undefined
+      >();
+      expectTypeOf(tool.outputSchema).toEqualTypeOf<
+        StandardSchemaWithJSON<{ success: boolean; message: string }> | undefined
+      >();
+      expectTypeOf(tool.suspendSchema).toEqualTypeOf<
+        StandardSchemaWithJSON<{ confirmationRequired: boolean; actionDescription: string }> | undefined
+      >();
+      expectTypeOf(tool.resumeSchema).toEqualTypeOf<StandardSchemaWithJSON<{ confirmed: boolean }> | undefined>();
     });
   });
 });
