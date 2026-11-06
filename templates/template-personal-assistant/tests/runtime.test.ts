@@ -85,6 +85,14 @@ test(
     };
     delete env.ASSISTANT_DATA_DIR;
     delete env.OPENAI_API_KEY;
+    for (const name of [
+      'MASTRA_PROJECT_ID',
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_PLATFORM_SECRET_KEY',
+      'ASSISTANT_CONNECT_PROVIDERS',
+      'ASSISTANT_CONNECT_TOOLS',
+    ])
+      delete env[name];
     try {
       for (const name of ['src', 'scripts', 'package.json', 'tsconfig.json', '.env.example']) {
         await cp(join(root, name), join(directory, name), { recursive: true });
@@ -105,7 +113,15 @@ test(
       assert.equal(agents['personal-assistant'].id, 'personal-assistant');
       assert.equal(agents['personal-assistant'].supportsMemory, true);
       assert.equal(agents['personal-assistant'].modelId, 'gpt-6-luna');
-      assert.deepEqual(agents['personal-assistant'].tools, {});
+      assert.deepEqual(Object.keys(agents['personal-assistant'].tools), ['connection_status']);
+      const status = await json(
+        await fetch(`${url}/api/agents/personal-assistant/tools/connection-status/execute`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ data: {} }),
+        }),
+      );
+      assert.equal(status.state, 'unconfigured');
       const studio = await fetch(url);
       assert.equal(studio.status, 200);
       assert.match(await studio.text(), /<html/i);

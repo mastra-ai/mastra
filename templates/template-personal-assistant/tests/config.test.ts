@@ -59,3 +59,99 @@ test('invalid settings identify their names without echoing credentials or suppl
     );
   }
 });
+
+test('Connect configuration rejects partial credentials and exact-key policy never guesses reads', async () => {
+  const { requiresApproval } = await import('../src/mastra/connect');
+  assert.equal(requiresApproval('google_mail_get_message'), false);
+  for (const key of [
+    'get_safe_record',
+    'google_docs_list_revisions',
+    'google_mail_get_message_extra',
+    'google_mail_get_Message',
+    'google_docs_create_document',
+  ])
+    assert.equal(requiresApproval(key), true, key);
+  for (const env of [
+    { MASTRA_PROJECT_ID: 'example-project' },
+    { MASTRA_PLATFORM_ACCESS_TOKEN: 'private-token' },
+    { MASTRA_PLATFORM_SECRET_KEY: 'private-token' },
+    { ASSISTANT_CONNECT_PROVIDERS: '["*"]' },
+    { ASSISTANT_CONNECT_TOOLS: '["google_docs_*"]' },
+    { ASSISTANT_OWNER_ID: '' },
+  ])
+    assert.throws(
+      () => loadConfig({ OPENAI_API_KEY: 'example-key', ...env }),
+      error => {
+        assert.ok(error instanceof Error);
+        assert.doesNotMatch(error.message, /private-token/);
+        return true;
+      },
+    );
+  const config = loadConfig({
+    OPENAI_API_KEY: 'example-key',
+    MASTRA_PROJECT_ID: 'example-project',
+    MASTRA_PLATFORM_SECRET_KEY: 'private-token',
+  });
+  assert.ok(config.connect);
+  assert.doesNotMatch(JSON.stringify(config), /private-token/);
+  assert.equal(
+    loadConfig({ OPENAI_API_KEY: 'example-key', MASTRA_PROJECT_ID: '', MASTRA_PLATFORM_ACCESS_TOKEN: '' }).connect,
+    undefined,
+  );
+});
+
+test('bounded MIME decoding rejects malformed oversized and unsupported source content', async () => {
+  const { normalizeMail } = await import('../src/mastra/connect');
+  const message = (data: string, mimeType = 'text/plain') => ({
+    id: 'source-id',
+    payload: { mimeType, body: { data } },
+  });
+  const text = 'Full UTF-8 body: café and a recovery requirement.';
+  assert.deepEqual(normalizeMail(message(Buffer.from(text).toString('base64url'))), {
+    sourceMessageId: 'source-id',
+    text,
+    status: 'complete',
+    truncated: false,
+    issues: [],
+  });
+  for (const data of ['***', 'A', 'dA=', '=', Buffer.from([0xff]).toString('base64url')]) {
+    const result = normalizeMail(message(data));
+    assert.equal(result.sourceMessageId, 'source-id');
+    assert.equal(result.text, '');
+    assert.match(JSON.stringify(result.issues), /Malformed/);
+  }
+  assert.equal(normalizeMail(message('dA==')).text, 't');
+  const large = normalizeMail(message(Buffer.alloc(65537, 97).toString('base64url')));
+  assert.equal(large.truncated, true);
+  assert.equal(large.text, '');
+  assert.match(JSON.stringify(large.issues), /limit/);
+  for (const source of [
+    message('PGh0bWw-', 'text/html'),
+    { id: 'source-id', snippet: 'Incomplete snippet' },
+    { id: 'source-id', payload: { mimeType: 'text/plain', filename: 'attachment.txt', body: { data: 'dGV4dA' } } },
+  ]) {
+    const result = normalizeMail(source);
+    assert.equal(result.sourceMessageId, 'source-id');
+    assert.equal(result.text, '');
+    assert.match(JSON.stringify(result.issues), /No supported full/);
+  }
+  const nested = {
+    id: 'source-id',
+    payload: { mimeType: 'multipart/mixed', parts: Array.from({ length: 65 }, () => ({})) },
+  };
+  assert.equal(normalizeMail(nested).truncated, true);
+  const multipart = (secondSize: number) => ({
+    id: 'source-id',
+    payload: {
+      mimeType: 'multipart/mixed',
+      parts: [
+        { mimeType: 'text/plain', body: { data: Buffer.alloc(32768, 97).toString('base64url') } },
+        { mimeType: 'text/plain', body: { data: Buffer.alloc(secondSize, 98).toString('base64url') } },
+      ],
+    },
+  });
+  assert.equal(Buffer.byteLength(normalizeMail(multipart(32766)).text), 65536);
+  const over = normalizeMail(multipart(32768));
+  assert.equal(over.truncated, true);
+  assert.ok(Buffer.byteLength(over.text) <= 65536);
+});

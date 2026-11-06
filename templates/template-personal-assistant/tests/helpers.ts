@@ -82,6 +82,12 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
       OPENAI_API_KEY: 'example-key',
       ASSISTANT_DATA_DIR: dataDir,
       TEST_MODEL_URL: modelUrl,
+      // Deterministic tests must never inherit live Connect credentials or tool policy.
+      MASTRA_PROJECT_ID: '',
+      MASTRA_PLATFORM_ACCESS_TOKEN: '',
+      MASTRA_PLATFORM_SECRET_KEY: '',
+      ASSISTANT_CONNECT_PROVIDERS: undefined,
+      ASSISTANT_CONNECT_TOOLS: undefined,
       ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
