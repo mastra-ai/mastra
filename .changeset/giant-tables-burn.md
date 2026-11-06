@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Fixed `agent.generateLegacy()` in the client SDK typing `result.object` as `never` when called with `output`, and dropping `text` when called with `experimental_output`. Both results are now typed from the schema you pass. Fixes #29604.
+Fixed the types of `agent.generateLegacy()` results. With `output`, `result.object` now has the type of your schema. With `experimental_output`, `result.text` is available again. Fixes #29604.
