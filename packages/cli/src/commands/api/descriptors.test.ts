@@ -141,6 +141,8 @@ describe('api command descriptors', () => {
       factorySkills: ['skillList', [], true, false, false],
       factorySkillUpdate: ['skillOverrideSave', ['id', 'name'], true, true, false],
       factorySkillRevert: ['skillOverrideRevert', ['id', 'name'], false, false, false],
+      'factoryConnect-toolsGet': ['connectToolsGet', [], false, false, false],
+      'factoryConnect-toolsUpdate': ['connectToolsUpdate', [], true, true, false],
       'factoryIntake-routeList': ['intakeRouteList', ['id'], false, false, false],
       'factoryIntake-routeGet': ['intakeRouteGet', ['id', 'routeId'], false, false, false],
       'factoryIntake-routeCreate': ['intakeRouteCreate', ['id'], true, true, false],

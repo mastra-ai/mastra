@@ -726,6 +726,25 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
+  const factoryConnectTools = factory
+    .command('connect-tools')
+    .description('Choose which Mastra Connect providers Factory sessions in your organization can use');
+  addAction(factoryConnectTools, 'get', FACTORY_API_ROUTE_CATALOG.connectToolsGet, {
+    description: 'Show which Mastra Connect providers are turned on for your organization',
+    routePlacement: 'origin',
+  });
+  addAction(factoryConnectTools, 'update', FACTORY_API_ROUTE_CATALOG.connectToolsUpdate, {
+    description: 'Replace the Mastra Connect providers Factory sessions can use; organization admins only',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Turn on Linear and Slack',
+        command: `mastra api factory connect-tools update '{"enabledProviders":["linear","slack"]}'`,
+      },
+    ],
+  });
+
   const factoryIntakeRoute = factory
     .command('intake-route')
     .description("Manage a Factory project's intake routes: where new cards land and which wait for a person");
