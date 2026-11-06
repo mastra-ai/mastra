@@ -132,13 +132,31 @@ describe.each(['durable', 'evented'] as const)(
         { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && !lastIsToolResult(req) },
         { toolCalls: [{ id: 'call-lookup-1', name: 'lookup-order', arguments: { orderId: '42' } }] },
       );
+      // Answers depend on the tool result each model actually receives, so a
+      // declined lookup can't produce a shipped status.
+      const lastToolResult = (req: ChatCompletionRequest) => String(req.messages.at(-1)?.content ?? '');
       llm.on(
-        { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && lastIsToolResult(req) },
+        {
+          endpoint: 'chat',
+          predicate: req =>
+            !isWorkerSupervisor(req) && lastIsToolResult(req) && lastToolResult(req).includes('"status":"shipped"'),
+        },
         { content: 'Order 42 has shipped.' },
       );
       llm.on(
-        { endpoint: 'chat', predicate: req => isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { content: "I couldn't look up order 42." },
+      );
+      llm.on(
+        {
+          endpoint: 'chat',
+          predicate: req => isWorkerSupervisor(req) && lastIsToolResult(req) && lastToolResult(req).includes('shipped'),
+        },
         { content: 'Your order 42 has shipped.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { content: "Sorry, I couldn't check order 42." },
       );
 
       const delegationResultSeenBySupervisor = () => {
@@ -157,7 +175,32 @@ describe.each(['durable', 'evented'] as const)(
         return shared;
       };
 
-      return { llm, toolRuns, delegationResultSeenBySupervisor, buildSupervisor };
+      // The worker transcript the delegation reports and saves: one thread under the
+      // worker resource, holding the prompt once and the worker response once, even
+      // though the durable run already saved those rows itself.
+      const workerTranscript = async (
+        memory: MockMemory,
+        delegation: { subAgentThreadId?: string; subAgentResourceId?: string },
+      ) => {
+        const { threads } = await memory.listThreads({ filter: { resourceId: delegation.subAgentResourceId! } });
+        expect(threads.map(t => t.id)).toEqual([delegation.subAgentThreadId]);
+        const { messages } = await memory.recall({
+          threadId: delegation.subAgentThreadId!,
+          resourceId: delegation.subAgentResourceId!,
+        });
+        return messages.map(m => ({
+          role: m.role,
+          parts: m.content.parts.flatMap(part =>
+            part.type === 'text'
+              ? [part.text]
+              : part.type === 'tool-invocation'
+                ? [`${part.toolInvocation.toolName}:${part.toolInvocation.state}`]
+                : [],
+          ),
+        }));
+      };
+
+      return { llm, toolRuns, delegationResultSeenBySupervisor, buildSupervisor, workerTranscript };
     }
 
     // Bug: the stream delegation path read `streamResult.messageList`, which
@@ -195,6 +238,25 @@ describe.each(['durable', 'evented'] as const)(
       });
     });
 
+    it('a streaming supervisor saves the sub-agent transcript once on the sub-agent thread', async () => {
+      const { toolRuns, buildSupervisor, workerTranscript } = setup();
+      const memory = new MockMemory();
+      const { agent } = await buildSupervisor(memory);
+
+      const output = await agent.stream('Where is order 42?', {
+        memory: { thread: `durable-worker-transcript-${kind}`, resource: 'durable-worker-transcript-user' },
+        maxSteps: 3,
+      });
+
+      expect(await output.text).toBe('Your order 42 has shipped.');
+      expect(toolRuns).toEqual(['42']);
+      const [delegation] = await output.toolResults;
+      expect(await workerTranscript(memory, delegation!.payload.result as any)).toEqual([
+        { role: 'user', parts: ['Where is order 42?'] },
+        { role: 'assistant', parts: ['lookup-order:result', 'Order 42 has shipped.'] },
+      ]);
+    });
+
     it('a generating supervisor receives the sub-agent answer after the sub-agent runs its tool', async () => {
       const { toolRuns, delegationResultSeenBySupervisor, buildSupervisor } = setup();
       const { agent } = await buildSupervisor();
@@ -211,7 +273,9 @@ describe.each(['durable', 'evented'] as const)(
     // A durable worker keeps its stream open across a suspension unless asked to
     // close it, so the supervisor would wait forever for the worker's approval.
     async function streamToApproval() {
-      const { toolRuns, delegationResultSeenBySupervisor, buildSupervisor } = setup({ requireApproval: true });
+      const { toolRuns, delegationResultSeenBySupervisor, buildSupervisor, workerTranscript } = setup({
+        requireApproval: true,
+      });
       const memory = new MockMemory();
       const { agent } = await buildSupervisor(memory);
       const thread = `durable-worker-approval-${kind}`;
@@ -244,48 +308,66 @@ describe.each(['durable', 'evented'] as const)(
         return Object.values(pending.content.metadata.pendingToolApprovals)[0] as { runId: string; toolCallId: string };
       });
 
-      return { agent, entry, thread, resource, toolRuns, delegationResultSeenBySupervisor };
+      return { agent, entry, thread, resource, memory, toolRuns, delegationResultSeenBySupervisor, workerTranscript };
     }
 
     async function drainText(stream: AsyncIterable<ChunkType>) {
       const types: string[] = [];
       let text = '';
+      let delegation: { subAgentThreadId?: string; subAgentResourceId?: string } | undefined;
       for await (const chunk of stream) {
         types.push(chunk.type);
         if (chunk.type === 'text-delta') text += (chunk.payload as { text: string }).text;
+        if (chunk.type === 'tool-result') delegation = (chunk.payload as { result: typeof delegation }).result;
       }
-      return { types, text };
+      return { types, text, delegation: delegation! };
     }
 
     it('a streaming supervisor surfaces the sub-agent tool approval and finishes after it is approved', async () => {
-      const { agent, entry, thread, resource, toolRuns, delegationResultSeenBySupervisor } = await streamToApproval();
+      const { agent, entry, thread, resource, memory, toolRuns, delegationResultSeenBySupervisor, workerTranscript } =
+        await streamToApproval();
 
       const resumed = (await agent.approveToolCall({
         runId: entry.runId,
         toolCallId: entry.toolCallId,
         memory: { thread, resource },
       } as any)) as unknown as RunHandle;
-      const { types, text } = await drainText(resumed.fullStream);
+      const { types, text, delegation } = await drainText(resumed.fullStream);
 
       expect(types, `resumed chunks: ${types.join(', ')}`).not.toContain('error');
       expect(toolRuns).toEqual(['42']);
       expect(delegationResultSeenBySupervisor()).toMatchObject({ role: 'tool', content: 'Order 42 has shipped.' });
       expect(text).toBe('Your order 42 has shipped.');
+      // The resumed delegation reports and saves to the thread the suspended run used.
+      expect(await workerTranscript(memory, delegation)).toEqual([
+        { role: 'user', parts: ['Where is order 42?'] },
+        { role: 'assistant', parts: ['lookup-order:result', 'Order 42 has shipped.'] },
+      ]);
     });
 
-    it('a streaming supervisor finishes without running the sub-agent tool after it is declined', async () => {
-      const { agent, entry, thread, resource, toolRuns } = await streamToApproval();
+    it('a streaming supervisor receives the sub-agent refusal without running the tool after it is declined', async () => {
+      const { agent, entry, thread, resource, memory, toolRuns, delegationResultSeenBySupervisor, workerTranscript } =
+        await streamToApproval();
 
       const resumed = (await agent.declineToolCall({
         runId: entry.runId,
         toolCallId: entry.toolCallId,
         memory: { thread, resource },
       } as any)) as unknown as RunHandle;
-      const { types, text } = await drainText(resumed.fullStream);
+      const { types, text, delegation } = await drainText(resumed.fullStream);
 
       expect(types, `resumed chunks: ${types.join(', ')}`).not.toContain('error');
       expect(toolRuns).toEqual([]);
-      expect(text).toBe('Your order 42 has shipped.');
+      expect(delegationResultSeenBySupervisor()).toStrictEqual({
+        role: 'tool',
+        content: "I couldn't look up order 42.",
+        tool_call_id: 'call-worker-1',
+      });
+      expect(text).toBe("Sorry, I couldn't check order 42.");
+      expect(await workerTranscript(memory, delegation)).toEqual([
+        { role: 'user', parts: ['Where is order 42?'] },
+        { role: 'assistant', parts: ['lookup-order:output-denied', "I couldn't look up order 42."] },
+      ]);
     });
   },
 );
