@@ -3189,6 +3189,21 @@ describe('Agent Routes Authorization', () => {
       expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1);
     });
 
+    it('unsubscribes a cancelled past-end resume while the history read is still pending', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-pending-history';
+      const topic = AGENT_STREAM_TOPIC(runId);
+      // A cache that lost its connection queues reads until it reconnects.
+      vi.spyOn(mockDurableAgent.pubsub, 'getHistory').mockReturnValue(new Promise(() => {}));
+      const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
+      const abort = new AbortController();
+      const reader = (await observe(runId, { offset: 5, abortSignal: abort.signal })).getReader();
+      await vi.waitFor(() => expect(mockDurableAgent.pubsub.getHistory).toHaveBeenCalled());
+      abort.abort();
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+      await vi.waitFor(() => expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1));
+    });
+
     it('keeps a past-end resume open after a trailing error chunk until the run finishes', async () => {
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
       const runId = 'observe-legacy-error-chunk';

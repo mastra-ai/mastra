@@ -12438,8 +12438,12 @@ export class Agent<
         const window = await bus.pubsub.getHistory(topic, offset - 1);
         return window.length > 0 ? window.at(-1) : (await bus.pubsub.getHistory(topic, 0)).at(-1);
       };
-      const last = await readTail().catch(() => undefined);
-      if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) detach();
+      // Don't hold back the returned stream while the read waits on the cache.
+      void readTail()
+        .catch(() => undefined)
+        .then(last => {
+          if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) detach();
+        });
     }
 
     return {

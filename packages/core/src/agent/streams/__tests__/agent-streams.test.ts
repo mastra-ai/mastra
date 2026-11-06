@@ -231,6 +231,22 @@ describe('Agent durable resumable streams option', () => {
       expect(result).toEqual({ types: [], text: '' });
     });
 
+    it('returns a resumed observation while the past-end history read is still pending', async () => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+
+      const runId = await run(agent);
+      await waitForFinish(pubsub, runId);
+
+      // A cache that lost its connection queues reads until it reconnects.
+      vi.spyOn(agent.__getStreamBus()!.pubsub, 'getHistory').mockReturnValue(new Promise(() => {}));
+      const timeout = new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 2_000).unref());
+      const observed = await Promise.race([agent.observe(runId, { offset: 100 }), timeout]);
+      expect(observed).not.toBe('hung');
+      if (observed !== 'hung') observed.detach();
+    });
+
     it.each([
       ['at the next index', (last: number) => last + 1],
       ['far past the end', () => 100],

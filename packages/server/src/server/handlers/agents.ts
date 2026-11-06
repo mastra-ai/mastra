@@ -3036,7 +3036,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames. Frames whose replay-cache write failed, or all frames when caching is off, carry no index and cannot be replayed.',
+    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames. Frames whose replay-cache write failed, or all frames when caching is off, carry no index, so no offset can resume at them; omitting `offset` replays whatever the transport itself retains, which can repeat frames already received.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
@@ -3061,7 +3061,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         if (offset === undefined) {
           return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));
         }
-        return pubsub.subscribeFromOffset(topic, offset, onEvent).then(async () => {
+        return pubsub.subscribeFromOffset(topic, offset, onEvent).then(() => {
           // Resuming past the run's last entry replays nothing; if that entry ended the
           // run, nothing more will arrive, so close instead of waiting for the idle timeout.
           // Read only after subscribing so a terminal entry racing attachment is not lost.
@@ -3073,8 +3073,12 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
               const window = await pubsub.getHistory(topic, offset - 1);
               return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
             };
-            const last = await readTail().catch(() => undefined);
-            if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) onComplete();
+            // Don't hold back the unsubscribe handle while the read waits on the cache.
+            void readTail()
+              .catch(() => undefined)
+              .then(last => {
+                if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) onComplete();
+              });
           }
           return () => pubsub.unsubscribe(topic, onEvent);
         });
