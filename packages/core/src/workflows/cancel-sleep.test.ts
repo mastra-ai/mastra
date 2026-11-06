@@ -465,7 +465,6 @@ describe.each([1, 2] as const)('workflow sleep cancellation (storage v%s)', stor
     const workflowId = 'time-travel-abort-branch-canceled-workflow';
     const storage = new MockStore();
     const afterFirstStep = vi.fn().mockResolvedValue({});
-    let cancelDuringFirstStep = async () => {};
     const workflow = createWorkflow({
       id: workflowId,
       inputSchema: z.object({}),
@@ -476,7 +475,7 @@ describe.each([1, 2] as const)('workflow sleep cancellation (storage v%s)', stor
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'canceled',
       },
     })
-      .then(noopStep('first-step', () => cancelDuringFirstStep().then(() => ({}))))
+      .then(noopStep('first-step', async () => ({})))
       .then(noopStep('after-first-step', afterFirstStep))
       .commit();
     new Mastra({ logger: false, storage, workflows: { [workflowId]: workflow } });
@@ -484,14 +483,12 @@ describe.each([1, 2] as const)('workflow sleep cancellation (storage v%s)', stor
     const store = await storage.getStore('workflows');
     if (!store) throw new Error('workflows store missing');
     const run = await workflow.createRun();
-    // Cancel while the first step runs. cancel()'s own storage write fails (and is swallowed), so the
-    // engine's abort branch is what records the cancellation.
-    cancelDuringFirstStep = async () => {
-      vi.spyOn(store, storageVersion === 2 ? 'updateWorkflowRunHeader' : 'updateWorkflowState').mockRejectedValueOnce(
-        new Error('unavailable'),
-      );
-      await run.cancel();
-    };
+    // cancel()'s own storage write fails (and is swallowed), so the engine's abort branch,
+    // before the first step, is what records the cancellation.
+    vi.spyOn(store, storageVersion === 2 ? 'updateWorkflowRunHeader' : 'updateWorkflowState').mockRejectedValueOnce(
+      new Error('unavailable'),
+    );
+    await run.cancel();
 
     expect((await run.start({ inputData: {} })).status).toBe('canceled');
     expect(afterFirstStep).not.toHaveBeenCalled();
