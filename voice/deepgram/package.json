@@ -40,6 +40,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "msw": "^2.15.0",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

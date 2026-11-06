@@ -1,14 +1,12 @@
-import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { Hono } from 'hono';
+import type { Hono } from 'hono';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { factoryVoiceSettingsKey, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
-import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
-import { VoiceRoutes } from './voice.js';
-import type { VoiceRoutesDeps } from './voice.js';
+import { localAuthStorage, mountVoiceRoutes as mount } from './__tests__/voice-routes.js';
+import { fakeRouteAuth } from './test-utils.js';
 
 const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const MISTRAL_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
@@ -62,34 +60,6 @@ afterEach(() => {
     else process.env[key] = savedEnv[key];
   }
 });
-
-function localAuthStorage(keys: Record<string, string>): AuthStorage {
-  return { getStoredApiKey: (provider: string) => keys[provider] } as unknown as AuthStorage;
-}
-
-async function mount(
-  deps: Partial<Omit<VoiceRoutesDeps, 'auth'>> & { auth?: VoiceRoutesDeps['auth'] },
-  user?: { org: string },
-) {
-  const seed = await createFactoryStorageForTests();
-  const app = new Hono();
-  if (user) {
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: user.org } as never);
-      await next();
-    });
-  }
-  mountApiRoutes(
-    app as never,
-    new VoiceRoutes({
-      auth: deps.auth ?? fakeRouteAuth({ enabled: false }),
-      voiceSettings: seed.voiceSettings,
-      factoryProjects: seed.projects,
-      ...deps,
-    }).routes(),
-  );
-  return app;
-}
 
 const clip = Buffer.from('fake opus bytes');
 

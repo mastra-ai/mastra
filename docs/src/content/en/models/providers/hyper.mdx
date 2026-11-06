@@ -7,7 +7,7 @@ description: "Browse Charm Hyper model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/hyper.svg" alt="Charm Hyper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Charm Hyper
 
-Access 26 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
+Access 18 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
 
 Learn more in the [Charm Hyper documentation](https://hyper.charm.land).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "hyper/deepseek-v4-flash-0731"
+  model: "hyper/deepseek-v4-pro-0813"
 });
 
 // Generate a response
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "hyper/deepseek-v4-flash-0731",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.44,
-    "outputCost": 1.32
-  },
-  {
     "model": "hyper/deepseek-v4-pro-0813",
     "imageInput": false,
     "audioInput": false,
@@ -68,18 +56,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 1.437216,
     "outputCost": 4.311648
-  },
-  {
-    "model": "hyper/deepseek-v4.1-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 262144,
-    "inputCost": 0.33,
-    "outputCost": 1.31
   },
   {
     "model": "hyper/deepseek-v4.1-flash-1017",
@@ -104,18 +80,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 25600,
     "inputCost": 0.098,
     "outputCost": 0.334
-  },
-  {
-    "model": "hyper/glm-5.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 32768,
-    "inputCost": 1.52432,
-    "outputCost": 4.79072
   },
   {
     "model": "hyper/glm-5.3",
@@ -166,30 +130,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.40964
   },
   {
-    "model": "hyper/kimi-k2-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 26214,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
-    "model": "hyper/kimi-k2.7-code",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 16000,
-    "inputCost": 1.03436,
-    "outputCost": 4.3552
-  },
-  {
     "model": "hyper/kimi-k3",
     "imageInput": true,
     "audioInput": false,
@@ -212,18 +152,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 2.2,
     "outputCost": 11
-  },
-  {
-    "model": "hyper/minimax-m2.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262100,
-    "maxOutput": 6553,
-    "inputCost": 0.484,
-    "outputCost": 1.852
   },
   {
     "model": "hyper/minimax-m3",
@@ -274,40 +202,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.79072
   },
   {
-    "model": "hyper/qwen3.7-flash",
+    "model": "hyper/prism-flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 0.2,
-    "outputCost": 0.8
-  },
-  {
-    "model": "hyper/qwen3.7-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 2.5,
-    "outputCost": 7.5
-  },
-  {
-    "model": "hyper/qwen3.7-plus",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 1.2,
-    "outputCost": 4.8
+    "maxOutput": 131072,
+    "inputCost": 0.33,
+    "outputCost": 1.31
   },
   {
     "model": "hyper/qwen3.8-2.4t-a95b",
@@ -374,7 +278,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://hyper.charm.land/v1",
-    id: "hyper/deepseek-v4-flash-0731",
+    id: "hyper/deepseek-v4-pro-0813",
     apiKey: process.env.HYPER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -395,7 +299,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "hyper/qwen3.8-max"
-      : "hyper/deepseek-v4-flash-0731";
+      : "hyper/deepseek-v4-pro-0813";
   }
 });
 ```

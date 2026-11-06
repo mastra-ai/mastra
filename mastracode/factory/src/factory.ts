@@ -51,7 +51,7 @@ import {
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
-import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
+import { boardForWorkItem, createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
@@ -68,6 +68,10 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import {
+  createGithubReviewStatusReporter,
+  reviewStatusAnimationFromEnv,
+} from './integrations/github/review-status-reporter.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
@@ -159,7 +163,13 @@ import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
 import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
-import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
+import {
+  createRequestTimingMiddleware,
+  factoryTimingEnabled,
+  instrumentAsyncMethods,
+  logTiming,
+  timedPhase,
+} from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import type { FactoryToolDependencies } from './tools/index.js';
@@ -173,6 +183,7 @@ import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
+import { backfillUntilDone } from './work-items/split-backfill.js';
 import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -516,6 +527,8 @@ export class MastraFactory {
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
+  #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
+  #prepareStartedAt: number | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -643,6 +656,7 @@ export class MastraFactory {
     // registry or double-run one-time adapter init.
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
+    this.#prepareStartedAt = performance.now();
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
@@ -884,6 +898,30 @@ export class MastraFactory {
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
+    // Copy the legacy cards still in play before anything reads cards; done and canceled cards
+    // follow in the background. A failure fails the boot: serving without open cards would let
+    // rules file duplicates.
+    if (storage.isDomainReady('work-items') && !workItemsStorage.legacyMode) {
+      const projectBoards = this.#projectBoards;
+      const projects = projectBoards
+        ? new Set((await factoryProjectsStorage.listAll()).map(project => `${project.orgId}\u0000${project.id}`))
+        : undefined;
+      // A card whose project or board cannot be resolved counts as open, so it is copied now.
+      const isTerminal = async (card: Card) => {
+        let registry: BoardRegistry = this.#boards;
+        if (projectBoards) {
+          if (!projects!.has(`${card.orgId}\u0000${card.factoryProjectId}`)) return false;
+          try {
+            registry = await projectBoards.load(card);
+          } catch {
+            return false;
+          }
+        }
+        return registry.has(boardForWorkItem(card)) && isTerminalWorkItem(registry, card);
+      };
+      await timedPhase('prepare.migrate.workItemSplit', () => workItemsStorage.migrateOpenLegacyCards(isTerminal));
+    }
+
     // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
     // back to Intake. Move the cards the old rule left there, once.
     if (storage.isDomainReady('work-items')) {
@@ -1005,6 +1043,18 @@ export class MastraFactory {
           return false;
         }
       });
+    }
+    if (workItemsStorage.legacyBackfillPending) {
+      const controller = new AbortController();
+      this.#workItemSplitBackfill = {
+        controller,
+        promise: timedPhase('background.migrate.workItemSplit', () =>
+          backfillUntilDone(
+            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+            controller.signal,
+          ),
+        ),
+      };
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
@@ -1953,6 +2003,13 @@ export class MastraFactory {
                             }),
                         );
                       },
+                      reportReviewStatus: createGithubReviewStatusReporter({
+                        github: githubIntegration,
+                        sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
+                        workItems: workItemsStorage,
+                        reviewerName: process.env.FACTORY_REVIEW_STATUS_NAME?.trim() || 'Factory',
+                        ...reviewStatusAnimationFromEnv(process.env),
+                      }),
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
@@ -2293,6 +2350,9 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    // Unconditional and outside the Mastra logger, which production runs at WARN.
+    if (this.#prepareStartedAt !== undefined)
+      logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
   }
 
   /** Stop Factory-owned background work and channel transports before the host process shuts down. */
@@ -2311,11 +2371,15 @@ export class MastraFactory {
             `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
           ),
         );
+      const backfill = this.#workItemSplitBackfill;
+      backfill?.controller.abort();
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
+        // Stops between cards; failures are already logged.
+        backfill?.promise ?? Promise.resolve(),
         ...channelShutdowns.map(async shutdown => shutdown()),
       ]);
-      results.slice(1).forEach((result, index) => {
+      results.slice(2).forEach((result, index) => {
         if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
       });
       const failure = results.find(result => result.status === 'rejected');
