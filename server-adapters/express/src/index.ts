@@ -175,11 +175,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const reader = readableStream.getReader();
 
     let readerCanceled = false;
-    const cancelReaderOnClose = () => {
+    const cancelReader = (reason: string) => {
       if (readerCanceled) return;
       readerCanceled = true;
-      void reader.cancel('request aborted').catch(() => {});
+      void reader.cancel(reason).catch(() => {});
     };
+    const cancelReaderOnClose = () => cancelReader('request aborted');
     res.on('close', cancelReaderOnClose);
 
     try {
@@ -364,13 +365,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
 
+        let readerCanceled = false;
+        const cancelReader = (reason: string) => {
+          if (readerCanceled) return;
+          readerCanceled = true;
+          void reader.cancel(reason).catch(() => {});
+        };
+        const cancelReaderOnClose = () => cancelReader('request aborted');
+
         const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error').catch(() => {});
+          cancelReader('response write error');
         };
         response.once('error', onResError);
+        response.on('close', cancelReaderOnClose);
 
         try {
           while (true) {
@@ -384,6 +394,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
         } finally {
           response.off('error', onResError);
+          response.off('close', cancelReaderOnClose);
           response.end();
         }
       } else {
