@@ -1116,7 +1116,7 @@ A Factory with an auth provider and an OAuth authorization server serves an MCP 
 https://<your-factory>/web/factory/projects/<projectId>/mcp
 ```
 
-Copy it from **Settings → Connections → MCP clients** in the Factory UI. The card only appears when the endpoint is served (`/web/config/features` reports `mcp: true`).
+The Factory UI does not show this URL while the MCP endpoint is being reworked. Build it from your Factory URL and project id as shown above.
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 
