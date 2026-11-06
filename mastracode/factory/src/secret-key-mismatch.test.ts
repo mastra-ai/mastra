@@ -98,7 +98,7 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
       {
         code: 'secret_key_mismatch',
         ...secretKeyProblem(new FactorySecretDecryptionError('')),
-        docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+        docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
       },
     ],
   });

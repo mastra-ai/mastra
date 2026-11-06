@@ -683,7 +683,7 @@ function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
         {
           code: 'secret_key_mismatch',
           ...problem,
-          docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+          docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
         },
       ]
     : [];

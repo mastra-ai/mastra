@@ -4,6 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { KeyRound } from 'lucide-react';
 
 import type { ServerStatusProblem } from '../../hooks/useServerStatus';
+import { Button } from '@mastra/playground-ui/components/Button';
 
 /** Renders a fix step, turning backticked env var names into copyable code. */
 function FixStep({ fix }: { fix: string }) {
@@ -37,11 +38,11 @@ export function ServerProblemPage({ problem }: { problem: ServerStatusProblem })
         </Txt>
         {problem.fix ? <FixStep fix={problem.fix} /> : null}
         {problem.docsUrl ? (
-          <Txt variant="body-sm" tone="muted">
-            <a href={problem.docsUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-              Rotating keys on purpose?
-            </a>
-          </Txt>
+          <div className="pt-1">
+            <Button variant="primary" render={<a href={problem.docsUrl} target="_blank" rel="noreferrer" />}>
+              Read the fix guide
+            </Button>
+          </div>
         ) : null}
       </div>
     </div>
