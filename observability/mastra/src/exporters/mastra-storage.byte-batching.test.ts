@@ -142,6 +142,33 @@ describe('Storage byte batching', () => {
     ]);
   });
 
+  it('logs a stalled shutdown and retains the queue without rejecting shutdown', async () => {
+    const logger = new ConsoleLogger({ name: 'shutdown-failure-test' });
+    const errors = vi.spyOn(logger, 'error');
+    const info = vi.spyOn(logger, 'info');
+    const { exporter, storage } = await setup('insert-only', {}, logger);
+    await exporter.onLogEvent(log(1));
+    const take = vi.spyOn(EventBuffer.prototype, 'takeByteBatch').mockReturnValue({ creates: [], updates: [] });
+    try {
+      await expect(exporter.shutdown()).resolves.toBeUndefined();
+      expect(exporter.getByteBatchingStats()?.pendingRecords).toBe(1);
+      expect(
+        errors.mock.calls.some(([message]) => message === 'Failed to flush remaining events during shutdown'),
+      ).toBe(true);
+      expect(info.mock.calls.some(([message]) => message === 'MastraStorageExporter shutdown complete')).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(take).toHaveBeenCalledTimes(1);
+    } finally {
+      take.mockRestore();
+      errors.mockRestore();
+      info.mockRestore();
+    }
+    await exporter.flush();
+    expect((await storage.listLogs({ pagination: { page: 0, perPage: 100 } })).logs.map(row => row.logId)).toEqual([
+      'log-1',
+    ]);
+  });
+
   it.each(['batch-with-updates', 'realtime'] as const)('preserves create, update and end with %s', async strategy => {
     const { exporter, storage, tracing } = await setup(strategy, { maxBatchBytes: 4000 });
     const span = tracing.startSpan({ type: SpanType.GENERIC, name: 'ordered span', input: { question: 'hello' } });

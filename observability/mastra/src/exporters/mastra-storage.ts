@@ -1,4 +1,4 @@
-import { MastraError, ErrorDomain } from '@mastra/core/error';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   TracingEvent,
@@ -803,12 +803,25 @@ export class MastraStorageExporter extends BaseExporter {
       this.#flushTimer = undefined;
     }
 
-    // Flush any remaining events
-    await this.flush();
-
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
-      this.#flushTimer = undefined;
+    try {
+      await this.flush();
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN',
+          domain: ErrorDomain.MASTRA_OBSERVABILITY,
+          category: ErrorCategory.USER,
+          details: { remainingEvents: this.#eventBuffer.totalSize },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to flush remaining events during shutdown', mastraError);
+    } finally {
+      if (this.#flushTimer) {
+        clearTimeout(this.#flushTimer);
+        this.#flushTimer = undefined;
+      }
     }
 
     this.logger.info('MastraStorageExporter shutdown complete');
