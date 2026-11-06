@@ -1438,13 +1438,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             : new LibSQLFactoryStorage({ id: 'gitlab-one-card', url: ':memory:' }),
       });
       const boards = createBoardRegistry();
+      const transitionService = new FactoryTransitionService({
+        storage: base.seeded.workItems,
+        configVersion: 'gitlab-test-v1',
+        boards,
+      });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: { getSession: vi.fn(async () => undefined) } as never,
-        transitionService: new FactoryTransitionService({
-          storage: base.seeded.workItems,
-          configVersion: 'gitlab-test-v1',
-          boards,
-        }),
+        transitionService,
         storage: base.seeded.workItems,
         boards,
         intakeRoutes: base.seeded.boards,
@@ -1481,7 +1482,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             },
           })
         ).item;
-      return { ...base, ingest, cards, decisions, issueCard };
+      return { ...base, ingest, cards, decisions, issueCard, transitionService };
     }
 
     function mergeRequest(
@@ -1597,6 +1598,54 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(cards[0]!.id).toBe(issue.id);
       expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
       expect(cards[0]!.metadata).toMatchObject({ openPullRequestNumber: 17 });
+    });
+
+    it("never makes a merge request a manual card's source: the card stays a builder's card, the merge request gets its own", async () => {
+      const h = await harness();
+      const manual = (
+        await h.seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: h.project.id,
+          input: {
+            board: 'work',
+            title: 'Tidy the release notes',
+            stages: ['review'],
+            sessions: {
+              work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/item-manual-1', startedBy: 'user-1' },
+            },
+            metadata: {},
+          },
+        })
+      ).item;
+
+      await h.ingest(mergeRequest(17, 'Tidies the release notes.', { sourceBranch: 'factory/item-manual-1' }));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const card = cards.find(item => item.id === manual.id)!;
+      expect(card.externalSource ?? null).toBeNull();
+      expect(sourceTypes(card)).toEqual([]);
+      expect(cards.find(item => item.id !== manual.id)).toMatchObject({
+        externalSource: { type: 'pull-request' },
+        board: 'work',
+        // Filed against the card that authored it, like any Factory merge request that card can't
+        // hold; intake routes place only what arrives from outside.
+        stages: ['intake'],
+      });
+
+      const moved = await h.transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        workItemId: card.id,
+        board: 'work',
+        stage: 'execute',
+        expectedRevision: card.revision,
+        actor: { type: 'human', id: 'user-1' },
+        ingress: { type: 'human', identity: 'human-back-to-building' },
+        cause: 'board_drag',
+      });
+      expect(moved).toMatchObject({ status: 'accepted' });
     });
 
     it('gives a second merge request its own card once the first is under review, and moves the card to Done when the first merges', async () => {
