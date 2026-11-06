@@ -16,6 +16,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '.
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
+import type { McpServersRuntime } from '../mcp-servers/runtime.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -41,6 +42,7 @@ import type { CustomProvidersStorage } from '../storage/domains/custom-providers
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
+import type { McpServersStorage } from '../storage/domains/mcp-servers/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
@@ -70,6 +72,7 @@ import { buildFsRoutes } from './fs.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
+import { McpServerRoutes } from './mcp-servers.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
@@ -124,6 +127,7 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
+    mcpServers: McpServersStorage;
     filesystem: FilesystemStorage;
     modelDefaults: ModelDefaultsStorage;
     projects: FactoryProjectsStorage;
@@ -140,6 +144,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
   mcpEnabled: boolean;
+  /** Organization MCP servers; absent when `MastraFactory({ mcpServers: false })`. */
+  mcpServers?: { runtime: McpServersRuntime; allowPrivateNetwork: boolean };
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   /** App skills from `MastraFactory({ skills })`. */
@@ -799,11 +805,21 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
-      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled },
+      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled, mcpServers: Boolean(deps.mcpServers) },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
+    ...(deps.mcpServers
+      ? new McpServerRoutes({
+          auth: deps.auth,
+          storage: deps.domains.mcpServers,
+          runtime: deps.mcpServers.runtime,
+          allowPrivateNetwork: deps.mcpServers.allowPrivateNetwork,
+          publicOrigin: deps.publicOrigin,
+          stateSigner: deps.stateSigner,
+        }).routes()
+      : []),
     ...new OAuthRoutes({
       auth: deps.auth,
       authStorage: deps.authStorage,

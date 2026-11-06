@@ -8,6 +8,8 @@ export interface ServerFeatures {
   knowledge: boolean;
   /** The server serves its MCP endpoint. Absent from servers that predate it. */
   mcp?: boolean;
+  /** Organization MCP servers can be managed. Absent from servers that predate them. */
+  mcpServers?: boolean;
 }
 
 export function serverFeaturesQueryOptions(client: ApiClient) {

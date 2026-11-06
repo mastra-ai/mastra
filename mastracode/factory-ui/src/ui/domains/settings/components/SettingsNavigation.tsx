@@ -12,12 +12,14 @@ import {
   GitBranch,
   Inbox,
   Palette,
+  Plug,
   SlidersHorizontal,
   SquareKanban,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
@@ -58,6 +60,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.connections,
         icon: Cable,
         searchText: 'personal organization connections connected accounts slack integrations github gitlab tokens pat',
+      },
+      {
+        id: 'mcp-servers',
+        label: SETTINGS_SECTION_LABELS['mcp-servers'],
+        icon: Plug,
+        searchText: 'mcp servers model context protocol tools remote oauth bearer headers organization',
       },
     ],
   },
@@ -135,10 +143,15 @@ export function SettingsNavigation() {
   const closeSettings = useCloseSettings();
   const { state } = useSidebar();
   const [query, setQuery] = useState('');
+  // Servers that predate MCP server settings, or turned them off, don't serve the section.
+  const mcpServersEnabled = useServerFeatures().data?.mcpServers === true;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
     ...group,
-    items: normalizedQuery ? group.items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : group.items,
+    items: group.items.filter(
+      ({ id, searchText }) =>
+        (id !== 'mcp-servers' || mcpServersEnabled) && (!normalizedQuery || searchText.includes(normalizedQuery)),
+    ),
   })).filter(group => group.items.length > 0);
 
   if (!factoryId) return null;

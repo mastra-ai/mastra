@@ -1160,6 +1160,70 @@ Claude and ChatGPT don't consume these events yet: Claude connectors have no eve
 - Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, a one-line `summary`, and `workItemId` and `sessionId` when the event is about a work item or session.
 - Work item and session activity is served: item changes, runs, approvals, signals, and agents' commits, pushes and pull requests. Sessions follow the same rule as everywhere else in the Factory: you see your own sessions and shared ones, never another member's private session. Work item activity always shows up: when it happened in a session you can't see, the event says `privateSession: true` and the summary ends with "(in a private session)", but it doesn't say which session. Activity on such a session alone is left out.
 
+### Connecting MCP servers
+
+Organization admins can connect remote Model Context Protocol (MCP) servers so Factory sessions can call their tools. A connected server belongs to the organization: the tools you select are available in every session in it, including signed-in users' sessions and the sessions that run work items.
+
+Manage servers in **Settings → MCP Servers**, under **Account**, below **Connections**. Admins can add, edit, connect, and remove servers and choose their tools. Other members see the same servers, statuses, and tools read-only. Personal servers that belong to one member aren't available yet.
+
+To add a server:
+
+1. Open **Settings → MCP Servers** and select **Add server**.
+2. Enter a name and the server's Streamable HTTP URL, for example `https://mcp.example.com/mcp`.
+3. Choose how the Factory authenticates, then select **Add and connect** (or **Add and sign in** for OAuth).
+
+The server shows **Connected** with its tool count once the Factory has listed its tools. Select **Refresh tools** later to pick up changes on the server.
+
+Only remote servers over HTTP are supported. Servers started as a local command (stdio) aren't, because they would run commands on the Factory host.
+
+#### Authentication
+
+- **None**: For servers that don't require credentials.
+- **Bearer token**: Sends `Authorization: Bearer <token>`.
+- **Custom headers**: Sends up to 20 headers you choose, such as `X-Api-Key`.
+- **OAuth**: An admin signs in to the server's authorization server from the settings page.
+
+Credentials act for the whole organization. Every member's sessions call the server with the token, headers, or OAuth sign-in an admin saved, so use credentials meant to be shared. Saved values are never shown again: the settings page lists header names only, and leaving a field blank when editing keeps the saved value. Members can see each server's URL, so put secrets in headers rather than the URL. Moving a server to a different origin removes its saved credentials, sign-in, and tools.
+
+For OAuth, the authorization server needs to know the Factory as a client. Either:
+
+- Register a client with the authorization server and enter its **Client ID** (and **Client secret** for a confidential client). Use `<publicUrl>/auth/mcp-servers/callback` as the redirect URI.
+- Leave **Client ID** empty when the authorization server supports Client ID Metadata Documents. The Factory identifies itself with `<publicUrl>/.well-known/oauth-client/mastra-factory.json`, which it serves only when `publicUrl` uses `https`.
+
+Dynamic client registration isn't supported. A sign-in must finish within 10 minutes, and the Factory refreshes the token when it expires. When the server stops accepting the credentials, it shows **Needs sign-in** and its tools are left out of sessions until an admin signs in again or updates them.
+
+#### Choosing tools
+
+The first connection selects every tool the server lists. Later refreshes add new tools unselected and mark them **New** until an admin saves a selection, so a server can't hand sessions new tools by itself. Each server can list up to 500 tools, and an organization can have up to 50 servers.
+
+Sessions pick up changes when their next turn starts. A turn that is already running keeps the tools it started with through a rename, a new tool selection, or a refresh. Changing a server's URL, authentication, or credentials, signing it out, or removing it stops running turns on the Factory instance that made the change from calling it; on other instances, running turns stop once a new turn starts there.
+
+Sessions see each tool as `<server>_<tool>`, where `<server>` comes from the server's name when it was added (lowercase letters, digits and `-`, up to 40 characters), for example `crm_lookup_order`. Renaming a server doesn't change its tool names. Names longer than 64 characters are shortened with a hash. When a name matches a tool the session already has, the MCP tool is skipped. A name that belongs to a built-in or Factory tool, such as `web_search` or anything starting with `factory_`, is never given to sessions, because approval rules go by tool name; the tools list marks these tools as not available.
+
+#### Approving tool calls
+
+MCP tools use the **MCP** category in **Settings → Behavior → Tool permissions**. While **Auto-approve tools** is on, which is the default, they run without asking. With it off, the MCP policy applies: **Ask** (the default) pauses for approval, **Allow** runs them, and **Deny** blocks them. In a work-item run, a call waiting for approval holds the run until someone answers it, so set MCP to **Allow** for tools those runs should call unattended.
+
+#### Configuration
+
+MCP servers are on by default. Pass `mcpServers: false` to turn them off, which also hides the settings page (`/web/config/features` reports `mcpServers`).
+
+Server URLs must use `https`, and the Factory refuses servers and authorization servers on loopback, private, or link-local addresses, including names that resolve to one. It checks each request and redirect. To reach servers on your own network, allow private networks:
+
+```ts
+new MastraFactory({
+  // ...
+  mcpServers: { allowPrivateNetwork: true },
+});
+```
+
+or set `MASTRA_FACTORY_MCP_ALLOW_PRIVATE_NETWORK=true`. This also allows plain `http` on loopback. Factories without auth always allow private networks.
+
+Set these when auth is enabled:
+
+- `stateSecret`: A deployment-stable secret for signing the OAuth sign-in state. Without it each process uses its own random secret, and a sign-in fails when the callback reaches a different replica.
+- `secretEncryption`: Encrypts saved headers, OAuth client secrets, and tokens at rest, for example with `createFactorySecretEncryption()`. Without it they are stored as plaintext and the Factory warns at boot. Give every instance the same keys: an instance that can't decrypt a server's saved credentials shows the server with an error in Settings and leaves it out of sessions, until its keys match or an admin enters the credentials again.
+
 ### Development
 
 Run focused package checks from the repository root:

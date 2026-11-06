@@ -47,9 +47,10 @@ function makeAgentController(models: { provider: string; hasApiKey: boolean; api
 
 describe('GET /web/config/features', () => {
   it.each([
-    { features: undefined, expected: { knowledge: false, mcp: false } },
-    { features: { knowledge: true }, expected: { knowledge: true, mcp: false } },
-    { features: { knowledge: false, mcp: true }, expected: { knowledge: false, mcp: true } },
+    { features: undefined, expected: { knowledge: false, mcp: false, mcpServers: false } },
+    { features: { knowledge: true }, expected: { knowledge: true, mcp: false, mcpServers: false } },
+    { features: { knowledge: false, mcp: true }, expected: { knowledge: false, mcp: true, mcpServers: false } },
+    { features: { knowledge: false, mcpServers: true }, expected: { knowledge: false, mcp: false, mcpServers: true } },
   ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();
     mountApiRoutes(

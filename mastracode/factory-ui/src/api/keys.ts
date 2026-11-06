@@ -134,6 +134,7 @@ export const queryKeys = {
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
+  mcpServers: () => ['mcp-servers'] as const,
   defaultModel: () => ['default-model'] as const,
   voiceSettingsAll: () => ['voice-settings'] as const,
   voiceSettings: (factoryId: string) => [...queryKeys.voiceSettingsAll(), factoryId] as const,

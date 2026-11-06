@@ -76,6 +76,8 @@ import { buildPlatformConnectRoutes } from './integrations/platform/connect/rout
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { mcpOAuthEndpoints } from './mcp-servers/oauth.js';
+import { McpServersRuntime } from './mcp-servers/runtime.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -150,6 +152,7 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { McpServersStorage } from './storage/domains/mcp-servers/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -242,6 +245,16 @@ export interface MastraFactoryConfig {
    * `authorizationServers` set. Pass `false` to turn it off.
    */
   mcp?: false | FactoryMcpConfig;
+  /**
+   * Remote MCP servers that organization admins connect under Settings → MCP
+   * Servers. The selected tools of every connected server are available in all
+   * of the organization's sessions. On by default; pass `false` to turn it off.
+   *
+   * `allowPrivateNetwork` lets servers live on loopback, private, or link-local
+   * addresses (and plain `http://` on loopback). It is always on when auth is
+   * disabled; `MASTRA_FACTORY_MCP_ALLOW_PRIVATE_NETWORK=true` also turns it on.
+   */
+  mcpServers?: false | { allowPrivateNetwork?: boolean };
   /**
    * Allowed cross-origin SPA origins. The SPA may be served from a separate
    * static host, so credentialed requests must be explicitly allowed.
@@ -511,6 +524,7 @@ export class MastraFactory {
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
+  #mcpServersRuntime: McpServersRuntime | undefined;
   #shutdownPromise: Promise<void> | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
@@ -766,6 +780,7 @@ export class MastraFactory {
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
+    const mcpServersStorage = storage.registerDomain(new McpServersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -787,6 +802,7 @@ export class MastraFactory {
       modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      mcpServers: mcpServersStorage,
       filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
@@ -796,6 +812,22 @@ export class MastraFactory {
       skillOverrides: skillOverridesStorage,
       voiceSettings: voiceSettingsStorage,
     };
+    const mcpServersConfig = this.#config.mcpServers;
+    const mcpServersAllowPrivateNetwork =
+      !routeAuth.enabled() ||
+      (mcpServersConfig !== false && mcpServersConfig?.allowPrivateNetwork === true) ||
+      process.env.MASTRA_FACTORY_MCP_ALLOW_PRIVATE_NETWORK === 'true';
+    const mcpServersRuntime =
+      mcpServersConfig === false
+        ? undefined
+        : new McpServersRuntime({
+            storage: mcpServersStorage,
+            allowPrivateNetwork: mcpServersAllowPrivateNetwork,
+            oauthEndpoints: mcpOAuthEndpoints(publicOrigin),
+          });
+    this.#mcpServersRuntime = mcpServersRuntime;
+    // Each skipped MCP server tool is reported once per process, not every turn.
+    const reportedMcpServerToolSkips = new Set<string>();
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -1433,6 +1465,14 @@ export class MastraFactory {
         );
       }
     }
+    // MCP servers are on by default, so a missing secret warns instead of
+    // failing boot: one replica works, more than one breaks the callback.
+    if (mcpServersRuntime && routeAuth.enabled() && !stateSigner.stable) {
+      console.warn(
+        `[factory] MCP server OAuth sign-in signs its state with a per-process secret, so a sign-in fails when ` +
+          `the callback reaches another replica. Set 'stateSecret' on the factory config.`,
+      );
+    }
 
     // The SDK needs to know which backend the injected Mastra store uses
     // (its own `instanceof` detection breaks when the dependency graph holds
@@ -1678,6 +1718,20 @@ export class MastraFactory {
         ...(vector ? { vector } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
           const tools: IntegrationTools = {};
+          // Resolved once per turn; `undefined` until something asks for it.
+          let toolScope: Awaited<ReturnType<typeof resolveFactoryToolScope>> | undefined;
+          const resolveToolScope = async () => {
+            if (toolScope === undefined) {
+              toolScope = await resolveFactoryToolScope({
+                requestContext,
+                authEnabled: routeAuth.enabled(),
+                sessions: sourceControlSessions,
+                projects: factoryProjectsStorage,
+                workItems: workItemsStorage,
+              });
+            }
+            return toolScope;
+          };
           const toolOwners = new Map<string, string>();
           const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
             for (const [name, tool] of Object.entries(contributed)) {
@@ -1776,13 +1830,7 @@ export class MastraFactory {
               }),
             );
             if (storage.isDomainReady('source-control')) {
-              const scope = await resolveFactoryToolScope({
-                requestContext,
-                authEnabled: routeAuth.enabled(),
-                sessions: sourceControlSessions,
-                projects: factoryProjectsStorage,
-                workItems: workItemsStorage,
-              });
+              const scope = await resolveToolScope();
               if (scope) {
                 mergeTools(
                   'factory-tools',
@@ -1822,6 +1870,41 @@ export class MastraFactory {
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
+            }
+          }
+          // The organization's MCP servers, for user and worker sessions alike,
+          // scoped by the verified session row rather than the thread tags.
+          // They come last and never displace a tool already here; a failure
+          // leaves the turn without them.
+          if (mcpServersRuntime && storage.isDomainReady('mcp-servers') && storage.isDomainReady('source-control')) {
+            try {
+              const scope = await resolveToolScope();
+              if (scope) {
+                const contributed = await mcpServersRuntime.toolsFor({
+                  orgId: scope.orgId,
+                  existingNames: new Set(Object.keys(tools)),
+                });
+                Object.assign(tools, contributed.tools);
+                for (const { serverId, toolName, exposedName, reason, detail } of contributed.skipped) {
+                  const key = `${serverId}:${toolName}:${reason}`;
+                  if (reportedMcpServerToolSkips.has(key)) continue;
+                  reportedMcpServerToolSkips.add(key);
+                  console.warn(
+                    `[factory] MCP server tool "${toolName}" (as "${exposedName}") is not given to sessions: ` +
+                      (reason === 'name_conflict'
+                        ? 'another tool has that name.'
+                        : reason === 'reserved_name'
+                          ? 'that name belongs to a built-in or Factory tool.'
+                          : reason === 'credentials_unreadable'
+                            ? "this Factory can't decrypt the server's saved credentials (check that every instance has the same secretEncryption keys)."
+                            : `its stored definition is invalid (${detail}).`),
+                  );
+                }
+              }
+            } catch (error) {
+              console.warn(
+                `[factory] MCP server tools are unavailable for this turn: ${error instanceof Error ? error.message : String(error)}`,
+              );
             }
           }
           return tools;
@@ -1907,6 +1990,9 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,
+            ...(mcpServersRuntime
+              ? { mcpServers: { runtime: mcpServersRuntime, allowPrivateNetwork: mcpServersAllowPrivateNetwork } }
+              : {}),
             deploymentModelProviders,
             skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,
@@ -2315,6 +2401,7 @@ export class MastraFactory {
         this.#dispatcher?.stop() ?? Promise.resolve(),
         ...channelShutdowns.map(async shutdown => shutdown()),
       ]);
+      await this.#mcpServersRuntime?.close();
       results.slice(1).forEach((result, index) => {
         if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
       });

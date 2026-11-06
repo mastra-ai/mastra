@@ -49,6 +49,18 @@ import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } f
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
+  CreateMcpServerRequest,
+  McpOAuthStartResponse,
+  McpServerAuthType,
+  McpServerInfo,
+  McpServerResponse,
+  McpServersResponse,
+  McpServerStatus,
+  McpServerToolInfo,
+  SelectMcpServerToolsRequest,
+  UpdateMcpServerRequest,
+} from '@mastra/factory/routes/mcp-servers';
+export type {
   ArtifactEntry,
   ArtifactListing,
   DirectoryEntry,
