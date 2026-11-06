@@ -615,6 +615,16 @@ const userMessageEchoIds = (chunk: ChunkType): { signalId?: string; clientMessag
   return { signalId, clientMessageId: typeof clientMessageId === 'string' ? clientMessageId : undefined };
 };
 
+/** Whether `chunk` is the delivery echo of one of `bubbles` (matched by signal id or client message id). */
+const isUserMessageEchoFor = (chunk: ChunkType, bubbles: MastraDBMessage[]): boolean => {
+  const { signalId, clientMessageId } = userMessageEchoIds(chunk);
+  return bubbles.some(
+    bubble =>
+      (signalId !== undefined && bubble.id === signalId) ||
+      (clientMessageId !== undefined && bubble.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId),
+  );
+};
+
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   let result = [...conversation];
 
@@ -659,11 +669,20 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     if (!isUserMessagePresentationChunk(chunk)) {
       return [...accumulateChunk({ chunk, conversation: result.slice(0, pendingTailStart), metadata }), ...pendingTail];
     }
-    // A user-message echo from this run marks its step boundary, whether it
-    // delivers a follow-up from the tail or a message sent from elsewhere: the
-    // answer above is complete, so finish it before the echo is applied.
-    if (chunk.type === 'data-user-message' && pendingTailOwner.content.parts.length > 0) {
-      result = [...finishStreamingAssistantMessage(result.slice(0, pendingTailStart)), ...pendingTail];
+    if (chunk.type === 'data-user-message') {
+      // A user-message echo from this run marks its step boundary, whether it
+      // delivers a follow-up from the tail or a message sent from elsewhere: the
+      // answer above is complete, so finish it before the echo is applied.
+      const delivered =
+        pendingTailOwner.content.parts.length > 0
+          ? finishStreamingAssistantMessage(result.slice(0, pendingTailStart))
+          : result.slice(0, pendingTailStart);
+      // A message this chat did not send was delivered first, so it goes above the
+      // follow-ups that are still pending, keeping the rows in delivery order.
+      if (!isUserMessageEchoFor(chunk, pendingTail)) {
+        return [...accumulateChunk({ chunk, conversation: delivered, metadata }), ...pendingTail];
+      }
+      result = [...delivered, ...pendingTail];
     }
   }
 

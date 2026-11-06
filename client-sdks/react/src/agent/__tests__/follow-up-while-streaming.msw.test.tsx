@@ -192,6 +192,23 @@ describe('useChat follow-up sent while the answer is still streaming (#29163)', 
     const answer = chat.result.current.messages.find(message => message.id === 'answer-1')!;
     expect(textOf(answer)).toBe('partially streamed answer');
     expect(textStates(answer)).toEqual(['done']);
+    // Rows follow delivery order: the delivered message goes above the still-pending follow-up.
+    expect(rows(chat.result.current.messages)).toEqual([
+      'user: first',
+      'assistant: partially streamed answer',
+      'user: from another tab',
+      'user: follow-up',
+    ]);
+    expect(chat.result.current.messages[3]!.content.metadata?.status).toBe('pending');
+
+    await thread.emit(thread.userEcho('run-1', 1));
+    expect(rows(chat.result.current.messages)).toEqual([
+      'user: first',
+      'assistant: partially streamed answer',
+      'user: from another tab',
+      'user: follow-up',
+    ]);
+    expect(chat.result.current.messages[3]!.content.metadata?.status).toBeUndefined();
   });
 
   it('keeps a tool call the answer makes after the follow-up in the same row', async () => {
