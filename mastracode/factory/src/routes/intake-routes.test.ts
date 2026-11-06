@@ -433,6 +433,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
   });
 
+  it('refuses a route that joins pull requests to their issue on any event but an arrival', async () => {
+    const { base, replicaA } = await setup();
+    const joins = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true };
+    const refused = { status: 422, body: { error: 'join_on_event' } };
+
+    expect(
+      await replicaA.send('POST', base, { name: 'On close', on: ['work_item.closed'], target: joins }),
+    ).toMatchObject(refused);
+    expect(
+      await replicaA.send('POST', base, {
+        name: 'On both',
+        on: ['work_item.created', 'work_item.reopened'],
+        target: joins,
+      }),
+    ).toMatchObject(refused);
+    const created = await replicaA.send('POST', base, { name: 'Joins', target: joins });
+    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.created'], problems: [] } } });
+    const route = created.body.intakeRoute as Route;
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, {
+        on: ['work_item.closed'],
+        expectedRevision: route.revision,
+      }),
+    ).toMatchObject(refused);
+  });
+
   it('refuses a route that names no event, an unknown or repeated one, activity, or event conditions it cannot test', async () => {
     const { base, replicaA } = await setup();
     const bodies = [
