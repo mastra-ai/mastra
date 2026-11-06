@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
-import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
+import { MASTRA_PLATFORM_URL } from '../../factory/services/platformConnect';
 import { isConnectToolsOffError } from '../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -82,7 +82,7 @@ function ManageLink() {
     <Button
       size="sm"
       iconEnd={<ExternalLink />}
-      render={<a href={MASTRA_PROJECTS_URL} target="_blank" rel="noreferrer" />}
+      render={<a href={MASTRA_PLATFORM_URL} target="_blank" rel="noreferrer" />}
     >
       Manage in Mastra Platform
     </Button>
