@@ -234,11 +234,14 @@ describe('AppLayout', () => {
         message: 'The encryption key changed. Your secrets are safe.',
       },
     ];
-    focusManager.setFocused(false);
-    focusManager.setFocused(true);
+    try {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
 
-    expect(await screen.findByRole('heading', { name: "Factory can't unlock your secrets" })).toBeInTheDocument();
-    focusManager.setFocused(undefined);
+      expect(await screen.findByRole('heading', { name: "Factory can't unlock your secrets" })).toBeInTheDocument();
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   });
 
   it('leaves retired Factory pages out of the sidebar', async () => {
