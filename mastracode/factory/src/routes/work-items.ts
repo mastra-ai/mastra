@@ -52,7 +52,7 @@ import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/deci
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -96,10 +96,6 @@ function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) 
     }
   }
   return [...picked];
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
