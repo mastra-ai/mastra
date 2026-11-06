@@ -13,7 +13,7 @@ import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
 import { createWorkflow } from './create';
 import { createDefaultEngineTestSuite } from './test-utils/default-engine-suite';
-import type { Workflow } from './types';
+import type { ShouldPersistSnapshotFn, Workflow } from './types';
 import { createStep } from './workflow';
 
 // ============================================================================
@@ -1701,54 +1701,68 @@ describe('run status reads for a run created without a stored row', () => {
     expect(statusSpy).not.toHaveBeenCalled();
   });
 
-  it('stops at the next step when another instance cancels the run after it stored a row', async () => {
-    const workflowId = 'late-stored-cancel-wf';
-    const storage = new MockStore();
-    const buildWorkflow = (first: () => Promise<void>, later: () => Promise<void>) =>
-      createWorkflow({
-        id: workflowId,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        options: {
-          validateInputs: false,
-          shouldPersistSnapshot: ({ workflowStatus, stepResults }) =>
-            workflowStatus === 'running' && stepResults.first?.status === 'running',
+  it.each<{
+    when: string;
+    shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+    createRunOptions: { runId?: string; shouldPersistSnapshot?: ShouldPersistSnapshotFn };
+  }>([
+    {
+      when: 'that stored a row after it started',
+      shouldPersistSnapshot: ({ workflowStatus, stepResults }) =>
+        workflowStatus === 'running' && stepResults.first?.status === 'running',
+      createRunOptions: {},
+    },
+    {
+      when: 'started unstored under a caller-supplied id',
+      createRunOptions: { runId: 'caller-supplied-cancel-run', shouldPersistSnapshot: () => false },
+    },
+  ])(
+    'stops at the next step when another instance cancels a run $when',
+    async ({ shouldPersistSnapshot, createRunOptions }) => {
+      const workflowId = 'late-stored-cancel-wf';
+      const storage = new MockStore();
+      const buildWorkflow = (first: () => Promise<void>, later: () => Promise<void>) =>
+        createWorkflow({
+          id: workflowId,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          options: { validateInputs: false, shouldPersistSnapshot },
+        })
+          .then(noopStep('first', first))
+          .then(noopStep('later', later))
+          .commit();
+
+      let releaseFirst = () => {};
+      let markFirstStarted = () => {};
+      const firstStarted = new Promise<void>(resolve => (markFirstStarted = resolve));
+      const later = vi.fn(async () => {});
+      const owner = new Mastra({
+        logger: false,
+        storage,
+        workflows: {
+          [workflowId]: buildWorkflow(
+            () =>
+              new Promise<void>(resolve => {
+                releaseFirst = resolve;
+                markFirstStarted();
+              }),
+            later,
+          ),
         },
-      })
-        .then(noopStep('first', first))
-        .then(noopStep('later', later))
-        .commit();
+      });
+      const other = new Mastra({ logger: false, storage, workflows: { [workflowId]: buildWorkflow(later, later) } });
 
-    let releaseFirst = () => {};
-    let markFirstStarted = () => {};
-    const firstStarted = new Promise<void>(resolve => (markFirstStarted = resolve));
-    const later = vi.fn(async () => {});
-    const owner = new Mastra({
-      logger: false,
-      storage,
-      workflows: {
-        [workflowId]: buildWorkflow(
-          () =>
-            new Promise<void>(resolve => {
-              releaseFirst = resolve;
-              markFirstStarted();
-            }),
-          later,
-        ),
-      },
-    });
-    const other = new Mastra({ logger: false, storage, workflows: { [workflowId]: buildWorkflow(later, later) } });
+      const run = await owner.getWorkflow(workflowId).createRun(createRunOptions);
+      const resultPromise = run.start({ inputData: {} });
+      await firstStarted;
+      const remoteRun = await other.getWorkflow(workflowId).createRun({ runId: run.runId });
+      await remoteRun.cancel();
+      releaseFirst();
 
-    const run = await owner.getWorkflow(workflowId).createRun();
-    const resultPromise = run.start({ inputData: {} });
-    await firstStarted;
-    const remoteRun = await other.getWorkflow(workflowId).createRun({ runId: run.runId });
-    await remoteRun.cancel();
-    releaseFirst();
-
-    expect((await resultPromise).status).toBe('canceled');
-    expect(later).not.toHaveBeenCalled();
-  });
+      expect((await resultPromise).status).toBe('canceled');
+      expect(later).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('concurrent stream close', () => {

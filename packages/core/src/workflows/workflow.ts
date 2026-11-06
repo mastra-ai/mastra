@@ -3317,7 +3317,7 @@ export class Workflow<
       run.workflowRunStatus = stored.status;
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
-    run.unstored = !existsInStorage && !shouldPersistSnapshot;
+    run.unstored = !lookUpStoredRun;
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {
