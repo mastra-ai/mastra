@@ -46,7 +46,10 @@ export interface ReviewStatusView {
   /** Why the run failed or will retry; already sanitized by the dispatcher. */
   reason?: string;
   reviewerName: string;
+  /** The animation shown while reviewing; also the fallback for readers without a theme preference. */
   gifUrl: string;
+  /** The same animation drawn for GitHub's dark theme, swapped in with `prefers-color-scheme`. */
+  gifDarkUrl?: string;
 }
 
 const PHASE_RANK: Record<ReviewStatusPhase, number> = {
@@ -183,7 +186,24 @@ function statsTable(view: ReviewStatusView): string[] {
 }
 
 export function gifAltText(reviewerName: string): string {
-  return `Animated ASCII spinner: ${reviewerName} is reviewing this pull request`;
+  return `Animated ASCII factory with smoke puffing from its chimneys: ${reviewerName} is reviewing this pull request`;
+}
+
+function htmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** The reviewing animation, matched to the reader's GitHub theme when a dark variant is configured. */
+function animation(view: ReviewStatusView): string[] {
+  const img = `<img src="${htmlAttribute(view.gifUrl)}" alt="${htmlAttribute(gifAltText(view.reviewerName))}">`;
+  if (!view.gifDarkUrl) return [img];
+  return [
+    '<picture>',
+    `  <source media="(prefers-color-scheme: dark)" srcset="${htmlAttribute(view.gifDarkUrl)}">`,
+    `  <source media="(prefers-color-scheme: light)" srcset="${htmlAttribute(view.gifUrl)}">`,
+    `  ${img}`,
+    '</picture>',
+  ];
 }
 
 /** The whole comment body for one lifecycle step. */
@@ -212,7 +232,7 @@ export function renderReviewStatusComment(view: ReviewStatusView): string {
       lines.push(
         '### Reviewing…',
         '',
-        `![${gifAltText(reviewerName)}](${view.gifUrl})`,
+        ...animation(view),
         '',
         `${reviewerName} is reviewing this pull request${head}${since}. This comment updates when the review finishes.`,
       );

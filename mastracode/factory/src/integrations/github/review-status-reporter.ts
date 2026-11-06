@@ -6,8 +6,26 @@ import { resolveRepository } from './acceptance-labels.js';
 import type { ReviewStatusState, ReviewStatusStats } from './review-status-comment.js';
 import { countFactoryInlineFindings, publishReviewStatus } from './review-status.js';
 
-export const DEFAULT_REVIEW_STATUS_GIF_URL =
-  'https://raw.githubusercontent.com/mastra-ai/mastra/main/mastracode/factory/assets/review-status/reviewing.gif';
+const REVIEW_STATUS_ASSETS =
+  'https://raw.githubusercontent.com/mastra-ai/mastra/main/mastracode/factory/assets/review-status';
+export const DEFAULT_REVIEW_STATUS_GIF_URL = `${REVIEW_STATUS_ASSETS}/reviewing-light.gif`;
+export const DEFAULT_REVIEW_STATUS_GIF_DARK_URL = `${REVIEW_STATUS_ASSETS}/reviewing-dark.gif`;
+
+/**
+ * Where the reviewing animation is served from. By default both theme variants
+ * come from this repository. A self-hosted `FACTORY_REVIEW_STATUS_GIF_URL` is
+ * used for every theme unless `FACTORY_REVIEW_STATUS_GIF_DARK_URL` adds a dark
+ * variant for it; a custom image is never paired with a stock one.
+ */
+export function reviewStatusAnimationFromEnv(env: Record<string, string | undefined>): {
+  gifUrl: string;
+  gifDarkUrl?: string;
+} {
+  const gifUrl = env.FACTORY_REVIEW_STATUS_GIF_URL?.trim();
+  const gifDarkUrl = env.FACTORY_REVIEW_STATUS_GIF_DARK_URL?.trim();
+  if (!gifUrl) return { gifUrl: DEFAULT_REVIEW_STATUS_GIF_URL, gifDarkUrl: DEFAULT_REVIEW_STATUS_GIF_DARK_URL };
+  return gifDarkUrl ? { gifUrl, gifDarkUrl } : { gifUrl };
+}
 
 const COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -21,6 +39,7 @@ export interface GithubReviewStatusReporterDeps {
   /** How the comment names the reviewer, e.g. "Shipyard". */
   reviewerName: string;
   gifUrl: string;
+  gifDarkUrl?: string;
 }
 
 function commitSha(value: unknown): string | undefined {
@@ -70,6 +89,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
           state,
           reviewerName: deps.reviewerName,
           gifUrl: deps.gifUrl,
+          ...(deps.gifDarkUrl ? { gifDarkUrl: deps.gifDarkUrl } : {}),
           ...(event.reason ? { reason: event.reason } : {}),
           ...(event.replayed ? { continuesRun: true } : {}),
           ...(final ? { stats: recorded => readStats(deps, ref, item, event, recorded, isFactoryAuthor) } : {}),

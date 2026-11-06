@@ -70,7 +70,7 @@ import {
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import {
   createGithubReviewStatusReporter,
-  DEFAULT_REVIEW_STATUS_GIF_URL,
+  reviewStatusAnimationFromEnv,
 } from './integrations/github/review-status-reporter.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
@@ -1962,7 +1962,7 @@ export class MastraFactory {
                         sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
                         workItems: workItemsStorage,
                         reviewerName: process.env.FACTORY_REVIEW_STATUS_NAME?.trim() || 'Factory',
-                        gifUrl: process.env.FACTORY_REVIEW_STATUS_GIF_URL?.trim() || DEFAULT_REVIEW_STATUS_GIF_URL,
+                        ...reviewStatusAnimationFromEnv(process.env),
                       }),
                     }
                   : {}),

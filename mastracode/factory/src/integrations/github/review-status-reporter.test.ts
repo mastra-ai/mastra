@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./acceptance-labels.js', () => ({
@@ -5,7 +7,12 @@ vi.mock('./acceptance-labels.js', () => ({
 }));
 
 import type { FactoryReviewStatusEvent } from '../../rules/dispatcher.js';
-import { createGithubReviewStatusReporter } from './review-status-reporter.js';
+import {
+  createGithubReviewStatusReporter,
+  DEFAULT_REVIEW_STATUS_GIF_DARK_URL,
+  DEFAULT_REVIEW_STATUS_GIF_URL,
+  reviewStatusAnimationFromEnv,
+} from './review-status-reporter.js';
 
 const BOT = 'factory[bot]';
 const HEAD = 'a'.repeat(40);
@@ -51,6 +58,7 @@ function setup(item: ReturnType<typeof card> | null) {
     workItems: { get: async () => item as never },
     reviewerName: 'Shipyard',
     gifUrl: 'https://assets.test/reviewing.gif',
+    gifDarkUrl: 'https://assets.test/reviewing-dark.gif',
   });
   return { report, versionControl, comments };
 }
@@ -77,6 +85,10 @@ describe('createGithubReviewStatusReporter', () => {
     await report(event('reviewing', { startedAt }));
     expect(comments[0]!.body).toContain('Shipyard is reviewing this pull request');
     expect(comments[0]!.body).toContain('aaaaaaa');
+    expect(comments[0]!.body).toContain(
+      '<source media="(prefers-color-scheme: dark)" srcset="https://assets.test/reviewing-dark.gif">',
+    );
+    expect(comments[0]!.body).toContain('<img src="https://assets.test/reviewing.gif"');
 
     await report(event('completed', { endedAt: new Date('2026-11-05T10:04:05Z') }));
     const body = comments[0]!.body;
@@ -109,5 +121,34 @@ describe('createGithubReviewStatusReporter', () => {
     await expect(down.report(event('queued'))).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('reviewStatusAnimationFromEnv', () => {
+  it('serves both theme variants from the repository by default', () => {
+    expect(reviewStatusAnimationFromEnv({})).toEqual({
+      gifUrl: DEFAULT_REVIEW_STATUS_GIF_URL,
+      gifDarkUrl: DEFAULT_REVIEW_STATUS_GIF_DARK_URL,
+    });
+    for (const url of [DEFAULT_REVIEW_STATUS_GIF_URL, DEFAULT_REVIEW_STATUS_GIF_DARK_URL]) {
+      const path = url.split('/mastra-ai/mastra/main/mastracode/factory/')[1]!;
+      expect(existsSync(fileURLToPath(new URL(`../../../${path}`, import.meta.url)))).toBe(true);
+    }
+  });
+
+  it('never pairs a self-hosted image with a stock variant', () => {
+    expect(reviewStatusAnimationFromEnv({ FACTORY_REVIEW_STATUS_GIF_URL: ' https://a.test/l.gif ' })).toEqual({
+      gifUrl: 'https://a.test/l.gif',
+    });
+    expect(
+      reviewStatusAnimationFromEnv({
+        FACTORY_REVIEW_STATUS_GIF_URL: 'https://a.test/l.gif',
+        FACTORY_REVIEW_STATUS_GIF_DARK_URL: 'https://a.test/d.gif',
+      }),
+    ).toEqual({ gifUrl: 'https://a.test/l.gif', gifDarkUrl: 'https://a.test/d.gif' });
+    expect(reviewStatusAnimationFromEnv({ FACTORY_REVIEW_STATUS_GIF_DARK_URL: 'https://a.test/d.gif' })).toEqual({
+      gifUrl: DEFAULT_REVIEW_STATUS_GIF_URL,
+      gifDarkUrl: DEFAULT_REVIEW_STATUS_GIF_DARK_URL,
+    });
   });
 });

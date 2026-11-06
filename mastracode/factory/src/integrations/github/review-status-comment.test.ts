@@ -10,6 +10,7 @@ import type { ReviewStatusState, ReviewStatusView } from './review-status-commen
 
 const HEAD = 'a'.repeat(40);
 const GIF = 'https://example.test/reviewing.gif';
+const DARK_GIF = 'https://example.test/reviewing-dark.gif';
 
 function state(overrides: Partial<ReviewStatusState> = {}): ReviewStatusState {
   return {
@@ -46,8 +47,49 @@ describe('renderReviewStatusComment', () => {
     const body = renderReviewStatusComment(
       view({ state: state({ phase: 'reviewing', startedAt: '2026-11-05T10:01:00.123Z', head: HEAD }) }),
     );
-    expect(body).toContain(`![Animated ASCII spinner: Shipyard is reviewing this pull request](${GIF})`);
+    expect(body).toContain(
+      `<img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request">`,
+    );
+    expect(body).not.toContain('<picture>');
     expect(body).toContain('Shipyard is reviewing this pull request on `aaaaaaa` since 2026-11-05T10:01:00Z.');
+  });
+
+  it("matches the animation to the reader's GitHub theme", () => {
+    const body = renderReviewStatusComment(view({ state: state({ phase: 'reviewing' }), gifDarkUrl: DARK_GIF }));
+    const picture = [
+      '',
+      '<picture>',
+      `  <source media="(prefers-color-scheme: dark)" srcset="${DARK_GIF}">`,
+      `  <source media="(prefers-color-scheme: light)" srcset="${GIF}">`,
+      `  <img src="${GIF}" alt="Animated ASCII factory with smoke puffing from its chimneys: Shipyard is reviewing this pull request">`,
+      '</picture>',
+      '',
+    ].join('\n');
+    // Blank lines around the block keep GitHub from reading the markup as text.
+    expect(body).toContain(picture);
+    expect(body).toContain('Shipyard is reviewing this pull request.');
+    for (const phase of ['queued', 'retrying', 'completed', 'failed', 'cancelled'] as const) {
+      const ended = renderReviewStatusComment(view({ state: state({ phase }), gifDarkUrl: DARK_GIF }));
+      expect(ended).not.toContain('<picture>');
+      expect(ended).not.toContain(DARK_GIF);
+    }
+  });
+
+  it('keeps configured names and URLs inside their HTML attributes', () => {
+    const body = renderReviewStatusComment(
+      view({
+        state: state({ phase: 'reviewing' }),
+        reviewerName: 'Bot "x" <b>',
+        gifUrl: 'https://a.test/l.gif?a=1&b="2"',
+        gifDarkUrl: 'https://a.test/d.gif"><script>',
+      }),
+    );
+    expect(body).toContain('srcset="https://a.test/d.gif&quot;&gt;&lt;script&gt;"');
+    expect(body).toContain('src="https://a.test/l.gif?a=1&amp;b=&quot;2&quot;"');
+    expect(body).toContain(
+      'alt="Animated ASCII factory with smoke puffing from its chimneys: Bot &quot;x&quot; &lt;b&gt; is',
+    );
+    expect(body).not.toContain('<script>');
   });
 
   it('replaces the animation with measured stats on completion', () => {
