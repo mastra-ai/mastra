@@ -97,18 +97,19 @@ const APPROVAL_LOOKUP_PAGE_SIZE = 50;
 /** Most approval lookup results kept per AgentChannels instance. */
 const APPROVAL_LOOKUP_CACHE_SIZE = 1000;
 /**
- * How long a lookup that found no pending approval is trusted. Bounds repeat
- * history reads for answered or unknown cards to one per card per window,
- * while still picking up an approval persisted by another instance after the
- * first click.
+ * How long a lookup that found no approval for a card is trusted. Short, so an
+ * approval persisted by another instance after the first click is still picked
+ * up, while repeat clicks on an unknown card read history at most once per window.
  */
-const APPROVAL_LOOKUP_NEGATIVE_TTL_MS = 60_000;
+const APPROVAL_LOOKUP_MISSING_TTL_MS = 60_000;
 /**
- * How long a found pending approval is trusted. Another instance may answer it
- * meanwhile; a resume of an answered run fails as stale, so this only bounds how
- * long that state is reused.
+ * How long a pending or answered lookup is trusted. Another instance may answer
+ * a pending approval meanwhile; resuming a run that is no longer suspended
+ * fails as stale, so this only bounds how long that state is reused. Answered
+ * cards also keep this mark after a click resumes them: the base dispatch
+ * returns before the resumed stream ends, so the claim cannot follow the run.
  */
-const APPROVAL_LOOKUP_PENDING_TTL_MS = 10 * 60_000;
+const APPROVAL_LOOKUP_TTL_MS = 10 * 60_000;
 
 /** The persisted pending-approval entry an agent stores on its assistant message. */
 type PersistedPendingApproval = {
@@ -135,8 +136,7 @@ type ApprovalLookupResult =
 type CachedApprovalLookup = {
   toolCallId: string;
   result: ApprovalLookupResult;
-  /** Unset while a click that claimed the approval is resuming its run. */
-  expiresAt?: number;
+  expiresAt: number;
 };
 
 /** Identifies one approval card: tool call ids alone can repeat across threads and runs. */
@@ -232,12 +232,17 @@ export class AgentChannels {
    * Approval state per card (thread, card message, toolCallId). A click that
    * misses `pendingApprovalCards` may have to read the whole thread, so the
    * result is kept: repeat clicks (including rejected ones from other users)
-   * reuse it with no storage read. A click that answers a card also claims it
-   * here, so a second click cannot answer it again. Bounded by
-   * `APPROVAL_LOOKUP_CACHE_SIZE`; entries expire per the `APPROVAL_LOOKUP_*_TTL_MS`
-   * constants.
+   * reuse it with no storage read. Cards answered by a click are marked here
+   * too. Bounded by `APPROVAL_LOOKUP_CACHE_SIZE`; entries expire per the
+   * `APPROVAL_LOOKUP_*_TTL_MS` constants.
    */
   private approvalLookups = new Map<string, CachedApprovalLookup>();
+  /**
+   * Cards a click is answering right now (see `claimApproval`). Kept apart from
+   * `approvalLookups` so eviction or a reseeded card cannot drop a live claim;
+   * holds at most one entry per in-progress click.
+   */
+  private approvalClaims = new Set<string>();
   /** Lookups in progress, so concurrent clicks on one card share one read. */
   private approvalLookupsInFlight = new Map<string, { toolCallId: string; promise: Promise<ApprovalLookupResult> }>();
 
@@ -2125,7 +2130,9 @@ export class AgentChannels {
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
-      // A new card for this id supersedes any earlier or in-progress lookup.
+      // A card posted for this id supersedes earlier lookups that found it
+      // pending or missing. Answered marks stay: resumed runs reseed the card
+      // they answer through here.
       this.forgetApprovalLookups(toolCallId);
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
@@ -2449,8 +2456,7 @@ export class AgentChannels {
           toolCallId,
           result,
           expiresAt:
-            Date.now() +
-            (result.status === 'pending' ? APPROVAL_LOOKUP_PENDING_TTL_MS : APPROVAL_LOOKUP_NEGATIVE_TTL_MS),
+            Date.now() + (result.status === 'missing' ? APPROVAL_LOOKUP_MISSING_TTL_MS : APPROVAL_LOOKUP_TTL_MS),
         });
       }
       return result;
@@ -2464,7 +2470,7 @@ export class AgentChannels {
   /** The cached entry for a card, or undefined when missing or expired. */
   private getApprovalLookup(key: string): CachedApprovalLookup | undefined {
     const entry = this.approvalLookups.get(key);
-    if (entry?.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+    if (entry && entry.expiresAt <= Date.now()) {
       this.approvalLookups.delete(key);
       return undefined;
     }
@@ -2481,10 +2487,10 @@ export class AgentChannels {
     }
   }
 
-  /** Drop cached and in-progress lookups for every card with this toolCallId. */
+  /** Drop pending, missing and in-progress lookups for every card with this toolCallId. */
   private forgetApprovalLookups(toolCallId: string): void {
     for (const [key, entry] of this.approvalLookups) {
-      if (entry.toolCallId === toolCallId) this.approvalLookups.delete(key);
+      if (entry.toolCallId === toolCallId && entry.result.status !== 'answered') this.approvalLookups.delete(key);
     }
     for (const [key, entry] of this.approvalLookupsInFlight) {
       if (entry.toolCallId === toolCallId) this.approvalLookupsInFlight.delete(key);
@@ -2493,28 +2499,30 @@ export class AgentChannels {
 
   /**
    * Claim a card for the click that is about to answer it. Returns undefined
-   * when another click already did. The claim holds while the run resumes;
-   * `settle` then keeps the card marked answered for
-   * `APPROVAL_LOOKUP_NEGATIVE_TTL_MS`, and `release` restores the previous
-   * state when the resume failed and the card must stay usable.
+   * when another click is answering it or already did. `settle` marks the card
+   * answered once its run was resumed (or found already consumed); `release`
+   * drops the claim when the resume failed and the card must stay usable.
    */
   private claimApproval(card: ApprovalCardKey): { release: () => void; settle: () => void } | undefined {
     const key = approvalCardKey(card);
-    const previous = this.getApprovalLookup(key);
-    if (previous?.result.status === 'answered') return undefined;
-    const claimed: CachedApprovalLookup = { toolCallId: card.toolCallId, result: { status: 'answered' } };
-    this.setApprovalLookup(key, claimed);
-    // Both are no-ops once a new card for this id replaced the claim.
-    const isCurrent = () => this.approvalLookups.get(key) === claimed;
+    if (this.approvalClaims.has(key) || this.getApprovalLookup(key)?.result.status === 'answered') return undefined;
+    this.approvalClaims.add(key);
+    let done = false;
     return {
       release: () => {
-        if (!isCurrent()) return;
-        if (previous) this.setApprovalLookup(key, previous);
-        else this.approvalLookups.delete(key);
+        if (done) return;
+        done = true;
+        this.approvalClaims.delete(key);
       },
       settle: () => {
-        if (!isCurrent()) return;
-        this.setApprovalLookup(key, { ...claimed, expiresAt: Date.now() + APPROVAL_LOOKUP_NEGATIVE_TTL_MS });
+        if (done) return;
+        done = true;
+        this.approvalClaims.delete(key);
+        this.setApprovalLookup(key, {
+          toolCallId: card.toolCallId,
+          result: { status: 'answered' },
+          expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+        });
       },
     };
   }
@@ -2525,9 +2533,8 @@ export class AgentChannels {
    * `pendingToolApprovals` entries, so this scans. There is deliberately no page
    * cap: any fixed limit would strand approvals behind it again (#29186). The
    * cost is bounded instead by `lookupPersistedApproval`, which runs this at
-   * most once per card per `APPROVAL_LOOKUP_PENDING_TTL_MS` for pending
-   * approvals and per `APPROVAL_LOOKUP_NEGATIVE_TTL_MS` for answered or unknown
-   * ones.
+   * most once per card per `APPROVAL_LOOKUP_TTL_MS` for pending or answered
+   * approvals and per `APPROVAL_LOOKUP_MISSING_TTL_MS` for unknown ones.
    */
   private async readPersistedApproval({
     mastra,

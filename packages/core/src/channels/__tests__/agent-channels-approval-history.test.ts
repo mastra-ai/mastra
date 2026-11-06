@@ -4,9 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { Mastra } from '../../mastra';
+import type { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import type { MemoryStorage } from '../../storage';
 import { AgentChannels } from '../agent-channels';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
+import type { ChatChannelRenderContext } from '../output-processor';
 
 // A user clicks Approve/Deny on a tool-approval card after the bot rebuilt (or
 // restarted) its AgentChannels. The new instance has no in-memory record of the
@@ -24,12 +27,21 @@ class RecordingChannels extends AgentChannels {
   readonly decisions: Decision[] = [];
   /** Makes the next approval resume fail, as a storage or model outage would. */
   failNextApproval = false;
+  /** Runs while an approval is resuming, before it is recorded. */
+  whileResuming?: (render: ChatChannelRenderContext) => Promise<void>;
 
-  protected override async dispatchApproval(args: { runId: string; toolCallId: string }): Promise<void> {
+  protected override async dispatchApproval(args: {
+    runId: string;
+    toolCallId: string;
+    requestContext: RequestContext;
+  }): Promise<void> {
     if (this.failNextApproval) {
       this.failNextApproval = false;
       throw new Error('resume failed');
     }
+    const whileResuming = this.whileResuming;
+    this.whileResuming = undefined;
+    await whileResuming?.(args.requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext);
     this.decisions.push({ kind: 'approve', toolCallId: args.toolCallId, runId: args.runId });
   }
 
@@ -600,5 +612,32 @@ describe('repeated clicks on an approval card after a rebuild', () => {
 
     await click('tool_approve:call_0', 'bob', { card: 'second-card' });
     expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'call_0', runId: 'second-run' }]);
+  });
+
+  it('ignores a second click while the run resumes, even after the resumed run reseeds its card', async () => {
+    const { channels, click } = await setup(deepApproval());
+    channels.whileResuming = async render => {
+      // What the output processor does when the resumed run starts streaming.
+      const { toolCallId, messageId } = render.approvalContext!;
+      render.onApprovalPosted(toolCallId, { messageId, displayName: '', argsSummary: '', startedAt: Date.now() });
+      await click('tool_deny:deep-pending', 'alice');
+    };
+
+    await click('tool_approve:deep-pending', 'alice');
+    await click('tool_deny:deep-pending', 'alice');
+
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+  });
+
+  it('keeps a claim while the run resumes, however many other cards are looked up meanwhile', async () => {
+    const { channels, click } = await setup(deepApproval());
+    channels.whileResuming = async () => {
+      for (let i = 0; i < 1001; i++) await click(`tool_approve:unknown-${i}`, 'alice', { card: `card-${i}` });
+      await click('tool_deny:deep-pending', 'alice');
+    };
+
+    await click('tool_approve:deep-pending', 'alice');
+
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
   });
 });
