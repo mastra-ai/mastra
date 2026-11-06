@@ -1,0 +1,27 @@
+{
+  "name": "template-agent-workflow-billing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Configurable billing for Mastra agents and workflows with Polar.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  },
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "check": "tsc --noEmit && oxfmt --check .",
+    "format": "oxfmt ."
+  },
+  "dependencies": {
+    "@mastra/core": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "mastra": "latest",
+    "oxfmt": "latest",
+    "typescript": "^5.9.0"
+  }
+}
