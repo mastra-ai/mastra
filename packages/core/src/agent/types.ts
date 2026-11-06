@@ -587,9 +587,17 @@ export interface GoalConfig {
    *
    * May be a model id / model object, or a resolver function (so a consumer can
    * inject provider credentials and read the current judge selection at runtime);
-   * the function may return `undefined` to keep the goal step a no-op.
+   * the function may return `undefined` to keep the goal step a no-op. A
+   * resolver also receives the goal's own `judgeModelId`, when one was set on
+   * the objective, so it can resolve that model with its own credentials.
    */
-  judge?: DynamicArgument<MastraModelConfig | undefined>;
+  judge?:
+    | MastraModelConfig
+    | ((args: {
+        requestContext: RequestContext;
+        mastra?: Mastra;
+        judgeModelId?: string;
+      }) => Promise<MastraModelConfig | undefined> | MastraModelConfig | undefined);
   /** Max goal evaluations before the goal stops. Defaults to 50. */
   maxRuns?: number;
   /** Extra judge guidance. Defaults to the built-in goal judge prompt. */

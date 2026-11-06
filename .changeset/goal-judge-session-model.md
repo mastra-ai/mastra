@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Goals are now graded with the session's own model when no goal judge model is configured. Before, a goal set without a judge model (for example from the web UI) never got graded and never finished.
+Goals are now graded even when no goal judge model is configured. The judge is the configured judge setting, then the goal's own `judgeModelId`, then the session's model.
