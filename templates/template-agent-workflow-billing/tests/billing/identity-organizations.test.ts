@@ -92,6 +92,12 @@ describe('trusted identity and shared workspace journeys', () => {
     const initialChecksum = (await legacyObserver.execute('SELECT checksum FROM billing_migrations WHERE version = 1'))
       .rows[0].checksum;
     for (const table of [
+      'billing_outbox',
+      'billing_ledger',
+      'billing_measurements',
+      'billing_reservations',
+      'billing_operations',
+      'billing_executions',
       'private_records',
       'organization_operations',
       'invitations',
@@ -101,7 +107,7 @@ describe('trusted identity and shared workspace journeys', () => {
       'identities',
     ])
       await legacyObserver.execute(`DROP TABLE ${table}`);
-    await legacyObserver.execute('DELETE FROM billing_migrations WHERE version = 2');
+    await legacyObserver.execute('DELETE FROM billing_migrations WHERE version >= 2');
     await legacyObserver.execute('PRAGMA user_version = 1');
     const upgraded = await OrganizationStorage.open({ url: legacyDatabase.url });
     cleanups.push(() => upgraded.close());
@@ -110,6 +116,7 @@ describe('trusted identity and shared workspace journeys', () => {
     ).toEqual([
       { version: 1n, checksum: initialChecksum },
       { version: 2n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 3n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     expect((await legacyObserver.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
       { id: 'event-1', units: 3n },

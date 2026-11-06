@@ -137,7 +137,7 @@ export class OrganizationStorage implements IdentityDirectory {
     });
   }
 
-  private async authorize(
+  async authorizeInTransaction(
     transaction: Transaction,
     actorId: string,
     workspaceId: string | undefined,
@@ -160,7 +160,9 @@ export class OrganizationStorage implements IdentityDirectory {
   }
 
   resolve(actorId: string, workspaceId?: string, permission: Permission = 'execute'): Promise<WorkspaceContext> {
-    return this.database.write(transaction => this.authorize(transaction, actorId, workspaceId, permission));
+    return this.database.write(transaction =>
+      this.authorizeInTransaction(transaction, actorId, workspaceId, permission),
+    );
   }
 
   private async mutate<T extends object>(
@@ -174,7 +176,7 @@ export class OrganizationStorage implements IdentityDirectory {
   ): Promise<T> {
     const fingerprint = hashSecret(JSON.stringify(input));
     return this.database.write(async transaction => {
-      const context = await this.authorize(transaction, actorId, workspaceId, permission);
+      const context = await this.authorizeInTransaction(transaction, actorId, workspaceId, permission);
       const previous = (
         await transaction.execute({
           sql: 'SELECT fingerprint, result FROM organization_operations WHERE actor_id = ? AND workspace_id = ? AND operation = ? AND key = ?',
@@ -277,7 +279,7 @@ export class OrganizationStorage implements IdentityDirectory {
       ).rows[0];
       if (previous) {
         if (previous.fingerprint !== tokenHash) throw new BillingError('conflict');
-        await this.authorize(transaction, actorId, workspaceId, 'execute');
+        await this.authorizeInTransaction(transaction, actorId, workspaceId, 'execute');
         return JSON.parse(String(previous.result));
       }
       if (invitation.accepted_at !== null || Date.parse(String(invitation.expires_at)) <= Date.now())
@@ -351,7 +353,7 @@ export class OrganizationStorage implements IdentityDirectory {
 
   async members(actorId: string, workspaceId: string): Promise<{ actorId: string; role: Role }[]> {
     return this.database.write(async transaction => {
-      await this.authorize(transaction, actorId, workspaceId, 'manage-members');
+      await this.authorizeInTransaction(transaction, actorId, workspaceId, 'manage-members');
       return (
         await transaction.execute({
           sql: 'SELECT identity_id, role FROM memberships WHERE workspace_id = ? ORDER BY identity_id',
@@ -365,7 +367,7 @@ export class OrganizationStorage implements IdentityDirectory {
   async seedPrivateRecord(input: z.input<typeof privateRecordSchema>): Promise<void> {
     const record = parseInput(privateRecordSchema, input);
     await this.database.write(async transaction => {
-      await this.authorize(transaction, record.actorId, record.workspaceId, 'execute');
+      await this.authorizeInTransaction(transaction, record.actorId, record.workspaceId, 'execute');
       await transaction.execute({
         sql: 'INSERT INTO private_records (id, workspace_id, actor_id, result) VALUES (?, ?, ?, ?)',
         args: [record.id, record.workspaceId, record.actorId, JSON.stringify(record.result)],
@@ -374,7 +376,7 @@ export class OrganizationStorage implements IdentityDirectory {
   }
   async readPrivateRecord(actorId: string, workspaceId: string, recordId: string): Promise<{ text: string }> {
     return this.database.write(async transaction => {
-      await this.authorize(transaction, actorId, workspaceId, 'execute');
+      await this.authorizeInTransaction(transaction, actorId, workspaceId, 'execute');
       const row = (
         await transaction.execute({
           sql: 'SELECT result FROM private_records WHERE id = ? AND workspace_id = ? AND actor_id = ?',

@@ -21,6 +21,7 @@ export function createBillingApp(organizations: OrganizationService) {
       invalid_configuration: 503,
       storage_incompatible: 503,
       storage_unavailable: 503,
+      state_unavailable: 503,
     } as const;
     return context.json(
       { error: { code: safe.code, message: safe.message, retryable: safe.retryable } },

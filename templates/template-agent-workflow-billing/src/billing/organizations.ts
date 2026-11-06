@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { decodeJwt } from 'jose';
+import type { AdmissionIdentity } from './accounting.js';
 import { BillingError, identifierSchema, parseInput, timestampSchema } from './contracts.js';
-import { assertIdentityMode, credentialSchema, LocalIdentityAdapter } from './identity.js';
+import { assertIdentityMode, credentialSchema, hashSecret, LocalIdentityAdapter } from './identity.js';
 import type { Identity, IdentityAdapter } from './identity.js';
 import { OrganizationStorage, roleSchema } from './storage/organizations.js';
 import type { Permission, WorkspaceContext } from './storage/organizations.js';
@@ -60,6 +62,18 @@ export class OrganizationService {
     const identity = await this.identity.authenticate(bound.credential);
     if (identity.id !== bound.actorId) throw new BillingError('unauthenticated');
     return { actorId: bound.actorId, workspaceId: bound.workspaceId };
+  }
+
+  // Internal accounting evidence is always derived from a live bound context.
+  // Storage rechecks local revocation, identity and membership in its transaction.
+  async accountingIdentity(context: BillingContext): Promise<AdmissionIdentity> {
+    const current = await this.current(context);
+    const bound = this.contexts.get(context)!;
+    return {
+      ...current,
+      credentialHash: this.identity.kind === 'local' ? hashSecret(bound.credential) : null,
+      validUntil: this.identity.kind === 'jwt' ? decodeJwt(bound.credential).exp! * 1000 : null,
+    };
   }
 
   async authorize(context: BillingContext, permission: Permission = 'execute'): Promise<WorkspaceContext> {

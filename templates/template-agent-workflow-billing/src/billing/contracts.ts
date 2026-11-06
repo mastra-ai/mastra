@@ -19,7 +19,8 @@ export type BillingErrorCode =
   | 'conflict'
   | 'insufficient_credits'
   | 'storage_incompatible'
-  | 'storage_unavailable';
+  | 'storage_unavailable'
+  | 'state_unavailable';
 
 const messages: Record<BillingErrorCode, string> = {
   unauthenticated: 'Valid credentials are required.',
@@ -32,6 +33,7 @@ const messages: Record<BillingErrorCode, string> = {
   insufficient_credits: 'The billing account has insufficient credits.',
   storage_incompatible: 'Billing storage is incompatible with this version.',
   storage_unavailable: 'Billing storage is unavailable. Retry later.',
+  state_unavailable: 'Billing state is unavailable. Retry later.',
 };
 
 export class BillingError extends Error {
@@ -40,7 +42,7 @@ export class BillingError extends Error {
   constructor(readonly code: BillingErrorCode) {
     super(messages[code]);
     this.name = 'BillingError';
-    this.retryable = code === 'storage_unavailable';
+    this.retryable = code === 'storage_unavailable' || code === 'state_unavailable';
   }
 }
 

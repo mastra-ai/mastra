@@ -124,7 +124,7 @@ Invitation acceptance authenticates its existing, verified recipient identity. T
 | Admin  | Yes                         | Yes                      | No                    |
 | Member | Yes                         | No                       | No                    |
 
-Admins may manage admin/member roles and invitations, but cannot add, demote or remove owners. Resource-specific admission is a later integration; these permissions do not execute a resource or charge an account. Actor-private records remain visible only to their initiating actor with current workspace membership, including historical records created before conversion. Owners and admins cannot read another actor's projection. The bounded `seedPrivateRecord` trusted storage contract demonstrates that boundary with a `{ text }` projection; it is not an execution engine or public write endpoint.
+Admins may manage admin/member roles and invitations, but cannot add, demote or remove owners. Registered deterministic executors use these permissions at transactional admission. The HTTP routes do not execute resources or charge an account. Actor-private records remain visible only to their initiating actor with current workspace membership, including historical records created before conversion. Owners and admins cannot read another actor's projection. The bounded `seedPrivateRecord` trusted storage contract demonstrates that boundary with a `{ text }` projection; it is not an execution engine or public write endpoint.
 
 ## Server configuration and HTTP API
 
@@ -168,3 +168,52 @@ await organizations.provisionJwt({ issuer: 'https://identity.example', subject: 
 For the supplied Mastra configuration, set `BILLING_JWT_CONFIGURATION` to JSON containing `issuer`, `audience`, `algorithms` and public `jwks`. Outside the Mastra development lifecycle (`MASTRA_DEV=true`), `NODE_ENV=production` rejects local identity at startup; Polar selection also rejects local identity. JWT key rotation requires updating trusted configuration/restarting; no remote discovery or account service is included. Use an external identity provider for token issuance, authentication flows and key lifecycle. Never place private signing keys in this configuration. The production identity example does not enable Polar payments.
 
 Migration v2 adds identity and organization records without changing migration v1 or commercial balances. Keep the database durable, restrict filesystem access, and back it up before upgrades. No destructive reset, automatic result sharing or cleanup is provided. The integration suite includes actual Mastra serving, real JOSE verification and 20 independent-process races each for invitation replay and competing owner removal/demotion.
+
+## Transactional execution accounting
+
+`BillingGateway` coordinates registered, trusted deterministic executors independently of a payment provider or HTTP transport. Construct it with the existing `OrganizationService`, an `AccountingStorage` opened on the same database, the billing provider, validated configuration and one executor for each configured `generate` or `start` operation. Executor code is trusted application setup; never accept executor registrations or outcome measurements from clients. `resume` and `cancel` lifecycle requests are unavailable in this layer. A trusted executor can report a confirmed canceled outcome.
+
+```ts
+import { BillingGateway } from '../src/billing/gateway.js';
+import { AccountingStorage } from '../src/billing/storage/accounting.js';
+
+const accounting = await AccountingStorage.open({ url: databaseUrl }, organizations.storage);
+const gateway = new BillingGateway(organizations, accounting, provider, configuration, [
+  {
+    resourceId: 'assistant',
+    operation: 'generate',
+    measurements: [{ key: 'token-count', maxUnits: 100 }],
+    async execute(input, budget) {
+      // Implement a bounded deterministic application operation here.
+      // Report only trusted observations after the operation has stopped.
+      return {
+        status: 'succeeded',
+        result: { text: 'Completed' },
+        measurements: [{ id: 'call-1', measure: 'token-count', units: 4 }],
+        measurementComplete: true,
+      };
+    },
+  },
+]);
+const response = await gateway.execute(context, {
+  resourceId: 'assistant',
+  operation: 'generate',
+  idempotencyKey: 'request-123',
+  input: { prompt: 'Hello' },
+});
+const receipt = await gateway.read(context, response.billing.executionId);
+```
+
+Use a resource/policy configuration whose measurement bound matches the executor. Usage registration requires a finite supported bound; prepaid configuration additionally requires an enforceable measurement declaration. The supplied executor contract is a trusted promise about application units, not a cap on model/provider costs. No Mastra resource adapter, customer execution HTTP route, workflow lifecycle, suspension recovery or Polar driver is included yet.
+
+Admission atomically rechecks current identity, local credential activity or verified JWT deadline, workspace membership, commercial version, idempotency and spendable credit. Provider observations occur outside SQL transactions. Version conflicts reread at most three times; unsafe or unverified commercial state returns retryable `state_unavailable`. Free work without an access guard needs no provider access. Paid access rechecks both configured entitlement and subscription validity, meter funding and current periods.
+
+A successful invocation charges its original immutable policy once. Credit/task policies reserve their fixed units; usage reserves `maxUnits` and releases unused capacity after complete measurement. Shared prepaid allowance subtracts active reservations and settled debits until exact reflection is proven. The local provider proves immutable event payload reflection against the same versioned SQL state; reporting usage therefore never subtracts a debit twice. Reconciliation requests include at most 1,000 pending event IDs, while transactional exact-payload reflection covers older history; this request bound imposes no lifetime or pending-count limit on valid work. Metered usage reserves a bounded execution budget without subtracting prepaid credit. Ledger, reservation release, terminal state and stable outbox payload commit together. Outbox delivery remains pending; no automatic worker sends it.
+
+Confirmed failure or cancellation writes a zero-charge ledger outcome and releases its reservation. Complete zero usage charges zero and emits no usage event. Confirmed usage above the bound becomes a failed, zero-charge outcome after termination; uncertain termination retains the hold. A thrown executor, malformed completion or unknown outcome is uncertain and never automatically rerun. Successful work with incomplete measurement stays pending with its reservation held. Missing measurement is `observedUnits: null`; a partial trusted sum is shown while `billedUnits` remains null. No invented usage, automatic refunds or recovery command releases these holds.
+
+Keys are scoped by actor, workspace, resource and operation, with canonical JSON input fingerprints. The same key/input replays the saved result/status under the original policy even after configuration changes; different input conflicts. Concurrent same-process retries return the existing running status. A different process observing a running claim marks it uncertain rather than dispatching it again. Current authorization is required for every replay/read; other members, including owners, cannot read another actor's result. Operation tombstones and accounting history are immutable, with no destructive cleanup supplied.
+
+Inputs and result projections contain JSON only: at most 16 KiB UTF-8, depth 12, 2,048 nodes, 256 fields/items per container, 128-character keys and 16,384-character strings. Cycles, nonfinite numbers, accessors, symbols, sparse arrays, SDK instances and prototype-sensitive keys are rejected. Keys are bounded identifiers. Fingerprinting normalizes object key order and negative zero. Persist only the projection needed by your application; results can include private content and require appropriate database access and retention controls. Receipts expose execution/policy/state/unit fields without external account identifiers or provider details.
+
+Migration v3 appends execution claims, immutable configuration snapshots, reservations, deduplicated measurements, terminal ledger and outbox records without rewriting migrations v1/v2. All three named accounting proofs run through the public gateway with real disposable SQL, including 20 independent-process shared-credit races, rollback at outbox insertion, crash/replay uncertainty, policy/funding/outcome combinations and exact reflected-debit accounting. `npm run test:integration` includes them.

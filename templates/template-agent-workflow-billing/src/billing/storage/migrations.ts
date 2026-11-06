@@ -109,9 +109,76 @@ const organizationStatements = [
   ) STRICT`,
 ];
 
+const accountingStatements = [
+  `CREATE TABLE billing_executions (
+    id TEXT PRIMARY KEY,
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    account_id TEXT REFERENCES billing_accounts(id),
+    resource_id TEXT NOT NULL,
+    operation TEXT NOT NULL CHECK (operation IN ('generate', 'start', 'resume', 'cancel')),
+    configuration TEXT NOT NULL,
+    runtime_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed', 'canceled', 'uncertain')),
+    settlement TEXT NOT NULL CHECK (settlement IN ('not_required', 'reserved', 'pending', 'settled', 'released', 'uncertain')),
+    observed_units INTEGER CHECK (observed_units ${safeInteger}),
+    billed_units INTEGER CHECK (billed_units ${safeInteger}),
+    result TEXT,
+    created_at TEXT NOT NULL,
+    terminal_at TEXT,
+    CHECK ((status IN ('running', 'uncertain') AND terminal_at IS NULL) OR (status IN ('completed', 'failed', 'canceled') AND terminal_at IS NOT NULL))
+  ) STRICT`,
+  `CREATE TRIGGER billing_execution_terms_immutable BEFORE UPDATE OF actor_id, workspace_id, account_id, resource_id, operation, configuration, created_at ON billing_executions BEGIN SELECT RAISE(ABORT, 'Execution terms are immutable'); END`,
+  `CREATE TABLE billing_operations (
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    resource_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    execution_id TEXT NOT NULL UNIQUE REFERENCES billing_executions(id),
+    PRIMARY KEY (actor_id, workspace_id, resource_id, operation, key)
+  ) STRICT`,
+  `CREATE TRIGGER billing_operations_no_update BEFORE UPDATE ON billing_operations BEGIN SELECT RAISE(ABORT, 'Operation claims are immutable'); END`,
+  `CREATE TRIGGER billing_operations_no_delete BEFORE DELETE ON billing_operations BEGIN SELECT RAISE(ABORT, 'Operation tombstones are retained'); END`,
+  `CREATE TABLE billing_reservations (
+    execution_id TEXT PRIMARY KEY REFERENCES billing_executions(id),
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    meter TEXT NOT NULL,
+    units INTEGER NOT NULL CHECK (units BETWEEN 1 AND 9007199254740991),
+    active INTEGER NOT NULL CHECK (active IN (0, 1))
+  ) STRICT`,
+  `CREATE TABLE billing_measurements (
+    execution_id TEXT NOT NULL REFERENCES billing_executions(id),
+    id TEXT NOT NULL,
+    measure TEXT NOT NULL,
+    units INTEGER NOT NULL CHECK (units ${safeInteger}),
+    PRIMARY KEY (execution_id, id)
+  ) STRICT`,
+  `CREATE TABLE billing_ledger (
+    execution_id TEXT PRIMARY KEY REFERENCES billing_executions(id),
+    account_id TEXT REFERENCES billing_accounts(id),
+    meter TEXT,
+    units INTEGER NOT NULL CHECK (units ${safeInteger}),
+    outcome TEXT NOT NULL CHECK (outcome IN ('completed', 'failed', 'canceled')),
+    occurred_at TEXT NOT NULL,
+    CHECK ((units = 0) OR (account_id IS NOT NULL AND meter IS NOT NULL AND outcome = 'completed'))
+  ) STRICT`,
+  `CREATE TABLE billing_outbox (
+    id TEXT PRIMARY KEY,
+    execution_id TEXT NOT NULL UNIQUE REFERENCES billing_ledger(execution_id),
+    payload TEXT NOT NULL
+  ) STRICT`,
+  ...['billing_measurements', 'billing_ledger', 'billing_outbox'].flatMap(table => [
+    `CREATE TRIGGER ${table}_no_update BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(ABORT, 'Accounting history is immutable'); END`,
+    `CREATE TRIGGER ${table}_no_delete BEFORE DELETE ON ${table} BEGIN SELECT RAISE(ABORT, 'Accounting history is immutable'); END`,
+  ]),
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
+  { version: 3, statements: accountingStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),

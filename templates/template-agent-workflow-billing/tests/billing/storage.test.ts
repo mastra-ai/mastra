@@ -115,9 +115,9 @@ describe('local billing storage', () => {
       billing.close();
       if (corruption === 'newer history') {
         await observer.execute(
-          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (3, 'unknown', '2026-11-06T00:00:00Z')",
+          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (4, 'unknown', '2026-11-06T00:00:00Z')",
         );
-        await observer.execute('PRAGMA user_version = 3');
+        await observer.execute('PRAGMA user_version = 4');
       } else if (corruption === 'checksum drift')
         await observer.execute("UPDATE billing_migrations SET checksum = 'changed'");
       else if (corruption === 'unknown schema')
@@ -144,8 +144,9 @@ describe('local billing storage', () => {
     expect(history.rows).toEqual([
       { version: 1n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 2n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 3n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(2n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(3n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);

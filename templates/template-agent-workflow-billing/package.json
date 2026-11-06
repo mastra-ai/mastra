@@ -15,7 +15,7 @@
     "check": "tsc --noEmit && oxfmt --check .",
     "format": "oxfmt .",
     "test:unit": "vitest run tests/billing/policies.test.ts",
-    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts"
+    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts tests/billing/accounting.test.ts"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
