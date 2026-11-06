@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -146,6 +146,7 @@ describe('GithubLabelRouting', () => {
     await user.click(screen.getByRole('button', { name: 'Remove route for release' }));
 
     await waitFor(() => expect(client.getQueryState(queryKeys.intakeLabelRoutes('fp-1'))?.status).toBe('error'));
+    await act(() => new Promise(resolve => setTimeout(resolve, 0)));
     expect(screen.queryByText(/label routes are unavailable/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove route for release' })).toBeEnabled();
   });
