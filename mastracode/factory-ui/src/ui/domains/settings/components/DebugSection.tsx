@@ -14,7 +14,15 @@ export function formatVersions({ packages, nodeVersion }: ServerVersions): strin
   return [...packages.map(({ name, version }) => `${name}@${version}`), `node@${nodeVersion}`].join('\n');
 }
 
-export function AboutSection() {
+function VersionValue({ children }: { children: string }) {
+  return (
+    <Txt tone="muted" as="span" variant="caption" font="mono" className="truncate tabular-nums">
+      {children}
+    </Txt>
+  );
+}
+
+export function DebugSection() {
   const query = useServerVersions();
 
   return (
@@ -22,7 +30,17 @@ export function AboutSection() {
       scope="deployment"
       title="Running versions"
       description="The Mastra packages this Factory server was built with. Include them when you report an issue."
-      action={query.data && <CopyButton content={formatVersions(query.data)} variant="ghost" tooltip="Copy versions" />}
+      action={
+        query.data && (
+          <CopyButton
+            content={formatVersions(query.data)}
+            tooltip="Copy versions"
+            variant="ghost"
+            size="icon-sm"
+            showToast={false}
+          />
+        )
+      }
     >
       {query.isPending ? (
         <SettingsContainer>
@@ -43,11 +61,11 @@ export function AboutSection() {
           <SettingsContainer>
             {query.data.packages.map(({ name, version }) => (
               <SettingsRow key={name} label={name}>
-                <InlineCode>{version}</InlineCode>
+                <VersionValue>{version}</VersionValue>
               </SettingsRow>
             ))}
             <SettingsRow label="Node.js">
-              <InlineCode>{query.data.nodeVersion}</InlineCode>
+              <VersionValue>{query.data.nodeVersion}</VersionValue>
             </SettingsRow>
           </SettingsContainer>
         </>

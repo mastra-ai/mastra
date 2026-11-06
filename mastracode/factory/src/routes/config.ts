@@ -747,7 +747,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
   features?: { knowledge: boolean; mcp?: boolean };
   /** Reads the Mastra packages this server runs; defaults to the build manifest. */
-  readPackages?: () => RunningPackage[];
+  readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -950,7 +950,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           await auth.ensureUser(loose(c));
           if (!auth.tenant(loose(c)) && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
-          const packages = (options.readPackages ?? readRunningPackages)();
+          const packages = await (options.readPackages ?? readRunningPackages)();
           return c.json({ packages, nodeVersion: process.version });
         },
       }),

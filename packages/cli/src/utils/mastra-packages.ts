@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getPackageInfo } from 'local-pkg';
 
@@ -62,5 +62,6 @@ export const MASTRA_PACKAGES_FILE_NAME = 'mastra-packages.json';
  * package.json or node_modules.
  */
 export async function writeMastraPackagesManifest(outputDir: string, packages: MastraPackageInfo[]): Promise<void> {
+  await mkdir(outputDir, { recursive: true });
   await writeFile(join(outputDir, MASTRA_PACKAGES_FILE_NAME), JSON.stringify(packages, null, 2));
 }

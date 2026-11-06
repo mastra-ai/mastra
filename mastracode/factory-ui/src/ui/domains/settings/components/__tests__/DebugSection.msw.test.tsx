@@ -1,19 +1,24 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { ServerVersions } from '../../../../../hooks/useServerVersions';
-import { AboutSection } from '../AboutSection';
+import { DebugSection } from '../DebugSection';
 
 const VERSIONS = `${TEST_BASE_URL}/web/config/versions`;
+const originalClipboard = navigator.clipboard;
+
+afterEach(() => {
+  Object.assign(navigator, { clipboard: originalClipboard });
+});
 
 function serveVersions(versions: ServerVersions) {
   server.use(http.get(VERSIONS, () => HttpResponse.json(versions)));
 }
 
-describe('About settings', () => {
+describe('Debug settings', () => {
   it('lists the packages the server runs and copies them as plain text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
@@ -24,7 +29,7 @@ describe('About settings', () => {
       ],
       nodeVersion: 'v22.15.0',
     });
-    renderWithProviders(<AboutSection />);
+    renderWithProviders(<DebugSection />);
 
     expect(await screen.findByText('@mastra/core')).toBeInTheDocument();
     expect(screen.getByText('1.83.0-alpha.0')).toBeInTheDocument();
@@ -41,7 +46,7 @@ describe('About settings', () => {
 
   it('says when the build shipped no package list', async () => {
     serveVersions({ packages: [], nodeVersion: 'v22.15.0' });
-    renderWithProviders(<AboutSection />);
+    renderWithProviders(<DebugSection />);
 
     expect(await screen.findByText(/This server's build has no package list/)).toBeInTheDocument();
     expect(screen.getByText('v22.15.0')).toBeInTheDocument();
@@ -49,7 +54,7 @@ describe('About settings', () => {
 
   it('offers a retry when versions fail to load', async () => {
     server.use(http.get(VERSIONS, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
-    renderWithProviders(<AboutSection />);
+    renderWithProviders(<DebugSection />);
 
     expect(await screen.findByText("Couldn't load versions.")).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();

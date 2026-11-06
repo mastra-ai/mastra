@@ -1,6 +1,5 @@
 ---
-'mastra': patch
 '@mastra/factory': patch
 ---
 
-`mastra build` now writes `mastra-packages.json` (the resolved `@mastra/*` package versions) into `.mastra/output`, so deployed servers can report what they run. The Factory serves this list at `GET /web/config/versions`, and the Factory UI shows it under **Settings › About** with a button that copies it for bug reports.
+Factory can now report the Mastra package versions it was built with. Signed-in users see them under **Settings › Debug** after a `mastra build` from this CLI version or newer.

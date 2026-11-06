@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,17 +31,28 @@ export function packagesManifestCandidates(
 }
 
 /** The Mastra packages this server was built with, sorted by name. Empty when no manifest is found. */
-export function readRunningPackages(candidates: string[] = packagesManifestCandidates()): RunningPackage[] {
-  const path = candidates.find(existsSync);
-  if (!path) return [];
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'));
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry): entry is RunningPackage => typeof entry?.name === 'string' && typeof entry?.version === 'string')
-      .map(({ name, version }) => ({ name, version }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  } catch {
-    return [];
+export async function readRunningPackages(
+  candidates: string[] = packagesManifestCandidates(),
+): Promise<RunningPackage[]> {
+  for (const path of candidates) {
+    let contents: string;
+    try {
+      contents = await readFile(path, 'utf-8');
+    } catch {
+      continue;
+    }
+    try {
+      const parsed: unknown = JSON.parse(contents);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(
+          (entry): entry is RunningPackage => typeof entry?.name === 'string' && typeof entry?.version === 'string',
+        )
+        .map(({ name, version }) => ({ name, version }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return [];
+    }
   }
+  return [];
 }

@@ -14,6 +14,5 @@ export function useServerVersions() {
   return useQuery({
     queryKey: queryKeys.serverVersions(),
     queryFn: () => client.get<ServerVersions>('/web/config/versions'),
-    staleTime: Number.POSITIVE_INFINITY,
   });
 }

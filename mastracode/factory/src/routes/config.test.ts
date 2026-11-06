@@ -74,7 +74,7 @@ describe('GET /web/config/versions', () => {
     { name: '@mastra/factory', version: '0.28.0' },
   ];
 
-  function appWith(user?: { workosId: string; organizationId: string }) {
+  function appWith(user?: { workosId: string; organizationId: string }, authEnabled = true) {
     const app = new Hono();
     app.use(async (c, next) => {
       if (user) c.set('factoryAuthUser' as never, user as never);
@@ -83,9 +83,9 @@ describe('GET /web/config/versions', () => {
     mountApiRoutes(
       app as never,
       new ConfigRoutes({
-        auth: fakeRouteAuth(),
+        auth: fakeRouteAuth({ enabled: authEnabled }),
         controller: makeAgentController([]),
-        readPackages: () => packages,
+        readPackages: async () => packages,
       }).routes(),
     );
     return app;
@@ -102,6 +102,13 @@ describe('GET /web/config/versions', () => {
     const response = await appWith().request('/web/config/versions');
 
     expect(response.status).toBe(401);
+  });
+
+  it('answers anonymous requests when auth is off', async () => {
+    const response = await appWith(undefined, false).request('/web/config/versions');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ packages, nodeVersion: process.version });
   });
 });
 
