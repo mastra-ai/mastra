@@ -93,6 +93,12 @@ describe('createFactorySecretEncryption', () => {
       expect(error).toBeInstanceOf(FactorySecretDecryptionError);
       expect(secretKeyMismatchHint(error)).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
     }
+    const [wrongKey, unknownKeyId, noKey] = keyMismatches;
+    expect(secretKeyMismatchHint(wrongKey)).toContain('different encryption key');
+    expect(secretKeyMismatchHint(unknownKeyId)).toContain('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS');
+    // With no key configured, previous keys are ignored, so only the primary key is suggested.
+    expect(secretKeyMismatchHint(noKey)).toContain('no encryption key is configured');
+    expect(secretKeyMismatchHint(noKey)).not.toContain('PREVIOUS_KEYS');
 
     const malformed = await createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } })
       .decrypt('mastra:factory-secret:v1:not-json')

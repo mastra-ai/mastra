@@ -94,12 +94,17 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
   expect(issues.status).toBe(503);
   expect(issuesBody).toEqual({
     error: 'integration_unavailable',
-    message: `github integration is unavailable. ${secretKeyMismatchHint(new FactorySecretDecryptionError())}`,
+    message: `github integration is unavailable. ${secretKeyMismatchHint(new FactorySecretDecryptionError(''))}`,
   });
   expect(issuesBody.message).toContain('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS');
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining('github integration is unavailable'),
     expect.any(FactorySecretDecryptionError),
+  );
+  // Every retry throws a fresh error; the same failure is logged once, not per request.
+  expect((await app.request('/web/github/projects/repo-1/issues')).status).toBe(503);
+  expect(errors.mock.calls.filter(([line]) => String(line).includes('github integration is unavailable'))).toHaveLength(
+    1,
   );
 
   const credentialsApp = new Hono();

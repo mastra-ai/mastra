@@ -165,6 +165,8 @@ export interface FactoryApiRoutesDeps {
   }) => void;
 }
 
+const REPEAT_UNAVAILABLE_LOG_MS = 5 * 60_000;
+
 function guardIntegrationRoutes({
   integration,
   ready,
@@ -172,15 +174,18 @@ function guardIntegrationRoutes({
   routes,
 }: IntegrationRegistration & { routes: ApiRoute[] }): ApiRoute[] {
   if (ready) return routes;
-  let lastReportedError: unknown;
+  // Each retry throws a fresh error, so dedupe by message and repeat it periodically.
+  let lastReported: { message: string; at: number } | undefined;
   const checkReady = async () => {
     try {
       await ensureReady();
       return undefined;
     } catch (error) {
       // The response only names a key mismatch, so this log is the only trace of any other cause.
-      if (error !== lastReportedError) {
-        lastReportedError = error;
+      const message = String(error);
+      const now = Date.now();
+      if (lastReported?.message !== message || now - lastReported.at >= REPEAT_UNAVAILABLE_LOG_MS) {
+        lastReported = { message, at: now };
         console.error(
           `[factory] ${integration.id} integration is unavailable: its storage failed to initialize:`,
           error,
