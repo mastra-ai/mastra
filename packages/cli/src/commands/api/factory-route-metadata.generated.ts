@@ -2590,11 +2590,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
+                  },
+                  "joinClosedIssue": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "boardKey",
-                  "phaseKey"
+                  "phaseKey",
+                  "joinClosedIssue"
                 ]
               },
               "on": {
@@ -2719,7 +2723,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -2889,11 +2896,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "string",
                     "null"
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "boardKey",
-                "phaseKey"
+                "phaseKey",
+                "joinClosedIssue"
               ]
             },
             "on": {
@@ -3017,7 +3028,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -4699,7 +4713,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema6": {
@@ -4794,6 +4811,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "joinClosedIssue": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -4894,11 +4914,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "string",
                     "null"
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "boardKey",
-                "phaseKey"
+                "phaseKey",
+                "joinClosedIssue"
               ]
             },
             "on": {
@@ -5022,7 +5046,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -7013,6 +7040,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "joinClosedIssue": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -7097,7 +7127,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -7256,11 +7289,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "string",
                     "null"
                   ]
+                },
+                "joinClosedIssue": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "boardKey",
-                "phaseKey"
+                "phaseKey",
+                "joinClosedIssue"
               ]
             },
             "on": {
@@ -7384,7 +7421,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
@@ -7571,11 +7611,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "string",
                       "null"
                     ]
+                  },
+                  "joinClosedIssue": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "boardKey",
-                  "phaseKey"
+                  "phaseKey",
+                  "joinClosedIssue"
                 ]
               },
               "on": {
@@ -7700,7 +7744,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.kind",
             "source.integration",
             "event.type",
-            "event.reason"
+            "event.reason",
+            "pullRequest.closesIssue",
+            "closedIssue.phase",
+            "closedIssue.hasPullRequest"
           ]
         },
         "__schema3": {
