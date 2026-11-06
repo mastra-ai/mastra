@@ -18,8 +18,8 @@ export interface ServerStatus {
 }
 
 /**
- * Startup problems that stop the whole Factory from working. They only clear
- * with a redeploy, so this is read once per page load.
+ * Problems that stop the whole Factory from working. Re-read when the tab
+ * regains focus, so a redeploy with a bad key shows up without a reload.
  */
 export function useServerStatus() {
   const { client } = useApiConfig();
@@ -33,6 +33,7 @@ export function useServerStatus() {
       }),
     // A blip on the one read must not hide a real problem until the next reload.
     retry: 3,
-    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 }
