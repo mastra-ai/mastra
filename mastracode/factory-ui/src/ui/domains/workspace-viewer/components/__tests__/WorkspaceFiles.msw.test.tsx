@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -8,6 +8,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { WorkspaceChangePatches } from '../../../../../api/types';
 import { queryKeys } from '../../../../../api/keys';
+import { ChatTranscriptContext } from '../../../chat/context/ChatTranscriptContext';
+import type { ChatTranscriptApi } from '../../../chat/context/ChatTranscriptContext';
+import { initialTranscript } from '../../../chat/services/transcript';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { useWorkspacePanel } from '../../context/useWorkspacePanel';
@@ -82,7 +85,25 @@ afterEach(() => {
   vi.stubGlobal('ResizeObserver', originalResizeObserver);
 });
 
-function renderPanel() {
+function transcriptApi(busy: boolean): ChatTranscriptApi {
+  return {
+    transcript: initialTranscript,
+    busy,
+    phase: busy ? 'working' : 'awaiting',
+    initializing: false,
+    historyInitializing: false,
+    initialHistoryReady: true,
+    localUser: vi.fn(),
+    failLocalUser: vi.fn(),
+    reset: vi.fn(),
+    resolvePrompt: vi.fn(),
+    clearPending: vi.fn(),
+    pushNotice: vi.fn(),
+    loadMore: { hasMore: false, isLoading: false },
+  };
+}
+
+function renderPanel({ busy = false }: { busy?: boolean } = {}) {
   const changesRequests: Array<string | null> = [];
   const session: FactoryUserSession = {
     id: 'row-1',
@@ -123,11 +144,13 @@ function renderPanel() {
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <WorkspaceFilesProvider>
-              <WorkspaceFilesToggle />
-              <WorkspaceFilesSurface />
-              <ExpansionProbe />
-            </WorkspaceFilesProvider>
+            <ChatTranscriptContext.Provider value={transcriptApi(busy)}>
+              <WorkspaceFilesProvider>
+                <WorkspaceFilesToggle />
+                <WorkspaceFilesSurface />
+                <ExpansionProbe />
+              </WorkspaceFilesProvider>
+            </ChatTranscriptContext.Provider>
           }
         />
       </Routes>
@@ -190,7 +213,7 @@ describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
     it('keeps the loaded workspace usable when refreshing session details fails', async () => {
       stubContainerWidth(1200);
-      const { client } = renderPanel();
+      const { client } = renderPanel({ busy: true });
       expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
       await waitForMutationsIdle(client);
 
@@ -209,19 +232,42 @@ describe('WorkspaceFiles', () => {
     it('opens the overview immediately and lets the header toggle close it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      const { client, changesRequests } = renderPanel();
+      renderPanel();
 
       const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
       expect(card).not.toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'true');
-      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
-      await waitForMutationsIdle(client);
-      expect(changesRequests).toEqual([WORKSPACE]);
+      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
 
       await user.click(toggle);
       expect(card).toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('leaves an idle sandbox asleep until the viewer opens the panel', async () => {
+      stubContainerWidth(1200);
+      const user = userEvent.setup();
+      const { client, changesRequests } = renderPanel();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
+      await waitForMutationsIdle(client);
+      expect(changesRequests).toEqual([]);
+
+      const toggle = screen.getByRole('button', { name: 'Workspace files' });
+      await user.click(toggle);
+      await user.click(toggle);
+
+      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
+      expect(changesRequests).toEqual([WORKSPACE]);
+    });
+
+    it('reads changes on open while a run has the sandbox awake', async () => {
+      stubContainerWidth(1200);
+      const { changesRequests } = renderPanel({ busy: true });
+
+      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
+      expect(changesRequests).toEqual([WORKSPACE]);
     });
   });
 

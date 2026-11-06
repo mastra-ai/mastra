@@ -54,7 +54,6 @@ function stubThreadRoute({
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
-  const changesGate = deferred();
   const onChanges = vi.fn();
   const onSwitchThread = vi.fn<(threadId: string) => void>();
   const sessionAnswer: { status: 200 | 404 | 500 } = { status: 200 };
@@ -131,14 +130,13 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/workspace/changes`, async () => {
+    http.get(`${TEST_BASE_URL}/web/workspace/changes`, () => {
       onChanges();
-      await changesGate.promise;
       return HttpResponse.json({ workspacePath: SESSION_ID, available: true, changes: [] });
     }),
   );
 
-  return { sessionGate, messagesGate, changesGate, onChanges, onSwitchThread, sessionAnswer };
+  return { sessionGate, messagesGate, onChanges, onSwitchThread, sessionAnswer };
 }
 
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
@@ -156,7 +154,7 @@ describe('ThreadPage loading shell', () => {
     `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`,
   ])('shows a typable composer and open panel while session metadata loads at %s', async path => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
-    const { sessionGate, messagesGate, changesGate, onChanges } = stubThreadRoute();
+    const { sessionGate, messagesGate, onChanges } = stubThreadRoute();
     const user = userEvent.setup();
     renderThreadRoute(path);
 
@@ -173,21 +171,20 @@ describe('ThreadPage loading shell', () => {
     expect(send).toBeDisabled();
     await user.type(textarea, 'Draft written while opening the session');
 
+    // Panel details and chat history resolve independently; neither remounts the input.
     sessionGate.resolve();
-    await waitFor(() => expect(onChanges).toHaveBeenCalled());
+    expect(await screen.findByRole('button', { name: 'Files' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
     expect(textarea).toHaveValue('Draft written while opening the session');
     expect(send).toBeDisabled();
-
-    // Panel data and chat history resolve independently; neither remounts the input.
-    changesGate.resolve();
-    expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     messagesGate.resolve();
     await waitFor(() => expect(send).toBeEnabled());
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
     expect(textarea).toHaveValue('Draft written while opening the session');
     expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
+    // The dock opened by default, so it leaves an idle sandbox asleep.
+    expect(onChanges).not.toHaveBeenCalled();
   });
 
   it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {
