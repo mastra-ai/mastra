@@ -21,6 +21,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
+import { secretKeyMismatchHint } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -171,20 +172,34 @@ function guardIntegrationRoutes({
   routes,
 }: IntegrationRegistration & { routes: ApiRoute[] }): ApiRoute[] {
   if (ready) return routes;
+  let lastReportedError: unknown;
+  const checkReady = async () => {
+    try {
+      await ensureReady();
+      return undefined;
+    } catch (error) {
+      // The response only names a key mismatch, so this log is the only trace of any other cause.
+      if (error !== lastReportedError) {
+        lastReportedError = error;
+        console.error(
+          `[factory] ${integration.id} integration is unavailable: its storage failed to initialize:`,
+          error,
+        );
+      }
+      const cause =
+        secretKeyMismatchHint(error) ??
+        `Its storage failed to start. The server log line "[factory] ${integration.id} integration is unavailable" has the cause.`;
+      return { error: 'integration_unavailable', message: `${integration.id} integration is unavailable. ${cause}` };
+    }
+  };
   return routes.map(route => {
     if ('handler' in route) {
       const handler = route.handler;
       return {
         ...route,
         handler: async (context: Parameters<typeof handler>[0]) => {
-          try {
-            await ensureReady();
-          } catch {
-            return context.json(
-              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
-              503,
-            );
-          }
+          const unavailable = await checkReady();
+          if (unavailable) return context.json(unavailable, 503);
           return handler(context, async () => {});
         },
       };
@@ -196,14 +211,8 @@ function guardIntegrationRoutes({
       createHandler: async (args: Parameters<typeof createHandler>[0]) => {
         const handler = await createHandler(args);
         return async (context: Parameters<typeof handler>[0]) => {
-          try {
-            await ensureReady();
-          } catch {
-            return context.json(
-              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
-              503,
-            );
-          }
+          const unavailable = await checkReady();
+          if (unavailable) return context.json(unavailable, 503);
           return handler(context);
         };
       },
