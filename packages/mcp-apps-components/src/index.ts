@@ -1,7 +1,19 @@
 import greetingHtml from '../apps-dist/greeting.html?raw';
 import observabilityWidgetHtml from '../apps-dist/observability-widget.html?raw';
 
-export { QUERY_OBSERVABILITY_TOOL } from './apps/observability-widget/tool';
+export { OBSERVABILITY_DATE_PRESETS, QUERY_OBSERVABILITY_TOOL } from './apps/observability-widget/tool';
+export type { ObservabilityDatePreset } from './apps/observability-widget/tool';
+export {
+  observabilityDashboardInputSchema,
+  observabilityDashboardOutputSchema,
+  toObservabilityDashboard,
+} from './observability-dashboard';
+export type {
+  ObservabilityDashboardDraft,
+  ObservabilityDashboardInput,
+  ObservabilityDashboardOpened,
+  ObservabilityWidgetDraft,
+} from './observability-dashboard';
 
 /** An MCP App resource: register it under a `ui://` URI in `MCPServer`'s `appResources`. */
 export interface McpAppResource {
@@ -21,13 +33,14 @@ export const greetingApp: McpAppResource = {
 };
 
 /**
- * Draws one Studio dashboard widget. The tool that opens it returns `{ widget, datePreset? }` as
- * structured content; the app reads every metric, score and aggregate through the server's
+ * Draws a Studio dashboard. The tool that opens it returns `{ dashboard, datePreset? }` as
+ * structured content, where `dashboard` passes `dashboardDefinitionSchema` (build it with
+ * `toObservabilityDashboard`); the app reads every metric, score and aggregate through the server's
  * app-only `queryObservability` tool (`{ action, args }` in, where `action` is a `MastraClient`
  * observability method, and `{ data }` out).
  */
 export const observabilityWidgetApp: McpAppResource = {
   name: 'Observability widget',
-  description: 'Draws one observability dashboard widget',
+  description: 'Draws an observability dashboard',
   html: observabilityWidgetHtml,
 };

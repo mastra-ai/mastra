@@ -30,7 +30,7 @@ export type ObservabilityWidgetPinsOptions = {
   resourceUri: string;
   /** The ids of the widgets the host has pinned. Pass new ids after `onPin`/`onUnpin` to answer. */
   pinnedIds: readonly string[];
-  /** The user pinned `pin.widget` over `pin.datePreset`. */
+  /** The user pinned `pin.widget` over `pin.datePreset`, under `pin.filters` when it has them. */
   onPin: (pin: Omit<ObservabilityWidgetPin, 'pinned'>, app: McpAppRef) => void;
   /** The user unpinned the widget with this id. */
   onUnpin: (widgetId: string, app: McpAppRef) => void;
@@ -44,7 +44,13 @@ function readPin(structuredContent: Record<string, unknown> | undefined): Observ
   const pin = structuredContent?.[OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY];
   if (!isRecord(pin) || typeof pin.pinned !== 'boolean' || typeof pin.datePreset !== 'string') return undefined;
   if (!isRecord(pin.widget) || typeof pin.widget.id !== 'string') return undefined;
-  return { pinned: pin.pinned, widget: { ...pin.widget, id: pin.widget.id }, datePreset: pin.datePreset };
+  if (pin.filters !== undefined && !Array.isArray(pin.filters)) return undefined;
+  return {
+    pinned: pin.pinned,
+    widget: { ...pin.widget, id: pin.widget.id },
+    datePreset: pin.datePreset,
+    ...(pin.filters ? { filters: pin.filters } : {}),
+  };
 }
 
 /**
@@ -75,8 +81,10 @@ export function observabilityWidgetPins({
       if (app.resourceUri !== resourceUri) return;
       const pin = readPin(params.structuredContent);
       if (!pin) return;
-      if (pin.pinned) onPin({ widget: pin.widget, datePreset: pin.datePreset }, app);
-      else onUnpin(pin.widget.id, app);
+      if (pin.pinned) {
+        const { pinned: _pinned, ...pinned } = pin;
+        onPin(pinned, app);
+      } else onUnpin(pin.widget.id, app);
     },
   };
 }

@@ -4,6 +4,11 @@ import { MCPServer } from '@mastra/mcp';
 import type { AppResources } from '@mastra/mcp';
 import { z } from 'zod';
 import { QUERY_OBSERVABILITY_TOOL } from '../apps/observability-widget/tool';
+import {
+  observabilityDashboardInputSchema,
+  observabilityDashboardOutputSchema,
+  toObservabilityDashboard,
+} from '../observability-dashboard';
 
 export const OBSERVABILITY_WIDGET_URI = 'ui://mastra/observability-widget';
 
@@ -65,9 +70,10 @@ export const agentRunsChart: DashboardWidget = {
 };
 
 /**
- * The server a host writes around the observability widget: `showObservabilityWidget` opens it with
- * a widget and a date preset, and the app-only `queryObservability` answers each action the app
- * asks for from `answers` (keyed by action), recording every call in `calls`.
+ * The server a host writes around the observability widget: `showObservabilityDashboard` opens it
+ * with a dashboard built by `toObservabilityDashboard`, and the app-only `queryObservability`
+ * answers each action the app asks for from `answers` (keyed by action), recording every call in
+ * `calls`.
  */
 export function observabilityServer({
   appResources = {},
@@ -80,14 +86,14 @@ export function observabilityServer({
     version: '1.0.0',
     appResources,
     tools: {
-      showObservabilityWidget: createTool({
-        id: 'showObservabilityWidget',
-        description: 'Shows one observability widget',
-        inputSchema: z.object({ widget: z.unknown(), datePreset: z.string().optional() }),
+      showObservabilityDashboard: createTool({
+        id: 'showObservabilityDashboard',
+        description: 'Shows an observability dashboard',
+        inputSchema: observabilityDashboardInputSchema,
         // Declaring an output schema is what makes MCPServer send the result as `structuredContent`.
-        outputSchema: z.object({ widget: z.unknown(), datePreset: z.string().optional() }),
+        outputSchema: observabilityDashboardOutputSchema,
         mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI } } },
-        execute: async ({ widget, datePreset }) => ({ widget, datePreset }),
+        execute: async input => toObservabilityDashboard(input),
       }),
       [QUERY_OBSERVABILITY_TOOL]: createTool({
         id: QUERY_OBSERVABILITY_TOOL,

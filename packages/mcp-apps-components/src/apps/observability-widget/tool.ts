@@ -1,6 +1,11 @@
 /** The app-only tool the observability widget calls, on the server that opened it, for every read. */
 export const QUERY_OBSERVABILITY_TOOL = 'queryObservability';
 
+/** The windows the widget can show, ending when it opens; the same presets as Studio's metrics. */
+export const OBSERVABILITY_DATE_PRESETS = ['24h', '3d', '7d', '14d', '30d'] as const;
+
+export type ObservabilityDatePreset = (typeof OBSERVABILITY_DATE_PRESETS)[number];
+
 /**
  * Host context key holding the ids of the widgets the host has pinned (`string[]`). The pin button
  * only shows when the host sends it and supports `updateModelContext.structuredContent`.
@@ -16,4 +21,6 @@ export type ObservabilityWidgetPin = {
   /** The stored dashboard widget, as the opening tool returned it. */
   widget: { id: string; [key: string]: unknown };
   datePreset: string;
+  /** The dashboard's `defaults.filters` the widget was drawn under, when it has any. */
+  filters?: unknown[];
 };

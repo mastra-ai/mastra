@@ -17,10 +17,10 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
-  // Only the iframe apps import these, and Vite already inlines them into each app's page; listing
-  // them keeps them bundled, never a runtime dependency, if the package entry ever imports them.
+  // The entry's dashboard schemas use the kind option modules from `@mastra/playground-ui`, which
+  // stays bundled (a devDependency); `@mastra/core` is a peer, as for `@mastra/mcp`.
   deps: {
-    alwaysBundle: ['@mastra/core', '@mastra/playground-ui'],
+    alwaysBundle: ['@mastra/playground-ui'],
   },
   plugins: [
     {

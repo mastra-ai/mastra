@@ -7,7 +7,7 @@ import {
 import type { McpAppRef } from '../host';
 
 const URI = 'ui://mastra/observability-widget';
-const widgetApp: McpAppRef = { toolName: 'showObservabilityWidget', toolCallId: 'call-1', resourceUri: URI };
+const widgetApp: McpAppRef = { toolName: 'showObservabilityDashboard', toolCallId: 'call-1', resourceUri: URI };
 const otherApp: McpAppRef = { toolName: 'showGreeting', toolCallId: 'call-2', resourceUri: 'ui://mastra/greeting' };
 
 function pinsHost() {

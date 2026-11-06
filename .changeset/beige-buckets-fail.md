@@ -1,0 +1,38 @@
+---
+'@mastra/mcp-apps-components': minor
+---
+
+The observability app now draws a whole dashboard instead of a single widget. Pass any definition that matches `dashboardDefinitionSchema`, with rows of KPIs, time series, tables and scores. The app applies the dashboard's default date range and filters.
+
+**Why:** with a single fixed widget, the model could only show a handful of hard-coded charts. Now it can write its own dashboard against real data, checked against each widget kind's options.
+
+**New helpers**
+
+- `observabilityDashboardInputSchema` lists every widget kind's options, so the model gets clear errors when a widget is wrong.
+- `toObservabilityDashboard(input)` gives each widget without an id a fresh UUID and checks the result.
+
+**Before**
+
+```ts
+outputSchema: z.object({ widget: z.unknown(), datePreset: z.string().optional() }),
+execute: async ({ widget, datePreset }) => ({ widget: WIDGETS[widget], datePreset }),
+```
+
+**After**
+
+```ts
+import {
+  observabilityDashboardInputSchema,
+  observabilityDashboardOutputSchema,
+  toObservabilityDashboard,
+} from '@mastra/mcp-apps-components';
+
+createTool({
+  id: 'showObservabilityDashboard',
+  inputSchema: observabilityDashboardInputSchema,
+  outputSchema: observabilityDashboardOutputSchema,
+  execute: async input => toObservabilityDashboard(input),
+});
+```
+
+Pins now also carry the dashboard's default filters as `filters`. `@mastra/core` and `zod` are now peer dependencies.
