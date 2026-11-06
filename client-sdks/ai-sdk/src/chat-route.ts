@@ -334,6 +334,20 @@ async function resolveChatAgent({
   return baseAgent;
 }
 
+const MASTRA_AUTH_MODE_KEY = 'mastra__authMode';
+
+type ChatFGAProvider = NonNullable<NonNullable<ReturnType<Mastra['getServer']>>['fga']>;
+
+/** Selects the FGA provider for the request's trusted authentication mode. */
+function resolveChatFGAProvider(mastra: Mastra, requestContext?: RequestContext): ChatFGAProvider | null | undefined {
+  const studioFga = mastra.getStudio()?.fga;
+  const serverFga = mastra.getServer()?.fga;
+
+  if (requestContext?.get(MASTRA_AUTH_MODE_KEY) === 'studio' && studioFga) return studioFga;
+  if (serverFga) return serverFga;
+  return studioFga ? null : undefined;
+}
+
 /** Authorizes replay using the same resource ownership and thread FGA rules as run observation. */
 async function authorizeChatRunObservation({
   mastra,
@@ -348,13 +362,15 @@ async function authorizeChatRunObservation({
 }): Promise<boolean> {
   const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
   const server = mastra.getServer();
+  const fgaProvider = resolveChatFGAProvider(mastra, requestContext);
+  if (fgaProvider === null) return false;
   const tenancy =
     typeof (server?.auth as { mapUserToResourceId?: unknown } | undefined)?.mapUserToResourceId === 'function';
 
   if (tenancy) {
     if (resourceId) {
       if (runRecord.resourceId !== resourceId) return false;
-    } else if (!server?.fga || !runRecord.threadId) {
+    } else if (!fgaProvider || !runRecord.threadId) {
       return false;
     }
   } else if (runRecord.resourceId && runRecord.resourceId !== resourceId) {
@@ -368,7 +384,7 @@ async function authorizeChatRunObservation({
   const thread = await memory?.getThreadById({ threadId: runRecord.threadId });
   if (resourceId && thread?.resourceId && thread.resourceId !== resourceId) return false;
 
-  if (server?.fga) {
+  if (fgaProvider) {
     const user = requestContext?.get('user');
     if (!user || typeof user !== 'object') return false;
     try {
@@ -378,7 +394,7 @@ async function authorizeChatRunObservation({
         threadId: runRecord.threadId,
         resourceId: (thread?.resourceId as string | undefined) ?? runRecord.resourceId ?? resourceId,
         requestContext,
-        fgaProvider: server.fga,
+        fgaProvider,
       });
     } catch {
       return false;

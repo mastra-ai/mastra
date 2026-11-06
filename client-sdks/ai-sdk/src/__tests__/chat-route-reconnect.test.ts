@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { chatRoute } from '../chat-route';
 
 const messages: UIMessage[] = [{ id: 'user-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] }];
+const MASTRA_AUTH_MODE_KEY = 'mastra__authMode';
 
 function createControlledModel() {
   let finish!: () => void;
@@ -390,6 +391,114 @@ describe('chatRoute reconnect', () => {
 
     expect(response.status).toBe(404);
     expect(fga.require).toHaveBeenCalled();
+    controlled.finish();
+  });
+
+  it.each([
+    ['a Studio-only provider', false],
+    ['the Studio provider when both providers are configured', true],
+  ])('enforces thread FGA with %s', async (_name, includeServerFga) => {
+    const controlled = createControlledModel();
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: controlled.model,
+    });
+    const studioFga = {
+      check: vi.fn(),
+      require: vi.fn().mockRejectedValue(new Error('denied')),
+      filterAccessible: vi.fn(),
+      clearCache: vi.fn(),
+    } as any;
+    const serverFga = {
+      check: vi.fn(),
+      require: vi.fn().mockResolvedValue(undefined),
+      filterAccessible: vi.fn(),
+      clearCache: vi.fn(),
+    } as any;
+    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      studio: { fga: studioFga },
+      server: { apiRoutes: [route], ...(includeServerFga ? { fga: serverFga } : {}) },
+    });
+    const runId = `studio-fga-run-${includeServerFga}`;
+    const ownerContext = new RequestContext();
+    ownerContext.set(MASTRA_AUTH_MODE_KEY, 'studio');
+    ownerContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
+    ownerContext.set(MASTRA_THREAD_ID_KEY, 'owner-thread');
+    ownerContext.set('user', { id: 'owner-user' });
+    const postResponse = await invoke(
+      getRoute(mastra, 'POST'),
+      createContext({ mastra, method: 'POST', runId, requestContext: ownerContext }),
+    );
+    const postReader = postResponse.body!.getReader();
+    await readUntil(postReader, 'Hello from a resumable run');
+    await postReader.cancel();
+
+    const reconnectContext = new RequestContext();
+    reconnectContext.set(MASTRA_AUTH_MODE_KEY, 'studio');
+    reconnectContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
+    reconnectContext.set('user', { id: 'owner-user' });
+    const studioCallsBeforeReconnect = studioFga.require.mock.calls.length;
+    const serverCallsBeforeReconnect = serverFga.require.mock.calls.length;
+    const response = await invoke(
+      getRoute(mastra, 'GET'),
+      createContext({ mastra, method: 'GET', runId, requestContext: reconnectContext }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(studioFga.require).toHaveBeenCalledTimes(studioCallsBeforeReconnect + 1);
+    expect(serverFga.require).toHaveBeenCalledTimes(serverCallsBeforeReconnect);
+    controlled.finish();
+  });
+
+  it('fails closed when only Studio FGA is configured for a server-auth reconnect', async () => {
+    const controlled = createControlledModel();
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: controlled.model,
+    });
+    const studioFga = {
+      check: vi.fn(),
+      require: vi.fn().mockResolvedValue(undefined),
+      filterAccessible: vi.fn(),
+      clearCache: vi.fn(),
+    } as any;
+    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      studio: { fga: studioFga },
+      server: { apiRoutes: [route] },
+    });
+    const runId = 'studio-fga-server-auth-run';
+    const ownerContext = new RequestContext();
+    ownerContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
+    ownerContext.set(MASTRA_THREAD_ID_KEY, 'owner-thread');
+    ownerContext.set('user', { id: 'owner-user' });
+    const postResponse = await invoke(
+      getRoute(mastra, 'POST'),
+      createContext({ mastra, method: 'POST', runId, requestContext: ownerContext }),
+    );
+    const postReader = postResponse.body!.getReader();
+    await readUntil(postReader, 'Hello from a resumable run');
+    await postReader.cancel();
+
+    const reconnectContext = new RequestContext();
+    reconnectContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
+    reconnectContext.set('user', { id: 'owner-user' });
+    const response = await invoke(
+      getRoute(mastra, 'GET'),
+      createContext({ mastra, method: 'GET', runId, requestContext: reconnectContext }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(studioFga.require).not.toHaveBeenCalled();
     controlled.finish();
   });
 
