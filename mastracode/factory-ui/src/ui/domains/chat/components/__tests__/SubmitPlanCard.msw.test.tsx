@@ -91,7 +91,7 @@ function stubRenderedList(rootPath: string) {
 
 function renderCard(props: Partial<Parameters<typeof SubmitPlanCard>[0]> = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/f-1/user/threads/thread-1']}>
+    <MemoryRouter initialEntries={[`/factories/f-1/user/threads/${WORKSPACE}`]}>
       <Routes>
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
