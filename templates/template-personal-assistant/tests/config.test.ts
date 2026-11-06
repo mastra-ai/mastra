@@ -11,6 +11,8 @@ test('local configuration requires only an OpenAI key and applies bounded defaul
   assert.equal(config.ownerId, 'local-owner');
   assert.equal(config.model, 'openai/gpt-6-luna');
   assert.equal(config.maxSteps, 20);
+  assert.equal(config.judgeModel, 'openai/gpt-6-luna');
+  assert.equal(config.maxGoalEvaluations, 5);
   assert.equal(config.timezone, undefined);
   assert.equal('OPENAI_API_KEY' in config, false);
   assert.equal(loadConfig({ OPENAI_API_KEY: 'example-key', ASSISTANT_MAX_STEPS: '1' }).maxSteps, 1);
@@ -40,6 +42,10 @@ test('invalid settings identify their names without echoing credentials or suppl
     { OPENAI_API_KEY: '' },
     { ASSISTANT_OWNER_ID: 'invalid owner secret' },
     { ASSISTANT_MODEL: 'anthropic/example-secret' },
+    { ASSISTANT_JUDGE_MODEL: 'anthropic/example-secret' },
+    { ASSISTANT_MAX_GOAL_EVALUATIONS: '21' },
+    { ASSISTANT_MAX_GOAL_EVALUATIONS: '0' },
+    { ASSISTANT_MAX_GOAL_EVALUATIONS: '1.5' },
     { ASSISTANT_MAX_STEPS: '21' },
     { ASSISTANT_MAX_STEPS: '1.5' },
     { ASSISTANT_MAX_STEPS: '0' },

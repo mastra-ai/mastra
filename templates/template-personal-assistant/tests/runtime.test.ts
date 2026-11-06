@@ -113,7 +113,14 @@ test(
       assert.equal(agents['personal-assistant'].id, 'personal-assistant');
       assert.equal(agents['personal-assistant'].supportsMemory, true);
       assert.equal(agents['personal-assistant'].modelId, 'gpt-6-luna');
-      assert.deepEqual(Object.keys(agents['personal-assistant'].tools), ['connection_status']);
+      assert.deepEqual(Object.keys(agents['personal-assistant'].tools).sort(), [
+        'connection_status',
+        'objective',
+        'task_check',
+        'task_complete',
+        'task_update',
+        'task_write',
+      ]);
       const status = await json(
         await fetch(`${url}/api/agents/personal-assistant/tools/connection-status/execute`, {
           method: 'POST',

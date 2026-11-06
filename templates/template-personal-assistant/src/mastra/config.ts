@@ -11,6 +11,11 @@ const configuration = z.object({
     .string()
     .regex(/^openai\/[a-zA-Z0-9][a-zA-Z0-9._:-]*$/)
     .default('openai/gpt-6-luna'),
+  ASSISTANT_JUDGE_MODEL: z
+    .string()
+    .regex(/^openai\/[a-zA-Z0-9][a-zA-Z0-9._:-]*$/)
+    .default('openai/gpt-6-luna'),
+  ASSISTANT_MAX_GOAL_EVALUATIONS: z.coerce.number().int().min(1).max(20).default(5),
   ASSISTANT_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(20),
   ASSISTANT_TIMEZONE: z
     .string()
@@ -86,6 +91,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       : undefined,
     model: value.ASSISTANT_MODEL as `openai/${string}`,
     maxSteps: value.ASSISTANT_MAX_STEPS,
+    judgeModel: value.ASSISTANT_JUDGE_MODEL as `openai/${string}`,
+    maxGoalEvaluations: value.ASSISTANT_MAX_GOAL_EVALUATIONS,
     timezone: value.ASSISTANT_TIMEZONE,
     databasePath: resolve(value.ASSISTANT_DATA_DIR || '.data', 'assistant.db'),
   };

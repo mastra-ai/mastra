@@ -6,7 +6,11 @@ import { loadConfig } from '../src/mastra/config';
 
 // Only the paid model endpoint is replaced. The Agent, server, tools, and storage remain native.
 const config = loadConfig();
-const mastra = createAssistant(config, { id: config.model, url: process.env.TEST_MODEL_URL, apiKey: 'example-key' });
+const mastra = createAssistant(
+  config,
+  { id: config.model, url: process.env.TEST_MODEL_URL, apiKey: 'example-key' },
+  { id: config.judgeModel, url: `${process.env.TEST_MODEL_URL}/judge`, apiKey: 'example-key' },
+);
 const memory = await mastra.getAgent('personalAssistant').getMemory();
 if (process.env.TEST_SEED_FOREIGN === 'true') {
   await memory!.createThread({
