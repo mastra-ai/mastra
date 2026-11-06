@@ -279,59 +279,6 @@ describe('KnowledgePageExplorer body links', () => {
     });
   });
 
-  describe("when an enrichment note links a page in another importer's scope, and only the note names it", () => {
-    const notionRef = 'notion:Mastra:conn_1#notion/page/40eebffb';
-    const notion = page('notion', null, { scopeId: 'notion', name: 'Notion', address: 'notion:Mastra:conn_1' });
-    const qa = page('qa', 'notion-page', { scopeId: 'notion', name: 'Design partnership Q&A', key: '40eebffb' });
-    const meeting = page('meeting', 'docs', { name: 'Dima and Jake Stone', key: 'meeting', body: 'Transcript' });
-    const relation: KnowledgeNotePayload = {
-      ...pathNote,
-      id: 'n4',
-      pageId: 'meeting',
-      text: `Related: [[${notionRef}]] — Same partnership terms`,
-      mentions: ['qa'],
-      provenance: { author: 'importer:imp_1/run:run_1' },
-    };
-
-    function NoteOnlyHost({ related }: { related: KnowledgePagePayload[] }) {
-      const [selected, setSelected] = useState<string | null>('meeting');
-      const source: KnowledgeExplorerSource = {
-        usePage: pageId =>
-          pageId === 'meeting' ? ok({ page: meeting, notes: [relation], ancestors: [docs], related }) : idle,
-        useSearch: () => ({ data: { results: [] } }),
-        useLinkedPages: keys => keys.map(() => idle),
-      };
-      return (
-        <>
-          <output data-testid="selected">{selected}</output>
-          <KnowledgePageExplorer
-            graph={{ pages: [docs, meeting], edges: [], pinnedIds: [], truncated: false }}
-            source={source}
-            selectedPageId={selected}
-            onSelect={setSelected}
-            view="page"
-            onViewChange={() => {}}
-          />
-        </>
-      );
-    }
-
-    it('links the page by name once the page read returns its scope', () => {
-      renderWithProviders(<NoteOnlyHost related={[qa, notion]} />);
-      const notes = within(screen.getByRole('region', { name: 'Notes' }));
-      expect(notes.queryByText(notionRef, { exact: false })).toBeNull();
-      fireEvent.click(notes.getByRole('button', { name: 'Design partnership Q&A' }));
-      expect(screen.getByTestId('selected').textContent).toBe('qa');
-    });
-
-    it('leaves the ref as text without its scope, rather than guess which scope it names', () => {
-      renderWithProviders(<NoteOnlyHost related={[qa]} />);
-      const notes = within(screen.getByRole('region', { name: 'Notes' }));
-      expect(notes.queryByRole('button', { name: 'Design partnership Q&A' })).toBeNull();
-      expect(notes.getByText(notionRef, { exact: false })).toBeTruthy();
-    });
-  });
-
   describe('when the graph shows pages whose bodies link each other', () => {
     const linkLines = (container: HTMLElement) =>
       [...container.querySelectorAll('.react-flow__edge')]

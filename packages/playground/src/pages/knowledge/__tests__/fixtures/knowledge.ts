@@ -173,3 +173,43 @@ export const knowledgeGraphWithGrants: KnowledgeGraphResponse = {
   ...knowledgeGraph,
   grants: [{ principal: 'role:acme:admin', principalLabel: 'acme admin', target: 'scope-acme', role: 'owner' }],
 };
+
+/** An importer's scope the graph and tree have not loaded. */
+export const notionScope = page({
+  id: 'scope-notion',
+  scopeId: 'scope-notion',
+  parentId: null,
+  isScope: true,
+  address: 'notion:acme:conn_1',
+  declaration: 'notion:$account:$connection',
+  name: 'Notion',
+  position: 'b0',
+});
+
+/** A page nested in that scope, under a folder nothing has loaded either. */
+export const partnershipPage = page({
+  id: 'page-partnership',
+  scopeId: 'scope-notion',
+  parentId: 'page-notion-folder',
+  isScope: false,
+  key: '40eebffb',
+  name: 'Design partnership Q&A',
+  position: 'a0',
+});
+
+export const partnershipRef = 'notion:acme:conn_1#notion/page/40eebffb';
+
+/** Payments with an enrichment note linking the Notion page; `related` as the server returns it. */
+export const paymentsPageViewWithRelation = (related: Page[]): KnowledgePageResponse => ({
+  ...paymentsPageView,
+  notes: [
+    {
+      ...paymentsPageView.notes[0],
+      id: 'note-relation',
+      text: `Related: [[${partnershipRef}]] — Same partnership terms`,
+      mentions: [partnershipPage.id],
+      provenance: { author: 'importer:imp_1/run:run_1' },
+    },
+  ],
+  related,
+});
