@@ -118,16 +118,26 @@ const ANSWERED_RESUME_ERROR_IDS = new Set([
   'AGENT_RESUME_NO_SNAPSHOT_FOUND',
   'AGENT_RESUME_ABORTED_RUN',
   'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+  'AGENT_RESUME_RUN_FINISHED',
+  'AGENT_RESUME_RUN_NOT_SUSPENDED',
 ]);
+/** Run statuses a durable `AGENT_RESUME_RUN_NOT_SUSPENDED` reports while another resume is still running it. */
+const RESUMING_RUN_STATUSES = new Set(['running', 'pending']);
 
 /** How a failed approval resume should be treated. */
 const classifyResumeError = (err: unknown): 'answered' | 'in-progress' | undefined => {
   if (err instanceof MastraError) {
     // A not-suspended error that only timed out waiting for the suspension to
     // persist leaves the card answerable, so it takes the normal error path.
-    if (ANSWERED_RESUME_ERROR_IDS.has(err.id)) return err.details?.timedOut === true ? undefined : 'answered';
+    if (err.details?.timedOut === true) return undefined;
     // Another click (here or on another instance) is resuming the run right now.
-    if (err.id === 'AGENT_RESUME_ALREADY_CLAIMED') return 'in-progress';
+    if (
+      err.id === 'AGENT_RESUME_ALREADY_CLAIMED' ||
+      (err.id === 'AGENT_RESUME_RUN_NOT_SUSPENDED' && RESUMING_RUN_STATUSES.has(String(err.details?.status)))
+    ) {
+      return 'in-progress';
+    }
+    if (ANSWERED_RESUME_ERROR_IDS.has(err.id)) return 'answered';
   }
   return err instanceof Error && err.message.includes('No snapshot found') ? 'answered' : undefined;
 };

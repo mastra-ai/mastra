@@ -951,6 +951,30 @@ describe('approval clicks that resume a real agent run', () => {
     expect(refunds).toEqual([10]);
   });
 
+  // What a DurableAgent reports for a run that already finished or was recovered.
+  it.each([
+    ['missing cold run', 'AGENT_RESUME_NO_SNAPSHOT_FOUND', {}],
+    ['run finished by recovery', 'AGENT_RESUME_RUN_FINISHED', {}],
+    ['completed run', 'AGENT_RESUME_RUN_NOT_SUSPENDED', { status: 'success' }],
+  ])('stops resuming a durable approval after a %s', async (_case, id, details) => {
+    const { agent, click, errorPosts } = await setup();
+    const approve = vi.spyOn(agent, 'approveToolCall').mockRejectedValue(
+      new MastraError({
+        id,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'cannot resume',
+        details,
+      }),
+    );
+
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+    await click(`tool_approve:${TOOL_CALL_ID}`, 'alice');
+
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(errorPosts()).toEqual([]);
+  });
+
   it('lets the requester approve again when the resumed run fails before it starts', async () => {
     const { workflows, refunds, click, runStatus } = await setup();
     // One storage failure while the resumed run starts. Core hands the

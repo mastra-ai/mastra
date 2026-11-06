@@ -3460,7 +3460,13 @@ export class DurableAgent<
         workflowName: DurableStepIds.AGENTIC_LOOP,
       });
       if (!persisted) {
-        throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
+        throw new MastraError({
+          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `No registry entry found for run ${runId}. Cannot resume.`,
+          details: { agentName: this.name, runId },
+        });
       }
 
       let snapshot =
