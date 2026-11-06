@@ -45,6 +45,16 @@ describe('reworkReason', () => {
     ).toEqual({ fromPhase: 'review', fromLabel: 'Review', reason: FINDINGS, movedBy: 'agent' });
   });
 
+  it("does not give a person's later move back the findings an earlier self-review left on the card", () => {
+    const item = card('execute', { metadata: { selfReviewVerdict: 'request changes', selfReviewFindings: FINDINGS } });
+
+    expect(reworkReason(item, phases, [moved('review', 'execute', 'human', 'board_drag')])).toEqual({
+      fromPhase: 'review',
+      fromLabel: 'Review',
+      movedBy: 'human',
+    });
+  });
+
   it("gives an agent's rationale when it sends the card from Building back to Planning", () => {
     const rationale = 'The plan misses the migration; replanning.';
 

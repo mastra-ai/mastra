@@ -205,8 +205,19 @@ describe('FactorySessionPage', () => {
 
     const currentCrumb = () => document.querySelector('[aria-current="page"]');
 
-    function renderContextHeader(sessionId: string, threadId: string) {
-      const item = { ...workItem(undefined), sessions: { triage: triageRef, work: workRef } };
+    const reviewRef = {
+      sessionId: 'review-session',
+      branch: 'factory/issue-7',
+      threadId: 'review-thread',
+      startedBy: 'user-1',
+    };
+
+    function renderContextHeader(sessionId: string, threadId: string, stage = 'execute') {
+      const item = {
+        ...workItem(undefined),
+        stages: [stage],
+        sessions: { triage: triageRef, work: workRef, review: reviewRef },
+      };
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
           HttpResponse.json({ sessions: [workspaceSession] }),
@@ -252,6 +263,14 @@ describe('FactorySessionPage', () => {
 
       await screen.findByText('Issue #7: Fix sandbox setup');
       await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
+      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
+    });
+
+    it("names only the context of self-review's session, which no phase runs in", async () => {
+      renderContextHeader('review-session', 'review-thread', 'review');
+
+      await screen.findByText('Issue #7: Fix sandbox setup');
+      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Review$/));
       expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
     });
   });

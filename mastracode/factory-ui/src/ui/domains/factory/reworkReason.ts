@@ -49,7 +49,9 @@ export function reworkReason(
   if (fromIndex === undefined || toIndex === undefined || toIndex >= fromIndex) return undefined;
 
   const fromPhase = phases.find(phase => phase.id === move.from);
-  const findings = selfReviewFindings(item.metadata, move.from, current);
+  // Self-review moves the card as the agent; a person moving it back later
+  // must not inherit the findings still stored on the card.
+  const findings = move.movedBy === 'agent' ? selfReviewFindings(item.metadata, move.from, current) : undefined;
   const reason = findings ?? (move.cause || undefined);
   return {
     fromPhase: move.from,
