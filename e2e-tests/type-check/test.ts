@@ -64,8 +64,8 @@ async function main() {
     check('MCP type tests', ['vitest', 'run', '--config', 'vitest.mcp.config.ts']);
     // vitest only reports type errors located inside a test, so errors in imports or
     // describe bodies (shared fixtures) need a plain tsc run.
-    check('tsc', ['exec', 'tsc', '-p', 'tsconfig.json']);
-    check('tsc (exactOptionalPropertyTypes)', ['exec', 'tsc', '-p', 'tsconfig.exact-optional.json']);
+    check('tsc', ['exec', 'tsc', '--noEmit', '-p', 'tsconfig.json']);
+    check('tsc (exactOptionalPropertyTypes)', ['exec', 'tsc', '--noEmit', '-p', 'tsconfig.exact-optional.json']);
   } finally {
     await teardown();
   }
