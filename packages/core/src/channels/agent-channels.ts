@@ -94,6 +94,44 @@ type ChannelAgent = Pick<
 
 /** Messages read per page when recovering a pending approval from Memory. */
 const APPROVAL_LOOKUP_PAGE_SIZE = 50;
+/** Most approval lookup results kept per AgentChannels instance. */
+const APPROVAL_LOOKUP_CACHE_SIZE = 1000;
+/**
+ * How long a lookup that found no pending approval is trusted. Bounds repeat
+ * history reads for answered or unknown cards to one per toolCallId per window,
+ * while still picking up an approval persisted by another instance after the
+ * first click.
+ */
+const APPROVAL_LOOKUP_NEGATIVE_TTL_MS = 60_000;
+
+/** The persisted pending-approval entry an agent stores on its assistant message. */
+type PersistedPendingApproval = {
+  toolCallId: string;
+  runId: string;
+  parentRunId?: string;
+  toolName: string;
+  args: Record<string, unknown>;
+};
+
+/** What the Memory fallback found for an approval click. */
+type ApprovalLookupResult =
+  | {
+      status: 'pending';
+      runId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      /** Platform user ids that spoke in the user turn that led to the approval. */
+      authors: string[];
+    }
+  | { status: 'answered' }
+  | { status: 'missing' };
+
+type CachedApprovalLookup = {
+  threadId: string;
+  result: ApprovalLookupResult;
+  /** Unset for pending approvals, which stay valid until answered or replaced. */
+  expiresAt?: number;
+};
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
@@ -178,6 +216,16 @@ export class AgentChannels {
    * context. Entries are removed after the resume completes.
    */
   private pendingApprovalCards = new Map<string, PendingApprovalRecord>();
+  /**
+   * Memory-fallback approval lookups, keyed by toolCallId. A click that misses
+   * `pendingApprovalCards` may have to read the whole thread, so the result is
+   * kept: repeat clicks (including rejected ones from other users) reuse it with
+   * no storage read. Bounded by `APPROVAL_LOOKUP_CACHE_SIZE`; negative results
+   * expire after `APPROVAL_LOOKUP_NEGATIVE_TTL_MS`.
+   */
+  private approvalLookups = new Map<string, CachedApprovalLookup>();
+  /** Lookups in progress, so concurrent clicks on one card share one read. */
+  private approvalLookupsInFlight = new Map<string, { threadId: string; promise: Promise<ApprovalLookupResult> }>();
 
   /**
    * Platforms we've already warned about for misconfigured `toolDisplay` (e.g.
@@ -706,6 +754,8 @@ export class AgentChannels {
               toolCallId: actionId.slice(actionId.indexOf(':') + 1),
               actorId: event.user?.userId,
             };
+            // Undoes the answered mark set below if resuming the run fails.
+            let releaseClaim: (() => void) | undefined;
             try {
               const approved = actionId.startsWith('tool_approve:');
               const toolCallId = actionEventContext.toolCallId;
@@ -756,105 +806,28 @@ export class AgentChannels {
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
               } else {
-                const storage = mastra.getStorage();
-                const memoryStore = storage ? await storage.getStore('memory') : undefined;
-                if (!memoryStore) {
-                  throw new Error('Storage is required for tool approval lookups');
+                const lookup = await this.lookupPersistedApproval({
+                  mastra,
+                  threadId: mastraThread.id,
+                  toolCallId,
+                  platform,
+                });
+                if (lookup.status === 'answered') {
+                  this.log('info', 'Tool approval already answered', actionEventContext);
+                  return;
                 }
-
-                // Read history newest-first, one page at a time, until the
-                // approval is found. A rebuilt or restarted AgentChannels has no
-                // card cache, so an approval followed by a long thread must still
-                // be reachable (#29186). Storage cannot filter on the nested
-                // `pendingToolApprovals` entries, so this scans; it only runs on
-                // a cache miss and holds at most the pages it needs. A click whose
-                // tool call is nowhere in the thread reads the whole thread on
-                // purpose: any fixed limit would strand approvals behind it again.
-                type PendingApprovalEntry = {
-                  toolCallId: string;
-                  runId: string;
-                  parentRunId?: string;
-                  toolName: string;
-                  args: Record<string, unknown>;
-                };
-                let found: PendingApprovalEntry | undefined;
-                // Set when the scan reaches the message that carries this tool
-                // call but holds no pending entry: the approval was answered.
-                let answered = false;
-                // Messages older than the approval, newest-first.
-                let earlier: MastraDBMessage[] = [];
-                const turnBounds = () => {
-                  const start = earlier.findIndex(m => m.role === 'user');
-                  const end = earlier.findIndex((m, i) => i > start && m.role !== 'user');
-                  return { start, end };
-                };
-                for (let page = 0; ; page++) {
-                  const { messages, hasMore } = await memoryStore.listMessages({
-                    threadId: mastraThread.id,
-                    page,
-                    perPage: APPROVAL_LOOKUP_PAGE_SIZE,
-                    orderBy: { field: 'createdAt', direction: 'DESC' },
-                    includeTotal: false,
-                  });
-                  if (found) {
-                    earlier.push(...messages);
-                  } else {
-                    for (const [index, msg] of messages.entries()) {
-                      const pending = msg.content?.metadata?.pendingToolApprovals as
-                        | Record<string, PendingApprovalEntry>
-                        | undefined;
-                      found = pending && Object.values(pending).find(entry => entry.toolCallId === toolCallId);
-                      if (found) {
-                        earlier = messages.slice(index + 1);
-                        break;
-                      }
-                      // Agents store the pending entry on the newest assistant
-                      // message that carries the tool call, so older history
-                      // cannot hold it.
-                      answered =
-                        msg.role === 'assistant' &&
-                        (msg.content?.parts ?? []).some(
-                          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-                        );
-                      if (answered) break;
-                    }
-                  }
-                  if (answered) break;
-                  // Stop once the user turn that led to the approval is fully read.
-                  const turn = turnBounds();
-                  if (found && turn.start !== -1 && turn.end !== -1) break;
-                  if (!hasMore || messages.length === 0) break;
-                }
-
-                if (found) {
-                  runId = found.parentRunId ?? found.runId;
-                  toolName = found.toolName;
-                  toolArgs = found.args;
-                  // Recover the card's owner from the user turn that led to it.
-                  // If that turn has messages from more than one author we can't
-                  // tell who triggered the tool, so no one may answer the card.
-                  const turn = turnBounds();
-                  const authors = new Set(
-                    (turn.start === -1 ? [] : earlier.slice(turn.start, turn.end === -1 ? undefined : turn.end))
-                      .map(
-                        m =>
-                          (
-                            m.content?.providerMetadata?.mastra as
-                              | { channels?: Record<string, { author?: { userId?: string } }> }
-                              | undefined
-                          )?.channels?.[platform]?.author?.userId,
-                      )
-                      .filter((id): id is string => !!id),
-                  );
-                  if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
+                if (lookup.status === 'pending') {
+                  runId = lookup.runId;
+                  toolName = lookup.toolName;
+                  toolArgs = lookup.args;
+                  // If the user turn that led to the approval has messages from
+                  // more than one author we can't tell who triggered the tool, so
+                  // no one may answer the card.
+                  if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && lookup.authors.length > 1) {
                     this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                     return;
                   }
-                  requesterId ??= [...authors][0];
-                }
-                if (answered) {
-                  this.log('info', 'Tool approval already answered', actionEventContext);
-                  return;
+                  requesterId ??= lookup.authors[0];
                 }
               }
 
@@ -873,6 +846,10 @@ export class AgentChannels {
                 });
                 return;
               }
+
+              // From here this click answers the approval. Mark it answered so
+              // repeat clicks are ignored without reading history again.
+              releaseClaim = this.claimApproval(mastraThread.id, toolCallId);
 
               // Build the card header with tool name and args
               const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
@@ -1026,6 +1003,8 @@ export class AgentChannels {
                 this.log('info', 'Ignoring stale tool approval action (runId already consumed)', actionEventContext);
                 return;
               }
+              // The run was not resumed, so the card is still answerable.
+              releaseClaim?.();
               // The resolver also runs on approval continuations, so a refusal
               // here means this clicker isn't allowed to act — same silence as the
               // inbound path (see handleChatMessage).
@@ -2127,6 +2106,9 @@ export class AgentChannels {
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
+      // A new card for this id supersedes any earlier or in-progress lookup.
+      this.approvalLookups.delete(toolCallId);
+      this.approvalLookupsInFlight.delete(toolCallId);
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
     const takePendingApproval = (id: string) => {
@@ -2416,6 +2398,169 @@ export class AgentChannels {
    * Look up a channel-backed Mastra thread and retain the store/metadata needed
    * by the create path when no mapping exists.
    */
+  /**
+   * Find a pending tool approval in Memory for a click that missed the
+   * in-memory card cache (e.g. after a rebuild or restart). Results are cached
+   * per toolCallId and concurrent lookups for the same card share one read, so
+   * repeated clicks cannot each force a history scan.
+   */
+  private async lookupPersistedApproval(args: {
+    mastra: Mastra;
+    threadId: string;
+    toolCallId: string;
+    platform: string;
+  }): Promise<ApprovalLookupResult> {
+    const { threadId, toolCallId } = args;
+    const cached = this.approvalLookups.get(toolCallId);
+    if (cached?.threadId === threadId && (cached.expiresAt === undefined || cached.expiresAt > Date.now())) {
+      return cached.result;
+    }
+    const inFlight = this.approvalLookupsInFlight.get(toolCallId);
+    if (inFlight?.threadId === threadId) return inFlight.promise;
+
+    const promise = this.readPersistedApproval(args);
+    this.approvalLookupsInFlight.set(toolCallId, { threadId, promise });
+    try {
+      const result = await promise;
+      // Only store the result if no card was posted for this id meanwhile.
+      if (this.approvalLookupsInFlight.get(toolCallId)?.promise === promise) {
+        this.cacheApprovalLookup(toolCallId, threadId, result);
+      }
+      return result;
+    } finally {
+      if (this.approvalLookupsInFlight.get(toolCallId)?.promise === promise) {
+        this.approvalLookupsInFlight.delete(toolCallId);
+      }
+    }
+  }
+
+  private cacheApprovalLookup(toolCallId: string, threadId: string, result: ApprovalLookupResult): void {
+    // Re-insert so Map order tracks recency, then drop the oldest entries.
+    this.approvalLookups.delete(toolCallId);
+    this.approvalLookups.set(toolCallId, {
+      threadId,
+      result,
+      expiresAt: result.status === 'pending' ? undefined : Date.now() + APPROVAL_LOOKUP_NEGATIVE_TTL_MS,
+    });
+    for (const key of this.approvalLookups.keys()) {
+      if (this.approvalLookups.size <= APPROVAL_LOOKUP_CACHE_SIZE) break;
+      this.approvalLookups.delete(key);
+    }
+  }
+
+  /**
+   * Mark an approval as answered before its run is resumed, so a second click
+   * cannot answer it again. Returns a function that restores the previous
+   * lookup result, for when the resume fails and the card must stay usable.
+   */
+  private claimApproval(threadId: string, toolCallId: string): () => void {
+    const previous = this.approvalLookups.get(toolCallId);
+    this.cacheApprovalLookup(toolCallId, threadId, { status: 'answered' });
+    const claim = this.approvalLookups.get(toolCallId);
+    return () => {
+      // Leave the entry alone if a new card for this id replaced the claim.
+      if (this.approvalLookups.get(toolCallId) !== claim) return;
+      if (previous) this.cacheApprovalLookup(toolCallId, previous.threadId, previous.result);
+      else this.approvalLookups.delete(toolCallId);
+    };
+  }
+
+  /**
+   * Read history newest-first, one page at a time, until the approval and the
+   * user turn that triggered it are found. Storage cannot filter on the nested
+   * `pendingToolApprovals` entries, so this scans. There is deliberately no page
+   * cap: any fixed limit would strand approvals behind it again (#29186). The
+   * cost is bounded instead by `lookupPersistedApproval`, which runs this at
+   * most once per toolCallId per instance for pending approvals and once per
+   * `APPROVAL_LOOKUP_NEGATIVE_TTL_MS` for answered or unknown ones.
+   */
+  private async readPersistedApproval({
+    mastra,
+    threadId,
+    toolCallId,
+    platform,
+  }: {
+    mastra: Mastra;
+    threadId: string;
+    toolCallId: string;
+    platform: string;
+  }): Promise<ApprovalLookupResult> {
+    const storage = mastra.getStorage();
+    const memoryStore = storage ? await storage.getStore('memory') : undefined;
+    if (!memoryStore) {
+      throw new Error('Storage is required for tool approval lookups');
+    }
+
+    let found: PersistedPendingApproval | undefined;
+    // Messages older than the approval, newest-first.
+    let earlier: MastraDBMessage[] = [];
+    const turnBounds = () => {
+      const start = earlier.findIndex(m => m.role === 'user');
+      const end = earlier.findIndex((m, i) => i > start && m.role !== 'user');
+      return { start, end };
+    };
+    for (let page = 0; ; page++) {
+      const { messages, hasMore } = await memoryStore.listMessages({
+        threadId,
+        page,
+        perPage: APPROVAL_LOOKUP_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+        includeTotal: false,
+      });
+      if (found) {
+        earlier.push(...messages);
+      } else {
+        for (const [index, msg] of messages.entries()) {
+          const pending = msg.content?.metadata?.pendingToolApprovals as
+            | Record<string, PersistedPendingApproval>
+            | undefined;
+          found = pending && Object.values(pending).find(entry => entry.toolCallId === toolCallId);
+          if (found) {
+            earlier = messages.slice(index + 1);
+            break;
+          }
+          // Agents store the pending entry on the newest assistant message that
+          // carries the tool call, so reaching that message without one means
+          // the approval was answered; older history cannot hold it.
+          const answered =
+            msg.role === 'assistant' &&
+            (msg.content?.parts ?? []).some(
+              part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+            );
+          if (answered) return { status: 'answered' };
+        }
+      }
+      // Stop once the user turn that led to the approval is fully read.
+      const turn = turnBounds();
+      if (found && turn.start !== -1 && turn.end !== -1) break;
+      if (!hasMore || messages.length === 0) break;
+    }
+
+    if (!found) return { status: 'missing' };
+
+    // Recover the card's owner from the user turn that led to it.
+    const turn = turnBounds();
+    const authors = new Set(
+      (turn.start === -1 ? [] : earlier.slice(turn.start, turn.end === -1 ? undefined : turn.end))
+        .map(
+          m =>
+            (
+              m.content?.providerMetadata?.mastra as
+                | { channels?: Record<string, { author?: { userId?: string } }> }
+                | undefined
+            )?.channels?.[platform]?.author?.userId,
+        )
+        .filter((id): id is string => !!id),
+    );
+    return {
+      status: 'pending',
+      runId: found.parentRunId ?? found.runId,
+      toolName: found.toolName,
+      args: found.args,
+      authors: [...authors],
+    };
+  }
+
   private async findThreadMapping({
     externalThreadId,
     channelId,

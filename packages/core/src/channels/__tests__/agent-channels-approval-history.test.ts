@@ -22,8 +22,14 @@ type Decision = { kind: 'approve' | 'deny'; toolCallId: string; runId: string };
 // mapping, Memory lookup, requester check) runs for real.
 class RecordingChannels extends AgentChannels {
   readonly decisions: Decision[] = [];
+  /** Makes the next approval resume fail, as a storage or model outage would. */
+  failNextApproval = false;
 
   protected override async dispatchApproval(args: { runId: string; toolCallId: string }): Promise<void> {
+    if (this.failNextApproval) {
+      this.failNextApproval = false;
+      throw new Error('resume failed');
+    }
     this.decisions.push({ kind: 'approve', toolCallId: args.toolCallId, runId: args.runId });
   }
 
@@ -188,19 +194,22 @@ describe('tool approval after AgentChannels is rebuilt (#29186)', () => {
     await replacement.initialize(mastra);
 
     cleanup = async () => {
-      await replacement.sdk.shutdown();
+      await replacement.sdk?.shutdown();
       await mastra.shutdown();
     };
 
     const click = async (actionId: string, userId: string) => {
-      await adapter.chat!.processAction({
-        actionId,
-        adapter,
-        threadId: EXTERNAL_THREAD_ID,
-        messageId: 'approval-card',
-        user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
-        raw: {},
-      });
+      await adapter.chat!.processAction(
+        {
+          actionId,
+          adapter,
+          threadId: EXTERNAL_THREAD_ID,
+          messageId: 'approval-card',
+          user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
+          raw: {},
+        },
+        undefined,
+      );
     };
 
     return { replacement, memory, click };
@@ -335,5 +344,184 @@ describe('tool approval after AgentChannels is rebuilt (#29186)', () => {
     await click('tool_approve:resolved-earlier', 'alice');
 
     expect(replacement.decisions).toEqual([]);
+  });
+});
+
+// Without a card cache every click falls back to reading history, and that read
+// runs before the requester check. Lookup results are kept per toolCallId, so
+// clicking a card again, by anyone, does not read the thread again.
+describe('repeated clicks on an approval card after a rebuild', () => {
+  let cleanup: (() => Promise<void>) | undefined;
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await cleanup?.();
+    cleanup = undefined;
+  });
+
+  async function setup(messages: MastraDBMessage[]) {
+    const store = new InMemoryStore({ id: 'approval-repeat-clicks' });
+    const agent = new Agent({
+      id: 'approval-owner',
+      name: 'Approval owner',
+      instructions: 'unused',
+      model: 'openai/gpt-4.1',
+    });
+    const mastra = new Mastra({
+      agents: { [agent.id]: agent },
+      storage: store,
+      workers: false,
+      scheduler: { enabled: false },
+      logger: false,
+    });
+    const memory = (await store.getStore('memory')) as MemoryStorage;
+    await memory.saveThread({
+      thread: {
+        id: THREAD_ID,
+        resourceId: RESOURCE_ID,
+        title: 'Support thread',
+        createdAt: when(0),
+        updatedAt: when(0),
+        metadata: {
+          channel_platform: 'mock',
+          channel_externalThreadId: EXTERNAL_THREAD_ID,
+          channel_externalChannelId: 'mock:room',
+          channel_ownerId: agent.id,
+        },
+      },
+    });
+    await memory.saveMessages({ messages });
+
+    const adapter = createAdapter();
+    // A fresh instance, as after a restart: no approval card is cached.
+    const channels = new RecordingChannels({
+      adapters: { mock: { adapter, gateway: false } },
+      state: createState(),
+      tools: false,
+    });
+    agent.setChannels(channels);
+    await channels.initialize(mastra);
+    cleanup = async () => {
+      await channels.sdk?.shutdown();
+      await mastra.shutdown();
+    };
+
+    const reads = vi.spyOn(memory, 'listMessages');
+    const click = (actionId: string, userId: string) =>
+      adapter.chat!.processAction(
+        {
+          actionId,
+          adapter,
+          threadId: EXTERNAL_THREAD_ID,
+          messageId: 'approval-card',
+          user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
+          raw: {},
+        },
+        undefined,
+      );
+
+    return { channels, memory, reads, click };
+  }
+
+  const deepApproval = () => [
+    user('ask', 0, 'alice'),
+    pendingToolCall('approval-metadata', 1, 'deep-pending', 'deep-run'),
+    ...filler(400, 2),
+  ];
+
+  it('reads history once for a deep approval however often another user clicks it, then lets the requester answer', async () => {
+    const { channels, reads, click } = await setup(deepApproval());
+
+    await click('tool_approve:deep-pending', 'mallory');
+    const oneScan = reads.mock.calls.length;
+    // 402 messages, 50 per page.
+    expect(oneScan).toBe(9);
+
+    for (let i = 0; i < 5; i++) {
+      await click('tool_approve:deep-pending', 'mallory');
+      await click('tool_deny:deep-pending', 'mallory');
+    }
+    expect(channels.decisions).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(oneScan);
+
+    await click('tool_approve:deep-pending', 'alice');
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+    expect(reads).toHaveBeenCalledTimes(oneScan);
+  });
+
+  it('shares one history read between clicks that arrive at the same time', async () => {
+    const { channels, reads, click } = await setup(deepApproval());
+
+    await Promise.all([
+      click('tool_approve:deep-pending', 'mallory'),
+      click('tool_deny:deep-pending', 'mallory'),
+      click('tool_approve:deep-pending', 'eve'),
+    ]);
+
+    expect(channels.decisions).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('reads history once for repeated clicks on a card it cannot find', async () => {
+    const { channels, reads, click } = await setup([user('ask', 0, 'alice'), ...filler(400, 1)]);
+
+    for (let i = 0; i < 5; i++) await click('tool_approve:unknown-call', 'alice');
+
+    expect(channels.decisions).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('reads history once for repeated clicks on an approval that was already answered', async () => {
+    const { channels, reads, click } = await setup([
+      user('ask', 0, 'alice'),
+      answeredToolCall('refund-call', 1, 'answered-call'),
+      ...filler(400, 2),
+    ]);
+
+    for (let i = 0; i < 5; i++) await click('tool_approve:answered-call', 'alice');
+
+    expect(channels.decisions).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('does not let an approval be answered twice', async () => {
+    const { channels, reads, click } = await setup(deepApproval());
+
+    await click('tool_approve:deep-pending', 'alice');
+    await click('tool_approve:deep-pending', 'alice');
+    await click('tool_deny:deep-pending', 'alice');
+
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+    expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('keeps the card answerable when resuming the run fails', async () => {
+    const { channels, reads, click } = await setup(deepApproval());
+    channels.failNextApproval = true;
+
+    await click('tool_approve:deep-pending', 'alice');
+    expect(channels.decisions).toEqual([]);
+
+    await click('tool_approve:deep-pending', 'alice');
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+    expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('finds an approval saved after an earlier click missed it, once the miss expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const { channels, memory, reads, click } = await setup([user('ask', 0, 'alice'), ...filler(10, 1)]);
+
+    await click('tool_approve:late-pending', 'alice');
+    // Another instance persists the approval after this one looked.
+    await memory.saveMessages({
+      messages: [user('ask-again', 11, 'alice'), pendingToolCall('late-approval', 12, 'late-pending', 'late-run')],
+    });
+    await click('tool_approve:late-pending', 'alice');
+    expect(channels.decisions).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 61_000);
+    await click('tool_approve:late-pending', 'alice');
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'late-pending', runId: 'late-run' }]);
   });
 });
