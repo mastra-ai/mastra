@@ -3319,12 +3319,16 @@ export class Workflow<
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
     // Another instance creating or starting this id under the workflow's own policy must not be able
-    // to store a row either. Like the DurableAgent policy guardrail, this probes with no step results.
-    run.unstored =
-      !lookUpStoredRun &&
-      WORKFLOW_RUN_STATUSES.every(
-        workflowStatus => !this.#options.shouldPersistSnapshot({ workflowStatus, stepResults: {} }),
-      );
+    // to store a row either. Like the DurableAgent policy guardrail, this probes with no step results;
+    // a policy that throws without them may store, so it keeps the reads.
+    const policyNeverStores = (workflowStatus: WorkflowRunStatus) => {
+      try {
+        return !this.#options.shouldPersistSnapshot({ workflowStatus, stepResults: {} });
+      } catch {
+        return false;
+      }
+    };
+    run.unstored = !lookUpStoredRun && WORKFLOW_RUN_STATUSES.every(policyNeverStores);
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {

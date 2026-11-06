@@ -1701,6 +1701,26 @@ describe('run status reads for a run created without a stored row', () => {
     expect(statusSpy).not.toHaveBeenCalled();
   });
 
+  it('runs a workflow whose persistence policy reads step results', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'step-results-policy-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: {
+        shouldPersistSnapshot: ({ workflowStatus, stepResults }) =>
+          workflowStatus === 'success' && stepResults.first!.status === 'success',
+      },
+    })
+      .then(noopStep('first'))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'step-results-policy-wf': workflow } });
+
+    const run = await workflow.createRun();
+
+    expect((await run.start({ inputData: {} })).status).toBe('success');
+  });
+
   it.each<{
     when: string;
     shouldPersistSnapshot?: ShouldPersistSnapshotFn;
