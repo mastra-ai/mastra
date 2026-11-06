@@ -46,7 +46,7 @@ What does the color mean?
 ```
 
 - `--chart-*` tokens are for data visualization only. Borrowing them for a label ties the label to whatever the chart palette becomes next.
-- Destructive and warning text on the plain page uses `{status}-foreground` because those indicators are too light to read as text in light mode ([decision](../decisions/0003-destructive-and-warning-text-use-foreground.md)).
+- Destructive and warning text on the plain page uses `{status}-foreground` because those indicators are too light to read as text in light mode ([#25587](https://github.com/mastra-ai/mastra/pull/25587)).
 - There is no `error` token. It was the same red as `destructive`; use `destructive-indicator`.
 - A ramp utility without a `dark:` pair is correct in one theme only. A single step tuned for the dark page (`text-green-400`) lands near 2:1 on the light page.
 
@@ -54,7 +54,7 @@ What does the color mean?
 
 A resting color never depends on what sits behind it: a translucent badge, notice, or status tint changes color on every surface it lands on and its contrast can no longer be checked. Resting colors are solid ramp steps in both themes, whatever layer they sit on.
 
-Opacity is allowed only through design-system tokens, for layers whose job is to show what is underneath: state layers (`fill`, `fill-subtle`, `fill-hover`, `fill-active`, `fill-strong`), scrims (`scrim`), badge fills (`badge-{hue}-strong` and `-subtle`, so a badge tints with the card or row under it when that changes on hover), neutral hairlines (`border`, `surface-rim`, `gray-alpha-*`), and fades, glows, and chart overlaps inside a `ds/` component. Product code (Studio, Factory, `ee/` features) MUST NOT add opacity modifiers to chromatic colors (`bg-green-500/20`), `color-mix()`, or SVG `fillOpacity` on its own colors. `src/theme-export.test.ts` keeps the status, product, chart, and span roles opaque; nothing checks product code, so `node scripts/check-color-usage.mjs --report` is the review aid ([decision](../decisions/0001-badge-fills-are-translucent.md)).
+Opacity is allowed only through design-system tokens, for layers whose job is to show what is underneath: state layers (`fill`, `fill-subtle`, `fill-hover`, `fill-active`, `fill-strong`), scrims (`scrim`), badge fills (`badge-{hue}-strong` and `-subtle`, so a badge tints with the card or row under it when that changes on hover), neutral hairlines (`border`, `surface-rim`, `gray-alpha-*`), and fades, glows, and chart overlaps inside a `ds/` component. Product code (Studio, Factory, `ee/` features) MUST NOT add opacity modifiers to chromatic colors (`bg-green-500/20`), `color-mix()`, or SVG `fillOpacity` on its own colors. `src/theme-export.test.ts` keeps the status, product, chart, and span roles opaque; nothing checks product code, so `node scripts/check-color-usage.mjs --report` is the review aid ([#25587](https://github.com/mastra-ai/mastra/pull/25587)).
 
 </instructions>
 
