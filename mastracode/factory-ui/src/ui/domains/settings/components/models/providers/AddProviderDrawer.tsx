@@ -94,13 +94,16 @@ export function AddProviderDrawer({
   const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : connectingGateway;
   const startError = startOAuthMutation.error ?? connectGatewayMutation.error;
 
+  // Each attempt shows its own error, not one left over from the other way to connect.
   const signIn = (provider: ProviderInfo) => {
+    connectGatewayMutation.reset();
     startOAuthMutation.mutate(signInRequest(provider, requestScope), {
       onSuccess: session => onOAuthStarted(provider.provider, session),
     });
   };
 
   const connectGateway = () => {
+    startOAuthMutation.reset();
     connectGatewayMutation.mutate({ scope: requestScope }, { onSuccess: onClose });
   };
 
