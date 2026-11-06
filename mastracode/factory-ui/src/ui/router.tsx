@@ -178,7 +178,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
               children: [
                 {
                   element: <AppLayout />,
-                  ...loadOnEntry(prefetchSidebar),
+                  // Load the chat code while its session links appear, before "Open session" is clicked.
+                  ...loadOnEntry(prefetchSidebar, ThreadPage),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.

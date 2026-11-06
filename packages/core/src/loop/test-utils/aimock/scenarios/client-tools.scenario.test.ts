@@ -1,4 +1,4 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
+import { jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
@@ -265,6 +265,46 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
     expect((chunks ?? []).some((c: any) => c.type === 'tool-error')).toBe(false);
     expect(
       (chunks ?? []).find((c: any) => c.type === 'tool-result' && c.payload?.toolCallId === 'call-edit'),
+    ).toMatchObject({ payload: { result: { acknowledged: true } } });
+  });
+
+  // Technical: an AI SDK `jsonSchema()` wrapper is neither Zod nor a standard schema, so it took
+  // the same Zod round-trip as a plain JSON Schema and reached the model as `{}`.
+  it('offers the model every branch of a union in an AI SDK jsonSchema() tool', async () => {
+    const setCursor = {
+      id: 'set-cursor',
+      description: 'Move the cursor',
+      inputSchema: jsonSchema({
+        type: 'object',
+        properties: { cursor: { anyOf: [{ type: 'string' }, { type: 'integer' }] } },
+        required: ['cursor'],
+      }),
+      renderOnly: true,
+    };
+
+    const { chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Move the cursor to 3',
+      clientTools: { 'set-cursor': setCursor as any },
+      stopWhen: stepCountIs(3),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call-cursor', name: 'set-cursor', arguments: { cursor: 3 } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-cursor', hasToolResult: true }, { content: 'Moved.' });
+      },
+    });
+
+    const tool = (requests[0]?.body?.tools ?? []).find((t: any) => t.function.name === 'set-cursor');
+    expect(tool?.function.parameters?.properties?.cursor?.anyOf?.map((b: any) => b.type)).toEqual([
+      'string',
+      'integer',
+    ]);
+    expect(
+      (chunks ?? []).find((c: any) => c.type === 'tool-result' && c.payload?.toolCallId === 'call-cursor'),
     ).toMatchObject({ payload: { result: { acknowledged: true } } });
   });
 

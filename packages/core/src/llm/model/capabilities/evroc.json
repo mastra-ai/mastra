@@ -50,6 +50,17 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "mistralai/Mistral-Medium-3.5-128B": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
@@ -64,12 +75,6 @@
         "type": "toggle"
       }
     ],
-    "mistralai/Mistral-Medium-3.5-128B": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
@@ -77,11 +82,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "budget_tokens"
       }
     ]
   }

@@ -150,12 +150,13 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
-import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
+import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
 import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
@@ -777,6 +778,7 @@ export class MastraFactory {
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
+    const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -792,6 +794,7 @@ export class MastraFactory {
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
       skillOverrides: skillOverridesStorage,
+      voiceSettings: voiceSettingsStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -1357,7 +1360,7 @@ export class MastraFactory {
       if (policy) {
         const orgId = tenantOrgId(policy.tenant);
         return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
-          ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
+          ? { orgId, userId: factoryProjectSettingsUserId(policy.factoryProjectId) }
           : { orgId, userId: policy.tenant.userId };
       }
       // No tenant pays: the session's Factory row applies.
@@ -1366,7 +1369,7 @@ export class MastraFactory {
       if (!factoryProjectId) return { orgId: 'local', userId: 'local' };
       return {
         orgId: binding?.orgId ?? scope?.factoryOrgId ?? 'local',
-        userId: factoryMemorySettingsUserId(factoryProjectId),
+        userId: factoryProjectSettingsUserId(factoryProjectId),
       };
     };
     const loadMemorySettings = async ({
