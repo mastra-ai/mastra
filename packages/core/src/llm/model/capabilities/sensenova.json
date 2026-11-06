@@ -10,6 +10,12 @@
     "sensenova-6.8-flash-lite"
   ],
   "reasoning": {
+    "deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -41,12 +47,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ]
   }

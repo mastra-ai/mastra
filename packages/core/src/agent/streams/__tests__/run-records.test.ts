@@ -96,10 +96,10 @@ describe('Agent run records', () => {
       requireApproval: true,
       execute: async () => ({ ok: true }),
     });
-    const agentA = makeAgent({ tools: { lookup }, streams: { cleanupTimeoutMs: 0 } });
+    const agentA = makeAgent({ tools: { lookup }, durable: { cleanupTimeoutMs: 0 } });
     new Mastra({ agents: { agent: agentA }, pubsub, cache, storage: new InMemoryStore(), logger: false });
     // A second server: same pubsub and cache, its own Agent instance.
-    const agentB = makeAgent({ tools: { lookup }, streams: { cleanupTimeoutMs: 0 } });
+    const agentB = makeAgent({ tools: { lookup }, durable: { cleanupTimeoutMs: 0 } });
     new Mastra({ agents: { agent: agentB }, pubsub, cache, storage: new InMemoryStore(), logger: false });
 
     const output = await agentA.stream('Look up a.', { requestContext: owner() });
@@ -152,8 +152,8 @@ describe('Agent run records', () => {
         return { ok: true };
       },
     });
-    const agentA = makeAgent({ tools: { wait }, streams: { cache: false, cleanupTimeoutMs: 0 } });
-    const agentB = makeAgent({ streams: { cache: false, cleanupTimeoutMs: 0 } });
+    const agentA = makeAgent({ tools: { wait }, durable: { cache: false, cleanupTimeoutMs: 0 } });
+    const agentB = makeAgent({ durable: { cache: false, cleanupTimeoutMs: 0 } });
     const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache, logger: false });
     const mastraB = new Mastra({ agents: { agent: agentB }, pubsub, cache, logger: false });
     try {
@@ -195,7 +195,7 @@ describe('Agent run records', () => {
       requireApproval: status === 'suspended',
       execute: async () => ({ ok: true }),
     });
-    const agent = makeAgent({ tools: { lookup }, streams: { cache: false, cleanupTimeoutMs: 0 } });
+    const agent = makeAgent({ tools: { lookup }, durable: { cache: false, cleanupTimeoutMs: 0 } });
     const mastra = new Mastra({ agents: { agent }, cache, storage: new InMemoryStore(), logger: false });
     try {
       const output = await agent.stream('Look it up.', { requestContext: owner(), maxSteps: 3 });
@@ -237,7 +237,7 @@ describe('Agent run records', () => {
         return { ok: true };
       },
     });
-    const agent = makeAgent({ tools: { wait }, streams: { cache: false, cleanupTimeoutMs: 0 } });
+    const agent = makeAgent({ tools: { wait }, durable: { cache: false, cleanupTimeoutMs: 0 } });
     const mastra = new Mastra({ agents: { agent }, cache, logger: false });
     try {
       const output = await agent.stream('Wait for work.', { requestContext: owner(), maxSteps: 3 });
@@ -262,7 +262,7 @@ describe('Agent run records', () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
     const cache = new InMemoryServerCache();
     const pubsub = new EventEmitterPubSub();
-    const agent = makeAgent({ streams: { cleanupTimeoutMs: 100 } });
+    const agent = makeAgent({ durable: { cleanupTimeoutMs: 100 } });
     new Mastra({ agents: { agent }, pubsub, cache, logger: false });
     const output = await agent.stream('Say hello.', { requestContext: owner() });
     await output.consumeStream();
@@ -280,7 +280,7 @@ describe('Agent run records', () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
     const pubsub = new EventEmitterPubSub();
     const cleared = vi.spyOn(pubsub, 'clearTopic');
-    const agent = makeAgent({ streams: { cleanupTimeoutMs: 50 } });
+    const agent = makeAgent({ durable: { cleanupTimeoutMs: 50 } });
     new Mastra({ agents: { agent }, pubsub, cache: new InMemoryServerCache(), logger: false });
     const output = await agent.stream('Say hello.', { requestContext: owner() });
     await output.consumeStream();
@@ -299,7 +299,7 @@ describe('Agent run records', () => {
   it('treats an expired or evicted record as an unknown run', async () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
     const cache = new InMemoryServerCache();
-    const agent = makeAgent({ streams: { cleanupTimeoutMs: 0 } });
+    const agent = makeAgent({ durable: { cleanupTimeoutMs: 0 } });
     new Mastra({ agents: { agent }, pubsub: new EventEmitterPubSub(), cache, logger: false });
     const output = await agent.stream('Say hello.', { requestContext: owner() });
     await output.consumeStream();
@@ -312,9 +312,9 @@ describe('Agent run records', () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
     const cache = new InMemoryServerCache();
     const pubsub = new EventEmitterPubSub();
-    const agentA = makeAgent({ streams: { cache: false, cleanupTimeoutMs: 0 } });
+    const agentA = makeAgent({ durable: { cache: false, cleanupTimeoutMs: 0 } });
     new Mastra({ agents: { agent: agentA }, pubsub, cache, logger: false });
-    const agentB = makeAgent({ streams: { cache: false, cleanupTimeoutMs: 0 } });
+    const agentB = makeAgent({ durable: { cache: false, cleanupTimeoutMs: 0 } });
     new Mastra({ agents: { agent: agentB }, pubsub, cache, logger: false });
     const output = await agentA.stream('Say hello.', { requestContext: owner() });
     await output.consumeStream();
@@ -336,7 +336,7 @@ describe('Agent run records', () => {
   it('keeps no record for a run of an agent with streams off', async () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
     const cache = new RecordingCache();
-    const agent = makeAgent({ streams: false });
+    const agent = makeAgent({ durable: false });
     new Mastra({ agents: { agent }, pubsub: new EventEmitterPubSub(), cache, logger: false });
     const output = await agent.stream('Say hello.', { requestContext: owner() });
     await output.consumeStream();

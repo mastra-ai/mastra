@@ -4,6 +4,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { IntakeIssue } from '../../capabilities/intake.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -22,10 +23,6 @@ import { handleGitLabWebhook } from './webhook.js';
 import type { GitLabWebhookHandlerOptions, ParsedGitLabWebhook } from './webhook.js';
 
 type RouteContext = Context;
-
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
