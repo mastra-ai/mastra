@@ -72,7 +72,7 @@ const chipsFieldStyle: React.CSSProperties = {
 // `w-0` + `flex-1`: an input's default width (about 20 characters) would otherwise set the field's
 // minimum width, so it couldn't shrink into a narrow column.
 const inputClass =
-  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground';
+  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none zoom-safe-text placeholder:text-muted-foreground';
 
 /** Caret at the end of the value instead of selecting it, the way a text field behaves. */
 function moveCaretToEnd(event: React.FocusEvent<HTMLInputElement>) {

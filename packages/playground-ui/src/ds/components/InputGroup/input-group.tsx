@@ -194,7 +194,7 @@ const inputGroupControlHeightBySize = cn(
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared with InputNumber
 export const inputGroupControlClassName = cn(
-  'min-w-0 flex-1 bg-transparent px-3 text-label text-foreground outline-hidden',
+  'min-w-0 flex-1 bg-transparent px-3 text-label zoom-safe-text text-foreground outline-hidden',
   inputGroupControlHeightBySize,
   'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
   'focus:placeholder:opacity-70',
@@ -244,7 +244,7 @@ function InputGroupTextarea({ className, testId, error, ...props }: InputGroupTe
       data-slot="input-group-control"
       data-testid={testId}
       className={cn(
-        'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-foreground outline-hidden',
+        'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 zoom-safe-text text-foreground outline-hidden',
         inputGroupControlTextBySize,
         'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
         'focus:placeholder:opacity-70',

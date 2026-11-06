@@ -264,6 +264,12 @@
   overflow-wrap: break-word;
 }
 
+@utility zoom-safe-text {
+  @variant pointer-coarse {
+    font-size: 16px !important;
+  }
+}
+
 @utility time-input {
   &::-webkit-calendar-picker-indicator {
     @apply cursor-pointer;

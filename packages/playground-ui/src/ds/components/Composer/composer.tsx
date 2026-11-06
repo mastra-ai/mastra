@@ -111,7 +111,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
           ref={mergeRefs(ref, shellInputRef)}
           data-slot="composer-input"
           className={cn(
-            'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+            'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body zoom-safe-text text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
             variant === 'textarea' ? 'min-h-28' : 'min-h-10',
             className,
           )}

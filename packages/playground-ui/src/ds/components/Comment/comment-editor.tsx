@@ -62,7 +62,7 @@ export function CommentEditor({
           readOnly={isPending}
           aria-label={ariaLabel}
           rows={2}
-          className="block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-border bg-background px-2 pt-1.5 pb-9 text-caption text-foreground outline-none focus:border-border-strong"
+          className="block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-border bg-background px-2 pt-1.5 pb-9 text-caption zoom-safe-text text-foreground outline-none focus:border-border-strong"
         />
         <div className="absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg bg-background px-1.5 pt-1 pb-1.5">
           <Button icon={<X />} type="button" variant="ghost" size="sm" disabled={isPending} onClick={onClose}>

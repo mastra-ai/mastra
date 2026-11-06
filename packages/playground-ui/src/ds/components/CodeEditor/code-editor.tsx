@@ -163,6 +163,7 @@ const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTh
 
 type CodeEditorContentAttributes = {
   'aria-label': string;
+  class: string;
   id?: string;
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
@@ -244,7 +245,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     };
 
     const extensions = useMemo(() => {
-      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
+      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel, class: 'zoom-safe-text' };
       if (controlId) contentAttributes.id = controlId;
       if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
