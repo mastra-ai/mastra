@@ -167,11 +167,14 @@ export function createSessionCredentialTools(
       await deps.credentials.ensureReady();
       const credentials = await deps.credentials.list({ orgId: scope.orgId, sessionId: scope.sessionId });
       return {
-        credentials: credentials.map(credential => ({
-          name: credential.name,
-          allowSandbox: credential.allowSandbox,
-          expiresAt: credential.expiresAt.toISOString(),
-        })),
+        // Only what the current owner submitted is usable (see resolveForCommand).
+        credentials: credentials
+          .filter(credential => credential.submittedBy === scope.userId)
+          .map(credential => ({
+            name: credential.name,
+            allowSandbox: credential.allowSandbox,
+            expiresAt: credential.expiresAt.toISOString(),
+          })),
       };
     },
   });
@@ -197,7 +200,7 @@ export function createSessionCredentialTools(
       if (!found) throw new Error('This session has no sandbox running yet. Run a command to start one.');
       await deps.credentials.ensureReady();
       const env = await deps.credentials
-        .resolveForCommand({ orgId: scope.orgId, sessionId: scope.sessionId, names })
+        .resolveForCommand({ orgId: scope.orgId, sessionId: scope.sessionId, names, submittedBy: scope.userId })
         .catch(toolError);
       const values = Object.values(env);
       const workdir = cwd ?? found.workdir;

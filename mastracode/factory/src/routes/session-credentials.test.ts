@@ -105,7 +105,12 @@ describe('session credential routes', () => {
     const replay = await submit(as('alice'), { value: 'other', allowSandbox: true });
     expect(replay.status).toBe(409);
     await expect(
-      credentials.resolveForCommand({ orgId: 'org-a', sessionId: 'sess-a', names: ['FAKE_API_KEY'] }),
+      credentials.resolveForCommand({
+        orgId: 'org-a',
+        sessionId: 'sess-a',
+        names: ['FAKE_API_KEY'],
+        submittedBy: 'alice',
+      }),
     ).resolves.toEqual({ FAKE_API_KEY: SECRET });
     expect(request.id).toBeTruthy();
   });
@@ -229,7 +234,12 @@ describe('session credential routes', () => {
     expect((res as Response).status).toBe(200);
     expect(notifyAvailable).toHaveBeenCalledTimes(1);
     expect(
-      await credentials.resolveForCommand({ orgId: 'org-a', sessionId: 'sess-a', names: ['FAKE_API_KEY'] }),
+      await credentials.resolveForCommand({
+        orgId: 'org-a',
+        sessionId: 'sess-a',
+        names: ['FAKE_API_KEY'],
+        submittedBy: 'alice',
+      }),
     ).toEqual({ FAKE_API_KEY: SECRET });
   });
 

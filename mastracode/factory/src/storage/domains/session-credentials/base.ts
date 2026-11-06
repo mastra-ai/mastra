@@ -328,6 +328,12 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
       );
       throw error;
     }
+    // A session purge that ran between the claim and the upsert removed the
+    // request first; drop the credential written after it instead of leaving it.
+    if (!(await this.#db.findOne<RequestRow>(REQUESTS, { id: input.requestId }))) {
+      await this.#db.deleteMany(CREDENTIALS, { id: row.id, created_at: row.created_at });
+      throw new SessionCredentialError('not_found', 'Credential request not found.');
+    }
     return { request, credential: toCredential(row) };
   }
 
@@ -383,17 +389,20 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
   /** Drop every credential and request of a session (session deleted or closed). */
   async purgeSession(scope: SessionCredentialScope): Promise<void> {
     const where = { org_id: scope.orgId, session_id: scope.sessionId };
-    await this.#db.deleteMany(CREDENTIALS, where);
+    // Requests first: an in-flight fulfillRequest re-checks its request after
+    // writing, so either it sees the request gone or this delete removes its credential.
     await this.#db.deleteMany(REQUESTS, where);
+    await this.#db.deleteMany(CREDENTIALS, where);
   }
 
   /**
    * Decrypt the named credentials for one sandbox command. Expired rows are
-   * deleted on the way; every name must exist, be unexpired, and have been
-   * submitted with sandbox use allowed.
+   * deleted on the way; every name must exist, be unexpired, have been
+   * submitted by `submittedBy` (the current session owner, so credentials do
+   * not pass to a new owner after a transfer), and allow sandbox use.
    */
   async resolveForCommand(
-    scope: SessionCredentialScope & { names: string[] },
+    scope: SessionCredentialScope & { names: string[]; submittedBy: string },
     now = new Date(),
   ): Promise<Record<string, string>> {
     const env: Record<string, string> = {};
@@ -402,6 +411,7 @@ export class SessionCredentialsStorage extends FactoryStorageDomain {
         org_id: scope.orgId,
         session_id: scope.sessionId,
         name,
+        submitted_by: scope.submittedBy,
       });
       if (row) await this.#deleteExpired([row], now);
       if (!row || row.expires_at.getTime() <= now.getTime()) {
