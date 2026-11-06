@@ -7879,7 +7879,9 @@ describe('review status comment lifecycle', () => {
     const { storage, lostAt, conversation, transitionService } = await lostReview('review-status-replay-live');
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     // The lost worker delivered the kickoff but died before recording the run start, and the run is still going here.
-    const { controller, emitAgentEnd } = createSession(undefined, { initialDeliveredSignalIds: [record!.id] });
+    const { controller, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+      initialDeliveredSignalIds: [record!.id],
+    });
     controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
     let dispatched = false;
     const tick = new FactoryDecisionDispatcher({
@@ -7893,7 +7895,8 @@ describe('review status comment lifecycle', () => {
       .runOnce(new Date(lostAt.getTime() + 2_000))
       .then(() => (dispatched = true));
 
-    await new Promise(resolve => setTimeout(resolve, 20));
+    // The re-claim is now watching the live run; only its end may finalize the review.
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(1));
     expect(dispatched).toBe(false);
     expect(conversation.events).toEqual([]);
     expect(conversation.comments()[0]!.body).toContain('Reviewing…');
