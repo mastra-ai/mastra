@@ -182,6 +182,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     };
     const cancelReaderOnClose = () => cancelReader('request aborted');
     res.on('close', cancelReaderOnClose);
+    // The client may have dropped while the handler was still running, in which case 'close' already fired.
+    if (res.destroyed) cancelReaderOnClose();
 
     try {
       while (true) {
@@ -381,6 +383,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         };
         response.once('error', onResError);
         response.on('close', cancelReaderOnClose);
+        // The client may have dropped while the handler was still running, in which case 'close' already fired.
+        if (response.destroyed) cancelReaderOnClose();
 
         try {
           while (true) {

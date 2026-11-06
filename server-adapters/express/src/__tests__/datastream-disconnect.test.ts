@@ -5,7 +5,9 @@ import express from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraServer } from '../index';
 
-describe('datastream-response client disconnect', () => {
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+describe('streaming client disconnect', () => {
   let server: Server | undefined;
 
   afterEach(async () => {
@@ -14,27 +16,46 @@ describe('datastream-response client disconnect', () => {
     server = undefined;
   });
 
-  it('cancels the upstream body and stops pulling when the client aborts mid-body', async () => {
+  async function setup({
+    responseType,
+    handlerDelayMs = 0,
+  }: {
+    responseType: 'datastream-response' | 'stream';
+    handlerDelayMs?: number;
+  }) {
     const context = await createDefaultTestContext();
     const app = express();
     const adapter = new MastraServer({ app, mastra: context.mastra });
 
-    let pulls = 0;
+    const state = { pulls: 0 };
     const canceled = vi.fn();
-    const body = new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        pulls++;
-        await new Promise(resolve => setTimeout(resolve, 10));
-        controller.enqueue(new TextEncoder().encode(`chunk-${pulls}\n`));
-      },
-      cancel: canceled,
-    });
+    let handlerReturned!: () => void;
+    const handlerDone = new Promise<void>(resolve => (handlerReturned = resolve));
 
     const route: ServerRoute<any, any, any> = {
       method: 'POST',
-      path: '/test/datastream-disconnect',
-      responseType: 'datastream-response',
-      handler: async () => new Response(body, { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      path: '/test/disconnect',
+      responseType,
+      handler: async () => {
+        await sleep(handlerDelayMs);
+        handlerReturned();
+        const body = new ReadableStream({
+          async pull(controller) {
+            state.pulls++;
+            await sleep(10);
+            controller.enqueue(
+              responseType === 'stream'
+                ? { type: 'chunk', n: state.pulls }
+                : new TextEncoder().encode(`chunk-${state.pulls}\n`),
+            );
+          },
+          cancel: canceled,
+        });
+
+        return responseType === 'stream'
+          ? body
+          : new Response(body, { status: 200, headers: { 'Content-Type': 'text/plain' } });
+      },
     };
     app.use(adapter.createContextMiddleware());
     await adapter.registerRoute(app, route, { prefix: '' });
@@ -45,18 +66,39 @@ describe('datastream-response client disconnect', () => {
     const address = server.address();
     const port = typeof address === 'object' && address ? address.port : 0;
 
+    return { url: `http://localhost:${port}/test/disconnect`, state, canceled, handlerDone };
+  }
+
+  it('cancels a datastream-response body and stops pulling when the client aborts mid-body', async () => {
+    const { url, state, canceled } = await setup({ responseType: 'datastream-response' });
+
     const client = new AbortController();
-    const response = await fetch(`http://localhost:${port}/test/datastream-disconnect`, {
-      method: 'POST',
-      signal: client.signal,
-    });
-    const clientReader = response.body!.getReader();
-    await clientReader.read();
-    const pullsAtAbort = pulls;
+    const response = await fetch(url, { method: 'POST', signal: client.signal });
+    await response.body!.getReader().read();
+    const pullsAtAbort = state.pulls;
     client.abort();
 
-    await new Promise(resolve => setTimeout(resolve, 300));
-    expect(pulls - pullsAtAbort, 'upstream pulls after client abort').toBeLessThanOrEqual(2);
+    await sleep(300);
+    expect(state.pulls - pullsAtAbort, 'upstream pulls after client abort').toBeLessThanOrEqual(2);
     expect(canceled).toHaveBeenCalledWith('request aborted');
   });
+
+  it.each(['datastream-response', 'stream'] as const)(
+    'cancels a %s body when the client aborts before the handler returns',
+    async responseType => {
+      const { url, state, canceled, handlerDone } = await setup({ responseType, handlerDelayMs: 200 });
+
+      const client = new AbortController();
+      const request = fetch(url, { method: 'POST', signal: client.signal }).catch(() => undefined);
+      await sleep(50);
+      expect(state.pulls).toBe(0);
+      client.abort();
+      await request;
+
+      await handlerDone;
+      await sleep(300);
+      expect(state.pulls, 'upstream pulls after client abort').toBeLessThanOrEqual(2);
+      expect(canceled).toHaveBeenCalledWith('request aborted');
+    },
+  );
 });
