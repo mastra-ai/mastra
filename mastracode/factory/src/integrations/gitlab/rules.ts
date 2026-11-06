@@ -423,8 +423,12 @@ export class GitLabRules {
     // when one is on Work. Otherwise a trusted author's merge request names the card of the issue
     // its description says it closes, and the project's intake routes decide, when it is filed,
     // whether it joins that card. An untrusted author's merge request never lands on another card.
+    // A card with no source of its own (a manual card) never takes one: the merge request would
+    // become its only source and turn it into a merge request card.
     const eligibleHome = (card: Card) =>
-      card.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(this.options.boards, card);
+      card.externalSource !== null &&
+      card.externalSource.type !== 'pull-request' &&
+      !isTerminalWorkItem(this.options.boards, card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
     if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
       // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
