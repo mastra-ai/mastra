@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { MASTRA_PROJECTS_URL } from '../../../factory/services/gitlab';
+import { MASTRA_PLATFORM_URL } from '../../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../../factory/services/platformConnect';
 import { ConnectToolsSection } from '../ConnectToolsSection';
 
@@ -42,7 +42,7 @@ describe('Mastra Connect tools settings', () => {
     expect(screen.getAllByText('Needs reconnecting')).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
       'href',
-      MASTRA_PROJECTS_URL,
+      MASTRA_PLATFORM_URL,
     );
   });
 
@@ -53,7 +53,7 @@ describe('Mastra Connect tools settings', () => {
     expect(await screen.findByText(/No connections are attached to this Factory's project yet/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
       'href',
-      MASTRA_PROJECTS_URL,
+      MASTRA_PLATFORM_URL,
     );
   });
 
