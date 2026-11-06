@@ -5,6 +5,7 @@ import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
@@ -39,7 +40,7 @@ export function GithubIntakeSection({
       icon={<SettingsIntegrationIcon provider="github" />}
       account={status?.installations.map(installation => installation.accountLogin).join(', ')}
       listed={listed}
-      connectable={status?.enabled === true}
+      connection={listed ? connected && <GithubManageButton /> : status?.enabled === true && <GithubConnectButton />}
       description={githubDescription(status, unavailable)}
       syncControl={
         <IntakeSyncControl

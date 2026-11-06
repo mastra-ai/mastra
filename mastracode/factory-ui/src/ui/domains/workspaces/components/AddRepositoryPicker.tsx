@@ -13,15 +13,13 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Plus, RefreshCw, RotateCcw, Settings2, X } from 'lucide-react';
+import { Plus, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { Link } from 'react-router';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { settingsSectionPath } from '../../settings/settingsSections';
 import { SettingsIntegrationIcon } from '../../settings/components/brand-icons/SettingsIntegrationIcon';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
@@ -166,7 +164,7 @@ export function AddRepositoryPicker({
               <Txt as="p" variant="caption" tone="muted">
                 {query
                   ? 'No repositories match your search.'
-                  : 'No more repositories available. Check repository access in Connections.'}
+                  : 'No more repositories available. Check repository access with Manage under Source control.'}
               </Txt>
             )}
           </div>
@@ -177,16 +175,6 @@ export function AddRepositoryPicker({
         ) : null}
       </DrawerBody>
       <DrawerFooter className="shrink-0">
-        <Button
-          variant="link"
-          size="sm"
-          icon={<Settings2 />}
-          disabled={Boolean(addingRepository)}
-          className="mr-auto"
-          render={<Link to={settingsSectionPath(factory.id, 'connections')} />}
-        >
-          Manage connections
-        </Button>
         <DrawerClose
           disabled={Boolean(addingRepository)}
           render={
@@ -231,7 +219,7 @@ function githubUnavailableMessage(status: GithubStatus | undefined): string {
     const missing = status.diagnostics?.missingGithubAppEnvVars ?? [];
     return missing.length > 0
       ? `GitHub is disabled on the server. Missing env vars: ${missing.join(', ')}.`
-      : 'No source-control provider is configured. Manage connections to see available providers.';
+      : 'No source-control provider is configured on this server.';
   }
   return 'Connect GitHub or GitLab to add repositories.';
 }

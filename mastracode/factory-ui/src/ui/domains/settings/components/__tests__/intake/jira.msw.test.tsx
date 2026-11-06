@@ -80,6 +80,9 @@ describe('IntakeSection jira', () => {
 
     expect(await screen.findByText('Connected through Mastra Platform')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeEnabled();
+    expect(
+      within(screen.getByRole('region', { name: 'Jira' })).getByRole('link', { name: 'Manage Jira connection' }),
+    ).toHaveAttribute('href', 'https://projects.mastra.ai');
     await openSourcePicker('Jira projects');
     expect(await screen.findByRole('group', { name: 'Jira projects' })).toBeInTheDocument();
   });
@@ -387,11 +390,14 @@ describe('IntakeSection jira', () => {
     renderIntakeSection();
 
     expect(
-      await screen.findByText('Jira rejected a connected account. Reconnect it to resume syncing.'),
+      await screen.findByText('Jira rejected a connected account. Reauthorize it from Manage to resume syncing.'),
     ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('region', { name: 'Jira' })).getByRole('link', { name: 'Manage connection' }),
-    ).toBeInTheDocument();
+    const jira = screen.getByRole('region', { name: 'Jira' });
+    expect(within(jira).getByRole('link', { name: 'Manage Jira connection' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai',
+    );
+    expect(within(jira).queryByRole('button', { name: 'Reconnect Jira' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Jira projects' })).not.toBeInTheDocument();
   });
 });

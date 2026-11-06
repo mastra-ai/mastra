@@ -106,9 +106,7 @@ describe('IntakeSection gitlab', () => {
 
       renderIntakeSection();
 
-      expect(
-        await screen.findByText('A GitLab account needs to be reconnected in Mastra Platform.'),
-      ).toBeInTheDocument();
+      expect(await screen.findByText('A GitLab account needs to be reconnected.')).toBeInTheDocument();
       await openSourcePicker('GitLab projects');
       expect(await screen.findByRole('button', { name: 'Add acme/app' })).toBeInTheDocument();
     });

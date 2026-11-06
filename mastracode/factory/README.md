@@ -971,7 +971,7 @@ Both integrations expose incidents and incident follow-ups as separate Intake so
 
 ### Linear workspace connections
 
-For Platform-managed Linear connections, Settings → Connections lists each workspace, including disconnected workspaces. Healthy workspaces offer **Manage**; disconnected workspaces offer **Reconnect**. To add another workspace, open **Add connection**, then choose **Add workspace**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
+For Platform-managed Linear connections, **Settings → Work Intake** connects and repairs workspaces in place. A disconnected workspace with saved sources shows **Reconnect** on the Linear card; healthy ones need no action. A disconnected workspace without saved sources has nothing paused, so it has no Reconnect; authorize it again with **Connect**. To add another workspace, choose **Connect** next to Linear under **Add a source**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
 
 Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources and polling from healthy workspaces remain available when another workspace's source request fails.
 

@@ -1,5 +1,3 @@
-export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
-
 export interface GitLabConnection {
   id: string;
   integrationId: string;

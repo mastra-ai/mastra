@@ -14,7 +14,9 @@ import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
 import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { JiraIntakeSection } from './JiraIntakeSection';
+import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
+import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
@@ -124,6 +126,18 @@ export function IntakeSection() {
   const connectedSources = sourcesListed('connected');
   const unavailableSources = sourcesListed('unavailable');
   const availableSources = sourcesListed('available');
+  const anotherAccountRows = [
+    gitlab.data?.mode === 'platform' && gitlab.data.connections?.length ? (
+      <AddPlatformAccountRow key="gitlab" provider="gitlab" />
+    ) : null,
+    linear.data?.mode === 'platform' && linear.data.workspaces?.some(workspace => workspace.connected) ? (
+      <AddLinearWorkspaceRow key="linear" />
+    ) : null,
+    jira.data?.connections?.length ? <AddPlatformAccountRow key="jira" provider="jira" /> : null,
+    !incidentioDirect && incidentioConnections.data?.length ? (
+      <AddPlatformAccountRow key="incident-io" provider="incident-io" />
+    ) : null,
+  ].filter(row => row !== null);
 
   return (
     <div className="flex flex-col gap-8">
@@ -149,12 +163,13 @@ export function IntakeSection() {
           </div>
         </SettingsSubsection>
       )}
-      {availableSources.length > 0 && (
+      {(availableSources.length > 0 || anotherAccountRows.length > 0) && (
         <SettingsSubsection title="Add a source">
           <SettingsContainer>
             {availableSources.map(source => (
               <div key={source.id}>{source.content}</div>
             ))}
+            {anotherAccountRows}
           </SettingsContainer>
         </SettingsSubsection>
       )}

@@ -10,6 +10,7 @@ import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupGitLabProjectsByAccount } from './intakeSourceGroups';
+import { PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
@@ -31,14 +32,14 @@ export function GitLabIntakeSection({
   const description = connectionDescription();
   function connectionDescription() {
     if (statusUnavailable) return "Couldn't load GitLab status.";
-    if (reauthRequired) return 'A GitLab account needs to be reconnected in Mastra Platform.';
+    if (reauthRequired) return 'A GitLab account needs to be reconnected.';
     if (authError)
       return platformManaged
-        ? 'GitLab rejected a connected account. Reconnect it in Mastra Platform.'
+        ? 'GitLab rejected a connected account. Reauthorize it from Manage to resume syncing.'
         : 'GitLab rejected the configured access token. Ask the operator to check it.';
     if (!configured)
       return platformManaged
-        ? 'Connect GitLab in Mastra Platform to sync issues from this organization.'
+        ? 'Connect GitLab to sync issues from this organization.'
         : 'GitLab is not configured on this server. Configure a GitLab access token to enable it.';
     return undefined;
   }
@@ -48,7 +49,14 @@ export function GitLabIntakeSection({
       icon={<SettingsIntegrationIcon provider="gitlab" />}
       account={status?.accounts?.join(', ')}
       listed={listed}
-      connectable={platformManaged}
+      connection={
+        platformManaged &&
+        (listed ? (
+          <PlatformConnectionActions provider="gitlab" connections={status?.connections ?? []} />
+        ) : (
+          <PlatformConnectButton provider="gitlab" />
+        ))
+      }
       description={description}
       syncControl={
         <IntakeSyncControl
