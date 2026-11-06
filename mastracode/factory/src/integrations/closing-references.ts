@@ -49,14 +49,19 @@ function runEnd(text: string, char: string, start: number): number {
  * `text` with each code fence replaced by a space: a run of three or more backticks or tildes up
  * to the first run of the same character at least as long, or to the end. A scan rather than a
  * backreference regex, which compares the whole opening run at every position and so takes
- * quadratic time on long runs. Each character is read once.
+ * quadratic time on long runs. Each search starts where the last one for that run ended, so every
+ * character is read a bounded number of times however many fences there are.
  */
 function withoutFences(text: string): string {
   let out = '';
   let from = 0;
+  // The next opener of each kind, searched again only once the scan has passed it: a kind that
+  // never appears again would otherwise be searched to the end on every fence.
+  let backtick = text.indexOf('```');
+  let tilde = text.indexOf('~~~');
   for (;;) {
-    const backtick = text.indexOf('```', from);
-    const tilde = text.indexOf('~~~', from);
+    if (backtick >= 0 && backtick < from) backtick = text.indexOf('```', from);
+    if (tilde >= 0 && tilde < from) tilde = text.indexOf('~~~', from);
     const start = backtick < 0 ? tilde : tilde < 0 ? backtick : Math.min(backtick, tilde);
     if (start < 0) return out + text.slice(from);
     out += `${text.slice(from, start)} `;
