@@ -98,11 +98,17 @@ const APPROVAL_LOOKUP_PAGE_SIZE = 50;
 const APPROVAL_LOOKUP_CACHE_SIZE = 1000;
 /**
  * How long a lookup that found no pending approval is trusted. Bounds repeat
- * history reads for answered or unknown cards to one per toolCallId per window,
+ * history reads for answered or unknown cards to one per card per window,
  * while still picking up an approval persisted by another instance after the
  * first click.
  */
 const APPROVAL_LOOKUP_NEGATIVE_TTL_MS = 60_000;
+/**
+ * How long a found pending approval is trusted. Another instance may answer it
+ * meanwhile; a resume of an answered run fails as stale, so this only bounds how
+ * long that state is reused.
+ */
+const APPROVAL_LOOKUP_PENDING_TTL_MS = 10 * 60_000;
 
 /** The persisted pending-approval entry an agent stores on its assistant message. */
 type PersistedPendingApproval = {
@@ -127,11 +133,17 @@ type ApprovalLookupResult =
   | { status: 'missing' };
 
 type CachedApprovalLookup = {
-  threadId: string;
+  toolCallId: string;
   result: ApprovalLookupResult;
-  /** Unset for pending approvals, which stay valid until answered or replaced. */
+  /** Unset while a click that claimed the approval is resuming its run. */
   expiresAt?: number;
 };
+
+/** Identifies one approval card: tool call ids alone can repeat across threads and runs. */
+type ApprovalCardKey = { threadId: string; messageId: string; toolCallId: string };
+
+const approvalCardKey = ({ threadId, messageId, toolCallId }: ApprovalCardKey) =>
+  JSON.stringify([threadId, messageId, toolCallId]);
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
@@ -217,15 +229,17 @@ export class AgentChannels {
    */
   private pendingApprovalCards = new Map<string, PendingApprovalRecord>();
   /**
-   * Memory-fallback approval lookups, keyed by toolCallId. A click that misses
-   * `pendingApprovalCards` may have to read the whole thread, so the result is
-   * kept: repeat clicks (including rejected ones from other users) reuse it with
-   * no storage read. Bounded by `APPROVAL_LOOKUP_CACHE_SIZE`; negative results
-   * expire after `APPROVAL_LOOKUP_NEGATIVE_TTL_MS`.
+   * Approval state per card (thread, card message, toolCallId). A click that
+   * misses `pendingApprovalCards` may have to read the whole thread, so the
+   * result is kept: repeat clicks (including rejected ones from other users)
+   * reuse it with no storage read. A click that answers a card also claims it
+   * here, so a second click cannot answer it again. Bounded by
+   * `APPROVAL_LOOKUP_CACHE_SIZE`; entries expire per the `APPROVAL_LOOKUP_*_TTL_MS`
+   * constants.
    */
   private approvalLookups = new Map<string, CachedApprovalLookup>();
   /** Lookups in progress, so concurrent clicks on one card share one read. */
-  private approvalLookupsInFlight = new Map<string, { threadId: string; promise: Promise<ApprovalLookupResult> }>();
+  private approvalLookupsInFlight = new Map<string, { toolCallId: string; promise: Promise<ApprovalLookupResult> }>();
 
   /**
    * Platforms we've already warned about for misconfigured `toolDisplay` (e.g.
@@ -754,8 +768,8 @@ export class AgentChannels {
               toolCallId: actionId.slice(actionId.indexOf(':') + 1),
               actorId: event.user?.userId,
             };
-            // Undoes the answered mark set below if resuming the run fails.
-            let releaseClaim: (() => void) | undefined;
+            // Set once this click answers the card; see `claimApproval`.
+            let claim: { release: () => void; settle: () => void } | undefined;
             try {
               const approved = actionId.startsWith('tool_approve:');
               const toolCallId = actionEventContext.toolCallId;
@@ -808,8 +822,7 @@ export class AgentChannels {
               } else {
                 const lookup = await this.lookupPersistedApproval({
                   mastra,
-                  threadId: mastraThread.id,
-                  toolCallId,
+                  card: { threadId: mastraThread.id, messageId, toolCallId },
                   platform,
                 });
                 if (lookup.status === 'answered') {
@@ -847,9 +860,13 @@ export class AgentChannels {
                 return;
               }
 
-              // From here this click answers the approval. Mark it answered so
-              // repeat clicks are ignored without reading history again.
-              releaseClaim = this.claimApproval(mastraThread.id, toolCallId);
+              // From here this click answers the approval. Claim it so repeat or
+              // concurrent clicks are ignored without reading history again.
+              claim = this.claimApproval({ threadId: mastraThread.id, messageId, toolCallId });
+              if (!claim) {
+                this.log('info', 'Tool approval already answered', actionEventContext);
+                return;
+              }
 
               // Build the card header with tool name and args
               const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
@@ -1004,7 +1021,7 @@ export class AgentChannels {
                 return;
               }
               // The run was not resumed, so the card is still answerable.
-              releaseClaim?.();
+              claim?.release();
               // The resolver also runs on approval continuations, so a refusal
               // here means this clicker isn't allowed to act — same silence as the
               // inbound path (see handleChatMessage).
@@ -1029,6 +1046,8 @@ export class AgentChannels {
               } catch (err) {
                 this.log('warn', 'Failed to post error message for action', { ...actionEventContext, error: err });
               }
+            } finally {
+              claim?.settle();
             }
           };
 
@@ -2107,8 +2126,7 @@ export class AgentChannels {
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, { ...record, requesterId: record.requesterId ?? requesterId });
       // A new card for this id supersedes any earlier or in-progress lookup.
-      this.approvalLookups.delete(toolCallId);
-      this.approvalLookupsInFlight.delete(toolCallId);
+      this.forgetApprovalLookups(toolCallId);
     };
     const getPendingApproval = (id: string) => this.pendingApprovalCards.get(id);
     const takePendingApproval = (id: string) => {
@@ -2401,67 +2419,103 @@ export class AgentChannels {
   /**
    * Find a pending tool approval in Memory for a click that missed the
    * in-memory card cache (e.g. after a rebuild or restart). Results are cached
-   * per toolCallId and concurrent lookups for the same card share one read, so
+   * per card and concurrent lookups for the same card share one read, so
    * repeated clicks cannot each force a history scan.
    */
   private async lookupPersistedApproval(args: {
     mastra: Mastra;
-    threadId: string;
-    toolCallId: string;
+    card: ApprovalCardKey;
     platform: string;
   }): Promise<ApprovalLookupResult> {
-    const { threadId, toolCallId } = args;
-    const cached = this.approvalLookups.get(toolCallId);
-    if (cached?.threadId === threadId && (cached.expiresAt === undefined || cached.expiresAt > Date.now())) {
-      return cached.result;
-    }
-    const inFlight = this.approvalLookupsInFlight.get(toolCallId);
-    if (inFlight?.threadId === threadId) return inFlight.promise;
+    const key = approvalCardKey(args.card);
+    const cached = this.getApprovalLookup(key);
+    if (cached) return cached.result;
+    const inFlight = this.approvalLookupsInFlight.get(key);
+    if (inFlight) return inFlight.promise;
 
-    const promise = this.readPersistedApproval(args);
-    this.approvalLookupsInFlight.set(toolCallId, { threadId, promise });
+    const { toolCallId } = args.card;
+    const promise = this.readPersistedApproval({
+      mastra: args.mastra,
+      threadId: args.card.threadId,
+      toolCallId,
+      platform: args.platform,
+    });
+    this.approvalLookupsInFlight.set(key, { toolCallId, promise });
     try {
       const result = await promise;
       // Only store the result if no card was posted for this id meanwhile.
-      if (this.approvalLookupsInFlight.get(toolCallId)?.promise === promise) {
-        this.cacheApprovalLookup(toolCallId, threadId, result);
+      if (this.approvalLookupsInFlight.get(key)?.promise === promise) {
+        this.setApprovalLookup(key, {
+          toolCallId,
+          result,
+          expiresAt:
+            Date.now() +
+            (result.status === 'pending' ? APPROVAL_LOOKUP_PENDING_TTL_MS : APPROVAL_LOOKUP_NEGATIVE_TTL_MS),
+        });
       }
       return result;
     } finally {
-      if (this.approvalLookupsInFlight.get(toolCallId)?.promise === promise) {
-        this.approvalLookupsInFlight.delete(toolCallId);
+      if (this.approvalLookupsInFlight.get(key)?.promise === promise) {
+        this.approvalLookupsInFlight.delete(key);
       }
     }
   }
 
-  private cacheApprovalLookup(toolCallId: string, threadId: string, result: ApprovalLookupResult): void {
-    // Re-insert so Map order tracks recency, then drop the oldest entries.
-    this.approvalLookups.delete(toolCallId);
-    this.approvalLookups.set(toolCallId, {
-      threadId,
-      result,
-      expiresAt: result.status === 'pending' ? undefined : Date.now() + APPROVAL_LOOKUP_NEGATIVE_TTL_MS,
-    });
-    for (const key of this.approvalLookups.keys()) {
-      if (this.approvalLookups.size <= APPROVAL_LOOKUP_CACHE_SIZE) break;
+  /** The cached entry for a card, or undefined when missing or expired. */
+  private getApprovalLookup(key: string): CachedApprovalLookup | undefined {
+    const entry = this.approvalLookups.get(key);
+    if (entry?.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
       this.approvalLookups.delete(key);
+      return undefined;
+    }
+    return entry;
+  }
+
+  private setApprovalLookup(key: string, entry: CachedApprovalLookup): void {
+    // Re-insert so Map order tracks recency, then drop the oldest entries.
+    this.approvalLookups.delete(key);
+    this.approvalLookups.set(key, entry);
+    for (const oldest of this.approvalLookups.keys()) {
+      if (this.approvalLookups.size <= APPROVAL_LOOKUP_CACHE_SIZE) break;
+      this.approvalLookups.delete(oldest);
+    }
+  }
+
+  /** Drop cached and in-progress lookups for every card with this toolCallId. */
+  private forgetApprovalLookups(toolCallId: string): void {
+    for (const [key, entry] of this.approvalLookups) {
+      if (entry.toolCallId === toolCallId) this.approvalLookups.delete(key);
+    }
+    for (const [key, entry] of this.approvalLookupsInFlight) {
+      if (entry.toolCallId === toolCallId) this.approvalLookupsInFlight.delete(key);
     }
   }
 
   /**
-   * Mark an approval as answered before its run is resumed, so a second click
-   * cannot answer it again. Returns a function that restores the previous
-   * lookup result, for when the resume fails and the card must stay usable.
+   * Claim a card for the click that is about to answer it. Returns undefined
+   * when another click already did. The claim holds while the run resumes;
+   * `settle` then keeps the card marked answered for
+   * `APPROVAL_LOOKUP_NEGATIVE_TTL_MS`, and `release` restores the previous
+   * state when the resume failed and the card must stay usable.
    */
-  private claimApproval(threadId: string, toolCallId: string): () => void {
-    const previous = this.approvalLookups.get(toolCallId);
-    this.cacheApprovalLookup(toolCallId, threadId, { status: 'answered' });
-    const claim = this.approvalLookups.get(toolCallId);
-    return () => {
-      // Leave the entry alone if a new card for this id replaced the claim.
-      if (this.approvalLookups.get(toolCallId) !== claim) return;
-      if (previous) this.cacheApprovalLookup(toolCallId, previous.threadId, previous.result);
-      else this.approvalLookups.delete(toolCallId);
+  private claimApproval(card: ApprovalCardKey): { release: () => void; settle: () => void } | undefined {
+    const key = approvalCardKey(card);
+    const previous = this.getApprovalLookup(key);
+    if (previous?.result.status === 'answered') return undefined;
+    const claimed: CachedApprovalLookup = { toolCallId: card.toolCallId, result: { status: 'answered' } };
+    this.setApprovalLookup(key, claimed);
+    // Both are no-ops once a new card for this id replaced the claim.
+    const isCurrent = () => this.approvalLookups.get(key) === claimed;
+    return {
+      release: () => {
+        if (!isCurrent()) return;
+        if (previous) this.setApprovalLookup(key, previous);
+        else this.approvalLookups.delete(key);
+      },
+      settle: () => {
+        if (!isCurrent()) return;
+        this.setApprovalLookup(key, { ...claimed, expiresAt: Date.now() + APPROVAL_LOOKUP_NEGATIVE_TTL_MS });
+      },
     };
   }
 
@@ -2471,8 +2525,9 @@ export class AgentChannels {
    * `pendingToolApprovals` entries, so this scans. There is deliberately no page
    * cap: any fixed limit would strand approvals behind it again (#29186). The
    * cost is bounded instead by `lookupPersistedApproval`, which runs this at
-   * most once per toolCallId per instance for pending approvals and once per
-   * `APPROVAL_LOOKUP_NEGATIVE_TTL_MS` for answered or unknown ones.
+   * most once per card per `APPROVAL_LOOKUP_PENDING_TTL_MS` for pending
+   * approvals and per `APPROVAL_LOOKUP_NEGATIVE_TTL_MS` for answered or unknown
+   * ones.
    */
   private async readPersistedApproval({
     mastra,

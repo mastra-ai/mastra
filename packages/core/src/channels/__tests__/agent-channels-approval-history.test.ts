@@ -348,8 +348,17 @@ describe('tool approval after AgentChannels is rebuilt (#29186)', () => {
 });
 
 // Without a card cache every click falls back to reading history, and that read
-// runs before the requester check. Lookup results are kept per toolCallId, so
+// runs before the requester check. Lookup results are kept per card, so
 // clicking a card again, by anyone, does not read the thread again.
+
+const SECOND_THREAD_ID = 'memory-thread-2';
+const SECOND_EXTERNAL_THREAD_ID = 'mock:room:thread-2';
+
+// The same messages in the second thread. Providers with sequential tool call
+// ids (`call_0`, ...) reuse ids across threads, so tool call ids are kept.
+function inSecondThread(messages: MastraDBMessage[]): MastraDBMessage[] {
+  return messages.map(m => ({ ...m, id: `t2-${m.id}`, threadId: SECOND_THREAD_ID }));
+}
 describe('repeated clicks on an approval card after a rebuild', () => {
   let cleanup: (() => Promise<void>) | undefined;
 
@@ -359,7 +368,7 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     cleanup = undefined;
   });
 
-  async function setup(messages: MastraDBMessage[]) {
+  async function setup(messages: MastraDBMessage[], secondThread: MastraDBMessage[] = []) {
     const store = new InMemoryStore({ id: 'approval-repeat-clicks' });
     const agent = new Agent({
       id: 'approval-owner',
@@ -390,7 +399,22 @@ describe('repeated clicks on an approval card after a rebuild', () => {
         },
       },
     });
-    await memory.saveMessages({ messages });
+    await memory.saveThread({
+      thread: {
+        id: SECOND_THREAD_ID,
+        resourceId: RESOURCE_ID,
+        title: 'Second support thread',
+        createdAt: when(0),
+        updatedAt: when(0),
+        metadata: {
+          channel_platform: 'mock',
+          channel_externalThreadId: SECOND_EXTERNAL_THREAD_ID,
+          channel_externalChannelId: 'mock:room',
+          channel_ownerId: agent.id,
+        },
+      },
+    });
+    await memory.saveMessages({ messages: [...messages, ...inSecondThread(secondThread)] });
 
     const adapter = createAdapter();
     // A fresh instance, as after a restart: no approval card is cached.
@@ -407,13 +431,17 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     };
 
     const reads = vi.spyOn(memory, 'listMessages');
-    const click = (actionId: string, userId: string) =>
+    const click = (
+      actionId: string,
+      userId: string,
+      { card = 'approval-card', thread = EXTERNAL_THREAD_ID }: { card?: string; thread?: string } = {},
+    ) =>
       adapter.chat!.processAction(
         {
           actionId,
           adapter,
-          threadId: EXTERNAL_THREAD_ID,
-          messageId: 'approval-card',
+          threadId: thread,
+          messageId: card,
           user: { userId, userName: userId, fullName: userId, isBot: false, isMe: false },
           raw: {},
         },
@@ -523,5 +551,54 @@ describe('repeated clicks on an approval card after a rebuild', () => {
     vi.setSystemTime(Date.now() + 61_000);
     await click('tool_approve:late-pending', 'alice');
     expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'late-pending', runId: 'late-run' }]);
+  });
+
+  it('resumes the run once when the requester clicks Approve and Deny at the same time', async () => {
+    const { channels, reads, click } = await setup(deepApproval());
+
+    await Promise.all([click('tool_approve:deep-pending', 'alice'), click('tool_deny:deep-pending', 'alice')]);
+
+    expect(channels.decisions).toHaveLength(1);
+    expect(reads).toHaveBeenCalledTimes(9);
+  });
+
+  it('keeps one lookup per card when two threads reuse the same tool call id', async () => {
+    const { channels, reads, click } = await setup(deepApproval(), deepApproval());
+    const second = { thread: SECOND_EXTERNAL_THREAD_ID };
+
+    for (let i = 0; i < 3; i++) {
+      await click('tool_approve:deep-pending', 'mallory');
+      await click('tool_approve:deep-pending', 'mallory', second);
+    }
+    expect(channels.decisions).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(18);
+
+    await click('tool_approve:deep-pending', 'alice', second);
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'deep-pending', runId: 'deep-run' }]);
+    expect(reads).toHaveBeenCalledTimes(18);
+  });
+
+  it('looks up a new card fresh when a later run in the thread reuses a tool call id', async () => {
+    const { channels, memory, click } = await setup([
+      user('ask', 0, 'alice'),
+      pendingToolCall('first-call', 1, 'call_0', 'first-run'),
+      ...filler(60, 2),
+    ]);
+
+    await click('tool_approve:call_0', 'bob', { card: 'first-card' });
+    expect(channels.decisions).toEqual([]);
+
+    // Another instance answers the first approval, then a new run by Bob asks
+    // for approval again under the same id and posts a new card.
+    await memory.saveMessages({
+      messages: [
+        answeredToolCall('first-call', 1, 'call_0'),
+        user('ask-bob', 62, 'bob'),
+        pendingToolCall('second-call', 63, 'call_0', 'second-run'),
+      ],
+    });
+
+    await click('tool_approve:call_0', 'bob', { card: 'second-card' });
+    expect(channels.decisions).toEqual([{ kind: 'approve', toolCallId: 'call_0', runId: 'second-run' }]);
   });
 });
