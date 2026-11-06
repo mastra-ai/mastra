@@ -311,9 +311,15 @@ const { output } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. Every chunk read from the run log carries the index of the event it came from as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass the last received chunk's `index + 1`, or `0` if nothing arrived. Lifecycle events send no chunk, so indexes have gaps and a chunk count isn't a valid offset. `object` chunks are built by the observer rather than read from the log, so they carry no `index`. A run that used a structuring model publishes its `object-result` to the run log, so that chunk carries an `index` and replays like any other. An observer that rebuilds structured output from replayed text (a core `observe()` caller holding the schema) gets `object-result` only when it replays the text that produced it. HTTP `/observe` replays the log and doesn't rebuild it. To rebuild it after a reconnect, observe from offset `0` and skip chunks whose `index` you already processed.
+The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. A chunk read from the run log carries the index of its event as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass `index + 1` of the last chunk that has an index, or `0` if nothing arrived. Lifecycle events take an index but produce no chunk, so indexes have gaps and a chunk count isn't a valid offset.
+
+Some chunks carry no `index`. The client builds `object` chunks itself rather than reading them from the log. An `abort` chunk is sent beside the `finish` of the same run-log entry, and only the `finish` carries the index, so a client that reconnects between the two gets the `abort` again.
+
+A run that used a structuring model publishes its `object-result` to the run log, so that chunk carries an `index` and replays like any other. A core `observe()` caller holding the schema can also rebuild structured output from replayed text, but gets `object-result` only when it replays the text that produced it. HTTP `/observe` replays the log and doesn't rebuild it. To rebuild it after a reconnect, observe from offset `0` and skip chunks whose `index` you already processed. Indexes come from the replay cache, so a chunk whose cache write failed, or any chunk when caching is off, has no `index` and can't be replayed. The paragraphs below cover offsets past the end and transports without numeric offsets.
 
 `index` is additive and `offset` keeps its meaning, so code that already passes a log position, or replays from `0`, needs no change. Code that passed a count of chunks received should switch to the last `index + 1`.
+
+The following example records the resume offset while streaming and passes it to `observe()` after a reconnect:
 
 ```typescript
 let offset = 0
