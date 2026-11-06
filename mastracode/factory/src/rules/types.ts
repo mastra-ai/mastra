@@ -38,6 +38,9 @@ export function externalSourceForWorkItem(
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+
+/** Request-changes rounds from self-review before the card parks in Intake for a person. */
+export const SELF_REVIEW_ROUND_LIMIT = 3;
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
 // The label only holds a card at rest: once a person moves it into a working lane, the

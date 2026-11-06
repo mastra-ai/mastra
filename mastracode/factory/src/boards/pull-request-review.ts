@@ -1,5 +1,10 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
-import { legacyGithubWorkItemBranch, pullRequestBranch, workItemBranch } from '../work-item-branch.js';
+import {
+  isSafeBranchName,
+  legacyGithubWorkItemBranch,
+  pullRequestBranch,
+  workItemBranch,
+} from '../work-item-branch.js';
 import { reviewedChangeRequest } from './semantics.js';
 import type { ReviewedChangeRequest } from './semantics.js';
 
@@ -52,18 +57,6 @@ function checkoutHint(item: FactoryRuleItemContext, change: ReviewedChangeReques
     `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path. ` +
     `If \`gh pr view ${number} --json headRefOid --jq .headRefOid\` differs from \`git rev-parse HEAD\`, refresh with \`${refresh}\`. ` +
     `Read the change with \`gh pr diff ${number}\`.${headBranch}`
-  );
-}
-
-function isSafeBranchName(value: string): boolean {
-  return (
-    /^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(value) &&
-    !value.includes('..') &&
-    !value.includes('//') &&
-    !value.includes('@{') &&
-    !value.endsWith('.') &&
-    !value.endsWith('/') &&
-    !value.endsWith('.lock')
   );
 }
 

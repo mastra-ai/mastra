@@ -155,3 +155,16 @@ export function mergeRequestNumberFromBranch(branch: string): number | undefined
   const number = match ? Number(match[1]) : undefined;
   return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
 }
+
+/** Whether a provider-reported branch name is safe to show an agent or pass to git. */
+export function isSafeBranchName(value: string): boolean {
+  return (
+    /^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(value) &&
+    !value.includes('..') &&
+    !value.includes('//') &&
+    !value.includes('@{') &&
+    !value.endsWith('.') &&
+    !value.endsWith('/') &&
+    !value.endsWith('.lock')
+  );
+}
