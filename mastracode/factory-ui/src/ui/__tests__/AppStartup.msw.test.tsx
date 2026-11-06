@@ -111,7 +111,8 @@ function returnToTab() {
 describe('Opening Factory', () => {
   it.each([
     { page: 'Work', path: '/factories/factory-1/work' },
-    { page: 'Review', path: '/factories/factory-1/review' },
+    // The retired Review board's links open Work, so they load what Work needs.
+    { page: 'Work from a Review board link', path: '/factories/factory-1/review' },
     { page: 'a custom board', path: '/factories/factory-1/boards/release' },
     { page: 'Rules', path: '/factories/factory-1/rules?group=failed' },
     { page: 'a new session', path: '/factories/factory-1/new' },
