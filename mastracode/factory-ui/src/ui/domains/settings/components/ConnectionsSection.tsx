@@ -5,7 +5,6 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { GithubPatBlock } from './GithubPatBlock';
-import { McpClientsSection } from './McpClientsSection';
 import { OrganizationConnectionsSection } from './OrganizationConnectionsSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
@@ -28,7 +27,6 @@ export function ConnectionsSection() {
       </SettingsSubsection>
       <OrganizationConnectionsSection />
       {githubRelevant && <GithubPatBlock />}
-      <McpClientsSection />
     </div>
   );
 }
