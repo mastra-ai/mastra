@@ -163,8 +163,8 @@ describe('AppLayout', () => {
               code: 'secret_key_mismatch',
               title: "Factory can't unlock your secrets",
               message: 'The encryption key changed. Your secrets are safe.',
-              fix: 'Redeploy with the original `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
-              docsUrl: 'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+              fix: 'Redeploy with your `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
+              docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
             },
           ],
         }),
@@ -177,9 +177,9 @@ describe('AppLayout', () => {
     expect(within(alert).getByText('The encryption key changed. Your secrets are safe.')).toBeInTheDocument();
     expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
     expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
-    expect(within(alert).getByRole('link', { name: 'Rotating keys on purpose?' })).toHaveAttribute(
+    expect(within(alert).getByRole('link', { name: 'Read the fix guide' })).toHaveAttribute(
       'href',
-      'https://factory.mastra.ai/reference/environment-variables#rotate-encryption-keys',
+      'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
     );
     // Nothing to retry: only a redeploy fixes it, so the copy button is the only control.
     expect(within(alert).getAllByRole('button')).toHaveLength(1);

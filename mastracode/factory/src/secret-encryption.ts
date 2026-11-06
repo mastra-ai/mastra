@@ -67,7 +67,7 @@ export function secretKeyProblem(error: unknown): { title: string; message: stri
     message: error.missingKey
       ? 'No encryption key is set. Your secrets are safe.'
       : 'The encryption key changed. Your secrets are safe.',
-    fix: 'Redeploy with the original `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
+    fix: 'Redeploy with your `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
   };
 }
 
