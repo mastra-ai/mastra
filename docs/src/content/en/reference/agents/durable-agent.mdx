@@ -48,28 +48,9 @@ const text = await output.text
 cleanup()
 ```
 
-### Using the `durable` config flag
+### Plain Agent stream configuration
 
-Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, `cleanupTimeoutMs`, `shouldCache`, or `shouldPersistSnapshot`.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { Agent } from '@mastra/core/agent'
-
-const myAgent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  durable: true, // or: { maxSteps: 10, cleanupTimeoutMs: 60_000 }
-})
-
-export const mastra = new Mastra({
-  agents: { myAgent },
-})
-```
-
-`mastra.getAgent('myAgent')` returns the wrapped `DurableAgent`. Standalone agents (constructed but never registered on a `Mastra` instance) don't become durable. The wrapping is applied at registration.
+The `durable` option on a plain `Agent` controls resumable streams only. It never wraps the agent or enables checkpoints. Use `createDurableAgent({ agent })` explicitly for durable execution, and pass execution options such as `maxSteps` and `shouldPersistSnapshot` to that factory.
 
 ## `createDurableAgent(options)`
 

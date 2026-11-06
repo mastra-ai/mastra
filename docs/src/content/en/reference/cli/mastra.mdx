@@ -897,6 +897,8 @@ Manages authentication for Mastra platform. Credentials are stored in `~/.mastra
 
 Opens a browser for login and stores the credentials locally.
 
+When browser sign-in is needed and there's no interactive terminal (in CI, when input or output is piped, or in an agent's shell), the command first prints how to authenticate headless shells, then still waits for browser sign-in. On the same machine, you can run `mastra auth login` once in your own terminal so later commands reuse the saved session. In CI or on another machine, set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` instead. Create the token from a signed-in terminal with [`mastra auth tokens create`](#mastra-auth-tokens-create) or in the dashboard. If the browser sign-in wait times out, the command exits with status 1. If `MASTRA_API_TOKEN` is already set in a non-interactive shell, the command skips browser sign-in: it verifies the token and checks that an organization is selected (from `MASTRA_ORG_ID` or saved credentials), then exits with status 0. If either check fails, it exits with status 1 and names what's missing.
+
 ### `mastra auth logout`
 
 Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
@@ -1265,6 +1267,13 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
   }
 }
 ```
+
+The exit code reflects whether the request succeeded, not the contents of the response:
+
+- `0`: The server returned a successful response. This includes empty results and payloads that report existing state, such as a tool result saying a record already exists. A tool that returns an object with an `error` field still exits `0`, so check the `data` payload when the tool reports its own failures.
+- `1`: The request failed. This includes an unreachable server, invalid JSON input, a missing resource, or a tool that throws an error.
+
+If the command reading the output exits early, as with `| head`, the exit code still reflects whether the request succeeded.
 
 ### Target resolution
 
