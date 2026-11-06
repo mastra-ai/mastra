@@ -18,6 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { Intake } from '../../capabilities/intake.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
@@ -28,11 +29,6 @@ type RouteContext = Context;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ITEM_REF_RE = /^incidentio:(?:follow-up|incident):[\w-]+$/;
 const FOLLOW_UP_PREFIX = 'incidentio:follow-up:';
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every incident.io feature gate, mirroring

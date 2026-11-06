@@ -92,8 +92,9 @@ function createDeps(pubsub: unknown = {}): WorkerDeps {
  */
 function stubWorkItems(
   links: Record<string, string[]> = {},
-): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list'> {
+): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list' | 'copyLegacyCards'> {
   return {
+    copyLegacyCards: async () => {},
     list: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
       const sourceKeys = links[`${orgId}:${factoryProjectId}`] ?? [];
       return sourceKeys.map(key => ({

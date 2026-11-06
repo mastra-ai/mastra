@@ -467,6 +467,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoreOps.getScoreById(this.db, scoreId);
   }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return feedbackOps.getFeedbackById(this.db, feedbackId);
+  }
   async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return scoreOps.getScoreAggregate(this.db, args);
   }
