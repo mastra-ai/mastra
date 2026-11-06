@@ -89,6 +89,20 @@ describe('describeRunError', () => {
     });
   });
 
+  it('recognizes the gateway host on a provider error the run wrapped', () => {
+    const wrapped = {
+      name: 'Error',
+      message: "You don't have inference credits left.",
+      cause: {
+        name: 'AI_APICallError',
+        message: "You don't have inference credits left.",
+        statusCode: 402,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      },
+    };
+    expect(describeRunError(wrapped)).toMatchObject({ title: 'Out of Mastra Gateway credits' });
+  });
+
   it('keeps a look-alike host a provider quota error', () => {
     const outOfCredits = {
       name: 'AI_APICallError',

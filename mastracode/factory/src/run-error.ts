@@ -120,18 +120,23 @@ const MASTRA_GATEWAY_HOST = /(?:^|\.)gateway(?:-api)?\.mastra\.ai$/;
 function isMastraGatewayError(error: RunErrorIdentity): boolean {
   return (
     providerModelId(error)?.startsWith(MASTRA_GATEWAY_PREFIX) === true ||
-    MASTRA_GATEWAY_HOST.test(requestHost(error) ?? '') ||
+    calledMastraGateway(error) ||
     /gateway\.mastra\.ai/.test(providerErrorReason(error) ?? error.message)
   );
 }
 
-function requestHost(error: RunErrorIdentity): string | undefined {
-  const url = (error as { url?: unknown }).url;
-  if (typeof url !== 'string') return undefined;
+/** Whether the request, or a provider error it wraps, went to the gateway's host. */
+function calledMastraGateway(error: unknown, depth = 0): boolean {
+  if (depth > 4 || typeof error !== 'object' || error === null) return false;
+  const { url, cause } = error as { url?: unknown; cause?: unknown };
+  return (typeof url === 'string' && MASTRA_GATEWAY_HOST.test(hostOf(url))) || calledMastraGateway(cause, depth + 1);
+}
+
+function hostOf(url: string): string {
   try {
     return new URL(url).hostname;
   } catch {
-    return undefined;
+    return '';
   }
 }
 
