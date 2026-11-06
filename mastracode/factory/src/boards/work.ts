@@ -400,9 +400,13 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       onEnter: {
         pullRequest: reviewPullRequest,
         gitlabPullRequest: reviewPullRequest,
-        // An issue card reviews the pull or merge request attached to it.
+        // Any other card reviews the pull or merge request attached to it.
         issue: reviewPullRequest,
         gitlabIssue: reviewPullRequest,
+        linearIssue: reviewPullRequest,
+        jiraIssue: reviewPullRequest,
+        incidentioFollowUp: reviewPullRequest,
+        manual: reviewPullRequest,
       },
     },
     done: {
