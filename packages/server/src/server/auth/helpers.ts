@@ -82,7 +82,13 @@ export const findMatchingCustomRoute = (
     if (keys && keys.length > 0) {
       for (let i = 0; i < keys.length; i++) {
         if (match[i + 1] !== undefined) {
-          params[keys[i]!] = match[i + 1]!;
+          // Match Hono/framework decoding so FGA sees the same resource the handler gets.
+          const raw = match[i + 1]!;
+          try {
+            params[keys[i]!] = decodeURIComponent(raw);
+          } catch {
+            params[keys[i]!] = raw;
+          }
         }
       }
     }

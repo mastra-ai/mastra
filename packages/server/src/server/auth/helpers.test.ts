@@ -9,6 +9,7 @@ import {
   canAccessPublicly,
   checkRules,
   coreAuthMiddleware,
+  findMatchingCustomRoute,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
@@ -62,6 +63,29 @@ describe('auth helpers', () => {
         expect(pathMatchesPattern('/api/v1/123', '/api/:version/:id')).toBe(true);
         expect(pathMatchesPattern('/api/v1/', '/api/:version/:id')).toBe(false);
       });
+    });
+  });
+
+
+  describe('findMatchingCustomRoute security', () => {
+    it('does not treat dots in a static path as regex wildcards', () => {
+      const routes = [
+        { path: '/a.b', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/axb', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/axb', 'GET', routes)?.route.path).toBe('/axb');
+      expect(findMatchingCustomRoute('/a.b', 'GET', routes)?.route.path).toBe('/a.b');
+      expect(pathMatchesPattern('/axb', '/a.b')).toBe(false);
+    });
+
+    it('decodes path params before returning them for FGA', () => {
+      const routes = [
+        { path: '/docs/:docId', method: 'GET', handler: async () => new Response('ok'), requiresAuth: true },
+      ] as any;
+
+      const match = findMatchingCustomRoute('/docs/%6fpen', 'GET', routes);
+      expect(match?.params).toEqual({ docId: 'open' });
     });
   });
 
