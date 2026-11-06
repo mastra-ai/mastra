@@ -1444,12 +1444,12 @@ describe('session tools on a turn nobody signed in started', () => {
 });
 
 /** The side session reporting back to the session that started it, as a factory-session notification. */
-async function reportFrom(env: Awaited<ReturnType<typeof setup>>, sessionId: string) {
+async function reportFrom(env: Awaited<ReturnType<typeof setup>>, sessionId: string, kind = 'report') {
   await env.notifications.createNotification({
     threadId: env.scope.threadId,
     resourceId: env.scope.sessionId,
     source: 'factory-session',
-    kind: 'report',
+    kind,
     priority: 'medium',
     summary: 'Here is the context.',
     sourceId: crypto.randomUUID(),
@@ -1476,13 +1476,18 @@ describe('a follow-up approved in a turn the person started', () => {
     if (report) await reportFrom(env, side.sessionId);
     const woken = env.toolsFor({ ...env.scope, interactive: false });
     // factory_create_work_item on that turn: the card, and this session following it as its filer.
-    const file = async (title = 'Improve the review summary', sessionId = env.scope.sessionId) => {
+    const file = async (
+      title = 'Improve the review summary',
+      sessionId = env.scope.sessionId,
+      beforeSubscribe?: () => Promise<void>,
+    ) => {
       const { item } = await env.seed.workItems.upsert({
         orgId: 'org-1',
         userId: 'user-1',
         factoryProjectId: env.scope.factoryProjectId,
         input: { title, stages: ['intake'], metadata: {} },
       });
+      await beforeSubscribe?.();
       await env.seed.workItems.subscribeToWorkItem({
         orgId: 'org-1',
         factoryProjectId: env.scope.factoryProjectId,
@@ -1555,6 +1560,39 @@ describe('a follow-up approved in a turn the person started', () => {
 
     vi.setSystemTime(new Date(Date.now() + 1_000));
     const followUp = await env.file();
+    await expect(env.woken.start({ prompt: 'Go.', workItem: followUp.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+  });
+
+  it('orders against the card itself, so a report landing before its subscription does not cover it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved({ report: false });
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const early = await env.file('Filed before the report', env.scope.sessionId, async () => {
+      vi.setSystemTime(new Date(Date.now() + 1_000));
+      await reportFrom(env, env.side.sessionId);
+      vi.setSystemTime(new Date(Date.now() + 1_000));
+    });
+
+    await expect(env.woken.start({ prompt: 'Go.', workItem: early.id, role: 'work' })).rejects.toThrow(
+      "the approved side session hadn't reported back when this session filed it",
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+  });
+
+  it('does not count a progress update as the handoff', async () => {
+    const env = await approved({ report: false });
+    await reportFrom(env, env.side.sessionId, 'progress');
+    const item = await env.file();
+
+    await expect(env.woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' })).rejects.toThrow(
+      "the approved side session hadn't reported back when this session filed it",
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+
+    await reportFrom(env, env.side.sessionId, 'done');
+    const followUp = await env.file('Filed after the side session finished');
     await expect(env.woken.start({ prompt: 'Go.', workItem: followUp.id, role: 'work' })).resolves.toMatchObject({
       mode: 'work-item',
     });

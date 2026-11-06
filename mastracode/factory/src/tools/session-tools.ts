@@ -1,3 +1,4 @@
+import type { NotificationRecord } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -114,6 +115,12 @@ function notStartedError(label: string, reason: string): string {
     `${label} is filed but nothing was started on it: nobody signed in started this turn, and ${reason}.`,
     `Tell the person the card is waiting, link it, and ask them to say "start" on it in their chat; don't report the work as started.`,
   ].join(' ');
+}
+
+/** A side session's handoff: a plain report or a `done`, not a progress, blocked or failed update. */
+function isHandoffReport(record: Pick<NotificationRecord, 'kind' | 'attributes'>): boolean {
+  if (record.kind === 'report' || record.kind === 'done') return true;
+  return record.kind === 'reply' && record.attributes?.status === 'done';
 }
 
 function titleFrom(prompt: string): string {
@@ -627,7 +634,8 @@ export function createFactorySessionTools(
         sessionId: scope.sessionId,
       })
     ).find(subscription => subscription.workItemId === item.id && subscription.reason === 'created');
-    const after = approved.filter(grant => filed && filed.createdAt >= grant.approvedAt);
+    // Order against the card's own filing time; the subscription is written after it and only attributes the card.
+    const after = filed ? approved.filter(grant => item.createdAt >= grant.approvedAt) : [];
     if (after.length === 0) {
       throw new Error(
         notStartedError(
@@ -643,8 +651,9 @@ export function createFactorySessionTools(
       reports.some(
         record =>
           record.attributes?.['from-session'] === grant.sessionId &&
+          isHandoffReport(record) &&
           record.createdAt >= grant.approvedAt &&
-          record.createdAt <= filed!.createdAt,
+          record.createdAt <= item.createdAt,
       ),
     );
     if (covering.length === 0) {
