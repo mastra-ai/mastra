@@ -226,6 +226,17 @@ describe('getGoalJudgeModel', () => {
     expect(judge.modelId).toBe('gpt-4.1');
   });
 
+  it("prefers the goal's own judge model over the session's model", () => {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modelId: 'github-copilot/gpt-4.1' } });
+
+    const judge = getGoalJudgeModel({ requestContext, judgeModelId: 'github-copilot/gpt-5-mini' }) as unknown as {
+      modelId: string;
+    };
+
+    expect(judge.modelId).toBe('gpt-5-mini');
+  });
+
   it('stays off when neither a judge model nor a session model resolves', () => {
     expect(getGoalJudgeModel({ requestContext: new RequestContext() })).toBeUndefined();
   });

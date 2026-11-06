@@ -605,10 +605,11 @@ export function getActiveRouteMemoryModelId(
  * credentials (stored in auth storage, not just env) are injected — a bare model
  * id handed to core's default model router would fail to find the API key.
  *
- * Without a configured judge model the session's own model judges, so a goal
- * set over the HTTP API (which has no judge settings) still gets graded.
- * Returns `undefined` only when neither resolves, which keeps the goal step a
- * complete no-op (the goal mechanism requires a judge to do anything).
+ * The judge is the configured setting, then the goal's own `judgeModelId`, then
+ * the session's model, so a goal set over the HTTP API (which has no judge
+ * settings) still gets graded. Returns `undefined` only when none resolves,
+ * which keeps the goal step a complete no-op (the goal mechanism requires a
+ * judge to do anything).
  *
  * `settingsPath` must be the same source `createMastraCode()` reads from so the
  * judge model and the goal budget (`goalMaxTurns`) come from one config — with a
@@ -616,11 +617,12 @@ export function getActiveRouteMemoryModelId(
  * and silently turn the goal step into a no-op.
  */
 export function getGoalJudgeModel(
-  { requestContext }: { requestContext: RequestContext },
+  { requestContext, judgeModelId: goalJudgeModelId }: { requestContext: RequestContext; judgeModelId?: string },
   settingsPath?: string,
 ): ResolvedModel | undefined {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel || controller?.session?.modelId;
+  const judgeModelId =
+    loadSettings(settingsPath).models.goalJudgeModel || goalJudgeModelId || controller?.session?.modelId;
   if (!judgeModelId) return undefined;
   return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
 }

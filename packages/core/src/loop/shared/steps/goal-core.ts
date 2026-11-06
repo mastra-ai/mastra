@@ -265,7 +265,11 @@ export async function evaluateGoal(deps: {
   let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
   if (typeof judgeModelConfig === 'function') {
     judgeModelConfig =
-      (await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra })) ?? effective.judgeModelId;
+      (await (judgeModelConfig as (args: any) => unknown)({
+        requestContext,
+        mastra,
+        judgeModelId: record.judgeModelId,
+      })) ?? effective.judgeModelId;
   }
   if (!judgeModelConfig) {
     return { evaluated: false };
