@@ -179,6 +179,7 @@ export class MastraStorageExporter extends BaseExporter {
     );
 
     if (this.#resolvedStrategy === 'realtime' && this.#byteTracker) {
+      this.logger.warn('MastraStorageExporter: byteBatching is ignored for the realtime strategy.');
       // Strategy is resolved before any event is accepted. Keep realtime's
       // existing immediate, awaited writes even when byte batching is configured.
       this.#byteTracker = undefined;
@@ -512,13 +513,21 @@ export class MastraStorageExporter extends BaseExporter {
         return Promise.resolve();
       }
     }
-    const promise = this.flushBuffer().finally(() => {
-      this.#inFlightFlushes.delete(promise);
-      if (this.#byteTracker && this.#eventBuffer.totalSize > 0) {
-        const delay = Math.max(0, this.#byteRetryAt - Date.now());
-        this.scheduleFlush(delay || (this.#byteDrainers || this.shouldFlush() ? 0 : this.#config.maxBatchWaitMs!));
-      }
-    });
+    let reschedule = true;
+    const promise = this.flushBuffer()
+      .catch(error => {
+        // Storage retry failures are handled inside flushBuffer. An unexpected
+        // failure must not schedule an immediate loop over the same stalled data.
+        reschedule = false;
+        throw error;
+      })
+      .finally(() => {
+        this.#inFlightFlushes.delete(promise);
+        if (reschedule && this.#byteTracker && this.#eventBuffer.totalSize > 0) {
+          const delay = Math.max(0, this.#byteRetryAt - Date.now());
+          this.scheduleFlush(delay || (this.#byteDrainers || this.shouldFlush() ? 0 : this.#config.maxBatchWaitMs!));
+        }
+      });
     this.#inFlightFlushes.add(promise);
     return promise;
   }
@@ -558,6 +567,11 @@ export class MastraStorageExporter extends BaseExporter {
     const { creates, updates } = this.#byteTracker
       ? this.#eventBuffer.takeByteBatch(this.#config.maxBatchSize!)
       : { creates: this.#eventBuffer.creates, updates: this.#eventBuffer.updates };
+    if (this.#byteTracker && creates.length === 0 && updates.length === 0 && this.#inFlightFlushes.size === 0) {
+      const message = 'MastraStorageExporter flush made no progress: queued events have no eligible batch.';
+      this.logger.error(message, { bufferedEvents: this.#eventBuffer.totalSize });
+      throw new Error(message);
+    }
     if (!this.#byteTracker) this.#eventBuffer.reset();
     try {
       const createFeedbackEvents: (FeedbackEvent & RetryCount)[] = [];

@@ -1,9 +1,11 @@
 import { Mastra } from '@mastra/core';
+import { ConsoleLogger } from '@mastra/core/logger';
 import type { LogEvent } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from '../default';
+import { EventBuffer } from './event-buffer';
 import { MastraStorageExporter } from './mastra-storage';
 
 const exporters: MastraStorageExporter[] = [];
@@ -11,7 +13,11 @@ afterEach(async () => {
   for (const exporter of exporters.splice(0)) await exporter.shutdown();
 });
 
-async function setup(strategy: 'insert-only' | 'batch-with-updates' | 'realtime' = 'insert-only', limits = {}) {
+async function setup(
+  strategy: 'insert-only' | 'batch-with-updates' | 'realtime' = 'insert-only',
+  limits = {},
+  logger?: ConsoleLogger,
+) {
   const storage = new InMemoryStore();
   const config = {
     strategy,
@@ -23,10 +29,11 @@ async function setup(strategy: 'insert-only' | 'batch-with-updates' | 'realtime'
   const observability = new Observability({
     configs: { default: { serviceName: 'byte-budget-test', exporters: [exporter] } },
   });
-  const mastra = new Mastra({ storage, observability, logger: false });
+  const mastra = new Mastra({ storage, observability, logger: logger ?? false });
   await exporter.init({ mastra });
   return {
     exporter,
+    mastra,
     storage: (await storage.getStore('observability'))!,
     tracing: observability.getDefaultInstance()!,
   };
@@ -91,6 +98,45 @@ describe('Storage byte batching', () => {
     const { exporter, storage } = await setup('realtime');
     await exporter.onLogEvent(log(1));
     expect(exporter.getByteBatchingStats()).toBeUndefined();
+    expect((await storage.listLogs({ pagination: { page: 0, perPage: 100 } })).logs.map(row => row.logId)).toEqual([
+      'log-1',
+    ]);
+  });
+
+  it('warns once at initialization when realtime ignores byte batching', async () => {
+    const logger = new ConsoleLogger({ name: 'realtime-warning-test' });
+    const warnings = vi.spyOn(logger, 'warn');
+    try {
+      const { exporter, mastra } = await setup('realtime', {}, logger);
+      await exporter.init({ mastra });
+      await exporter.onLogEvent(log(1));
+      await exporter.onLogEvent(log(2));
+      await exporter.flush();
+      expect(warnings.mock.calls.filter(([message]) => message.includes('byteBatching is ignored'))).toHaveLength(1);
+    } finally {
+      warnings.mockRestore();
+    }
+  });
+
+  it('rejects a stalled drain without losing queued data or scheduling a retry loop', async () => {
+    const { exporter, storage } = await setup();
+    await exporter.onLogEvent(log(1));
+    // Fault injection for the defensive path: a future bookkeeping bug could
+    // leave queued data with no eligible batch. Keep a pre-fix run from hanging.
+    let attempts = 0;
+    const take = vi.spyOn(EventBuffer.prototype, 'takeByteBatch').mockImplementation(() => {
+      if (++attempts > 3) throw new Error('test stopped an unbounded drain');
+      return { creates: [], updates: [] };
+    });
+    try {
+      await expect(exporter.flush()).rejects.toThrow('no progress');
+      expect(exporter.getByteBatchingStats()?.pendingRecords).toBe(1);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(attempts).toBe(1);
+    } finally {
+      take.mockRestore();
+    }
+    await exporter.flush();
     expect((await storage.listLogs({ pagination: { page: 0, perPage: 100 } })).logs.map(row => row.logId)).toEqual([
       'log-1',
     ]);
