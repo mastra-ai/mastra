@@ -125,7 +125,7 @@ it('explains an encryption key mismatch on every surface it breaks', async () =>
   expect(start.status).toBe(503);
   expect(startBody).toEqual({
     error: 'credentials_unavailable',
-    message: `Provider credentials are unavailable. ${secretKeyMismatchHint(new FactorySecretDecryptionError())}`,
+    message: `Provider credentials are unavailable. ${secretKeyMismatchHint(new FactorySecretDecryptionError(''))}`,
   });
 
   // The stored secrets were left untouched: restoring key A brings everything back.
