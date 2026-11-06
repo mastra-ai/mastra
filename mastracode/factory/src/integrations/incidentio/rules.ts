@@ -203,7 +203,10 @@ export class IncidentioRules {
     }
     if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
     if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
-      const routed = routeEventDecision(context);
+      const routed = await routeEventDecision(context, this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+      });
       if (routed) decisions = [{ ...routed }];
     }
 

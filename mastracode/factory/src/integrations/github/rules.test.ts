@@ -5758,8 +5758,34 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
     };
     const route = async (name: string) =>
       (await storedBoards.listIntakeRoutes(scope)).find(candidate => candidate.name === name)!;
-    return { deliver, route, storedBoards, scope, workItems, project, card };
+    // Both deliveries land before the dispatcher runs, a millisecond apart as webhooks are.
+    const deliverTogether = async (...deliveries: Array<ReturnType<typeof issueClosed>>) => {
+      for (const delivery of deliveries) {
+        await service.ingest(delivery);
+        await new Promise(resolve => setTimeout(resolve, 2));
+      }
+      await dispatcher.runOnce(new Date(Date.parse('2030-01-02T00:00:00Z') + 1000 * tick++));
+      return (await workItems.get({ orgId: 'org-1', id: card.id }))!;
+    };
+    return { deliver, deliverTogether, route, storedBoards, scope, workItems, project, card };
   }
+
+  it('leaves a card where it was when its issue is closed and reopened before the close is applied', async () => {
+    const { deliverTogether, workItems, project } = await harness({ stages: ['planning'] });
+    const card = await deliverTogether(issueClosed('queued-close', 'completed'), reopened('queued-reopen'));
+    expect(card.stages).toEqual(['planning']);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => [entry.decision.type, entry.status])).toEqual([
+      ['transition', 'superseded'],
+      ['routeEvent', 'succeeded'],
+    ]);
+  });
+
+  it('leaves a finished card closed when its issue is reopened and closed again before the reopen is applied', async () => {
+    const { deliverTogether } = await harness({ stages: ['done'] });
+    const card = await deliverTogether(reopened('queued-reopen'), issueClosed('queued-close-again', 'completed'));
+    expect(card.stages).toEqual(['done']);
+  });
 
   it('closes and reopens a Work card through the default routes, recorded as their moves', async () => {
     const { deliver, route } = await harness({ stages: ['planning'] });

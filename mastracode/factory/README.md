@@ -747,7 +747,7 @@ The other three move Work cards when their issue's status changes:
 | `Issues closed as not planned go to Canceled` | `["work_item.closed"]`   | `event.reason equals canceled`  | Work › Canceled |
 | `Reopened issues go back to Intake`           | `["work_item.reopened"]` | none                            | Work › Intake   |
 
-They replace the close handlers each integration used to apply on its own, so a closed GitHub, GitLab, Linear, Jira or incident.io issue lands where it did before, but you can now edit, disable or delete that move.
+They replace the close handlers each integration used to apply on its own, so a closed GitHub, GitLab, Linear, Jira or incident.io issue lands where it did before, but you can now edit or disable that move. To stop closes from moving Work cards, disable both close routes. Deleting them does not stop the move: with no route left that handles closes, Work's `sourceClosed` mapping moves closed cards to Done or Canceled again.
 
 The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. Deleting a default is permanent: recreate it by hand to get it back. A project set up before the pull request route or the close and reopen routes existed gets them this way too.
 
@@ -787,13 +787,14 @@ When one of these arrives for a card that already exists, the first enabled rout
 - The move clears the card's armed autonomy. A provider event is not a person's go-ahead, so a reopened card waits for a person or the project's auto-run before a phase run starts.
 - It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
 - It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
-- A move into a working or resting phase waits for a run in flight on the card to end, then moves the card.
+- A move into a working or resting phase waits for a run in flight on the card to end, then moves the card. While it waits it goes back to the queue, so it never holds a dispatch slot.
+- The source's last status wins. When an issue is closed and reopened before Factory applies the close, the close is dropped and the card stays where it was.
 - A move into a terminal phase doesn't wait: it runs terminal cleanup like any other, so a session still running on the card is aborted at once, as a close always has.
 - A close moves only an unfinished card, and a reopen only a finished one. Redelivered or reconciled webhooks move the card once.
 
 Only routes targeting the card's own board apply; a route naming another board is skipped. A route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
 
-A deployment that answers an event itself keeps routes out of it: a handler or `null` set explicitly on the integration's `rules` for `issueClosed`, `issueReopened`, `issueCommentCreated` and so on, or `null` on the card's board handlers. An override that moves nothing really moves nothing.
+A deployment that answers an event itself keeps routes out of it: a handler or `null` set explicitly on the integration's `rules` for `issueClosed`, `issueReopened`, `issueCommentCreated` and so on, or `null` on the card's board handlers. An override that moves nothing really moves nothing. A board handler that wraps or returns the stock close move is different: that move still goes to the routes, as the stock handler's own would.
 
 #### Activity reaches the card's session
 
@@ -804,7 +805,7 @@ New comment by @alice on acme/repo#42: https://github.com/acme/repo/issues/42#is
 acme/repo#42 was edited by @bob (untrusted author): https://github.com/acme/repo/issues/42
 ```
 
-The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped. An idle session is woken by GitHub activity from a trusted author. Activity from an untrusted author never wakes a session, and neither does GitLab activity: GitLab deliveries don't say whether Factory wrote a comment, so a session could otherwise wake itself with its own comments. That activity is sent as a `low` priority notification, which never starts a run: it waits in the session's notifications, and the session's next run is told it is there. Otherwise, activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
+The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped, and so are edits to an existing GitLab comment. An idle session is woken by GitHub activity from a trusted author. Activity from an untrusted author never wakes a session, and neither does GitLab activity: GitLab deliveries don't say whether Factory wrote a comment, so a session could otherwise wake itself with its own comments. That activity is sent as a `low` priority notification, which never starts a run: it waits in the session's notifications, and the session's next run is told it is there. Otherwise, activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
 
 **Routes.** Reading needs a signed-in user of the project's organization. Changes need an organization admin when auth is enabled. Deleting or reordering routes renumbers the routes after it and bumps their `revision`, so an update sent with an older `expectedRevision` is refused with 409 and must be retried with the current one. Changes are recorded in the audit log as `factory.intake_route.created`, `updated`, `deleted` and `reordered`.
 

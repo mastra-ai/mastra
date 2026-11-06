@@ -94,18 +94,19 @@ function labelColors(value: unknown): Record<string, string> {
 /**
  * Points the card's session at a new comment on its issue, or at an edit to
  * the issue's title or description. Only pointers travel (who, where, a link).
+ * An edited comment (a Note Hook with action `update`, GitLab 16.11+) is no new comment.
  * GitLab deliveries don't say whether Factory wrote the comment, so the
  * message waits in the session's notifications instead of waking it: a session
  * that comments must not wake itself.
  */
 export function activitySignalFor(
   context: Pick<FactoryGitLabRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'note'>,
-  edited: boolean,
+  delivery: { edited: boolean; noteEdited: boolean },
 ): FactorySignalActivityDecision | undefined {
   const event =
-    context.event === 'issueCommented'
+    context.event === 'issueCommented' && !delivery.noteEdited
       ? ('work_item.commented' as const)
-      : context.event === 'issueUpdated' && edited
+      : context.event === 'issueUpdated' && delivery.edited
         ? ('work_item.edited' as const)
         : undefined;
   if (!event || !context.item || !context.issue) return undefined;
@@ -774,8 +775,14 @@ export class GitLabRules {
     if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
       const changes = object(input.parsed.payload.changes);
       const routed =
-        routeEventDecision(context) ??
-        activitySignalFor(context, Boolean(object(changes?.title) || object(changes?.description)));
+        (await routeEventDecision(context, this.options.storage, {
+          orgId: input.orgId,
+          factoryProjectId: input.factoryProjectId,
+        })) ??
+        activitySignalFor(context, {
+          edited: Boolean(object(changes?.title) || object(changes?.description)),
+          noteEdited: string(object(input.parsed.payload.object_attributes)?.action)?.toLowerCase() === 'update',
+        });
       if (routed) decisions = [{ ...routed }];
     }
 

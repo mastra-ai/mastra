@@ -917,7 +917,11 @@ export class GithubRules {
       }
       if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
       if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
-        const routed = routeEventDecision(context) ?? activitySignalFor(context);
+        const routed =
+          (await routeEventDecision(context, this.options.storage, {
+            orgId: project.orgId,
+            factoryProjectId: project.factoryProjectId,
+          })) ?? activitySignalFor(context);
         if (routed) decisions = [{ ...routed }];
       }
 

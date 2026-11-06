@@ -57,6 +57,7 @@ import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import { isStatusEventDecision } from './event-rules.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from './types.js';
@@ -98,15 +99,11 @@ const MAX_IN_FLIGHT = 25;
 /**
  * Decisions that may start or wake an agent run, or wait for one to end, and so
  * hold a run slot. A transition's message is queued as a separate sendMessage,
- * so a plain transition stays bookkeeping; one a status event hands to intake
- * routes can wait for the card's run, so it does not.
+ * so a transition stays bookkeeping, and so does a status event's route move:
+ * it never waits for a run inline, it hands itself back until the run ends.
  */
 const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'invokeSkill' ||
-  decision.type === 'sendMessage' ||
-  decision.type === 'signalActivity' ||
-  decision.type === 'routeEvent' ||
-  (decision.type === 'transition' && decision.event !== undefined);
+  decision.type === 'invokeSkill' || decision.type === 'sendMessage' || decision.type === 'signalActivity';
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
@@ -121,6 +118,12 @@ const RECONCILE_INTERVAL_MS = 30_000;
 
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
 class FactoryDecisionSuperseded extends Error {}
+
+/** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
+class FactoryDecisionPostponed extends Error {}
+
+// How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
+const POSTPONE_MS = 10_000;
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
@@ -1053,6 +1056,14 @@ export class FactoryDecisionDispatcher {
         await this.#reviewStatus(record, record.decision, { phase: 'cancelled', endedAt: new Date() });
         return;
       }
+      if (error instanceof FactoryDecisionPostponed) {
+        await this.#storage.postponeDeferredDecision(
+          leaseIdentity(record, this.#ownerId),
+          new Date(now.getTime() + POSTPONE_MS),
+          new Date(),
+        );
+        return;
+      }
       const failureCode = factoryDispatchFailureCode(error);
       const terminal = isTerminalFailure(record.attempts, failureCode);
       const failed = await this.#storage.failDeferredDecision({
@@ -1915,7 +1926,8 @@ export class FactoryDecisionDispatcher {
 
   /**
    * Moves a card where the project's intake routes send it on a status event. A move into a
-   * working or resting phase waits for the run in flight on the card to end; a move into a
+   * working or resting phase waits for the run in flight on the card to end, going back to the
+   * queue without holding a dispatch slot until it has; a move into a
    * terminal phase does not, so terminal cleanup stops that run at once, as a close always has.
    * A close moves only an unfinished card and a reopen only a finished one. When no route on the
    * card's board handles the event at all, the rule's own move (a board's `sourceClosed` phase)
@@ -1931,6 +1943,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<void> {
     const identity = `event-route:${record.idempotencyKey}`;
     if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) return;
+    if (await this.#statusEventOvertaken(record)) throw new FactoryDecisionSuperseded();
     const resolve = async () => {
       const item = await this.#requireItem(record);
       const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
@@ -1952,22 +1965,15 @@ export class FactoryDecisionDispatcher {
       if (fallback) await this.#applyTransition(record, fallback, causalChain);
       return;
     }
-    let target: Awaited<ReturnType<typeof resolve>> = first;
     if (!first.board.isTerminal(first.route.phase)) {
       const binding = await this.#findBinding(record);
       const session = binding ? await this.#findSession(binding) : undefined;
-      if (binding && session) {
-        await this.#waitForOpenRun(session, binding, 'Factory run before an intake route move');
-        // The card may have moved, or the routes changed, while the run finished.
-        target = await resolve();
+      // Checked again on the next claim: the card may have moved, or the routes changed, by then.
+      if (binding && session && (await this.#hasRunInFlight(session, binding))) {
+        throw new FactoryDecisionPostponed();
       }
     }
-    if (!target) return;
-    if ('fallback' in target) {
-      if (fallback) await this.#applyTransition(record, fallback, causalChain);
-      return;
-    }
-    const { item, board, route } = target;
+    const { item, board, route } = first;
     const result = await this.#transitionService.transition({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -1983,6 +1989,27 @@ export class FactoryDecisionDispatcher {
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+  }
+
+  /**
+   * Whether a later status event was queued for the same card: the source's last word wins, so a
+   * close still queued when the issue is reopened moves nothing. Of events queued in the same
+   * millisecond, the one with the greatest id is the last; one already settled had its turn.
+   */
+  async #statusEventOvertaken(record: FactoryDeferredDecisionRecord): Promise<boolean> {
+    if (!record.workItemId) return false;
+    const decisions = await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId, {
+      workItemId: record.workItemId,
+    });
+    return decisions.some(
+      other =>
+        other.id !== record.id &&
+        isStatusEventDecision(other.decision) &&
+        (other.createdAt.getTime() > record.createdAt.getTime() ||
+          (other.createdAt.getTime() === record.createdAt.getTime() &&
+            other.completedAt === null &&
+            other.id > record.id)),
+    );
   }
 
   async #requireItem(record: FactoryDeferredDecisionRecord) {
@@ -2179,9 +2206,17 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Waits for the run in flight on `binding` to end, so what follows (a kickoff, a route's move)
-   * never overlaps it.
+   * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
+   * entry with nothing live behind it is an orphan of a dead process and does not count.
    */
+  async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
+    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    if (open.length === 0) return false;
+    if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
+    return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+  }
+
+  /** Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. */
   async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
     const runStillActive = () =>
       this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
