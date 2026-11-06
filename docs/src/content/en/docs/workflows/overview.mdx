@@ -520,7 +520,9 @@ While a run executes, Mastra holds a storage lease on it and renews it in the ba
 
 A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step also runs again when its event is redelivered to a worker. Make steps with side effects idempotent, so a repeated step has no additional effect.
 
-A step's `execute` function receives `runId`, which stays the same when the step repeats. Combine it with the `id` you gave the step in `createStep()` to build an idempotency key. Inside `foreach` or a loop, the same step runs more than once in a run. Add an item ID from the step's input or an iteration counter kept in [workflow state](#workflow-state) to the key. For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
+A step's `execute` function receives `runId` and `workflowId`, which stay the same when the step repeats. Combine them with the `id` you gave the step in `createStep()` to build an idempotency key. Nested workflows share the parent's `runId`, and `workflowId` keeps their steps apart.
+
+Inside `foreach`, add an ID from the step's input that identifies the item. For a nested workflow that runs inside `foreach`, leave `runId` out of the key and use that item ID instead, because recovery can give the nested workflow a new `runId`. In a sequential loop, you can instead add an iteration counter kept in [workflow state](#workflow-state). Don't use a shared counter for concurrent `foreach` items, because concurrent items can read the same value. For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
 
 ### Restarting an active workflow run with `restart()`
 

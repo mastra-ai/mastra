@@ -466,7 +466,7 @@ export const refundPayment = createTool({
 
     const refund = await stripe.refunds.create(
       { payment_intent: paymentIntentId },
-      { idempotencyKey: `refund-payment:${toolCallId}` },
+      { idempotencyKey: `refund-payment:${paymentIntentId}:${toolCallId}` },
     )
 
     return { refundId: refund.id, status: refund.status }
@@ -474,7 +474,7 @@ export const refundPayment = createTool({
 })
 ```
 
-`context.agent` is only set when an agent runs the tool, which is why the example checks for it. Stripe can remove an idempotency key once it's 24 hours old, so a run recovered after that can create a second refund.
+`context.agent` is only set when an agent runs the tool, which is why the example checks for it. The tool call ID comes from the model provider, and some providers reuse IDs across responses. Adding the payment ID keeps two different refunds from sharing a key. Stripe can remove an idempotency key once it's 24 hours old, so a run recovered after that can create a second refund.
 
 If a service doesn't accept idempotency keys, record the tool call ID together with the change:
 
