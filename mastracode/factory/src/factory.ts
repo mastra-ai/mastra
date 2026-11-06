@@ -68,6 +68,10 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import {
+  createGithubReviewStatusReporter,
+  reviewStatusAnimationFromEnv,
+} from './integrations/github/review-status-reporter.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
@@ -1999,6 +2003,13 @@ export class MastraFactory {
                             }),
                         );
                       },
+                      reportReviewStatus: createGithubReviewStatusReporter({
+                        github: githubIntegration,
+                        sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
+                        workItems: workItemsStorage,
+                        reviewerName: process.env.FACTORY_REVIEW_STATUS_NAME?.trim() || 'Factory',
+                        ...reviewStatusAnimationFromEnv(process.env),
+                      }),
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
