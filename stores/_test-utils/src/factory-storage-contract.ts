@@ -448,6 +448,25 @@ export function describeFactoryStorageContract(
         expect(await storage.ops.findMany(CONTRACT_ITEMS.name, {})).toHaveLength(1);
         expect(await storage.ops.deleteMany(CONTRACT_ITEMS.name, { org_id: 'org-1' })).toBe(0);
       });
+
+      it('matches a timestamp read back from storage exactly (compare-and-delete)', async () => {
+        const observed = await storage.ops.insertOne<ContractItemRow>(
+          CONTRACT_ITEMS.name,
+          baseItem({ name: 'ts', occurred_at: new Date('2026-07-17T12:34:56.789Z') }),
+        );
+        const read = await storage.ops.findOne<ContractItemRow>(CONTRACT_ITEMS.name, { id: observed.id });
+
+        expect(
+          await storage.ops.deleteMany(CONTRACT_ITEMS.name, {
+            id: observed.id,
+            occurred_at: new Date('2026-07-17T12:34:56.790Z'),
+          }),
+        ).toBe(0);
+        expect(
+          await storage.ops.deleteMany(CONTRACT_ITEMS.name, { id: observed.id, occurred_at: read!.occurred_at }),
+        ).toBe(1);
+        expect(await storage.ops.findOne(CONTRACT_ITEMS.name, { id: observed.id })).toBeNull();
+      });
     });
 
     describe('updateAtomic', () => {
