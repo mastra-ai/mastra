@@ -706,8 +706,33 @@ describe('handler dispatch gating', () => {
     // The host handler is now the only gate — core dispatches whatever reaches it.
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(ctx.requestContext.get('user')).toBeUndefined();
-    expect(thread.post).toHaveBeenCalledTimes(1);
+    // Plain thread chatter didn't address the agent: only the sender sees the card.
+    expect(thread.post).not.toHaveBeenCalled();
+    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
     expect(prime).not.toHaveBeenCalled();
+  });
+
+  it('publicly prompts an unlinked sender only when they mention the agent in a subscribed thread', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeSubscribedThread();
+    const handlers = createHandlers({ accountLinks: fullStore(null) });
+    const defaultHandler = vi.fn();
+
+    for (const text of ['lgtm', 'I think the build is red', 'ok merging']) {
+      await handlers.onSubscribedMessage!(thread, { ...makeMessage('T-1'), text }, defaultHandler, handlerCtx());
+    }
+    expect(thread.post).not.toHaveBeenCalled();
+    expect(thread.postEphemeral).toHaveBeenCalledTimes(3);
+
+    await handlers.onSubscribedMessage!(
+      thread,
+      { ...makeMessage('T-1'), text: '@shipyard can you check the build?', isMention: true },
+      defaultHandler,
+      handlerCtx(),
+    );
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(thread.post.mock.calls[0][0])).toContain('<@U-sender> Connect your Slack account');
   });
 
   it('blocks dispatch for a linked sender with several factories and no default', async () => {
@@ -816,11 +841,14 @@ describe('pre-dispatch error feedback', () => {
       const f = fixture(slot);
       if (card === 'connect') {
         f.accountLinks.getAccountLink.mockResolvedValue(null as any);
+        // Subscribed-thread chatter gets the ephemeral card; mentions and DMs a public one.
+        if (slot === 'onSubscribedMessage') f.thread.postEphemeral.mockRejectedValue(new Error('card failed'));
+        else f.thread.post.mockRejectedValueOnce(new Error('card failed'));
       } else {
         f.projects.get.mockResolvedValue(null);
         f.projects.list.mockResolvedValue([]);
+        f.thread.post.mockRejectedValueOnce(new Error('card failed'));
       }
-      f.thread.post.mockRejectedValueOnce(new Error('card failed'));
       await expect(f.run()).resolves.toBeUndefined();
       expect(f.defaultHandler).not.toHaveBeenCalled();
       expect(f.thread.post.mock.calls.filter(([text]: [unknown]) => text === reply)).toHaveLength(1);

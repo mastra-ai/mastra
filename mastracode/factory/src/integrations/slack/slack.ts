@@ -171,18 +171,23 @@ type LinkedSenderResult =
 /**
  * Resolve the sender's account link, replying in the thread with a "connect
  * your account" card linking into the web UI's Slack-connect flow when
- * they're unlinked. The reply is public (and mentions the sender in channels)
- * so the sender gets notified and everyone else in the thread can see why the
- * agent didn't pick up the message.
+ * they're unlinked. When the sender addressed the agent (a mention or a DM)
+ * the reply is public, and mentions the sender in channels, so they get
+ * notified and everyone else in the thread can see why the agent didn't pick
+ * up the message. Other chatter in a subscribed thread only gets an ephemeral
+ * card, so an unlinked teammate isn't publicly pinged for every reply.
  */
 export async function resolveLinkedSender({
   thread,
   message,
   accountLinks,
+  addressed = true,
 }: {
   thread: HandlerThread;
   message: HandlerMessage;
   accountLinks?: ChannelIdentityStorage;
+  /** Whether the sender addressed the agent (mention or DM). */
+  addressed?: boolean;
 }): Promise<LinkedSenderResult> {
   if (!accountLinks) return { status: 'ungated' };
   const platform = thread.adapter.name;
@@ -200,7 +205,11 @@ export async function resolveLinkedSender({
   // Slack account they control, so posting it publicly leaks nothing. Without
   // an origin, still block, just no card.
   if (publicUrl) {
-    await thread.post(buildConnectCard(publicUrl, thread, message.author.userId));
+    if (addressed) {
+      await thread.post(buildConnectCard(publicUrl, thread, message.author.userId));
+    } else {
+      await thread.postEphemeral(message.author, buildConnectCard(publicUrl, thread), { fallbackToDM: true });
+    }
   }
   return { status: 'blocked' };
 }
@@ -212,8 +221,8 @@ const retryHint = (thread: HandlerThread) => (thread.isDM ? 'message me again' :
  * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
  * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
-function buildConnectCard(publicUrl: string, thread: HandlerThread, senderUserId: string) {
-  const greeting = thread.isDM ? '' : `${thread.mentionUser(senderUserId)} `;
+function buildConnectCard(publicUrl: string, thread: HandlerThread, mentionUserId?: string) {
+  const greeting = mentionUserId && !thread.isDM ? `${thread.mentionUser(mentionUserId)} ` : '';
   return Card({
     title: 'Connect your account',
     children: [
@@ -864,10 +873,12 @@ async function gateDispatch(
   message: HandlerMessage,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
+  options: { requireInternalThread: boolean; internalThread?: InternalThread; addressed?: boolean } = {
+    requireInternalThread: false,
+  },
 ): Promise<DispatchGate | null> {
   const { accountLinks, projects } = deps;
-  const sender = await resolveLinkedSender({ thread, message, accountLinks });
+  const sender = await resolveLinkedSender({ thread, message, accountLinks, addressed: options.addressed });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
   if (sender.status === 'linked' && accountLinks) {
@@ -1049,7 +1060,7 @@ async function transcribeBatch(
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
-    // Unlinked → post the ephemeral Connect card and stop; no session/run is
+    // Unlinked → post the Connect card and stop; no session/run is
     // created (which would otherwise be tenant-less and fail credential
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
@@ -1145,7 +1156,11 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation). Mute and unmute pass the same gate, so only
       // someone allowed to prompt this session can change what it listens to.
-      const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread }).catch(
+      const gate = await gateDispatch(thread, message, deps, ctx, {
+        requireInternalThread: true,
+        internalThread,
+        addressed: thread.isDM || !!message.isMention,
+      }).catch(
         async (error: unknown) => {
           await reportPreDispatchError(thread, message, ctx, error);
           return null;
