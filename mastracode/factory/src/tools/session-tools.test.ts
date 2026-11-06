@@ -2,7 +2,7 @@ import type { AgentControllerEvent, PermissionRules } from '@mastra/core/agent-c
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
@@ -25,7 +25,7 @@ import { createSessionRunEndReporter } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
-import { FACTORY_TOOLS_OWNER_ID, createFactorySessionTools } from './session-tools.js';
+import { FACTORY_TOOLS_OWNER_ID, FOLLOW_UP_APPROVAL_TTL_MS, createFactorySessionTools } from './session-tools.js';
 import { createFactoryTools } from './index.js';
 import type { FactoryToolDependencies } from './index.js';
 
@@ -1404,13 +1404,26 @@ describe('session tools on a turn nobody signed in started', () => {
 
   it('refuses to seat a role on a work item, which records a run as the person', async () => {
     const env = await setup('org', wake);
-    await expect(env.start({ prompt: 'Plan it.', workItem: '#1', role: 'plan' })).rejects.toThrow(
-      'Starting a role on a work item needs a person in this turn',
+    const { item } = await env.seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: env.scope.factoryProjectId,
+      input: { title: 'Speed up the nightly build', stages: ['intake'], metadata: {} },
+    });
+    await expect(env.start({ prompt: 'Plan it.', workItem: item.id, role: 'plan' })).rejects.toThrow(
+      'is filed but nothing was started on it: nobody signed in started this turn, and the person approved no follow-up work',
     );
     expect(env.prepare).not.toHaveBeenCalled();
     expect(env.created).toHaveLength(0);
   });
 
+  it('refuses to record a follow-up approval, which only the person can give', async () => {
+    const env = await setup('org', wake);
+    await expect(env.start({ prompt: 'Look into it.', approvedFollowUp: true })).rejects.toThrow(
+      'Only the person can approve follow-up work',
+    );
+    expect(env.created).toHaveLength(0);
+  });
   it('mounts every user tool but refuses to answer an approval', async () => {
     const env = await setup('org', wake);
     const deps = { ...env.deps, comments: {} } as unknown as FactoryToolDependencies;
@@ -1427,5 +1440,174 @@ describe('session tools on a turn nobody signed in started', () => {
     await expect(answer(env.scope)).rejects.toThrow('Only a person can answer an approval');
     // A person's turn gets past the gate and fails on the lookup instead.
     await expect(answer({ ...env.scope, interactive: true })).rejects.toThrow('was not found in this Factory');
+  });
+});
+
+describe('a follow-up approved in a turn the person started', () => {
+  type Started = { mode: string; sessionId: string; workItem?: { id: string } };
+
+  afterEach(() => vi.useRealTimers());
+
+  /** The person asks for work in their turn; the coordinator starts a side session to look into it first. */
+  async function approved({ approvedFollowUp = true }: { approvedFollowUp?: boolean } = {}) {
+    const env = await setup('org');
+    const side = (await env.start({
+      prompt: 'Gather context for the review summary.',
+      ...(approvedFollowUp ? { approvedFollowUp } : {}),
+    })) as Started;
+    // The side session reports back; the coordinator's notification turn has nobody signed in.
+    const woken = env.toolsFor({ ...env.scope, interactive: false });
+    // factory_create_work_item on that turn: the card, and this session following it as its filer.
+    const file = async (title = 'Improve the review summary', sessionId = env.scope.sessionId) => {
+      const { item } = await env.seed.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: env.scope.factoryProjectId,
+        input: { title, stages: ['intake'], metadata: {} },
+      });
+      await env.seed.workItems.subscribeToWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: env.scope.factoryProjectId,
+        workItemId: item.id,
+        sessionId,
+        threadId: env.scope.threadId,
+        resourceId: sessionId,
+        userId: 'user-1',
+        reason: 'created',
+      });
+      return item;
+    };
+    return { ...env, side, woken, file };
+  }
+
+  it('starts one role on the card this session files after the side session reports', async () => {
+    const env = await approved();
+    await expect(env.sessions.getBySessionId(env.side.sessionId)).resolves.toMatchObject({
+      followUpApprovedBy: 'user-1',
+      followUpUsedAt: null,
+    });
+    const item = await env.file();
+
+    const result = (await env.woken.start({ prompt: 'Implement it.', workItem: item.id, role: 'work' })) as Started;
+
+    expect(result).toMatchObject({ mode: 'work-item', workItem: { id: item.id } });
+    expect(env.prepare).toHaveBeenCalledTimes(1);
+    const after = (await env.seed.workItems.get({ orgId: 'org-1', id: item.id }))!;
+    expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
+    expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeInstanceOf(Date);
+  });
+
+  it('refuses a second start, so a replayed notification cannot reuse the approval', async () => {
+    const env = await approved();
+    const first = await env.file();
+    await env.woken.start({ prompt: 'Implement it.', workItem: first.id, role: 'work' });
+    const second = await env.file('Something else the notification asked for');
+
+    await expect(env.woken.start({ prompt: 'Also this.', workItem: second.id, role: 'work' })).rejects.toThrow(
+      'its approval was already used to start a role',
+    );
+    expect(env.prepare).toHaveBeenCalledTimes(1);
+    const after = (await env.seed.workItems.get({ orgId: 'org-1', id: second.id }))!;
+    expect(after.sessions.work).toBeUndefined();
+  });
+
+  it('refuses without an approval, telling the agent the card is filed but not started', async () => {
+    const env = await approved({ approvedFollowUp: false });
+    const item = await env.file();
+
+    const refusal = env.woken.start({ prompt: 'Implement it.', workItem: item.id, role: 'work' });
+    await expect(refusal).rejects.toThrow('is filed but nothing was started on it');
+    await expect(refusal).rejects.toThrow("don't report the work as started");
+    expect(env.prepare).not.toHaveBeenCalled();
+  });
+
+  it('refuses once the approval expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved();
+    vi.setSystemTime(new Date(Date.now() + FOLLOW_UP_APPROVAL_TTL_MS + 60_000));
+    const item = await env.file();
+
+    await expect(env.woken.start({ prompt: 'Implement it.', workItem: item.id, role: 'work' })).rejects.toThrow(
+      'its approval expired',
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+  });
+
+  it("refuses cards outside the approval's scope: filed before it, or not by this session", async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await setup('org');
+    const { item: earlier } = await env.seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: env.scope.factoryProjectId,
+      input: { title: 'Filed before the approval', stages: ['intake'], metadata: {} },
+    });
+    await env.seed.workItems.subscribeToWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: env.scope.factoryProjectId,
+      workItemId: earlier.id,
+      sessionId: env.scope.sessionId,
+      threadId: env.scope.threadId,
+      resourceId: env.scope.sessionId,
+      userId: 'user-1',
+      reason: 'created',
+    });
+    vi.setSystemTime(new Date(Date.now() + 60_000));
+    await env.start({ prompt: 'Gather context.', approvedFollowUp: true });
+    const woken = env.toolsFor({ ...env.scope, interactive: false });
+
+    await expect(woken.start({ prompt: 'Go.', workItem: earlier.id, role: 'work' })).rejects.toThrow(
+      "this session didn't file it after the person approved follow-up work",
+    );
+    const { item: unrelated } = await env.seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'someone-else',
+      factoryProjectId: env.scope.factoryProjectId,
+      input: { title: 'Somebody else’s card', stages: ['intake'], metadata: {} },
+    });
+    await expect(woken.start({ prompt: 'Go.', workItem: unrelated.id, role: 'work' })).rejects.toThrow(
+      "this session didn't file it",
+    );
+    // Another caller on the same session can't spend user-1's approval.
+    const otherCaller = env.toolsFor({ ...env.scope, userId: 'user-2', interactive: false });
+    await expect(otherCaller.start({ prompt: 'Go.', workItem: earlier.id, role: 'work' })).rejects.toThrow(
+      'the person approved no follow-up work',
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+  });
+
+  it('releases the approval when the start fails, so the retry can use it', async () => {
+    let fail = true;
+    const env = await setup('org', {
+      wrapPrepare: prepare => async request => {
+        if (fail) throw new Error('coordinator down');
+        return prepare(request);
+      },
+    });
+    const side = (await env.start({ prompt: 'Gather context.', approvedFollowUp: true })) as Started;
+    const { item } = await env.seed.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: env.scope.factoryProjectId,
+      input: { title: 'Improve the review summary', stages: ['intake'], metadata: {} },
+    });
+    await env.seed.workItems.subscribeToWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: env.scope.factoryProjectId,
+      workItemId: item.id,
+      sessionId: env.scope.sessionId,
+      threadId: env.scope.threadId,
+      resourceId: env.scope.sessionId,
+      userId: 'user-1',
+      reason: 'created',
+    });
+    const woken = env.toolsFor({ ...env.scope, interactive: false });
+
+    await expect(woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' })).rejects.toThrow('coordinator down');
+    expect((await env.sessions.getBySessionId(side.sessionId))!.followUpUsedAt).toBeNull();
+    fail = false;
+    await expect(woken.start({ prompt: 'Go.', workItem: item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
   });
 });

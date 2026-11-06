@@ -45,7 +45,10 @@ const TITLE_LENGTH = 120;
 export const FACTORY_TOOLS_OWNER_ID = `factory-tools:${globalThis.crypto.randomUUID()}`;
 
 export interface FactorySessionToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
+  sessions: Pick<
+    SourceControlSessionLookup,
+    'getBySessionId' | 'getSourceControlBySessionId' | 'listByOrigin' | 'approveFollowUp' | 'setFollowUpUsed'
+  >;
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
@@ -85,6 +88,9 @@ export interface FactorySessionToolDependencies {
 
 const LISTED_MODELS = 8;
 
+/** How long a person's approval of follow-up work waits for the side session to report. */
+export const FOLLOW_UP_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
+
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
 }
@@ -100,6 +106,14 @@ function startErrorMessage(error: unknown): string | null {
 function workItemLabel(item: Card): string {
   const number = workItemNumber(item);
   return number === null ? `"${item.title}"` : `#${number}`;
+}
+
+/** Why a role start without a person was refused, and what to tell them: the card is filed but has no run. */
+function notStartedError(label: string, reason: string): string {
+  return [
+    `${label} is filed but nothing was started on it: nobody signed in started this turn, and ${reason}.`,
+    `Tell the person the card is waiting, link it, and ask them to say "start" on it in their chat; don't report the work as started.`,
+  ].join(' ');
 }
 
 function titleFrom(prompt: string): string {
@@ -227,6 +241,8 @@ export function createFactorySessionTools(
       'Use it for self-contained investigations; when the result should land as a pull request, file a work item instead.',
       'With `workItem` and `role` it starts that role on the work item instead, without moving the card, and this session follows the item.',
       "A role that already has a session on the item (current or past) can't be started again from here: message that session with factory_signal_session, or ask the person to start it from a signed-in chat.",
+      'Starting a role records a run as the person, so it needs a turn the person started, or their approval given ahead: when the person asks for work that a side session should look into first, start that side session with `approvedFollowUp: true`.',
+      'When it reports back, this session may file one work item and start one role on it without asking the person again.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -243,21 +259,36 @@ export function createFactorySessionTools(
           ),
         workItem: workItemRefSchema.optional(),
         role: z.string().trim().min(1).max(64).optional(),
+        approvedFollowUp: z
+          .boolean()
+          .optional()
+          .describe(
+            'Side sessions only. True when the person in this turn already asked for the work this side session leads to, so that when it reports you may file one work item and start one role on it without asking again. Only in a turn the person started.',
+          ),
       })
       .strict()
       .refine(input => input.role === undefined || input.workItem !== undefined, {
         message: 'Pass workItem together with role.',
         path: ['role'],
+      })
+      .refine(input => input.approvedFollowUp === undefined || input.workItem === undefined, {
+        message: 'approvedFollowUp is for side sessions; leave it out with workItem.',
+        path: ['approvedFollowUp'],
       }),
-    execute: async ({ prompt, title, model, workItem, role }) => {
+    execute: async ({ prompt, title, model, workItem, role, approvedFollowUp }) => {
       if (workItem !== undefined) {
-        // A role start records a run as the person, so it waits for a turn the person started.
-        if (!scope.interactive) {
-          throw new Error(
-            'Starting a role on a work item needs a person in this turn; start a side session, or ask the person to ask for it in a signed-in chat.',
-          );
-        }
-        return startWorkItemRole({ prompt, title, workItem, role });
+        // A role start records a run as the person, so it waits for a turn the person started,
+        // or uses the approval they gave ahead for a side session this one started.
+        if (scope.interactive) return startWorkItemRole({ prompt, title, workItem, role });
+        const item = await findWorkItem(deps.workItems, scope, workItem);
+        if (!item) throw workItemNotFound(workItem);
+        const grantSessionId = await followUpGrantFor(item);
+        return startWorkItemRole({ prompt, title, workItem, role, grantSessionId });
+      }
+      if (approvedFollowUp && !scope.interactive) {
+        throw new Error(
+          'Only the person can approve follow-up work, and nobody signed in started this turn; leave approvedFollowUp out.',
+        );
       }
 
       const parent = await deps.sessions.getBySessionId(scope.sessionId);
@@ -303,6 +334,7 @@ export function createFactorySessionTools(
         visibility: parent.visibility,
         origin: { sessionId: scope.sessionId, threadId: scope.threadId },
       });
+      if (approvedFollowUp) await deps.sessions.approveFollowUp({ sessionId: ensured.sessionId, userId: scope.userId });
       const resolvedModel = await resolveFactorySessionModel({
         ...deps.sessionModel,
         factoryProjectId: scope.factoryProjectId,
@@ -373,11 +405,14 @@ export function createFactorySessionTools(
     title,
     workItem,
     role,
+    grantSessionId,
   }: {
     prompt: string;
     title?: string;
     workItem: string;
     role?: string;
+    /** The side session whose follow-up approval this start uses, when no person started the turn. */
+    grantSessionId?: string;
   }) {
     if (!role) throw new Error('Pass the role to start on the work item.');
     const coordinator = deps.startCoordinator();
@@ -437,6 +472,17 @@ export function createFactorySessionTools(
       reason: 'started',
     });
 
+    // Used after every check, so a refused start leaves the approval for a corrected one.
+    if (grantSessionId && !(await deps.sessions.setFollowUpUsed({ sessionId: grantSessionId, used: true }))) {
+      if (!alreadyFollowing) {
+        await deps.workItems.unsubscribeFromWorkItem({
+          orgId: scope.orgId,
+          workItemId: item.id,
+          sessionId: scope.sessionId,
+        });
+      }
+      throw new Error(notStartedError(label, 'its approval was just used by another start'));
+    }
     const startedAt = new Date();
     let prepared;
     try {
@@ -463,6 +509,7 @@ export function createFactorySessionTools(
         },
       });
     } catch (error) {
+      if (grantSessionId) await deps.sessions.setFollowUpUsed({ sessionId: grantSessionId, used: false });
       if (!alreadyFollowing) {
         await deps.workItems.unsubscribeFromWorkItem({
           orgId: scope.orgId,
@@ -553,6 +600,50 @@ export function createFactorySessionTools(
       bindingId: prepared.bindingId,
       ...(replaced ? { replacedSessionId: replaced.sessionId } : {}),
     };
+  }
+
+  /**
+   * The side session whose unused follow-up approval covers a role start on `item` in a turn nobody signed in
+   * started: approved by this caller within the TTL, with `item` filed by this session after the approval.
+   */
+  async function followUpGrantFor(item: Card): Promise<string> {
+    const label = workItemLabel(item);
+    const approved = (
+      await deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId })
+    ).flatMap(row =>
+      row.factoryProjectId === scope.factoryProjectId &&
+      row.followUpApprovedAt &&
+      row.followUpApprovedBy === scope.userId
+        ? [{ sessionId: row.sessionId, approvedAt: row.followUpApprovedAt, usedAt: row.followUpUsedAt }]
+        : [],
+    );
+    if (approved.length === 0) {
+      throw new Error(notStartedError(label, 'the person approved no follow-up work for a side session of this one'));
+    }
+    const filed = (
+      await deps.workItems.listSessionSubscriptions({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        sessionId: scope.sessionId,
+      })
+    ).find(subscription => subscription.workItemId === item.id && subscription.reason === 'created');
+    const covering = approved.filter(grant => filed && filed.createdAt >= grant.approvedAt);
+    if (covering.length === 0) {
+      throw new Error(
+        notStartedError(
+          label,
+          "this session didn't file it after the person approved follow-up work, so that approval doesn't cover it",
+        ),
+      );
+    }
+    const unused = covering.filter(grant => !grant.usedAt);
+    if (unused.length === 0) throw new Error(notStartedError(label, 'its approval was already used to start a role'));
+    const now = Date.now();
+    const fresh = unused
+      .filter(grant => now - grant.approvedAt.getTime() <= FOLLOW_UP_APPROVAL_TTL_MS)
+      .sort((left, right) => right.approvedAt.getTime() - left.approvedAt.getTime())[0];
+    if (!fresh) throw new Error(notStartedError(label, 'its approval expired'));
+    return fresh.sessionId;
   }
 
   async function resolveRepository(sourceControl: SourceControlStorageHandle, item: Card): Promise<string> {
