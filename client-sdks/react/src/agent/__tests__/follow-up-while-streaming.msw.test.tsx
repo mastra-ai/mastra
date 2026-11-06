@@ -271,6 +271,31 @@ describe('useChat follow-up sent while the answer is still streaming (#29163)', 
     expect(textStates(messages[1]!)).toEqual(['done']);
   });
 
+  it('puts a message the chat did not send above the pending follow-up before any text streamed', async () => {
+    thread = useDurableThread();
+    const chat = renderChat();
+    await thread.ready();
+    await act(async () => {
+      await chat.result.current.sendMessage({ message: 'first', threadId: 'thread-1' });
+    });
+    await thread.emit({ type: 'start', runId: 'run-1', payload: { messageId: 'answer-1' } });
+    await thread.emit(thread.userEcho('run-1', 0));
+    await thread.emit({ type: 'step-start', runId: 'run-1', payload: { messageId: 'answer-1' } });
+    await sendFollowUp(chat);
+    await thread.emit(thread.userEcho('run-1', 1, 'pending'));
+
+    await thread.emit({
+      type: 'data-user-message',
+      runId: 'run-1',
+      data: { id: 'signal-other', type: 'user', contents: 'from another tab', metadata: {} },
+    });
+
+    const ids = chat.result.current.messages.map(message => message.id);
+    expect(ids.indexOf('signal-other')).toBeGreaterThan(-1);
+    expect(ids.indexOf('signal-other')).toBeLessThan(ids.indexOf('signal-2'));
+    expect(chat.result.current.messages.at(-1)!.content.metadata?.status).toBe('pending');
+  });
+
   it('keeps the answer in its row when the follow-up is sent before any text streamed', async () => {
     thread = useDurableThread();
     const chat = renderChat();
