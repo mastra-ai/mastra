@@ -286,28 +286,13 @@ const exporter = new MastraPlatformExporter({
 
 Without `byteBatching`, the exporter keeps its existing count-based batching behavior.
 
-In byte mode:
+- `maxBatchBytes` triggers an upload when a batch reaches 8 MiB by default. Larger records are sent intact, without truncation or size-based drops.
+- `maxConcurrentUploads` controls concurrent uploads across all signal types. The default is two.
+- `uploadTimeoutMs` sets the upload deadline, including retries. The default is 30 seconds.
 
-- `maxBatchBytes` is a flush threshold measured in UTF-8 JSON bytes, including the request envelope and separators. Crossing it makes a batch ready to send. It doesn't cap request size: records are never truncated, split, or dropped to meet the threshold. A single larger record is sent intact in its own request.
-- `maxConcurrentUploads` limits simultaneous uploads across all signal types. Retries occupy the same slot until the upload settles.
-- `uploadTimeoutMs` sets a deadline for each upload, including retries. Upload failures follow the exporter's retry and error handling behavior below.
-- `maxBatchSize` remains a secondary record-count flush trigger. `maxBatchWaitMs` makes partial batches ready to send. Waiting for an upload slot can add delay.
-- Records are serialized once when accepted, so later mutations don't affect the queued payload. Serialization errors propagate to the caller.
-- `flush()` and `shutdown()` wait for queued and active uploads to settle. Existing authentication, quota, and retry-exhaustion behavior still applies.
+Record-count and timer-based flush triggers still apply. Queued records are retained when uploads fall behind, so queue memory can grow.
 
-All byte-mode settings must be positive safe integers. `maxBatchBytes` must be at least 32. Timer values must not exceed 2,147,483,647 milliseconds.
-
-Pending bytes have no admission cap. If exports fall behind, queued records are retained and memory can grow. Byte batching reduces typical request size and concurrent upload allocations; it doesn't guarantee bounded memory or durable delivery. The collector may apply its own payload processing after export.
-
-Inspect the current queue with `exporter.getByteBatchingStats()`:
-
-```typescript
-const stats = exporter.getByteBatchingStats()
-// undefined when byte mode is disabled
-// Otherwise: pendingBytes, activeUploads
-```
-
-`pendingBytes` measures serialized JSON retained across queued and active uploads, not total process memory. JavaScript strings, queue bookkeeping, temporary serialization, HTTP buffers, and agent execution consume additional memory.
+Inspect the current queue with `exporter.getByteBatchingStats()`.
 
 ### Error handling
 
