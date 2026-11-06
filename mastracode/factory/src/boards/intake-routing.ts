@@ -50,7 +50,8 @@ export function intakeTargetProblem(
   if (target.joinClosedIssue && route.on.some(event => event !== 'work_item.created')) {
     return {
       code: 'join_on_event',
-      message: 'A route that joins a pull request to the card of the issue it closes handles only arrivals: its `on` must be `work_item.created` alone.',
+      message:
+        'A route that joins a pull request to the card of the issue it closes handles only arrivals: its `on` must be `work_item.created` alone.',
     };
   }
   if (!target.phaseKey) return undefined;
