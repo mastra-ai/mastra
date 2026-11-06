@@ -1,7 +1,7 @@
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
@@ -1528,6 +1528,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).map(entry => entry.decision)).toContainEqual(
         expect.objectContaining({ type: 'invokeSkill', role: 'review' }),
       );
+    });
+
+    it("binds a reviewer to the merge request's iid, on its own card and on the issue card it joined", async () => {
+      const h = await harness();
+      const issue = await h.issueCard('intake');
+
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+      await h.ingest(mergeRequest(23, 'Unrelated cleanup'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const joined = cards.find(card => card.id === issue.id)!;
+      const own = cards.find(card => card.id !== issue.id)!;
+      expect(own).toMatchObject({ stages: ['pr-review'] });
+      // The card's key is base64url JSON, so digits at its end are not the iid.
+      expect(own.externalSource?.externalId).toMatch(/^gitlab-pr:/);
+      expect(boundChangeRequestNumber(joined)).toBe('17');
+      expect(boundChangeRequestNumber(own)).toBe('23');
     });
 
     it("never files an outsider's \"Closes #42\" merge request on issue 42's card", async () => {

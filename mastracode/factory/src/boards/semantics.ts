@@ -326,3 +326,17 @@ export function rulePhaseField(
   const phase = rulePhaseContext(boards, item);
   return phase ? { phase } : {};
 }
+
+/**
+ * The change request a review session on this card may publish checks for: the card's own one,
+ * or, for an issue card in PR review, the pull request attached to it.
+ */
+export function boundChangeRequestNumber(item: Card): string | undefined {
+  const source = workItemBranchSource(item.externalSource);
+  const own = isPullRequestCard({ source });
+  if (!own && item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return undefined;
+  const number = reviewedChangeRequest({ ...item, source })?.number;
+  if (number !== undefined) return String(number);
+  // A GitHub key ends in its number (`github-pr:34`); a GitLab key is encoded, so its digits mean nothing.
+  return source === 'github-pr' ? /(\d+)$/.exec(item.externalSource?.externalId ?? '')?.[1] : undefined;
+}
