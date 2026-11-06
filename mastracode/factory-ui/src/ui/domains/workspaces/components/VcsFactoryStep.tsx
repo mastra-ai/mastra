@@ -14,7 +14,6 @@ import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import { isGitLabRepository } from '../services/github';
 import type { SourceControlRepository } from '../services/github';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
@@ -321,7 +320,7 @@ function GitLabAction({
   }
   return (
     <ProviderConnectControl
-      provider={PLATFORM_CONNECT_PROVIDERS.gitlab}
+      provider="gitlab"
       label="Connect GitLab"
       variant="default"
       size="md"

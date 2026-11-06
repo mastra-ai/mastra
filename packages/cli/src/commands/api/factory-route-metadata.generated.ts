@@ -88,20 +88,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "GET /web/config/connect-tools": {
-    "contractKey": "connectToolsGet",
-    "method": "GET",
-    "path": "/web/config/connect-tools",
-    "description": "Get which Mastra Connect providers the organization's agent sessions can use",
-    "pathParams": [],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /web/factory/projects": {
     "contractKey": "projectList",
     "method": "GET",
@@ -827,22 +813,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
-  "PUT /web/config/connect-tools": {
-    "contractKey": "connectToolsUpdate",
-    "method": "PUT",
-    "path": "/web/config/connect-tools",
-    "description": "Choose which Mastra Connect providers the organization's agent sessions can use",
-    "pathParams": [],
-    "queryParams": [],
-    "bodyParams": [
-      "enabledProviders"
-    ],
-    "hasQuery": false,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "PUT /web/factory/projects/:id/skills/:name": {
     "contractKey": "skillOverrideSave",
     "method": "PUT",
@@ -1027,31 +997,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "ok"
-      ]
-    }
-  },
-  "GET /web/config/connect-tools": {
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "available": {
-          "type": "boolean"
-        },
-        "canEdit": {
-          "type": "boolean"
-        },
-        "enabledProviders": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "available",
-        "canEdit",
-        "enabledProviders"
       ]
     }
   },
@@ -8257,49 +8202,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "additionalProperties": {}
     }
   },
-  "PUT /web/config/connect-tools": {
-    "body": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "enabledProviders": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128,
-            "pattern": "^[a-z0-9][a-z0-9_-]*$"
-          }
-        }
-      },
-      "required": [
-        "enabledProviders"
-      ]
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "available": {
-          "type": "boolean"
-        },
-        "canEdit": {
-          "type": "boolean"
-        },
-        "enabledProviders": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "available",
-        "canEdit",
-        "enabledProviders"
-      ]
-    }
-  },
   "PUT /web/factory/projects/:id/skills/:name": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -8365,7 +8267,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "intakeRouteDelete": "DELETE /web/factory/projects/:id/intake-routes/:routeId",
   "skillOverrideRevert": "DELETE /web/factory/projects/:id/skills/:name",
   "workItemDelete": "DELETE /web/factory/work-items/:id",
-  "connectToolsGet": "GET /web/config/connect-tools",
   "projectList": "GET /web/factory/projects",
   "projectGet": "GET /web/factory/projects/:id",
   "attentionList": "GET /web/factory/projects/:id/attention",
@@ -8404,6 +8305,5 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",
-  "connectToolsUpdate": "PUT /web/config/connect-tools",
   "skillOverrideSave": "PUT /web/factory/projects/:id/skills/:name"
 } as const;

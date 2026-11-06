@@ -1,279 +1,110 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Switch } from '@mastra/playground-ui/components/Switch';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { supportsHeadlessAuth } from '@mastra/playground-ui/domains/connect/headless-connect';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Blocks, Check, Link2, Plus } from 'lucide-react';
-import { useId, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { useState } from 'react';
 
-import type { ConnectToolsSettings } from '../../../../api/types';
-import { useConnectToolsQuery, useSetConnectToolProviderMutation } from '../../../../hooks/useConnectTools';
-import { useAllPlatformConnectionsQuery, usePlatformCatalogQuery } from '../../../../hooks/usePlatformConnections';
+import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
+import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
-import type { PlatformCatalogProvider, PlatformProviderConnection } from '../../factory/services/platformConnect';
-import { connectionName, ProviderConnectControl } from './PlatformProviderConnections';
+import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
-import { NotConfiguredRow, RetryRow } from './common/ConnectionStateRows';
+import { RetryRow } from './common/ConnectionStateRows';
 
 const SECTION_LABEL = 'Mastra Connect';
 
-interface ConnectedProvider {
-  provider: PlatformCatalogProvider;
-  connections: PlatformProviderConnection[];
-}
-
 export function ConnectToolsSection() {
-  const settingsQuery = useConnectToolsQuery();
-  const settings = settingsQuery.data;
-  const available = settings?.available === true;
-  const catalogQuery = usePlatformCatalogQuery(available);
-  const connectionsQuery = useAllPlatformConnectionsQuery(available);
-  const [adding, setAdding] = useState(false);
-  const listId = useId();
-  const loaded = catalogQuery.isSuccess && connectionsQuery.isSuccess;
+  const query = useConnectToolsQuery();
+  const unavailable = query.isError && isPlatformConnectUnavailableError(query.error);
 
   return (
     <SettingsSubsection
-      scope="org"
+      scope="deployment"
       title="Mastra Connect tools"
-      description={
-        settings?.canEdit === false
-          ? 'Sessions run enabled tools without asking for approval. Only organization admins can change this.'
-          : 'Sessions run enabled tools without asking for approval.'
-      }
-      action={
-        available &&
-        loaded && (
-          <Button
-            size="sm"
-            icon={adding ? <Check /> : <Plus />}
-            aria-expanded={adding}
-            aria-controls={listId}
-            onClick={() => setAdding(!adding)}
-          >
-            {adding ? 'Done' : 'Add provider'}
-          </Button>
-        )
-      }
+      description="Sessions can use the Mastra Connect tools of every connection attached to this Factory's Platform project. They run without asking for approval; delete and archive tools are left out."
+      action={!unavailable && <ManageLink />}
     >
-      <div id={listId} className="flex flex-col gap-3">
-        {settingsQuery.isPending ? (
-          <SettingsContainer>
-            <SettingsRowsSkeleton label="Loading Mastra Connect tools" />
-          </SettingsContainer>
-        ) : settingsQuery.isError ? (
-          <SettingsContainer>
-            <RetryRow
-              label={SECTION_LABEL}
-              errorMsg="Couldn't load tool settings."
-              onRetry={() => void settingsQuery.refetch()}
-            />
-          </SettingsContainer>
-        ) : !settingsQuery.data.available ? (
-          <SettingsContainer>
-            <NotConfiguredRow
-              label={SECTION_LABEL}
-              showAvailable
-              description={
-                <>
-                  Set <InlineCode>MASTRA_PLATFORM_SECRET_KEY</InlineCode> and <InlineCode>MASTRA_PROJECT_ID</InlineCode>{' '}
-                  on this server to use Mastra Connect tools.
-                </>
-              }
-            />
-          </SettingsContainer>
-        ) : catalogQuery.isPending || connectionsQuery.isPending ? (
-          <SettingsContainer>
-            <SettingsRowsSkeleton label="Loading Mastra Connect providers" />
-          </SettingsContainer>
-        ) : catalogQuery.isError || connectionsQuery.isError ? (
-          <SettingsContainer>
-            {isPlatformConnectUnavailableError(catalogQuery.error ?? connectionsQuery.error) ? (
-              <NotConfiguredRow label={SECTION_LABEL} showAvailable />
-            ) : (
-              <RetryRow
-                label={SECTION_LABEL}
-                errorMsg="Couldn't load Mastra Connect providers."
-                onRetry={() => {
-                  if (catalogQuery.isError) void catalogQuery.refetch();
-                  if (connectionsQuery.isError) void connectionsQuery.refetch();
-                }}
-              />
-            )}
-          </SettingsContainer>
-        ) : (
-          <ProviderLists
-            settings={settingsQuery.data}
-            catalog={catalogQuery.data}
-            connections={connectionsQuery.data}
-            adding={adding}
+      {query.isPending ? (
+        <SettingsContainer>
+          <SettingsRowsSkeleton label="Loading Mastra Connect tools" />
+        </SettingsContainer>
+      ) : unavailable ? (
+        <SettingsContainer>
+          <SettingsRow
+            label={SECTION_LABEL}
+            description={
+              <>
+                Sessions on this Factory don't get Mastra Connect tools. They need Platform credentials and{' '}
+                <InlineCode>MASTRA_PROJECT_ID</InlineCode>, and no custom <InlineCode>tools</InlineCode> option.
+              </>
+            }
           />
-        )}
-      </div>
+        </SettingsContainer>
+      ) : query.isError ? (
+        <SettingsContainer>
+          <RetryRow
+            label={SECTION_LABEL}
+            errorMsg="Couldn't load Mastra Connect tools."
+            onRetry={() => void query.refetch()}
+          />
+        </SettingsContainer>
+      ) : query.data.length === 0 ? (
+        <Txt as="p" variant="caption" tone="muted">
+          No connections are attached to this Factory's project yet. Attach one in Mastra Platform, on your project's
+          Connect page.
+        </Txt>
+      ) : (
+        <SettingsContainer>
+          {query.data.map(connection => (
+            <SettingsRow
+              key={connection.id}
+              label={<ProviderLabel connection={connection} />}
+              description={connection.accountLabel ?? undefined}
+              errorMsg={statusLabel(connection.status)}
+            />
+          ))}
+        </SettingsContainer>
+      )}
     </SettingsSubsection>
   );
 }
 
-function ProviderLists({
-  settings,
-  catalog,
-  connections,
-  adding,
-}: {
-  settings: ConnectToolsSettings;
-  catalog: PlatformCatalogProvider[];
-  connections: PlatformProviderConnection[];
-  adding: boolean;
-}) {
-  const connected = connectedProviders(catalog, connections);
-  const connectedIds = new Set(connected.map(entry => entry.provider.id));
-  return (
-    <>
-      {connected.length > 0 && (
-        <SettingsContainer>
-          {connected.map(entry => (
-            <ConnectedProviderRow key={entry.provider.id} entry={entry} settings={settings} />
-          ))}
-        </SettingsContainer>
-      )}
-      {adding && (
-        <AddProviderList
-          providers={catalog.filter(
-            provider => !connectedIds.has(provider.id) && supportsHeadlessAuth(provider.authType, provider.authFields),
-          )}
-        />
-      )}
-    </>
-  );
+function statusLabel(status: string): string | undefined {
+  if (status === 'active') return undefined;
+  if (status === 'needs_reauth') return 'Needs reconnecting';
+  return 'Unavailable';
 }
 
-function connectedProviders(
-  catalog: PlatformCatalogProvider[],
-  connections: PlatformProviderConnection[],
-): ConnectedProvider[] {
-  const byId = new Map<string, ConnectedProvider>();
-  for (const connection of connections) {
-    const entry = byId.get(connection.integrationId);
-    if (entry) {
-      entry.connections.push(connection);
-      continue;
-    }
-    const provider = catalog.find(candidate => candidate.id === connection.integrationId) ?? {
-      id: connection.integrationId,
-      displayName: connection.integrationId,
-      logoUrl: null,
-      authType: null,
-      mcp: false,
-      authFields: [],
-    };
-    byId.set(connection.integrationId, { provider, connections: [connection] });
-  }
-  return [...byId.values()].sort((a, b) => a.provider.displayName.localeCompare(b.provider.displayName));
-}
-
-function ConnectedProviderRow({ entry, settings }: { entry: ConnectedProvider; settings: ConnectToolsSettings }) {
-  const { provider, connections } = entry;
-  const setProvider = useSetConnectToolProviderMutation();
-  const enabled = settings.enabledProviders.includes(provider.id);
-  const usable = connections.some(connection => connection.status === 'active');
-  const reauth = connections.find(connection => connection.status === 'needs_reauth');
-
-  const toggle = (on: boolean) =>
-    setProvider.mutate(
-      { providerId: provider.id, enabled: on },
-      {
-        onError: error =>
-          toast.error(`Couldn't turn ${on ? 'on' : 'off'} ${provider.displayName} tools: ${error.message}`),
-      },
-    );
-
+function ManageLink() {
   return (
-    <SettingsRow
-      label={<ProviderLabel provider={provider} />}
-      description={connections.map(connectionName).join(', ')}
-      errorMsg={reauth ? 'Needs reauthorization' : usable ? undefined : 'Not connected'}
+    <Button
+      size="sm"
+      iconEnd={<ExternalLink />}
+      render={<a href={MASTRA_PROJECTS_URL} target="_blank" rel="noreferrer" />}
     >
-      <div className="flex items-center gap-2">
-        {reauth && (
-          <ProviderConnectControl
-            provider={provider}
-            reconnectConnectionId={reauth.id}
-            label={`Reconnect ${provider.displayName}`}
-            buttonLabel="Reconnect"
-            icon={<Link2 />}
-          />
-        )}
-        <Switch
-          aria-label={`${provider.displayName} tools`}
-          checked={enabled}
-          disabled={!settings.canEdit || (!enabled && !usable)}
-          onCheckedChange={toggle}
-        />
-      </div>
-    </SettingsRow>
+      Manage in Mastra Platform
+    </Button>
   );
 }
 
-function AddProviderList({ providers }: { providers: PlatformCatalogProvider[] }) {
-  const [query, setQuery] = useState('');
-  const needle = query.trim().toLowerCase();
-  const matches = needle
-    ? providers.filter(provider => provider.displayName.toLowerCase().includes(needle))
-    : providers;
-  return (
-    <div className="flex flex-col gap-2">
-      <SearchInput
-        label="Search providers"
-        placeholder="Search providers"
-        value={query}
-        onValueChange={setQuery}
-        className="w-full"
-      />
-      {matches.length > 0 ? (
-        <SettingsContainer>
-          {matches.map(provider => (
-            <SettingsRow
-              key={provider.id}
-              label={<ProviderLabel provider={provider} />}
-              description={provider.mcp ? 'MCP server' : undefined}
-            >
-              <ProviderConnectControl
-                provider={provider}
-                label={`Connect ${provider.displayName}`}
-                buttonLabel="Connect"
-                icon={<Link2 />}
-              />
-            </SettingsRow>
-          ))}
-        </SettingsContainer>
-      ) : (
-        <Txt as="p" variant="caption" tone="muted">
-          {needle ? 'No providers match.' : 'Every catalog provider is connected.'}
-        </Txt>
-      )}
-    </div>
-  );
-}
-
-function ProviderLabel({ provider }: { provider: PlatformCatalogProvider }) {
+function ProviderLabel({ connection }: { connection: ConnectToolConnection }) {
   const [failedSrc, setFailedSrc] = useState<string>();
+  const { logoUrl, providerName } = connection;
   return (
     <span className="flex items-center gap-2">
-      {provider.logoUrl && failedSrc !== provider.logoUrl ? (
-        <img
-          src={provider.logoUrl}
-          alt=""
-          className="size-4 shrink-0 object-contain"
-          onError={() => setFailedSrc(provider.logoUrl ?? undefined)}
-        />
+      {logoUrl && failedSrc !== logoUrl ? (
+        <img src={logoUrl} alt="" className="size-4 shrink-0 object-contain" onError={() => setFailedSrc(logoUrl)} />
       ) : (
-        <Blocks aria-hidden className="text-muted-foreground size-4 shrink-0" />
+        <span
+          aria-hidden
+          className="bg-muted text-muted-foreground flex size-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-medium uppercase"
+        >
+          {providerName.charAt(0)}
+        </span>
       )}
-      {provider.displayName}
+      {providerName}
     </span>
   );
 }

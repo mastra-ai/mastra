@@ -10,15 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import {
-  headlessAuthFieldKey,
-  headlessAuthFields,
-  splitHeadlessAuthValues,
-} from '@mastra/playground-ui/domains/connect/headless-connect';
-import type { UserConnectAuthField } from '@mastra/playground-ui/domains/connect/types';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -26,62 +19,46 @@ import {
   useConnectPlatformProviderMutation,
   useReconnectPlatformProviderMutation,
 } from '../../../../hooks/usePlatformConnections';
-import type {
-  HeadlessAuthInput,
-  PlatformConnectProvider,
-  PlatformProviderConnection,
-} from '../../factory/services/platformConnect';
+import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 
 export function connectionName(connection: PlatformProviderConnection): string {
   return connection.displayName?.trim() || connection.accountLabel?.trim() || 'Connected account';
 }
 
-interface AuthFieldsDialogProps {
-  provider: PlatformConnectProvider;
-  fields: UserConnectAuthField[];
+interface ApiKeyDialogProps {
+  provider: PlatformConnectProviderId;
   title: string;
   pending: boolean;
-  onSubmit: (values: Record<string, string>) => void;
+  onSubmit: (apiKey: string) => void;
   onClose: () => void;
 }
 
-function AuthFieldsDialog({ provider, fields, title, pending, onSubmit, onClose }: AuthFieldsDialogProps) {
-  const [values, setValues] = useState<Record<string, string>>({});
-  const trimmed = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.trim()]));
-  const complete = fields.every(field => !field.required || trimmed[headlessAuthFieldKey(field)]);
+function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDialogProps) {
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const [apiKey, setApiKey] = useState('');
   return (
     <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {fields.some(field => field.secret) && (
-            <DialogDescription>
-              Secrets are stored by Mastra Platform and never reach the browser again.
-            </DialogDescription>
-          )}
+          <DialogDescription>
+            Paste an API key from your {meta.displayName} dashboard. The key is stored by Mastra Platform and never
+            reaches the browser again.
+          </DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
-          {fields.map(field => {
-            const key = headlessAuthFieldKey(field);
-            const label = field.label || field.name;
-            return (
-              <Field key={key}>
-                <FieldLabel required={!!field.required}>{label}</FieldLabel>
-                <Input
-                  aria-label={`${provider.displayName} ${label}`}
-                  type={field.secret ? 'password' : 'text'}
-                  placeholder={field.placeholder ?? undefined}
-                  value={values[key] ?? ''}
-                  onChange={event => setValues(current => ({ ...current, [key]: event.target.value }))}
-                />
-                {field.description && <FieldDescription>{field.description}</FieldDescription>}
-              </Field>
-            );
-          })}
+        <DialogBody>
+          <Input
+            aria-label={`${meta.displayName} API key`}
+            type="password"
+            placeholder="Paste your API key"
+            value={apiKey}
+            onChange={event => setApiKey(event.target.value)}
+          />
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!complete} onConfirm={() => onSubmit(trimmed)}>
+          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
             {pending ? 'Connecting…' : 'Connect'}
           </DialogAction>
         </DialogFooter>
@@ -91,7 +68,7 @@ function AuthFieldsDialog({ provider, fields, title, pending, onSubmit, onClose 
 }
 
 export interface ProviderConnectControlProps {
-  provider: PlatformConnectProvider;
+  provider: PlatformConnectProviderId;
   reconnectConnectionId?: string;
   label: string;
   buttonLabel?: string;
@@ -113,27 +90,29 @@ export function ProviderConnectControl({
   className,
   onCompleted,
 }: ProviderConnectControlProps) {
-  const connectMutation = useConnectPlatformProviderMutation(provider.id);
-  const reconnectMutation = useReconnectPlatformProviderMutation(provider.id);
-  const [collectingFields, setCollectingFields] = useState(false);
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const connectMutation = useConnectPlatformProviderMutation(provider);
+  const reconnectMutation = useReconnectPlatformProviderMutation(provider);
+  const [collectingApiKey, setCollectingApiKey] = useState(false);
   const pending = connectMutation.isPending || reconnectMutation.isPending;
-  const fields = headlessAuthFields(provider);
 
-  const run = async (values: Record<string, string>) => {
-    const auth: HeadlessAuthInput = { authType: provider.authType, ...splitHeadlessAuthValues(fields, values) };
+  const run = async (credentials?: Record<string, string>) => {
     try {
       const connection = reconnectConnectionId
-        ? await reconnectMutation.mutateAsync({ connectionId: reconnectConnectionId, ...auth })
-        : await connectMutation.mutateAsync(auth);
-      setCollectingFields(false);
+        ? await reconnectMutation.mutateAsync({
+            connectionId: reconnectConnectionId,
+            ...(credentials ? { credentials } : {}),
+          })
+        : await connectMutation.mutateAsync({ ...(credentials ? { credentials } : {}) });
+      setCollectingApiKey(false);
       if (connection) {
-        toast.success(`${provider.displayName} connected`);
+        toast.success(`${meta.displayName} connected`);
       } else {
-        toast.success(`${provider.displayName} authorization completed. The connection is activating.`);
+        toast.success(`${meta.displayName} authorization completed. The connection is activating.`);
       }
       onCompleted?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to connect ${provider.displayName}`);
+      toast.error(err instanceof Error ? err.message : `Failed to connect ${meta.displayName}`);
     }
   };
 
@@ -146,18 +125,17 @@ export function ProviderConnectControl({
         className={className}
         disabled={pending}
         aria-label={buttonLabel && !pending ? label : undefined}
-        onClick={() => (fields.length > 0 ? setCollectingFields(true) : void run({}))}
+        onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
         {pending ? 'Connecting…' : (buttonLabel ?? label)}
       </Button>
-      {collectingFields && (
-        <AuthFieldsDialog
+      {collectingApiKey && (
+        <ApiKeyDialog
           provider={provider}
-          fields={fields}
           title={label}
           pending={pending}
-          onSubmit={values => void run(values)}
-          onClose={() => setCollectingFields(false)}
+          onSubmit={apiKey => void run({ apiKey })}
+          onClose={() => setCollectingApiKey(false)}
         />
       )}
     </>

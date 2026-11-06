@@ -652,24 +652,6 @@ export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
-const connectToolsSettingsSchema = z.object({
-  available: z.boolean(),
-  canEdit: z.boolean(),
-  enabledProviders: z.array(z.string()),
-});
-
-export const connectToolsUpdateBodySchema = z.object({
-  enabledProviders: z
-    .array(
-      z
-        .string()
-        .min(1)
-        .max(128)
-        .regex(/^[a-z0-9][a-z0-9_-]*$/),
-    )
-    .transform(ids => [...new Set(ids)].sort()),
-});
-
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -875,19 +857,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: boardPathSchema,
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
-  },
-  connectToolsGet: {
-    method: 'GET',
-    path: '/web/config/connect-tools',
-    description: "Get which Mastra Connect providers the organization's agent sessions can use",
-    responseSchema: connectToolsSettingsSchema,
-  },
-  connectToolsUpdate: {
-    method: 'PUT',
-    path: '/web/config/connect-tools',
-    description: "Choose which Mastra Connect providers the organization's agent sessions can use",
-    bodySchema: connectToolsUpdateBodySchema,
-    responseSchema: connectToolsSettingsSchema,
   },
   intakeRouteList: {
     method: 'GET',

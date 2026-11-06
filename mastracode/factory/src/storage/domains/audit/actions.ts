@@ -23,7 +23,6 @@ export const AUDIT_ACTIONS = {
   board: ['created', 'updated', 'deleted', 'reset'],
   skill: ['updated', 'reverted'],
   intake_route: ['created', 'updated', 'deleted', 'reordered'],
-  connect_tools: ['updated'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

@@ -15,7 +15,6 @@ import {
 import { buildAttentionRoutes } from './attention.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { BoardRoutes } from './boards.js';
-import { ConnectToolRoutes } from './connect-tools.js';
 import {
   attentionQuerySchema,
   createProjectBodySchema,
@@ -81,22 +80,7 @@ function registeredFactoryRoutes() {
     storage: {},
     boards: {},
   } as never).routes();
-  const connectTools = new ConnectToolRoutes({
-    auth: {},
-    audit: {},
-    storage: {},
-    available: () => false,
-  } as never).routes();
-  return [
-    ...projects,
-    ...work,
-    ...attention,
-    ...automationRuns,
-    ...boards,
-    ...skills,
-    ...intakeRoutes,
-    ...connectTools,
-  ];
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
 }
 
 describe('Factory route contracts', () => {

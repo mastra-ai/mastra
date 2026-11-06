@@ -91,8 +91,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'tools',
         label: SETTINGS_SECTION_LABELS.tools,
         icon: Wrench,
-        searchText:
-          'tools mcp servers mastra connect providers integrations connections sessions slack web chat enable approval',
+        searchText: 'tools mastra connect connections integrations sessions platform project approval',
       },
       {
         id: 'behavior',

@@ -26,8 +26,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import { MastraConnectError, tools as connectTools } from '@mastra/connect';
-import type { ToolsResolver as ConnectToolsResolver } from '@mastra/connect';
+import { tools as connectTools } from '@mastra/connect';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -150,7 +149,6 @@ import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
 import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
 import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
-import { ConnectToolSettingsStorage } from './storage/domains/connect-tools/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -178,7 +176,6 @@ import {
 import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
-import { FACTORY_SLACK_SENDER_KEY } from './tools/scope.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -294,9 +291,8 @@ export interface MastraFactoryConfig {
    * session keeps Factory's tool; the configured one is skipped with a warning.
    *
    * Defaults, with Platform credentials and `MASTRA_PROJECT_ID`, to the Mastra
-   * Connect tools of the providers an org admin turned on in Settings → Tools
-   * for the run's organization, minus delete and archive tools. Nothing is on
-   * until an admin turns it on. Passing `tools` replaces this default.
+   * Connect tools of every connection attached to the Platform project, minus
+   * delete and archive tools. Pass `{}` to offer none.
    */
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
@@ -450,69 +446,24 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   return new PlatformFactorySandbox();
 }
 
-function connectToolsAvailable(): boolean {
-  return hasPlatformCredentials() && Boolean(process.env.MASTRA_PROJECT_ID?.trim());
-}
-
-function slackSenderOrgId(requestContext: RequestContext): string | undefined {
-  const sender: unknown = requestContext.get(FACTORY_SLACK_SENDER_KEY);
-  if (typeof sender !== 'object' || sender === null || !('orgId' in sender)) return undefined;
-  return typeof sender.orgId === 'string' ? sender.orgId : undefined;
-}
-
-function runOrgId(requestContext: RequestContext): string | undefined {
-  return (
-    readFactorySessionScope(requestContext)?.factoryOrgId ??
-    slackSenderOrgId(requestContext) ??
-    getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext))
-  );
-}
-
-function orgConnectTools(settings: ConnectToolSettingsStorage): FactoryTools | undefined {
+function platformConnectProjectId(): string | undefined {
   if (!hasPlatformCredentials()) return undefined;
-  if (!connectToolsAvailable()) {
+  const projectId = process.env.MASTRA_PROJECT_ID?.trim();
+  if (!projectId) {
     console.warn(
       'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
     );
     return undefined;
   }
-  const resolvers = new Map<string, ConnectToolsResolver>();
-  const resolverFor = (providers: string[]) => {
-    const key = providers.join(',');
-    let resolve = resolvers.get(key);
-    if (!resolve) {
-      // Sessions auto-approve tools, so destructive Connect tools stay out.
-      resolve = connectTools({ providers, disallowTools: ['*_delete_*', '*_archive_*'] });
-      resolvers.set(key, resolve);
-    }
-    return resolve;
-  };
-  const resolve = async (providers: string[], requestContext: RequestContext): Promise<IntegrationTools> => {
-    try {
-      return await resolverFor(providers)({ requestContext });
-    } catch (error) {
-      if (providers.length === 1 || !(error instanceof MastraConnectError) || error.code !== 'invalid_options') {
-        throw error;
-      }
-      const settled = await Promise.allSettled(providers.map(provider => resolverFor([provider])({ requestContext })));
-      const tools: IntegrationTools = {};
-      settled.forEach((result, index) => {
-        if (result.status === 'fulfilled') Object.assign(tools, result.value);
-        else {
-          const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-          console.warn(`MastraFactory: Mastra Connect '${providers[index]}' tools are unavailable: ${reason}`);
-        }
-      });
-      return tools;
-    }
-  };
+  return projectId;
+}
+
+function platformConnectTools(projectId: string): FactoryTools {
+  // Sessions auto-approve tools by default, so destructive Connect tools stay out.
+  const resolve = connectTools({ projectId, disallowTools: ['*_delete_*', '*_archive_*'] });
   return async ({ requestContext }) => {
-    const orgId = runOrgId(requestContext);
-    if (!orgId) return {};
     try {
-      const providers = [...(await settings.get({ orgId }))].sort();
-      if (providers.length === 0) return {};
-      return await resolve(providers, requestContext);
+      return await resolve({ requestContext });
     } catch (error) {
       console.warn(
         `MastraFactory: Mastra Connect tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
@@ -526,7 +477,7 @@ function warnIgnoredMcpConfig(): void {
   const mcpPath = getGlobalMcpPath();
   if (!existsSync(mcpPath)) return;
   console.warn(
-    `MastraFactory: ${mcpPath} is ignored; Factory sessions don't load mcp.json. Pass MCP tools through the \`tools\` option or turn on a Mastra Connect provider in Settings → Tools.`,
+    `MastraFactory: ${mcpPath} is ignored; Factory sessions don't load mcp.json. Pass MCP tools through the \`tools\` option or attach a Mastra Connect connection to the Platform project.`,
   );
 }
 
@@ -886,7 +837,6 @@ export class MastraFactory {
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
-    const connectToolSettingsStorage = storage.registerDomain(new ConnectToolSettingsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -903,7 +853,6 @@ export class MastraFactory {
       comments: workItemCommentsStorage,
       skillOverrides: skillOverridesStorage,
       voiceSettings: voiceSettingsStorage,
-      connectTools: connectToolSettingsStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -1573,7 +1522,9 @@ export class MastraFactory {
           ]
         : [],
     );
-    const sessionTools = this.#config.tools ?? orgConnectTools(connectToolSettingsStorage);
+    const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
+    const sessionTools =
+      this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
     const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -2035,7 +1986,6 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,
-            connectToolsAvailable,
             deploymentModelProviders,
             skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,
@@ -2116,6 +2066,7 @@ export class MastraFactory {
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                connectToolsProjectId,
               })
             : []),
         ],

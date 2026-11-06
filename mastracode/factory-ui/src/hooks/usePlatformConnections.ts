@@ -5,13 +5,11 @@ import { queryKeys } from '../api/keys';
 import {
   createPlatformConnectSession,
   createPlatformReconnectSession,
-  listAllPlatformConnections,
-  listPlatformCatalog,
   listPlatformConnections,
   runHeadlessAuth,
   waitForActiveConnection,
 } from '../ui/domains/factory/services/platformConnect';
-import type { HeadlessAuthInput, PlatformConnectProviderId } from '../ui/domains/factory/services/platformConnect';
+import type { PlatformConnectProviderId } from '../ui/domains/factory/services/platformConnect';
 
 /**
  * The org's Platform connections for one provider. Server responds 403/404
@@ -28,32 +26,12 @@ export function usePlatformConnectionsQuery(provider: PlatformConnectProviderId,
   });
 }
 
-export function useAllPlatformConnectionsQuery(enabled: boolean) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.platformConnectionsAll(),
-    queryFn: () => listAllPlatformConnections(baseUrl),
-    enabled,
-    retry: false,
-  });
-}
-
-export function usePlatformCatalogQuery(enabled: boolean) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.platformCatalog(),
-    queryFn: () => listPlatformCatalog(baseUrl),
-    enabled,
-    retry: false,
-  });
-}
-
 /** Invalidate everything that reflects a provider's connection state. */
-function useInvalidateProviderState(provider: string) {
+function useInvalidateProviderState(provider: PlatformConnectProviderId) {
   const queryClient = useQueryClient();
   return async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.platformConnectionsAll() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections(provider) }),
       ...(provider === 'jira'
         ? [
             queryClient.invalidateQueries({ queryKey: queryKeys.jiraStatus() }),
@@ -78,16 +56,16 @@ function useInvalidateProviderState(provider: string) {
 
 /**
  * Connect a new provider account: mint a session server-side, run the
- * headless Nango auth (OAuth popup, or direct credential submission when
+ * headless Nango auth (OAuth popup, or direct API-key submission when
  * `credentials` are passed), then wait for the connection to activate.
  */
-export function useConnectPlatformProviderMutation(provider: string) {
+export function useConnectPlatformProviderMutation(provider: PlatformConnectProviderId) {
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (auth: HeadlessAuthInput) => {
+    mutationFn: async (input: { credentials?: Record<string, string> } = {}) => {
       const session = await createPlatformConnectSession(baseUrl, provider);
-      await runHeadlessAuth({ session, ...auth });
+      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
       return waitForActiveConnection(baseUrl, provider, session.connectionId);
     },
     onSettled: invalidate,
@@ -95,14 +73,14 @@ export function useConnectPlatformProviderMutation(provider: string) {
 }
 
 /** Reauthorize an existing connection through the same headless flow. */
-export function useReconnectPlatformProviderMutation(provider: string) {
+export function useReconnectPlatformProviderMutation(provider: PlatformConnectProviderId) {
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async ({ connectionId, ...auth }: HeadlessAuthInput & { connectionId: string }) => {
-      const session = await createPlatformReconnectSession(baseUrl, provider, connectionId);
-      await runHeadlessAuth({ session, ...auth });
-      return waitForActiveConnection(baseUrl, provider, connectionId);
+    mutationFn: async (input: { connectionId: string; credentials?: Record<string, string> }) => {
+      const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
+      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      return waitForActiveConnection(baseUrl, provider, input.connectionId);
     },
     onSettled: invalidate,
   });

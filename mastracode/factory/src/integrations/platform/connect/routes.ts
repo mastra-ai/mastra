@@ -1,6 +1,7 @@
 /**
  * Mastra `apiRoutes` that let the Factory SPA connect and reconnect
- * Platform-managed provider accounts without leaving Factory.
+ * Platform-managed provider accounts without leaving Factory, and list the
+ * Platform project connections whose Mastra Connect tools sessions get.
  *
  * The browser cannot talk to the integrations service itself — it has no
  * Platform session — so these routes mint Nango connect/reconnect sessions
@@ -15,7 +16,6 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
-import { z } from 'zod';
 
 import type { RouteAuth } from '../../../routes/route.js';
 import type { PlatformApiClient} from '../api-client.js';
@@ -47,42 +47,14 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider>
   gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab'] },
 };
 
-const connectionRowSchema = z.object({
-  id: z.string(),
-  integrationId: z.string(),
-  status: z.string(),
-  accountLabel: z.string().nullable(),
-  displayName: z.string().nullish(),
-  connectedAt: z.string().optional(),
-});
-
-const connectionListSchema = z.object({ connections: z.array(connectionRowSchema) });
-
-type PlatformConnectionRow = z.infer<typeof connectionRowSchema>;
-
-const catalogAuthFieldSchema = z.object({
-  name: z.string(),
-  target: z.enum(['credentials', 'params']).nullish(),
-  label: z.string().nullish(),
-  description: z.string().nullish(),
-  placeholder: z.string().nullish(),
-  secret: z.boolean().nullish(),
-  required: z.boolean().nullish(),
-  order: z.number().nullish(),
-});
-
-const catalogSchema = z.object({
-  integrations: z.array(
-    z.object({
-      id: z.string(),
-      capabilities: z.object({ mcp: z.boolean().optional() }),
-      displayName: z.string().nullish(),
-      logoUrl: z.string().nullish(),
-      authType: z.string().nullish(),
-      authFields: z.array(catalogAuthFieldSchema).nullish(),
-    }),
-  ),
-});
+interface PlatformConnectionRow {
+  id: string;
+  integrationId: string;
+  status: 'active' | 'needs_reauth';
+  accountLabel: string | null;
+  displayName?: string | null;
+  connectedAt?: string;
+}
 
 interface PlatformSessionResponse {
   connectionId: string;
@@ -92,22 +64,46 @@ interface PlatformSessionResponse {
   expiresAt: string;
 }
 
+interface ProjectConnectionRow {
+  id: string;
+  integrationId: string;
+  status: string;
+  accountLabel?: string | null;
+}
+
+interface CatalogEntry {
+  id: string;
+  displayName?: string | null;
+  logoUrl?: string | null;
+}
+
 export interface BuildPlatformConnectRoutesOptions {
   auth: RouteAuth;
   client: PlatformApiClient;
+  connectToolsProjectId?: string;
 }
 
-async function resolveOrgTenant(
+async function resolveTenant(
   c: RouteContext,
   auth: RouteAuth,
-): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
+): Promise<{ tenant: { orgId?: string; userId: string } } | { response: Response }> {
   if (!auth.enabled()) {
     return { response: c.json({ error: 'auth_disabled', message: 'Factory auth is not enabled.' }, 403) };
   }
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (!tenant.orgId) {
+  return { tenant };
+}
+
+async function resolveOrgTenant(
+  c: RouteContext,
+  auth: RouteAuth,
+): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
+  const resolved = await resolveTenant(c, auth);
+  if ('response' in resolved) return resolved;
+  const { orgId, userId } = resolved.tenant;
+  if (!orgId) {
     return {
       response: c.json(
         {
@@ -118,44 +114,12 @@ async function resolveOrgTenant(
       ),
     };
   }
-  return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
+  return { tenant: { orgId, userId } };
 }
 
-async function listConnections(client: PlatformApiClient): Promise<PlatformConnectionRow[]> {
-  return connectionListSchema.parse(await client.request<unknown>('GET', '/v2/connections')).connections;
-}
-
-async function listCatalog(client: PlatformApiClient) {
-  const { integrations } = catalogSchema.parse(await client.request<unknown>('GET', '/v2/integrations'));
-  return integrations
-    .map(entry => ({
-      id: entry.id,
-      displayName: entry.displayName ?? entry.id,
-      logoUrl: entry.logoUrl ?? null,
-      authType: entry.authType ?? null,
-      mcp: entry.capabilities.mcp ?? false,
-      authFields: [...(entry.authFields ?? [])]
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        .map(field => ({
-          name: field.name,
-          target: field.target ?? 'credentials',
-          label: field.label ?? field.name,
-          description: field.description ?? null,
-          placeholder: field.placeholder ?? null,
-          secret: field.secret ?? false,
-          required: field.required ?? false,
-        })),
-    }))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName));
-}
-
-async function resolveProvider(c: RouteContext, client: PlatformApiClient): Promise<PlatformConnectProvider | null> {
-  const id = c.req.param('provider');
-  if (!id) return null;
-  const known = PLATFORM_CONNECT_PROVIDERS[id];
-  if (known) return known;
-  const catalog = await listCatalog(client);
-  return catalog.some(entry => entry.id === id) ? { integrationId: id, connectionIntegrationIds: [id] } : null;
+function providerFromParam(c: RouteContext): PlatformConnectProvider | null {
+  const provider = c.req.param('provider');
+  return provider ? (PLATFORM_CONNECT_PROVIDERS[provider] ?? null) : null;
 }
 
 function platformError(c: RouteContext, err: unknown) {
@@ -170,53 +134,65 @@ function platformError(c: RouteContext, err: unknown) {
   return c.json({ error: 'platform_request_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
+function buildConnectToolsRoute(auth: RouteAuth, client: PlatformApiClient, projectId: string): ApiRoute {
+  return registerApiRoute('/web/integrations/platform/connect-tools', {
+    method: 'GET',
+    requiresAuth: false,
+    handler: async rawContext => {
+      const c = loose(rawContext);
+      const resolved = await resolveTenant(c, auth);
+      if ('response' in resolved) return resolved.response;
+      try {
+        const [listed, catalog] = await Promise.all([
+          client.request<{ connections: ProjectConnectionRow[] }>(
+            'GET',
+            `/v2/projects/${encodeURIComponent(projectId)}/connections`,
+          ),
+          client.request<{ integrations: CatalogEntry[] }>('GET', '/v2/integrations'),
+        ]);
+        const entries = new Map(catalog.integrations.map(entry => [entry.id, entry]));
+        const connections = listed.connections
+          .map(connection => {
+            const entry = entries.get(connection.integrationId);
+            return {
+              id: connection.id,
+              integrationId: connection.integrationId,
+              providerName: entry?.displayName ?? connection.integrationId,
+              logoUrl: entry?.logoUrl ?? null,
+              accountLabel: connection.accountLabel ?? null,
+              status: connection.status,
+            };
+          })
+          .sort((a, b) => a.providerName.localeCompare(b.providerName));
+        return c.json({ connections });
+      } catch (err) {
+        return platformError(c, err);
+      }
+    },
+  });
+}
+
 /**
  * Build the `/web/integrations/platform/*` routes. Callers only mount these
  * when Platform machine credentials are configured.
  */
 export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
-  const { auth, client } = options;
+  const { auth, client, connectToolsProjectId } = options;
 
   return [
-    registerApiRoute('/web/integrations/platform/catalog', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async rawContext => {
-        const c = loose(rawContext);
-        const resolved = await resolveOrgTenant(c, auth);
-        if ('response' in resolved) return resolved.response;
-        try {
-          return c.json({ providers: await listCatalog(client) });
-        } catch (err) {
-          return platformError(c, err);
-        }
-      },
-    }),
-    registerApiRoute('/web/integrations/platform/connections', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async rawContext => {
-        const c = loose(rawContext);
-        const resolved = await resolveOrgTenant(c, auth);
-        if ('response' in resolved) return resolved.response;
-        try {
-          return c.json({ connections: await listConnections(client) });
-        } catch (err) {
-          return platformError(c, err);
-        }
-      },
-    }),
+    ...(connectToolsProjectId ? [buildConnectToolsRoute(auth, client, connectToolsProjectId)] : []),
     registerApiRoute('/web/integrations/platform/:provider/connections', {
       method: 'GET',
       requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
-        const provider = PLATFORM_CONNECT_PROVIDERS[c.req.param('provider') ?? ''];
+        const provider = providerFromParam(c);
         if (!provider) return c.json({ error: 'unknown_provider' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         try {
-          const connections = (await listConnections(client)).filter(connection =>
+          const result = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
+          const connections = result.connections.filter(connection =>
             provider.connectionIntegrationIds.includes(connection.integrationId),
           );
           return c.json({ connections });
@@ -230,11 +206,11 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
       requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
+        const provider = providerFromParam(c);
+        if (!provider) return c.json({ error: 'unknown_provider' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         try {
-          const provider = await resolveProvider(c, client);
-          if (!provider) return c.json({ error: 'unknown_provider' }, 404);
           const session = await client.request<PlatformSessionResponse>(
             'POST',
             `/v2/integrations/${encodeURIComponent(provider.integrationId)}/connect-sessions`,
@@ -252,15 +228,18 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
       requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
+        const provider = providerFromParam(c);
+        if (!provider) return c.json({ error: 'unknown_provider' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         const connectionId = c.req.param('connectionId');
         if (!connectionId) return c.json({ error: 'connection_required' }, 400);
         try {
-          const provider = await resolveProvider(c, client);
-          if (!provider) return c.json({ error: 'unknown_provider' }, 404);
-          // Confirm the connection belongs to this provider so one provider cannot reconnect another's connection.
-          const connection = (await listConnections(client)).find(
+          // Confirm the connection belongs to this provider before minting so
+          // one provider's page cannot reconnect a different provider's
+          // connection through this route family.
+          const listed = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
+          const connection = listed.connections.find(
             candidate =>
               candidate.id === connectionId && provider.connectionIntegrationIds.includes(candidate.integrationId),
           );

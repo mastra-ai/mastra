@@ -13,7 +13,6 @@ import { AuditStorage } from './domains/audit/base.js';
 import { StoredBoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './domains/comments/base.js';
-import { ConnectToolSettingsStorage } from './domains/connect-tools/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
@@ -104,7 +103,6 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   boards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
   voiceSettings: VoiceSettingsStorage;
-  connectTools: ConnectToolSettingsStorage;
 }
 
 /**
@@ -141,7 +139,6 @@ export async function createFactoryStorageForTests(
   const boards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
-  const connectTools = storage.registerDomain(new ConnectToolSettingsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -162,6 +159,5 @@ export async function createFactoryStorageForTests(
     boards,
     skillOverrides,
     voiceSettings,
-    connectTools,
   };
 }

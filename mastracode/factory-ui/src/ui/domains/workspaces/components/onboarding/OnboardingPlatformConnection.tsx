@@ -1,10 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { usePlatformConnectionsQuery } from '../../../../../hooks/usePlatformConnections';
-import {
-  isPlatformConnectUnavailableError,
-  PLATFORM_CONNECT_PROVIDERS,
-} from '../../../factory/services/platformConnect';
+import { isPlatformConnectUnavailableError } from '../../../factory/services/platformConnect';
 import { ProviderConnectControl } from '../../../settings/components/PlatformProviderConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../ui/icons';
 import { OnboardingConnectionSkeleton } from './OnboardingConnectionSkeleton';
@@ -69,7 +66,7 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
       description={description}
       action={
         <ProviderConnectControl
-          provider={PLATFORM_CONNECT_PROVIDERS[provider]}
+          provider={provider}
           label={`${action} ${name}`}
           buttonLabel={action}
           reconnectConnectionId={reconnect?.id}
