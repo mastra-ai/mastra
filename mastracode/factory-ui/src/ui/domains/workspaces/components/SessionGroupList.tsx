@@ -1,7 +1,8 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Fragment, startTransition, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, startTransition, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 import { collapsedRowsKeepingActive } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
@@ -35,26 +36,24 @@ export function SessionGroupList({
   const visibleRows = collapsedRowsKeepingActive(group.rows, additionalRowCount);
   const remainingCount = group.rows.length - visibleRows.length;
   const sectionRef = useRef<HTMLElement>(null);
-  // The button that was pressed unmounts once its count reaches zero; hand focus to the one left.
-  const focusAfterChange = useRef<ToggleName | null>(null);
 
-  useLayoutEffect(() => {
-    const target = focusAfterChange.current;
-    focusAfterChange.current = null;
-    if (target)
-      sectionRef.current?.querySelector<HTMLButtonElement>(`[data-session-group-toggle="${target}"]`)?.focus();
-  }, [additionalRowCount]);
+  // The pressed toggle unmounts once its count reaches zero, so hand focus to the one that remains.
+  const focusToggle = (name: ToggleName) =>
+    sectionRef.current?.querySelector<HTMLButtonElement>(`[data-session-group-toggle="${name}"]`)?.focus();
 
   const showMore = () => {
     const nextCount = additionalRowCount + GROUP_ROW_INCREMENT;
-    if (collapsedRowsKeepingActive(group.rows, nextCount).length === group.rows.length)
-      focusAfterChange.current = 'less';
-    startTransition(() => setAdditionalRowCount(nextCount));
+    if (collapsedRowsKeepingActive(group.rows, nextCount).length < group.rows.length) {
+      startTransition(() => setAdditionalRowCount(nextCount));
+      return;
+    }
+    flushSync(() => setAdditionalRowCount(nextCount));
+    focusToggle('less');
   };
 
   const showLess = () => {
-    focusAfterChange.current = 'more';
-    setAdditionalRowCount(0);
+    flushSync(() => setAdditionalRowCount(0));
+    focusToggle('more');
   };
 
   return (
