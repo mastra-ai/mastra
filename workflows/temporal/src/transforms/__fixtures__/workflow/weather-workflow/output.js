@@ -240,6 +240,9 @@ class TemporalExecutionEngine {
         }
       }
       this.suspendedSteps.add(id);
+      if (this.executionClaim?.operation === 'timeTravel') {
+        this.executionClaim = undefined;
+      }
       const suspended = [...this.suspendedSteps].map(stepId => [stepId]);
       const suspendedPayloads = Object.fromEntries([...this.suspendedSteps].map(stepId => [stepId, stepResults[stepId]?.suspendPayload]));
       this.currentResult = {

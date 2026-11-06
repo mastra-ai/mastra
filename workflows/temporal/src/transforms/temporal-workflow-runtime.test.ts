@@ -415,6 +415,29 @@ describe('temporal workflow runtime helper module', () => {
     });
   });
 
+  it('releases a replacement startup claim when the replay suspends', async () => {
+    const approval = vi
+      .fn()
+      .mockResolvedValueOnce({
+        __temporalSuspension: true,
+        suspendPayload: { reason: 'approval' },
+      })
+      .mockResolvedValueOnce({ approved: true });
+    proxyActivities.mockReturnValue({ approval });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow').then('approval').commit();
+    const run = workflow({ inputData: { orderId: 'order-1' }, runId: 'run-1' });
+    const claimExecution = signalHandlers.get('mastra.claimExecution');
+
+    expect(claimExecution?.({ action: 'claim', operation: 'timeTravel', token: 'startup-claim' })).toBe(true);
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledOnce());
+    expect(signalHandlers.get('mastra.executionClaim')?.()).toBeUndefined();
+
+    resumeWorkflow({ step: 'approval' }, { approved: true });
+    await expect(run).resolves.toMatchObject({ status: 'success', result: { approved: true } });
+  });
+
   it('atomically claims a suspended execution for time travel', async () => {
     const approval = vi
       .fn()
