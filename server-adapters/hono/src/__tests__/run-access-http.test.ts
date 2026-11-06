@@ -19,6 +19,7 @@ import { MastraServer } from '../index';
 const users: Record<string, { id: string; resourceId: string }> = {
   alice: { id: 'alice', resourceId: 'alice' },
   'alice-viewer': { id: 'alice-viewer', resourceId: 'alice' },
+  'alice-no-read': { id: 'alice-no-read', resourceId: 'alice' },
   bob: { id: 'bob', resourceId: 'bob' },
 };
 
@@ -88,6 +89,9 @@ describe.each(['plain', 'durable'] as const)('run observe/abort authorization ov
       check: vi.fn(async () => true),
       require: vi.fn(async (user: { id: string }, { permission }: { permission: string | string[] }) => {
         const permissions = Array.isArray(permission) ? permission : [permission];
+        if (user.id === 'alice-no-read' && permissions.includes('memory:read')) {
+          throw Object.assign(new Error('read denied'), { status: 403 });
+        }
         if (user.id === 'alice-viewer' && permissions.some(p => p.endsWith(':write'))) {
           throw Object.assign(new Error('write denied'), { status: 403 });
         }
@@ -152,6 +156,9 @@ describe.each(['plain', 'durable'] as const)('run observe/abort authorization ov
     try {
       expect((await post('agent/observe', undefined, { runId })).status).toBe(401);
       expect((await post('agent/observe', 'bob', { runId })).status).toBe(403);
+      const denied = await post('agent/observe', 'alice-no-read', { runId });
+      await denied.body?.cancel();
+      expect(denied.status).toBe(403);
       expect((await post('agent/observe', 'alice', { runId: 'unknown-run' })).status).toBe(404);
 
       for (const token of ['alice', 'alice-viewer']) {
