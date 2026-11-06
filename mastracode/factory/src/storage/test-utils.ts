@@ -23,9 +23,36 @@ import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
+import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 import type { ExternalWorkItemSource } from './domains/work-items/base.js';
+import { bumpBoardVersions } from './domains/work-items/board-version.js';
+import { Cards } from './domains/work-items/cards.js';
 import type { WorkItemRow, WorkItemSourceRow } from './domains/work-items/work-item-schema.js';
+
+/**
+ * Leave cards only where a 0.26 Factory wrote them, the legacy table, and restart the work-items
+ * domain so it sees them as not yet copied.
+ */
+export async function demoteCardsToLegacyForTests(storage: FactoryStorage, cardIds: readonly string[]): Promise<void> {
+  for (const id of cardIds) {
+    const legacy = await new Cards(storage.ops).findOne({ id });
+    if (!legacy) throw new Error(`No card ${id} to demote`);
+    const workItemId = (legacy.work_item as { id: string }).id;
+    delete legacy.work_item;
+    delete legacy.work_item_sources;
+    await storage.ops.insertOne('work_items', legacy);
+    await storage.ops.deleteMany('factory_board_items', { id });
+    await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: workItemId });
+    await storage.ops.deleteMany('factory_work_items', { id: workItemId });
+    // The rows moved behind the domain's back; drop board lists cached with them.
+    await bumpBoardVersions(storage.ops, [
+      { orgId: legacy.org_id as string, factoryProjectId: legacy.factory_project_id as string },
+    ]);
+  }
+  await storage.ops.deleteMany('factory_work_item_split_state', {});
+  await storage.getDomain<WorkItemsStorage>('work-items').init();
+}
 
 export function createProviderWorkItemForTests(input: {
   id: string;
@@ -101,6 +128,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   comments: WorkItemCommentsStorage;
   boards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
+  voiceSettings: VoiceSettingsStorage;
 }
 
 /**
@@ -136,6 +164,7 @@ export async function createFactoryStorageForTests(
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
   const boards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
+  const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -155,5 +184,6 @@ export async function createFactoryStorageForTests(
     comments,
     boards,
     skillOverrides,
+    voiceSettings,
   };
 }

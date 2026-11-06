@@ -1,5 +1,6 @@
 import { readdir, rename, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { build } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -22,7 +23,11 @@ for (const app of apps) {
     configFile: false,
     logLevel: 'warn',
     root,
-    plugins: [react(), viteSingleFile({ removeViteModuleLoader: true })],
+    plugins: [react(), tailwindcss(), viteSingleFile({ removeViteModuleLoader: true })],
+    resolve: {
+      // playground-ui and the apps must share one copy of each context-bearing package.
+      dedupe: ['react', 'react-dom', '@tanstack/react-query', '@mastra/react', '@mastra/client-js'],
+    },
     build: {
       outDir,
       // One build per app into the same folder, cleared once above.

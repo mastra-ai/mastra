@@ -10,7 +10,7 @@ import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
 import { spanQueryOutcomeFieldsSupported, timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
 import { parseJson, payloadColumnSql, timeRangeOf } from './helpers';
-import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
+import { buildSpanQueryResponse, needsPreview, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -163,6 +163,19 @@ type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | '
   cursorId: number | null;
 };
 
+type LookupRow = SpanQueryIdentity &
+  Record<(typeof previewPayloads)[number][0] | 'model' | 'provider' | 'stopReasonContext', string | null>;
+
+function eventRowsFilter(rows: Selected[]) {
+  const values: unknown[] = timeRangeOf(rows.map(row => row.endedAt));
+  const conditions = rows.map(row => {
+    const key = keys([row], values);
+    values.push(row.cursorId, row.endedAt);
+    return `(${key} AND cursorId IS NOT DISTINCT FROM ? AND endedAt = ?)`;
+  });
+  return { sql: `endedAt BETWEEN ? AND ? AND (${conditions.join(' OR ')})`, values };
+}
+
 export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPlan) {
   const deadline = performance.now() + coreStorage.TRACE_QUERY_DEFAULT_TIMEOUT_MS;
   const query = async <T>(sql: string, values: unknown[]) => {
@@ -204,34 +217,38 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   );
   const page = rows.slice(0, plan.limit);
   if (!page.length) return buildSpanQueryResponse(plan, [], []);
-  const payloadValues: unknown[] = timeRangeOf(page.map(row => row.endedAt));
-  const payloadWhere = page
-    .map(row => {
-      const key = keys([row], payloadValues);
-      payloadValues.push(row.cursorId, row.endedAt);
-      return `(${key} AND cursorId IS NOT DISTINCT FROM ? AND endedAt = ?)`;
-    })
-    .join(' OR ');
-  // Stored previews of the selected event row. A row written before previews were stored has NULL
-  // previews, so its payload is read instead (only for that row) and previewed the same way. Model
-  // and provider fall back to span attributes for rows written before their columns existed; that
-  // fallback is returned, never filtered on.
-  const previewRows = await query<
-    SpanQueryIdentity &
-      Record<(typeof previewPayloads)[number][0] | 'model' | 'provider' | 'stopReasonContext', string | null>
-  >(
-    `SELECT DISTINCT ${identities}, CAST(stopReasonContext AS VARCHAR) AS stopReasonContext,
+  // Model and provider fall back to span attributes for rows written before their columns existed;
+  // that fallback is returned, never filtered on.
+  const lookupColumns = `${identities}, CAST(stopReasonContext AS VARCHAR) AS stopReasonContext,
     COALESCE(model, CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END) AS model,
     COALESCE(provider, CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END) AS provider,
-    ${previewPayloads
-      .map(
-        ([preview, payload]) =>
-          `${preview}, CASE WHEN ${missingPreviewSql(preview)} THEN CAST(${payload} AS VARCHAR) END AS ${preview}Payload`,
-      )
-      .join(',\n    ')}
-    FROM span_events WHERE endedAt BETWEEN ? AND ? AND (${payloadWhere})`,
-    payloadValues,
+    ${previewPayloads.map(([preview]) => preview).join(', ')}`;
+  const pageFilter = eventRowsFilter(page);
+  const storedRows = await query<LookupRow>(
+    `SELECT DISTINCT ${lookupColumns} FROM span_events WHERE ${pageFilter.sql}`,
+    pageFilter.values,
   );
+  // DuckDB reads every column a query names, even inside a CASE that discards it, so payloads get
+  // their own query.
+  const withoutPreview = new Set(
+    storedRows
+      .filter(row => previewPayloads.some(([preview]) => needsPreview(row[preview])))
+      .map(row => coreStorage.spanQueryIdentityKey(row)),
+  );
+  const rowsWithoutPreview = page.filter(row => withoutPreview.has(coreStorage.spanQueryIdentityKey(row)));
+  let previewRows = storedRows;
+  if (rowsWithoutPreview.length) {
+    const payloadFilter = eventRowsFilter(rowsWithoutPreview);
+    const payloadRows = await query<LookupRow>(
+      `SELECT DISTINCT ${lookupColumns}, ${previewPayloads.map(([preview, payload]) => `CAST(${payload} AS VARCHAR) AS ${preview}Payload`).join(', ')}
+      FROM span_events WHERE ${payloadFilter.sql}`,
+      payloadFilter.values,
+    );
+    previewRows = [
+      ...storedRows.filter(row => !withoutPreview.has(coreStorage.spanQueryIdentityKey(row))),
+      ...payloadRows,
+    ];
+  }
   const payloads: SpanQueryPayload[] = previewRows.map(row => {
     const payload: SpanQueryPayload = {
       organizationId: row.organizationId,
