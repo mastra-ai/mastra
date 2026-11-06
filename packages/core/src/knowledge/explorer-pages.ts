@@ -244,9 +244,14 @@ export async function readKnowledgePage(
     for (const id of [...note.mentions, ...note.stampScopeIds, note.pageId]) if (!known.has(id)) wanted.add(id);
   }
   if (!known.has(page.scopeId)) wanted.add(page.scopeId);
-  const related = (await Promise.all([...wanted].map(id => store.getPage({ id, read })))).filter(
-    (candidate): candidate is KnowledgePage => candidate !== null,
-  );
+  const readable = async (ids: Iterable<string>) =>
+    (await Promise.all([...ids].map(id => store.getPage({ id, read })))).filter(
+      (candidate): candidate is KnowledgePage => candidate !== null,
+    );
+  const related = await readable(wanted);
+  // A note names a page by `scope#path`, so reading its ref takes the page's scope too.
+  const scopes = new Set(related.map(candidate => candidate.scopeId).filter(id => !known.has(id) && !wanted.has(id)));
+  related.push(...(await readable(scopes)));
   return {
     page,
     ancestors,

@@ -226,6 +226,26 @@ describe('readKnowledgePage', () => {
     expect(bound?.notes.map(note => note.text)).toEqual(['Refund disputes go through [[Refunds]]']);
     expect(names(bound?.related ?? [])).not.toContain('Roadmap');
   });
+
+  it('returns the scope of a page a note mentions in another scope, so its `scope#path` ref can be read', async () => {
+    const { store, billing } = await seed();
+    const view = await readKnowledgePage(store, { pageId: billing.id, read: 'all' });
+    expect(names(view?.related ?? [])).toEqual(expect.arrayContaining(['Roadmap', 'Engineering']));
+  });
+
+  it('returns the scope of a page whose note mentions this one, from another scope', async () => {
+    const { store, support, refunds, roadmap } = await seed();
+    await store.addNote({
+      pageId: roadmap.id,
+      text: 'Q3 changes [[team:acme:support#refunds]]',
+      stampScopeIds: [support.id],
+      mentions: [refunds.id],
+      provenance: { author: 'agent:alex' },
+    });
+    const view = await readKnowledgePage(store, { pageId: refunds.id, read: 'all' });
+    expect(view?.mentionedBy.map(note => note.pageId)).toContain(roadmap.id);
+    expect(names(view?.related ?? [])).toEqual(expect.arrayContaining(['Roadmap', 'Engineering']));
+  });
 });
 
 describe('readKnowledgePage by reference', () => {
