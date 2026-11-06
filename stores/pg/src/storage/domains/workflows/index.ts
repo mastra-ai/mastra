@@ -560,6 +560,12 @@ export class WorkflowsPG extends WorkflowsStorage {
         compositePrimaryKey: config.compositePrimaryKey,
       });
     }
+    // Runs tables created by @mastra/pg 1.36.0-alpha.0 lack the state columns.
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_RUNS as TABLE_NAMES,
+      schema: WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS[TABLE_WORKFLOW_RUNS].columns,
+      ifNotExists: ['stateSeq', 'statePatchCount', 'statePatchBytes', 'stateBytes'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
