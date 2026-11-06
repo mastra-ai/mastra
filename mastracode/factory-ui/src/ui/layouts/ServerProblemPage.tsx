@@ -29,7 +29,7 @@ export function ServerProblemPage({ problem }: { problem: ServerStatusProblem })
   return (
     <div role="alert" className="flex min-h-64 flex-1 items-center justify-center p-6">
       <div className="flex max-w-md flex-col gap-3">
-        <KeyRound aria-hidden className="size-6 text-muted-foreground" />
+        <KeyRound aria-hidden className="text-muted-foreground size-6" />
         <Txt as="h1" variant="heading" tone="ink">
           {problem.title}
         </Txt>
