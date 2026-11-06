@@ -48,6 +48,16 @@ describe('closingIssueNumbers', () => {
     expect(closingIssueNumbers(`Closes ${list}`, gitlab)).toEqual(expected);
   });
 
+  it.each([
+    ['```\nCloses #2\n```\nCloses #1', 'a closed fence'],
+    ['~~~~\nCloses #2\n~~~\n~~~~~\nCloses #1', 'a fence closed by a longer run, not a shorter one'],
+    ['```\nCloses #2\n~~~\nCloses #3\n```\nCloses #1', 'a fence the other character never closes'],
+    ['Closes #1\n```\nCloses #2', 'an unclosed fence, to the end'],
+    ['````\nCloses #2\n`````Closes #1', 'the rest of a longer closing run'],
+  ])('reads only what is outside %j (%s)', text => {
+    expect(closingIssueNumbers(text, github)).toEqual([1]);
+  });
+
   it("drops an unclosed HTML comment's tail, like an unclosed code fence", () => {
     expect(closingIssueNumbers('Closes #1\n<!-- Closes #2', github)).toEqual([1]);
   });
@@ -58,6 +68,11 @@ describe('closingIssueNumbers', () => {
     ['40k spaces after a GitLab list', `Closes #1${' '.repeat(40_000)}`, gitlab],
     ['1 MB of unclosed HTML comments', `Closes #1 ${'<!--'.repeat(262_144)}`, github],
     ['1 MB of unclosed HTML comments on GitLab', `Closes #1 ${'<!--'.repeat(262_144)}`, gitlab],
+    [
+      'a 262k-backtick fence opener followed by shorter runs',
+      `Closes #1 ${'`'.repeat(262_000)}${` ${'`'.repeat(261_999)}`.repeat(3)}`,
+      gitlab,
+    ],
   ])('reads %s in linear time', (_, body, options) => {
     const started = performance.now();
     expect(closingIssueNumbers(body, options)).toEqual([1]);
