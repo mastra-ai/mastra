@@ -136,6 +136,29 @@ describe('Sessions sidebar show more', () => {
     },
   );
 
+  it('keeps keyboard focus on a toggle when the pressed one disappears', async () => {
+    stubSessions(Array.from({ length: 28 }, (_, index) => reviewSession(index + 1)));
+    const user = userEvent.setup();
+
+    renderSection();
+
+    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const showMore = within(group).getByRole('button', { name: 'Show 20 more' });
+    expect(showMore).not.toHaveAttribute('aria-expanded');
+    showMore.focus();
+
+    await user.keyboard('{Enter}');
+    expect(within(group).getByRole('button', { name: 'Show 3 more' })).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    const showLess = within(group).getByRole('button', { name: 'Show less' });
+    expect(showLess).toHaveFocus();
+    expect(showLess).not.toHaveAttribute('aria-expanded');
+
+    await user.keyboard('{Enter}');
+    expect(within(group).getByRole('button', { name: 'Show 20 more' })).toHaveFocus();
+  });
+
   it('keeps a pinned session visible and persists the pin', async () => {
     stubSessions(Array.from({ length: 8 }, (_, index) => reviewSession(index + 1)));
     const user = userEvent.setup();
