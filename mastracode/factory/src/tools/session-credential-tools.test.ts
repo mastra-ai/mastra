@@ -42,7 +42,10 @@ async function setup() {
     createSessionCredentialTools(s, {
       credentials,
       sessions: {
-        getBySessionId: async (sessionId: string) => ({ sessionId, orgId: s.orgId, userId: 'alice' }) as never,
+        getBySessionId: async (sessionId: string) =>
+          (sessionId === 'sess-a' || sessionId === 'sess-b'
+            ? { sessionId, orgId: 'org-a', userId: 'alice' }
+            : null) as never,
       },
       findSandbox: async () => ({ sandbox, workdir }),
       publicOrigin: 'https://factory.example',
@@ -72,6 +75,14 @@ async function setup() {
 }
 
 describe('session credential tools', () => {
+  it('instructs the agent to clarify unspecified credential details before requesting a link', async () => {
+    const { tools } = await setup();
+    const description = tools(scope('sess-a')).factory_request_credential!.description;
+    expect(description).toContain('ask them for those details before calling this tool');
+    expect(description).toContain('Do not invent a name or purpose');
+    expect(description).toContain('Never ask them to share the secret value in chat');
+  });
+
   it("refuses another org member driving the owner's shared session", async () => {
     const { tools, submit, run } = await setup();
     await submit(scope('sess-a'), 'FAKE_API_KEY');
@@ -83,6 +94,21 @@ describe('session credential tools', () => {
       tools(bob).factory_request_credential!.execute!({ name: 'OTHER_KEY', purpose: 'x' }, {} as never),
     ).rejects.toThrow('Only the owner');
     expect((await run(scope('sess-a'), 'test -n "$FAKE_API_KEY" && echo ok', ['FAKE_API_KEY'])).stdout).toContain('ok');
+  });
+
+  it('rejects all credential tools when the session belongs to another org or is missing', async () => {
+    const { tools, run, submit } = await setup();
+    await submit(scope('sess-a'), 'FAKE_API_KEY');
+
+    for (const caller of [scope('sess-a', 'org-b'), scope('missing')]) {
+      await expect(
+        tools(caller).factory_request_credential!.execute!({ name: 'OTHER_KEY', purpose: 'test' }, {} as never),
+      ).rejects.toThrow('This session is not available.');
+      await expect(tools(caller).factory_list_credentials!.execute!({}, {} as never)).rejects.toThrow(
+        'This session is not available.',
+      );
+      await expect(run(caller, 'true', ['FAKE_API_KEY'])).rejects.toThrow('This session is not available.');
+    }
   });
 
   it('requests by link, then runs a real shell command with the credential in its env only', async () => {
@@ -118,7 +144,9 @@ describe('session credential tools', () => {
     const { credentials, submit, run } = await setup();
     await submit(scope('sess-a'), 'FAKE_API_KEY');
     await expect(run(scope('sess-b'), 'true', ['FAKE_API_KEY'])).rejects.toThrow(/No credential named FAKE_API_KEY/);
-    await expect(run(scope('sess-a', 'org-b'), 'true', ['FAKE_API_KEY'])).rejects.toThrow(/No credential named/);
+    await expect(run(scope('sess-a', 'org-b'), 'true', ['FAKE_API_KEY'])).rejects.toThrow(
+      'This session is not available.',
+    );
 
     await credentials.revoke({ orgId: 'org-a', sessionId: 'sess-a', name: 'FAKE_API_KEY' });
     await expect(run(scope('sess-a'), 'true', ['FAKE_API_KEY'])).rejects.toThrow(/No credential named/);

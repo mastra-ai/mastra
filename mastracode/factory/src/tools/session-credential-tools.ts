@@ -106,6 +106,7 @@ export function createSessionCredentialTools(
     id: 'factory_request_credential',
     description: [
       'Ask the owner of this session for a credential (an API key, token or password for a test account) that a command needs, for example to run real integration tests.',
+      'If the person asks to store a value securely without specifying its environment variable name and intended use, ask them for those details before calling this tool. Do not invent a name or purpose from a vague request. Never ask them to share the secret value in chat.',
       'Returns a private link. Share that link with the person (in your reply or in Slack); they open it, sign in, and enter the value there. Never ask anyone to paste a secret into chat, Slack, an issue, or a tool argument, and never accept one that way.',
       'The link works once, for 15 minutes, and only for the session owner. You get a notification naming the credential when it is ready; then use factory_run_with_credentials.',
       'Ask for short-lived, least-privilege test credentials only.',
