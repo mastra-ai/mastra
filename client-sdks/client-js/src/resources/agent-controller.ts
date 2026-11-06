@@ -974,10 +974,13 @@ export class AgentControllerSession extends BaseResource {
     return body.goal;
   }
 
-  /** Set a new goal objective. The agent's in-loop judge evaluates progress after each turn. */
+  /**
+   * Set a new goal objective. The agent's in-loop judge evaluates progress after each turn.
+   * Pass `start: true` to have the agent start working on it right away.
+   */
   async setGoal(
     objective: string,
-    options?: { judgeModelId?: string; maxRuns?: number },
+    options?: { judgeModelId?: string; maxRuns?: number; start?: boolean },
   ): Promise<AgentControllerGoalRecord | undefined> {
     const body = await this.request<RouteResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/goal'>>(
       `${this.base()}/goal`,
@@ -989,11 +992,15 @@ export class AgentControllerSession extends BaseResource {
     return body.goal;
   }
 
-  /** Update goal options (judge model, max runs, status). */
+  /**
+   * Update goal options (judge model, max runs, status). Pass `start: true` with
+   * `status: 'active'` to have the agent pick the goal back up right away.
+   */
   async updateGoal(options: {
     judgeModelId?: string;
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
+    start?: boolean;
   }): Promise<AgentControllerGoalRecord | undefined> {
     const body = await this.request<RouteResponse<'PUT /agent-controller/:controllerId/sessions/:sessionId/goal'>>(
       `${this.base()}/goal`,
