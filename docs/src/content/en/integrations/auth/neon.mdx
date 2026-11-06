@@ -80,6 +80,8 @@ Frontends that use the Neon Auth SDK can request a short-lived JWT for the signe
 
 ### Retrieving a JWT
 
+For a Vite frontend, set `VITE_NEON_AUTH_URL` in the frontend's `.env` file to the same Neon Auth URL used for `NEON_AUTH_BASE_URL` on the Mastra server.
+
 Use `authClient.getSession()` from the [Neon Auth SDK](https://neon.com/docs/reference/javascript-sdk) after the user signs in. The session includes the JWT to send to Mastra:
 
 ```typescript title="lib/auth.ts"
