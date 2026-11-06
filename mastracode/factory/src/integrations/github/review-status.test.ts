@@ -138,6 +138,25 @@ describe('publishReviewStatus', () => {
     expect(parseReviewStatusState(store.all()[0]!.body)).toEqual(newer);
   });
 
+  it('starts a new attempt clean so it never reports an earlier attempt’s timing', async () => {
+    const startedAt = '2026-11-05T10:01:00.000Z';
+    const store = fakeComments([existing('5', state({ phase: 'reviewing', startedAt, head: 'c'.repeat(40) }))]);
+    await publishReviewStatus(store.port, ref, step({ generation: 1, attempt: 2, phase: 'queued' }), isFactory);
+    expect(parseReviewStatusState(store.all()[0]!.body)?.startedAt).toBeUndefined();
+
+    // A re-claim that dies before it posts queued must not inherit the lost attempt's start either.
+    const lost = fakeComments([existing('5', state({ phase: 'reviewing', startedAt, head: 'c'.repeat(40) }))]);
+    let seen: ReviewStatusState | undefined;
+    await publishReviewStatus(
+      lost.port,
+      ref,
+      step({ attempt: 2, phase: 'failed' }, { stats: async recorded => ((seen = recorded), {}) }),
+      isFactory,
+    );
+    expect(seen?.startedAt).toBeUndefined();
+    expect(seen?.head).toBeUndefined();
+  });
+
   it('lets a re-review take over the comment and forget the old start time', async () => {
     const store = fakeComments([existing('5', state({ phase: 'completed', startedAt: '2026-11-05T10:01:00.000Z' }))]);
     await publishReviewStatus(

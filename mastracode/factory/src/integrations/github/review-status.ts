@@ -21,6 +21,7 @@ export type ReviewStatusPublishResult =
   | { action: 'skipped' };
 
 const CREATING_PHASES = new Set<ReviewStatusPhase>(['queued', 'reviewing', 'retrying', 'failed']);
+const FRESH_ATTEMPT_PHASES = new Set<ReviewStatusPhase>(['queued', 'retrying']);
 
 export interface ReviewStatusStep extends Omit<ReviewStatusView, 'stats'> {
   /** Stats for a final step, read once the start time and head of the run are known. */
@@ -80,10 +81,13 @@ export async function publishReviewStatus(
   if (canonical && !supersedesReviewStatus(existing, step.state)) {
     return { action: 'stale', commentId: canonical.id };
   }
-  // Later steps of a run carry only what changed; the start time and head come
-  // from the step that recorded them.
+  // Later steps of an attempt carry only what changed; the start time and head
+  // come from the step that recorded them. A new attempt (queued or waiting to
+  // retry) starts clean, so it never reports an earlier attempt's timing.
   const state =
-    existing?.run === step.state.run
+    existing?.run === step.state.run &&
+    existing.attempt === step.state.attempt &&
+    !FRESH_ATTEMPT_PHASES.has(step.state.phase)
       ? {
           ...step.state,
           ...((step.state.startedAt ?? existing.startedAt)

@@ -7855,4 +7855,60 @@ describe('review status comment lifecycle', () => {
     expect(conversation.comments()[0]!.body).toContain('Reviewing…');
     expect(conversation.comments()[0]!.body).not.toContain('Review finished');
   });
+
+  it('keeps reviewing when a status write hangs, and still lands later writes in order', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const queued = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: 'review-status-hung',
+      });
+      await bindReviewRun(storage, queued.item.id);
+      const conversation = pullRequestConversation();
+      let releaseQueued!: () => void;
+      const queuedHeld = new Promise<void>(resolve => (releaseQueued = resolve));
+      const reportReviewStatus = vi.fn(async (event: FactoryReviewStatusEvent) => {
+        if (event.phase === 'queued') await queuedHeld;
+        await conversation.reportReviewStatus(event);
+      });
+      const { controller } = createSession(undefined, { agentEndReason: 'complete' });
+      const dispatch = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService: queued.transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        reportReviewStatus,
+      }).runOnce();
+
+      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.reviewStatusTimeoutMs);
+      await vi.waitFor(async () => {
+        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.reviewStatusTimeoutMs);
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      });
+      let dispatched = false;
+      void dispatch.then(() => (dispatched = true));
+      await vi.waitFor(async () => {
+        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.reviewStatusTimeoutMs);
+        expect(dispatched).toBe(true);
+      });
+      // The run finished without the stuck `queued` write, and nothing overtook it.
+      expect(conversation.events).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('still pending'));
+
+      releaseQueued();
+      await vi.waitFor(() => expect(conversation.events.map(event => event.phase)).toHaveLength(3));
+      expect(conversation.events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
+      expect(conversation.comments()).toHaveLength(1);
+      expect(conversation.comments()[0]!.body).toContain('Review finished');
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });

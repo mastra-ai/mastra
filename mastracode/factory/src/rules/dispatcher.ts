@@ -64,6 +64,8 @@ import {
 } from './validation.js';
 
 const LEASE_MS = 30_000;
+/** How long the run waits on a status-comment write; well inside one lease so a slow provider never costs the claim. */
+const REVIEW_STATUS_TIMEOUT_MS = 10_000;
 // Cadence while dispatches are in flight or a cycle filled its batch. An idle
 // dispatcher does not poll: it sleeps until the next row becomes claimable or
 // a write wakes it.
@@ -671,6 +673,8 @@ export class FactoryDecisionDispatcher {
   /** Review attempts that already said `queued`, and those that watched their run start. */
   readonly #reviewQueued = new WeakSet<FactoryDeferredDecisionRecord>();
   readonly #reviewWatched = new WeakSet<FactoryDeferredDecisionRecord>();
+  /** Last pending status-comment write per run, so writes stay ordered. */
+  readonly #reviewStatusTail = new Map<string, Promise<void>>();
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
@@ -1059,19 +1063,38 @@ export class FactoryDecisionDispatcher {
   ): Promise<void> {
     const report = this.#reportReviewStatus;
     if (!report || !record.workItemId || !isReviewRun(decision)) return;
+    const event: FactoryReviewStatusEvent = {
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: record.workItemId,
+      run: record.id,
+      requestedAt: record.createdAt,
+      generation: record.deliveryGeneration,
+      attempt: record.attempts,
+      ...step,
+    };
+    // Writes for one run go out in order even when the run stops waiting on a
+    // slow one, so an earlier step can never land on top of a later one.
+    const previous = this.#reviewStatusTail.get(record.id) ?? Promise.resolve();
+    const delivered = previous.then(() =>
+      report(event).catch(error => {
+        console.warn('Factory review status update failed', sanitizeDispatchError(error));
+      }),
+    );
+    this.#reviewStatusTail.set(record.id, delivered);
+    void delivered.then(() => {
+      if (this.#reviewStatusTail.get(record.id) === delivered) this.#reviewStatusTail.delete(record.id);
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<'timeout'>(resolve => {
+      timer = setTimeout(() => resolve('timeout'), REVIEW_STATUS_TIMEOUT_MS);
+    });
     try {
-      await report({
-        orgId: record.orgId,
-        factoryProjectId: record.factoryProjectId,
-        workItemId: record.workItemId,
-        run: record.id,
-        requestedAt: record.createdAt,
-        generation: record.deliveryGeneration,
-        attempt: record.attempts,
-        ...step,
-      });
-    } catch (error) {
-      console.warn('Factory review status update failed', sanitizeDispatchError(error));
+      if ((await Promise.race([delivered, timedOut])) === 'timeout') {
+        console.warn(`Factory review status update (${step.phase}) still pending; continuing the run without it`);
+      }
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -2232,5 +2255,6 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   runRegistryHeartbeatMs: RUN_REGISTRY_HEARTBEAT_MS,
   openRunStaleMs: FACTORY_OPEN_RUN_STALE_MS,
   maxInFlight: MAX_IN_FLIGHT,
+  reviewStatusTimeoutMs: REVIEW_STATUS_TIMEOUT_MS,
   stages: FACTORY_RULE_STAGES,
 } as const;

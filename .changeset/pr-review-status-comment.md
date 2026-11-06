@@ -7,3 +7,10 @@ Factory now keeps one status comment on a GitHub pull request while it reviews i
 The comment is updated by Factory's dispatcher rather than by the review agent, so it still resolves when a run crashes, times out or is replaced. Retries, redelivered events and re-reviews update the same comment, and a late result from an older run cannot overwrite a newer one.
 
 Set `FACTORY_REVIEW_STATUS_NAME` to choose how the comment names the reviewer (default `Factory`). Set `FACTORY_REVIEW_STATUS_GIF_URL` to serve the animation from your own host.
+
+```sh
+# Name the reviewer in the comment (default: Factory)
+FACTORY_REVIEW_STATUS_NAME=Shipyard
+# Serve the animation from your own host (default: the GIF in the mastra repository)
+FACTORY_REVIEW_STATUS_GIF_URL=https://assets.example.com/reviewing.gif
+```
