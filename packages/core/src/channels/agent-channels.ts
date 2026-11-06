@@ -2415,10 +2415,6 @@ export class AgentChannels {
   }
 
   /**
-   * Look up a channel-backed Mastra thread and retain the store/metadata needed
-   * by the create path when no mapping exists.
-   */
-  /**
    * Find a pending tool approval in Memory for a click that missed the
    * in-memory card cache (e.g. after a rebuild or restart). Results are cached
    * per card and concurrent lookups for the same card share one read, so
@@ -2596,6 +2592,10 @@ export class AgentChannels {
     };
   }
 
+  /**
+   * Look up a channel-backed Mastra thread and retain the store/metadata needed
+   * by the create path when no mapping exists.
+   */
   private async findThreadMapping({
     externalThreadId,
     channelId,
