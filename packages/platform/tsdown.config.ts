@@ -11,7 +11,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    neverBundle: ['@mastra/core', '@mastra/platform-workspace'],
+    neverBundle: ['@mastra/core', '@mastra/platform-workspace', '@mastra/stagehand'],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd());

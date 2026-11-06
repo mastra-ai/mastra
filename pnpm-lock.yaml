@@ -5646,6 +5646,9 @@ importers:
       '@mastra/platform-workspace':
         specifier: workspace:*
         version: link:../../workspaces/platform-workspace
+      '@mastra/stagehand':
+        specifier: workspace:*
+        version: link:../../browser/stagehand
     devDependencies:
       '@internal/ai-sdk-v5':
         specifier: workspace:*

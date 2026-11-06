@@ -1,6 +1,6 @@
 # @mastra/platform (experimental)
 
-Hosted Mastra Platform clients for Memory and Knowledge, with Sandbox and Filesystem re-exported from the `@mastra/platform-workspace` dependency.
+Hosted Mastra Platform clients for Memory, Knowledge, and Browser, with Sandbox and Filesystem re-exported from the `@mastra/platform-workspace` dependency.
 
 ## Installation
 
@@ -26,6 +26,23 @@ const knowledge = new PlatformKnowledge();
 ```
 
 `PlatformSandbox` and `PlatformFilesystem` are also available from `@mastra/platform`.
+
+### Hosted browser
+
+Provide a Mastra Platform project ID and access token to create a Browserbase-backed Stagehand browser. Browserbase credentials stay on the Platform server.
+
+```ts
+import { Agent } from '@mastra/core/agent';
+import { PlatformBrowser } from '@mastra/platform';
+
+const agent = new Agent({
+  name: 'browser-agent',
+  model: 'openai/gpt-4o-mini',
+  browser: new PlatformBrowser({ projectId: 'your-project-id' }),
+});
+```
+
+`PlatformBrowser` uses `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` and `MASTRA_PROJECT_ID` when the corresponding options are omitted. It POSTs `{ projectId }` to `https://platform.mastra.ai/v1/browsers/sessions` (overridable with `apiUrl` or `MASTRA_BROWSER_API_URL`) and connects to the returned CDP URL with shared browser scope. A project access token must be authorized for that project; the Browserbase session is provisioned on demand.
 
 ### Knowledge transport contract
 

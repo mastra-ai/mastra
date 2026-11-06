@@ -1,7 +1,7 @@
 {
   "name": "@mastra/platform",
   "version": "0.1.0-alpha.0",
-  "description": "Mastra Platform hosted Memory, Knowledge, and workspace clients",
+  "description": "Mastra Platform hosted Memory, Knowledge, Browser, and workspace clients",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -63,6 +63,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/platform-workspace": "workspace:*"
+    "@mastra/platform-workspace": "workspace:*",
+    "@mastra/stagehand": "workspace:*"
   }
 }
