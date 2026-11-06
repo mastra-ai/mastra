@@ -37,7 +37,7 @@ import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
 import { heartbeatOpenRunUntilEnd } from './run-watch.js';
 import type { FactoryToolScope } from './scope.js';
-import { sessionModel } from './side-sessions.js';
+import { listSessionNotifications, sessionModel } from './side-sessions.js';
 
 const TITLE_LENGTH = 120;
 
@@ -604,7 +604,7 @@ export function createFactorySessionTools(
 
   /**
    * The side session whose unused follow-up approval covers a role start on `item` in a turn nobody signed in
-   * started: approved by this caller within the TTL, with `item` filed by this session after the approval.
+   * started: approved by this caller within the TTL, with `item` filed by this session after that side session reported.
    */
   async function followUpGrantFor(item: Card): Promise<string> {
     const label = workItemLabel(item);
@@ -627,12 +627,31 @@ export function createFactorySessionTools(
         sessionId: scope.sessionId,
       })
     ).find(subscription => subscription.workItemId === item.id && subscription.reason === 'created');
-    const covering = approved.filter(grant => filed && filed.createdAt >= grant.approvedAt);
-    if (covering.length === 0) {
+    const after = approved.filter(grant => filed && filed.createdAt >= grant.approvedAt);
+    if (after.length === 0) {
       throw new Error(
         notStartedError(
           label,
           "this session didn't file it after the person approved follow-up work, so that approval doesn't cover it",
+        ),
+      );
+    }
+    // The approval covers the work the side session's report leads to: the report must land between the
+    // approval and the filing, so a card filed on some other turn before the handoff can't spend it.
+    const reports = await listSessionNotifications((await deps.messaging())?.notifications ?? null, scope.threadId);
+    const covering = after.filter(grant =>
+      reports.some(
+        record =>
+          record.attributes?.['from-session'] === grant.sessionId &&
+          record.createdAt >= grant.approvedAt &&
+          record.createdAt <= filed!.createdAt,
+      ),
+    );
+    if (covering.length === 0) {
+      throw new Error(
+        notStartedError(
+          label,
+          "the approved side session hadn't reported back when this session filed it, so the approval doesn't cover it",
         ),
       );
     }

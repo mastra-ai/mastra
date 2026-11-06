@@ -1443,19 +1443,37 @@ describe('session tools on a turn nobody signed in started', () => {
   });
 });
 
+/** The side session reporting back to the session that started it, as a factory-session notification. */
+async function reportFrom(env: Awaited<ReturnType<typeof setup>>, sessionId: string) {
+  await env.notifications.createNotification({
+    threadId: env.scope.threadId,
+    resourceId: env.scope.sessionId,
+    source: 'factory-session',
+    kind: 'report',
+    priority: 'medium',
+    summary: 'Here is the context.',
+    sourceId: crypto.randomUUID(),
+    attributes: { 'from-session': sessionId, 'from-thread': 'side-thread' },
+  });
+}
+
 describe('a follow-up approved in a turn the person started', () => {
   type Started = { mode: string; sessionId: string; workItem?: { id: string } };
 
   afterEach(() => vi.useRealTimers());
 
   /** The person asks for work in their turn; the coordinator starts a side session to look into it first. */
-  async function approved({ approvedFollowUp = true }: { approvedFollowUp?: boolean } = {}) {
+  async function approved({
+    approvedFollowUp = true,
+    report = true,
+  }: { approvedFollowUp?: boolean; report?: boolean } = {}) {
     const env = await setup('org');
     const side = (await env.start({
       prompt: 'Gather context for the review summary.',
       ...(approvedFollowUp ? { approvedFollowUp } : {}),
     })) as Started;
     // The side session reports back; the coordinator's notification turn has nobody signed in.
+    if (report) await reportFrom(env, side.sessionId);
     const woken = env.toolsFor({ ...env.scope, interactive: false });
     // factory_create_work_item on that turn: the card, and this session following it as its filer.
     const file = async (title = 'Improve the review summary', sessionId = env.scope.sessionId) => {
@@ -1521,6 +1539,27 @@ describe('a follow-up approved in a turn the person started', () => {
     expect(env.prepare).not.toHaveBeenCalled();
   });
 
+  it('refuses a card filed before the approved side session reported, on some other turn', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
+    const env = await approved({ report: false });
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const early = await env.file('Something an unrelated notification asked for');
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    await reportFrom(env, env.side.sessionId);
+
+    await expect(env.woken.start({ prompt: 'Go.', workItem: early.id, role: 'work' })).rejects.toThrow(
+      "the approved side session hadn't reported back when this session filed it",
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect((await env.sessions.getBySessionId(env.side.sessionId))!.followUpUsedAt).toBeNull();
+
+    vi.setSystemTime(new Date(Date.now() + 1_000));
+    const followUp = await env.file();
+    await expect(env.woken.start({ prompt: 'Go.', workItem: followUp.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+  });
+
   it('refuses once the approval expires', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T10:00:00Z') });
     const env = await approved();
@@ -1553,7 +1592,8 @@ describe('a follow-up approved in a turn the person started', () => {
       reason: 'created',
     });
     vi.setSystemTime(new Date(Date.now() + 60_000));
-    await env.start({ prompt: 'Gather context.', approvedFollowUp: true });
+    const side = (await env.start({ prompt: 'Gather context.', approvedFollowUp: true })) as Started;
+    await reportFrom(env, side.sessionId);
     const woken = env.toolsFor({ ...env.scope, interactive: false });
 
     await expect(woken.start({ prompt: 'Go.', workItem: earlier.id, role: 'work' })).rejects.toThrow(
@@ -1585,6 +1625,7 @@ describe('a follow-up approved in a turn the person started', () => {
       },
     });
     const side = (await env.start({ prompt: 'Gather context.', approvedFollowUp: true })) as Started;
+    await reportFrom(env, side.sessionId);
     const { item } = await env.seed.workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
