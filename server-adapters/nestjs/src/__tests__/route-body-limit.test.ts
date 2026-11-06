@@ -37,4 +37,36 @@ describe('route-level body size limits', () => {
 
     expect(res.status).toBe(413);
   });
+
+  describe('without a Content-Length header', () => {
+    function postChunked(baseUrl: string, body: string) {
+      const bytes = new TextEncoder().encode(body);
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let i = 0; i < bytes.length; i += 16 * 1024) controller.enqueue(bytes.slice(i, i + 16 * 1024));
+          controller.close();
+        },
+      });
+      return fetch(`${baseUrl}/api/observability/traces/query`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: stream,
+        duplex: 'half',
+      } as RequestInit);
+    }
+
+    it('rejects a chunked JSON body over the route maxBodySize with 413', async () => {
+      const baseUrl = await start();
+      const res = await postChunked(baseUrl, JSON.stringify({ padding: 'x'.repeat(300 * 1024) }));
+
+      expect(res.status).toBe(413);
+    });
+
+    it('lets a chunked JSON body under the route maxBodySize reach the handler', async () => {
+      const baseUrl = await start();
+      const res = await postChunked(baseUrl, JSON.stringify({ padding: 'x' }));
+
+      expect(res.status).not.toBe(413);
+    });
+  });
 });
