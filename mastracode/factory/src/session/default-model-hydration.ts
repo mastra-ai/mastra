@@ -2,8 +2,9 @@ import { primeTenantCredentialsForTenant, resolveTenantProviderDefaultModel } fr
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
+import { threadRunBinding } from './session-threads.js';
+import type { ThreadRunBindings } from './session-threads.js';
 
 export interface DefaultModelApplicableSession {
   model: { switch(modelId: string): Promise<unknown> };
@@ -34,7 +35,7 @@ async function applyDefaultModel(session: DefaultModelApplicableSession, modelId
 export interface DefaultModelHydrationDependencies {
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'getById'>;
-  workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
+  workItems: ThreadRunBindings;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
@@ -65,15 +66,7 @@ export async function hydrateSessionDefaultModel(
     }
     // Historical thread membership keeps completed work items on Factory billing in hybrid scope.
     const threadId = session.thread.getId();
-    const binding = threadId
-      ? await workItems.findRunBindingByThread({
-          orgId: sourceSession.orgId,
-          threadId,
-          resourceId,
-          sessionId,
-          rejectAmbiguous: true,
-        })
-      : null;
+    const binding = await threadRunBinding(workItems, { orgId: sourceSession.orgId, threadId, resourceId, sessionId });
     const project = await projects.getById({ id: binding?.factoryProjectId ?? sourceSession.factoryProjectId });
     if (!project || project.orgId !== sourceSession.orgId) {
       await clearFactoryIdentity();

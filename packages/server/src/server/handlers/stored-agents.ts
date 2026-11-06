@@ -1022,9 +1022,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {
+          // Same as create: publishing a version also publishes the agent, otherwise a
+          // draft agent keeps status 'draft' with a live active version.
           await agentsStore.update({
             id: storedAgentId,
             activeVersionId: latestVersion.id,
+            status: 'published',
           });
         }
       }

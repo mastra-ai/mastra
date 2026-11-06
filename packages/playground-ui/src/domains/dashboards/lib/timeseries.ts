@@ -17,7 +17,7 @@ import {
   unknownQueryIssues,
   valueExprSchema,
 } from './values';
-import type { ValueExpr, ValueRef } from './values';
+import type { LabelledValue, ValueExpr, ValueRef } from './values';
 
 export const timeseriesSeriesSchema = z
   .object({
@@ -207,6 +207,17 @@ export function shapeTimeseries({
 
 /** Aggregations whose values for several groups add up to the value for all of them. */
 const ADDITIVE = new Set<string>(['sum', 'count']);
+
+/**
+ * The numbers an alert could watch: each series over the range (its `rangeTotal`, else its value),
+ * then the card's total when it is an expression.
+ */
+export function timeseriesAlertValues(options: TimeseriesOptions): LabelledValue[] {
+  const values = options.series.map(s => ({ label: s.label, value: s.rangeTotal ?? s.value }));
+  const total = options.total?.value;
+  if (total && total !== 'total' && !('peak' in total)) values.push({ label: 'Total', value: total });
+  return values;
+}
 
 /**
  * What the schema can't say: query ids the view has, bucketed queries that leave their interval to the

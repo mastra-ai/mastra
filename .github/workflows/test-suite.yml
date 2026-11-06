@@ -256,6 +256,10 @@ jobs:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
+    # Required check: stays always() so a run cancelled mid-tests still reaches the
+    # "Require every test job to finish" step and fails. A skipped required job counts
+    # as a pass. The heavy steps below keep the implicit success() guard, which is
+    # false once the run is cancelled, so a superseded run spends seconds here.
     if: always()
     permissions:
       actions: read

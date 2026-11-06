@@ -95,13 +95,14 @@ describe('createSTTTranscriber', () => {
     ]);
   });
 
-  it('reads the transcript out of the object Deepgram returns', async () => {
+  it('asks Deepgram for the configured model only and reads the transcript out of its reply', async () => {
     vi.stubEnv('DEEPGRAM_API_KEY', '');
 
     const transcriber = await createSTTTranscriber(resolveSTTModel('deepgram'), 'dg-key');
 
     expect(await transcriber.transcribe(AUDIO, 'wav')).toBe('from deepgram');
     expect(requests).toEqual([expect.objectContaining({ authorization: 'Token dg-key', model: 'nova-3' })]);
+    expect([...new URL(requests[0]?.url ?? '').searchParams.keys()]).toEqual(['model']);
   });
 
   it('gives up when the provider never answers', async () => {
@@ -111,11 +112,53 @@ describe('createSTTTranscriber', () => {
     const transcriber = await createSTTTranscriber(resolveSTTModel('deepgram'), 'dg-key');
 
     const attempt = expect(transcriber.transcribe(AUDIO, 'wav')).rejects.toThrow(
-      'Speech-to-text timed out after 2 minutes.',
+      'Speech-to-text timed out after 1 minute.',
     );
-    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(60_000);
 
     await attempt;
+  });
+
+  describe('OpenAI organization and project from the environment', () => {
+    async function accountHeadersSent(provider: string, model: string, apiKey: string) {
+      const sent: Array<{ organization: string | null; project: string | null }> = [];
+      const record = ({ request }: { request: Request }) => {
+        sent.push({
+          organization: request.headers.get('openai-organization'),
+          project: request.headers.get('openai-project'),
+        });
+        return HttpResponse.json({ text: 'ok' });
+      };
+      server.use(
+        http.post('https://api.openai.com/v1/audio/transcriptions', record),
+        http.post('https://api.groq.com/openai/v1/audio/transcriptions', record),
+      );
+      vi.stubEnv('OPENAI_API_KEY', 'server-key');
+      vi.stubEnv('OPENAI_ORG_ID', 'org-server');
+      vi.stubEnv('OPENAI_PROJECT_ID', 'proj-server');
+
+      const transcriber = await createSTTTranscriber(resolveSTTModel(provider, model), apiKey);
+      await transcriber.transcribe(AUDIO, 'wav');
+      return sent;
+    }
+
+    it("are not sent with a tenant's own key", async () => {
+      expect(await accountHeadersSent('openai', 'whisper-1', 'tenant-key')).toEqual([
+        { organization: null, project: null },
+      ]);
+    });
+
+    it('are still sent with the OPENAI_API_KEY they belong to', async () => {
+      expect(await accountHeadersSent('openai', 'whisper-1', 'server-key')).toEqual([
+        { organization: 'org-server', project: 'proj-server' },
+      ]);
+    });
+
+    it('are not sent to an OpenAI-compatible provider', async () => {
+      expect(await accountHeadersSent('groq', 'whisper-large-v3-turbo', 'groq-key')).toEqual([
+        { organization: null, project: null },
+      ]);
+    });
   });
 });
 
