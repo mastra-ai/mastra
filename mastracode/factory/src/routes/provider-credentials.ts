@@ -66,9 +66,12 @@ export async function getTenantCredentialsStorage(
   credentials: ModelCredentialsStorage | undefined,
 ): Promise<ModelCredentialsStorage | undefined> {
   if (!credentials) return undefined;
+  const failedAt = failedInitAt.get(credentials);
+  if (failedAt !== undefined && Date.now() - failedAt < INIT_RETRY_MS) return undefined;
   try {
     await credentials.ensureReady();
   } catch (error) {
+    failedInitAt.set(credentials, Date.now());
     // Callers degrade to "no credentials", so this log is the only trace of why.
     if (error !== lastReportedInitError) {
       lastReportedInitError = error;
@@ -80,6 +83,9 @@ export async function getTenantCredentialsStorage(
 }
 
 let lastReportedInitError: unknown;
+/** Init is a full table scan and callers run per request and per model call, so a failure retries at most this often. */
+const INIT_RETRY_MS = 15_000;
+const failedInitAt = new WeakMap<ModelCredentialsStorage, number>();
 
 /**
  * Org key for tenant rows. Personal accounts get an org bootstrapped by the

@@ -14,7 +14,7 @@ import type { Context } from 'hono';
  */
 export const factoryTimingEnabled = /^(1|true|yes)$/i.test(process.env.FACTORY_TIMING ?? '');
 
-function logTiming(line: string): void {
+export function logTiming(line: string): void {
   process.stderr.write(`[factory:timing] ${line}\n`);
 }
 

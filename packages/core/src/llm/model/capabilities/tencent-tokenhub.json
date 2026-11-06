@@ -2,16 +2,19 @@
   "attachment": ["hy4"],
   "temperature": ["hy3", "hy3-preview", "hy4", "hy4-preview"],
   "reasoning": {
-    "hy3": [
+    "hy3-preview": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "hy4": [
+    "hy3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -26,13 +29,10 @@
         "values": ["none", "high"]
       }
     ],
-    "hy3-preview": [
-      {
-        "type": "toggle"
-      },
+    "hy4": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ]
   }
