@@ -180,7 +180,12 @@ function renderWorkItem(input: {
   const phase = board?.phases[stage];
   const nextPhases = phase?.nextPhases ?? [];
   const nextText = nextPhases.length
-    ? nextPhases.map(key => `${board?.phases[key]?.name ?? key} (${key})`).join(', ')
+    ? nextPhases
+        .map(key => {
+          const target = board?.phases[key];
+          return `${target?.name ?? key} (${key})${target?.manualEntry ? ' [people only]' : ''}`;
+        })
+        .join(', ')
     : 'none';
   const labels = Array.isArray(item.workItem.labels)
     ? item.workItem.labels.filter((label): label is string => typeof label === 'string')

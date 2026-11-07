@@ -41,6 +41,8 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
     auto_start: { type: 'boolean', default: false },
     auto_start_when: { type: 'json', nullable: true },
     exit_tool: { type: 'json', nullable: true },
+    // True when only people (and provider event routes) move cards into the phase. Null on rows written before it: off.
+    manual_entry: { type: 'boolean', nullable: true },
   },
   uniqueIndexes: [
     {

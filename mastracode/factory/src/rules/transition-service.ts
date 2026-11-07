@@ -20,7 +20,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import { factoryRuleSourceForWorkItem, isFactoryRuleStage, workItemSource } from './types.js';
+import { factoryRuleSourceForWorkItem, INTAKE_ROUTE_ACTOR_ID, isFactoryRuleStage, workItemSource } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -460,6 +460,21 @@ export class FactoryTransitionService {
       );
     }
 
+    // A people-only phase: agents and rules can't move cards in; people, provider event routes and
+    // intake routes placing a new card can.
+    const placedByPerson =
+      request.actor.type === 'human' ||
+      request.eventRoute !== undefined ||
+      (request.actor.type === 'system' && request.actor.id === INTAKE_ROUTE_ACTOR_ID);
+    if (fromStage !== request.stage && board.phases[request.stage]?.manualEntry && !placedByPerson) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        `Only people move cards into ${board.phases[request.stage]!.name}. Ask a person to move it from the Factory board or a chat they are signed in to.`,
+      );
+    }
+
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
@@ -502,16 +517,16 @@ export class FactoryTransitionService {
         (async () => {
           // Plans are approved without a person only where the card's phase auto-approves submit_plan.
           const plansAutoApproved = autoApprovedExitTool(boards, item) === 'submit_plan';
-          // When the board's own rule for a phase's exit tool moves the card on success, that
-          // result is the handoff to the next working phase (for submit_plan, only an approved
-          // plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
+          // When the exit tool's success moves the card (its `next`, or the board's own rule for the
+          // tool), that result is the handoff to the next working phase (for submit_plan, only an
+          // approved plan). Anyone but a person needs it, unless the tool is auto-approved for this card.
           const fromPhase = board.phases[fromStage];
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
             !request.eventRoute &&
             exitTool &&
-            board.tools[exitTool.id] &&
+            (exitTool.next !== undefined || board.tools[exitTool.id]) &&
             fromStage !== request.stage &&
             entersWorking &&
             !(exitTool.id === 'submit_plan' ? request.planApproved === true : request.completedTool === exitTool.id)

@@ -2928,3 +2928,83 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
     });
   },
 );
+
+describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))(
+  'people-only phases on %s',
+  backend => {
+    const release = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'intake',
+      phases: {
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['triage', 'planning'] },
+        triage: { name: 'Triage', kind: 'working', runner: { context: 'triage' }, nextPhases: ['planning'] },
+        planning: {
+          name: 'Planning',
+          kind: 'working',
+          runner: { context: 'work' },
+          manualEntry: true,
+          nextPhases: ['intake'],
+        },
+      },
+    });
+
+    async function card() {
+      const orgId = `org-${randomUUID()}`;
+      const storage = await workItemsOn(backend);
+      const item = await createItem(storage, {
+        orgId,
+        sourceKey: orgId,
+        board: 'release',
+        stages: ['triage'],
+        metadata: { authorTrusted: true },
+      });
+      const service = new FactoryTransitionService({
+        configVersion: 'release-rules',
+        storage,
+        boards: createBoardRegistry({ boards: [release] }),
+      });
+      return { orgId, item, service };
+    }
+
+    it('refuses agents and board rules moving a card in', async () => {
+      for (const mover of [
+        {
+          actor: { type: 'agent' as const, bindingId: 'triage-binding', role: 'triage' },
+          ingress: { type: 'agent' as const, identity: 'agent-move' },
+        },
+        {
+          actor: { type: 'system' as const, id: 'factory-rule-dispatcher' },
+          ingress: { type: 'rule' as const, identity: 'rule-move' },
+        },
+      ]) {
+        const { orgId, item, service } = await card();
+        const result = await service.transition({
+          ...request(item, { orgId, board: 'release', stage: 'planning' }),
+          ...mover,
+        });
+        expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+        expect(result.status === 'rejected' && result.reason).toContain('Only people move cards into Planning');
+      }
+    });
+
+    it('lets a person or a provider event route move a card in', async () => {
+      const byPerson = await card();
+      await expect(
+        byPerson.service.transition(
+          request(byPerson.item, { orgId: byPerson.orgId, board: 'release', stage: 'planning' }),
+        ),
+      ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+
+      const byRoute = await card();
+      await expect(
+        byRoute.service.transition({
+          ...request(byRoute.item, { orgId: byRoute.orgId, board: 'release', stage: 'planning' }),
+          actor: { type: 'system', id: 'factory-event-route' },
+          ingress: { type: 'rule', identity: 'event-route-move' },
+          eventRoute: { routeId: 'reopened', allowWorkingPhase: true },
+        }),
+      ).resolves.toMatchObject({ status: 'accepted', stage: 'planning' });
+    });
+  },
+);

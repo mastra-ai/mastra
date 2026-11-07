@@ -556,6 +556,58 @@ describe('FactoryPhaseStateProcessor', () => {
       }
     });
 
+    it('moves the card to the exit tool’s next phase only on that tool’s approved result', async () => {
+      const release = (next?: string) =>
+        defineBoard({
+          id: 'release',
+          name: 'Release',
+          initialPhase: 'intake',
+          phases: {
+            intake: { name: 'Intake', kind: 'resting', nextPhases: ['planning'] },
+            planning: {
+              name: 'Planning',
+              kind: 'working',
+              runner: { context: 'work' },
+              exitTool: { id: 'submit_plan', ...(next ? { next } : {}) },
+              nextPhases: ['building', 'intake'],
+            },
+            building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+            shipped: { name: 'Shipped', kind: 'terminal' },
+          },
+        });
+      const cases = [
+        { board: release('building'), message: approved(), stages: ['building'] },
+        {
+          board: release('building'),
+          message: toolMessage({ result: { content: 'Plan rejected.' } }),
+          stages: ['planning'],
+        },
+        { board: release('building'), message: toolMessage({ state: 'error', result: 'boom' }), stages: ['planning'] },
+        {
+          board: release('building'),
+          message: toolMessage({ toolName: 'ship_it', result: { content: 'Plan approved.' } }),
+          stages: ['planning'],
+        },
+        { board: release(), message: approved(), stages: ['planning'] },
+      ];
+      for (const c of cases) {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const prepared = await prepare(storage, 'work', 'issue', { id: 'release', stage: 'planning' });
+        const boards = createBoardRegistry({ boards: [c.board] });
+        const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+        const processor = new FactoryPhaseStateProcessor({
+          configVersion: 'rules-v1',
+          boards,
+          storage,
+          transitionService,
+        });
+        await processor.processInputStep(inputArgs(requestContext(), [c.message]));
+        const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+        expect(card?.stages).toEqual(c.stages);
+        if (c.stages[0] === 'building') expect(card?.metadata).toMatchObject({ planApprovedAt: expect.any(String) });
+      }
+    });
+
     it('runs a custom board’s own tool rule with its board id', async () => {
       const onResult = vi.fn(() => undefined);
       const release = defineBoard({
@@ -682,13 +734,15 @@ describe('FactoryPhaseStateProcessor', () => {
       ]),
     );
 
+    // The approval stamp (planApprovedAt) and the move each bump the card's revision.
     await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
-      revision: 2,
+      revision: 3,
       stages: ['execute'],
+      metadata: { planApprovedAt: expect.any(String) },
     });
     const signal = await processor.computeStateSignal(stateArgs(requestContext()));
     expect(signal).toMatchObject({
-      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
+      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 3 },
     });
     expect(signal?.contents).toContain('Factory work phase: Building (execute)');
     expect(signal?.contents).toContain('Config: rules-v1');
@@ -1046,7 +1100,8 @@ describe('FactoryPhaseStateProcessor', () => {
     );
     const signal = await processor.computeStateSignal(stateArgs(context));
 
-    expect(signal).toMatchObject({ attributes: { stage: 'execute', revision: 2 } });
+    // Approval stamps planApprovedAt (revision 2) before the move (revision 3).
+    expect(signal).toMatchObject({ attributes: { stage: 'execute', revision: 3 } });
     expect(signal?.contents).toContain('Factory work phase: Building (execute)');
   });
 

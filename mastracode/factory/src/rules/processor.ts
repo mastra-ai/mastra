@@ -15,6 +15,7 @@ import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPha
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
+import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -71,6 +72,28 @@ function isApprovedPlanResult(result: CompletedToolResult): boolean {
   if (!result.value || typeof result.value !== 'object' || Array.isArray(result.value)) return false;
   const content = result.value.content;
   return typeof content === 'string' && content.startsWith('Plan approved.');
+}
+
+/**
+ * The move a phase's exit tool makes when it names a `next` phase: a successful call (for
+ * `submit_plan`, an approved plan) by the card's session moves the card there. Undefined when
+ * the tool isn't the exit tool of the card's phase or the phase names no `next`.
+ */
+function exitToolRule(
+  boards: BoardRegistry,
+  board: string,
+  item: Card,
+  toolResult: CompletedToolResult,
+): ((context: FactoryToolResultRuleContext) => FactoryRuleDecision | undefined) | undefined {
+  const phase = item.stages.length === 1 ? boards.get(board)?.phases[item.stages[0]!] : undefined;
+  const exitTool = phase?.kind === 'working' ? phase.exitTool : undefined;
+  if (!exitTool?.next || exitTool.id !== toolResult.toolName) return undefined;
+  const next = exitTool.next;
+  return context => {
+    if (toolResult.status !== 'success') return undefined;
+    if (toolResult.toolName === 'submit_plan' && !isApprovedPlanResult(toolResult)) return undefined;
+    return { type: 'transition', idempotencyKey: `${context.ingress.id}:exit-tool`, board, stage: next };
+  };
 }
 
 type RuntimeSnapshot = {
@@ -444,12 +467,26 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
-    const phase = boards.get(board)?.phases[stage];
+    const definition = boards.get(board);
+    const phase = definition?.phases[stage];
     const phaseLabel = phase?.name ?? stage;
+    const nextText = phase
+      ? `Next phases: ${
+          phase.nextPhases.length
+            ? phase.nextPhases
+                .map(key => {
+                  const target = definition?.phases[key];
+                  const name = `${escapeText(target?.name ?? key)} (${escapeText(key)})`;
+                  return target?.manualEntry ? `${name}, people only` : name;
+                })
+                .join('; ')
+            : 'none'
+        }\n`
+      : '';
     const exitText =
       phase?.kind === 'working' && phase.exitTool
-        ? boards.get(board)?.tools[phase.exitTool.id]
-          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
+        ? phase.exitTool.next || definition?.tools[phase.exitTool.id]
+          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on${phase.exitTool.next ? ` to ${escapeText(definition?.phases[phase.exitTool.next]?.name ?? phase.exitTool.next)}` : ''}. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
           : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
         : '';
     const runtime =
@@ -464,6 +501,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ((board === 'work' || board === 'review') && stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
         : '') +
+      nextText +
       exitText +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
@@ -566,7 +604,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   ): Promise<void> {
     const board = boardForWorkItem(item);
     const boards = await this.boards.load(binding);
-    const rule = resolveBoardToolRule(boards, board, toolResult.toolName);
+    const rule =
+      exitToolRule(boards, board, item, toolResult) ?? resolveBoardToolRule(boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
       binding.id,
@@ -648,6 +687,22 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       consentedBy: `agent:${binding.id}`,
     });
     if (committed.status !== 'committed' || !this.options.transitionService) return;
+    let revision = item.revision;
+    if (isApprovedPlanResult(toolResult)) {
+      try {
+        const stamped = await this.options.storage.update({
+          orgId: binding.orgId,
+          id: item.id,
+          userId: `agent:${binding.id}`,
+          patch: { metadata: { planApprovedAt: new Date().toISOString() } },
+          expectedRevision: revision,
+        });
+        if (stamped) revision = stamped.item.revision;
+      } catch (error) {
+        // The card moved on meanwhile; its move below fails on the stale revision as it would have.
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+    }
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
       await this.options.transitionService.transition({
@@ -657,7 +712,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         board: entry.board,
         stage: entry.stage,
         ...(entry.reenter ? { reenter: true } : {}),
-        expectedRevision: item.revision,
+        expectedRevision: revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
         cause: 'tool_result_rule',
