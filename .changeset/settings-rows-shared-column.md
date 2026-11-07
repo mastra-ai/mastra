@@ -2,23 +2,33 @@
 '@mastra/playground-ui': minor
 ---
 
-`SettingsRow` puts its control in a right-hand column at least 16rem wide, and text inputs and selects inside fill it, so their left edges line up row to row; switches and buttons end at the right edge. Pass `controlPlacement="below"` (on `SettingsRow` or `SettingsFieldsetRow`) to put a control under its label at full width, for forms with several controls. A `SettingsFieldsetRow` that isn't the last row now keeps its divider.
+One settings layout for Studio, Factory and Platform, from `@mastra/playground-ui/new/settings`:
 
-New pieces for settings pages:
-
-- `SettingsTitle` takes `info`, shown as a tooltip on the title (it gets a dotted underline on hover), for section descriptions that are worth keeping but don't need to sit on the page.
-- `SettingsAddRow`, `SettingsEmptyRow` and `SettingsNoticeRow` keep a list's add action (with other controls like refresh in `actions`), empty state and notices inside its `SettingsContainer`, so the card holds everything about the list.
+- `SettingsLayout` is the page: a centered 640px column with the title above its sections, 28px apart. Pass `header` for an app's own header.
+- `SettingsTitle` sits dimmed above each card. `info` shows a section description as a tooltip on the title.
+- `SettingsContainer` is a borderless card that owns its rows' spacing (14px padding, hairlines between rows that stop at it), so rows carry no padding of their own. Rows with nothing in them take no space.
+- `SettingsRow` keeps the label and description on the left and the control on the right. Text fields share one 13.75rem width; selects hug their value up to that width; switches and buttons keep their size. `controlPlacement="below"` puts a control under its label at full width.
+- Lists: `SettingsListHeader` puts a count and the list's action at the top of its card, `SettingsEmptyRow` holds the empty text and that same action in one row, and `SettingsItem` (with `SettingsItemIcon` for logos and icons, the same size as `Avatar size="md"`) is one thing in a list. `SettingsNoticeRow` keeps a list's errors inside its card.
 - `CopyInput` (`@mastra/playground-ui/components/CopyInput`) shows a read-only value, like an ID, with a copy button.
-- `PageLayout` takes `variant="form"`: `narrow` at 768px, for settings and other form pages.
+
+Removed: `SettingsAddRow` (use `SettingsListHeader` or `SettingsEmptyRow` with an `action`), and `SettingsContainer`'s `variant`. Input, InputGroup and select values now use the regular-weight `text-body-sm`, like Textarea.
 
 ```tsx
-<SettingsGroup>
-  <SettingsHeader>
-    <SettingsTitle info="Sent with every request the studio makes.">Request headers</SettingsTitle>
-  </SettingsHeader>
-  <SettingsContainer>
-    {headers.length === 0 ? <SettingsEmptyRow>No request headers</SettingsEmptyRow> : rows}
-    <SettingsAddRow onClick={addHeader}>Add header</SettingsAddRow>
-  </SettingsContainer>
-</SettingsGroup>
+<SettingsLayout title="General">
+  <SettingsGroup>
+    <SettingsTitle>Accounts</SettingsTitle>
+    <SettingsContainer>
+      {accounts.length === 0 ? (
+        <SettingsEmptyRow action={addButton}>No accounts connected</SettingsEmptyRow>
+      ) : (
+        <>
+          <SettingsListHeader action={addButton}>{accounts.length} accounts</SettingsListHeader>
+          {accounts.map(account => (
+            <SettingsItem key={account.id} media={<SettingsItemIcon>{account.icon}</SettingsItemIcon>} title={account.name} />
+          ))}
+        </>
+      )}
+    </SettingsContainer>
+  </SettingsGroup>
+</SettingsLayout>
 ```
