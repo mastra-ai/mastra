@@ -216,7 +216,7 @@ export const AllAppUsages: Story = {
               content="8f3c2a1b-1d2e-4c5f-9a7b-3e6d8c0f1a2b"
               tooltip="Copy run id"
               variant="ghost"
-              size="icon-sm"
+              size="icon-inline"
             />
           }
         >
