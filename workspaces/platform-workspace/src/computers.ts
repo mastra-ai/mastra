@@ -1,4 +1,4 @@
-import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Agent } from '@mastra/core/agent';
 import type {
   Mastra,
@@ -26,9 +26,15 @@ export const MISSING_IDENTITY = 'missing thread or resource id';
 export const HUMAN_HAS_CONTROL = 'the user has control of this computer; wait for them to hand it back';
 const NOTE_MAX = 500;
 
-const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
+// Ephemeral: cmp_e_<sandboxId>_<mac>. Persistent: cmp_p_<sandboxId>_<nonce>_<mac>; the nonce names the recovery key.
+const ID_PATTERN = /^cmp_(?:(e)_([A-Za-z0-9-]{1,128})|(p)_([A-Za-z0-9-]{1,128})_([0-9a-f]{32}))_([A-Za-z0-9_-]{22})$/;
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9-]{1,128}$/;
 const MAC_VERSION = 'mastra-computer-v1';
+const MAC_VERSION_PERSISTENT = 'mastra-computer-v2';
+const RECOVERY_PREFIX = 'mastra-computer-';
+const ATTACHMENT_TYPE = 'mastra-computer:';
+const LIST_THREAD = 'mastra-computers:';
+const LIST_TYPE = 'mastra-computers';
 
 /** The part of a sandbox the computers toolset drives. */
 export interface ComputerSandbox {
@@ -37,6 +43,8 @@ export interface ComputerSandbox {
   start(): Promise<unknown>;
   destroy(): Promise<void>;
   captureCheckpoint(): Promise<CaptureCheckpointResult>;
+  /** Deletes the recovery checkpoint (persistent computers). */
+  deleteCheckpoint?(): Promise<'deleted' | 'not_found' | 'skipped'>;
   executeCommand(
     command: string,
     args?: string[],
@@ -69,6 +77,10 @@ interface Entry {
   name: string;
   template: 'desktop';
   persistent: boolean;
+  /** Platform recovery key of a persistent computer; its checkpoint is stored under it. */
+  recoveryKey?: string;
+  /** Reattach failed and the computer was rebuilt from its recovery key (disk = last checkpoint). */
+  recovered?: boolean;
   ownerResourceId: string;
   queue: Promise<unknown>;
   destroyed: boolean;
@@ -96,6 +108,38 @@ interface Scope {
 
 type Context = ToolExecutionContext<any, any, any>;
 
+interface Verified {
+  persistent: boolean;
+  sandboxId: string;
+  nonce?: string;
+}
+
+/** A persistent computer remembered for its owner resource. */
+interface StoredComputer {
+  id: string;
+  name: string;
+}
+
+/** The slice of core's `threadState` storage domain the toolset persists through. */
+interface StateStore {
+  getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined>;
+  setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void>;
+  deleteState(args: { threadId: string; type: string }): Promise<void>;
+}
+
+class MemoryStateStore implements StateStore {
+  readonly #values = new Map<string, unknown>();
+  async getState<T>({ threadId, type }: { threadId: string; type: string }) {
+    return this.#values.get(JSON.stringify([threadId, type])) as T | undefined;
+  }
+  async setState<T>({ threadId, type, value }: { threadId: string; type: string; value: T }) {
+    this.#values.set(JSON.stringify([threadId, type]), value);
+  }
+  async deleteState({ threadId, type }: { threadId: string; type: string }) {
+    this.#values.delete(JSON.stringify([threadId, type]));
+  }
+}
+
 function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
   return values.find(v => typeof v === 'string' && v.trim().length > 0);
 }
@@ -120,6 +164,12 @@ export class PlatformComputers implements MastraComputers {
   readonly #lifecycle = new Map<string, Promise<unknown>>();
   /** Last agent seen per thread, so a user take can notify it. */
   readonly #agents = new Map<string, AgentRef>();
+  /** Per-thread restore of a stored attachment, run once per process. */
+  readonly #hydrated = new Map<string, Promise<void>>();
+  /** Serializes read-modify-write of each resource's stored computer list (in this process). */
+  readonly #listWrites = new Map<string, Promise<unknown>>();
+  readonly #memoryStore = new MemoryStateStore();
+  #mastra?: Mastra;
   #tools?: Record<string, ToolAction<any, any, any, any>>;
 
   constructor(options: PlatformComputersOptions = {}) {
@@ -150,28 +200,139 @@ export class PlatformComputers implements MastraComputers {
     this.#createSandbox = options.createSandbox ?? (opts => new PlatformSandbox(opts) as unknown as ComputerSandbox);
   }
 
-  #mac(flag: 'p' | 'e', sandboxId: string, ownerResourceId: string): Buffer {
-    const message = JSON.stringify([MAC_VERSION, flag, sandboxId, ownerResourceId, this.#environmentId]);
+  #mac(flag: 'p' | 'e', sandboxId: string, ownerResourceId: string, nonce?: string): Buffer {
+    const message = JSON.stringify(
+      nonce === undefined
+        ? [MAC_VERSION, flag, sandboxId, ownerResourceId, this.#environmentId]
+        : [MAC_VERSION_PERSISTENT, flag, sandboxId, ownerResourceId, this.#environmentId, nonce],
+    );
     return createHmac('sha256', this.#key).update(message, 'utf8').digest().subarray(0, 16);
   }
 
-  /** @internal */
-  mintId(persistent: boolean, sandboxId: string, ownerResourceId: string): string {
+  /** @internal Persistent ids need the `nonce` that names their recovery key. */
+  mintId(persistent: boolean, sandboxId: string, ownerResourceId: string, nonce?: string): string {
     const flag = persistent ? 'p' : 'e';
-    return `cmp_${flag}_${sandboxId}_${this.#mac(flag, sandboxId, ownerResourceId).toString('base64url')}`;
+    const middle = persistent && nonce !== undefined ? `${sandboxId}_${nonce}` : sandboxId;
+    const mac = this.#mac(flag, sandboxId, ownerResourceId, persistent ? nonce : undefined);
+    return `cmp_${flag}_${middle}_${mac.toString('base64url')}`;
   }
 
-  #verify(id: unknown, ownerResourceId: string): { persistent: boolean; sandboxId: string } | undefined {
+  #verify(id: unknown, ownerResourceId: string): Verified | undefined {
     if (typeof id !== 'string') return undefined;
     const match = ID_PATTERN.exec(id);
     if (!match) return undefined;
-    const [, flag, sandboxId, mac] = match as unknown as [string, 'p' | 'e', string, string];
+    const persistent = match[3] === 'p';
+    const sandboxId = (persistent ? match[4] : match[2])!;
+    const nonce = persistent ? match[5] : undefined;
+    const mac = match[6]!;
     const given = Buffer.from(mac, 'base64url');
-    const expected = this.#mac(flag, sandboxId, ownerResourceId);
+    const expected = this.#mac(persistent ? 'p' : 'e', sandboxId, ownerResourceId, nonce);
     // 22 base64url chars carry 132 bits; reject non-canonical aliases of the same 16 bytes.
     if (given.length !== expected.length || given.toString('base64url') !== mac) return undefined;
     if (!timingSafeEqual(given, expected)) return undefined;
-    return { persistent: flag === 'p', sandboxId };
+    return { persistent, sandboxId, ...(nonce !== undefined && { nonce }) };
+  }
+
+  /** @internal Called by `new Mastra({ computers })`. */
+  __registerMastra(mastra: Mastra): void {
+    this.#mastra = mastra;
+  }
+
+  /** Mastra's `threadState` storage when Mastra has storage, else this instance's memory. */
+  async #store(): Promise<StateStore> {
+    const storage = this.#mastra?.getStorage?.();
+    const store = storage ? await storage.getStore('threadState').catch(() => undefined) : undefined;
+    return (store as StateStore | undefined) ?? this.#memoryStore;
+  }
+
+  /** Runs a storage write; a storage failure is logged and never fails the tool call. */
+  async #persist(what: string, fn: (store: StateStore) => Promise<unknown>): Promise<void> {
+    try {
+      await fn(await this.#store());
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`computers: could not ${what}`, { error: String(error) });
+    }
+  }
+
+  async #storedList(resourceId: string): Promise<StoredComputer[]> {
+    try {
+      const store = await this.#store();
+      const value = await store.getState<unknown>({ threadId: LIST_THREAD + resourceId, type: LIST_TYPE });
+      if (!Array.isArray(value)) return [];
+      // Stored records are untrusted: keep only well-formed ids this resource could have minted.
+      return value.filter(
+        (r): r is StoredComputer =>
+          typeof r?.id === 'string' &&
+          typeof r?.name === 'string' &&
+          this.#verify(r.id, resourceId)?.persistent === true,
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  #updateList(resourceId: string, update: (list: StoredComputer[]) => StoredComputer[]): Promise<void> {
+    const run = (this.#listWrites.get(resourceId) ?? Promise.resolve()).then(() =>
+      this.#persist('update the computer list', async store => {
+        const next = update(await this.#storedList(resourceId));
+        await store.setState({ threadId: LIST_THREAD + resourceId, type: LIST_TYPE, value: next });
+      }),
+    );
+    this.#listWrites.set(resourceId, run);
+    void run.then(() => {
+      if (this.#listWrites.get(resourceId) === run) this.#listWrites.delete(resourceId);
+    });
+    return run;
+  }
+
+  /** Writes (persistent) or clears (anything else) this thread's stored attachment. */
+  #storeAttachment(scope: Scope, entry: Entry | undefined): Promise<void> {
+    const key = { threadId: scope.threadId, type: ATTACHMENT_TYPE + scope.resourceId };
+    return this.#persist('store the computer attachment', store =>
+      entry?.persistent ? store.setState({ ...key, value: { computerId: entry.id } }) : store.deleteState(key),
+    );
+  }
+
+  /** Restores this thread's stored attachment of a persistent computer. */
+  async #hydrate(scope: Scope): Promise<void> {
+    if (this.#attachments.has(scope.key)) return;
+    const store = await this.#store();
+    const key = { threadId: scope.threadId, type: ATTACHMENT_TYPE + scope.resourceId };
+    const value = await store.getState<{ computerId?: unknown }>(key);
+    if (!value) return;
+    const id = value.computerId;
+    const verified = this.#verify(id, scope.resourceId);
+    const record = verified?.persistent ? (await this.#storedList(scope.resourceId)).find(r => r.id === id) : undefined;
+    if (!verified || !record) {
+      // Destroyed (or never valid): forget it.
+      await store.deleteState(key).catch(() => {});
+      return;
+    }
+    const entry = this.#lookup(record.id, verified, scope.resourceId, record);
+    if (!entry) return;
+    await entry.ready;
+    if (!entry.destroyed && !this.#attachments.has(scope.key)) this.#attach(scope, entry);
+  }
+
+  /**
+   * Resolves once this thread's stored attachment (if any) is restored, or
+   * `undefined` when there is nothing to wait for. Created synchronously and
+   * shared, so calls chained on it keep their call order.
+   */
+  #ensureHydrated(scope: Scope): Promise<void> | undefined {
+    if (this.#attachments.has(scope.key)) return undefined;
+    let pending = this.#hydrated.get(scope.key);
+    if (!pending) {
+      pending = this.#chain(scope, () => this.#hydrate(scope)).then(
+        () => {},
+        () => {
+          // Retry on the next call.
+          if (this.#hydrated.get(scope.key) === pending) this.#hydrated.delete(scope.key);
+        },
+      );
+      this.#hydrated.set(scope.key, pending);
+    }
+    return pending;
   }
 
   #scope(context: Context): Scope | undefined {
@@ -187,7 +348,14 @@ export class PlatformComputers implements MastraComputers {
   }
 
   #describe(entry: Entry, status: 'attached' | 'released' | 'available') {
-    return { id: entry.id, name: entry.name, template: entry.template, status, persistent: entry.persistent };
+    return {
+      id: entry.id,
+      name: entry.name,
+      template: entry.template,
+      status,
+      persistent: entry.persistent,
+      ...(entry.recovered && { recovered: true }),
+    };
   }
 
   async #emit(context: Context, entry: Entry, threadId: string, status: 'attached' | 'released') {
@@ -205,7 +373,11 @@ export class PlatformComputers implements MastraComputers {
   #serial<T>(context: Context, fn: (scope: Scope) => Promise<T>): Promise<T | string> {
     const scope = this.#scope(context);
     if (!scope) return Promise.resolve(MISSING_IDENTITY);
-    const run = (this.#lifecycle.get(scope.key) ?? Promise.resolve()).then(() => fn(scope));
+    return this.#chain(scope, () => fn(scope));
+  }
+
+  #chain<T>(scope: Scope, fn: () => Promise<T>): Promise<T> {
+    const run = (this.#lifecycle.get(scope.key) ?? Promise.resolve()).then(fn);
     const tail = run.catch(() => {});
     this.#lifecycle.set(scope.key, tail);
     void tail.then(() => {
@@ -219,43 +391,82 @@ export class PlatformComputers implements MastraComputers {
   }
 
   /** Runs `fn` on the computer attached to this thread, in call order. Takes the slot synchronously. */
-  #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer) => Promise<T>) {
+  #hands<T>(
+    context: Context,
+    fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>,
+  ): Promise<T | string> {
     const scope = this.#scope(context);
     if (!scope) return Promise.resolve(MISSING_IDENTITY);
+    const pending = this.#ensureHydrated(scope);
+    return pending ? pending.then(() => this.#enqueue(scope, fn)) : this.#enqueue(scope, fn);
+  }
+
+  /** Synchronously takes the next slot on the attached computer's queue. */
+  #enqueue<T>(
+    scope: Scope,
+    fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>,
+  ): Promise<T | string> {
     const id = this.#attachments.get(scope.key);
     const entry = id ? this.#computers.get(id) : undefined;
     if (!entry || entry.ownerResourceId !== scope.resourceId) return Promise.resolve(NOT_ATTACHED);
     if (entry.control.holder === 'human') return Promise.resolve(HUMAN_HAS_CONTROL);
     // Re-checked when the action runs: a take while earlier actions are in flight refuses the rest.
     const run = entry.queue.then((): T | string | Promise<T> =>
-      entry.control.holder === 'human' ? HUMAN_HAS_CONTROL : fn(entry.sandbox!, entry.sandbox!.computer!),
+      entry.control.holder === 'human' ? HUMAN_HAS_CONTROL : fn(entry.sandbox!, entry.sandbox!.computer!, entry),
     );
     entry.queue = run.catch(() => {});
     return run;
   }
 
-  /** Same-process entry, or a pending reattach of a persistent id stored before any await. */
-  #lookup(id: string, verified: { persistent: boolean; sandboxId: string }, ownerResourceId: string) {
+  /**
+   * Same-process entry, or a pending reattach of a persistent id stored before any await.
+   * `record` (the owner's stored list entry) restores the name and allows recovery by
+   * recovery key when the VM itself is gone.
+   */
+  #lookup(id: string, verified: Verified, ownerResourceId: string, record?: StoredComputer) {
     const existing = this.#computers.get(id);
     if (existing) return existing;
-    if (!verified.persistent) return undefined;
-    const sandbox = this.#createSandbox({
-      ...this.#sandboxOptions,
-      sandboxId: verified.sandboxId,
-      computer: true,
-      reattach: 'required',
-    });
+    if (!verified.persistent || !verified.nonce) return undefined;
+    const recoveryKey = RECOVERY_PREFIX + verified.nonce;
     const entry: Entry = {
       id,
-      ready: sandbox.start().then(() => sandbox),
-      name: 'computer',
+      ready: Promise.resolve(undefined as unknown as ComputerSandbox),
+      name: record?.name ?? 'computer',
       template: 'desktop',
       persistent: true,
+      recoveryKey,
       ownerResourceId,
       queue: Promise.resolve(),
       destroyed: false,
       control: { holder: 'agent' },
     };
+    entry.ready = (async () => {
+      const sandbox = this.#createSandbox({
+        ...this.#sandboxOptions,
+        id: recoveryKey,
+        sandboxId: verified.sandboxId,
+        computer: true,
+        reattach: 'required',
+      });
+      try {
+        await sandbox.start();
+        return sandbox;
+      } catch (error) {
+        // Only a computer its owner still lists may be rebuilt; a destroyed one stays gone.
+        if (!isReattachFailure(error) || !record) throw error;
+      }
+      // The VM is gone. The proxy hands back a live sandbox under the recovery key, or boots one
+      // from the key's checkpoint.
+      const recovered = this.#createSandbox({ ...this.#sandboxOptions, id: recoveryKey, computer: true });
+      try {
+        await recovered.start();
+      } catch (error) {
+        await recovered.destroy().catch(() => {});
+        throw error;
+      }
+      entry.recovered = true;
+      return recovered;
+    })();
     entry.queue = entry.ready.catch(() => {});
     entry.ready.then(
       s => {
@@ -272,19 +483,25 @@ export class PlatformComputers implements MastraComputers {
   #create(input: { name?: string; persist?: boolean }, context: Context) {
     return this.#serial(context, async scope => {
       const persistent = input.persist === true;
-      const sandbox = this.#createSandbox({ ...this.#sandboxOptions, computer: true });
+      const nonce = persistent ? randomBytes(16).toString('hex') : undefined;
+      const sandbox = this.#createSandbox({
+        ...this.#sandboxOptions,
+        ...(nonce !== undefined && { id: RECOVERY_PREFIX + nonce }),
+        computer: true,
+      });
       let entry: Entry | undefined;
       try {
         await sandbox.start();
         const sandboxId = sandbox.sandboxId;
         if (!sandboxId || !SANDBOX_ID_PATTERN.test(sandboxId)) throw new Error('unexpected sandbox id');
         entry = {
-          id: this.mintId(persistent, sandboxId, scope.resourceId),
+          id: this.mintId(persistent, sandboxId, scope.resourceId, nonce),
           ready: Promise.resolve(sandbox),
           sandbox,
           name: input.name?.trim() || 'computer',
           template: 'desktop',
           persistent,
+          ...(nonce !== undefined && { recoveryKey: RECOVERY_PREFIX + nonce }),
           ownerResourceId: scope.resourceId,
           queue: Promise.resolve(),
           destroyed: false,
@@ -296,6 +513,11 @@ export class PlatformComputers implements MastraComputers {
       }
       this.#computers.set(entry.id, entry);
       this.#attach(scope, entry);
+      if (persistent) {
+        const stored = { id: entry.id, name: entry.name };
+        await this.#updateList(scope.resourceId, list => [...list.filter(r => r.id !== stored.id), stored]);
+      }
+      await this.#storeAttachment(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });
@@ -305,7 +527,11 @@ export class PlatformComputers implements MastraComputers {
     return this.#serial(context, async scope => {
       const verified = this.#verify(input.id, scope.resourceId);
       if (!verified) return NOT_FOUND;
-      const entry = this.#lookup(input.id, verified, scope.resourceId);
+      const record =
+        verified.persistent && !this.#computers.has(input.id)
+          ? (await this.#storedList(scope.resourceId)).find(r => r.id === input.id)
+          : undefined;
+      const entry = this.#lookup(input.id, verified, scope.resourceId, record);
       if (!entry || entry.destroyed) return NOT_FOUND;
       try {
         await entry.ready;
@@ -314,18 +540,30 @@ export class PlatformComputers implements MastraComputers {
       }
       if (entry.destroyed) return NOT_FOUND;
       this.#attach(scope, entry);
+      await this.#storeAttachment(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });
   }
 
   #release(context: Context) {
-    return this.#serial(context, async scope => {
+    const scope = this.#scope(context);
+    if (!scope) return Promise.resolve(MISSING_IDENTITY);
+    void this.#ensureHydrated(scope);
+    return this.#chain(scope, async () => {
       const id = this.#attachments.get(scope.key);
       const entry = id ? this.#computers.get(id) : undefined;
       if (entry?.control.holder === 'human') return HUMAN_HAS_CONTROL;
       this.#attachments.delete(scope.key);
+      await this.#storeAttachment(scope, undefined);
       if (!entry) return NOT_ATTACHED;
+      if (entry.persistent && entry.sandbox) {
+        // Checkpoint after the computer's queued actions, so a rebuilt machine has this disk.
+        const sandbox = entry.sandbox;
+        const capture = entry.queue.then(() => sandbox.captureCheckpoint());
+        entry.queue = capture.catch(() => {});
+        await capture.catch(() => {});
+      }
       await this.#emit(context, entry, scope.threadId, 'released');
       return { computer: this.#describe(entry, 'released') };
     });
@@ -335,19 +573,34 @@ export class PlatformComputers implements MastraComputers {
     return this.#serial(context, async scope => {
       const verified = this.#verify(input.id, scope.resourceId);
       if (!verified) return NOT_FOUND;
-      const entry = this.#lookup(input.id, verified, scope.resourceId);
+      const record =
+        verified.persistent && !this.#computers.has(input.id)
+          ? (await this.#storedList(scope.resourceId)).find(r => r.id === input.id)
+          : undefined;
+      const entry = this.#lookup(input.id, verified, scope.resourceId, record);
       if (!entry || entry.destroyed) return NOT_FOUND;
       if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
       entry.destroyed = true;
       const releasedHere = this.#attachments.get(scope.key) === entry.id;
       for (const [key, id] of this.#attachments) if (id === entry.id) this.#attachments.delete(key);
       if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
-      const done = entry.queue.then(() => entry.ready).then(sandbox => sandbox.destroy());
+      // A persistent computer's checkpoint goes first: if that fails, its stored records stay and
+      // a later destroy retries both.
+      const done = entry.queue
+        .then(() => entry.ready)
+        .then(async sandbox => {
+          if (entry.persistent) await sandbox.deleteCheckpoint?.();
+          await sandbox.destroy();
+        });
       entry.queue = done.catch(() => {});
       try {
         await done;
       } catch (error) {
         return isReattachFailure(error) ? NOT_FOUND : DESTROY_FAILED;
+      }
+      if (entry.persistent) {
+        await this.#updateList(scope.resourceId, list => list.filter(r => r.id !== entry.id));
+        if (releasedHere) await this.#storeAttachment(scope, undefined);
       }
       if (releasedHere) await this.#emit(context, entry, scope.threadId, 'released');
       return { destroyed: entry.id };
@@ -357,6 +610,7 @@ export class PlatformComputers implements MastraComputers {
   async #requestHuman(input: { reason: string }, context: Context) {
     const scope = this.#scope(context);
     if (!scope) return MISSING_IDENTITY;
+    await this.#ensureHydrated(scope);
     const id = this.#attachments.get(scope.key);
     const entry = id ? this.#computers.get(id) : undefined;
     if (!entry || entry.ownerResourceId !== scope.resourceId || !entry.sandbox || entry.destroyed) return NOT_ATTACHED;
@@ -385,13 +639,19 @@ export class PlatformComputers implements MastraComputers {
     };
   }
 
-  #list(context: Context) {
+  async #list(context: Context) {
     const scope = this.#scope(context);
     if (!scope) return MISSING_IDENTITY;
+    await this.#ensureHydrated(scope);
     const attachedId = this.#attachments.get(scope.key);
     const computers = [...this.#computers.values()]
       .filter(e => e.ownerResourceId === scope.resourceId && e.sandbox && !e.destroyed)
       .map(e => this.#describe(e, e.id === attachedId ? 'attached' : 'available'));
+    // Persistent computers this process hasn't reattached yet.
+    for (const record of await this.#storedList(scope.resourceId)) {
+      if (this.#computers.has(record.id)) continue;
+      computers.push({ id: record.id, name: record.name, template: 'desktop', status: 'available', persistent: true });
+    }
     return { computers };
   }
 
@@ -573,7 +833,7 @@ export class PlatformComputers implements MastraComputers {
    * Returns `null` when the computer isn't running; throws when it isn't attached to this thread.
    */
   async viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
-    const sandbox = this.#attached(computerId, scope).sandbox!;
+    const sandbox = (await this.#attached(computerId, scope)).sandbox!;
     const url = await sandbox.computer?.streamUrl?.();
     if (!url) return null;
     const cookie = await sandbox.getPortAuthCookie(COMPUTER_VIEWER_PORT);
@@ -581,9 +841,11 @@ export class PlatformComputers implements MastraComputers {
     return { url, headers: { cookie: `${cookie.name}=${cookie.value}` } };
   }
 
-  #attached(computerId: string, scope: MastraComputerScope): Entry {
-    const entry = this.#computers.get(computerId);
+  /** The computer attached to this thread, restoring a stored attachment first. Throws otherwise. */
+  async #attached(computerId: string, scope: MastraComputerScope): Promise<Entry> {
     const key = JSON.stringify([scope.resourceId, scope.threadId]);
+    await this.#ensureHydrated({ ...scope, key });
+    const entry = this.#computers.get(computerId);
     if (this.#attachments.get(key) !== computerId || !entry?.sandbox || entry.ownerResourceId !== scope.resourceId) {
       throw new Error('computer not attached');
     }
@@ -596,7 +858,7 @@ export class PlatformComputers implements MastraComputers {
    * @experimental
    */
   async controlState(computerId: string, scope: MastraComputerScope): Promise<MastraComputerControl> {
-    const { control } = this.#attached(computerId, scope);
+    const { control } = await this.#attached(computerId, scope);
     return { holder: control.holder, ...(control.reason !== undefined && { reason: control.reason }) };
   }
 
@@ -611,7 +873,7 @@ export class PlatformComputers implements MastraComputers {
     scope: MastraComputerScope,
     input: { action: 'take' | 'release'; note?: string },
   ): Promise<MastraComputerControlResult> {
-    const entry = this.#attached(computerId, scope);
+    const entry = await this.#attached(computerId, scope);
     const note = input.note?.trim() || undefined;
     if (note && note.length > NOTE_MAX) throw new Error('note too long');
     const holder = input.action === 'take' ? 'human' : 'agent';

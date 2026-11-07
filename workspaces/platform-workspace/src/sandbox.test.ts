@@ -626,6 +626,44 @@ describe('PlatformSandbox', () => {
     expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
   });
 
+  it('deleteCheckpoint() deletes the recovery checkpoint on E2B and treats a missing one as not_found', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+      .mockResolvedValueOnce(json({ status: 'deleted' }))
+      .mockResolvedValueOnce(json({ status: 'not_found' }))
+      .mockResolvedValueOnce(json({ error: { message: 'gone' } }, { status: 404 }));
+    const sandbox = new PlatformSandbox({
+      id: 'mc-session-42',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    await expect(sandbox.deleteCheckpoint()).resolves.toBe('deleted');
+    await expect(sandbox.deleteCheckpoint()).resolves.toBe('not_found');
+    await expect(sandbox.deleteCheckpoint()).resolves.toBe('not_found');
+
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/checkpoint',
+    );
+    expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toEqual({ id: 'mc-session-42' });
+  });
+
+  it('deleteCheckpoint() skips without a recovery id or before start', async () => {
+    const fetchMock = vi.fn();
+    const sandbox = new PlatformSandbox({ accessToken: 'sk_test', projectId: 'p', environmentId: 'env_123', fetch: fetchMock });
+    await expect(sandbox.deleteCheckpoint()).resolves.toBe('skipped');
+    const keyed = new PlatformSandbox({ id: 'k', accessToken: 'sk_test', projectId: 'p', environmentId: 'env_123', fetch: fetchMock });
+    await expect(keyed.deleteCheckpoint()).resolves.toBe('skipped');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not send a template field on the create wire body', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));

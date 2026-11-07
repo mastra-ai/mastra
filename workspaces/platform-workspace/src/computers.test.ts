@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -46,6 +47,12 @@ class FakeBackend {
   nextSandboxId?: string;
   failStart?: Error;
   failDestroy = false;
+  failDeleteCheckpoint = false;
+  /** Every option bag `create` was called with. */
+  options: PlatformSandboxOptions[] = [];
+  /** Live sandbox per recovery key, and the recovery keys that have a checkpoint. */
+  byRecoveryKey = new Map<string, string>();
+  checkpoints = new Set<string>();
   checkpoint: any = { status: 'captured', checkpointName: 'ck-internal' };
   viewerUrl: string | null = 'https://6080-vm.preview.test/vnc.html?autoconnect=1';
   cookie: { name: string; value: string } | null = { name: '__mastra_preview', value: 'secret-cookie' };
@@ -53,6 +60,7 @@ class FakeBackend {
 
   create = (options: PlatformSandboxOptions): ComputerSandbox => {
     const backend = this;
+    backend.options.push(options);
     let id: string | undefined;
     const act = async (name: string) => {
       await sleep(backend.latency[name] ?? 0);
@@ -83,9 +91,22 @@ class FakeBackend {
           id = options.sandboxId;
           return;
         }
+        const live = options.id ? backend.byRecoveryKey.get(options.id) : undefined;
+        if (live && backend.vms.get(live)?.alive) {
+          backend.createCalls.push({ kind: 'reattach', sandboxId: live });
+          id = live;
+          return;
+        }
         backend.createCalls.push({ kind: 'provision' });
         id = backend.nextSandboxId ?? `sbx-${++backend.#n}`;
         backend.vms.set(id, { alive: true });
+        if (options.id) backend.byRecoveryKey.set(options.id, id);
+      },
+      async deleteCheckpoint() {
+        await act('deleteCheckpoint');
+        if (backend.failDeleteCheckpoint) throw new Error('proxy 500 checkpoint');
+        if (!options.id) return 'skipped';
+        return backend.checkpoints.delete(options.id) ? 'deleted' : 'not_found';
       },
       async destroy() {
         backend.destroys++;
@@ -94,6 +115,7 @@ class FakeBackend {
       },
       async captureCheckpoint() {
         await act('snapshot');
+        if (options.id) backend.checkpoints.add(options.id);
         return backend.checkpoint;
       },
       async executeCommand(command: string) {
@@ -906,6 +928,182 @@ describe('control lease', () => {
       computer_click: 'clicked at (1, 2)',
       computer_type: HUMAN_HAS_CONTROL,
       computer_key: HUMAN_HAS_CONTROL,
+    });
+  });
+});
+
+describe('persistent computers across a server restart', () => {
+  // One durable store shared by every "process", like a libsql file across `pnpm dev` restarts.
+  let storage: InMemoryStore;
+  const boot = () => {
+    const computers = make();
+    new Mastra({ logger: false, storage, computers });
+    return computers;
+  };
+  beforeEach(() => {
+    storage = new InMemoryStore();
+  });
+
+  async function createPersistent(name = 'box', resource = 'r1', thread = 't1') {
+    const computers = boot();
+    const { computer } = await call(computers, 'computer_create', { name, persist: true }, ctx(resource, thread));
+    return { computers, id: computer.id as string };
+  }
+
+  it('mints a v2 id whose nonce names the recovery key passed to the sandbox', async () => {
+    const { id } = await createPersistent();
+    const [, , sandboxId, nonce] = id.split('_');
+    expect(nonce).toMatch(/^[0-9a-f]{32}$/);
+    expect(backend.options[0]).toMatchObject({ id: `mastra-computer-${nonce}`, computer: true });
+    expect(backend.vms.get(sandboxId!)?.alive).toBe(true);
+  });
+
+  it("restores the thread's attachment after a restart: hands work with no attach call", async () => {
+    const { id } = await createPersistent();
+    const nonce = id.split('_')[3];
+    const restarted = boot();
+    expect(await call(restarted, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe('clicked at (1, 1)');
+    expect(backend.options.at(-1)).toMatchObject({
+      id: `mastra-computer-${nonce}`,
+      sandboxId: id.split('_')[2],
+      reattach: 'required',
+    });
+  });
+
+  it('keeps model order for a step whose calls arrive before the restore finishes', async () => {
+    await createPersistent();
+    backend.startDelayMs = 10;
+    const restarted = boot();
+    const results = await Promise.all([
+      call(restarted, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1')),
+      call(restarted, 'computer_type', { text: 'hi' }, ctx('r1', 't1')),
+      call(restarted, 'computer_key', { keys: 'Return' }, ctx('r1', 't1')),
+    ]);
+    expect(results).toEqual(['clicked at (1, 1)', 'typed', 'pressed']);
+    expect(backend.actions).toEqual(['click', 'type', 'key']);
+    expect(backend.createCalls.filter(c => c.kind === 'reattach')).toHaveLength(1);
+  });
+
+  it('lists stored persistent computers before they are reattached, with their names', async () => {
+    const { id } = await createPersistent('lab');
+    await call(boot(), 'computer_create', {}, ctx('r1', 't9'));
+    const restarted = boot();
+    expect(await call(restarted, 'computer_list', {}, ctx('r1', 'other'))).toEqual({
+      computers: [{ id, name: 'lab', template: 'desktop', status: 'available', persistent: true }],
+    });
+    expect(await call(restarted, 'computer_list', {}, ctx('r2', 'other'))).toEqual({ computers: [] });
+  });
+
+  it('attaches from a new thread after a restart with the stored name', async () => {
+    const { id } = await createPersistent('lab');
+    const out = await call(boot(), 'computer_attach', { id }, ctx('r1', 'new-thread'));
+    expect(out.computer).toEqual({ id, name: 'lab', template: 'desktop', status: 'attached', persistent: true });
+  });
+
+  it('rebuilds a listed computer from its recovery key when the VM is gone', async () => {
+    const { computers, id } = await createPersistent();
+    await call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    const [, , sandboxId, nonce] = id.split('_');
+    backend.vms.set(sandboxId!, { alive: false });
+    const out = await call(boot(), 'computer_attach', { id }, ctx('r1', 't1'));
+    expect(out.computer).toMatchObject({ id, status: 'attached', recovered: true });
+    const last = backend.options.at(-1)!;
+    expect(last).toMatchObject({ id: `mastra-computer-${nonce}`, computer: true });
+    expect(last.sandboxId).toBeUndefined();
+  });
+
+  it('does not rebuild a destroyed computer', async () => {
+    const { computers, id } = await createPersistent();
+    expect(await call(computers, 'computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
+    backend.createCalls = [];
+    expect(await call(boot(), 'computer_attach', { id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(backend.createCalls.filter(c => c.kind === 'provision')).toEqual([]);
+  });
+
+  it('destroy deletes the checkpoint before the VM and forgets every stored record', async () => {
+    const { computers, id } = await createPersistent();
+    await call(computers, 'computer_attach', { id }, ctx('r1', 't2'));
+    await call(computers, 'computer_snapshot', {}, ctx('r1', 't1'));
+    const nonce = id.split('_')[3];
+    expect(backend.checkpoints.has(`mastra-computer-${nonce}`)).toBe(true);
+    const restarted = boot();
+    expect(await call(restarted, 'computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
+    expect(backend.actions.slice(-1)).toEqual(['deleteCheckpoint']);
+    expect(backend.checkpoints.size).toBe(0);
+    expect([...backend.vms.values()].every(v => !v.alive)).toBe(true);
+    const after = boot();
+    expect(await call(after, 'computer_list', {}, ctx('r1', 't1'))).toEqual({ computers: [] });
+    // t2's stored attachment points at a destroyed computer: dropped, not rebuilt.
+    expect(await call(after, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't2'))).toBe(NOT_ATTACHED);
+    expect(backend.createCalls.filter(c => c.kind === 'provision')).toHaveLength(1);
+  });
+
+  it('keeps the records when the checkpoint delete fails, so destroy can be retried', async () => {
+    const { id } = await createPersistent();
+    backend.failDeleteCheckpoint = true;
+    expect(await call(boot(), 'computer_destroy', { id }, ctx('r1', 't1'))).toBe(DESTROY_FAILED);
+    expect([...backend.vms.values()].every(v => v.alive)).toBe(true);
+    backend.failDeleteCheckpoint = false;
+    const retry = boot();
+    expect((await call(retry, 'computer_list', {}, ctx('r1', 't1'))).computers).toHaveLength(1);
+    expect(await call(retry, 'computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
+  });
+
+  it('release checkpoints after queued actions and clears the stored attachment', async () => {
+    const { computers } = await createPersistent();
+    const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
+    const released = await call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    await click;
+    expect(released.computer.status).toBe('released');
+    expect(backend.actions).toEqual(['click', 'snapshot']);
+    expect(await call(boot(), 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+  });
+
+  it('does not persist ephemeral attachments, and an ephemeral attach clears a stored one', async () => {
+    await call(boot(), 'computer_create', {}, ctx('r1', 'eph'));
+    expect(await call(boot(), 'computer_click', { x: 1, y: 1 }, ctx('r1', 'eph'))).toBe(NOT_ATTACHED);
+    const { computers } = await createPersistent();
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    expect(await call(boot(), 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+  });
+
+  it('isolates stored attachments by resource for the same thread id', async () => {
+    await createPersistent('box', 'r1', 'shared');
+    expect(await call(boot(), 'computer_click', { x: 1, y: 1 }, ctx('r2', 'shared'))).toBe(NOT_ATTACHED);
+  });
+
+  it('ignores a stored attachment whose id fails verification', async () => {
+    const { id } = await createPersistent();
+    const threadState = (await storage.getStore('threadState'))!;
+    const forged = id.replace(/_([0-9a-f])([0-9a-f]{31})_/, (_m, a, rest) => `_${a === '0' ? '1' : '0'}${rest}_`);
+    await threadState.setState({ threadId: 't1', type: 'mastra-computer:r1', value: { computerId: forged } });
+    expect(await call(boot(), 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+    expect(await call(boot(), 'computer_attach', { id: forged }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+  });
+
+  it('rejects persistent ids without a nonce', async () => {
+    const legacy = make().mintId(true, 'sbx-1', 'r1');
+    backend.vms.set('sbx-1', { alive: true });
+    expect(await call(boot(), 'computer_attach', { id: legacy }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+  });
+
+  it('serves the viewer and control state after a restart without a tool call', async () => {
+    const { id } = await createPersistent();
+    const restarted = boot();
+    await expect(restarted.viewer(id, { resourceId: 'r1', threadId: 't1' })).resolves.toMatchObject({
+      headers: { cookie: '__mastra_preview=secret-cookie' },
+    });
+    await expect(restarted.controlState(id, { resourceId: 'r1', threadId: 't1' })).resolves.toEqual({
+      holder: 'agent',
+    });
+    await expect(restarted.viewer(id, { resourceId: 'r1', threadId: 'nope' })).rejects.toThrow('not attached');
+  });
+
+  it('works without Mastra storage, in memory only', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', { persist: true }, ctx('r1', 't1'));
+    expect(await call(computers, 'computer_list', {}, ctx('r1', 't1'))).toEqual({
+      computers: [{ ...computer, status: 'attached' }],
     });
   });
 });
