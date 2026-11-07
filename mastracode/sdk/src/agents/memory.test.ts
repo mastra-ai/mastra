@@ -8,6 +8,8 @@ const memorySettledMock = vi.fn(async (): Promise<void> => {});
 const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const embedInSubprocessMock = vi.fn();
+const fastembedDoEmbedMock = vi.fn();
 
 vi.mock('@mastra/memory', async () => ({
   resolveAutoModelId: (await vi.importActual<typeof import('@mastra/memory')>('@mastra/memory')).resolveAutoModelId,
@@ -26,7 +28,11 @@ vi.mock('@mastra/memory', async () => ({
 }));
 
 vi.mock('@mastra/fastembed', () => ({
-  fastembed: { small: 'fastembed-small' },
+  fastembed: { small: { doEmbed: fastembedDoEmbedMock } },
+}));
+
+vi.mock('./fastembed-subprocess.js', () => ({
+  embedInSubprocess: embedInSubprocessMock,
 }));
 
 vi.mock('../utils/project.js', () => ({
@@ -158,6 +164,24 @@ describe('getDynamicMemory', () => {
     delete process.env.MASTRACODE_DISABLE_TITLE_GENERATION;
     vi.unstubAllEnvs();
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+  });
+
+  it('embeds observations in a worker process unless MASTRACODE_EMBED_IN_PROCESS=1', async () => {
+    embedInSubprocessMock.mockReset().mockResolvedValue({ embeddings: [[1]], warnings: [] });
+    fastembedDoEmbedMock.mockReset().mockResolvedValue({ embeddings: [[2]], warnings: [] });
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+    const embedder = config.embedder as { doEmbed: (options: { values: string[] }) => Promise<unknown> };
+
+    // Default: the worker embeds, so fastembed never loads into this process.
+    await expect(embedder.doEmbed({ values: ['a'] })).resolves.toEqual({ embeddings: [[1]], warnings: [] });
+    expect(embedInSubprocessMock).toHaveBeenCalledWith({ values: ['a'] });
+    expect(fastembedDoEmbedMock).not.toHaveBeenCalled();
+
+    // Opt-out: fastembed runs in this process, and no worker starts.
+    vi.stubEnv('MASTRACODE_EMBED_IN_PROCESS', '1');
+    await expect(embedder.doEmbed({ values: ['b'] })).resolves.toEqual({ embeddings: [[2]], warnings: [] });
+    expect(fastembedDoEmbedMock).toHaveBeenCalledWith({ values: ['b'] });
+    expect(embedInSubprocessMock).toHaveBeenCalledTimes(1);
   });
 
   it('wires Mastra Code observational memory activation defaults into core memory', async () => {
