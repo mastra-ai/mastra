@@ -11,6 +11,12 @@ export type ServerBundleOptions = {
   isDev?: boolean;
   tools: Record<string, Tool>;
   browserStream?: boolean;
+  /**
+   * Set to `false` to never mount the computer viewer proxy.
+   *
+   * @experimental
+   */
+  computerStream?: false;
 };
 
 export type BodyLimitOptions = {

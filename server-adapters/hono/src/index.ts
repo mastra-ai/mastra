@@ -30,6 +30,10 @@ export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
 export type { HonoBrowserStreamConfig } from './browser-stream';
+export { setupComputerStream } from './computer-stream';
+export type { ComputerStreamResult, ComputerViewerSource, HonoComputerStreamConfig } from './computer-stream';
+export { createWebSocketSupport } from './shared/websocket-support';
+export type { WebSocketSupport } from './shared/websocket-support';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;

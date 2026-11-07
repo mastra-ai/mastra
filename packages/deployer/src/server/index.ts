@@ -10,7 +10,14 @@ import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
-import { MastraServer, setupBrowserStream, skipIfFrameworkPublic } from '@mastra/hono';
+import {
+  MastraServer,
+  createAuthMiddleware,
+  createWebSocketSupport,
+  setupBrowserStream,
+  setupComputerStream,
+  skipIfFrameworkPublic,
+} from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
@@ -243,10 +250,23 @@ export async function createHonoServer(
   const browserStreamOrigins =
     server?.cors && typeof server.cors === 'object' && 'origin' in server.cors ? server.cors.origin : undefined;
 
+  // Experimental: a computer's viewer proxy (see `setupComputerStream`). Mounted only
+  // with MASTRA_EXPERIMENTAL_COMPUTER=true and registered computers.
+  const computers =
+    process.env.MASTRA_EXPERIMENTAL_COMPUTER === 'true' && options.computerStream !== false
+      ? mastra.getComputers()
+      : undefined;
+
+  // One `@hono/node-ws` instance for every WebSocket route family: its upgrade
+  // listener ends any upgrade it has no route for, so two instances would
+  // reject each other's sockets.
+  const webSocket = options.browserStream !== false || computers ? await createWebSocketSupport(app) : null;
+
   const browserStreamSetup =
     options.browserStream === false
       ? null
       : await setupBrowserStream(app, {
+          webSocket,
           mastra,
           allowedOrigins: browserStreamOrigins,
           getToolset: async (agentId: string) => {
@@ -291,6 +311,22 @@ export async function createHonoServer(
   if (!browserStreamSetup) {
     app.get(`${apiPrefix}/agents/:agentId/browser/session`, c =>
       c.json({ hasSession: false, screencastAvailable: false }),
+    );
+  }
+
+  const computerStreamSetup = computers
+    ? await setupComputerStream(app, {
+        mastra,
+        webSocket,
+        apiPrefix,
+        allowedOrigins: browserStreamOrigins,
+        getViewer: (computerId, scope) => computers.viewer(computerId, scope),
+      })
+    : null;
+  if (computers && !computerStreamSetup) {
+    // No WebSocket support (e.g. serverless): report that instead of a bare 404.
+    app.post(`${apiPrefix}/computers/:computerId/session`, createAuthMiddleware({ mastra }), c =>
+      c.json({ state: 'unavailable' }),
     );
   }
 
@@ -586,7 +622,7 @@ export async function createHonoServer(
 
   // Attach injectWebSocket to app for backwards compatibility
   // Consumers can use app directly, and optionally call app.injectWebSocket(server) for browser streaming
-  (app as any).injectWebSocket = browserStreamSetup?.injectWebSocket;
+  (app as any).injectWebSocket = browserStreamSetup?.injectWebSocket ?? computerStreamSetup?.injectWebSocket;
 
   return app;
 }

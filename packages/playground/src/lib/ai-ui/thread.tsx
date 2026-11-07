@@ -29,6 +29,7 @@ import {
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
+import { ComputerThreadProvider } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
@@ -183,130 +184,138 @@ const ThreadContent = ({
     startViewTransition(() => setLandingShown(false));
   }, [showLanding, landingShown, isRunning]);
 
+  // Studio stores agent chat threads under the agent id as the resource.
+  const computerScope = useMemo(
+    () => (threadId && agentId ? { threadId, resourceId: agentId } : undefined),
+    [threadId, agentId],
+  );
+
   return (
-    <ComposerAttachmentsProvider
-      controlled={
-        draft && updateDraft
-          ? {
-              value: draft.attachments,
-              onChange: value =>
-                updateDraft(previous => ({
-                  ...previous,
-                  attachments: typeof value === 'function' ? value(previous.attachments) : value,
-                })),
-            }
-          : undefined
-      }
-    >
-      <ChatShell
-        className="h-full"
-        scroller={{
-          autoScroll: true,
-          defaultScrollPosition: 'last-anchor',
-          onReachStart: onLoadPrevious,
-          preserveScrollOnPrepend: Boolean(onLoadPrevious),
-        }}
-        data-testid="thread-wrapper"
+    <ComputerThreadProvider messages={messages} scope={computerScope}>
+      <ComposerAttachmentsProvider
+        controlled={
+          draft && updateDraft
+            ? {
+                value: draft.attachments,
+                onChange: value =>
+                  updateDraft(previous => ({
+                    ...previous,
+                    attachments: typeof value === 'function' ? value(previous.attachments) : value,
+                  })),
+              }
+            : undefined
+        }
       >
-        <ChatShell.Stage>
-          <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
-            <ThreadRailLayer turns={threadRailTurns} />
-            <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
-              {isLoadingPrevious && (
-                <ChatShell.Column
-                  data-testid="thread-history-older-skeleton"
-                  aria-busy="true"
-                  aria-label="Loading older messages"
-                  className="py-3"
-                >
-                  <ChatMessagesLoadingSkeleton />
-                </ChatShell.Column>
-              )}
-              {isEmpty && isHistoryLoading ? (
-                <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
-                  <ChatMessagesLoadingSkeleton />
-                </ChatShell.Column>
-              ) : landingShown ? null : (
-                <ChatShell.Transcript
-                  ref={messagesContainerRef}
-                  data-testid="thread-message-column"
-                  className="flex-1 gap-4 py-4"
-                >
-                  <BracketOverlay containerRef={messagesContainerRef} />
-                  <TranscriptAnnotations />
-                  {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
-                  <ArrivalScope>
-                    {turnGroups.map((group, index) => {
-                      const isLiveTurn = index === turnGroups.length - 1;
-                      // The first turn opens at the top already; room under it would only add empty scroll.
-                      const holdsRoom = isLiveTurn && isRunning && group.opensTurn && index > 0;
-                      return (
-                        <ChatShell.Turn
-                          key={group.key}
-                          opensTurn={group.opensTurn}
-                          holdsRoom={holdsRoom}
-                          className="gap-4"
-                        >
-                          {group.entries.map(message => (
-                            <MessageScrollerItem
-                              key={getClientMessageKey(message)}
-                              messageId={message.id}
-                              scrollAnchor={threadRailAnchorIds.has(message.id)}
-                            >
-                              <MessageRow
-                                message={message}
-                                hasModelList={hasModelList}
-                                isSpeaking={isSpeaking}
-                                onReadAloud={readAloud}
-                                onStopSpeaking={stopSpeaking}
-                              />
-                            </MessageScrollerItem>
-                          ))}
-                          {isLiveTurn && showPending && (
-                            <PendingIndicator className="animate-in delay-300 duration-200 fade-in-0 fill-mode-backwards" />
-                          )}
-                        </ChatShell.Turn>
-                      );
-                    })}
-                  </ArrivalScope>
-                  {!isRunning && <SaveFullConversationAction />}
-                </ChatShell.Transcript>
-              )}
-            </ChatShell.Content>
-            <ChatShell.Dock
-              data-testid={landingShown ? 'thread-landing' : undefined}
-              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
-            >
-              {landingShown ? null : <ChatShell.ScrollButton />}
-              <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
-                {landingShown ? (
-                  <>
-                    <ThreadWelcome agentName={agentName} />
-                    {agentId ? <AgentChannelsCard agentId={agentId} /> : null}
-                  </>
-                ) : (
-                  <>
-                    {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
-                    <TaskPanel />
-                  </>
+        <ChatShell
+          className="h-full"
+          scroller={{
+            autoScroll: true,
+            defaultScrollPosition: 'last-anchor',
+            onReachStart: onLoadPrevious,
+            preserveScrollOnPrepend: Boolean(onLoadPrevious),
+          }}
+          data-testid="thread-wrapper"
+        >
+          <ChatShell.Stage>
+            <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
+              <ThreadRailLayer turns={threadRailTurns} />
+              <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
+                {isLoadingPrevious && (
+                  <ChatShell.Column
+                    data-testid="thread-history-older-skeleton"
+                    aria-busy="true"
+                    aria-label="Loading older messages"
+                    className="py-3"
+                  >
+                    <ChatMessagesLoadingSkeleton />
+                  </ChatShell.Column>
                 )}
-                <div className={landingShown ? 'starter-prompt' : undefined}>
-                  <AgentComposer
-                    agentId={agentId}
-                    threadId={threadId}
-                    hasModelList={hasModelList}
-                    hideModelSwitcher={hideModelSwitcher}
-                    runOptionsSlot={runOptionsSlot}
-                    refreshThreadList={refreshThreadList}
-                  />
-                </div>
-                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
-              </ChatShell.Column>
-            </ChatShell.Dock>
-          </ChatShell.Viewport>
-        </ChatShell.Stage>
-      </ChatShell>
-    </ComposerAttachmentsProvider>
+                {isEmpty && isHistoryLoading ? (
+                  <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
+                    <ChatMessagesLoadingSkeleton />
+                  </ChatShell.Column>
+                ) : landingShown ? null : (
+                  <ChatShell.Transcript
+                    ref={messagesContainerRef}
+                    data-testid="thread-message-column"
+                    className="flex-1 gap-4 py-4"
+                  >
+                    <BracketOverlay containerRef={messagesContainerRef} />
+                    <TranscriptAnnotations />
+                    {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
+                    <ArrivalScope>
+                      {turnGroups.map((group, index) => {
+                        const isLiveTurn = index === turnGroups.length - 1;
+                        // The first turn opens at the top already; room under it would only add empty scroll.
+                        const holdsRoom = isLiveTurn && isRunning && group.opensTurn && index > 0;
+                        return (
+                          <ChatShell.Turn
+                            key={group.key}
+                            opensTurn={group.opensTurn}
+                            holdsRoom={holdsRoom}
+                            className="gap-4"
+                          >
+                            {group.entries.map(message => (
+                              <MessageScrollerItem
+                                key={getClientMessageKey(message)}
+                                messageId={message.id}
+                                scrollAnchor={threadRailAnchorIds.has(message.id)}
+                              >
+                                <MessageRow
+                                  message={message}
+                                  hasModelList={hasModelList}
+                                  isSpeaking={isSpeaking}
+                                  onReadAloud={readAloud}
+                                  onStopSpeaking={stopSpeaking}
+                                />
+                              </MessageScrollerItem>
+                            ))}
+                            {isLiveTurn && showPending && (
+                              <PendingIndicator className="animate-in delay-300 duration-200 fade-in-0 fill-mode-backwards" />
+                            )}
+                          </ChatShell.Turn>
+                        );
+                      })}
+                    </ArrivalScope>
+                    {!isRunning && <SaveFullConversationAction />}
+                  </ChatShell.Transcript>
+                )}
+              </ChatShell.Content>
+              <ChatShell.Dock
+                data-testid={landingShown ? 'thread-landing' : undefined}
+                className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+              >
+                {landingShown ? null : <ChatShell.ScrollButton />}
+                <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
+                  {landingShown ? (
+                    <>
+                      <ThreadWelcome agentName={agentName} />
+                      {agentId ? <AgentChannelsCard agentId={agentId} /> : null}
+                    </>
+                  ) : (
+                    <>
+                      {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                      <TaskPanel />
+                    </>
+                  )}
+                  <div className={landingShown ? 'starter-prompt' : undefined}>
+                    <AgentComposer
+                      agentId={agentId}
+                      threadId={threadId}
+                      hasModelList={hasModelList}
+                      hideModelSwitcher={hideModelSwitcher}
+                      runOptionsSlot={runOptionsSlot}
+                      refreshThreadList={refreshThreadList}
+                    />
+                  </div>
+                  {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
+                </ChatShell.Column>
+              </ChatShell.Dock>
+            </ChatShell.Viewport>
+          </ChatShell.Stage>
+        </ChatShell>
+      </ComposerAttachmentsProvider>
+    </ComputerThreadProvider>
   );
 };
 

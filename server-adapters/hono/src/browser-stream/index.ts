@@ -1,4 +1,3 @@
-import type { createNodeWebSocket as CreateNodeWebSocket } from '@hono/node-ws';
 import type { Mastra } from '@mastra/core/mastra';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
@@ -6,18 +5,13 @@ import type { Context, Env, Hono, MiddlewareHandler, Schema } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 
 import { createAuthMiddleware } from '../auth-middleware';
+import { isOriginAllowed, isSameOrigin } from '../shared/origin';
+import type { BrowserStreamOrigin } from '../shared/origin';
+import { createWebSocketSupport } from '../shared/websocket-support';
+import type { WebSocketSupport } from '../shared/websocket-support';
 import { UpgradeTicketStore } from './upgrade-tickets';
 
 const TICKET_BODY_MAX_BYTES = 4 * 1024;
-
-/**
- * Allowed `Origin` values for browser WebSocket upgrades. Accepts the same shape
- * as Hono's `cors.origin` option.
- */
-export type BrowserStreamOrigin =
-  | string
-  | string[]
-  | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
 
 /**
  * Hono-specific browser stream configuration.
@@ -53,50 +47,18 @@ export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
    * left as-is so cross-origin Studio deployments keep working.
    */
   allowedOrigins?: BrowserStreamOrigin;
+
+  /**
+   * Shared WebSocket support to register the upgrade route on. Pass the same
+   * instance to every WebSocket route family on the app; when omitted one is
+   * created here.
+   *
+   * @internal
+   */
+  webSocket?: WebSocketSupport | null;
 }
 
-/**
- * Resolve an `allowedOrigins` value against the request's `Origin` header.
- *
- * Mirrors Hono's `cors.origin` semantics so the same config value means the same
- * thing on the upgrade as it does on the HTTP routes: `'*'` allows everything,
- * array entries match literally, and a callback is only an approval when it
- * returns the request's own origin (the value Hono would echo back) or `'*'`.
- */
-async function isOriginAllowed(allowedOrigins: BrowserStreamOrigin, origin: string, c: Context): Promise<boolean> {
-  if (Array.isArray(allowedOrigins)) {
-    return allowedOrigins.includes(origin);
-  }
-  if (typeof allowedOrigins === 'function') {
-    const allowed = await allowedOrigins(origin, c);
-    return allowed === origin || allowed === '*';
-  }
-  return allowedOrigins === '*' || allowedOrigins === origin;
-}
-
-/**
- * Is the `Origin` header the server's own origin?
- *
- * A Studio served by this server connects back to the same host, and operators
- * don't add their own origin to a CORS allowlist because same-origin requests
- * never needed CORS. Comparing hosts (rather than scheme + host) keeps that
- * working behind TLS-terminating proxies, where the server sees `http` while the
- * browser sends `https`.
- */
-function isSameOrigin(origin: string, requestHost: string | undefined): boolean {
-  if (!requestHost) {
-    return false;
-  }
-  let originHost: string;
-  try {
-    originHost = new URL(origin).host;
-  } catch {
-    return false;
-  }
-  // `x-forwarded-host` may list several hosts; the first is the client-facing one.
-  const host = (requestHost.split(',')[0] ?? '').trim();
-  return originHost !== '' && originHost.toLowerCase() === host.toLowerCase();
-}
+export type { BrowserStreamOrigin };
 
 /**
  * Set up WebSocket-based browser stream endpoint for real-time screencast viewing.
@@ -145,20 +107,13 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   app: Hono<E, S, B>,
   config: HonoBrowserStreamConfig,
 ): Promise<BrowserStreamResult | null> {
-  // Dynamic import to avoid bundling ws into non-Node environments (e.g. Cloudflare Workers).
-  // The variable-based specifier prevents bundlers from resolving the module at build time.
-  let createNodeWebSocket: typeof CreateNodeWebSocket;
-  try {
-    const mod = '@hono/node-ws';
-    const honoNodeWs = await import(/* @vite-ignore */ /* webpackIgnore: true */ mod);
-    createNodeWebSocket = honoNodeWs.createNodeWebSocket;
-  } catch {
+  const webSocket = config.webSocket === undefined ? await createWebSocketSupport(app) : config.webSocket;
+  if (!webSocket) {
     // @hono/node-ws is not available (e.g. no ws package installed).
     // This is expected in non-Node environments — silently disable browser streaming.
     return null;
   }
-
-  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+  const { injectWebSocket, upgradeWebSocket } = webSocket;
   const registry = new ViewerRegistry();
 
   // Normalize the API prefix so we can build paths like `${apiPrefix}/agents/...`
@@ -390,5 +345,5 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
     }
   });
 
-  return { injectWebSocket: injectWebSocket as (server: unknown) => void, registry };
+  return { injectWebSocket, registry };
 }
