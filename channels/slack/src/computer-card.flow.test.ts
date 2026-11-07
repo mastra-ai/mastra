@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { createSlackAdapter } from '@chat-adapter/slack';
 import type { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -122,7 +123,8 @@ function makeCards(overrides: Partial<ConstructorParameters<typeof ComputerCards
   return { cards, calls };
 }
 
-const ctx = (chatThreadId: string) => ({ platform: 'slack', chatThread: { id: chatThreadId }, threadId: 'th-1' }) as any;
+const ctx = (chatThreadId: string) =>
+  ({ platform: 'slack', chatThread: { id: chatThreadId }, threadId: 'th-1' }) as any;
 const part = (data: Record<string, unknown>) => ({ type: 'data-computer' as const, data });
 
 describe('card lifecycle', () => {
@@ -133,7 +135,10 @@ describe('card lifecycle', () => {
   ] as const) {
     it(`posts once into the ${label} thread`, async () => {
       const { cards, calls } = makeCards();
-      await cards.onDataPart(part({ computerId: 'c1', threadId: 'th-1', name: 'Desk', status: 'attached' }), ctx(chatThreadId));
+      await cards.onDataPart(
+        part({ computerId: 'c1', threadId: 'th-1', name: 'Desk', status: 'attached' }),
+        ctx(chatThreadId),
+      );
       expect(calls).toHaveLength(1);
       expect(calls[0]!.method).toBe('chat.postMessage');
       expect(calls[0]!.args.channel).toBe(channel);
@@ -196,50 +201,53 @@ describe('card lifecycle', () => {
   });
 });
 
+async function bootProvider() {
+  vi.spyOn(SlackManifestClient.prototype, 'updateApp').mockResolvedValue(undefined as any);
+  const store = new InMemoryStore();
+  const channels = (await store.getStore('channels'))!;
+  await channels.saveInstallation({
+    id: 'inst-1',
+    platform: 'slack',
+    agentId: 'agent-1',
+    status: 'active',
+    webhookId: 'w1',
+    configHash: 'x',
+    data: {
+      appId: 'A1',
+      clientId: 'cid',
+      clientSecret: 'cs',
+      signingSecret: 'ss',
+      teamId: 'T1',
+      botToken: 'xoxb-test',
+      botUserId: 'UBOT',
+    },
+  } as any);
+  let set: any;
+  const agent: any = {
+    name: 'Helper',
+    getDescription: () => 'Helps',
+    getChannels: () => set,
+    setChannels: (c: any) => (set = c),
+  };
+  const provider = new SlackProvider({ tokenResolver: async () => 'token' });
+  const fakeMastra = {
+    getStorage: () => store,
+    getAgentById: () => agent,
+    getAgent: () => agent,
+    getLogger: () => undefined,
+    getServer: () => undefined,
+  } as unknown as Mastra;
+  provider.__attach(fakeMastra);
+  await provider.initialize();
+  return { provider, channels: set, mastra: fakeMastra };
+}
+
 describe('provider wiring', () => {
   afterEach(() => {
     delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
   });
 
-  async function boot() {
-    vi.spyOn(SlackManifestClient.prototype, 'updateApp').mockResolvedValue(undefined as any);
-    const store = new InMemoryStore();
-    const channels = (await store.getStore('channels'))!;
-    await channels.saveInstallation({
-      id: 'inst-1',
-      platform: 'slack',
-      agentId: 'agent-1',
-      status: 'active',
-      webhookId: 'w1',
-      configHash: 'x',
-      data: {
-        appId: 'A1',
-        clientId: 'cid',
-        clientSecret: 'cs',
-        signingSecret: 'ss',
-        teamId: 'T1',
-        botToken: 'xoxb-test',
-        botUserId: 'UBOT',
-      },
-    } as any);
-    let set: any;
-    const agent: any = {
-      name: 'Helper',
-      getDescription: () => 'Helps',
-      getChannels: () => set,
-      setChannels: (c: any) => (set = c),
-    };
-    const provider = new SlackProvider({ tokenResolver: async () => 'token' });
-    provider.__attach({
-      getStorage: () => store,
-      getAgentById: () => agent,
-      getAgent: () => agent,
-      getLogger: () => undefined,
-      getServer: () => undefined,
-    } as unknown as Mastra);
-    await provider.initialize();
-    return { provider, channels: set };
-  }
+  const boot = bootProvider;
 
   it('flag off: adapter entry has no onDataPart and no computer route', async () => {
     const { provider, channels } = await boot();
@@ -260,5 +268,211 @@ describe('provider wiring', () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toBe('Open this computer from its Slack card.');
+  });
+});
+
+describe('details + buttons', () => {
+  const key = deriveRefKey(installation.signingSecret);
+  const chatThreadId = 'slack:C1:1700000000.000100';
+  const goodRef = signRef(key, { teamId: 'T1', computerId: 'c1', threadId: 'th-1' });
+
+  function harness(
+    opts: { holder?: 'agent' | 'human'; resourceId?: string; controlThrows?: boolean; noControl?: boolean } = {},
+  ) {
+    const thread = {
+      id: 'th-1',
+      resourceId: opts.resourceId ?? 'slack:U1',
+      metadata: { channel_platform: 'slack', channel_externalThreadId: chatThreadId },
+    };
+    const control = vi.fn(async (_id: string, _scope: unknown, input: { action: 'take' | 'release' }) => {
+      if (opts.controlThrows) throw new Error('not attached');
+      return { holder: input.action === 'take' ? ('human' as const) : ('agent' as const), notified: true };
+    });
+    const controlState = vi.fn(async () => ({ holder: opts.holder ?? ('agent' as const) }));
+    const mastra = {
+      getStorage: () => ({
+        getStore: async () => ({ getThreadById: async ({ threadId }: any) => (threadId === 'th-1' ? thread : null) }),
+      }),
+      getComputers: () => (opts.noControl ? { tools: () => ({}) } : { control, controlState }),
+    };
+    const embedUrl = vi.fn(async (a: any) => `https://embed.example/${a.mode}`);
+    const h = makeCards({ getMastra: () => mastra as any, embedUrl });
+    return { ...h, control, embedUrl };
+  }
+  const click = (over: Record<string, unknown> = {}) => ({
+    actionId: 'computer_take',
+    value: goodRef,
+    threadId: chatThreadId,
+    messageId: '1700000001.000001',
+    user: { userId: 'U1' },
+    raw: { team: { id: 'T1' } },
+    ...over,
+  });
+
+  it('owner Take control calls control(take) with the thread scope and flips the card', async () => {
+    const { cards, calls, control } = harness();
+    expect(await cards.handleAction(click())).toBe(true);
+    expect(control).toHaveBeenCalledWith('c1', { threadId: 'th-1', resourceId: 'slack:U1' }, { action: 'take' });
+    expect(calls.at(-1)!.method).toBe('chat.update');
+    expect(calls.at(-1)!.args.text).toContain('you have control');
+  });
+
+  it('Hand back calls control(release), which is what wakes the agent (#29675)', async () => {
+    const { cards, control, calls } = harness({ holder: 'human' });
+    await cards.handleAction(click({ actionId: 'computer_release' }));
+    expect(control).toHaveBeenCalledWith('c1', expect.anything(), { action: 'release' });
+    expect(calls.at(-1)!.args.text).toContain('agent has control');
+  });
+
+  for (const [label, over] of [
+    ['non-owner', { user: { userId: 'U2' } }],
+    ['forged ref', { value: goodRef.replace(/.$/, c => (c === 'A' ? 'B' : 'A')) }],
+    ['other team', { raw: { team: { id: 'T9' } } }],
+    ['button copied into another thread', { threadId: 'slack:C2:1.1' }],
+  ] as const) {
+    it(`refuses ${label} with an ephemeral and never calls control`, async () => {
+      const { cards, calls, control } = harness();
+      expect(await cards.handleAction(click(over as any))).toBe(true);
+      expect(control).not.toHaveBeenCalled();
+      expect(calls.map(c => c.method)).toEqual(['chat.postEphemeral']);
+    });
+  }
+
+  it('custom resourceId scheme refuses (stricter v0 owner check)', async () => {
+    const { cards, control } = harness({ resourceId: 'user-42' });
+    await cards.handleAction(click());
+    expect(control).not.toHaveBeenCalled();
+  });
+
+  it('control throwing or missing refuses without crashing', async () => {
+    for (const o of [{ controlThrows: true }, { noControl: true }]) {
+      const { cards, calls } = harness(o);
+      expect(await cards.handleAction(click())).toBe(true);
+      expect(calls.map(c => c.method)).toEqual(['chat.postEphemeral']);
+    }
+  });
+
+  it('other action ids fall through', async () => {
+    const { cards } = harness();
+    expect(await cards.handleAction(click({ actionId: 'tool_approve:x' }))).toBe(false);
+  });
+
+  const details = (over: Record<string, unknown> = {}, team = 'T1') => ({
+    team_id: team,
+    event: { type: 'entity_details_requested', user: 'U1', trigger_id: 'trig', external_ref: { id: goodRef }, ...over },
+  });
+
+  it('owner details gets a framed preview in watch/control mode by holder', async () => {
+    for (const holder of ['agent', 'human'] as const) {
+      const { cards, calls, embedUrl } = harness({ holder });
+      await cards.handleDetails(details());
+      expect(embedUrl).toHaveBeenCalledWith({
+        computerId: 'c1',
+        threadId: 'th-1',
+        resourceId: 'slack:U1',
+        mode: holder === 'human' ? 'control' : 'watch',
+      });
+      const call = calls.find(c => c.method === 'entity.presentDetails')!;
+      expect(call.args.trigger_id).toBe('trig');
+      expect(call.args.metadata.entity_payload.attributes.full_size_preview.preview_url).toContain('embed.example');
+    }
+  });
+
+  it('non-owner details gets is_supported:false and no embed URL is minted', async () => {
+    const { cards, calls, embedUrl } = harness();
+    await cards.handleDetails(details({ user: 'U2' }));
+    expect(embedUrl).not.toHaveBeenCalled();
+    expect(calls[0]!.args.metadata.entity_payload.attributes.full_size_preview).toEqual({ is_supported: false });
+  });
+
+  it('forged ref or foreign team: no presentDetails call at all', async () => {
+    for (const d of [details({ external_ref: { id: 'c1:evil:mac' } }), details({}, 'T9')]) {
+      const { cards, calls } = harness();
+      await cards.handleDetails(d);
+      expect(calls).toHaveLength(0);
+    }
+  });
+});
+
+describe('real Slack payloads through the events route', () => {
+  afterEach(() => {
+    delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    vi.restoreAllMocks();
+  });
+
+  function signed(body: string, contentType: string, headers: Record<string, string> = {}) {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = 'v0=' + crypto.createHmac('sha256', 'ss').update(`v0:${ts}:${body}`).digest('hex');
+    const h: Record<string, string> = {
+      'x-slack-request-timestamp': ts,
+      'x-slack-signature': sig,
+      'content-type': contentType,
+      ...headers,
+    };
+    const raw = new Request('https://example.com/slack/events/w1', { method: 'POST', headers: h, body });
+    return {
+      req: {
+        url: 'https://example.com/slack/events/w1',
+        method: 'POST',
+        param: (k: string) => (k === 'webhookId' ? 'w1' : undefined),
+        header: (k: string) => h[k.toLowerCase()],
+        text: async () => body,
+        raw,
+      },
+      json: (o: unknown, status = 200) => Response.json(o, { status }),
+      get: () => undefined,
+      executionCtx: undefined,
+    } as any;
+  }
+
+  async function events(mastra: any, provider: SlackProvider) {
+    const route = provider.getRoutes().find(r => r.path === '/slack/events/:webhookId')!;
+    return (route as any).createHandler({ mastra });
+  }
+
+  it('block_actions form payload reaches the card handler with user.userId and value', async () => {
+    process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+    const seen: any[] = [];
+    vi.spyOn(ComputerCards.prototype, 'handleAction').mockImplementation(async (e: any) => {
+      seen.push(e);
+      return true;
+    });
+    const { provider, mastra, channels } = await bootProvider();
+    await channels.initialize(mastra);
+    const payload = {
+      type: 'block_actions',
+      team: { id: 'T1' },
+      user: { id: 'U1', team_id: 'T1', username: 'u' },
+      api_app_id: 'A1',
+      trigger_id: 'trig',
+      channel: { id: 'C1' },
+      container: { type: 'message', channel_id: 'C1', message_ts: '1700000001.000001', thread_ts: '1700000000.000100' },
+      message: { ts: '1700000001.000001', thread_ts: '1700000000.000100', text: 'Computer' },
+      actions: [{ type: 'button', action_id: 'computer_take', block_id: 'b', value: 'c1:x:y', action_ts: '1' }],
+    };
+    const body = 'payload=' + encodeURIComponent(JSON.stringify(payload));
+    const handler = await events(mastra, provider);
+    const res: Response = await handler(signed(body, 'application/x-www-form-urlencoded'));
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toMatchObject({ actionId: 'computer_take', value: 'c1:x:y', user: { userId: 'U1' } });
+    expect(seen[0].threadId).toBe('slack:C1:1700000000.000100');
+    expect(seen[0].raw.team.id).toBe('T1');
+  });
+
+  it('entity_details_requested is acked; retries are ignored; flag off never intercepts', async () => {
+    process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+    const spy = vi.spyOn(ComputerCards.prototype, 'handleDetails').mockResolvedValue();
+    const { provider, mastra } = await bootProvider();
+    const body = JSON.stringify({
+      type: 'event_callback',
+      team_id: 'T1',
+      event: { type: 'entity_details_requested', trigger_id: 't' },
+    });
+    const handler = await events(mastra, provider);
+    expect((await handler(signed(body, 'application/json'))).status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+    await handler(signed(body, 'application/json', { 'x-slack-retry-num': '1' }));
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });
