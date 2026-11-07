@@ -238,6 +238,7 @@ describe('withDesktop', () => {
     'xdotool',
     'scrot',
     'xterm',
+    'fonts-dejavu-core',
     'dbus-x11',
     'x11-utils',
   ];

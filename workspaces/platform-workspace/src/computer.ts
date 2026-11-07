@@ -33,12 +33,13 @@ export const DESKTOP_PACKAGES: readonly string[] = [
   'xdotool',
   'scrot',
   'xterm',
+  'fonts-dejavu-core',
   'dbus-x11',
   'x11-utils',
 ];
 
 const DISPLAY = ':1';
-const SCREEN = '1280x800x24';
+const SCREEN = '1024x640x24';
 const VNC_PORT = 5900;
 export const COMPUTER_VIEWER_PORT = 6080;
 const ENV = { DISPLAY };
@@ -61,6 +62,7 @@ for b in Xvfb openbox x11vnc websockify xdotool scrot xdpyinfo xprop xterm; do
   command -v "$b" >/dev/null 2>&1 || missing=1
 done
 [ -f /usr/share/novnc/vnc.html ] || missing=1
+[ -f /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf ] || missing=1
 if [ "$missing" = 1 ]; then
   sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/tmp/.mastra-computer-install.log 2>&1 &&
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ${DESKTOP_PACKAGES.join(' ')} >>/tmp/.mastra-computer-install.log 2>&1 ||
@@ -87,7 +89,7 @@ vnc_ok || launch x11vnc -display ${DISPLAY} -forever -shared -nopw -rfbport ${VN
 await_ok vnc_ok
 web_ok || launch websockify --web /usr/share/novnc 0.0.0.0:${COMPUTER_VIEWER_PORT} 127.0.0.1:${VNC_PORT}
 await_ok web_ok
-term_ok || launch xterm
+term_ok || launch xterm -fa 'DejaVu Sans Mono' -fs 14
 await_ok term_ok
 echo "$(date -u +%FT%TZ) launched=$n" >>/tmp/.mastra-computer-ensure.log
 echo "launched=$n"
