@@ -1,0 +1,39 @@
+---
+'@mastra/factory': minor
+'mastra': patch
+---
+
+A board phase now does exactly what its stored fields say, so an admin who edits a phase changes what actually runs. Entering a working phase starts its `runner.skill` in the `runner.context` session, with its `instructions`, for every card source. Code handlers no longer start work in the background.
+
+**Work runs on stored runners.** Triage runs `factory-triage`, Planning `factory-plan`, Building the new `factory-build`, Review `factory-self-review` and PR review `factory-review`. You can edit each one in Settings › Boards or through the boards API. Agents now read the card's details (sources, labels, author trust, plan approval, self-review rounds and verdicts, the pull request under review) from a new `<factory-work-item>` signal instead of their kickoff message.
+
+**Building works as a goal.** A runner can set `goal: { objective, maxRuns }`. The run then keeps going until a judge decides the objective is met or needs a person. Building pursues the approved plan this way, with up to 20 runs. Factory marks the goal done when the card leaves the phase.
+
+**New phase fields:**
+
+- `exitTool.next`: where the exit tool moves the card when it succeeds. Planning's `submit_plan` moves an approved plan to Building.
+- `tools`: the Factory tools a phase gives the session working in it (`factory_record_review_verdict`, `factory_review_source`). Tools follow the card's phase, not the session's role.
+- `manualEntry`: only people and provider events may move cards into the phase.
+- The `item.pullRequest` rule fact. Work's Review starts on its own only while the card has no open pull request.
+
+```ts
+{
+  key: 'execute',
+  name: 'Building',
+  kind: 'working',
+  runner: {
+    skill: 'factory-build',
+    context: 'work',
+    goal: { objective: 'Done when every step of the approved plan is implemented, tested and pushed.', maxRuns: 20 },
+  },
+  nextPhases: ['review', 'pr-review', 'planning', 'done', 'canceled'],
+}
+```
+
+**Self-review off (the default) goes straight to PR review.** The builder opens the change request and moves the card to PR review. With self-review on, an approving self-review opens the change request and moves the card to PR review.
+
+**Existing projects are updated once, keeping your edits.** On its first load after the upgrade, each project's stored Work board gets the new runner, exit-tool, tools and auto-start fields. Only fields that still hold the old default are filled; anything you edited stays as it is. Factory logs the fields it filled.
+
+**Runner fields are no longer locked.** On Work and app boards, `422 code_behaviour` now covers only the phases, kinds and moves Factory's code relies on. The boards API's `codeBehaviour` reports only `requiredNextPhases` per phase.
+
+**Deprecated and ignored:** `onEnter`, `onExit` and `outcomes` on `defineBoard()` phases. Boards that declare them still compile and log a warning once, but no handler runs. Outcome targets stay allowed moves. Move a handler's work into `runner.skill`.
