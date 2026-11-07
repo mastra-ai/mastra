@@ -54,10 +54,10 @@ import {
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
-  seedMessageListState,
+  dehydrateMessageListState,
   storeMessageListState,
   buildDeferredStepFinishChunk,
-  readAccumulatedSteps,
+  loadAccumulatedSteps,
   storeAccumulatedSteps,
   expandDurableSteps,
   carriedSpanClocks,
@@ -441,23 +441,26 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const isTaskCompleteStep = withExecutionFence(this.isTaskCompleteStep());
     const goalStep = withExecutionFence(this.goalStep());
     const executeLLM = llmExecutionStep.execute;
-    llmExecutionStep.execute = async params => {
-      let workflowState = params.state;
-      const setState: typeof params.setState = async nextState => {
-        await params.setState(nextState);
-        workflowState = nextState;
-      };
-      const llmOutput = await executeLLM(withParams(params, { setState }));
+    llmExecutionStep.execute = async stepParams => {
+      // On abort this step stores both the transcript and the step records. On
+      // storage v1 the default engine keeps only a step's last setState, so each
+      // write carries the ones before it.
+      let written: Record<string, unknown> = {};
+      const params = withParams(stepParams, {
+        setState: async (update: Record<string, unknown>) => {
+          written = { ...written, ...update };
+          await stepParams.setState(written);
+        },
+      });
+      const llmOutput = await executeLLM(params);
       if (llmOutput && llmOutput.stepResult.reason === 'abort') {
         const initData = params.getInitData() as IterationState;
         // Preserve transcript, step records, usage and span bookkeeping, then
         // finish only this iteration. The outer loop still runs its normal
-        // terminal side effects. Both stores replace workflow state, so each
-        // builds on the state the previous one wrote.
+        // terminal side effects. `getState` includes this step's `setState`
+        // changes, so each store builds on the state the previous one wrote.
         const executionOutput = await llmMappingStep.execute(
           withParams(params, {
-            state: workflowState,
-            setState,
             bail: params.bail<unknown>,
             inputData: {
               llmOutput,
@@ -471,12 +474,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         );
         if (!executionOutput) return executionOutput;
         const { accumulatedSteps, ...update } = createBaseIterationStateUpdate({
-          currentState: { ...initData, accumulatedSteps: readAccumulatedSteps(workflowState, initData) },
+          currentState: { ...initData, accumulatedSteps: await loadAccumulatedSteps(params, initData) },
           executionOutput,
         });
         return params.bail<IterationState>({
           ...update,
-          ...(await storeAccumulatedSteps({ state: workflowState, setState }, accumulatedSteps)),
+          ...(await storeAccumulatedSteps(params, accumulatedSteps)),
           modelList: initData.modelList,
         });
       }
@@ -640,7 +643,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             // Use shared function for base state update
             const { accumulatedSteps, ...baseUpdate } = createBaseIterationStateUpdate({
-              currentState: { ...initData, accumulatedSteps: readAccumulatedSteps(params.state, initData) },
+              currentState: { ...initData, accumulatedSteps: await loadAccumulatedSteps(params, initData) },
               executionOutput,
             });
 
@@ -677,7 +680,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   protected override buildContinuationPredicate(): LoopContinuationPredicate {
     return async (params: any) => {
       const state = params.inputData as IterationState;
-      const steps = readAccumulatedSteps(params.state, state);
+      const steps = await loadAccumulatedSteps(params, state);
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
@@ -996,7 +999,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // A suspended run releases too: it may wait indefinitely, and on
           // resume `hydrate` reloads the rows it references from storage.
           onFinish: ({ getInitData }) => {
-            releaseMessageListState({ state: undefined, getInitData });
+            releaseMessageListState({ getInitData });
           },
           validateInputs: false,
           // Engine step events off for the same reason as the iteration
@@ -1025,11 +1028,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // The transcript and the step records ride in workflow state from
             // here on: each persisted snapshot then holds one copy (in `value`)
             // rather than one per step payload. Steps read and update them
-            // there. One write seeds both, since setState replaces state.
-            await seedMessageListState(
-              withParams(params, { state: { ...(params.state as object), accumulatedSteps: [] } }),
-              messageListState,
-            );
+            // there. One write: on storage v1 the default engine keeps only a
+            // step's last setState.
+            await params.setState({
+              accumulatedSteps: [],
+              messageListState: await dehydrateMessageListState(params, messageListState),
+            });
             const iterationState: IterationState = {
               ...input,
               initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
@@ -1058,7 +1062,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
             const logger = mastra?.getLogger?.();
 
-            const storedSteps = readAccumulatedSteps(params.state, state);
+            const storedSteps = await loadAccumulatedSteps(params, state);
             const steps = expandDurableSteps(storedSteps);
 
             // Extract final text from last step

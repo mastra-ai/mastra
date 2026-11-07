@@ -62,7 +62,8 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
 
     const step1 = createStep({
       id: 'step1',
-      execute: async ({ state, setState }: any) => {
+      execute: async ({ getState, setState }: any) => {
+        const state = await getState();
         // Track call via mock
         const callsMock = mockRegistry.get('basic-single-step-with-state:calls');
         callsMock();
@@ -249,12 +250,14 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
   // Test: should execute multiple steps in parallel with state
   {
     mockRegistry.register('basic-parallel-with-state:step1Action', () =>
-      vi.fn().mockImplementation(async ({ state }: any) => {
+      vi.fn().mockImplementation(async ({ getState }: any) => {
+        const state = await getState();
         return { value: 'step1', stateValue: state.value };
       }),
     );
     mockRegistry.register('basic-parallel-with-state:step2Action', () =>
-      vi.fn().mockImplementation(async ({ state }: any) => {
+      vi.fn().mockImplementation(async ({ getState }: any) => {
+        const state = await getState();
         return { value: 'step2', stateValue: state.value };
       }),
     );

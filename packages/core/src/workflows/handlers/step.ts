@@ -37,9 +37,11 @@ import type {
   TimeTravelExecutionParams,
 } from '../types';
 import {
+  applyStateDelta,
   validateStepInput,
   createDeprecationProxy,
   defineLazyWriter,
+  defineStateAccessors,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
@@ -411,6 +413,7 @@ export async function executeStep(
         resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
         stateUpdate: any;
         stateBase?: Record<string, unknown>;
+        stateDelta?: Record<string, unknown>;
         requestContextUpdate: Record<string, any> | null;
       } = {
         suspendedPaths: {},
@@ -506,7 +509,8 @@ export async function executeStep(
         };
       }
 
-      const setState = async (state: any, base?: Record<string, unknown>) => {
+      // A nested run hands back its state with the version of this run's state it started from.
+      const handBackState = async (state: any, base?: Record<string, unknown>) => {
         const { stateData, validationError: stateValidationError } = await validateStepStateData({
           stateData: state,
           step,
@@ -517,6 +521,40 @@ export async function executeStep(
         }
         contextMutations.stateUpdate = stateData;
         contextMutations.stateBase = base;
+      };
+
+      // The state as this step sees it, with its own setState changes.
+      const stateView = (): Record<string, any> => {
+        if (contextMutations.stateDelta) {
+          const view = { ...executionContext.state };
+          applyStateDelta(view, contextMutations.stateDelta);
+          return view;
+        }
+        return contextMutations.stateUpdate
+          ? { ...executionContext.state, ...contextMutations.stateUpdate }
+          : executionContext.state;
+      };
+
+      // On storage v2, setState merges its top-level keys into the state and validates the result.
+      // Only the keys it was given change: a key the step's stateSchema strips isn't set, as on v1.
+      const mergeState = async (update: Record<string, unknown> | null | undefined) => {
+        const changes = update ?? {};
+        const merged = { ...stateView() };
+        applyStateDelta(merged, changes);
+        const { stateData, validationError: stateValidationError } = await validateStepStateData({
+          stateData: merged,
+          step,
+          validateInputs: engine.options?.validateInputs ?? true,
+        });
+        if (stateValidationError) {
+          throw stateValidationError;
+        }
+        const delta = { ...contextMutations.stateDelta };
+        for (const [key, value] of Object.entries(changes)) {
+          if (value === undefined) delta[key] = undefined;
+          else if (Object.prototype.hasOwnProperty.call(stateData, key)) delta[key] = stateData[key];
+        }
+        contextMutations.stateDelta = delta;
       };
 
       const stepParams = {
@@ -531,7 +569,8 @@ export async function executeStep(
         actor,
         inputData,
         state: executionContext.state,
-        setState: (state: any) => setState(state),
+        // A nested workflow hands back its state through the internal path, as on v1.
+        setState: (state: any) => (journal && !isNestedWorkflow ? mergeState(state) : handBackState(state)),
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
@@ -610,7 +649,7 @@ export async function executeStep(
           isNestedWorkflow && journal
             ? (((state: unknown) => journal.baseFor(state)) satisfies ParentStateLink)
             : undefined,
-        [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
+        [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? handBackState : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,
@@ -621,7 +660,7 @@ export async function executeStep(
       };
       const output = await runStep(
         defineLazyWriter(
-          stepParams,
+          defineStateAccessors(stepParams, stateView, !!journal && !isNestedWorkflow),
           () =>
             new ToolStream(
               {
@@ -751,6 +790,7 @@ export async function executeStep(
           : executionContext.state,
       }),
       stateBase: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateBase : undefined,
+      stateDelta: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateDelta : undefined,
     },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps

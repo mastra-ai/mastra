@@ -106,6 +106,14 @@ export function collectTemplateStepIds(template: string): string[] {
   return ids;
 }
 
+/** Whether a template reads the run's state through `${state...}` placeholders. */
+export function templateReadsState(template: string): boolean {
+  for (const match of template.matchAll(TEMPLATE_PLACEHOLDER)) {
+    if (parseTemplatePlaceholder(match[1] ?? '').scope === 'state') return true;
+  }
+  return false;
+}
+
 /**
  * Coerces a resolved placeholder value to a string. Primitives are stringified
  * the normal way; objects and arrays are JSON-encoded so downstream agents can

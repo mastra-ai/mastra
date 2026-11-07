@@ -72,6 +72,7 @@ function setupRegistry(execute: (...args: any[]) => any) {
 function runToolCallStep(resumeData: unknown, args = TOOL_ARGS, suspend = vi.fn()) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
+    getState: async () => ({}),
     inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args },
     mastra: { getLogger: () => undefined },
     suspend,
@@ -109,6 +110,7 @@ function seedMessageListState() {
 async function runMappingStep(toolResults: unknown[]) {
   const step = createDurableLLMMappingStep();
   const output = await (step as any).execute({
+    getState: async () => ({}),
     inputData: {
       llmOutput: {
         messageListState: seedMessageListState(),
@@ -201,7 +203,7 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
           resumeData: { approved: true },
           requestContext: new Map(),
           getInitData: () => makeInitData(),
-          state: { messageListState },
+          getState: async () => ({ messageListState }),
           getStepResultAsync: async () => undefined,
           [PUBSUB_SYMBOL]: mockPubsub(),
         });

@@ -168,6 +168,54 @@ describeForAllEngines(
       expect((task as any).result).toEqual({ summary: 'Research complete on "quantum computing"' });
     }, 30_000);
 
+    // The task turns `completed` before its onResult hook has written the result into the
+    // transcript, here held up by a slow toModelOutput. Durable engines wait for that hook before
+    // the follow-up model call; the main loop never waits in-loop.
+    it.runIf(isDurableEngineVariant(engine))(
+      'shows the follow-up model call a result whose toModelOutput is still running when the task finishes',
+      async () => {
+        const toModelOutput = vi.fn(async (output: { summary?: string }) => {
+          // The placeholder passes through here too, with no summary.
+          if (output.summary === undefined) return { type: 'text', value: 'Research running.' };
+          await new Promise(resolve => setTimeout(resolve, 300));
+          return { type: 'text', value: `Model view: ${output.summary}` };
+        });
+        const research = createTool({
+          id: 'research',
+          description: 'Research a topic in the background',
+          inputSchema: z.object({ topic: z.string() }),
+          outputSchema: z.object({ summary: z.string() }),
+          background: { enabled: true },
+          execute: async ({ topic }) => ({ summary: `Research complete on "${topic}"` }),
+          toModelOutput,
+        });
+
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research slow model output',
+          tools: { research },
+          agentBackgroundTasks: { tools: { research: true } },
+          backgroundTasks: BG_CONFIG,
+          stopWhen: stepCountIs(3),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call-bg-slow', name: 'research', arguments: { topic: 'slow output' } }] },
+            );
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research reported.' });
+          },
+        });
+
+        expect(JSON.stringify(getMock().getRequests()[1]!.body!.messages)).toContain(
+          'Model view: Research complete on \\"slow output\\"',
+        );
+        // Steps that write the result into their own transcript reuse the hook's output.
+        expect(toModelOutput.mock.calls.filter(([output]) => output.summary !== undefined)).toHaveLength(1);
+      },
+      30_000,
+    );
+
     it('runs a foreground tool on the same thread while a background task is still running', async () => {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));

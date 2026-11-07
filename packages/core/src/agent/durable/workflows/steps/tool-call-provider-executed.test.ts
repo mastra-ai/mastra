@@ -60,6 +60,7 @@ function makeInitData() {
 function runToolCallStep(inputData: Record<string, unknown>) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
+    getState: async () => ({}),
     inputData,
     mastra: { getLogger: () => undefined },
     suspend: vi.fn(),
@@ -159,6 +160,7 @@ describe('durable llm-mapping: provider-executed commit gate', () => {
 
     const step = createDurableLLMMappingStep();
     const output = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         llmOutput: {
           messageListState: messageList.serialize(),

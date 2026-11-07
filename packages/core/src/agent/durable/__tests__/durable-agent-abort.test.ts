@@ -152,6 +152,9 @@ describe('DurableAgent abort signal', () => {
     new Mastra({ agents: { durableAgent }, storage, pubsub, logger: false });
     const workflowsStore = (await storage.getStore('workflows'))!;
     const persistedSteps = vi.spyOn(workflowsStore, 'updateWorkflowResults');
+    // Storage v2 runs write step results as entries instead.
+    const appendedSteps = vi.spyOn(workflowsStore, 'appendWorkflowRunEntries');
+    const mergedSteps = vi.spyOn(workflowsStore, 'mergeWorkflowRunStepResult');
     const onAbort = vi.fn();
 
     const { output, abort, cleanup } = await durableAgent.stream('Go', { onAbort });
@@ -161,7 +164,11 @@ describe('DurableAgent abort signal', () => {
     }
     await vi.waitFor(() => expect(onAbort).toHaveBeenCalledTimes(1));
 
-    const stepIds = persistedSteps.mock.calls.map(([args]) => args.stepId);
+    const stepIds = [
+      ...persistedSteps.mock.calls.map(([args]) => args.stepId),
+      ...appendedSteps.mock.calls.flatMap(([args]) => Object.keys(args.steps)),
+      ...mergedSteps.mock.calls.map(([args]) => args.stepId),
+    ];
     if (_kind === 'evented') expect(stepIds).toContain('durable-llm-execution');
     for (const stepId of [
       'extract-tool-calls',

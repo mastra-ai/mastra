@@ -17,7 +17,7 @@ import type {
   StepFlowEntry,
   StepResult,
 } from '../types';
-import { defineLazyWriter } from '../utils';
+import { applyStateDelta, defineLazyWriter, defineStateAccessors } from '../utils';
 import { getControlFlowIdentityAttributes } from './control-flow';
 
 /** The timer resolves both when it expires and when its executor is stopped. */
@@ -94,34 +94,40 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
   try {
     if (fn) {
       const stepCallId = globalThis.crypto.randomUUID();
+      const storageV2 = !!engine.getRunJournal(runId);
       duration = await engine.wrapDurableOperation(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
         return fn(
           defineLazyWriter(
-            {
-              runId,
-              workflowId,
-              mastra: engine.mastra!,
-              requestContext,
-              inputData: prevOutput,
-              state: executionContext.state,
-              setState: async (state: any) => {
-                executionContext.state = state;
+            defineStateAccessors(
+              {
+                runId,
+                workflowId,
+                mastra: engine.mastra!,
+                requestContext,
+                inputData: prevOutput,
+                state: executionContext.state,
+                setState: async (state: any) => {
+                  if (storageV2) applyStateDelta(executionContext.state, state ?? {});
+                  else executionContext.state = state;
+                },
+                retryCount: -1,
+                ...createObservabilityContext({ currentSpan: sleepSpan }),
+                getInitData: () => stepResults?.input as any,
+                ...buildStepResultAccessors(engine, runId, stepResults),
+                // TODO: this function shouldn't have suspend probably?
+                suspend: async (_suspendPayload: any): Promise<any> => {},
+                bail: (() => {}) as () => InnerOutput,
+                abort: () => {
+                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                },
+                [PUBSUB_SYMBOL]: pubsub,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                engine: engine.getEngineContext(),
+                abortSignal: abortController?.signal,
               },
-              retryCount: -1,
-              ...createObservabilityContext({ currentSpan: sleepSpan }),
-              getInitData: () => stepResults?.input as any,
-              ...buildStepResultAccessors(engine, runId, stepResults),
-              // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any): Promise<any> => {},
-              bail: (() => {}) as () => InnerOutput,
-              abort: () => {
-                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
-              },
-              [PUBSUB_SYMBOL]: pubsub,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: engine.getEngineContext(),
-              abortSignal: abortController?.signal,
-            },
+              () => executionContext.state,
+              storageV2,
+            ),
             () =>
               new ToolStream(
                 {
@@ -240,36 +246,42 @@ export async function executeSleepUntil(
   try {
     if (fn) {
       const stepCallId = globalThis.crypto.randomUUID();
+      const storageV2 = !!engine.getRunJournal(runId);
       const dateResult = await engine.wrapDurableOperation(
         `workflow.${workflowId}.sleepUntil.${entry.id}`,
         async () => {
           return fn(
             defineLazyWriter(
-              {
-                runId,
-                workflowId,
-                mastra: engine.mastra!,
-                requestContext,
-                inputData: prevOutput,
-                state: executionContext.state,
-                setState: async (state: any) => {
-                  executionContext.state = state;
+              defineStateAccessors(
+                {
+                  runId,
+                  workflowId,
+                  mastra: engine.mastra!,
+                  requestContext,
+                  inputData: prevOutput,
+                  state: executionContext.state,
+                  setState: async (state: any) => {
+                    if (storageV2) applyStateDelta(executionContext.state, state ?? {});
+                    else executionContext.state = state;
+                  },
+                  retryCount: -1,
+                  ...createObservabilityContext({ currentSpan: sleepUntilSpan }),
+                  getInitData: () => stepResults?.input as any,
+                  ...buildStepResultAccessors(engine, runId, stepResults),
+                  // TODO: this function shouldn't have suspend probably?
+                  suspend: async (_suspendPayload: any): Promise<any> => {},
+                  bail: (() => {}) as () => InnerOutput,
+                  abort: () => {
+                    abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                  },
+                  [PUBSUB_SYMBOL]: pubsub,
+                  [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                  engine: engine.getEngineContext(),
+                  abortSignal: abortController?.signal,
                 },
-                retryCount: -1,
-                ...createObservabilityContext({ currentSpan: sleepUntilSpan }),
-                getInitData: () => stepResults?.input as any,
-                ...buildStepResultAccessors(engine, runId, stepResults),
-                // TODO: this function shouldn't have suspend probably?
-                suspend: async (_suspendPayload: any): Promise<any> => {},
-                bail: (() => {}) as () => InnerOutput,
-                abort: () => {
-                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
-                },
-                [PUBSUB_SYMBOL]: pubsub,
-                [STREAM_FORMAT_SYMBOL]: executionContext.format,
-                engine: engine.getEngineContext(),
-                abortSignal: abortController?.signal,
-              },
+                () => executionContext.state,
+                storageV2,
+              ),
               () =>
                 new ToolStream(
                   {

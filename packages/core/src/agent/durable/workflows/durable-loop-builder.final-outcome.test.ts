@@ -76,7 +76,7 @@ describe('durable final step on a worker with no run-registry entry', () => {
     await finalStep.execute({
       inputData: iterationState,
       getInitData: () => iterationState,
-      state: {},
+      getState: async () => ({}),
       mastra,
       requestContext: new RequestContext(),
       tracingContext: {},

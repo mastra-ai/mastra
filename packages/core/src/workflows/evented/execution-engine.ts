@@ -136,6 +136,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    storageVersion?: 1 | 2;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
@@ -252,6 +253,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     // NOW safe to publish - listener is guaranteed to be registered
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
+    // The processor reads a run's storage version off each event; it can't look it up.
+    const storageVersionTag = params.storageVersion === 2 ? { storageVersion: 2 as const } : {};
     try {
       if (params.resume) {
         const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.resume.resumePath);
@@ -269,7 +272,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
               ? await this.eventProcessor.restoreParentWorkflow(params.parentWorkflow)
               : undefined,
             executionPath: params.resume.resumePath,
-            stepResults: params.resume.stepResults,
+            // On storage v2 successful steps were loaded as summaries; the processor loads them.
+            ...(params.storageVersion !== 2 && { stepResults: params.resume.stepResults }),
             resumeSteps: params.resume.steps,
             prevResult: { status: 'success', output: prevResult?.payload },
             resumeData: params.resume.resumePayload,
@@ -281,6 +285,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             state: resumeState,
             outputOptions: params.outputOptions,
             forEachIndex: params.resume.forEachIndex,
+            ...storageVersionTag,
           },
         });
       } else if (params.timeTravel) {
@@ -304,6 +309,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             format: params.format,
             perStep: params.perStep,
             state: params.timeTravel.state,
+            ...storageVersionTag,
           },
         });
       } else if (params.restart) {
@@ -335,6 +341,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             format: params.format,
             perStep: params.perStep,
             state: params.restart.state,
+            ...storageVersionTag,
           },
         });
       } else {
@@ -351,6 +358,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             perStep: params.perStep,
             initialState: params.initialState,
             outputOptions: params.outputOptions,
+            ...storageVersionTag,
           },
         });
       }

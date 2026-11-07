@@ -587,14 +587,23 @@ export class Tool<
                     },
                   }
                 : baseContext.agent,
+              // Copies descriptors, not values: a workflow's `state` may be a getter that throws.
               workflow: baseContext.workflow
-                ? {
-                    ...baseContext.workflow,
-                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
-                      suspendData = args;
-                      return baseContext.workflow?.suspend?.(args, suspendOptions);
+                ? Object.defineProperties(
+                    {},
+                    {
+                      ...Object.getOwnPropertyDescriptors(baseContext.workflow),
+                      suspend: {
+                        enumerable: true,
+                        configurable: true,
+                        writable: true,
+                        value: (args: any, suspendOptions?: SuspendOptions) => {
+                          suspendData = args;
+                          return baseContext.workflow?.suspend?.(args, suspendOptions);
+                        },
+                      },
                     },
-                  }
+                  )
                 : baseContext.workflow,
               requestContext: executionRequestContext ?? new RequestContext(),
             };

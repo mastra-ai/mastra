@@ -9,6 +9,7 @@ export * from './domains/datasets/fidelity';
 export * from './domains/run-fencing';
 export { createBackgroundTasksTests } from './domains/background-tasks';
 export * from './domains/workflow-step-guards';
+export * from './domains/workflows/runs-table-upgrade';
 export * from './vector-factory';
 export * from './config-validation';
 export * from './client-acceptance';

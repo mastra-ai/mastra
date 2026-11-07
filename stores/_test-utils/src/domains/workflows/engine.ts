@@ -350,7 +350,7 @@ export function createWorkflowEngineTests({
 
     it('sends only the changed steps on each v2 write', async () => {
       const STEPS = 10;
-      const writes: { checkpoint: boolean; status: string; stepIds: string[]; state: boolean }[] = [];
+      const writes: { checkpoint: boolean; status?: string; stepIds: string[]; state: boolean }[] = [];
       const { writeWorkflowRunCheckpoint, appendWorkflowRunEntries, persistWorkflowSnapshot } = store;
       store.writeWorkflowRunCheckpoint = function (args) {
         writes.push({
@@ -364,7 +364,7 @@ export function createWorkflowEngineTests({
       store.appendWorkflowRunEntries = function (args) {
         writes.push({
           checkpoint: false,
-          status: args.header.status,
+          status: args.header?.status,
           stepIds: Object.keys(args.steps),
           state: args.state !== undefined || args.statePatch !== undefined,
         });

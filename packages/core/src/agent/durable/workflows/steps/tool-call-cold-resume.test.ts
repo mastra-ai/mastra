@@ -55,6 +55,7 @@ describe('cold durable tool-call resume (#25978)', () => {
     });
     vi.mocked(resolveRuntime.toolRequiresApproval).mockResolvedValue(true);
     const result = await (createDurableToolCallStep() as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-1', toolName: 'save', args, requireApproval: true },
       resumeData: { approved: false },
       suspendData: { type: 'approval' },
@@ -139,6 +140,7 @@ describe('cold durable tool-call resume (#25978)', () => {
       const transform = { targets: ['display', 'transcript'], transformToolPayload: () => '[redacted]' };
       const step = createDurableToolCallStep();
       const result = await (step as any).execute({
+        getState: async () => ({}),
         inputData: { toolCallId: 'call-1', toolName: 'save', args, requireApproval: kind === 'approval' },
         resumeData: { approved: true },
         suspendData:

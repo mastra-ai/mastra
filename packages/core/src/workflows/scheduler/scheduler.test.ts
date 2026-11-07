@@ -376,6 +376,7 @@ describe('Scheduler', () => {
             ? { type: 'workflow', workflowId: 'wf-test' }
             : { type: 'agent', agentId: 'agent-test', prompt: 'hello' },
         cron: '0 0 10 23 9 * 2026',
+        timezone: 'UTC',
         status: 'active',
         nextFireAt: fireAt,
         createdAt: fireAt,

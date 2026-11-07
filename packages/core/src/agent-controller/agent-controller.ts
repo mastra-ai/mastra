@@ -450,7 +450,7 @@ export class AgentController<TState = {}> {
             AGENTIC_EXECUTION_WORKFLOW_ID,
             DurableStepIds.AGENTIC_LOOP,
             DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 })),
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
         );
       },
       // History lets the runtime skip retained run parts that storage already

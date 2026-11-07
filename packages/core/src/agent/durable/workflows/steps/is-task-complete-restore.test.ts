@@ -34,6 +34,7 @@ function runStep({
   const result = (createDurableIsTaskCompleteStep() as any).execute({
     inputData: state,
     mastra,
+    getState: async () => ({}),
     getInitData: () => ({
       agentId: 'coach',
       agentName: 'Coach',

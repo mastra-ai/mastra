@@ -195,8 +195,11 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       runToken: expect.any(String),
       lastSeq: 4,
       startStateSeq: 4,
-      state: { n: 1 },
+      stateSeq: 4,
+      statePatchCount: 0,
       statePatchBytes: 0,
+      stateBytes: 7,
+      state: { n: 1 },
       steps: { input: { x: 1 }, a: ok(1), b: ok(2) },
       summarizedStepIds: [],
     });
@@ -330,8 +333,11 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       runToken: expect.any(String),
       lastSeq: 1,
       startStateSeq: 0,
-      state: {},
+      stateSeq: 0,
+      statePatchCount: 0,
       statePatchBytes: 0,
+      stateBytes: null,
+      state: {},
       steps: { a: ok(1) },
       summarizedStepIds: [],
     });
@@ -431,6 +437,10 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       runToken: expect.any(String),
       lastSeq: 2,
       startStateSeq: 2,
+      stateSeq: 2,
+      statePatchCount: 0,
+      statePatchBytes: 0,
+      stateBytes: 2,
     });
     expect(await store.loadWorkflowRunHeader({ workflowName: 'wf', runId: 'v1' })).toBeNull();
     expect(await store.loadWorkflowRunHeader({ workflowName: 'wf', runId: 'nope' })).toBeNull();
@@ -456,6 +466,10 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       runToken: expect.any(String),
       lastSeq: 2,
       startStateSeq: 2,
+      stateSeq: 2,
+      statePatchCount: 0,
+      statePatchBytes: 0,
+      stateBytes: 2,
     });
     expect(await store.loadWorkflowRunHeader(run)).toEqual(updated);
 

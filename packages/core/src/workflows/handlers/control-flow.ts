@@ -32,6 +32,7 @@ import type {
 import {
   createDeprecationProxy,
   defineLazyWriter,
+  defineStateAccessors,
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
@@ -455,27 +456,31 @@ export async function executeConditional(
         const conditionCallId = globalThis.crypto.randomUUID();
         const context = createDeprecationProxy(
           defineLazyWriter(
-            {
-              runId,
-              workflowId,
-              mastra: engine.mastra!,
-              requestContext,
-              actor,
-              inputData: prevOutput,
-              state: executionContext.state,
-              retryCount: -1,
-              ...createObservabilityContext({ currentSpan: evalSpan }),
-              getInitData: () => stepResults?.input as any,
-              ...buildStepResultAccessors(engine, runId, stepResults),
-              bail: (() => {}) as () => InnerOutput,
-              abort: () => {
-                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+            defineStateAccessors(
+              {
+                runId,
+                workflowId,
+                mastra: engine.mastra!,
+                requestContext,
+                actor,
+                inputData: prevOutput,
+                state: executionContext.state,
+                retryCount: -1,
+                ...createObservabilityContext({ currentSpan: evalSpan }),
+                getInitData: () => stepResults?.input as any,
+                ...buildStepResultAccessors(engine, runId, stepResults),
+                bail: (() => {}) as () => InnerOutput,
+                abort: () => {
+                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                },
+                [PUBSUB_SYMBOL]: pubsub,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                engine: engine.getEngineContext(),
+                abortSignal: abortController?.signal,
               },
-              [PUBSUB_SYMBOL]: pubsub,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: engine.getEngineContext(),
-              abortSignal: abortController?.signal,
-            },
+              () => executionContext.state,
+              !!engine.getRunJournal(runId),
+            ),
             () =>
               new ToolStream(
                 {
@@ -899,28 +904,32 @@ export async function executeLoop(
       isTrue = await condition(
         createDeprecationProxy(
           defineLazyWriter(
-            {
-              workflowId,
-              runId,
-              mastra: engine.mastra!,
-              requestContext,
-              actor,
-              inputData: result.output,
-              state: executionContext.state,
-              retryCount: -1,
-              ...createObservabilityContext({ currentSpan: evalSpan }),
-              iterationCount: iteration + 1,
-              getInitData: () => stepResults?.input as any,
-              ...buildStepResultAccessors(engine, runId, stepResults),
-              bail: (() => {}) as () => InnerOutput,
-              abort: () => {
-                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+            defineStateAccessors(
+              {
+                workflowId,
+                runId,
+                mastra: engine.mastra!,
+                requestContext,
+                actor,
+                inputData: result.output,
+                state: executionContext.state,
+                retryCount: -1,
+                ...createObservabilityContext({ currentSpan: evalSpan }),
+                iterationCount: iteration + 1,
+                getInitData: () => stepResults?.input as any,
+                ...buildStepResultAccessors(engine, runId, stepResults),
+                bail: (() => {}) as () => InnerOutput,
+                abort: () => {
+                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                },
+                [PUBSUB_SYMBOL]: pubsub,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                engine: engine.getEngineContext(),
+                abortSignal: abortController?.signal,
               },
-              [PUBSUB_SYMBOL]: pubsub,
-              [STREAM_FORMAT_SYMBOL]: executionContext.format,
-              engine: engine.getEngineContext(),
-              abortSignal: abortController?.signal,
-            },
+              () => executionContext.state,
+              !!engine.getRunJournal(runId),
+            ),
             () =>
               new ToolStream(
                 {

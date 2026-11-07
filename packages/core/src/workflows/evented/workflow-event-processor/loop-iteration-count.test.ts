@@ -66,7 +66,7 @@ async function driveLoop(loopType: 'dountil' | 'dowhile', condition: (n: number)
         prevResult: bodyResult,
         requestContext: {},
       } as any,
-      { pubsub, stepExecutor, step, stepResult: bodyResult },
+      { pubsub, runStorage: {} as any, stepExecutor, step, stepResult: bodyResult },
     );
 
     if (published.some(e => e.type === 'workflow.step.end')) {

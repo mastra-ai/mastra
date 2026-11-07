@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
-import { summarizeStepResult } from '../storage/domains/workflows/journal';
+import { STATE_CHECKPOINT_PATCHES, summarizeStepResult } from '../storage/domains/workflows/journal';
 import type { StateRef, StepResultSummary } from '../storage/domains/workflows/journal';
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import { diffState } from '../storage/domains/workflows/state-patch';
@@ -106,6 +106,8 @@ export class RunJournal {
   #inheritedRef: StateRef | undefined;
   /** JSON size of the patches stored after the latest full state. */
   #patchBytes: number;
+  /** The patches stored after the latest full state or state base. */
+  #patchCount: number;
   /** The latest draft of the live state written for nested runs to build on, since the last state write. */
   #draft: StateBase | undefined;
   /** JSON size of the draft patches chained since the latest full draft or state write. */
@@ -137,7 +139,7 @@ export class RunJournal {
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
    * context). Without it, the first boundary write is a checkpoint that replaces whatever is stored.
    * @param state The state already in storage, with `seed`.
-   * @param storedState What the store reported for `state`: its `lastSeq`, and its `statePatchBytes`.
+   * @param storedState What the store reported for `state`: its `lastSeq`, `statePatchBytes` and `statePatchCount`.
    * @param inherited For a nested run that starts from a version of its parent's state (the parent
    * journal's `baseFor`): the checkpoint stores that version as the base, and only the changes to it.
    * @param resumed Set for a resume: the run's new drive starts from `storedState`, which the first
@@ -158,7 +160,7 @@ export class RunJournal {
     runId: string;
     seed?: Record<string, unknown>;
     state?: unknown;
-    storedState?: { seq: number; patchBytes: number; runToken?: string };
+    storedState?: { seq: number; patchBytes: number; patchCount: number; runToken?: string };
     inherited?: StateBase;
     resumed?: boolean;
   }) {
@@ -176,6 +178,7 @@ export class RunJournal {
       if (storedState) this.#writtenRef = { workflowName, runId, seq: storedState.seq };
     }
     this.#patchBytes = storedState?.patchBytes ?? 0;
+    this.#patchCount = storedState?.patchCount ?? 0;
     if (resumed && seed) this.#startStateSeq = storedState?.seq;
     this.#lastSeq = storedState?.seq;
     this.#runToken = storedState?.runToken;
@@ -367,6 +370,7 @@ export class RunJournal {
 
     let writtenState = this.#writtenState;
     let patchBytes = this.#patchBytes;
+    let patchCount = this.#patchCount;
     let state: Record<string, unknown> | undefined;
     let stateBase: StateRef | undefined;
     let statePatch: StatePatchOp[] | undefined;
@@ -379,20 +383,26 @@ export class RunJournal {
           // The checkpoint starts the state over, from the inherited version.
           stateBase = this.#inheritedRef;
           patchBytes = 0;
+          patchCount = 0;
         }
         const ops = diffState(writtenState, next.state);
         if (ops.length) {
           const opsBytes = JSON.stringify(ops).length;
-          if (patchBytes + opsBytes > next.bytes) {
+          // A full state once the patches would outgrow it, or once a cold load would apply too many.
+          if (patchBytes + opsBytes > next.bytes || patchCount >= STATE_CHECKPOINT_PATCHES) {
             state = next.state;
             stateBase = undefined;
           } else {
             statePatch = ops;
             patchBytes += opsBytes;
+            patchCount++;
           }
         }
       }
-      if (state) patchBytes = 0;
+      if (state) {
+        patchBytes = 0;
+        patchCount = 0;
+      }
       if (state || statePatch) writtenState = next.state;
     }
 
@@ -451,6 +461,7 @@ export class RunJournal {
     }
     this.#writtenState = writtenState;
     this.#patchBytes = patchBytes;
+    this.#patchCount = patchCount;
     return true;
   }
 

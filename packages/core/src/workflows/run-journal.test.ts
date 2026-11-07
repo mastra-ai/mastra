@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
+import { STATE_CHECKPOINT_PATCHES } from '../storage/domains/workflows/journal';
 import { buildStepResultAccessors, isStepResultStub, RunJournal, stubStepResult } from './run-journal';
 import type { WorkflowRunState } from './types';
 
@@ -202,7 +203,7 @@ describe('RunJournal writes', () => {
 describe('RunJournal state writes', () => {
   const run = { workflowName: 'wf', runId: 'r' };
   const kb = (i: number) => String(i % 10).repeat(1024);
-  const stateArgs = (mock: ReturnType<typeof fakeStore>['appendWorkflowRunEntries']) =>
+  const stateArgs = (mock: { mock: { calls: any[][] } }) =>
     mock.mock.calls.map(([args]) => (args.state ? 'state' : args.statePatch ? 'patch' : 'none'));
 
   /** The run as the in-memory store holds it, and the JSON size of its patches after the latest full state. */
@@ -211,7 +212,7 @@ describe('RunJournal state writes', () => {
     return {
       state: loaded.state,
       statePatchBytes: loaded.statePatchBytes,
-      storedState: { seq: loaded.lastSeq, patchBytes: loaded.statePatchBytes },
+      storedState: { seq: loaded.lastSeq, patchBytes: loaded.statePatchBytes, patchCount: loaded.statePatchCount },
     };
   }
 
@@ -289,6 +290,31 @@ describe('RunJournal state writes', () => {
         journal = new RunJournal({ store: memory, ...run, seed: {}, state: now.state, storedState: now.storedState });
       }
     }
+  });
+
+  it('writes a full state once STATE_CHECKPOINT_PATCHES patches follow the latest, counting on across a resume', async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const appendWorkflowRunEntries = vi.spyOn(memory, 'appendWorkflowRunEntries');
+    // Small patches on a large state, so only the count rule writes a full state.
+    const state: Record<string, unknown> = { big: 'x'.repeat(100_000), n: 0 };
+    let journal = new RunJournal({ store: memory, ...run });
+    await journal.write({ snapshot: snapshot({}, 'running', state) });
+
+    const writes = 2 * STATE_CHECKPOINT_PATCHES + 2;
+    for (let i = 1; i <= writes; i++) {
+      state.n = i;
+      await journal.write({ snapshot: snapshot({}, 'running', state) });
+      if (i === STATE_CHECKPOINT_PATCHES / 2) {
+        const now = await stored(memory);
+        journal = new RunJournal({ store: memory, ...run, seed: {}, state: now.state, storedState: now.storedState });
+      }
+    }
+    expect(stateArgs(appendWorkflowRunEntries)).toEqual(
+      Array.from({ length: writes }, (_, i) =>
+        i % (STATE_CHECKPOINT_PATCHES + 1) === STATE_CHECKPOINT_PATCHES ? 'state' : 'patch',
+      ),
+    );
+    expect((await stored(memory)).state).toEqual(state);
   });
 
   it('does not double the state when replaying patches onto a state that has them', async () => {

@@ -123,6 +123,14 @@ Returns: `DurableAgent`
     description:
       "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`. Pass a predicate that includes `running` to keep crash-recovery checkpoints for manual `listActiveRuns()` / `recoverActiveRuns()` without enabling automatic recovery. Mastra logs a warning when a predicate excludes `suspended` or `paused`, or excludes `running` while `recovery.durableAgents` is `'auto'`.",
   },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description:
+      'Experimental. How new runs of this agent are stored. `1` rewrites the whole run on every save. `2` saves only what changed at each step, which cuts storage writes for long runs. Version 2 needs a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. On another adapter, the agent logs a warning and stores new runs as version 1. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.',
+    defaultValue: '1',
+  },
 ]}
 />
 
@@ -182,6 +190,14 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     isOptional: true,
     description:
       'Accepted for API symmetry with `createDurableAgent`, but ignored: the evented engine requires the full snapshot set (`pending`, `paused`, `suspended`, `running`) because the initial `running` write creates the base row that suspend-merges and multi-worker coordination build on. A warning is logged if set.',
+  },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description:
+      'Experimental. How new runs of this agent are stored. `1` rewrites the whole run on every save. `2` saves only what changed at each step, which cuts storage writes for long runs. Version 2 needs a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. On another adapter, the agent logs a warning and stores new runs as version 1. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.',
+    defaultValue: '1',
   },
 ]}
 />
@@ -246,6 +262,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     isOptional: true,
     description:
       "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`.",
+  },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description: 'Experimental. How new runs of this agent are stored. See `storageVersion` on `createDurableAgent`.',
+    defaultValue: '1',
   },
   {
     name: 'cleanupTimeoutMs',
