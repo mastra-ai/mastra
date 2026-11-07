@@ -121,6 +121,38 @@ describe('accumulateGenUI', () => {
     expect(after.diagnostics.at(-1)?.code).toBe('invalid-graph');
   });
 
+  // Each path to a shared child renders it again, so a few dozen nodes can expand into billions of renders.
+  it('rejects a surface whose nodes share children, which would freeze the tab when rendered', () => {
+    const layers = 30;
+    const layer = (l: number) => [`l${l}a`, `l${l}b`];
+    const nodes = [
+      { id: 'root', component: 'Box', children: layer(0) },
+      ...Array.from({ length: layers }, (_, l) =>
+        layer(l).map(id => ({ id, component: 'Box', children: l + 1 < layers ? layer(l + 1) : [] })),
+      ).flat(),
+    ];
+    const state = applyAll([env('bomb', [{ op: 'createSurface', rootId: 'root', nodes }])]);
+    expect(state.surfaces.bomb).toBeUndefined();
+    expect(state.diagnostics.at(-1)).toMatchObject({ code: 'invalid-graph', surfaceId: 'bomb' });
+
+    const before = applyAll([dashboard()]);
+    const after = accumulateGenUI(before, env('dash', [{ op: 'setChildren', nodeId: 'kpi', children: ['chart'] }]));
+    expect(after.surfaces.dash).toBe(before.surfaces.dash);
+    expect(after.diagnostics.at(-1)?.code).toBe('invalid-graph');
+  });
+
+  it('moves a node to another parent when both parents change in the same envelope', () => {
+    const state = applyAll([
+      dashboard(),
+      env('dash', [
+        { op: 'setChildren', nodeId: 'root', children: ['kpi'] },
+        { op: 'setChildren', nodeId: 'kpi', children: ['chart'] },
+      ]),
+    ]);
+    expect(state.surfaces.dash!.nodes.root!.children).toEqual(['kpi']);
+    expect(state.surfaces.dash!.nodes.kpi!.children).toEqual(['chart']);
+  });
+
   it('enforces configurable limits', () => {
     const limits = { maxNodesPerSurface: 3 };
     const create = env('big', [

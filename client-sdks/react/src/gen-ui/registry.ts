@@ -297,6 +297,11 @@ export function createGenUI(options: CreateGenUIOptions = {}): GenUIRegistry {
   if (surfaceTool) {
     if (!TOOL_NAME.test(surfaceTool.name)) throw new Error(`GenUI tool name "${surfaceTool.name}" is invalid`);
     if (surfaceTool.placements.length === 0) throw new Error('GenUI surface tool needs at least one placement');
+    if (!Object.values(components).some(entry => entry.definition.declarative !== false)) {
+      throw new Error(
+        'GenUI surface tool needs at least one component the model can compose (not `declarative: false`)',
+      );
+    }
     if (componentTools[surfaceTool.name]) {
       throw new Error(`GenUI surface tool name "${surfaceTool.name}" collides with a component tool`);
     }

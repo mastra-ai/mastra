@@ -150,6 +150,47 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
     expect(weatherMounts).toBe(1);
   });
 
+  it('shows a surface as failed when the tool that was building it throws', async () => {
+    const stream = controllableStream();
+    server.use(http.post(STREAM_URL, () => stream.response()));
+    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard } })} />);
+
+    await send('Weather in Paris?');
+    act(() =>
+      stream.push(
+        chunk('start'),
+        chunk('tool-call', { toolCallId: 'c1', toolName: 'weatherReport', args: { city: 'Paris' } }),
+        genUIChunk({
+          version: 1,
+          eventId: 'e1',
+          surfaceId: 'weather',
+          operations: [
+            {
+              op: 'createSurface',
+              source: { toolCallId: 'c1' },
+              nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Paris', temp: 0 } }],
+            },
+          ],
+        }),
+      ),
+    );
+    await screen.findByTestId('weather');
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    act(() =>
+      stream.push(
+        chunk('tool-error', { toolCallId: 'c1', toolName: 'weatherReport', error: 'Weather service unavailable' }),
+        finish('stop'),
+      ),
+    );
+    stream.close();
+
+    await waitFor(() => expect(current.isRunning).toBe(false));
+    expect(current.genUI.controller.getSurfaceStatus('weather')).toBe('failed');
+    expect(current.genUI.controller.getSurfaceError('weather')).toBe('Weather service unavailable');
+    expect(screen.getByRole('alert').textContent).toContain('Weather service unavailable');
+  });
+
   it('shows a fallback instead of executing anything for unknown components or invalid props', async () => {
     server.use(
       http.post(STREAM_URL, () =>
@@ -236,6 +277,16 @@ describe('useGenUIChat — opt-in', () => {
     await waitFor(() =>
       expect(plain.messages.at(-1)?.content.parts).toContainEqual(expect.objectContaining({ type: 'data-gen-ui' })),
     );
+  });
+
+  it('refuses a surface tool with no components the model can compose', () => {
+    const Custom = defineGenUIComponent({
+      schema: z.object({}),
+      declarative: false,
+      component: () => null,
+    });
+    expect(() => createGenUI({ surfaceTool: true })).toThrow(/surface tool/);
+    expect(() => createGenUI({ components: { Custom }, surfaceTool: true })).toThrow(/surface tool/);
   });
 
   it('refuses a client tool that collides with a GenUI frontend tool', () => {
@@ -420,6 +471,69 @@ describe('useGenUIChat — tool UI', () => {
     expect(JSON.stringify(bodies[1]!.messages)).toContain('"confirmed":true');
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
   });
+
+  it('an interactive call left unanswered by a reload cannot be answered and does not block the next message', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.post(STREAM_URL, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return sseResponse([
+          chunk('text-start', { id: 't1' }),
+          chunk('text-delta', { id: 't1', text: 'Which hotel then?' }),
+          chunk('text-end', { id: 't1' }),
+          finish('stop'),
+        ]);
+      }),
+    );
+    let respond: ((value: unknown) => Promise<{ ok: boolean }>) | undefined;
+    const ConfirmBooking = defineGenUIComponent({
+      description: 'Ask the user to confirm a booking',
+      schema: z.object({ hotel: z.string() }),
+      tool: { mode: 'interactive', responseSchema: z.object({ confirmed: z.boolean() }) },
+      component: ({ props }) => {
+        const response = useGenUIToolResponse();
+        respond = response.respond;
+        return <button disabled={!response.canRespond}>Confirm {props.hotel}</button>;
+      },
+    });
+    const history: MastraDBMessage[] = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        createdAt: new Date(0),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'c1',
+                toolName: 'ui_ConfirmBooking',
+                args: { hotel: 'Ritz' },
+              },
+            },
+          ],
+        },
+      },
+    ];
+    renderWithProviders(
+      <GenUIChat genUI={createGenUI({ components: { ConfirmBooking } })} initialMessages={history} />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Confirm Ritz' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(current.isRunning).toBe(false);
+    expect((await respond!({ confirmed: true })).ok).toBe(false);
+    expect(bodies).toHaveLength(0);
+
+    await send('Actually, not the Ritz');
+    expect(await screen.findByText('Which hotel then?')).toBeTruthy();
+    expect(bodies).toHaveLength(1);
+    expect(JSON.stringify(bodies[0]!.messages)).not.toContain('confirmed');
+  });
 });
 
 describe('useGenUIChat — surface tool', () => {
@@ -458,6 +572,9 @@ describe('useGenUIChat — surface tool', () => {
     const tool = (bodies[0]!.clientTools as Record<string, { description: string }>).ui_surface!;
     expect(tool.description).toContain('WeatherCard');
     expect(tool.description).toContain('Current weather for a city');
+    // Prop schemas are advertised once, in the input schema, not repeated in the description.
+    expect(tool.description).not.toContain('propsSchema');
+    expect(JSON.stringify(tool)).toContain('"temp"');
     expect(JSON.stringify(bodies[1]!.messages)).toContain('"ok":true');
     expect(document.querySelector('[data-genui-surface="weather"]')?.getAttribute('data-genui-status')).toBe('ready');
   });
@@ -816,6 +933,64 @@ describe('useGenUIChat — actions and context', () => {
     expect(await screen.findByText('success')).toBeTruthy();
     expect(bodies).toHaveLength(2);
     expect(JSON.stringify(bodies[1]!.messages)).toContain('Filter by Lyon');
+  });
+
+  it('actions and renderers defined inline see the app state of the latest render', async () => {
+    server.use(
+      http.post(STREAM_URL, () =>
+        sseResponse([
+          chunk('start'),
+          chunk('text-start', { id: 't1' }),
+          chunk('text-delta', { id: 't1', text: 'Pick a plan' }),
+          chunk('text-end', { id: 't1' }),
+          genUIChunk({
+            version: 1,
+            eventId: 'p1',
+            surfaceId: 'plans',
+            operations: [{ op: 'createSurface', nodes: [{ id: 'pick', component: 'PlanPicker', props: {} }] }],
+          }),
+          finish('stop'),
+        ]),
+      ),
+    );
+    const PlanPicker = defineGenUIComponent({
+      schema: z.object({}),
+      component: () => {
+        const choose = useGenUIAction('choose');
+        return (
+          <button type="button" onClick={() => void choose.dispatch(null)}>
+            Choose
+          </button>
+        );
+      },
+    });
+    const registry = createGenUI({ components: { PlanPicker } });
+    const chosen: string[] = [];
+    function App({ currency }: { currency: string }) {
+      const chat = useGenUIChat({
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        genUI: registry,
+        actions: { choose: { handle: () => void chosen.push(currency) } },
+        renderers: { Text: part => <span>{`${currency}: ${part.text}`}</span> },
+      });
+      current = chat;
+      return (
+        <>
+          {chat.messages.map(message => (
+            <MessageFactory key={message.id} message={message} {...chat.genUI.renderers} />
+          ))}
+        </>
+      );
+    }
+    const view = renderWithProviders(<App currency="EUR" />);
+    await send('show plans');
+    expect(await screen.findByText('EUR: Pick a plan')).toBeTruthy();
+
+    view.rerender(<App currency="USD" />);
+    expect(await screen.findByText('USD: Pick a plan')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose' }));
+    await waitFor(() => expect(chosen).toEqual(['USD']));
   });
 
   it('published app context travels with the next message only while the publisher is mounted', async () => {

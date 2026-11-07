@@ -3,7 +3,6 @@ title: 'Generative UI | Agents'
 description: 'Let agents render React components in chat: tool-specific UI, components the model calls as tools, and declarative surfaces streamed from tools or composed by the model.'
 packages:
   - '@mastra/client-js'
-  - '@mastra/core'
   - '@mastra/react'
 ---
 
@@ -75,7 +74,7 @@ export function Chat() {
 
 With `tool: true`, `WeatherCard` is sent to the agent as a frontend tool named `ui_WeatherCard`. Its input schema is the component's props schema. When the model calls it, the card renders in the message with the validated props.
 
-`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, pass them as `renderers`; GenUI renders its own parts and hands the rest to yours.
+`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, pass them as `renderers`. GenUI renders its own parts and hands the rest to yours.
 
 ## Let the model call components
 
@@ -153,7 +152,7 @@ The `phase` is one of `input-streaming`, `input-available`, `awaiting-approval`,
 
 `partialArgs` is a best-effort parse of the arguments streamed so far. Treat it as unvalidated. `args` and `output` are set only after they pass `argsSchema` and `outputSchema`. If validation fails, `validationError` describes the problem.
 
-For tools that use [human-in-the-loop](/docs/agents/human-in-the-loop), `approval` is set while the call waits. `approval.approve(resumeData)` resumes a suspended tool with data, and `approval.decline()` declines it. A second call made while the first is pending is ignored, so a double click sends one request. Approval works after a page reload because the run ID is restored from the message history.
+For tools that use [human-in-the-loop](/docs/agents/human-in-the-loop), `approval` is set while the call waits. `approval.approve(resumeData)` resumes a suspended tool with data, and `approval.decline()` declines it. A second call made while the first is pending is ignored. Pressing the button twice sends one request. Approval works after a page reload because the run ID is restored from the message history.
 
 ## Stream surfaces from a tool
 
@@ -168,8 +167,8 @@ export const weatherReport = createTool({
   id: 'weather-report',
   description: 'Show a live weather report for a city',
   inputSchema: z.object({ city: z.string() }),
-  execute: async ({ city }, { writer }) => {
-    const ui = createGenUIEmitter(writer).surface(`weather-${city}`)
+  execute: async ({ city }, { writer, agent }) => {
+    const ui = createGenUIEmitter(writer, { source: { toolCallId: agent?.toolCallId } }).surface()
 
     await ui.create({
       nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 0 } }],
@@ -184,7 +183,11 @@ export const weatherReport = createTool({
 })
 ```
 
-The emitter validates operations on the server with the same rules as the client and throws on invalid input. Updates are written as `data-gen-ui` message parts. They're saved with the message, so a reloaded thread rebuilds the same surface.
+Calling `surface()` without an ID gives each run its own surface, so running the tool twice in a thread shows two cards. Pass an ID only to continue a surface created by an earlier run. IDs must be unique within a thread.
+
+Setting `source.toolCallId` links the surface to the tool call. If the tool throws before the surface is ready, the surface shows as failed instead of finished.
+
+The emitter validates operations on the server with the same rules as the client and throws on invalid input. Updates are written as `data-gen-ui` message parts. They're saved with the message. A reloaded thread rebuilds the same surface from them.
 
 On the client, nothing extra is needed. The renderers from `useGenUIChat` show inline surfaces where they were created in the message. Updating a node's props doesn't remount its component, so local component state is kept.
 
@@ -291,7 +294,7 @@ export function PageTracker({ page }: { page: number }) {
 }
 ```
 
-Published context is marked as data, not instructions, and is limited to 16 KB.
+Published context is marked as data, not instructions, and is limited to 16 KB. The context is captured when a message is sent. Tool approvals, declines, and frontend tool results continue that run with the same context, so changes published while the run is suspended reach the agent with the next message.
 
 ## Recovery and status
 

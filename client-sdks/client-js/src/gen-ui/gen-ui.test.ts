@@ -88,6 +88,47 @@ describe('createGenUIEmitter', () => {
     ).rejects.toThrow(/Invalid GenUI operations/);
     expect(chunks).toEqual([]);
   });
+
+  it('gives each surface a unique id by default, so running the same tool twice in a thread shows two surfaces', async () => {
+    const { chunks, writer } = recorder();
+    const weatherTool = async (city: string, temp: number) => {
+      const ui = createGenUIEmitter(writer).surface();
+      await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 0 } }] });
+      await ui.updateProps('card', { temp });
+      await ui.setStatus('ready');
+    };
+    await weatherTool('Paris', 18);
+    await weatherTool('Paris', 25);
+
+    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    expect(state.diagnostics).toEqual([]);
+    expect(state.surfaceOrder).toHaveLength(2);
+    expect(state.surfaceOrder.map(id => state.surfaces[id]!.nodes.card!.props.temp)).toEqual([18, 25]);
+  });
+
+  it('keeps later updates applicable when a write fails', async () => {
+    const { chunks, generateEventId } = recorder();
+    let failNext = false;
+    const writer = {
+      custom: (chunk: GenUIChunk) => {
+        if (failNext) {
+          failNext = false;
+          throw new Error('stream closed');
+        }
+        chunks.push(chunk);
+      },
+    };
+    const ui = createGenUIEmitter(writer, { generateEventId }).surface('w');
+    await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { temp: 0 } }] });
+    failNext = true;
+    await expect(ui.updateProps('card', { temp: 10 })).rejects.toThrow('stream closed');
+    await ui.updateProps('card', { temp: 20 });
+
+    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    expect(state.diagnostics).toEqual([]);
+    expect(state.buffered).toEqual({});
+    expect(state.surfaces.w!.nodes.card!.props.temp).toBe(20);
+  });
 });
 
 describe('createGenUISession', () => {

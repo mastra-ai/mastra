@@ -8,7 +8,7 @@ Added `@mastra/client-js/gen-ui` (beta), the framework-agnostic core of Generati
 import { createGenUIEmitter } from '@mastra/client-js/gen-ui';
 
 execute: async ({ city }, { writer }) => {
-  const ui = createGenUIEmitter(writer).surface(`weather-${city}`);
+  const ui = createGenUIEmitter(writer).surface();
   await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 0 } }] });
   await ui.updateProps('card', { temp: await getTemperature(city) });
   await ui.setStatus('ready');

@@ -216,6 +216,21 @@ class SurfaceDraft {
     if (ids.length > this.limits.maxNodesPerSurface) {
       throw new OperationError('limit-exceeded', `surface exceeds ${this.limits.maxNodesPerSurface} nodes`);
     }
+    // A tree, not a DAG: the renderer walks every path, so a child shared by two parents renders once per
+    // path and a few dozen nodes could expand into billions of renders.
+    const parentOf = new Map<string, string>();
+    for (const id of ids) {
+      for (const child of nodes[id]!.children) {
+        const parent = parentOf.get(child);
+        if (parent !== undefined) {
+          throw new OperationError(
+            'invalid-graph',
+            `node "${child}" has two parents ("${parent}" and "${id}"); to move it, update both parents in the same envelope`,
+          );
+        }
+        parentOf.set(child, id);
+      }
+    }
     // Iterative three-color DFS over all nodes: rejects cycles anywhere and
     // computes each node's subtree height in post-order to enforce the depth
     // limit on every path. Missing child ids are allowed so a parent can stream
