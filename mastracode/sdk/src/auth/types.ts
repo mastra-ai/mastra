@@ -127,6 +127,12 @@ export interface OAuthAccountRecord extends OAuthCredentials {
    * credentials carry no such identifier.
    */
   identity?: string;
+  /**
+   * Switch order within the provider's pool: lower is tried first, ties by
+   * insertion order. Absent only on entries written before priorities
+   * existed; `AuthStorage` backfills it on load.
+   */
+  priority?: number;
 }
 
 export type AuthStorageData = Record<string, AuthCredential | OAuthAccountRecord>;
@@ -166,7 +172,8 @@ export interface CredentialStore {
   getOAuthCredential?(provider: string, accountInstanceId?: string): Promise<OAuthCredentialSnapshot | undefined>;
 
   /**
-   * Registered OAuth accounts for a provider, in insertion order. Optional so
+   * Registered OAuth accounts for a provider, in switch order (priority, then
+   * insertion order). Optional so
    * deployed per-tenant stores need no change.
    */
   listAccounts?(providerId: string): OAuthAccountRecord[];
@@ -175,7 +182,7 @@ export interface CredentialStore {
   getActiveAccount?(providerId: string): OAuthAccountRecord | undefined;
 
   /**
-   * Activate an account: rotate to the next instance (insertion order,
+   * Activate an account: rotate to the next instance (switch order,
    * wrapping once), or to `instanceId` when given. Moves the active tokens
    * between the legacy slot and the registry entries. Returns the newly
    * active record, or undefined when there is no other instance to rotate to

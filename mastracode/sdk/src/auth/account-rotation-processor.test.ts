@@ -40,6 +40,7 @@ import {
   markRequestAccountRoutingExhausted,
   setRequestAccountSelection,
 } from './account-routing-context.js';
+import * as accountSwitch from './account-switch.js';
 import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { AuthStorage } from './storage.js';
@@ -1006,5 +1007,23 @@ describe('model-route fallback parts', () => {
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+  });
+});
+
+describe('account-switch re-exports', () => {
+  it('re-exports the browser-safe notice module unchanged', async () => {
+    const processorModule = await import('./account-rotation-processor.js');
+    for (const name of [
+      'ACCOUNT_SWITCH_PART_TYPE',
+      'MODEL_FALLBACK_PART_TYPE',
+      'MODEL_FALLBACK_STATE_KEY',
+      'PROVIDER_DISPLAY_NAMES',
+      'accountSwitchNoticeText',
+      'modelFallbackNoticeText',
+      'isAccountSwitchReason',
+      'isModelFallbackReason',
+    ] as const) {
+      expect(processorModule[name]).toBe(accountSwitch[name]);
+    }
   });
 });
