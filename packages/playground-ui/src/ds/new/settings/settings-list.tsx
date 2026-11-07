@@ -82,10 +82,10 @@ export function SettingsItem({ media, title, description, children, className, .
       {media}
       <div className="flex min-w-0 flex-1 flex-col gap-px">
         {/* A string title truncates, so it also goes in the hover title to stay readable in full. */}
-        <div className="text-label text-foreground truncate" title={typeof title === 'string' ? title : undefined}>
+        <div className="truncate text-label text-foreground" title={typeof title === 'string' ? title : undefined}>
           {title}
         </div>
-        {description != null && <div className="text-caption text-muted-foreground truncate">{description}</div>}
+        {description != null && <div className="truncate text-caption text-muted-foreground">{description}</div>}
       </div>
       {children != null && <div className="flex shrink-0 items-center gap-2">{children}</div>}
     </div>
