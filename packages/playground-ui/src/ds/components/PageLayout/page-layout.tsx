@@ -1,7 +1,15 @@
-import type { ReactNode } from 'react';
+import { Children, isValidElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Header } from '../Header';
 import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
 import type { ScrollAreaMask } from '../ScrollArea';
+import { SidebarMobileTrigger } from '../Sidebar/root/sidebar-mobile-trigger';
+import { useAppShellMobileBar } from '@/ds/new/layout/app-shell/app-shell-mobile-bar-context';
+import { PageHeaderRoot } from '@/ds/new/layout/page-header/page-header-root';
+import type { PageHeaderRootProps } from '@/ds/new/layout/page-header/page-header-root';
+import { PageHeaderTitle } from '@/ds/new/layout/page-header/page-header-title';
+import type { PageHeaderTitleProps } from '@/ds/new/layout/page-header/page-header-title';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
@@ -27,6 +35,25 @@ export interface PageLayoutProps {
   mask?: ScrollAreaMask;
 }
 
+function pageTitleOf(header: ReactNode) {
+  if (!isValidElement<PageHeaderRootProps>(header) || header.type !== PageHeaderRoot) return undefined;
+  return Children.toArray(header.props.children).find(
+    (child): child is ReactElement<PageHeaderTitleProps> => isValidElement(child) && child.type === PageHeaderTitle,
+  );
+}
+
+function MobileBarLead({ header, brand }: { header: ReactNode; brand: ReactNode }) {
+  const title = pageTitleOf(header);
+  if (!title) return brand;
+  return (
+    <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
+      <Crumb as="span" isCurrent isLoading={title.props.isLoading}>
+        {title.props.children}
+      </Crumb>
+    </Breadcrumb>
+  );
+}
+
 export function PageLayout({
   children,
   breadcrumbs,
@@ -36,6 +63,8 @@ export function PageLayout({
   variant = 'container',
   mask = false,
 }: PageLayoutProps) {
+  const mobileBar = useAppShellMobileBar();
+  const mobileActions = mobileBar?.actions;
   const headerSlot = header ? (
     <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
       {header}
@@ -43,12 +72,16 @@ export function PageLayout({
   ) : null;
 
   return (
-    <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
-      {(breadcrumbs || headerActions) && (
+    <div ref={mobileBar?.registerPageLayout} data-slot="page-layout" className="flex h-full min-h-0 flex-col">
+      {(breadcrumbs || headerActions || mobileBar) && (
         <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
-          {breadcrumbs}
-          {headerActions && (
-            <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{headerActions}</div>
+          {mobileBar && <SidebarMobileTrigger className="shrink-0" />}
+          {breadcrumbs || (mobileBar && <MobileBarLead header={header} brand={mobileBar.brand} />)}
+          {(headerActions || mobileActions) && (
+            <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">
+              {headerActions}
+              {mobileActions}
+            </div>
           )}
         </Header>
       )}

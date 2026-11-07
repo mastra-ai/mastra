@@ -11,14 +11,15 @@ export function useCloseSettings() {
   const navigate = useNavigate();
   const location = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { openMobile: mobileDrawerOpen, setOpenMobile } = useSidebar();
+  const { openMobile: mobileDrawerOpen, mobileTriggerRef, setOpenMobile } = useSidebar();
 
   return function closeSettings() {
     const from = (location.state as { from?: Location } | null)?.from;
     void navigate(from ?? (factoryId ? `/factories/${factoryId}` : '/'));
     setOpenMobile(false);
 
-    const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'sidebar-settings-link';
-    requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
+    requestAnimationFrame(() =>
+      (mobileDrawerOpen ? mobileTriggerRef.current : document.getElementById('sidebar-settings-link'))?.focus(),
+    );
   };
 }

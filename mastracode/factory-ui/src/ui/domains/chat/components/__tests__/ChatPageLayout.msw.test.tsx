@@ -1,10 +1,12 @@
-import { SidebarProvider, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar, SidebarProvider, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 
 import { OverlaysProvider } from '../../../../lib/overlays';
+import { GlobalSearchButton } from '../../../search/components/GlobalSearchButton';
 import { ChatPageLayout } from '../ChatPageLayout';
 
 function DesktopSidebarStateProbe() {
@@ -38,15 +40,25 @@ describe('ChatPageLayout', () => {
       <MemoryRouter initialEntries={['/settings/preferences']}>
         <SidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <OverlaysProvider>
-            <ChatPageLayout crumbs={<li>Page title</li>} headerActions={<button type="button">Panel</button>}>
-              body
-            </ChatPageLayout>
+            <AppShell
+              sidebar={
+                <Sidebar aria-label="Main sidebar">
+                  <Sidebar.Nav />
+                </Sidebar>
+              }
+              mobileActions={<GlobalSearchButton id="global-search-mobile-trigger" />}
+            >
+              <ChatPageLayout crumbs={<li>Page title</li>} headerActions={<button type="button">Panel</button>}>
+                body
+              </ChatPageLayout>
+            </AppShell>
           </OverlaysProvider>
         </SidebarProvider>
       </MemoryRouter>,
     );
 
-    const header = screen.getByRole('banner');
+    const [header, ...otherRows] = screen.getAllByRole('banner');
+    expect(otherRows).toHaveLength(0);
     expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
     expect(within(header).getByText('Page title')).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
