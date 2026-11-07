@@ -4375,7 +4375,10 @@ describe('PlatformSandbox computer driven by an agent', () => {
    * `getInfo()` (a proxy round trip on a running sandbox) before acting. Each
    * request is slower than the next, so separate round trips would reverse the order.
    */
-  async function runClickTypeEnter(generateOptions: { toolCallConcurrency?: number }) {
+  async function runClickTypeEnter(
+    generateOptions: { toolCallConcurrency?: number },
+    defaultOptions?: { toolCallConcurrency: number },
+  ) {
     const infoDelaysMs = [150, 100, 50];
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       if (String(url).endsWith('/sandbox/sbx_1') && (init?.method ?? 'GET') === 'GET') {
@@ -4417,10 +4420,19 @@ describe('PlatformSandbox computer driven by an agent', () => {
         { toolName: 'mastra_workspace_computer_press_key', input: { key: 'Enter' } },
       ]),
       workspace: new Workspace({ sandbox }),
+      ...(defaultOptions && { defaultOptions }),
     });
     await agent.generate('go', { maxSteps: 3, ...generateOptions });
     return xdotool;
   }
+
+  it('keeps model order with the documented defaultOptions setup', async () => {
+    expect(await runClickTypeEnter({}, { toolCallConcurrency: 1 })).toEqual([
+      'xdotool mousemove 1 2 click 1',
+      "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
+      'xdotool key --clearmodifiers -- Return',
+    ]);
+  });
 
   it('runs the actions of one step in the model order with toolCallConcurrency: 1', async () => {
     expect(await runClickTypeEnter({ toolCallConcurrency: 1 })).toEqual([

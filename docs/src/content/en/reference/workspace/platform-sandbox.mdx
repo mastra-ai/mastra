@@ -394,7 +394,7 @@ Limits:
 
 - E2B only. `computer: true` with another sandbox provider throws when the sandbox is constructed.
 - The viewer opens in its own browser tab. It can't be embedded in an iframe on another site yet.
-- Computer tool calls in one model step are only guaranteed to stay in order with `toolCallConcurrency: 1`; otherwise Enter can arrive before the typed text.
+- Computer tool calls in one model step are only guaranteed to stay in order with `toolCallConcurrency: 1` (set in `defaultOptions`, not overridden per call). It serializes all of the agent's tool calls; otherwise Enter can arrive before the typed text.
 - The VNC server has no password. Access to the viewer is protected only by the port's sign-in or auth cookie.
 - A human in the viewer and the agent share one mouse and keyboard, so their input can interleave.
 
