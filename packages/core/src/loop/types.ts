@@ -49,6 +49,7 @@ import type {
   StreamTransportRef,
 } from '../stream/types';
 import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { OrderedToolGate } from '../tools/ordered-tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -139,6 +140,8 @@ export type StreamInternal = {
   stepWorkspace?: Workspace;
   /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
   toolApprovalVerdicts?: Map<string, boolean>;
+  /** @deprecated Use `runScope.get(ORDERED_TOOL_GATES_KEY)` from `loop/run-scope-keys`. */
+  orderedToolGates?: Map<string, OrderedToolGate>;
   /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
   stepUsage?: LanguageModelUsage;
   /** @deprecated Use `runScope.get(STEP_PROVIDER_METADATA_KEY)` from `loop/run-scope-keys`. */

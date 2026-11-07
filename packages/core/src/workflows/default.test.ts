@@ -1161,6 +1161,42 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
     expect(progressEvents.map(event => event.iterationStatus)).toEqual(['success', 'success', 'success', 'success']);
   });
 
+  it('a remote cancel seen by a later worker aborts items already in flight', async () => {
+    // Item 0 finishes and starts a progress checkpoint, so item 2's worker reads the stored
+    // status before dispatching; item 1 is in flight and only stops when its signal aborts.
+    const checkpoint = deferred();
+    vi.spyOn(engine, 'persistStepUpdate').mockImplementation(() => checkpoint.promise as any);
+    (engine as any).mastra = {
+      getStorage: () => ({ getStore: async () => ({ loadWorkflowRunStatus: async () => stored }) }),
+    };
+    // Another process cancels the run once item 0 has run.
+    let stored = 'running';
+    let item1Signal: AbortSignal | undefined;
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData, abortSignal }: { inputData: number; abortSignal?: AbortSignal }) => {
+        if (inputData === 0) stored = 'canceled';
+        if (inputData !== 1) return inputData;
+        item1Signal = abortSignal;
+        await new Promise<void>(resolve => {
+          if (abortSignal?.aborted) return resolve();
+          abortSignal?.addEventListener('abort', () => resolve(), { once: true });
+        });
+        return 'aborted';
+      },
+    };
+
+    // Let the checkpoint land later so the foreach can settle once item 1 has stopped.
+    setTimeout(() => checkpoint.resolve(), 200);
+    const result = await runForeach({ step, prevOutput: [0, 1, 2], concurrency: 2 });
+
+    expect(item1Signal).toBeDefined();
+    expect(item1Signal?.aborted).toBe(true);
+    expect(result.status).toBe('canceled');
+  }, 5_000);
+
   it('stops queued work and returns failed when an iteration fails', async () => {
     const firstItemGate = deferred();
     const starts: number[] = [];

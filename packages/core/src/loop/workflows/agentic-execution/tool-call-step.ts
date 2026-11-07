@@ -10,6 +10,7 @@ import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../../stream/types';
+import { waitForGate } from '../../../tools/ordered-tools';
 import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
@@ -29,6 +30,7 @@ import {
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   EAGER_TOOL_EXECUTION_KEY,
+  ORDERED_TOOL_GATES_KEY,
   FIXED_MEMORY_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
@@ -120,7 +122,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 }: OuterLLMRun<Tools, OUTPUT>) {
   // Shared by every suspension of the run, so parallel suspends verify recalled messages once.
   const memoryMessageRefs = new MemoryMessageRefs();
-  return createStep({
+  const step = createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
@@ -1665,4 +1667,47 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
     },
   });
+  // Wraps `step.execute` in place, so every holder of this step (the foreach and the eager
+  // coordinator) runs the gated version.
+  return withOrderedToolGate(step, { mastra, runId, _internal }, () => options?.abortSignal);
+}
+
+/**
+ * Run ordered tool calls (computer tools) one at a time in emitted order. `map-tool-calls`
+ * chains a gate per ordered call; each call waits for its predecessor before doing anything
+ * (lease check, validation, execution) and releases on every exit path. Calls without a gate
+ * run unchanged. A resumed call runs ungated (its step's chain is stale) but still releases.
+ */
+function withOrderedToolGate<S extends { execute: (executionContext: any) => Promise<any> }>(
+  step: S,
+  scopeCtx: RunScopeContext,
+  getRunAbortSignal: () => AbortSignal | undefined,
+): S {
+  const run = step.execute;
+  step.execute = async (executionContext: {
+    inputData: { toolCallId: string; args?: unknown };
+    abortSignal?: AbortSignal;
+    resumeData?: unknown;
+  }) => {
+    const { inputData } = executionContext;
+    const gate = readScoped(scopeCtx, ORDERED_TOOL_GATES_KEY, 'orderedToolGates')?.get(inputData.toolCallId);
+    if (!gate) return run(executionContext);
+    try {
+      // Tool input schemas carry an optional `resumeData`; match the body's `!= null` test.
+      const args = inputData.args as { resumeData?: unknown } | undefined;
+      const resumed = executionContext.resumeData != null || args?.resumeData != null;
+      if (!resumed) {
+        // The workflow signal carries run cancellation; the run signal carries caller aborts.
+        const signals = [executionContext.abortSignal, getRunAbortSignal()].filter((s): s is AbortSignal => !!s);
+        const admitted = await waitForGate(gate.ready, signals.length ? AbortSignal.any(signals) : undefined);
+        if (!admitted) {
+          return { ...inputData, aborted: true, result: TOOL_ABORT_NOTICE };
+        }
+      }
+      return await run(executionContext);
+    } finally {
+      gate.release();
+    }
+  };
+  return step;
 }
