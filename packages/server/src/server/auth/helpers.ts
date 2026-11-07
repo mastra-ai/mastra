@@ -34,19 +34,9 @@ export const isProtectedCustomRoute = (
     return false;
   }
 
-  // Check exact match first (fast path for static routes)
-  const exactRouteKey = `${method}:${path}`;
-  if (customRouteAuthConfig.has(exactRouteKey)) {
-    return customRouteAuthConfig.get(exactRouteKey) === true;
-  }
-
-  // Check exact match for ALL method
-  const allRouteKey = `ALL:${path}`;
-  if (customRouteAuthConfig.has(allRouteKey)) {
-    return customRouteAuthConfig.get(allRouteKey) === true;
-  }
-
-  // Check pattern matches for dynamic routes (e.g., '/users/:id')
+  // The first matching route in registration order is the one that handles the
+  // request, so it decides. Don't prefer an exact match: a protected '/users/:id'
+  // registered before a public '/users/me' still serves '/users/me'.
   for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
     const colonIndex = routeKey.indexOf(':');
     if (colonIndex === -1) {
@@ -92,7 +82,13 @@ export const findMatchingCustomRoute = (
     if (keys && keys.length > 0) {
       for (let i = 0; i < keys.length; i++) {
         if (match[i + 1] !== undefined) {
-          params[keys[i]!] = match[i + 1]!;
+          // Match Hono/framework decoding so FGA sees the same resource the handler gets.
+          const raw = match[i + 1]!;
+          try {
+            params[keys[i]!] = decodeURIComponent(raw);
+          } catch {
+            params[keys[i]!] = raw;
+          }
         }
       }
     }
@@ -134,20 +130,8 @@ export const isCustomRoutePublic = (
     return false;
   }
 
-  // Check exact match first (fast path for static routes)
-  const exactRouteKey = `${method}:${path}`;
-  if (customRouteAuthConfig.has(exactRouteKey)) {
-    return !customRouteAuthConfig.get(exactRouteKey); // True when route opts out of auth
-  }
-
-  // Check exact match for ALL method
-  const allRouteKey = `ALL:${path}`;
-  if (customRouteAuthConfig.has(allRouteKey)) {
-    return !customRouteAuthConfig.get(allRouteKey);
-  }
-
-  // Check pattern matches for dynamic routes (e.g., '/users/:id').
-  // Any matching pattern that requires auth wins over overlapping public patterns.
+  // Any matching route that requires auth wins over overlapping public routes,
+  // including an exact match on a static public route.
   let matchedPublic = false;
   for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
     const colonIndex = routeKey.indexOf(':');
