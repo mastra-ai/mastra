@@ -425,6 +425,16 @@ describe('ModelPicker', () => {
     expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
   });
 
+  it("links to the Factory's model settings to connect another provider", async () => {
+    const user = userEvent.setup();
+    renderPicker({ inFactory: true });
+
+    await user.click(await screen.findByLabelText('Session model'));
+
+    const connect = screen.getByRole('link', { name: 'Connect a provider' });
+    expect(connect.getAttribute('href')).toMatch(/^\/factories\/fp-1\/settings\/models/);
+  });
+
   it('resets a deviating user session to the personal default', async () => {
     const user = userEvent.setup();
     const { client, modelSwitches } = renderPicker();

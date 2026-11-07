@@ -1,3 +1,4 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ClipboardEvent, DragEvent } from 'react';
 
 import type { PendingImage } from '../context/ComposerImagesContext';
@@ -38,7 +39,7 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
     });
     if (accepted.length === 0) return;
 
-    const additions = await Promise.all(
+    const read = await Promise.allSettled(
       accepted.map(
         async (file): Promise<PendingImage> => ({
           id: `pending-image-${pendingImageSequence++}`,
@@ -48,7 +49,9 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
         }),
       ),
     );
-    setImages(current => [...current, ...additions]);
+    const additions = read.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+    if (additions.length < read.length) toast.error("Couldn't read an image. Try attaching it again.");
+    if (additions.length > 0) setImages(current => [...current, ...additions]);
   };
 
   const removeImage = (id: string) => {
