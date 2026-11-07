@@ -5,11 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 type Viewer = MastraHono.ComputerViewerSource;
 
 function mastraWithComputers(viewer?: Viewer) {
-  const mastra = new Mastra({ logger: false });
-  if (viewer) {
-    Object.assign(mastra, { getComputers: () => ({ viewer }) });
-  }
-  return mastra;
+  return new Mastra({ logger: false, ...(viewer && { computers: { tools: () => ({}), viewer } }) });
 }
 
 async function createServer(mastra: Mastra, extra: Record<string, unknown> = {}) {

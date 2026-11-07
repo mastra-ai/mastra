@@ -18,7 +18,7 @@ import {
   setupComputerStream,
   skipIfFrameworkPublic,
 } from '@mastra/hono';
-import type { ComputerViewerSource, HonoBindings, HonoVariables } from '@mastra/hono';
+import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -131,14 +131,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
       err,
     );
   }
-}
-
-/**
- * The slice of the experimental computers registry the server needs. Declared
- * structurally until `Mastra#getComputers` ships.
- */
-interface ComputerRegistryHost {
-  getComputers?: () => { viewer: ComputerViewerSource } | undefined;
 }
 
 export async function createHonoServer(
@@ -262,7 +254,7 @@ export async function createHonoServer(
   // with MASTRA_EXPERIMENTAL_COMPUTER=true and registered computers.
   const computers =
     process.env.MASTRA_EXPERIMENTAL_COMPUTER === 'true' && options.computerStream !== false
-      ? (mastra as unknown as ComputerRegistryHost).getComputers?.()
+      ? mastra.getComputers()
       : undefined;
 
   // One `@hono/node-ws` instance for every WebSocket route family: its upgrade
