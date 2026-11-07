@@ -7,7 +7,7 @@ import type { SandboxComputer } from '@mastra/core/workspace';
 import { z } from 'zod/v4';
 import { COMPUTER_VIEWER_PORT } from './computer.js';
 import { PlatformSandbox } from './sandbox.js';
-import type { PlatformSandboxOptions, SandboxPortAuthCookie } from './sandbox.js';
+import type { CaptureCheckpointResult, PlatformSandboxOptions, SandboxPortAuthCookie } from './sandbox.js';
 
 export const NOT_ATTACHED = 'no computer attached — call computer_attach or computer_create';
 export const NOT_FOUND = 'computer not found';
@@ -25,7 +25,7 @@ export interface ComputerSandbox {
   computer?: SandboxComputer;
   start(): Promise<unknown>;
   destroy(): Promise<void>;
-  snapshot(): Promise<void>;
+  captureCheckpoint(): Promise<CaptureCheckpointResult>;
   executeCommand(
     command: string,
     args?: string[],
@@ -72,7 +72,7 @@ interface Scope {
 type Context = ToolExecutionContext<any, any, any>;
 
 function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
-  return values.find(v => typeof v === 'string' && v.trim().length > 0)?.trim();
+  return values.find(v => typeof v === 'string' && v.trim().length > 0);
 }
 
 function isReattachFailure(error: unknown): boolean {
@@ -92,6 +92,7 @@ export class PlatformComputers implements MastraComputers {
   readonly #createSandbox: (options: PlatformSandboxOptions) => ComputerSandbox;
   readonly #computers = new Map<string, Entry>();
   readonly #attachments = new Map<string, string>();
+  readonly #lifecycle = new Map<string, Promise<unknown>>();
   #tools?: Record<string, ToolAction<any, any, any, any>>;
 
   constructor(options: PlatformComputersOptions = {}) {
@@ -140,7 +141,9 @@ export class PlatformComputers implements MastraComputers {
     const [, flag, sandboxId, mac] = match as unknown as [string, 'p' | 'e', string, string];
     const given = Buffer.from(mac, 'base64url');
     const expected = this.#mac(flag, sandboxId, ownerResourceId);
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return undefined;
+    // 22 base64url chars carry 132 bits; reject non-canonical aliases of the same 16 bytes.
+    if (given.length !== expected.length || given.toString('base64url') !== mac) return undefined;
+    if (!timingSafeEqual(given, expected)) return undefined;
     return { persistent: flag === 'p', sandboxId };
   }
 
@@ -149,7 +152,7 @@ export class PlatformComputers implements MastraComputers {
     const resourceId = firstNonEmpty(context?.agent?.resourceId, rc?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
     const threadId = firstNonEmpty(context?.agent?.threadId, rc?.get(MASTRA_THREAD_ID_KEY) as string | undefined);
     if (!resourceId || !threadId) return undefined;
-    return { resourceId, threadId, key: `${resourceId}:${threadId}` };
+    return { resourceId, threadId, key: JSON.stringify([resourceId, threadId]) };
   }
 
   #describe(entry: Entry, status: 'attached' | 'released' | 'available') {
@@ -157,10 +160,27 @@ export class PlatformComputers implements MastraComputers {
   }
 
   async #emit(context: Context, entry: Entry, threadId: string, status: 'attached' | 'released') {
-    await context?.writer?.custom({
-      type: 'data-computer',
-      data: { computerId: entry.id, threadId, name: entry.name, status, persistent: entry.persistent },
+    try {
+      await context?.writer?.custom({
+        type: 'data-computer',
+        data: { computerId: entry.id, threadId, name: entry.name, status, persistent: entry.persistent },
+      });
+    } catch {
+      // A closed stream must not turn a completed lifecycle change into a failed tool call.
+    }
+  }
+
+  /** Serializes lifecycle calls per thread, in call order. Takes the slot synchronously. */
+  #serial<T>(context: Context, fn: (scope: Scope) => Promise<T>): Promise<T | string> {
+    const scope = this.#scope(context);
+    if (!scope) return Promise.resolve(MISSING_IDENTITY);
+    const run = (this.#lifecycle.get(scope.key) ?? Promise.resolve()).then(() => fn(scope));
+    const tail = run.catch(() => {});
+    this.#lifecycle.set(scope.key, tail);
+    void tail.then(() => {
+      if (this.#lifecycle.get(scope.key) === tail) this.#lifecycle.delete(scope.key);
     });
+    return run;
   }
 
   #attach(scope: Scope, entry: Entry) {
@@ -173,7 +193,7 @@ export class PlatformComputers implements MastraComputers {
     if (!scope) return Promise.resolve(MISSING_IDENTITY);
     const id = this.#attachments.get(scope.key);
     const entry = id ? this.#computers.get(id) : undefined;
-    if (!entry) return Promise.resolve(NOT_ATTACHED);
+    if (!entry || entry.ownerResourceId !== scope.resourceId) return Promise.resolve(NOT_ATTACHED);
     const run = entry.queue.then(() => fn(entry.sandbox!, entry.sandbox!.computer!));
     entry.queue = run.catch(() => {});
     return run;
@@ -213,86 +233,86 @@ export class PlatformComputers implements MastraComputers {
     return entry;
   }
 
-  async #create(input: { name?: string; persist?: boolean }, context: Context) {
-    const scope = this.#scope(context);
-    if (!scope) return MISSING_IDENTITY;
-    const persistent = input.persist === true;
-    const sandbox = this.#createSandbox({ ...this.#sandboxOptions, computer: true });
-    let entry: Entry | undefined;
-    try {
-      await sandbox.start();
-      const sandboxId = sandbox.sandboxId;
-      if (!sandboxId || !SANDBOX_ID_PATTERN.test(sandboxId)) throw new Error('unexpected sandbox id');
-      entry = {
-        id: this.mintId(persistent, sandboxId, scope.resourceId),
-        ready: Promise.resolve(sandbox),
-        sandbox,
-        name: input.name?.trim() || 'computer',
-        template: 'desktop',
-        persistent,
-        ownerResourceId: scope.resourceId,
-        queue: Promise.resolve(),
-        destroyed: false,
-      };
-    } catch {
-      await sandbox.destroy().catch(() => {});
-      return UNAVAILABLE;
-    }
-    this.#computers.set(entry.id, entry);
-    this.#attach(scope, entry);
-    await this.#emit(context, entry, scope.threadId, 'attached');
-    return { computer: this.#describe(entry, 'attached') };
+  #create(input: { name?: string; persist?: boolean }, context: Context) {
+    return this.#serial(context, async scope => {
+      const persistent = input.persist === true;
+      const sandbox = this.#createSandbox({ ...this.#sandboxOptions, computer: true });
+      let entry: Entry | undefined;
+      try {
+        await sandbox.start();
+        const sandboxId = sandbox.sandboxId;
+        if (!sandboxId || !SANDBOX_ID_PATTERN.test(sandboxId)) throw new Error('unexpected sandbox id');
+        entry = {
+          id: this.mintId(persistent, sandboxId, scope.resourceId),
+          ready: Promise.resolve(sandbox),
+          sandbox,
+          name: input.name?.trim() || 'computer',
+          template: 'desktop',
+          persistent,
+          ownerResourceId: scope.resourceId,
+          queue: Promise.resolve(),
+          destroyed: false,
+        };
+      } catch {
+        await sandbox.destroy().catch(() => {});
+        return UNAVAILABLE;
+      }
+      this.#computers.set(entry.id, entry);
+      this.#attach(scope, entry);
+      await this.#emit(context, entry, scope.threadId, 'attached');
+      return { computer: this.#describe(entry, 'attached') };
+    });
   }
 
-  async #attachTool(input: { id: string }, context: Context) {
-    const scope = this.#scope(context);
-    if (!scope) return MISSING_IDENTITY;
-    const verified = this.#verify(input.id, scope.resourceId);
-    if (!verified) return NOT_FOUND;
-    const entry = this.#lookup(input.id, verified, scope.resourceId);
-    if (!entry || entry.destroyed) return NOT_FOUND;
-    try {
-      await entry.ready;
-    } catch (error) {
-      return isReattachFailure(error) ? NOT_FOUND : UNAVAILABLE;
-    }
-    if (entry.destroyed) return NOT_FOUND;
-    this.#attach(scope, entry);
-    await this.#emit(context, entry, scope.threadId, 'attached');
-    return { computer: this.#describe(entry, 'attached') };
+  #attachTool(input: { id: string }, context: Context) {
+    return this.#serial(context, async scope => {
+      const verified = this.#verify(input.id, scope.resourceId);
+      if (!verified) return NOT_FOUND;
+      const entry = this.#lookup(input.id, verified, scope.resourceId);
+      if (!entry || entry.destroyed) return NOT_FOUND;
+      try {
+        await entry.ready;
+      } catch (error) {
+        return isReattachFailure(error) ? NOT_FOUND : UNAVAILABLE;
+      }
+      if (entry.destroyed) return NOT_FOUND;
+      this.#attach(scope, entry);
+      await this.#emit(context, entry, scope.threadId, 'attached');
+      return { computer: this.#describe(entry, 'attached') };
+    });
   }
 
-  async #release(context: Context) {
-    const scope = this.#scope(context);
-    if (!scope) return MISSING_IDENTITY;
-    const id = this.#attachments.get(scope.key);
-    const entry = id ? this.#computers.get(id) : undefined;
-    this.#attachments.delete(scope.key);
-    if (!entry) return NOT_ATTACHED;
-    await this.#emit(context, entry, scope.threadId, 'released');
-    return { computer: this.#describe(entry, 'released') };
+  #release(context: Context) {
+    return this.#serial(context, async scope => {
+      const id = this.#attachments.get(scope.key);
+      const entry = id ? this.#computers.get(id) : undefined;
+      this.#attachments.delete(scope.key);
+      if (!entry) return NOT_ATTACHED;
+      await this.#emit(context, entry, scope.threadId, 'released');
+      return { computer: this.#describe(entry, 'released') };
+    });
   }
 
-  async #destroy(input: { id: string }, context: Context) {
-    const scope = this.#scope(context);
-    if (!scope) return MISSING_IDENTITY;
-    const verified = this.#verify(input.id, scope.resourceId);
-    if (!verified) return NOT_FOUND;
-    const entry = this.#lookup(input.id, verified, scope.resourceId);
-    if (!entry || entry.destroyed) return NOT_FOUND;
-    entry.destroyed = true;
-    const releasedHere = this.#attachments.get(scope.key) === entry.id;
-    for (const [key, id] of this.#attachments) if (id === entry.id) this.#attachments.delete(key);
-    if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
-    const done = entry.queue.then(() => entry.ready).then(sandbox => sandbox.destroy());
-    entry.queue = done.catch(() => {});
-    try {
-      await done;
-    } catch (error) {
-      return isReattachFailure(error) ? NOT_FOUND : DESTROY_FAILED;
-    }
-    if (releasedHere) await this.#emit(context, entry, scope.threadId, 'released');
-    return { destroyed: entry.id };
+  #destroy(input: { id: string }, context: Context) {
+    return this.#serial(context, async scope => {
+      const verified = this.#verify(input.id, scope.resourceId);
+      if (!verified) return NOT_FOUND;
+      const entry = this.#lookup(input.id, verified, scope.resourceId);
+      if (!entry || entry.destroyed) return NOT_FOUND;
+      entry.destroyed = true;
+      const releasedHere = this.#attachments.get(scope.key) === entry.id;
+      for (const [key, id] of this.#attachments) if (id === entry.id) this.#attachments.delete(key);
+      if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
+      const done = entry.queue.then(() => entry.ready).then(sandbox => sandbox.destroy());
+      entry.queue = done.catch(() => {});
+      try {
+        await done;
+      } catch (error) {
+        return isReattachFailure(error) ? NOT_FOUND : DESTROY_FAILED;
+      }
+      if (releasedHere) await this.#emit(context, entry, scope.threadId, 'released');
+      return { destroyed: entry.id };
+    });
   }
 
   #list(context: Context) {
@@ -345,8 +365,10 @@ export class PlatformComputers implements MastraComputers {
         inputSchema: z.object({}),
         execute: async (_input, context) =>
           this.#hands(context, async sandbox => {
-            await sandbox.snapshot();
-            return 'snapshot saved';
+            const result = await sandbox.captureCheckpoint();
+            return result.status === 'skipped'
+              ? { status: result.status, reason: result.reason }
+              : { status: result.status };
           }),
       }),
       computer_destroy: createTool({
@@ -478,7 +500,8 @@ export class PlatformComputers implements MastraComputers {
     scope: { threadId: string; resourceId: string },
   ): Promise<MastraComputerViewer | null> {
     const entry = this.#computers.get(computerId);
-    if (this.#attachments.get(`${scope.resourceId}:${scope.threadId}`) !== computerId || !entry?.sandbox) {
+    const key = JSON.stringify([scope.resourceId, scope.threadId]);
+    if (this.#attachments.get(key) !== computerId || !entry?.sandbox || entry.ownerResourceId !== scope.resourceId) {
       throw new Error('computer not attached');
     }
     const sandbox = entry.sandbox;

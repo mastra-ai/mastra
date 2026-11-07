@@ -28,6 +28,7 @@ class FakeBackend {
   nextSandboxId?: string;
   failStart?: Error;
   failDestroy = false;
+  checkpoint: any = { status: 'captured', checkpointName: 'ck-internal' };
   viewerUrl: string | null = 'https://6080-vm.preview.test/vnc.html?autoconnect=1';
   cookie: { name: string; value: string } | null = { name: '__mastra_preview', value: 'secret-cookie' };
   #n = 0;
@@ -66,8 +67,9 @@ class FakeBackend {
         if (backend.failDestroy) throw new Error('proxy 500 sbx internal');
         if (id) backend.vms.set(id, { alive: false });
       },
-      async snapshot() {
+      async captureCheckpoint() {
         await act('snapshot');
+        return backend.checkpoint;
       },
       async executeCommand(command: string) {
         await act(`exec:${command}`);
@@ -284,6 +286,51 @@ describe('attachment', () => {
     expect((await call(computers, 'computer_attach', { id: a.id }, ctx('r1', 't1'))).computer.id).toBe(a.id);
   });
 
+  it('does not let ids containing ":" collide across resources', async () => {
+    const computers = make();
+    await call(computers, 'computer_create', {}, ctx('u1:x', 't'));
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('u1', 'x:t'))).toBe(NOT_ATTACHED);
+    expect(await call(computers, 'computer_list', {}, ctx('u1', 'x:t'))).toEqual({ computers: [] });
+  });
+
+  it('rejects a non-canonical alias of a valid id', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', { persist: true }, ctx('r1', 't1'));
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const last = alphabet.indexOf(computer.id.at(-1));
+    const alias = computer.id.slice(0, -1) + alphabet[last ^ 1];
+    expect(Buffer.from(alias.slice(-22), 'base64url')).toEqual(Buffer.from(computer.id.slice(-22), 'base64url'));
+    backend.createCalls = [];
+    expect(await call(make(), 'computer_attach', { id: alias }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_attach', { id: alias }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(backend.createCalls).toEqual([]);
+  });
+
+  it('serializes lifecycle calls per thread in call order', async () => {
+    const computers = make();
+    backend.startDelayMs = 10;
+    const a = call(computers, 'computer_create', { name: 'a' }, ctx('r1', 't1'));
+    const b = call(computers, 'computer_create', { name: 'b' }, ctx('r1', 't1'));
+    const released = call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    const [ra, rb] = await Promise.all([a, b]);
+    expect([ra.computer.name, rb.computer.name]).toEqual(['a', 'b']);
+    expect((await released).computer.name).toBe('b');
+    const att = call(computers, 'computer_attach', { id: ra.computer.id }, ctx('r1', 't1'));
+    const rel = call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    expect((await att).computer.id).toBe(ra.computer.id);
+    expect((await rel).computer.id).toBe(ra.computer.id);
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+  });
+
+  it('completes lifecycle changes when the stream writer fails', async () => {
+    const computers = make();
+    const broken = { ...ctx('r1', 't1'), writer: { custom: async () => Promise.reject(new Error('closed')) } };
+    const { computer } = await call(computers, 'computer_create', {}, broken);
+    expect((await call(computers, 'computer_release', {}, broken)).computer.status).toBe('released');
+    expect((await call(computers, 'computer_attach', { id: computer.id }, broken)).computer.status).toBe('attached');
+    expect(await call(computers, 'computer_destroy', { id: computer.id }, broken)).toEqual({ destroyed: computer.id });
+  });
+
   it('refuses another resource attaching or destroying a computer, without side effects', async () => {
     const computers = make();
     const { computer } = await call(computers, 'computer_create', { persist: true }, ctx('r1', 't1'));
@@ -310,10 +357,13 @@ describe('lifecycle', () => {
     backend.latency.type = 20;
     const typed = call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'));
     const destroyed = call(computers, 'computer_destroy', { id: computer.id }, ctx('r1', 't1'));
-    expect(await call(computers, 'computer_key', { keys: 'a' }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+    const keyed = call(computers, 'computer_key', { keys: 'a' }, ctx('r1', 't1'));
+    await sleep(0);
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
     expect(await typed).toBe('typed');
+    expect(await keyed).toBe('pressed');
     expect(await destroyed).toEqual({ destroyed: computer.id });
-    expect(backend.actions).toEqual(['type']);
+    expect(backend.actions).toEqual(['type', 'key']);
     expect(await call(computers, 'computer_attach', { id: computer.id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
   });
 
@@ -346,7 +396,12 @@ describe('lifecycle', () => {
       stdout: 'out',
       stderr: '',
     });
-    expect(await call(computers, 'computer_snapshot', {}, c)).toBe('snapshot saved');
+    expect(await call(computers, 'computer_snapshot', {}, c)).toEqual({ status: 'captured' });
+    backend.checkpoint = { status: 'skipped', reason: 'sandbox-not-running' };
+    expect(await call(computers, 'computer_snapshot', {}, c)).toEqual({
+      status: 'skipped',
+      reason: 'sandbox-not-running',
+    });
     expect(backend.actions).toEqual([
       'screenshot',
       'rightClick',
@@ -355,6 +410,7 @@ describe('lifecycle', () => {
       'drag',
       'scroll',
       'exec:echo hi',
+      'snapshot',
       'snapshot',
     ]);
   });
@@ -498,6 +554,46 @@ function parallelToolCallModel(calls: { toolName: string; input: unknown }[]) {
   };
 }
 
+function streamingToolCallModel(calls: { toolName: string; input: unknown }[]) {
+  let step = 0;
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  const stream = (parts: unknown[]) =>
+    new ReadableStream({
+      start(controller) {
+        for (const p of parts) controller.enqueue(p);
+        controller.close();
+      },
+    });
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'test',
+    modelId: 'streaming-tool-calls',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('not used');
+    },
+    doStream: async () => ({
+      stream:
+        step++ === 0
+          ? stream([
+              ...calls.map((c, i) => ({
+                type: 'tool-call',
+                toolCallId: `call_${i}`,
+                toolName: c.toolName,
+                input: JSON.stringify(c.input),
+              })),
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ])
+          : stream([
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'done' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage },
+            ]),
+    }),
+  };
+}
+
 describe('ordering through a real agent at default tool concurrency', () => {
   const steps = [
     { toolName: 'computer_click', input: { x: 1, y: 2 } },
@@ -525,6 +621,26 @@ describe('ordering through a real agent at default tool concurrency', () => {
     backend.latency = { click: 30, type: 10, key: 0 };
     await run(computers.tools());
     expect(backend.actions).toEqual(['click', 'type', 'key']);
+  });
+
+  it('delivers data-computer chunks through the agent stream', async () => {
+    const computers = make();
+    const agent = new Agent({
+      id: 'computer-events',
+      name: 'computer-events',
+      instructions: 'Use the computer.',
+      model: streamingToolCallModel([{ toolName: 'computer_create', input: { name: 'box' } }]) as any,
+      tools: computers.tools(),
+    });
+    const rc = new RequestContext();
+    rc.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    rc.set(MASTRA_THREAD_ID_KEY, 't1');
+    const stream = await agent.stream('go', { maxSteps: 3, requestContext: rc });
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream as any) if (chunk.type === 'data-computer') chunks.push(chunk);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].data).toMatchObject({ threadId: 't1', name: 'box', status: 'attached', persistent: false });
+    expect(JSON.stringify(chunks)).not.toMatch(/secret-cookie|__mastra_preview|https?:/);
   });
 
   it('red: a tool that awaits before taking its slot misorders in the same harness', async () => {
