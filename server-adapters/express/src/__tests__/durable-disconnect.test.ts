@@ -30,7 +30,6 @@ async function collect(response: {
 }
 
 createDurableDisconnectTestSuite({
-  skipUntilIdleDisconnectReplay: true,
   observeWithClient: async (baseUrl, runId, offset) =>
     collect(await new MastraClient({ baseUrl, retries: 0 }).getAgent('agent').observe({ runId, offset })),
   streamWithClient: async (baseUrl, { messages, runId }) =>

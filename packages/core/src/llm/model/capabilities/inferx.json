@@ -35,12 +35,12 @@
         "type": "toggle"
       }
     ],
-    "Qwen3.6-35B-A3B-FP8": [
+    "Qwen3.6-27B-FP8": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen3.6-27B-FP8": [
+    "Qwen3.6-35B-A3B-FP8": [
       {
         "type": "toggle"
       }
