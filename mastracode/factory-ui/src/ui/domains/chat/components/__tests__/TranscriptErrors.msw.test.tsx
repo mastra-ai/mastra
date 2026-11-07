@@ -295,6 +295,30 @@ describe('chat run errors', () => {
     expect(screen.getByText('Provider access failed')).toBeVisible();
   });
 
+  it('sends the organization to add credits on Mastra when a run runs out of gateway credits', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 0,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const outOfCredits = failedReply(
+      "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      'AI_APICallError',
+      { statusCode: 402 },
+    );
+    renderWithProviders(<ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-opus-5.5" />);
+
+    expect(screen.getByText('Out of Mastra Gateway credits')).toBeVisible();
+    const addCredits = await screen.findByRole('link', { name: 'Add credits' });
+    expect(addCredits).toHaveAttribute('href', 'https://projects.mastra.ai/add-credits/org-1');
+    expect(addCredits).toHaveAttribute('target', '_blank');
+  });
+
   it('continues a timed-out run from the card', async () => {
     const sentMessages: unknown[] = [];
     server.use(

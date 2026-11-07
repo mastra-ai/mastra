@@ -5,6 +5,7 @@ import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
+  MastraGatewayCredits,
   OAuthPollResponse,
   OAuthStartResponse,
   ProviderInfo,
@@ -72,6 +73,30 @@ export function useSaveProviderKey() {
         ...(scope !== undefined ? { scope } : {}),
       }),
     onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
+}
+
+const MASTRA_GATEWAY_CATALOG_PROVIDER = 'mastra';
+
+export function useConnectMastraGateway() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scope }: { scope?: 'user' | 'org' }) =>
+      client.post<SaveProviderKeyResponse>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
+        ...(scope !== undefined ? { scope } : {}),
+      }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
+}
+
+/** A payment finished in another tab lands in the balance when the user comes back. */
+export function useMastraGatewayCreditsQuery() {
+  const { client } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.mastraGatewayCredits(),
+    queryFn: () => client.get<MastraGatewayCredits>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`),
+    refetchOnWindowFocus: 'always',
   });
 }
 

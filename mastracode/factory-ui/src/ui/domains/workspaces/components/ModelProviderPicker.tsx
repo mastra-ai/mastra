@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
@@ -10,6 +11,7 @@ import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { CustomProviderForm } from '../../settings/components/CustomProviderForm';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
+import { MastraGatewayBilling } from './MastraGatewayBilling';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 type ProviderPickerTab = ProviderConnectionMethod | 'custom';
@@ -52,13 +54,53 @@ export function ModelProviderPicker({
 
   const visible = connection.keyProviders.filter(provider => matchesProviderQuery(provider, search));
   const restore = () => onPreviewProvider?.(connection.provider?.provider, connection.method);
+  const gateway = connection.gatewayProvider;
   return (
     <div
+      className="flex flex-col gap-5"
       onMouseLeave={restore}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) restore();
       }}
     >
+      {gateway && (
+        <>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <span className="pt-0.5">
+                <ProviderBrandIcon provider={gateway.provider} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <Txt as="h2" variant="caption" tone="ink" className="m-0 flex items-center gap-2">
+                  {providerDisplayName(gateway.provider)}
+                  <Badge size="xs" variant="success" emphasis="subtle">
+                    Recommended
+                  </Badge>
+                </Txt>
+                <Txt variant="caption" tone="muted" className="mt-1">
+                  <MastraGatewayBilling />
+                </Txt>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              className="w-full"
+              disabled={connection.pending || !connection.canConfigure(gateway, 'api_key')}
+              onMouseEnter={() => onPreviewProvider?.(gateway.provider, 'api_key')}
+              onFocus={() => onPreviewProvider?.(gateway.provider, 'api_key')}
+              onClick={() => {
+                connection.chooseGateway();
+                onPreviewProvider?.(gateway.provider, 'api_key');
+              }}
+            >
+              {connection.connectingGateway ? 'Connecting…' : 'Connect Mastra Gateway'}
+            </Button>
+          </div>
+          <Txt as="h2" variant="meta" tone="muted" className="m-0">
+            Or bring your own provider
+          </Txt>
+        </>
+      )}
       <Tabs
         defaultTab="api_key"
         value={tab}
