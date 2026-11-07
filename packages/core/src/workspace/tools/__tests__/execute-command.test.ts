@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -766,6 +767,37 @@ describe('executeCommandTool data chunks', () => {
       });
     });
 
+    // On a dash /bin/sh without pipefail (Debian, Ubuntu 22.04/24.04) these run through the bash
+    // fallback; on shells with pipefail they run as written.
+    it('reports the failing stage of a multi-stage pipeline ending in tail', async () => {
+      const { result } = await runCommand(`sh -c 'echo match-line; exit 3' | grep match | tail -5`);
+      expect(result).toBe('match-line\n\nExit code: 3');
+    });
+
+    it('reports an upstream failure after && in a pipeline ending in tail', async () => {
+      const { result } = await runCommand(`cd . && sh -c 'echo hi; exit 4' 2>&1 | tail -1`);
+      expect(result).toBe('hi\n\nExit code: 4');
+    });
+
+    it('keeps single quotes intact in a pipeline ending in tail', async () => {
+      const { result } = await runCommand(`printf '%s\\n' "it's | here" 'x' | tail -n 2`);
+      expect(result).toBe("it's | here\nx\n");
+    });
+
+    it('runs a pipeline ending in tail when bash is not on PATH', async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'mastra-nobash-'));
+      const bin = join(directory, 'bin');
+      await mkdir(bin);
+      await symlink(execFileSync('sh', ['-c', 'command -v tail'], { encoding: 'utf8' }).trim(), join(bin, 'tail'));
+      const sandbox = new LocalSandbox({ workingDirectory: directory, isolation: 'none', env: { PATH: bin } });
+      resources.push({ sandbox, directory });
+      const result = await execute(
+        { command: `printf 'a\\nb\\n' | tail -1`, tail: 0, timeout: 10 },
+        { workspace: new Workspace({ sandbox }) },
+      );
+      expect(result).toBe('b\n');
+    });
+
     it('keeps shell exit status for pipelines that do not end in tail', async () => {
       const { result, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | cat`);
       expect(result).toBe('kept\n');
@@ -829,6 +861,47 @@ describe('executeCommandTool data chunks', () => {
       await execute({ command: 'cat file.txt | grep error', timeout: null, cwd: null, tail: null }, context);
 
       expect(receivedCommand).toBe('cat file.txt | grep error');
+    });
+
+    it('falls back to bash pipefail for a pipeline ending in tail', async () => {
+      let receivedCommand = '';
+
+      const { context } = createMockContext({
+        executeCommand: async cmd => {
+          receivedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      const command = `echo "it's" | tail -5`;
+      await execute({ command, timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedCommand).toBe(
+        `if (set -o pipefail) 2>/dev/null; then set -o pipefail; ` +
+          `elif command -v bash >/dev/null 2>&1; then exec bash -o pipefail -c 'echo "it'\\''s" | tail -5'; fi; ` +
+          command,
+      );
+    });
+
+    // The fallback quotes the command and repeats it, so its size is measured in UTF-8 bytes of the
+    // whole wrapped argument: quotes and non-ASCII text grow it beyond `command.length`.
+    it.each([
+      ['a long command', `echo ${'x'.repeat(40_000)} | tail -1`],
+      ['a command full of single quotes', `echo "${"'".repeat(16_000)}" | tail -1`],
+      ['a command full of non-ASCII text', `echo ${'é'.repeat(20_000)} | tail -1`],
+    ])('skips the bash fallback for %s too large to pass twice', async (_label, command) => {
+      let receivedCommand = '';
+
+      const { context } = createMockContext({
+        executeCommand: async cmd => {
+          receivedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command, timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedCommand).toBe(`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ${command}`);
     });
 
     it('passes stdinMode ignore to spawn for background commands', async () => {
