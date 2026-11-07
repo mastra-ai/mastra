@@ -5,13 +5,23 @@ import { connectedFixture } from './connections';
 import { json, startAssistant } from './helpers';
 
 export type Call = { name: string; args: unknown };
-export type ProgressCommand = { calls?: Call[][]; missing?: string; complete?: boolean };
+export type ProgressCommand = {
+  calls?: Call[][];
+  missing?: string;
+  complete?: boolean;
+  scheduledResult?: boolean;
+  reuseCompleted?: boolean;
+};
 
 export async function progressFixture() {
   const judges: Record<string, unknown>[] = [];
   let callSequence = 0;
-  const state = { failJudge: false, continueGoal: false };
-  const fixture = await connectedFixture((body, judge) => {
+  const state = {
+    failJudge: false,
+    continueGoal: false,
+    responseGate: undefined as Promise<void> | undefined,
+  };
+  const fixture = await connectedFixture(async (body, judge) => {
     const messages = body.messages as { role: string; content: unknown }[];
     if (judge) {
       judges.push(body);
@@ -38,7 +48,7 @@ export async function progressFixture() {
             ? message.content.map(part => part.text ?? '').join('')
             : '';
       try {
-        const value = JSON.parse(text);
+        const value = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
         return value && typeof value === 'object';
       } catch {
         return false;
@@ -53,16 +63,9 @@ export async function progressFixture() {
           : '';
     let command: ProgressCommand = {};
     try {
-      command = JSON.parse(text);
+      command = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
     } catch {}
     const results = messages.slice(latest + 1).filter(message => message.role === 'tool');
-    const batches = command.calls ?? [];
-    let consumed = 0;
-    for (const batch of batches) {
-      if (results.length < consumed + batch.length)
-        return { text: '', calls: batch.map(call => ({ ...call, id: `progress-${++callSequence}` })) };
-      consumed += batch.length;
-    }
     // The response exposes actual native results; assertions inspect both them and persisted state.
     const parsed = results.flatMap(result => {
       try {
@@ -71,22 +74,60 @@ export async function progressFixture() {
         return [];
       }
     });
+    // The paid-model fixture only reuses completion that actually crossed the native memory boundary.
+    if (
+      command.reuseCompleted &&
+      JSON.stringify(messages.slice(0, latest)).includes('Verified scheduled document content:')
+    )
+      return {
+        text: 'The recorded document existing-document already has verified content. No external action was repeated.',
+      };
+    if (command.reuseCompleted && JSON.stringify(messages.slice(0, latest)).includes('Content insertion failed'))
+      return {
+        text: 'Document existing-document exists but its content is incomplete. An owner decision is required before repeating an uncertain external action.',
+      };
+    const batches = command.calls ?? [];
+    let consumed = 0;
+    for (const batch of batches) {
+      if (results.length < consumed + batch.length) {
+        if (
+          command.scheduledResult &&
+          batch.some(call => call.name === 'google_docs_insert_text') &&
+          !parsed.some(result => typeof result.documentId === 'string')
+        )
+          return {
+            text: 'Document creation is unconfirmed. The responsibility remains unfinished.',
+          };
+        return {
+          text: '',
+          calls: batch.map(call => ({ ...call, id: `progress-${++callSequence}` })),
+        };
+      }
+      consumed += batch.length;
+    }
     const inserted = parsed.find(result => typeof result.documentId === 'string' && Array.isArray(result.replies));
     const checked = parsed.findLast(result => result.summary && result.summary.allCompleted === true);
     const complete = command.complete && inserted && checked;
+    await state.responseGate;
     return {
-      text: complete
-        ? `Verified document content and completed task results: ${JSON.stringify({ inserted, checked })}`
-        : command.missing
-          ? `Please provide ${command.missing}. Work remains unfinished. ${JSON.stringify(results)}`
-          : `Native progress: ${JSON.stringify(results)}`,
+      text:
+        command.scheduledResult && inserted
+          ? `Verified scheduled document content: ${JSON.stringify(inserted)}`
+          : complete
+            ? `Verified document content and completed task results: ${JSON.stringify({ inserted, checked })}`
+            : command.missing
+              ? `Please provide ${command.missing}. Work remains unfinished. ${JSON.stringify(results)}`
+              : `Native progress: ${JSON.stringify(results)}`,
     };
   });
   return { ...fixture, providerState: fixture.state, judges, state };
 }
 
 export async function progressState(dataDir: string, threadId: string) {
-  const storage = new LibSQLStore({ id: 'progress-reader', url: `file:${join(dataDir, 'assistant.db')}` });
+  const storage = new LibSQLStore({
+    id: 'progress-reader',
+    url: `file:${join(dataDir, 'assistant.db')}`,
+  });
   await storage.init();
   try {
     const domain = await storage.getStore('threadState');
@@ -121,6 +162,16 @@ export const taskPlan = [
     activeForm: 'Researching the meeting topic',
     status: 'in_progress',
   },
-  { id: 'draft', content: 'Draft the agenda', activeForm: 'Drafting the agenda', status: 'pending' },
-  { id: 'review', content: 'Review with the owner', activeForm: 'Reviewing with the owner', status: 'pending' },
+  {
+    id: 'draft',
+    content: 'Draft the agenda',
+    activeForm: 'Drafting the agenda',
+    status: 'pending',
+  },
+  {
+    id: 'review',
+    content: 'Review with the owner',
+    activeForm: 'Reviewing with the owner',
+    status: 'pending',
+  },
 ];

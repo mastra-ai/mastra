@@ -10,8 +10,8 @@ Repeating the same preferences in every conversation adds friction. This assista
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for the default `openai/gpt-6-luna` model. Your account needs access to that model; `ASSISTANT_MODEL` can select another OpenAI model available to your account.
 - **[Mastra Connect credentials](https://mastra.ai/docs/mastra-platform/connect)** (optional): set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` together after creating a Platform project and app access token. `MASTRA_PLATFORM_SECRET_KEY` is the native fallback. Connect accounts in that project separately; the OpenAI key does not authorize access to them.
-- This local version supports one owner per installation and listens on `127.0.0.1`. Each conversation can hold one explicit objective and its task list. Schedules are not configured.
-- Conversations, preferences, objectives, tasks, and native traces persist in `.data/assistant.db` without automatic expiration. `ASSISTANT_DATA_DIR` changes the directory, relative to the template root or an absolute path. Keep your database private; deleting it removes the installation's stored context.
+- This local version supports one owner per installation and listens on `127.0.0.1`. Each conversation can hold one explicit objective and its task list. Schedules use explicit timezones and stay attached to their original conversations.
+- Conversations, preferences, objectives, tasks, schedules, and native traces persist in `.data/assistant.db` without automatic expiration. `ASSISTANT_DATA_DIR` changes the directory, relative to the template root or an absolute path. Keep your database private; deleting it removes the installation's stored context.
 
 ## Quickstart 🚀
 
@@ -31,6 +31,8 @@ Repeating the same preferences in every conversation adds friction. This assista
 - Say “Set an objective to prepare my meeting agenda. Track research, drafting and review as tasks; wait for my meeting topic before proceeding.” Supply the topic when asked, then restart and inspect progress in that conversation. Unfinished objectives need explicit replacement; ask to pause, resume with an additional evaluation allowance, or clear one when needed.
 - With Connect configured, ask “Check my connected services and summarize this Gmail message: `<message ID>`.” Supported full plain-text bodies are decoded; unsupported or incomplete content is identified.
 - Ask to create a document containing your reviewed draft. Review each pending tool call and its arguments, then approve or decline it in Studio. A blank document is incomplete; failed insertion should retain its document ID.
+
+- Ask “Check for my meeting confirmation every weekday at 09:00 America/Sao_Paulo; stop after the confirmed document update.” Review the explicit cadence, schedule ID and next occurrence, then ask to pause, resume or cancel it. Connected changes still require Studio approval. Keep the server running for scheduled checks; busy or approval-blocked conversations can skip checks, and missed checks may not replay. Run-now during an active conversation can be discarded. A completed cadence is not proof of completed work.
 
 ## Customization
 

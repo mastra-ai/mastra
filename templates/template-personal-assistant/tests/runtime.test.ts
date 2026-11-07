@@ -116,6 +116,7 @@ test(
       assert.deepEqual(Object.keys(agents['personal-assistant'].tools).sort(), [
         'connection_status',
         'objective',
+        'schedule',
         'task_check',
         'task_complete',
         'task_update',
@@ -174,7 +175,9 @@ test(
       const working = await json(await fetch(`${url}/api/memory/threads/runtime-thread/working-memory${query}`));
       assert.match(working.workingMemory, /Prefer short morning plans/);
       assert.equal((await stat(join(directory, 'state/assistant.db'))).ino, database.ino);
-      await assert.rejects(stat(join(directory, '.mastra/output/.data/assistant.db')), { code: 'ENOENT' });
+      await assert.rejects(stat(join(directory, '.mastra/output/.data/assistant.db')), {
+        code: 'ENOENT',
+      });
       await assert.rejects(stat(join(directory, '.data/assistant.db')), { code: 'ENOENT' });
     } finally {
       await runtime?.stop();

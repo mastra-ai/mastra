@@ -20,7 +20,10 @@ test('ordinary execution limits protect native message and approval options', { 
   const model = await modelFixture();
   let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
   try {
-    app = await startAssistant(dataDir, model.url, { ASSISTANT_MAX_STEPS: '1', TEST_SEED_FOREIGN: 'true' });
+    app = await startAssistant(dataDir, model.url, {
+      ASSISTANT_MAX_STEPS: '1',
+      TEST_SEED_FOREIGN: 'true',
+    });
     await json(
       await app.request(`/memory/threads${query}`, 'POST', {
         threadId: 'owner-thread',
@@ -44,7 +47,10 @@ test('ordinary execution limits protect native message and approval options', { 
     multipart.append('ifIdle', JSON.stringify({ behavior: 'wake', streamOptions: { maxSteps: 1 } }));
     multipart.append('ifIdle', JSON.stringify({ behavior: 'wake', streamOptions: { maxSteps: 2 } }));
     const multipartDenied = await json(
-      await fetch(`${app.url}/api/agents/${agent}/send-message`, { method: 'POST', body: multipart }),
+      await fetch(`${app.url}/api/agents/${agent}/send-message`, {
+        method: 'POST',
+        body: multipart,
+      }),
       400,
     );
     assert.match(multipartDenied.error, /maxSteps/);
@@ -67,11 +73,30 @@ test('ordinary execution limits protect native message and approval options', { 
           ifIdle: { behavior: 'wake', streamOptions: { maxSteps } },
         }),
       ],
-      ['signals', maxSteps => ({ ...target, signal, ifIdle: { behavior: 'wake', streamOptions: { maxSteps } } })],
-      ['queue-signal', maxSteps => ({ ...target, signal, ifIdle: { behavior: 'wake', streamOptions: { maxSteps } } })],
+      [
+        'signals',
+        maxSteps => ({
+          ...target,
+          signal,
+          ifIdle: { behavior: 'wake', streamOptions: { maxSteps } },
+        }),
+      ],
+      [
+        'queue-signal',
+        maxSteps => ({
+          ...target,
+          signal,
+          ifIdle: { behavior: 'wake', streamOptions: { maxSteps } },
+        }),
+      ],
       [
         'send-tool-approval',
-        maxSteps => ({ ...target, toolCallId: 'pending-call', approved: true, streamOptions: { maxSteps } }),
+        maxSteps => ({
+          ...target,
+          toolCallId: 'pending-call',
+          approved: true,
+          streamOptions: { maxSteps },
+        }),
       ],
       ...['generate', 'stream', 'stream-until-idle'].map(
         mode =>
@@ -111,7 +136,10 @@ test('ordinary execution limits protect native message and approval options', { 
     allowedForm.append('ifIdle', JSON.stringify({ behavior: 'wake', streamOptions: { maxSteps: 2 } }));
     allowedForm.append('ifIdle', JSON.stringify({ behavior: 'wake', streamOptions: { maxSteps: 1 } }));
     const sent = await json(
-      await fetch(`${app.url}/api/agents/${agent}/send-message`, { method: 'POST', body: allowedForm }),
+      await fetch(`${app.url}/api/agents/${agent}/send-message`, {
+        method: 'POST',
+        body: allowedForm,
+      }),
     );
     assert.equal(sent.accepted, true);
     let history = '';
@@ -132,9 +160,15 @@ test('ordinary execution limits protect native message and approval options', { 
 });
 
 async function readState(dataDir: string) {
-  const storage = new LibSQLStore({ id: 'test-state-reader', url: `file:${join(dataDir, 'assistant.db')}` });
+  const storage = new LibSQLStore({
+    id: 'test-state-reader',
+    url: `file:${join(dataDir, 'assistant.db')}`,
+  });
   await storage.init();
-  const memory = new Memory({ storage, options: { workingMemory: { enabled: true, scope: 'resource' } } });
+  const memory = new Memory({
+    storage,
+    options: { workingMemory: { enabled: true, scope: 'resource' } },
+  });
   try {
     const state = {} as Record<string, unknown>;
     for (const [threadId, resourceId] of [
@@ -144,7 +178,10 @@ async function readState(dataDir: string) {
       state[threadId] = {
         thread: await memory.getThreadById({ threadId: threadId! }),
         messages: await memory.recall({ threadId: threadId!, resourceId: resourceId! }),
-        workingMemory: await memory.getWorkingMemory({ threadId: threadId!, resourceId: resourceId! }),
+        workingMemory: await memory.getWorkingMemory({
+          threadId: threadId!,
+          resourceId: resourceId!,
+        }),
       };
     }
     return JSON.parse(JSON.stringify(state));
@@ -263,7 +300,10 @@ test('invalid configuration and conflicting identity leave state unchanged', { t
         {
           messages: [{ role: 'user', content: 'Read private context' }],
           memory: { thread: 'foreign-thread', resource: 'foreign-owner' },
-          requestContext: { mastra__resourceId: 'foreign-owner', mastra__scopes: ['resource:foreign-owner'] },
+          requestContext: {
+            mastra__resourceId: 'foreign-owner',
+            mastra__scopes: ['resource:foreign-owner'],
+          },
         },
       ],
       [
@@ -326,15 +366,15 @@ test('invalid configuration and conflicting identity leave state unchanged', { t
     });
     try {
       await assert.rejects(
-        native
-          .getAgent(agent)
-          .generate('Read foreign context', { memory: { thread: 'foreign-thread', resource: 'foreign-owner' } }),
+        native.getAgent(agent).generate('Read foreign context', {
+          memory: { thread: 'foreign-thread', resource: 'foreign-owner' },
+        }),
         /conflict|resource|scope/i,
       );
       await assert.rejects(
-        native
-          .getAgent(agent)
-          .generate('Read foreign context', { memory: { thread: 'foreign-thread', resource: 'local-owner' } }),
+        native.getAgent(agent).generate('Read foreign context', {
+          memory: { thread: 'foreign-thread', resource: 'local-owner' },
+        }),
         /resource|owner|thread/i,
       );
       assert.deepEqual(await readState(dataDir), stable);
@@ -355,7 +395,10 @@ async function pending(app: Awaited<ReturnType<typeof startAssistant>>, threadId
       await app.request(`/agents/${agent}/suspended-runs?threadId=${threadId}&resourceId=local-owner`),
     );
     if (result.runs.length)
-      return result.runs[0] as { runId: string; toolCalls: { toolCallId: string; toolName: string; args: unknown }[] };
+      return result.runs[0] as {
+        runId: string;
+        toolCalls: { toolCallId: string; toolName: string; args: unknown }[];
+      };
     await delay(25);
   }
   assert.fail(`No persisted pending approval for ${threadId}.`);
@@ -499,7 +542,11 @@ test('external writes require matching approval across restart and policy change
               message: prompt,
               ifIdle: { behavior: 'wake', streamOptions },
             }
-          : { messages: [{ role: 'user', content: prompt }], memory: { thread }, ...streamOptions };
+          : {
+              messages: [{ role: 'user', content: prompt }],
+              memory: { thread },
+              ...streamOptions,
+            };
       const response: Response = await app.request(`/agents/${agent}/${route}`, 'POST', body);
       assert.equal(response.status, 200, await response.clone().text());
       await response.text();
@@ -570,7 +617,10 @@ test('external writes require matching approval across restart and policy change
       assert.equal(output.finishReason, 'suspended');
       assert.equal(fixture.providerCalls.length, 2);
       assert.ok(output.runId);
-      await nativeAgent.declineToolCallGenerate({ runId: output.runId, toolCallId: 'call-write-0' });
+      await nativeAgent.declineToolCallGenerate({
+        runId: output.runId,
+        toolCallId: 'call-write-0',
+      });
       assert.equal(fixture.providerCalls.length, 2);
     } finally {
       await native.shutdown();
@@ -683,7 +733,11 @@ test('partial document writes preserve references without blind retry', { timeou
         toolCallId: 'call-partial-1',
       }),
     );
-    const finalInput = fixture.models.at(-1)!.messages as { role: string; tool_call_id?: string; content: unknown }[];
+    const finalInput = fixture.models.at(-1)!.messages as {
+      role: string;
+      tool_call_id?: string;
+      content: unknown;
+    }[];
     const createdInput = finalInput.find(
       message => message.role === 'tool' && message.tool_call_id === 'call-partial-0',
     );
@@ -691,7 +745,10 @@ test('partial document writes preserve references without blind retry', { timeou
       message => message.role === 'tool' && message.tool_call_id === 'call-partial-1',
     );
     assert.ok(createdInput, 'The model must receive the actual creation result.');
-    assert.deepEqual(JSON.parse(String(createdInput.content)), { documentId, revisionId: 'revision-1' });
+    assert.deepEqual(JSON.parse(String(createdInput.content)), {
+      documentId,
+      revisionId: 'revision-1',
+    });
     assert.ok(failedInput, 'The model must receive the insertion failure as a tool result.');
     assert.match(String(failedInput.content), /Content insertion failed\./);
     assert.ok(String(failedInput.content).includes(documentId));
@@ -742,12 +799,19 @@ test('partial document writes preserve references without blind retry', { timeou
         toolCallId: 'call-partial-1',
       }),
     );
-    const successInput = fixture.models.at(-1)!.messages as { role: string; tool_call_id?: string; content: unknown }[];
+    const successInput = fixture.models.at(-1)!.messages as {
+      role: string;
+      tool_call_id?: string;
+      content: unknown;
+    }[];
     const insertionResult = successInput.find(
       message => message.role === 'tool' && message.tool_call_id === 'call-partial-1',
     );
     assert.ok(insertionResult);
-    assert.deepEqual(JSON.parse(String(insertionResult.content)), { documentId: successfulDocumentId, replies: [{}] });
+    assert.deepEqual(JSON.parse(String(insertionResult.content)), {
+      documentId: successfulDocumentId,
+      replies: [{}],
+    });
     assert.ok(successfulInsert.text.includes(successfulDocumentId));
     assert.match(successfulInsert.text, /inserted successfully/);
     assert.doesNotMatch(successfulInsert.text, /incomplete|failed/i);
@@ -775,7 +839,10 @@ test('native objectives and tasks preserve unfinished work across restart', { ti
         [
           {
             name: 'objective',
-            args: { action: 'set', objective: 'Prepare a meeting agenda and wait for owner review.' },
+            args: {
+              action: 'set',
+              objective: 'Prepare a meeting agenda and wait for owner review.',
+            },
           },
         ],
         [{ name: 'task_check', args: {} }],
@@ -823,7 +890,12 @@ test('native objectives and tasks preserve unfinished work across restart', { ti
     const invalid = await progressTurn(app, thread, {
       calls: [
         [{ name: 'task_check', args: {} }],
-        [{ name: 'task_write', args: { tasks: stable.tasks.map(task => ({ ...task, status: 'in_progress' })) } }],
+        [
+          {
+            name: 'task_write',
+            args: { tasks: stable.tasks.map(task => ({ ...task, status: 'in_progress' })) },
+          },
+        ],
       ],
     });
     assert.match(invalid.text, /only one task|one task.*in_progress|at most one/i);
@@ -902,7 +974,9 @@ test('objective conflicts and exhausted budgets require explicit continuation', 
     });
     assert.match(conflict.text, /explicit replacement|separate conversation/);
     assert.deepEqual((await progressState(dataDir, thread)).objective, exhausted);
-    const noBudget = await progressTurn(app, thread, { calls: [[{ name: 'objective', args: { action: 'resume' } }]] });
+    const noBudget = await progressTurn(app, thread, {
+      calls: [[{ name: 'objective', args: { action: 'resume' } }]],
+    });
     assert.match(noBudget.text, /additional evaluation allowance/);
     assert.deepEqual((await progressState(dataDir, thread)).objective, exhausted);
     for (const invalid of [
@@ -911,7 +985,12 @@ test('objective conflicts and exhausted budgets require explicit continuation', 
       { action: 'resume', additionalEvaluations: 1.5 },
       { action: 'inspect', objective: 'Unexpected field' },
       { action: 'clear' },
-      { action: 'set', objective: 'Thread injection', threadId: 'another-thread', ownerId: 'foreign-owner' },
+      {
+        action: 'set',
+        objective: 'Thread injection',
+        threadId: 'another-thread',
+        ownerId: 'foreign-owner',
+      },
     ]) {
       await progressTurn(app, thread, { calls: [[{ name: 'objective', args: invalid }]] });
       assert.deepEqual((await progressState(dataDir, thread)).objective, exhausted);
@@ -948,10 +1027,14 @@ test('objective conflicts and exhausted budgets require explicit continuation', 
     const replacement = (await progressState(dataDir, thread)).objective!;
     assert.notEqual(replacement.id, guarded.id);
     assert.equal(replacement.runsUsed, 1);
-    await progressTurn(app, thread, { calls: [[{ name: 'objective', args: { action: 'pause' } }]] });
+    await progressTurn(app, thread, {
+      calls: [[{ name: 'objective', args: { action: 'pause' } }]],
+    });
     assert.equal((await progressState(dataDir, thread)).objective?.status, 'paused');
     fixture.state.failJudge = true;
-    await progressTurn(app, thread, { calls: [[{ name: 'objective', args: { action: 'resume' } }]] });
+    await progressTurn(app, thread, {
+      calls: [[{ name: 'objective', args: { action: 'resume' } }]],
+    });
     const failed = (await progressState(dataDir, thread)).objective!;
     assert.equal(failed.status, 'paused');
     assert.match(failed.pausedReason!, /judge|evaluation|fail/i);
@@ -980,7 +1063,10 @@ test('incomplete objectives wait for information and preserve approvals', { time
   let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
   const thread = 'missing-topic';
   try {
-    app = await startAssistant(dataDir, fixture.modelUrl, { ...fixture.env, TEST_SEED_FOREIGN: 'true' });
+    app = await startAssistant(dataDir, fixture.modelUrl, {
+      ...fixture.env,
+      TEST_SEED_FOREIGN: 'true',
+    });
     const answer = await progressTurn(app, thread, {
       missing: 'the meeting topic',
       calls: [
@@ -1014,7 +1100,14 @@ test('incomplete objectives wait for information and preserve approvals', { time
         {
           role: 'user',
           content: JSON.stringify({
-            calls: [[{ name: 'google_docs_create_document', args: { title: 'Agenda: recovery planning' } }]],
+            calls: [
+              [
+                {
+                  name: 'google_docs_create_document',
+                  args: { title: 'Agenda: recovery planning' },
+                },
+              ],
+            ],
           }),
         },
       ],
@@ -1044,7 +1137,12 @@ test('incomplete objectives wait for information and preserve approvals', { time
     assert.ok((await progressState(dataDir, thread)).tasks.every(task => task.status !== 'completed'));
     const calls = fixture.models.length;
     const foreign = await app.request(`/agents/${agent}/generate`, 'POST', {
-      messages: [{ role: 'user', content: JSON.stringify({ calls: [[{ name: 'task_check', args: {} }]] }) }],
+      messages: [
+        {
+          role: 'user',
+          content: JSON.stringify({ calls: [[{ name: 'task_check', args: {} }]] }),
+        },
+      ],
       memory: { thread: 'foreign-thread', resource: 'foreign-owner' },
     });
     assert.equal(foreign.status, 403);
@@ -1183,6 +1281,501 @@ test('incomplete objectives wait for information and preserve approvals', { time
     assert.match(JSON.stringify(fixture.judges.at(-1)), /confirmed-agenda/);
     assert.match(JSON.stringify(fixture.judges.at(-1)), /allCompleted/);
   } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+// Schedule journeys use native workers, file storage and a separate real server process.
+import { progressFixture, progressTurn } from './progress';
+import {
+  createMonitor,
+  dueNow,
+  eventually,
+  history,
+  monitorPrompt,
+  nativeSchedule,
+  occurrences,
+  recurring,
+  schedules,
+  scheduleTurn,
+} from './schedules';
+import type { Schedule } from '@mastra/core/storage';
+import type { AgentSchedule } from '@mastra/core/schedules';
+
+test('schedule lifecycle persists timing and owner scope across restart', { timeout: 120000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-life-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl);
+    const value = await createMonitor(
+      app,
+      'schedule-life',
+      'meeting-request',
+      JSON.stringify({ missing: 'a meeting confirmation' }),
+    );
+    assert.equal(value.timezone, recurring.timezone);
+    assert.equal(value.cron, recurring.cron);
+    assert.ok(value.nextFireAt > Date.now());
+    assert.equal(value.resourceId, 'local-owner');
+    assert.equal(value.agentId, 'personal-assistant');
+    await createMonitor(app, 'schedule-life', 'meeting-request');
+    assert.equal((await schedules(app)).length, 1, 'An identified request cannot create a duplicate monitor.');
+    await scheduleTurn(app, 'schedule-life', {
+      action: 'update',
+      scheduleId: value.id,
+      timing: { ...recurring, cron: '0 30 10 * * 1-5' },
+    });
+    const changed = (await schedules(app))[0]!;
+    assert.equal(changed.cron, '0 30 10 * * 1-5');
+    assert.notEqual(changed.nextFireAt, value.nextFireAt);
+    await scheduleTurn(app, 'schedule-life', { action: 'pause', scheduleId: value.id });
+    assert.equal((await schedules(app, 'paused'))[0]!.id, value.id);
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl);
+    const restored = (await schedules(app, 'paused'))[0]!;
+    assert.equal(restored.id, value.id);
+    assert.equal(restored.timezone, recurring.timezone);
+    assert.equal(restored.cron, changed.cron);
+    await scheduleTurn(app, 'schedule-life', { action: 'resume', scheduleId: value.id });
+    const resumed = (await schedules(app))[0]!;
+    await nativeSchedule(app, 'run', { id: value.id });
+    const fired = await eventually(
+      () => occurrences(app!, value.id),
+      values => values.some(value => value.outcome === 'succeeded'),
+    );
+    assert.ok(fired[0]!.id);
+    assert.ok(fired[0]!.runId);
+    await eventually(
+      () => history(app!, 'schedule-life'),
+      value => value.includes('Please provide a meeting confirmation'),
+    );
+    assert.equal((await schedules(app))[0]!.nextFireAt, resumed.nextFireAt, 'Manual dispatch preserves cadence.');
+    const cancelled = await scheduleTurn(app, 'schedule-life', {
+      action: 'cancel',
+      scheduleId: value.id,
+      reason: 'owner-request',
+    });
+    assert.match(cancelled.text, /does not roll back/);
+    assert.deepEqual(await schedules(app), []);
+    await json(await app.request(`/schedules/${value.id}`), 404);
+    assert.equal(await nativeSchedule(app, 'row', { id: value.id }), null);
+    assert.match(await history(app, 'schedule-life'), /meeting confirmation/);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('invalid timing and foreign schedule targets leave storage unchanged', { timeout: 120000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-scope-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, { TEST_SEED_FOREIGN: 'true' });
+    const owner = await createMonitor(app, 'schedule-scope', 'owner');
+    const futureYear = new Date().getUTCFullYear() + 2;
+    const marchDay = 8 + ((7 - new Date(Date.UTC(futureYear, 2, 1)).getUTCDay()) % 7);
+    const dstGap = `${futureYear}-03-${String(marchDay).padStart(2, '0')}T02:30:00-05:00`;
+    for (const timing of [
+      { kind: 'once', date: `${futureYear}-02-30T10:00:00Z`, timezone: 'UTC' },
+      { kind: 'once', date: '2020-01-01T10:00:00Z', timezone: 'UTC' },
+      { kind: 'once', date: `${futureYear}-01-10T10:00:00`, timezone: 'UTC' },
+      { kind: 'once', date: dstGap, timezone: 'America/New_York' },
+      { kind: 'once', date: `${futureYear}-01-10T10:00:00+01:00`, timezone: 'UTC' },
+      { ...recurring, timezone: '+01:00' },
+      { ...recurring, timezone: 'Invalid/Zone' },
+      { ...recurring, cron: 'invalid cron' },
+      { ...recurring, cron: '0 0 9 1 1 * 2020' },
+      { kind: 'cron', cron: '* * * * *' },
+    ]) {
+      await scheduleTurn(app, 'schedule-scope', {
+        action: 'create',
+        requestId: 'invalid',
+        name: 'Invalid timing',
+        prompt: 'Check',
+        timing,
+      });
+      assert.deepEqual(
+        (await schedules(app)).map(value => value.id),
+        [owner.id],
+      );
+    }
+    const hidden: AgentSchedule[] = [];
+    for (const overrides of [
+      { id: 'foreign-resource', resourceId: 'foreign-owner', threadId: 'foreign-thread' },
+      { id: 'foreign-agent', agentId: 'other-agent' },
+      { id: 'internal-notification', metadata: {} },
+      { id: 'forged-thread', threadId: 'foreign-thread' },
+    ])
+      hidden.push(
+        await nativeSchedule<AgentSchedule>(app, 'create', {
+          agentId: 'personal-assistant',
+          cron: recurring.cron,
+          timezone: recurring.timezone,
+          resourceId: 'local-owner',
+          threadId: 'schedule-scope',
+          prompt: 'private-schedule-marker',
+          metadata: { personalAssistant: true },
+          ...overrides,
+        }),
+      );
+    for (const value of hidden) {
+      const before: Schedule = await nativeSchedule<Schedule>(app, 'row', { id: value.id });
+      for (const action of ['inspect', 'pause', 'resume', 'run-now', 'cancel', 'update']) {
+        await scheduleTurn(app, 'schedule-scope', {
+          action,
+          scheduleId: value.id,
+          ...(action === 'cancel' ? { reason: 'owner-request' } : {}),
+          ...(action === 'update' ? { timing: recurring } : {}),
+        });
+      }
+      for (const operation of ['pause', 'resume', 'run'])
+        await json(await app.request(`/schedules/${value.id}/${operation}`, 'POST', {}), 403);
+      await json(await app.request(`/schedules/${value.id}`), 404);
+      await json(await app.request(`/schedules/${value.id}/triggers`), 404);
+      assert.deepEqual(await nativeSchedule(app, 'row', { id: value.id }), before);
+    }
+    assert.deepEqual(
+      (await schedules(app)).map(value => value.id),
+      [owner.id],
+    );
+    const listed = await scheduleTurn(app, 'schedule-scope', { action: 'list' });
+    assert.doesNotMatch(listed.text, /private-schedule-marker/);
+    for (const [path, method, body] of [
+      [
+        '/schedules',
+        'POST',
+        {
+          agentId: 'personal-assistant',
+          prompt: 'bypass',
+          cron: '* * * * *',
+          ifIdle: { streamOptions: { requestContext: { injected: true } } },
+        },
+      ],
+      [`/schedules/${owner.id}`, 'PATCH', { ifActive: { behavior: 'deliver' }, providerOptions: { bypass: true } }],
+      [`/schedules/${owner.id}`, 'DELETE', undefined],
+      ...['pause', 'resume', 'run'].map(operation => [
+        `/schedules/${owner.id}/${operation}`,
+        'POST',
+        { requireToolApproval: false },
+      ]),
+    ] as [string, string, unknown][])
+      await json(await app.request(path, method, body), 403);
+    for (const forbidden of [
+      { agentId: 'other-agent' },
+      { resourceId: 'foreign-owner' },
+      { ifIdle: { behavior: 'wake' } },
+      { providerOptions: {} },
+    ]) {
+      await scheduleTurn(app, 'schedule-scope', {
+        action: 'create',
+        requestId: 'injected',
+        name: 'Injected',
+        prompt: 'Check',
+        timing: recurring,
+        ...forbidden,
+      });
+      assert.deepEqual(
+        (await schedules(app)).map(value => value.id),
+        [owner.id],
+      );
+    }
+    assert.equal(fixture.providerCalls.length, 0);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('scheduled responsibilities preserve approvals results and stop conditions', { timeout: 240000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-approval-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    fixture.providerState.insertStatus = 200;
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    await json(
+      await app.request(`/memory/threads${query}`, 'POST', {
+        threadId: 'schedule-approved',
+        resourceId: 'local-owner',
+        title: 'Scheduled meeting result',
+      }),
+    );
+    await json(
+      await app.request(`/memory/threads/schedule-approved/working-memory${query}`, 'POST', {
+        workingMemory: 'Prefer concise scheduled summaries.',
+      }),
+    );
+    const value = await createMonitor(app, 'schedule-approved', 'approved-monitor');
+    await dueNow(app, value.id);
+    const waiting = await pending(app, 'schedule-approved');
+    assert.equal(waiting.toolCalls[0]!.toolName, 'google_docs_create_document');
+    assert.deepEqual(waiting.toolCalls[0]!.args, { title: 'Scheduled reviewed result' });
+    assert.equal(fixture.providerCalls.filter(value => value.method === 'POST').length, 0);
+    assert.ok(
+      fixture.providerCalls.some(
+        value => value.resource === 'local-owner' && value.path.includes('/messages/source-message'),
+      ),
+    );
+    assert.match(JSON.stringify(fixture.models), /Prefer concise scheduled summaries/);
+    assert.equal((await schedules(app))[0]!.id, value.id, 'Hand-off and pending approval cannot stop monitoring.');
+    const blockedModelCalls = fixture.models.length;
+    await nativeSchedule(app, 'run', { id: value.id });
+    await eventually(
+      () => occurrences(app!, value.id),
+      rows => rows.some(row => row.outcome === 'skipped'),
+    );
+    const preservedApproval = await pending(app, 'schedule-approved');
+    assert.equal(preservedApproval.runId, waiting.runId);
+    assert.deepEqual(preservedApproval.toolCalls, waiting.toolCalls);
+    assert.equal(
+      fixture.models.length,
+      blockedModelCalls,
+      'A skipped approval-blocked check must not start another model run.',
+    );
+    assert.equal(fixture.providerCalls.filter(value => value.method === 'POST').length, 0);
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    const restored = await pending(app, 'schedule-approved');
+    assert.equal(restored.runId, waiting.runId);
+    assert.match(await history(app, 'schedule-approved'), /Scheduled reviewed result/);
+    const blank = await json(
+      await app.request(`/agents/${agent}/approve-tool-call-generate`, 'POST', {
+        runId: restored.runId,
+        toolCallId: restored.toolCalls[0]!.toolCallId,
+      }),
+    );
+    assert.equal(blank.finishReason, 'suspended', 'A blank document must request a separate content approval.');
+    const content = await pending(app, 'schedule-approved');
+    assert.equal(content.toolCalls[0]!.toolName, 'google_docs_insert_text');
+    assert.deepEqual(content.toolCalls[0]!.args, {
+      documentId: 'existing-document',
+      text: 'Source source-message requires an offline-first editor and a recovery test.',
+      location: { index: 1 },
+    });
+    assert.equal(fixture.providerCalls.filter(value => value.method === 'POST').length, 1);
+    assert.ok(
+      (await schedules(app)).some(row => row.id === value.id),
+      'Blank creation cannot complete monitoring.',
+    );
+    const approved = await json(
+      await app.request(`/agents/${agent}/approve-tool-call-generate`, 'POST', {
+        runId: content.runId,
+        toolCallId: content.toolCalls[0]!.toolCallId,
+      }),
+    );
+    assert.match(approved.text, /Verified scheduled document content/);
+    const insertions = fixture.providerCalls.filter(value => value.path.includes(':batchUpdate'));
+    assert.equal(insertions.length, 1);
+    assert.match(JSON.stringify(insertions[0]!.body), /offline-first editor and a recovery test/);
+    assert.equal(insertions[0]!.resource, 'local-owner');
+    assert.equal(fixture.providerCalls.filter(value => value.method === 'POST').length, 2);
+    assert.ok(
+      (await schedules(app)).some(row => row.id === value.id),
+      'Confirmed result remains available until the assistant explicitly stops the responsibility.',
+    );
+    // Repeat a native publication after a full restart: the paid-model fixture must see real stored completion before choosing reuse.
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    const modelCount = fixture.models.length;
+    await nativeSchedule(app, 'run', { id: value.id });
+    await eventually(
+      () => history(app!, 'schedule-approved'),
+      value => value.includes('No external action was repeated'),
+    );
+    assert.match(JSON.stringify(fixture.models.slice(modelCount)), /Verified scheduled document content/);
+    assert.equal(
+      fixture.providerCalls.filter(value => value.method === 'POST').length,
+      2,
+      'A recorded completed effect must not be repeated on the duplicate check.',
+    );
+    await scheduleTurn(app, 'schedule-approved', {
+      action: 'cancel',
+      scheduleId: value.id,
+      reason: 'confirmed-completion',
+    });
+    assert.ok(!(await schedules(app)).some(row => row.id === value.id));
+    assert.match(await history(app, 'schedule-approved'), /existing-document/);
+
+    const declined = await createMonitor(app, 'schedule-declined', 'declined-monitor');
+    const mutations = fixture.providerCalls.filter(value => value.method === 'POST').length;
+    await nativeSchedule(app, 'run', { id: declined.id });
+    const declineCall = await pending(app, 'schedule-declined');
+    await json(
+      await app.request(`/agents/${agent}/decline-tool-call-generate`, 'POST', {
+        runId: declineCall.runId,
+        toolCallId: declineCall.toolCalls[0]!.toolCallId,
+      }),
+    );
+    assert.equal(
+      fixture.providerCalls.filter(value => value.method === 'POST').length,
+      mutations,
+      'Declined work has no external mutation.',
+    );
+    assert.ok(
+      (await schedules(app)).some(row => row.id === declined.id),
+      'Decline leaves the responsibility unfinished.',
+    );
+
+    fixture.providerState.insertStatus = 400;
+    const partial = await createMonitor(app, 'schedule-partial', 'partial-monitor');
+    await nativeSchedule(app, 'run', { id: partial.id });
+    const partialCreate = await pending(app, 'schedule-partial');
+    await json(
+      await app.request(`/agents/${agent}/approve-tool-call-generate`, 'POST', {
+        runId: partialCreate.runId,
+        toolCallId: partialCreate.toolCalls[0]!.toolCallId,
+      }),
+    );
+    const partialInsert = await pending(app, 'schedule-partial');
+    await json(
+      await app.request(`/agents/${agent}/approve-tool-call-generate`, 'POST', {
+        runId: partialInsert.runId,
+        toolCallId: partialInsert.toolCalls[0]!.toolCallId,
+      }),
+    );
+    const partialHistory = await history(app, 'schedule-partial');
+    assert.match(partialHistory, /existing-document/);
+    assert.match(partialHistory, /Content insertion failed/);
+    assert.doesNotMatch(partialHistory, /Verified scheduled document content:/);
+    assert.ok(
+      (await schedules(app)).some(row => row.id === partial.id),
+      'A partial external result cannot stop monitoring.',
+    );
+    const effects = fixture.providerCalls.filter(value => value.method === 'POST').length;
+    await app.stop();
+    app = undefined;
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    assert.match(await history(app, 'schedule-partial'), /existing-document/);
+    assert.ok((await schedules(app)).some(row => row.id === partial.id));
+    assert.ok((await schedules(app)).some(row => row.id === declined.id));
+    assert.equal(
+      fixture.providerCalls.filter(value => value.method === 'POST').length,
+      effects,
+      'Restart cannot replay partial writes automatically.',
+    );
+    await nativeSchedule(app, 'run', { id: partial.id });
+    await eventually(
+      () => history(app!, 'schedule-partial'),
+      value => value.includes('An owner decision is required'),
+    );
+    assert.equal(
+      fixture.providerCalls.filter(value => value.method === 'POST').length,
+      effects,
+      'A repeated check preserves the existing partial document and requests a new owner decision.',
+    );
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('schedule failures and duplicates preserve truthful outcomes', { timeout: 180000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-outcomes-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  let release: (() => void) | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    const value = await createMonitor(
+      app,
+      'schedule-outcomes',
+      'outcomes',
+      JSON.stringify({ missing: 'a confirmed external event' }),
+    );
+    fixture.state.responseGate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const active = scheduleTurn(app, 'schedule-outcomes', {
+      action: 'run-now',
+      scheduleId: value.id,
+    });
+    const discarded = await eventually(
+      () => occurrences(app!, value.id),
+      rows => rows.some(row => row.outcome === 'discarded'),
+    );
+    assert.equal(discarded[0]!.triggerKind, 'manual');
+    release!();
+    fixture.state.responseGate = undefined;
+    const manual = await active;
+    assert.match(manual.text, /not a completed check/);
+    const before = (await schedules(app))[0]!;
+    assert.equal(before.nextFireAt, value.nextFireAt);
+    // Native duplicate publication remains best effort: every dispatch stays visible, with no template write replay.
+    const time = Date.now();
+    for (let index = 0; index < 2; index++)
+      await nativeSchedule(app, 'publish', {
+        id: value.id,
+        claimId: 'duplicate-occurrence',
+        scheduledFireAt: time,
+      });
+    const duplicate = await eventually(
+      () => occurrences(app!, value.id),
+      rows => rows.filter(row => row.scheduledFireAt === time).length >= 2,
+    );
+    assert.ok(duplicate.every(row => row.id && row.runId));
+    assert.equal(fixture.providerCalls.length, 0);
+    await eventually(
+      () => history(app!, 'schedule-outcomes'),
+      value => value.includes('confirmed external event'),
+    );
+    const report = await scheduleTurn(app, 'schedule-outcomes', {
+      action: 'inspect',
+      scheduleId: value.id,
+    });
+    assert.match(report.text, /discarded/);
+    assert.match(report.text, /not proof of completed work/);
+    // A missed finite occurrence is exhausted by the real scheduler after restart, never relabeled business completion.
+    const date = new Date(Date.now() + 3600000);
+    date.setUTCMilliseconds(0);
+    await scheduleTurn(app, 'finite-outcomes', {
+      action: 'create',
+      requestId: 'finite',
+      name: 'Finite check',
+      prompt: JSON.stringify({ missing: 'owner verification' }),
+      timing: { kind: 'once', date: date.toISOString().replace('.000Z', 'Z'), timezone: 'UTC' },
+    });
+    const finite = (await schedules(app)).find(value => value.threadId === 'finite-outcomes')!;
+    await app.stop();
+    app = undefined;
+    // Simulate elapsed downtime in persisted native state, with no custom recovery queue.
+    const storage = new LibSQLStore({
+      id: 'missed-schedule-fixture',
+      url: `file:${join(dataDir, 'assistant.db')}`,
+    });
+    await storage.init();
+    const domain = await storage.getStore('schedules');
+    const past = new Date(Date.now() - 3600000);
+    past.setUTCMilliseconds(0);
+    const cron = `${past.getUTCSeconds()} ${past.getUTCMinutes()} ${past.getUTCHours()} ${past.getUTCDate()} ${past.getUTCMonth() + 1} * ${past.getUTCFullYear()}`;
+    await domain!.updateSchedule(finite.id, { cron, nextFireAt: past.getTime() });
+    await storage.close();
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    const complete = await eventually(
+      () => schedules(app!, 'completed'),
+      values => values.some(value => value.id === finite.id),
+    );
+    assert.equal(complete.find(value => value.id === finite.id)!.status, 'completed');
+    const cadence = await scheduleTurn(app, 'finite-outcomes', {
+      action: 'inspect',
+      scheduleId: finite.id,
+    });
+    assert.match(cadence.text, /completed cadence does not mean the responsibility succeeded/);
+    const list = await scheduleTurn(app, 'finite-outcomes', { action: 'list' });
+    assert.match(list.text, new RegExp(finite.id));
+    assert.equal(fixture.providerCalls.length, 0);
+  } finally {
+    release?.();
+    fixture.state.responseGate = undefined;
     await app?.stop();
     await fixture.close();
     await rm(dataDir, { recursive: true, force: true });

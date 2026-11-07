@@ -1,6 +1,8 @@
 import { serve } from '@hono/node-server';
 import { MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
+import type { CreateAgentScheduleInput } from '@mastra/core/schedules';
+import type { ScheduleUpdate } from '@mastra/core/storage';
 import { createAssistant } from '../src/mastra/assistant';
 import { loadConfig } from '../src/mastra/config';
 
@@ -36,8 +38,42 @@ if (process.env.TEST_SEED_FOREIGN === 'true') {
     workingMemory: 'foreign-preference-marker',
   });
 }
+// Test-only IPC drives real native scheduling without opening a product HTTP bypass.
+process.on('message', async (message: { requestId: string; operation: string; input: Record<string, unknown> }) => {
+  const { requestId, operation, input } = message;
+  try {
+    const store = await mastra.getStorage()!.getStore('schedules');
+    let result: unknown;
+    if (operation === 'create') result = await mastra.schedules.create(input as unknown as CreateAgentScheduleInput);
+    else if (operation === 'run') result = await mastra.schedules.run(String(input.id));
+    else if (operation === 'row') result = await store!.getSchedule(String(input.id));
+    else if (operation === 'patch')
+      result = await store!.updateSchedule(String(input.id), input.patch as ScheduleUpdate);
+    else if (operation === 'tick') {
+      await mastra.scheduler!.tick();
+      result = true;
+    } else if (operation === 'publish') {
+      const row = await store!.getSchedule(String(input.id));
+      await mastra.pubsub.publish('agent-schedules', {
+        type: 'agent-schedule.fire',
+        runId: String(input.claimId),
+        data: {
+          scheduleId: row!.id,
+          claimId: input.claimId,
+          scheduledFireAt: input.scheduledFireAt,
+          target: row!.target,
+        },
+      });
+      result = true;
+    } else throw new Error('Unknown test control operation.');
+    process.send?.({ requestId, result });
+  } catch (error) {
+    process.send?.({ requestId, error: String(error) });
+  }
+});
 const app = new Hono();
 await new MastraServer({ app, mastra }).init();
+await mastra.startWorkers();
 const server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 }, info => process.send?.({ port: info.port }));
 process.on('SIGTERM', () => {
   server.close(async () => {

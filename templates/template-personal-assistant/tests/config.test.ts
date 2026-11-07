@@ -101,7 +101,11 @@ test('Connect configuration rejects partial credentials and exact-key policy nev
   assert.ok(config.connect);
   assert.doesNotMatch(JSON.stringify(config), /private-token/);
   assert.equal(
-    loadConfig({ OPENAI_API_KEY: 'example-key', MASTRA_PROJECT_ID: '', MASTRA_PLATFORM_ACCESS_TOKEN: '' }).connect,
+    loadConfig({
+      OPENAI_API_KEY: 'example-key',
+      MASTRA_PROJECT_ID: '',
+      MASTRA_PLATFORM_ACCESS_TOKEN: '',
+    }).connect,
     undefined,
   );
 });
@@ -134,7 +138,10 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
   for (const source of [
     message('PGh0bWw-', 'text/html'),
     { id: 'source-id', snippet: 'Incomplete snippet' },
-    { id: 'source-id', payload: { mimeType: 'text/plain', filename: 'attachment.txt', body: { data: 'dGV4dA' } } },
+    {
+      id: 'source-id',
+      payload: { mimeType: 'text/plain', filename: 'attachment.txt', body: { data: 'dGV4dA' } },
+    },
   ]) {
     const result = normalizeMail(source);
     assert.equal(result.sourceMessageId, 'source-id');
@@ -152,7 +159,10 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
       mimeType: 'multipart/mixed',
       parts: [
         { mimeType: 'text/plain', body: { data: Buffer.alloc(32768, 97).toString('base64url') } },
-        { mimeType: 'text/plain', body: { data: Buffer.alloc(secondSize, 98).toString('base64url') } },
+        {
+          mimeType: 'text/plain',
+          body: { data: Buffer.alloc(secondSize, 98).toString('base64url') },
+        },
       ],
     },
   });
@@ -160,4 +170,55 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
   const over = normalizeMail(multipart(32768));
   assert.equal(over.truncated, true);
   assert.ok(Buffer.byteLength(over.text) <= 65536);
+});
+
+test('schedule timing preserves explicit timezone dates and rejects calendar or DST shifts', async () => {
+  const { scheduleTiming } = await import('../src/mastra/schedules');
+  const { computeNextFireAt } = await import('@mastra/core/workflows');
+  const year = new Date().getUTCFullYear() + 2;
+  const gapDay = 8 + ((7 - new Date(Date.UTC(year, 2, 1)).getUTCDay()) % 7);
+  const repeatDay = 1 + ((7 - new Date(Date.UTC(year, 10, 1)).getUTCDay()) % 7);
+  const gap = `${year}-03-${String(gapDay).padStart(2, '0')}T02:30:00-05:00`;
+  const local = `${year}-11-${String(repeatDay).padStart(2, '0')}T01:30:00`;
+  for (const input of [
+    { kind: 'once', date: `${year}-02-30T10:00:00Z`, timezone: 'UTC' },
+    { kind: 'once', date: `${year}-01-10T10:00:00`, timezone: 'UTC' },
+    { kind: 'once', date: gap, timezone: 'America/New_York' },
+    { kind: 'once', date: `${year}-01-10T10:00:00+01:00`, timezone: 'UTC' },
+    { kind: 'once', date: '2020-01-01T10:00:00Z', timezone: 'UTC' },
+    { kind: 'cron', cron: '* * * * *', timezone: '+01:00' },
+    { kind: 'cron', cron: '* * * * *', timezone: 'Invalid/Zone' },
+    { kind: 'cron', cron: 'invalid cron', timezone: 'UTC' },
+    { kind: 'cron', cron: '0 0 9 1 1 * 2020', timezone: 'UTC' },
+  ])
+    assert.equal(scheduleTiming.safeParse(input).success, false, JSON.stringify(input));
+  const date = `${year}-01-10T10:15:00-03:00`;
+  const once = scheduleTiming.parse({ kind: 'once', date, timezone: 'America/Sao_Paulo' });
+  assert.equal(once.timezone, 'America/Sao_Paulo');
+  assert.equal(computeNextFireAt(once.cron, { timezone: once.timezone }), Date.parse(date));
+  assert.throws(
+    () => computeNextFireAt(once.cron, { timezone: once.timezone, after: Date.parse(date) }),
+    'A one-time cadence must exhaust after its chosen instant.',
+  );
+  let representableChoices = 0;
+  for (const offset of ['-04:00', '-05:00']) {
+    const date = `${local}${offset}`;
+    const chosen = scheduleTiming.safeParse({ kind: 'once', date, timezone: 'America/New_York' });
+    if (chosen.success) {
+      representableChoices++;
+      assert.equal(chosen.data.timezone, 'America/New_York');
+      assert.equal(
+        computeNextFireAt(chosen.data.cron, { timezone: chosen.data.timezone }),
+        Date.parse(date),
+        'An explicit repeated-hour choice cannot shift to the other offset.',
+      );
+      assert.throws(() =>
+        computeNextFireAt(chosen.data.cron, {
+          timezone: chosen.data.timezone,
+          after: Date.parse(date),
+        }),
+      );
+    } else assert.match(JSON.stringify(chosen.error.issues), /offset choice/);
+  }
+  assert.ok(representableChoices >= 1, 'Native scheduling must support at least one explicit repeated-hour choice.');
 });
