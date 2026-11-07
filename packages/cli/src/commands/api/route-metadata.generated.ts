@@ -6012,6 +6012,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "perPage",
+      "status",
       "tags"
     ],
     "bodyParams": [],

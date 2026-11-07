@@ -791,6 +791,56 @@ describe('Datasets Handlers', () => {
       expect(all.results).toHaveLength(2);
     });
 
+    it('filters listed results by review status', async () => {
+      const { dataset, item1, item2 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const flagged = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item2.id,
+        output: { a: 'ok' },
+      } as any);
+
+      await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: flagged.id,
+        status: 'needs-review',
+      } as any);
+
+      const list = async (status?: string) =>
+        (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: created.experimentId,
+          page: 0,
+          perPage: 10,
+          status,
+        } as any)) as any;
+
+      const needsReview = await list('needs-review');
+      expect(needsReview.results.map((r: any) => r.id)).toEqual([flagged.id]);
+      expect(needsReview.pagination.total).toBe(1);
+
+      expect((await list('complete')).results).toEqual([]);
+      expect((await list()).results).toHaveLength(2);
+      expect(listExperimentResultsQuerySchema.safeParse({ status: 'flagged' }).success).toBe(false);
+    });
+
     it('listExperimentResultsQuerySchema coerces a single tag string into an array', () => {
       expect(listExperimentResultsQuerySchema.parse({ tags: 'a' }).tags).toEqual(['a']);
       expect(listExperimentResultsQuerySchema.parse({ tags: ['a', 'b'] }).tags).toEqual(['a', 'b']);

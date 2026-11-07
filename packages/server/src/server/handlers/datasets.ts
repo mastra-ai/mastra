@@ -1219,7 +1219,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage, tags, orderBy } = params;
+      const { page, perPage, tags, status, orderBy } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       // Validate experiment belongs to dataset
       const run = await ds.getExperiment({ experimentId });
@@ -1231,6 +1231,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
         page: page ?? 0,
         perPage: perPage ?? 10,
         ...(tags !== undefined ? { tags } : {}),
+        ...(status !== undefined ? { status } : {}),
         orderBy,
       });
       return {
