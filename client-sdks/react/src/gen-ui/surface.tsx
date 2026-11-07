@@ -87,6 +87,12 @@ function useSurfaceStatus(surfaceId: string): GenUISurface['status'] | undefined
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
+function useSurfaceError(surfaceId: string): string | undefined {
+  const controller = useGenUIController();
+  const get = () => controller.getSurfaceError(surfaceId);
+  return useSyncExternalStore(controller.subscribe, get, get);
+}
+
 interface NodeViewProps {
   surfaceId: string;
   nodeId: string;
@@ -181,8 +187,10 @@ export function SurfaceFrame({ surfaceId, preview, className }: GenUISurfaceView
   const controller = useGenUIController();
   const liveSurface = useGenUISurface(surfaceId);
   const liveStatus = useSurfaceStatus(surfaceId);
+  const liveError = useSurfaceError(surfaceId);
   const surface = preview ?? liveSurface;
   const status = preview ? preview.status : liveStatus;
+  const error = preview ? preview.error : liveError;
   const { Fallback, Loading, SurfaceStatus } = resolveFallbacks(controller.registry.fallbacks);
   if (!surface) return <Loading />;
   if (!isCatalogCompatible(controller.registry, surface)) {
@@ -209,7 +217,7 @@ export function SurfaceFrame({ surfaceId, preview, className }: GenUISurfaceView
           <Loading />
         ) : null}
         {status === 'streaming' || status === 'failed' || status === 'aborted' ? (
-          <SurfaceStatus status={status} error={surface.error} />
+          <SurfaceStatus status={status} error={error} />
         ) : null}
       </div>
     </PreviewSurfaceContext.Provider>

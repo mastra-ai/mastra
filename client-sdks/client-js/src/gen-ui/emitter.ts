@@ -63,7 +63,13 @@ export interface GenUISurfaceEmitter {
 }
 
 export interface GenUIEmitter {
-  surface(surfaceId: string, options?: GenUISurfaceEmitterOptions): GenUISurfaceEmitter;
+  /**
+   * Emit updates for one surface. Omit `surfaceId` to get a unique one, which is what a tool that
+   * creates a new surface each time it runs wants. Pass an id only to continue a surface from an
+   * earlier run; ids must be unique per thread, since a second `createSurface` with the same id is
+   * rejected on the client.
+   */
+  surface(surfaceId?: string, options?: GenUISurfaceEmitterOptions): GenUISurfaceEmitter;
 }
 
 /**
@@ -78,7 +84,7 @@ export interface GenUIEmitter {
  * @example
  * ```ts
  * execute: async (input, { writer }) => {
- *   const ui = createGenUIEmitter(writer).surface(`weather-${input.city}`);
+ *   const ui = createGenUIEmitter(writer).surface();
  *   await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { city: input.city } }] });
  *   const forecast = await getForecast(input.city);
  *   await ui.updateProps('card', { forecast });
@@ -94,7 +100,7 @@ export function createGenUIEmitter(
   const nextEventId = options.generateEventId ?? uuid;
 
   return {
-    surface(surfaceId, surfaceOptions = {}) {
+    surface(surfaceId = uuid(), surfaceOptions = {}) {
       let revision = surfaceOptions.baseRevision;
 
       const send = async (operations: GenUIOperation[]): Promise<GenUIEnvelope> => {
@@ -102,6 +108,7 @@ export function createGenUIEmitter(
         if (!parsed.ok) throw new Error(`Invalid GenUI operations for surface "${surfaceId}": ${parsed.error}`);
         const ops = parsed.value;
         const first = ops[0];
+        const before = revision;
         if (first?.op === 'createSurface') {
           if (!first.source && options.source) first.source = { ...options.source };
           revision = 0;
@@ -115,7 +122,14 @@ export function createGenUIEmitter(
         };
         // Advance before writing so un-awaited consecutive calls get consecutive revisions.
         if (revision !== undefined) revision += 1;
-        await writer?.custom({ type: GENUI_DATA_PART_TYPE, data: envelope });
+        const assigned = revision;
+        try {
+          await writer?.custom({ type: GENUI_DATA_PART_TYPE, data: envelope });
+        } catch (error) {
+          // The envelope never reached the stream: give its revision back so later updates still apply.
+          if (revision === assigned) revision = before;
+          throw error;
+        }
         return envelope;
       };
 

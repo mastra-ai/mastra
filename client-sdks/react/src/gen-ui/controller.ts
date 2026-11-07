@@ -111,6 +111,8 @@ export interface GenUIController {
    * afterwards it is `ready`, or `aborted` if the user stopped the run. Out-of-band surfaces keep their own status.
    */
   getSurfaceStatus(surfaceId: string): GenUISurface['status'] | undefined;
+  /** Error to display with a `failed` surface: the agent's own, or the error of the tool that was building it. */
+  getSurfaceError(surfaceId: string): string | undefined;
   /** Whether a `data-gen-ui` part anchors its surface. A replayed event in a later message does not. */
   isAnchor(eventId: string, envelope: object): boolean;
   /** Mark message surfaces that are still streaming as interrupted (the user stopped the run). */
@@ -129,6 +131,8 @@ export interface GenUIController {
    */
   previewSurface(call: NormalizedToolCall): GenUISurface | undefined;
   setServices(services: GenUIChatServices): void;
+  /** Replace the action handlers. Names missing from `actions` stop being handled. */
+  setActions(actions?: Record<string, GenUIChatActionHandler<any>>): void;
   threadScope(): GenUIStateScope;
   /** Keep the controller alive. Disposal happens after the last release, so StrictMode remounts are safe. */
   retain(): () => void;
@@ -277,8 +281,13 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   const isExternal = (surface: GenUISurface) =>
     surface.anchorEventId !== undefined && externalEvents.has(surface.anchorEventId);
 
+  /** Tool call ids whose tool threw, with the error. A surface such a tool was still building did not finish. */
+  let failedToolCalls = new Map<string, string | undefined>();
+
   const effectiveStatus = (surface: GenUISurface): GenUISurface['status'] => {
     if (surface.status !== 'streaming' || isExternal(surface)) return surface.status;
+    const toolCallId = surface.source?.toolCallId;
+    if (toolCallId && failedToolCalls.has(toolCallId)) return 'failed';
     if (aborted.get(surface.id) === surface.revision) return 'aborted';
     return live ? 'streaming' : 'ready';
   };
@@ -300,16 +309,22 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     if (changed) notify();
   };
 
-  const handlers: Record<string, GenUIActionHandler<any>> = {};
-  for (const [name, handler] of Object.entries(options.actions ?? {})) {
-    handlers[name] = {
-      ...handler,
-      handle: (payload, actionContext) =>
-        handler.handle(payload, { ...actionContext, chat: requireServices(), state, context }),
-    };
-  }
+  const updateFailedToolCalls = (messages: ReadonlyArray<MastraDBMessage>) => {
+    const next = new Map<string, string | undefined>();
+    for (const message of messages) {
+      for (const part of message.content.parts) {
+        const call = normalizeToolPart(part);
+        if (call?.phase === 'output-error') next.set(call.toolCallId, call.errorText);
+      }
+    }
+    const changed =
+      next.size !== failedToolCalls.size ||
+      [...next].some(([id, error]) => !failedToolCalls.has(id) || failedToolCalls.get(id) !== error);
+    failedToolCalls = next;
+    if (changed) notify();
+  };
+
   const actions = createGenUIActionDispatcher({
-    handlers,
     limits,
     getSurface: surfaceId => {
       const surface = session.getState().surfaces[surfaceId];
@@ -319,6 +334,18 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       return status === surface.status ? surface : { ...surface, status };
     },
   });
+  let releaseActions: Array<() => void> = [];
+  const setActions = (next: Record<string, GenUIChatActionHandler<any>> = {}) => {
+    releaseActions.forEach(release => release());
+    releaseActions = Object.entries(next).map(([name, handler]) =>
+      actions.register(name, {
+        ...handler,
+        handle: (payload, actionContext) =>
+          handler.handle(payload, { ...actionContext, chat: requireServices(), state, context }),
+      }),
+    );
+  };
+  setActions(options.actions);
 
   // ---- tool approvals, suspensions, interactive responses -------------------------------------
   const toolListeners = new Set<() => void>();
@@ -509,7 +536,10 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       'Render or update a user interface surface built only from the registered components below.',
       'Each call applies a batch of operations atomically. Reuse the same surfaceId to update a surface later.',
       `Operations:\n${operationHelp(placements)}`,
-      `Components (props must match propsSchema):\n${JSON.stringify(manifest)}`,
+      // Prop schemas are already in the input schema; repeating them here would double the tokens.
+      `Components (props must match the component's schema in the input schema):\n${manifest
+        .map(({ name, description }) => (description ? `- ${name}: ${description}` : `- ${name}`))
+        .join('\n')}`,
       registry.surfaceTool.instructions,
     ]
       .filter(Boolean)
@@ -607,6 +637,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     aborted.clear();
     externalEvents.clear();
     anchors = new Map();
+    failedToolCalls = new Map();
     state.clear();
     rejectPending('The conversation changed before the user responded');
     approvalStatus.clear();
@@ -628,6 +659,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       syncedThread = { id: chat.threadId };
       session.sync(surfaceToolName ? messages.map(project) : messages);
       updateAnchors(messages);
+      updateFailedToolCalls(messages);
       updateToolMeta(messages);
       const running = chat.running ?? false;
       if (live !== running) {
@@ -660,6 +692,13 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     getSurfaceStatus(surfaceId) {
       const surface = session.getState().surfaces[surfaceId];
       return surface && effectiveStatus(surface);
+    },
+    getSurfaceError(surfaceId) {
+      const surface = session.getState().surfaces[surfaceId];
+      if (!surface) return undefined;
+      if (surface.error) return surface.error;
+      const toolCallId = surface.source?.toolCallId;
+      return toolCallId && effectiveStatus(surface) === 'failed' ? failedToolCalls.get(toolCallId) : undefined;
     },
     isAnchor(eventId, envelope) {
       const first = anchors.get(eventId);
@@ -704,6 +743,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     setServices(next) {
       services = next;
     },
+    setActions,
     threadScope: () => ({ kind: 'thread', id: services?.threadId ?? 'default' }),
     retain() {
       retainers += 1;
