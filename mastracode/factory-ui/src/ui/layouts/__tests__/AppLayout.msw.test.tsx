@@ -9,6 +9,7 @@ import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { useSidebarHeaderSlots } from '../../domains/chat/components/useSidebarHeaderSlots';
+import { captureInstallPrompt, takeCapturedInstallPrompt } from '../../lib/pwa/installPromptCapture';
 import { AppLayout } from '../AppLayout';
 import { AppPageLoader } from '../AppPageLoader';
 import { lazyPage } from '../PageSuspense';
@@ -134,6 +135,7 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
 describe('AppLayout', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    takeCapturedInstallPrompt();
   });
 
   it('renders the sidebar once and swaps only the outlet between routes', async () => {
@@ -298,5 +300,25 @@ describe('AppLayout', () => {
     const shell = container.querySelector('[data-slot="app-shell"]')!;
     expect(banner.compareDocumentPosition(shell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(banner).getByRole('button', { name: 'Install' })).toHaveAttribute('data-variant', 'primary');
+  });
+
+  it('keeps an install prompt that fired before the shell mounted', async () => {
+    // main.tsx starts capturing at app start; Chromium may fire the prompt
+    // during sign-in, onboarding or route loaders, before AppLayout renders.
+    captureInstallPrompt();
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn(() => Promise.resolve()),
+      userChoice: Promise.resolve({ outcome: 'accepted', platform: 'web' }),
+    });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+
+    stubFactory();
+    renderApp();
+    await screen.findByRole('heading', { name: 'Page A' });
+
+    const banner = await screen.findByRole('region', { name: 'Install app' });
+    await userEvent.click(within(banner).getByRole('button', { name: 'Install' }));
+    expect(event.prompt).toHaveBeenCalledTimes(1);
   });
 });

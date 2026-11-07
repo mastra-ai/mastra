@@ -8,10 +8,15 @@ import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider, createApiConfig } from '../api/config';
 import { createQueryClient } from '../query-client';
+import { captureInstallPrompt } from './lib/pwa';
 import { createAppRouter } from './router';
 import '@fontsource-variable/mona-sans/standard.css';
 import '@fontsource-variable/mona-sans/standard-italic.css';
 import './tailwind.css';
+
+// Chromium fires `beforeinstallprompt` once, early in the page load and often
+// before the signed-in shell that shows the install banner mounts.
+captureInstallPrompt();
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
