@@ -61,11 +61,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/generative-ui',
-              label: 'Generative UI',
-            },
-            {
-              type: 'doc',
               id: 'agents/resumable-streams',
               label: 'Resumable Streams',
             },
