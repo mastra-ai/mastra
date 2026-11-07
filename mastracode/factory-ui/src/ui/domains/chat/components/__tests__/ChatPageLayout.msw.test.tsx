@@ -32,19 +32,25 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('renders no header on mobile — AppLayout owns the mobile trigger and search', () => {
+  it('puts the drawer trigger and the breadcrumbs on one mobile header row, without search', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
         <SidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <OverlaysProvider>
-            <ChatPageLayout>body</ChatPageLayout>
+            <ChatPageLayout crumbs={<li>Page title</li>} headerActions={<button type="button">Panel</button>}>
+              body
+            </ChatPageLayout>
           </OverlaysProvider>
         </SidebarProvider>
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
+    expect(within(header).getByText('Page title')).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 

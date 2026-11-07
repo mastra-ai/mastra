@@ -5,6 +5,10 @@ import type { ReactNode } from 'react';
 import { GlobalSearchButton } from '../../search/components/GlobalSearchButton';
 import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
 
+/**
+ * Page header slots with the sidebar trigger in front of the breadcrumbs when the sidebar is out of view:
+ * on mobile (where search lives in the drawer) and while the desktop sidebar is collapsed.
+ */
 export function useSidebarHeaderSlots({
   breadcrumbs,
   headerActions,
@@ -14,12 +18,13 @@ export function useSidebarHeaderSlots({
 > {
   const { isMobile, desktopState } = useSidebar();
   const collapsed = !isMobile && desktopState === 'collapsed';
+  const showTrigger = isMobile || collapsed;
 
   return {
     breadcrumbs:
-      collapsed || breadcrumbs ? (
+      showTrigger || breadcrumbs ? (
         <>
-          {collapsed && <ChatHeaderSidebarTrigger />}
+          {showTrigger && <ChatHeaderSidebarTrigger />}
           {breadcrumbs}
         </>
       ) : undefined,

@@ -198,7 +198,7 @@ describe('AppLayout', () => {
     mockMobileViewport();
     stubFactory();
     stubRepository();
-    const { router } = renderApp();
+    const { router } = renderApp(`/factories/${FACTORY_ID}/slots`);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Open navigation menu' }));
     const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
