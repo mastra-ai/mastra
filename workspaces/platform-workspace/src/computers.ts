@@ -86,7 +86,6 @@ interface Lease {
   reason?: string;
   /** The thread (and its agent) to notify when the user hands control back. */
   target?: { resourceId: string; threadId: string } & AgentRef;
-  seq: number;
 }
 
 interface Scope {
@@ -255,7 +254,7 @@ export class PlatformComputers implements MastraComputers {
       ownerResourceId,
       queue: Promise.resolve(),
       destroyed: false,
-      control: { holder: 'agent', seq: 0 },
+      control: { holder: 'agent' },
     };
     entry.queue = entry.ready.catch(() => {});
     entry.ready.then(
@@ -289,7 +288,7 @@ export class PlatformComputers implements MastraComputers {
           ownerResourceId: scope.resourceId,
           queue: Promise.resolve(),
           destroyed: false,
-          control: { holder: 'agent', seq: 0 },
+          control: { holder: 'agent' },
         };
       } catch {
         await sandbox.destroy().catch(() => {});
@@ -355,7 +354,7 @@ export class PlatformComputers implements MastraComputers {
     });
   }
 
-  #requestHuman(input: { reason: string }, context: Context) {
+  async #requestHuman(input: { reason: string }, context: Context) {
     const scope = this.#scope(context);
     if (!scope) return MISSING_IDENTITY;
     const id = this.#attachments.get(scope.key);
@@ -367,20 +366,17 @@ export class PlatformComputers implements MastraComputers {
         holder: 'human',
         reason,
         target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
-        seq: entry.control.seq + 1,
       };
     }
     const shown = entry.control.reason ?? reason;
-    void (async () => {
-      try {
-        await context?.writer?.custom({
-          type: 'data-computer',
-          data: { computerId: entry.id, threadId: scope.threadId, control: 'human', reason: shown },
-        });
-      } catch {
-        // A closed stream must not undo the handoff.
-      }
-    })();
+    try {
+      await context?.writer?.custom({
+        type: 'data-computer',
+        data: { computerId: entry.id, threadId: scope.threadId, control: 'human', reason: shown },
+      });
+    } catch {
+      // A closed stream must not undo the handoff.
+    }
     return {
       computerId: entry.id,
       reason: shown,
@@ -627,8 +623,8 @@ export class PlatformComputers implements MastraComputers {
         : entry.control.target;
     entry.control =
       holder === 'human'
-        ? { holder, reason: 'user took control', target, seq: entry.control.seq + 1 }
-        : { holder, seq: entry.control.seq + 1 };
+        ? { holder, reason: 'user took control', target }
+        : { holder };
     return { holder, ...(await this.#notify(entry, holder, target, note)) };
   }
 
@@ -661,7 +657,6 @@ export class PlatformComputers implements MastraComputers {
             ? `The user handed control back${note ? `: ${note}` : ''}`
             : 'The user took control of the computer',
           attributes: { computerId: entry.id },
-          payload: { computerId: entry.id, holder },
         },
         {
           resourceId: target.resourceId,

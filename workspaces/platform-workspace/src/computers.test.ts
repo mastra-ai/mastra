@@ -707,12 +707,30 @@ describe('control lease', () => {
       control: 'human',
       message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
     });
-    await sleep(0);
     expect(events).toEqual([
       { type: 'data-computer', data: { computerId: id, threadId: 't1', control: 'human', reason: 'log in please' } },
     ]);
     expect(events[0].data).not.toHaveProperty('status');
     await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'log in please' });
+  });
+
+  it('writes the control part before returning, and a failing writer keeps the handoff', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const written = gate();
+    const slow = { ...ctx('r1', 't1'), writer: { custom: () => written.opened.then(() => written.enter()) } };
+    let returned = false;
+    const out = call(computers, 'computer_request_human', { reason: 'slow' }, slow).then(r => ((returned = true), r));
+    await sleep(5);
+    expect(returned).toBe(false);
+    written.open();
+    await out;
+    await written.entered;
+    const failing = { ...ctx('r1', 't2'), writer: { custom: async () => { throw new Error('closed'); } } };
+    const other = (await call(computers, 'computer_create', {}, ctx('r1', 't2'))).computer.id;
+    await expect(call(computers, 'computer_request_human', { reason: 'x' }, failing)).resolves.toMatchObject({ control: 'human' });
+    await expect(computers.controlState(other, { resourceId: 'r1', threadId: 't2' })).resolves.toMatchObject({ holder: 'human' });
+    expect(id).not.toBe(other);
   });
 
   it('is idempotent and keeps the first reason', async () => {
