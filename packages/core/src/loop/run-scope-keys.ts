@@ -15,6 +15,7 @@
  */
 
 import type { IdGenerator, LanguageModelRequestMetadata, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import type { SaveAcceptedUserSignals } from '../agent/save-accepted-user-signals';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { PendingSignalListener, CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -87,6 +88,9 @@ export const DRAIN_PENDING_SIGNALS_KEY =
 export const SUBSCRIBE_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, listener: PendingSignalListener) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
+
+export const SAVE_ACCEPTED_USER_SIGNALS_KEY =
+  createRunScopeKey<SaveAcceptedUserSignals>('loop:saveAcceptedUserSignals');
 
 // --- Tool payload transform ------------------------------------------------
 

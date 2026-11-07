@@ -1,8 +1,13 @@
 import { MastraError } from '../../../error/index.js';
+import type { MastraLanguageModel } from '../shared.types.js';
 import type { GatewayAuthResult, MastraModelGatewayInterface } from './base.js';
 
 export function getGatewayId(gateway: MastraModelGatewayInterface): string {
   return gateway.getId?.() ?? gateway.id;
+}
+
+export function isMastraGatewayModel(model: MastraLanguageModel): boolean {
+  return 'gatewayId' in model && model.gatewayId === 'mastra';
 }
 
 export function shouldEnableGateway(gateway: MastraModelGatewayInterface): boolean {
