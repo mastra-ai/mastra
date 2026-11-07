@@ -425,8 +425,12 @@ export async function setupComputerStream(
     if (!originAllowed) return c.text('Forbidden', 403);
     const session = sessions.touch(getCookie(c, SESSION_COOKIE), computerIdOf(c));
     if (!session) return c.text('Unauthorized', 401);
-    const protocols = (c.req.header('sec-websocket-protocol') ?? '').split(',').map(p => p.trim());
-    if (!protocols.includes('binary')) return c.text('Bad Request', 400);
+    // noVNC requests no subprotocol by default; older clients ask for `binary`. Anything else is refused.
+    const protocols = (c.req.header('sec-websocket-protocol') ?? '')
+      .split(',')
+      .map(p => p.trim())
+      .filter(Boolean);
+    if (protocols.some(p => p !== 'binary')) return c.text('Bad Request', 400);
     // Every socket open re-checks the attachment.
     const current = await refresh(session);
     if (!current) return c.text(session.revoked ? 'Unauthorized' : 'Bad Gateway', session.revoked ? 401 : 502);
@@ -446,8 +450,9 @@ export async function setupComputerStream(
       let clientClosed = false;
       let retried = false;
 
+      const upstreamProtocols = c.req.header('sec-websocket-protocol') ? ['binary'] : [];
       const openUpstream = (ws: { send: (data: ArrayBuffer | string) => void; close: (code?: number) => void }) => {
-        const upstream = new WebSocketClient(upstreamSocketUrl(session.viewer.base), ['binary'], {
+        const upstream = new WebSocketClient(upstreamSocketUrl(session.viewer.base), upstreamProtocols, {
           headers: session.viewer.headers,
         });
         live.upstream = upstream;

@@ -394,7 +394,18 @@ async function waitForRealRequest(predicate: () => boolean) {
 }
 
 describe('websocket proxy', () => {
-  it('enforces origin, session cookie and the binary subprotocol', async () => {
+  it("relays noVNC's default upgrade, which requests no subprotocol", async () => {
+    const { origin } = await start();
+    const { cookie } = await openSession(origin, 'c1');
+    const { ws, protocol } = await openSocket(socketUrl(origin, 'c1'), { cookie, origin }, []);
+    expect(protocol).toBe('');
+    ws!.send(Buffer.from([7, 8]));
+    expect([...(await nextMessage(ws!)).data]).toEqual([7, 8]);
+    expect(upstream.wsHandshakes.at(-1)!.headers['sec-websocket-protocol']).toBeUndefined();
+    ws!.close();
+  });
+
+  it('enforces origin, session cookie and the subprotocol allow-list', async () => {
     const { origin } = await start({ allowedOrigins: ['http://studio.test'] });
     const { cookie } = await openSession(origin, 'c1');
     const url = socketUrl(origin, 'c1');
@@ -403,6 +414,7 @@ describe('websocket proxy', () => {
     expect((await openSocket(url, { origin })).status).toBe(401);
     expect((await openSocket(url, { cookie: 'mastra_computer=nope', origin })).status).toBe(401);
     expect((await openSocket(url, { cookie, origin }, ['base64'])).status).toBe(400);
+    expect((await openSocket(url, { cookie, origin }, ['binary', 'base64'])).status).toBe(400);
     const allowed = await openSocket(url, { cookie, origin: 'http://studio.test' });
     expect(allowed.protocol).toBe('binary');
     allowed.ws!.close();
