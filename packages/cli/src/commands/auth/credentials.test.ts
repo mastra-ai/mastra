@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('./client.js', () => ({
@@ -61,25 +64,161 @@ describe('token requests', () => {
   });
 
   it('passes the abort signal when refreshing a token', async () => {
+    const tempHome = await mkdtemp(join(tmpdir(), 'mastra-cli-credentials-'));
     const controller = new AbortController();
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false });
-    vi.stubGlobal('fetch', fetchMock);
 
-    const { tryRefreshToken } = await import('./credentials.js');
-    const credentials = {
-      token: 'expired-token',
-      refreshToken: 'refresh-token',
-      user: { id: 'u1', email: 'e@e.com', firstName: 'A', lastName: 'B' },
-      organizationId: 'org-1',
-    };
-
-    await expect(tryRefreshToken(credentials, controller.signal)).resolves.toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:9999/v1/auth/refresh-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: 'refresh-token' }),
-      signal: controller.signal,
+    vi.resetModules();
+    vi.doMock('node:os', async () => {
+      const actual = await vi.importActual<typeof import('node:os')>('node:os');
+      return { ...actual, homedir: () => tempHome };
     });
+
+    try {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: false });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { saveCredentials, tryRefreshToken } = await import('./credentials.js');
+      const credentials = {
+        token: 'expired-token',
+        refreshToken: 'refresh-token',
+        user: { id: 'u1', email: 'e@e.com', firstName: 'A', lastName: 'B' },
+        organizationId: 'org-1',
+      };
+      await saveCredentials(credentials);
+
+      await expect(tryRefreshToken(credentials, controller.signal)).resolves.toBeNull();
+      // The caller signal is combined with a request timeout, so assert an
+      // abort signal is present rather than the caller's exact instance.
+      expect(fetchMock).toHaveBeenCalledWith('http://localhost:9999/v1/auth/refresh-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: 'refresh-token' }),
+        signal: expect.any(AbortSignal),
+      });
+    } finally {
+      vi.doUnmock('node:os');
+      vi.resetModules();
+      await rm(tempHome, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('concurrent token refresh', () => {
+  it('reuses credentials rotated by another refresh instead of submitting a stale refresh token twice', async () => {
+    const tempHome = await mkdtemp(join(tmpdir(), 'mastra-cli-credentials-'));
+    let releaseRefresh!: () => void;
+    const refreshStarted = new Promise<void>(resolve => {
+      releaseRefresh = resolve;
+    });
+
+    vi.resetModules();
+    vi.doMock('node:os', async () => {
+      const actual = await vi.importActual<typeof import('node:os')>('node:os');
+      return { ...actual, homedir: () => tempHome };
+    });
+
+    try {
+      const fetchMock = vi.fn().mockImplementation(async () => {
+        await refreshStarted;
+        return {
+          ok: true,
+          json: async () => ({ accessToken: 'new-token', refreshToken: 'new-refresh-token' }),
+        };
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { loadCredentials, saveCredentials, tryRefreshToken } = await import('./credentials.js');
+      const credentials = {
+        token: 'expired-token',
+        refreshToken: 'stale-refresh-token',
+        user: { id: 'u1', email: 'e@e.com', firstName: 'A', lastName: 'B' },
+        organizationId: 'org-1',
+      };
+      await saveCredentials(credentials);
+
+      const firstRefresh = tryRefreshToken({ ...credentials });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const secondRefresh = tryRefreshToken({ ...credentials });
+      releaseRefresh();
+
+      await expect(Promise.all([firstRefresh, secondRefresh])).resolves.toEqual(['new-token', 'new-token']);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await expect(loadCredentials()).resolves.toMatchObject({
+        token: 'new-token',
+        refreshToken: 'new-refresh-token',
+      });
+    } finally {
+      vi.doUnmock('node:os');
+      vi.resetModules();
+      await rm(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  it('does not refresh from caller credentials after a logout cleared the stored credentials', async () => {
+    const tempHome = await mkdtemp(join(tmpdir(), 'mastra-cli-credentials-'));
+
+    vi.resetModules();
+    vi.doMock('node:os', async () => {
+      const actual = await vi.importActual<typeof import('node:os')>('node:os');
+      return { ...actual, homedir: () => tempHome };
+    });
+
+    try {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { tryRefreshToken } = await import('./credentials.js');
+      const credentials = {
+        token: 'expired-token',
+        refreshToken: 'stale-refresh-token',
+        user: { id: 'u1', email: 'e@e.com', firstName: 'A', lastName: 'B' },
+        organizationId: 'org-1',
+      };
+
+      await expect(tryRefreshToken(credentials)).resolves.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock('node:os');
+      vi.resetModules();
+      await rm(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  it('does not return another account token when a different user logged in meanwhile', async () => {
+    const tempHome = await mkdtemp(join(tmpdir(), 'mastra-cli-credentials-'));
+
+    vi.resetModules();
+    vi.doMock('node:os', async () => {
+      const actual = await vi.importActual<typeof import('node:os')>('node:os');
+      return { ...actual, homedir: () => tempHome };
+    });
+
+    try {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { saveCredentials, tryRefreshToken } = await import('./credentials.js');
+      await saveCredentials({
+        token: 'other-user-token',
+        refreshToken: 'other-user-refresh-token',
+        user: { id: 'u2', email: 'other@e.com', firstName: 'C', lastName: 'D' },
+        organizationId: 'org-2',
+      });
+
+      const callerCredentials = {
+        token: 'expired-token',
+        refreshToken: 'stale-refresh-token',
+        user: { id: 'u1', email: 'e@e.com', firstName: 'A', lastName: 'B' },
+        organizationId: 'org-1',
+      };
+
+      await expect(tryRefreshToken(callerCredentials)).resolves.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock('node:os');
+      vi.resetModules();
+      await rm(tempHome, { recursive: true, force: true });
+    }
   });
 });
 
