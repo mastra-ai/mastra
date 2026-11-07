@@ -26,7 +26,6 @@ Paths are under `packages/playground-ui/design/`.
 | The rule is about                                                              | File                        |
 | ------------------------------------------------------------------------------ | --------------------------- |
 | Restyling, arbitrary values, raw elements, imports, what every change follows  | `rules/core.md`             |
-| How components, pages, and hooks are written                                   | `rules/react.md`            |
 | App shell, page width and header, actions, page body, page states, filter bars | `rules/page-frame.md`       |
 | Text entry, choices, forms, buttons, links                                     | `rules/controls.md`         |
 | Status, badges, color, opacity                                                 | `rules/color-and-status.md` |

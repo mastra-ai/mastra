@@ -5,16 +5,7 @@ Mastra UI is composed from design-system parts, never painted by hand. Every dec
 </overview>
 
 <context>
-The code is the source of truth. This contract names the decisions; the files below hold the current values. If this file and the code disagree, the code wins: build from the code and report which line here drifted.
-
-| Concern                   | Source                                                                                              |
-| ------------------------- | --------------------------------------------------------------------------------------------------- |
-| Text roles                | `theme/typography.css`, `src/ds/components/Txt/Txt.tsx`                                             |
-| Control sizes             | `src/ds/primitives/control-size.ts`                                                                 |
-| Field and button surfaces | `src/ds/primitives/form-element.ts`                                                                 |
-| Page frame                | `src/ds/components/PageLayout`, `src/ds/components/ActionRow`, `src/ds/new/layout/page-header`      |
-| Settings pages            | `src/ds/new/settings`                                                                               |
-| Current variants          | the `cva` block or variant map in each component; anything marked `@deprecated` is not for new code |
+The code is the source of truth. If this file and the code disagree, the code wins: build from the code and report which line here drifted. Check names against what you can import: a component's props type in `@mastra/playground-ui/components/<Name>` lists its real variants and sizes, `theme/*.css` lists every token, and anything marked `@deprecated` is not for new code.
 
 Reference pages: a `narrow` page is `mastracode/factory-ui/src/ui/pages/ActivityPage.tsx`; settings on `narrow` are `mastracode/factory-ui/src/ui/pages/SettingsPage.tsx` and `SlackConnectionPage.tsx`; a detail page is `packages/playground/src/pages/mcps/[serverId]/index.tsx`; a `fit` list page is `packages/playground/src/pages/tools/index.tsx`. Studio's `/settings` still uses the older `SettingsLayout` frame, so do not copy it.
 
@@ -27,7 +18,7 @@ Release status: Studio builds `playground-ui` from the workspace, so everything 
 3. Choose the page frame with `page-frame.md`.
 4. Choose each control with `controls.md`, and each color and status with `color-and-status.md`.
 5. Assign every piece of text a role with `text.md`, and write it with `copy.md`.
-6. Write the component code with `react.md`.
+6. Write the component code with the `react-best-practices` skill (`.claude/skills/react-best-practices/` in `mastra`; Platform keeps its own copy).
 7. Put `className` only on layout, per the restyling rules below.
 8. If no tree branch fits, stop and propose a design-system change. Do not work around it.
 9. Walk each loaded file's checklist, then check the route in a browser at desktop and mobile widths, in both themes and every state it can reach.
@@ -57,18 +48,19 @@ When the look is wrong:
 Arbitrary values (`text-[13px]`, `bg-[#111]`, `h-[29px]`) are never correct, in product code or in `playground-ui` itself. A token for the value exists, or the missing token is a design-system question.
 
 - Lengths in any unit are banned: `px-[3px]`, `w-[274px]`, `py-[0.6rem]`, and `mt-[0.6em]` alike. Snap to the nearest scale step (`px-[13px]` becomes `px-3`, `py-[3px]` becomes `py-1`). A scale step is the fix even when it moves the element a pixel or two, because a one-off length is how a spacing system drifts.
-- Icon sizes use the `icon-*` tokens, never `em`: `size-icon-xs|sm|md|lg`, or `iconSizeClasses` from `src/ds/icons/icon-size-classes.ts` for a `[&>svg]` rule. An `em` size (`size-[1.1em]`) looks like it scales with text but produces sizes that match no token. When a control has size variants, set the icon token per variant, as `Button` does.
+- Icon sizes use the `icon-*` tokens, never `em`: `size-icon-xs|sm|md|lg`, or `iconSizeClasses` from `@mastra/playground-ui/icons/icon-size-classes` for a `[&>svg]` rule. An `em` size (`size-[1.1em]`) looks like it scales with text but produces sizes that match no token. When a control has size variants, set the icon token per variant, as `Button` does.
 - A class that names no token (`text-ui-md`, a misspelled role) renders nothing and raises no error. Check every role and color name against `theme/`.
 
 </instructions>
 
 <constraints>
-- MUST NOT change `theme.css`, `theme/*`, `src/ds/tokens/*`, or any variant's class string without a frontend code owner's approval for that change.
+- MUST NOT change `theme.css`, `theme/*`, the token exports, or any variant's class string without a frontend code owner's approval for that change.
 - MUST NOT use deprecated APIs in new code: `Section.*Row`, `components/SettingsRow`, the `*FieldBlock` components, `Button as|href|to`, `asChild`, `variant="filled"`, or anything marked `@deprecated`.
 - MUST build from `@mastra/playground-ui` components. MUST NOT hand-roll a raw `<button>`, `<input>`, `<select>`, `<textarea>`, `<table>`, or `<dialog>`, and MUST NOT import Radix, Base UI, or a local shadcn copy directly, when a playground-ui component covers the job. A raw element skips the shared states, sizes, and focus handling, so it drifts on the next token change. When nothing covers it, follow step 4 of Do not restyle above.
 - MUST NOT add a new shared component for a single call site. Compose locally, and extract once a second real call site exists, following `../build-component.md`.
 - MUST import from the owning module path (`@mastra/playground-ui/components/Button`), never from a barrel.
-- MUST follow `react.md` for every component, page, and hook.
+- MUST follow the `react-best-practices` skill (`.claude/skills/react-best-practices/` in `mastra`; Platform keeps its own copy) for every component, page, and hook. It is the only React standard; these files do not restate it.
+- MUST NOT call `useEffect` or `useLayoutEffect` in app and page code. An effect runs after paint, so it renders twice and flashes stale state. Derive during render, run work in the event handler, remount with a `key`, fetch with query hooks, or use a ref callback; when none fits, ask a frontend code owner. Inside a `ds/` component an effect MAY sync with something outside React.
 </constraints>
 
 <quality-checklist>
@@ -79,7 +71,7 @@ Arbitrary values (`text-[13px]`, `bg-[#111]`, `h-[29px]`) are never correct, in 
 - [ ] Every control, table, and dialog is a playground-ui component; no raw element or direct Radix or Base UI import stands in for one
 - [ ] Every visible string passes the `copy.md` checklist
 - [ ] No deprecated API appears in the diff
-- [ ] The code passes the `react.md` checklist
+- [ ] The code follows `react-best-practices`, and app code has no `useEffect` or `useLayoutEffect`
 - [ ] Anything these rules could not express was proposed as a design-system change, not styled around
 - [ ] Token definitions, values, and variant classes are unchanged unless a frontend code owner approved each change
 </quality-checklist>
