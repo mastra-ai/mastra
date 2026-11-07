@@ -18,6 +18,13 @@ export const MISSING_IDENTITY = 'missing thread or resource id';
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9-]{1,128}$/;
 const MAC_VERSION = 'mastra-computer-v1';
+const COMPUTER_ORDERED_TOOL_GROUP = 'workspace-computer';
+
+function markComputerTool<T extends object>(tool: T): T {
+  // Duck-type packages/core/src/tools/ordered-tools.ts's internal marker without importing an internal module.
+  (tool as T & { orderedToolGroup: string }).orderedToolGroup = COMPUTER_ORDERED_TOOL_GROUP;
+  return tool;
+}
 
 /** The part of a sandbox the computers toolset drives. */
 export interface ComputerSandbox {
@@ -488,6 +495,7 @@ export class PlatformComputers implements MastraComputers {
           }),
       }),
     };
+    for (const tool of Object.values(this.#tools)) markComputerTool(tool);
     return this.#tools;
   }
 

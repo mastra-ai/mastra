@@ -175,7 +175,10 @@ describe('PlatformComputers construction', () => {
         'computer_exec',
       ].sort(),
     );
-    for (const [id, tool] of Object.entries(computers.tools())) expect(tool.id).toBe(id);
+    for (const [id, tool] of Object.entries(computers.tools())) {
+      expect(tool.id).toBe(id);
+      expect((tool as typeof tool & { orderedToolGroup?: string }).orderedToolGroup).toBe('workspace-computer');
+    }
   });
 });
 
