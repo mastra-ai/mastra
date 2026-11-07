@@ -1986,6 +1986,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
 
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+      if (process.env.MASTRA_GATEWAY_VERSION === 'v2' && id === 'mastra') continue;
       allProviders[id] = provider;
     }
   }

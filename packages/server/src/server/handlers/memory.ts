@@ -969,6 +969,10 @@ export const LIST_THREADS_ROUTE = createRoute({
         });
       }
 
+      if (agent && isGateway && process.env.MASTRA_GATEWAY_VERSION === 'v2' && !agentSupportsMemory(agent)) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
       // Fallback to storage (covers stored agents whose memory can't be resolved)
       const storage = getStorageFromContext({ mastra });
       if (storage) {
@@ -1138,7 +1142,8 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 
       // Gateway proxy: list messages from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent))) {
+      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      if (agent && isGateway) {
         const gwClient = getGatewayClient();
         if (gwClient) {
           if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
@@ -1208,6 +1213,10 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           ...result,
           uiMessages: Array.isArray(uiMessages) ? uiMessages : null,
         };
+      }
+
+      if (agent && isGateway && process.env.MASTRA_GATEWAY_VERSION === 'v2' && !agentSupportsMemory(agent)) {
+        return { messages: [], uiMessages: [] };
       }
 
       // Fallback to storage (covers stored agents whose memory can't be resolved)

@@ -299,6 +299,8 @@ let _gatewayClient: GatewayMemoryClient | null | undefined;
  * Get a GatewayMemoryClient instance, or null if gateway is not configured.
  */
 export function getGatewayClient(): GatewayMemoryClient | null {
+  // Gateway v2 has no memory REST API; Studio must use the agent's own memory configuration.
+  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return null;
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;

@@ -465,6 +465,66 @@ describe('getProvidersHandler', () => {
 
       expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
     });
+
+    it('uses only the live Mastra catalog in v2 mode', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.endsWith('/v1/models')
+            ? Response.json({ data: [{ id: 'live-chat-model', endpoints: ['chat'] }] })
+            : Response.json({ providers: {} }),
+        ),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({}),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')?.models).toEqual(['live-chat-model']);
+    });
+
+    it('does not fall back to cached Mastra models when the v2 catalog fails', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url.endsWith('/v1/models')) throw new Error('catalog unavailable');
+          return Response.json({ providers: {} });
+        }),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({}),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')).toBeUndefined();
+      expect(result.providers.find(provider => provider.id === 'openai')).toBeDefined();
+    });
   });
 
   it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {

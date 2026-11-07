@@ -47,7 +47,31 @@ export class MastraGateway extends MastraModelGateway {
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     const openrouterConfig = PROVIDER_REGISTRY['openrouter'];
-    const models = openrouterConfig?.models ?? [];
+    let models = openrouterConfig?.models ?? [];
+    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') {
+      const apiKey = await this.getApiKey();
+      const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
+        headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`Gateway model catalog unavailable (${response.status})`);
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
+        throw new Error('Gateway model catalog has an invalid response');
+      }
+      // The Mastra gateway model uses the OpenAI-compatible chat transport.
+      // Models offered only through another endpoint cannot be selected here.
+      models = body.data
+        .filter(
+          (item): item is { id: string; endpoints: string[] } =>
+            !!item &&
+            typeof item === 'object' &&
+            typeof item.id === 'string' &&
+            Array.isArray(item.endpoints) &&
+            item.endpoints.includes('chat'),
+        )
+        .map(item => item.id);
+    }
 
     const providers = {
       mastra: {
@@ -56,7 +80,8 @@ export class MastraGateway extends MastraModelGateway {
         name: 'Gateway',
         gateway: 'mastra',
         models: [...models],
-        modelReleaseDates: openrouterConfig?.modelReleaseDates,
+        modelReleaseDates:
+          process.env['MASTRA_GATEWAY_VERSION'] === 'v2' ? undefined : openrouterConfig?.modelReleaseDates,
         docUrl: 'https://mastra.ai/docs/gateway',
       },
     };
