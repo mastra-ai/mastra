@@ -371,6 +371,9 @@ jobs:
           // does a change most of the repository depends on (its affected tests reach every store).
           const runAllStores = fullSuite || changed(file =>
             file.startsWith('stores/_test-utils/') ||
+            // A workspace manifest (dependencies, exports) can change what any store imports,
+            // and the import graph only follows source files.
+            (/(^|\/)package\.json$/.test(file) && !file.startsWith('stores/')) ||
             file === '.github/workflows/test-combined-stores.yml' ||
             file === '.github/workflows/prebuild.yml' ||
             file === 'pnpm-lock.yaml'

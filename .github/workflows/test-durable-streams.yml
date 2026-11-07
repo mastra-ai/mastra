@@ -19,7 +19,7 @@ permissions: {}
 
 jobs:
   worker-takeover:
-    name: Worker takeover (Redis + Postgres, shard ${{ matrix.shard }}/6)
+    name: Worker takeover (Redis + Postgres, shard ${{ matrix.shard }}/${{ strategy.job-total }})
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     # Half-price 2 vCPU runners: a shard spends its time waiting on leases and restarts, and ran
     # as fast on 2 vCPUs as on 4 (207 s against 205 s, Redis and Postgres on the same CPUs).
@@ -104,4 +104,4 @@ jobs:
         working-directory: pubsub/redis-streams
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
-          VITEST_TEST_SHARD: ${{ matrix.shard }}/6
+          VITEST_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}

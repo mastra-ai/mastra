@@ -133,9 +133,12 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Run ${{ matrix.store }} tests
-        run: pnpm test ${{ matrix.shards > 1 && format('--shard={0}/{1}', matrix.shard, matrix.shards) || '' }}
+        run: |
+          if [ "$SHARDS" -gt 1 ]; then pnpm test --shard="$SHARD/$SHARDS"; else pnpm test; fi
         working-directory: stores/${{ matrix.store }}
         env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.shards }}
           NODE_OPTIONS: '--max_old_space_size=8192'
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
