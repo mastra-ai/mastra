@@ -11,6 +11,7 @@ import { posix as posixPath } from 'node:path';
 import { z } from 'zod/v4';
 import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import { RequestContext } from '../../request-context';
+import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../../tools/ordered-tools';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
@@ -510,6 +511,8 @@ export async function createWorkspaceTools(
       optIn?: boolean;
       /** Every path the call writes, for tools that touch more than `input.path`. */
       getWritePaths?: (input: any) => string[];
+      /** Run this tool's calls from one model step one at a time, in emitted order, within the group. */
+      orderedGroup?: string;
       /** Whether a successful result actually changed files; read records are kept when it didn't. */
       didWrite?: (result: unknown) => boolean;
     },
@@ -590,6 +593,10 @@ export async function createWorkspaceTools(
     // Write lock is outermost — serializes the entire enriched execute pipeline
     if (opts?.useWriteLock) {
       wrapped = wrapWithWriteLock(wrapped, getWriteLock(), opts.getWritePaths);
+    }
+
+    if (opts?.orderedGroup) {
+      wrapped = markOrderedTool(wrapped, opts.orderedGroup);
     }
 
     tools[exposedName] = wrapped;
@@ -694,21 +701,19 @@ export async function createWorkspaceTools(
     // capability. Not offered for dynamic sandbox resolvers (no static
     // instance) since the capability can't be detected at tool-listing time.
     if (supportsComputer(workspace.sandbox)) {
-      await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, () => computerScreenshotTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, () => computerClickTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, () => computerDoubleClickTool, {
-        targets: { sandbox: true },
-      });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, () => computerRightClickTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, () => computerMoveMouseTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, () => computerDragTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, () => computerTypeTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, () => computerPressKeyTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, () => computerScrollTool, { targets: { sandbox: true } });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, () => computerGetScreenInfoTool, {
-        targets: { sandbox: true },
-      });
-      await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, () => computerWaitTool, { targets: { sandbox: true } });
+      // Computer tools drive one desktop, so a step's calls run one at a time in emitted order.
+      const computerTool = { targets: { sandbox: true }, orderedGroup: COMPUTER_ORDERED_TOOL_GROUP };
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, () => computerScreenshotTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, () => computerClickTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, () => computerDoubleClickTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, () => computerRightClickTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, () => computerMoveMouseTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, () => computerDragTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, () => computerTypeTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, () => computerPressKeyTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, () => computerScrollTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, () => computerGetScreenInfoTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, () => computerWaitTool, computerTool);
     }
   } else if (hasSandboxConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, () => backgroundExecuteCommandTool, {

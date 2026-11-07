@@ -22,6 +22,7 @@ import { createRunScopeKey } from '../mastra/run-scope';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { LanguageModelUsage, ProviderMetadata, StreamTransportRef } from '../stream/types';
 import type { ToolPayloadTransformPolicy } from '../tools';
+import type { OrderedToolGate } from '../tools/ordered-tools';
 import type { Workspace } from '../workspace/workspace';
 import type { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
 
@@ -49,6 +50,8 @@ export const REQUEST_TOOLS_KEY = createRunScopeKey<ToolSet>('loop:requestTools')
 export const STEP_ACTIVE_TOOLS_KEY = createRunScopeKey<string[]>('loop:stepActiveTools');
 export const STEP_WORKSPACE_KEY = createRunScopeKey<Workspace>('loop:stepWorkspace');
 export const TOOL_APPROVAL_VERDICTS_KEY = createRunScopeKey<Map<string, boolean>>('loop:toolApprovalVerdicts');
+/** Per-step gates that run ordered tools (e.g. computer tools) in emitted order, keyed by toolCallId. */
+export const ORDERED_TOOL_GATES_KEY = createRunScopeKey<Map<string, OrderedToolGate>>('loop:orderedToolGates');
 /**
  * Usage of the current model step. A suspended step emits no `step-finish`, so the first
  * suspension chunk of the step carries (and consumes) this usage instead.

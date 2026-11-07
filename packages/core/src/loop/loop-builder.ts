@@ -5,6 +5,7 @@ import { getResumeTracingContext, InternalSpans, SpanType } from '../observabili
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
+import { createOrderedToolGates } from '../tools/ordered-tools';
 import type { createEventedWorkflow } from '../workflows/create';
 import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
@@ -26,6 +27,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
+  ORDERED_TOOL_GATES_KEY,
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
@@ -385,6 +387,20 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           });
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          // Ordered tools (computer tools) drive one shared resource, so when calls run
+          // concurrently each one waits for the previous call of its group, in emitted order.
+          // Written every step so a previous step's gates never leak into this one.
+          writeScoped(
+            scopeCtx,
+            ORDERED_TOOL_GATES_KEY,
+            'orderedToolGates',
+            toolCallForeachOptions.concurrency > 1
+              ? createOrderedToolGates(
+                  toolCalls,
+                  (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
+                )
+              : new Map(),
+          );
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           writeScoped(
             scopeCtx,
