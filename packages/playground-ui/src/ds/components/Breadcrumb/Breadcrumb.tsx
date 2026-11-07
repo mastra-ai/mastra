@@ -74,7 +74,7 @@ export const Crumb = ({
         ref={crumbRef}
         className={cn(
           'group flex h-control-sm min-w-0 items-center',
-          isCurrent ? 'shrink' : 'shrink-0',
+          isCurrent ? 'max-w-2/3 shrink-0 first:max-w-full' : 'shrink',
           switcherCoversCrumb &&
             'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
         )}

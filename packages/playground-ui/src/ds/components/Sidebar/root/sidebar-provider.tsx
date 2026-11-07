@@ -100,7 +100,7 @@ export function SidebarProvider({
   const [openMobile, setOpenMobileState] = React.useState(false);
   const [mobileDrawerPresent, setMobileDrawerPresent] = React.useState(false);
   const openMobileRef = React.useRef(false);
-  const mobileTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const mobileTriggerRef = React.useRef<HTMLElement | null>(null);
   const widthRef = React.useRef<number>(initial.width);
   const stateRef = React.useRef<SidebarState>(initial.state);
   stateRef.current = state;

@@ -1,11 +1,10 @@
 import { MenuIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useSidebar } from './sidebar-context';
-import { focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
+import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
-export type SidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
+export type SidebarMobileTriggerProps = Omit<ComponentPropsWithoutRef<'button'>, 'children'> & {
   icon?: React.ReactNode;
 };
 
@@ -18,9 +17,16 @@ export function SidebarMobileTrigger({
 }: SidebarMobileTriggerProps) {
   const { isMobile, mobileTriggerRef, setOpenMobile } = useSidebar();
   return (
-    <button
-      ref={mobileTriggerRef}
+    <Button
+      ref={node => {
+        mobileTriggerRef.current = node;
+        return () => {
+          if (mobileTriggerRef.current === node) mobileTriggerRef.current = null;
+        };
+      }}
       type="button"
+      variant="ghost"
+      size="icon-sm"
       aria-label={ariaLabel}
       aria-hidden={!isMobile}
       tabIndex={isMobile ? 0 : -1}
@@ -28,20 +34,19 @@ export function SidebarMobileTrigger({
       {...props}
       onClick={event => {
         onClick?.(event);
-        if (!event.defaultPrevented) setOpenMobile(true);
+        if (event.defaultPrevented) return;
+        mobileTriggerRef.current = event.currentTarget;
+        setOpenMobile(true);
       }}
       className={cn(
-        'inline-flex size-10 items-center justify-center rounded-md',
+        'relative before:absolute before:-inset-2',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
         "[[data-sidebar-mobile-present='true']_&]:invisible",
-        quietTextHover,
-        'hover:bg-fill-subtle',
-        focusRing,
         className,
       )}
     >
-      {icon ?? <MenuIcon className="size-5" />}
-    </button>
+      {icon ?? <MenuIcon />}
+    </Button>
   );
 }

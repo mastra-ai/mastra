@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Search, Settings, Workflow } from 'lucide-react';
+import { BookOpen, Bot, Search, Settings, Workflow } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { verifyChromeRows } from '../../../../../.storybook/tests/app-shell-mobile-row';
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
+import { Button } from '@/ds/components/Button';
+import { Combobox } from '@/ds/components/Combobox';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
@@ -35,17 +38,19 @@ function DemoSidebar() {
   );
 }
 
-function MobileHeader() {
+const mobileBrand = <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Workspace" />;
+
+const mobileActions = (
+  <Button type="button" variant="ghost" size="icon-sm" aria-label="Search">
+    <Search />
+  </Button>
+);
+
+function DemoShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-sidebar px-3 lg:hidden">
-      <span className="flex items-center gap-3">
-        <Sidebar.MobileTrigger />
-        <span className="text-subheading text-foreground">Workspace</span>
-      </span>
-      <button type="button" aria-label="Search">
-        <Search className="size-5" />
-      </button>
-    </div>
+    <AppShell sidebar={<DemoSidebar />} mobileBrand={mobileBrand} mobileActions={mobileActions}>
+      {children}
+    </AppShell>
   );
 }
 
@@ -110,11 +115,11 @@ export const StandardDesktop: Story = {
     <TooltipProvider>
       <SidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <MainCard>
               <MainContent />
             </MainCard>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
@@ -133,11 +138,11 @@ export const CollapsedSidebar: Story = {
         storageKey="app-shell-story-collapsed"
       >
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <MainCard>
               <MainContent />
             </MainCard>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
@@ -150,11 +155,11 @@ export const Mobile: Story = {
     <TooltipProvider>
       <SidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <MainCard>
               <MainContent />
             </MainCard>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
@@ -166,11 +171,11 @@ export const WithoutRouteHeader: Story = {
     <TooltipProvider>
       <SidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <MainCard>
               <MainContent withHeader={false} />
             </MainCard>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
@@ -190,11 +195,11 @@ export const WithFrameWrapper: Story = {
     <TooltipProvider>
       <SidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <FrameWithPanel>
               <MainContent />
             </FrameWithPanel>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
@@ -207,11 +212,11 @@ export const LightTheme: Story = {
     <TooltipProvider>
       <SidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <MainCard>
               <MainContent />
             </MainCard>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
@@ -224,13 +229,140 @@ export const DarkTheme: Story = {
     <TooltipProvider>
       <SidebarProvider>
         <div className="h-dvh w-dvw bg-sidebar font-body">
-          <AppShell sidebar={<DemoSidebar />} mobileHeader={<MobileHeader />}>
+          <DemoShell>
             <MainCard>
               <MainContent />
             </MainCard>
-          </AppShell>
+          </DemoShell>
         </div>
       </SidebarProvider>
     </TooltipProvider>
+  ),
+};
+
+const projects = [
+  { label: 'PLTFRM-1389 browser automation sandbox', value: 'pltfrm-1389' },
+  { label: 'Support triage', value: 'support-triage' },
+];
+
+const projectTrail = (
+  <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
+    <Crumb
+      as="a"
+      to="#project"
+      action={
+        <Combobox
+          options={projects}
+          value="pltfrm-1389"
+          variant="ghost"
+          size="icon-sm"
+          align="end"
+          aria-label="Switch project"
+        />
+      }
+    >
+      PLTFRM-1389 browser automation sandbox
+    </Crumb>
+    <Crumb as="span" isCurrent>
+      Overview
+    </Crumb>
+  </Breadcrumb>
+);
+
+function MobileFrame({ children }: { children: ReactNode }) {
+  return (
+    <TooltipProvider>
+      <SidebarProvider storageKey="app-shell-story-mobile-row">
+        <div className="h-dvh w-dvw bg-sidebar font-body">
+          <DemoShell>
+            <MainCard>{children}</MainCard>
+          </DemoShell>
+        </div>
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+}
+
+function ProjectOverview() {
+  return (
+    <PageLayout
+      breadcrumbs={projectTrail}
+      headerActions={
+        <Button variant="link" size="sm">
+          <BookOpen />
+          Docs
+        </Button>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="text-column text-foreground">Project overview</p>
+      </div>
+    </PageLayout>
+  );
+}
+
+function BillingPage() {
+  return (
+    <PageLayout
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>Billing and usage for every project in this organization</PageHeader.Title>
+          <PageHeader.Description>Plan, credits and invoices for this organization.</PageHeader.Description>
+        </PageHeader>
+      }
+    >
+      <div className="mt-6 flex flex-col gap-6 pb-16">
+        <p className="text-column text-foreground">Plan details</p>
+      </div>
+    </PageLayout>
+  );
+}
+
+function UntitledPage() {
+  return (
+    <PageLayout>
+      <p className="text-column text-foreground">A page with neither a trail nor a title.</p>
+    </PageLayout>
+  );
+}
+
+export const MobileRowWithTrail: Story = {
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  play: verifyChromeRows({ desktopRows: 1 }),
+  render: () => (
+    <MobileFrame>
+      <ProjectOverview />
+    </MobileFrame>
+  ),
+};
+
+export const MobileRowWithTitle: Story = {
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  play: verifyChromeRows({ desktopRows: 0 }),
+  render: () => (
+    <MobileFrame>
+      <BillingPage />
+    </MobileFrame>
+  ),
+};
+
+export const MobileRowWithBrand: Story = {
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  play: verifyChromeRows({ desktopRows: 0 }),
+  render: () => (
+    <MobileFrame>
+      <UntitledPage />
+    </MobileFrame>
+  ),
+};
+
+export const MobileRowWithoutPageLayout: Story = {
+  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  play: verifyChromeRows({ desktopRows: 0 }),
+  render: () => (
+    <MobileFrame>
+      <p className="p-4 text-column text-foreground">Routed content that renders no PageLayout.</p>
+    </MobileFrame>
   ),
 };
