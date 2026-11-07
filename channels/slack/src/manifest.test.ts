@@ -77,10 +77,10 @@ describe('buildManifest', () => {
     expect(scopes).toContain('assistant:write');
   });
 
-  it('declares assistant_view feature (required by assistant:write scope)', () => {
+  it('declares agent_view, not the deprecated assistant_view (required by assistant:write scope)', () => {
     const manifest = buildManifest(baseOptions);
-    expect(manifest.features?.assistant_view).toBeDefined();
-    expect(manifest.features?.assistant_view?.assistant_description).toBeTruthy();
+    expect(manifest.features?.agent_view?.agent_description).toBeTruthy();
+    expect(manifest.features).not.toHaveProperty('assistant_view');
   });
 
   describe('slash commands', () => {
