@@ -4,7 +4,7 @@
 
 The observability app now draws a whole dashboard instead of a single widget, with rows of KPIs, time series, tables and scores. The app applies the dashboard's default date range and filters.
 
-The model writes each widget, read and column option under a key that names it, such as `{ timeseries: { queries: [{ metricTimeSeries: { … } }] } }`. A widget with a single view puts it directly on the widget; tabs go in `tabs`. `toObservabilityDashboard` turns this into a regular `dashboardDefinitionSchema` definition, so anything a stored dashboard can show, the model can write too.
+The model writes each widget, read and column under a key that names it, and each number holds the read it comes from, such as `{ timeseries: { series: [{ value: { metricTimeSeries: { … } } }] } }`. Nothing points at a query, series or column by id, so a dashboard can't reference something it lacks. A widget with a single view puts it directly on the widget; tabs go in `tabs`. `toObservabilityDashboard` turns this into a regular `dashboardDefinitionSchema` definition, gathering the reads into queries.
 
 **Why:** with a single fixed widget, the model could only show a handful of hard-coded charts. Now it can write its own dashboard against real data, checked against each widget kind's options.
 

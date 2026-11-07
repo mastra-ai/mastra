@@ -2,7 +2,6 @@ import {
   DASHBOARD_MAX_QUERIES_PER_VIEW,
   DASHBOARD_MAX_WIDGETS,
   DASHBOARD_SCHEMA_VERSION,
-  dashboardColumnSchema,
   dashboardDefaultsSchema,
   dashboardDefinitionSchema,
   dashboardDrilldownSchema,
@@ -25,30 +24,108 @@ import {
   tableIssues,
   tableOptionsSchema,
 } from '@mastra/playground-ui/domains/dashboards/lib/table';
-import { timeseriesIssues, timeseriesOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
+import {
+  timeseriesIssues,
+  timeseriesOptionsSchema,
+  timeseriesSeriesSchema,
+} from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
+import { valueRefSchema } from '@mastra/playground-ui/domains/dashboards/lib/values';
+import type { ValueExpr, ValueRef } from '@mastra/playground-ui/domains/dashboards/lib/values';
 import { z } from 'zod/v4';
 import { OBSERVABILITY_DATE_PRESETS } from './apps/observability-widget/tool';
 import type { ObservabilityDatePreset } from './apps/observability-widget/tool';
 
-const report = (context: z.core.$RefinementCtx, issues: string[]) => {
-  for (const message of issues) context.addIssue({ code: 'custom', message });
-};
-
-const reportAt = (context: z.core.$RefinementCtx, prefix: PropertyKey[], error: z.ZodError) => {
-  for (const issue of error.issues) {
-    context.addIssue({ code: 'custom', path: [...prefix, ...issue.path], message: issue.message });
-  }
-};
-
 /*
  * The model writes a dashboard in an authoring shape that `toObservabilityDashboard` turns into the
- * stored definition, field for field. Where the definition tells cases apart by a tag (`kind`,
- * `source` + `request`, a column's `type`), the authoring shape names the case by a key holding its
- * fields instead, e.g. `{ timeseries: { queries, options } }`. Such keys sit in one object rather
- * than a union, so a rejected input is reported at the field that is wrong rather than once per case.
+ * stored definition. The definition keeps a view's reads in a `queries` list that options point
+ * into by id (values, a chart's `totals`, a total's `peak`, a table's `defaultSort`, a dimension's
+ * lookup). The authoring shape has no such ids: each value holds the read it shows, and the
+ * converter gathers identical reads into one query. What a value can read depends on where it
+ * sits, so a read that can't work there (a breakdown in a chart, a time series in a table) can't
+ * be written. Where the definition tells cases apart by a tag (`kind`, `source` + `request`, a
+ * column's `type`), the authoring shape names the case by a key holding its fields, so a rejected
+ * input is reported at the field that is wrong rather than once per case.
  */
 
-const QUERY_READS = {
+const report = (context: z.core.$RefinementCtx, issues: string[], path: PropertyKey[] = []) => {
+  for (const message of issues) context.addIssue({ code: 'custom', path, message });
+};
+
+const keysList = (keys: readonly string[]) => keys.map(key => `\`${key}\``).join(', ');
+
+/** The keys of `value` among `keys` that hold something. */
+const keysIn = <K extends string>(value: object, keys: readonly K[]) =>
+  keys.filter(key => (value as Record<string, unknown>)[key] !== undefined);
+
+/**
+ * Whether exactly one of `keys` holds the case's fields, reporting it when not. Checked before the
+ * cases are parsed, so a missing or extra case is reported as such rather than as each case's
+ * errors. The keys named are the cases given, or, with none, the keys `fields` doesn't have: a
+ * read written where it isn't allowed.
+ */
+const hasOneKey = (
+  input: object,
+  keys: readonly string[],
+  fields: readonly string[],
+  what: string,
+  context: z.core.$RefinementCtx,
+) => {
+  const given = keysIn(input, keys);
+  if (given.length === 1) return true;
+  const wrong = given.length ? given : Object.keys(input).filter(key => !fields.includes(key));
+  context.addIssue({
+    code: 'custom',
+    path: given.slice(1),
+    message: `${what} takes exactly one of ${keysList(keys)}${wrong.length ? `, not ${keysList(wrong)}` : ''}`,
+  });
+  return false;
+};
+
+/**
+ * `schema`, an object with one optional key per case, parsed only once exactly one of `keys` holds
+ * the case's fields. Typed as `T`, the union of one-key objects that check leaves.
+ */
+const oneKeyOf = <T>(keys: readonly string[], what: string, schema: z.ZodObject): z.ZodType<T> => {
+  const fields = Object.keys(schema.shape);
+  return z.preprocess((input, context) => {
+    if (!input || typeof input !== 'object' || hasOneKey(input, keys, fields, what, context)) return input;
+    return z.NEVER;
+  }, schema) as unknown as z.ZodType<T>;
+};
+
+/** The fields of an object schema, without `omit`. */
+const fieldsOf = (schema: z.ZodObject, omit: readonly string[]) =>
+  Object.fromEntries(Object.entries(schema.shape).filter(([key]) => !omit.includes(key)));
+
+/** Canonical JSON: the same for objects that differ only in key order. */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
+
+/** What the project records, so the input schema can list it rather than leave it to a guess. */
+export type ObservabilityCatalog = {
+  /** The metric names with data, as `MastraClient#getMetricNames` lists them. */
+  metricNames?: readonly string[];
+};
+
+/** Past this many, metric names stay free strings: a longer list costs more than it guides. */
+export const OBSERVABILITY_CATALOG_MAX_METRIC_NAMES = 200;
+
+// An unknown metric name reads as zero rather than failing, so the description names the ones
+// Mastra emits.
+const METRIC_NAME_DESCRIPTION = [
+  'A metric name. Mastra emits `mastra_agent_duration_ms`, `mastra_workflow_duration_ms`, `mastra_tool_duration_ms`,',
+  '`mastra_model_duration_ms` and `mastra_processor_duration_ms` (one row per run or call, labelled `status` `ok` or',
+  '`error`: `count` them for runs, take percentiles for latency); `mastra_model_total_input_tokens` and',
+  '`mastra_model_total_output_tokens` (`sum` them for tokens; read `field: "estimatedCost"` for the price), plus',
+  'per-type token metrics such as `mastra_model_input_cache_read_tokens` and `mastra_model_output_reasoning_tokens`.',
+  'Projects can emit their own metrics too.',
+].join(' ');
+
+const READS = {
   traceAggregate: { source: 'traceAggregate' },
   spanAggregate: { source: 'spanAggregate' },
   metricAggregate: { source: 'metrics', request: 'aggregate' },
@@ -60,252 +137,620 @@ const QUERY_READS = {
   scoreTimeSeries: { source: 'scores', request: 'timeSeries' },
   scorePercentiles: { source: 'scores', request: 'percentiles' },
 } as const satisfies Record<string, { source: DashboardQuery['source']; request?: string }>;
-type QueryRead = keyof typeof QUERY_READS;
-const QUERY_READ_KEYS = Object.keys(QUERY_READS) as QueryRead[];
+type ReadKey = keyof typeof READS;
 
-const WIDGET_KINDS = ['kpis', 'timeseries', 'table', 'scores'] as const;
-type WidgetKind = (typeof WIDGET_KINDS)[number];
+/** What each place a value sits can read. */
+const CHART_READS = [
+  'metricTimeSeries',
+  'metricPercentiles',
+  'scoreTimeSeries',
+  'scorePercentiles',
+  'traceAggregate',
+  'spanAggregate',
+] as const satisfies ReadKey[];
+const RANGE_READS = [...CHART_READS, 'metricAggregate', 'scoreAggregate'] as const satisfies ReadKey[];
+const TABLE_READS = [
+  'traceAggregate',
+  'spanAggregate',
+  'metricBreakdown',
+  'scoreBreakdown',
+] as const satisfies ReadKey[];
+const LOOKUP_READS = ['traceAggregate', 'spanAggregate'] as const satisfies ReadKey[];
+const KPI_READS = ['metricAggregate', 'scoreAggregate'] as const satisfies ReadKey[];
 
-const keysList = (keys: readonly string[]) => keys.map(key => `\`${key}\``).join(', ');
+/** The fields of a read that pick a number out of its answer rather than change the request. */
+const PICKS = ['measure', 'percentile', 'field', 'groups', 'notGroups'] as const;
 
-/** The keys of `value` among `keys` that hold something. */
-const keysIn = <K extends string>(value: object, keys: readonly K[]) =>
-  keys.filter(key => (value as Record<string, unknown>)[key] !== undefined);
+const isTraceRead = (key: ReadKey) => key === 'traceAggregate' || key === 'spanAggregate';
 
-/**
- * Whether exactly one of `keys` holds the case's fields, reporting it when not. Checked before the
- * cases are parsed, so a missing or extra key is reported as such rather than as each case's errors.
- */
-const hasOneKey = (input: object, keys: readonly string[], what: string, context: z.core.$RefinementCtx) => {
-  const given = keysIn(input, keys);
-  if (given.length === 1) return true;
-  context.addIssue({
-    code: 'custom',
-    path: given.slice(1),
-    message: `${what} takes exactly one of ${keysList(keys)}${given.length ? `, not ${keysList(given)}` : ''}`,
-  });
-  return false;
-};
-
-/**
- * `schema`, an object with one optional key per case, parsed only once exactly one of `keys` holds
- * the case's fields. Typed as `T`, the union of one-key objects that check leaves.
- */
-const oneKeyOf = <T>(keys: readonly string[], what: string, schema: z.ZodObject): z.ZodType<T> =>
-  z.preprocess((input, context) => {
-    if (!input || typeof input !== 'object' || hasOneKey(input, keys, what, context)) return input;
-    return z.NEVER;
-  }, schema) as unknown as z.ZodType<T>;
-
-/** The fields of an object schema, without `omit`. */
-const fieldsOf = (schema: z.ZodObject, omit: readonly string[]) =>
-  Object.fromEntries(Object.entries(schema.shape).filter(([key]) => !omit.includes(key)));
-
-// Metric names are free strings, and an unknown one reads as zero rather than failing, so the
-// description names the ones Mastra emits.
-const QUERY_DESCRIPTION = [
-  'One read the view draws from: its `id`, which options refer to it by, and exactly one key naming the',
-  'read (e.g. `metricAggregate`, `metricTimeSeries`) holding its arguments.',
-  'Metrics Mastra emits: `mastra_agent_duration_ms`, `mastra_workflow_duration_ms`, `mastra_tool_duration_ms`,',
-  '`mastra_model_duration_ms` and `mastra_processor_duration_ms` (one row per run or call, labelled `status`',
-  '`ok` or `error`: `count` them for runs, take percentiles for latency); `mastra_model_total_input_tokens` and',
-  '`mastra_model_total_output_tokens` (`sum` them for tokens; read `field: "estimatedCost"` for the price), plus',
-  'per-type token metrics such as `mastra_model_input_cache_read_tokens` and `mastra_model_output_reasoning_tokens`.',
-  'Projects can emit their own metrics too. A value reads a metrics or scores query whole or by `field`;',
-  '`measure` only reads trace and span aggregates.',
-].join(' ');
-
-/** What the project records, so the input schema can list it rather than leave it to a guess. */
-export type ObservabilityCatalog = {
-  /** The metric names with data, as `MastraClient#getMetricNames` lists them. */
-  metricNames?: readonly string[];
-};
-
-/** Past this many, metric names stay free strings: a longer list costs more than it guides. */
-export const OBSERVABILITY_CATALOG_MAX_METRIC_NAMES = 200;
-
-// Named, so JSON Schema lists it once under `$defs` rather than once per widget kind.
-const drilldownSchema = dashboardDrilldownSchema.meta({ id: 'MastraDashboardDrilldown' });
-
-/** Each read's definition schema, with metrics `name` narrowed to `metricNames` when given. */
+/** Each read's arguments, with metric names limited to `metricNames` when given. */
 const readSchemas = (metricNames?: [string, ...string[]]) => {
   const [traceAggregate, spanAggregate, metrics, scores] = dashboardQuerySchema.out.options;
   const [metricAggregate, metricBreakdown, metricTimeSeries, metricPercentiles] = metrics.options;
   const [scoreAggregate, scoreBreakdown, scoreTimeSeries, scorePercentiles] = scores.options;
-  const name = metricNames && z.enum(metricNames);
-  return {
-    traceAggregate,
-    spanAggregate,
-    metricAggregate: name ? metricAggregate.safeExtend({ name: z.array(name).nonempty() }) : metricAggregate,
-    metricBreakdown: name ? metricBreakdown.safeExtend({ name: z.array(name).nonempty() }) : metricBreakdown,
-    metricTimeSeries: name ? metricTimeSeries.safeExtend({ name: z.array(name).nonempty() }) : metricTimeSeries,
-    metricPercentiles: name ? metricPercentiles.safeExtend({ name }) : metricPercentiles,
-    scoreAggregate,
-    scoreBreakdown,
-    scoreTimeSeries,
-    scorePercentiles,
-  } satisfies Record<QueryRead, z.ZodObject>;
+  const metricName = (metricNames ? z.enum(metricNames) : z.string().min(1)).meta({
+    id: 'MastraMetricName',
+    description: METRIC_NAME_DESCRIPTION,
+  });
+  const names = { name: z.array(metricName).nonempty() };
+  const { field, groups, notGroups, percentile } = valueRefSchema.shape;
+  const picks = {
+    field: field.describe('`value`, or `estimatedCost` for the price. Defaults to `value`.'),
+    groups: groups.describe('Only the groups whose key is exactly one of these.'),
+    notGroups: notGroups.describe('Only the groups whose key is none of these.'),
+    percentile: percentile.unwrap().describe('The percentile to read, e.g. `0.95`.'),
+  };
+  // Not sent: the page's range sets the interval; a table's or chart's own reads set the sort.
+  const omit = ['source', 'request', 'id', 'interval'];
+  const measures = traceAggregate.shape.measures as unknown as z.ZodArray<z.ZodType>;
+  const traceRead = (source: 'traceAggregate' | 'spanAggregate', query: z.ZodObject) =>
+    guardPredicates(
+      source,
+      z.strictObject({
+        ...fieldsOf(query, [...omit, 'measures', 'having', 'orderBy']),
+        measure: measures.element.optional().describe('The measure this value reads. Defaults to `count`.'),
+        groups: picks.groups,
+        notGroups: picks.notGroups,
+      }),
+    );
+  const grouped = (query: z.ZodObject) =>
+    (query.shape.groupBy as z.ZodType)
+      .optional()
+      .describe("The dimensions to group by. In a table, defaults to the table's `groupBy`.");
+  return named({
+    traceAggregate: traceRead('traceAggregate', traceAggregate),
+    spanAggregate: traceRead('spanAggregate', spanAggregate),
+    metricAggregate: z.strictObject({ ...fieldsOf(metricAggregate, omit), ...names, field: picks.field }),
+    metricBreakdown: z.strictObject({
+      ...fieldsOf(metricBreakdown, omit),
+      ...names,
+      groupBy: grouped(metricBreakdown),
+      field: picks.field,
+    }),
+    metricTimeSeries: z.strictObject({
+      ...fieldsOf(metricTimeSeries, omit),
+      ...names,
+      field: picks.field,
+      groups: picks.groups,
+      notGroups: picks.notGroups,
+    }),
+    metricPercentiles: z.strictObject({
+      ...fieldsOf(metricPercentiles, [...omit, 'percentiles']),
+      name: metricName,
+      percentile: picks.percentile,
+    }),
+    scoreAggregate: z.strictObject(fieldsOf(scoreAggregate, omit)),
+    scoreBreakdown: z.strictObject({ ...fieldsOf(scoreBreakdown, omit), groupBy: grouped(scoreBreakdown) }),
+    scoreTimeSeries: z.strictObject({
+      ...fieldsOf(scoreTimeSeries, omit),
+      groups: picks.groups,
+      notGroups: picks.notGroups,
+    }),
+    scorePercentiles: z.strictObject({
+      ...fieldsOf(scorePercentiles, [...omit, 'percentiles']),
+      percentile: picks.percentile,
+    }),
+  });
 };
 
-const toQuery = (draft: ObservabilityQueryDraft): DashboardQuery => {
-  const { id, compare, ...reads } = draft as Record<string, unknown>;
-  const [read] = keysIn(reads, QUERY_READ_KEYS);
-  return {
-    ...QUERY_READS[read!],
-    ...(id === undefined ? {} : { id }),
-    ...(compare === undefined ? {} : { compare }),
-    ...(reads[read!] as object),
-  } as DashboardQuery;
-};
+/** `schemas`, each named, so JSON Schema lists a read's arguments once rather than at every value. */
+const named = <T extends Record<ReadKey, z.ZodType>>(schemas: T) =>
+  Object.fromEntries(
+    Object.entries(schemas).map(([key, schema]) => [
+      key,
+      schema.meta({ id: `Mastra${key[0]!.toUpperCase()}${key.slice(1)}Read` }),
+    ]),
+  ) as T;
+type ReadSchemas = ReturnType<typeof readSchemas>;
 
-/** The authoring query: `id` and `compare` beside one key per read. */
-const authoringQuerySchema = (reads: ReturnType<typeof readSchemas>) => {
-  const { id, compare } = reads.metricAggregate.shape;
-  const definition = z.discriminatedUnion('source', [
-    reads.traceAggregate,
-    reads.spanAggregate,
-    z.discriminatedUnion('request', [
-      reads.metricAggregate,
-      reads.metricBreakdown,
-      reads.metricTimeSeries,
-      reads.metricPercentiles,
-    ]),
-    z.discriminatedUnion('request', [
-      reads.scoreAggregate,
-      reads.scoreBreakdown,
-      reads.scoreTimeSeries,
-      reads.scorePercentiles,
-    ]),
-  ]);
-  const query = z
-    .strictObject({
-      id,
-      compare,
-      ...Object.fromEntries(
-        QUERY_READ_KEYS.map(read => [
-          read,
-          z.strictObject(fieldsOf(reads[read], ['source', 'request', 'id', 'compare'])).optional(),
-        ]),
-      ),
-    })
-    // The checks the definition runs across fields, such as distinct group-by columns.
-    .superRefine((draft, context) => {
-      const checked = definition.safeParse(toQuery(draft as ObservabilityQueryDraft));
-      if (!checked.success) reportAt(context, keysIn(draft, QUERY_READ_KEYS), checked.error);
-    });
-  // An oversized predicate is rejected before zod recurses into it, as the definition does.
-  return z.preprocess((input, context) => {
+/** `schema`, with an oversized `where` rejected before zod recurses into it, as the definition does. */
+const guardPredicates = (source: 'traceAggregate' | 'spanAggregate', schema: z.ZodObject) =>
+  z.preprocess((input, context) => {
     if (!input || typeof input !== 'object') return input;
-    if (!hasOneKey(input, QUERY_READ_KEYS, 'A query', context)) return z.NEVER;
-    const [read] = keysIn(input, QUERY_READ_KEYS) as [QueryRead];
-    const guarded = z.safeParse(dashboardQuerySchema.in, {
-      ...QUERY_READS[read],
-      ...(input as Record<string, object>)[read],
-    });
+    const guarded = z.safeParse(dashboardQuerySchema.in, { source, ...input });
     if (guarded.success) return input;
-    reportAt(context, [read], guarded.error);
+    for (const issue of guarded.error.issues) context.addIssue({ ...issue, code: 'custom' });
     return z.NEVER;
-  }, query);
+  }, schema) as unknown as z.ZodObject;
+
+const OPERATORS = ['const', 'sum', 'minus', 'ratio', 'max', 'coalesce'] as const;
+
+/**
+ * A value: exactly one key, either a read among `keys` holding its arguments, or an operator over
+ * values. `sumOnly` leaves `sum` as the one operator.
+ */
+const valueSchema = (
+  reads: ReadSchemas,
+  keys: readonly ReadKey[],
+  id: string,
+  description: string,
+  sumOnly = false,
+): z.ZodType<ObservabilityValue> => {
+  const operators = sumOnly ? (['sum'] as const) : OPERATORS;
+  const self: z.ZodType<ObservabilityValue> = z.lazy(() => value);
+  const parts = (description: string) => z.array(self).min(1).optional().describe(description);
+  const value: z.ZodType<ObservabilityValue> = oneKeyOf<ObservabilityValue>(
+    [...keys, ...operators],
+    'A value',
+    z.strictObject({
+      ...Object.fromEntries(keys.map(key => [key, reads[key].optional()])),
+      sum: parts('The parts added up; a missing part counts as 0.'),
+      ...(sumOnly
+        ? {}
+        : {
+            const: z.number().optional(),
+            minus: z.tuple([self, self]).optional().describe('The first minus the second.'),
+            ratio: z
+              .strictObject({ of: self, over: self })
+              .optional()
+              .describe('`of / over`; no value when `over` is 0.'),
+            max: parts('The largest part that has a value.'),
+            coalesce: parts('The first part that has a value.'),
+          }),
+    }),
+  ).meta({
+    id,
+    description: `${description} Exactly one key: a read (${keysList(keys)}) holding its arguments, or ${sumOnly ? '`sum`' : `an operator (${keysList(operators)})`} over values. Reads that differ only in ${keysList(PICKS)} share one request.`,
+  });
+  return value;
 };
+
+/** The view's reads, gathered into one query each, so identical reads are sent once. */
+class Reads {
+  readonly queries: DashboardQuery[] = [];
+  /** Ids of trace and span aggregates sent over the whole range, which a chart lists as `totals`. */
+  readonly wholeRange: string[] = [];
+  #byIdentity = new Map<string, DashboardQuery & { measures?: string[]; percentiles?: number[] }>();
+
+  /**
+   * The ref reading `read` placed in `place`: `range` sends a trace or span aggregate over the whole
+   * range; `table` and `lookup` group it by `groupBy` unless it sets its own.
+   */
+  ref(read: ObservabilityRead, place: 'bucket' | 'range' | 'table' | 'lookup', groupBy?: string[]): ValueRef {
+    const [key] = keysIn(read, Object.keys(READS) as ReadKey[]) as [ReadKey];
+    const { measure, percentile, field, groups, notGroups, ...args } = (
+      read as unknown as Record<ReadKey, ValueRef & Record<string, unknown>>
+    )[key];
+    const trace = isTraceRead(key);
+    const fillsGroupBy = trace || key === 'metricBreakdown' || key === 'scoreBreakdown';
+    if (groupBy && fillsGroupBy && args.groupBy === undefined) (args as { groupBy?: string[] }).groupBy = groupBy;
+    const whole = trace && place === 'range';
+    const identity = canonical([key, whole, args]);
+    let query = this.#byIdentity.get(identity);
+    if (!query) {
+      query = {
+        ...READS[key],
+        id: `q${this.queries.length + 1}`,
+        ...args,
+        ...(trace ? { measures: [] } : {}),
+        ...(percentile === undefined ? {} : { percentiles: [] }),
+      } as DashboardQuery & { measures?: string[]; percentiles?: number[] };
+      this.#byIdentity.set(identity, query);
+      this.queries.push(query);
+      if (whole) this.wholeRange.push(query.id!);
+    }
+    const ref: ValueRef = { query: query.id! };
+    if (trace && place !== 'lookup') {
+      ref.measure = measure ?? 'count';
+      if (!query.measures!.includes(ref.measure)) query.measures!.push(ref.measure);
+    }
+    if (percentile !== undefined) {
+      ref.percentile = percentile;
+      if (!query.percentiles!.includes(percentile)) query.percentiles!.push(percentile);
+    }
+    if (field !== undefined) ref.field = field;
+    if (groups !== undefined) ref.groups = groups;
+    if (notGroups !== undefined) ref.notGroups = notGroups;
+    return ref;
+  }
+
+  /** `value` with each read turned into a ref. */
+  expr(value: ObservabilityValue, place: 'bucket' | 'range' | 'table', groupBy?: string[]): ValueExpr {
+    const recurse = (v: ObservabilityValue) => this.expr(v, place, groupBy);
+    if ('const' in value) return { const: value.const };
+    if ('sum' in value) return { sum: value.sum.map(recurse) };
+    if ('minus' in value) return { minus: [recurse(value.minus[0]), recurse(value.minus[1])] };
+    if ('ratio' in value) return { ratio: { of: recurse(value.ratio.of), over: recurse(value.ratio.over) } };
+    if ('max' in value) return { max: value.max.map(recurse) };
+    if ('coalesce' in value) return { coalesce: value.coalesce.map(recurse) };
+    return this.ref(value, place, groupBy);
+  }
+
+  /** The queries, a trace or span aggregate no value reads a measure of counting rows. */
+  done(): DashboardQuery[] {
+    for (const query of this.queries) {
+      if ('measures' in query && query.measures?.length === 0) query.measures = ['count'];
+    }
+    return this.queries;
+  }
+}
+
+const WIDGET_KINDS = ['kpis', 'timeseries', 'table', 'scores'] as const;
+type WidgetKind = (typeof WIDGET_KINDS)[number];
 
 const COLUMN_TYPES = tableColumnOptionsSchema.options.map(option => option.shape.type.value);
+type ColumnType = (typeof COLUMN_TYPES)[number];
 
-const toColumn = ({ options, ...column }: ObservabilityColumnDraft): DashboardColumn => {
-  const [type] = keysIn(options, COLUMN_TYPES);
-  return { ...column, options: { type, ...(options as Record<string, object>)[type!] } };
+type Draft = Record<string, unknown>;
+type ViewBody = {
+  label?: string;
+  description?: string;
+  drilldown?: DashboardWidgetView['drilldown'];
+  tabs?: unknown;
+} & Draft;
+
+const viewBase = ({ label, description, drilldown }: ViewBody) => ({
+  ...(label === undefined ? {} : { label }),
+  ...(description === undefined ? {} : { description }),
+  ...(drilldown === undefined ? {} : { drilldown }),
+});
+
+const toKpisView = (draft: ObservabilityKpisDraft): DashboardWidgetView => {
+  const {
+    label: _l,
+    description: _d,
+    drilldown: _dd,
+    tabs: _t,
+    items,
+    ...options
+  } = draft as ViewBody & ObservabilityKpisDraft;
+  const reads = new Reads();
+  const converted = items.map(({ value, ...item }) => ({ ...item, value: reads.expr(value, 'range') }));
+  return { ...viewBase(draft), queries: reads.done(), options: { ...options, items: converted } };
 };
 
-// Column options name their type by a key holding its fields, as queries name their read.
-const columnOptionsSchema = oneKeyOf<ObservabilityColumnDraft['options']>(
-  COLUMN_TYPES,
-  'Column options',
-  z.strictObject(
-    Object.fromEntries(
-      tableColumnOptionsSchema.options.map(option => [
-        option.shape.type.value,
-        z.strictObject(fieldsOf(option, ['type'])).optional(),
-      ]),
-    ),
-  ),
-).describe(`Exactly one of ${keysList(COLUMN_TYPES)}, holding that column type's options.`);
-
-const toView = (draft: ObservabilityViewDraft): DashboardWidgetView => {
-  const { tabs: _tabs, queries, columns, ...view } = draft as ObservabilityViewDraft & { tabs?: unknown };
-  return { ...view, queries: queries.map(toQuery), ...(columns ? { columns: columns.map(toColumn) } : {}) };
+const toTimeseriesView = (draft: ObservabilityTimeseriesDraft): DashboardWidgetView => {
+  const {
+    label: _l,
+    description: _d,
+    drilldown: _dd,
+    tabs: _t,
+    series,
+    total,
+    emptyWhenZero,
+    ...options
+  } = draft as ViewBody & ObservabilityTimeseriesDraft;
+  const reads = new Reads();
+  const converted = series.map(({ value, rangeTotal, ...line }, i) => ({
+    ...line,
+    dataKey: `series${i + 1}`,
+    value: reads.expr(value, 'bucket'),
+    ...(rangeTotal === undefined ? {} : { rangeTotal: reads.expr(rangeTotal, 'range') }),
+  }));
+  const peaked = converted.find(line => line.emphasis) ?? converted[0]!;
+  const totalValue =
+    total === undefined
+      ? undefined
+      : total.value === 'total'
+        ? 'total'
+        : total.value === 'peak'
+          ? { peak: peaked.dataKey }
+          : reads.expr(total.value, 'range');
+  return {
+    ...viewBase(draft),
+    queries: reads.done(),
+    options: {
+      ...options,
+      series: converted,
+      ...(total === undefined ? {} : { total: { ...total, value: totalValue } }),
+      ...(emptyWhenZero === undefined ? {} : { emptyWhenZero: reads.expr(emptyWhenZero, 'range') }),
+      ...(reads.wholeRange.length ? { totals: reads.wholeRange } : {}),
+    },
+  };
 };
+
+const columnIds = (columns: ObservabilityColumnDraft[]) => columns.map((column, i) => column.id ?? `column${i + 1}`);
+const columnType = (column: ObservabilityColumnDraft) => keysIn(column, COLUMN_TYPES)[0]!;
+
+const toTableView = (draft: ObservabilityTableDraft): DashboardWidgetView => {
+  const {
+    label: _l,
+    description: _d,
+    drilldown: _dd,
+    tabs: _t,
+    columns,
+    ...options
+  } = draft as ViewBody & ObservabilityTableDraft;
+  const reads = new Reads();
+  const ids = columnIds(columns);
+  const converted = columns.map((column, i): DashboardColumn => {
+    const type = columnType(column);
+    const body = (column as Draft)[type] as Draft;
+    let typed: Draft = body;
+    if (type === 'value')
+      typed = { ...body, value: reads.expr(body.value as ObservabilityValue, 'table', options.groupBy) };
+    if (type === 'dimension' && body.lookup) {
+      const { lookup, ...dimension } = body as { lookup: ObservabilityLookupDraft; dimension: string };
+      const { joinOn, ...read } = lookup;
+      typed = {
+        ...dimension,
+        query: reads.ref(read as ObservabilityRead, 'lookup', [joinOn, dimension.dimension]).query,
+        joinOn,
+      };
+    }
+    return {
+      id: ids[i]!,
+      ...(column.label === undefined ? {} : { label: column.label }),
+      options: { type, ...typed },
+    };
+  });
+  const sorted = columns.findIndex(column => column.sort !== undefined);
+  const values = columns.flatMap((column, i) => (columnType(column) === 'value' ? [i] : []));
+  const sortBy =
+    sorted >= 0 ? sorted : (values.find(i => ((columns[i] as Draft).value as Draft).emphasis) ?? values[0]!);
+  return {
+    ...viewBase(draft),
+    queries: reads.done(),
+    columns: converted,
+    options: { ...options, defaultSort: { column: ids[sortBy]!, direction: columns[sorted]?.sort ?? 'desc' } },
+  };
+};
+
+const toScoresView = (draft: ObservabilityScoresDraft): DashboardWidgetView => {
+  const {
+    label: _l,
+    description: _d,
+    drilldown: _dd,
+    tabs: _t,
+    scorerId,
+    scoreSource,
+    average,
+    series,
+    ...options
+  } = draft as ViewBody & ObservabilityScoresDraft;
+  const scorer = {
+    ...(scorerId === undefined ? {} : { scorerId }),
+    ...(scoreSource === undefined ? {} : { scoreSource }),
+  };
+  return {
+    ...viewBase(draft),
+    queries: [
+      { id: 'average', source: 'scores', request: 'aggregate', ...scorer, ...average } as DashboardQuery,
+      { id: 'series', source: 'scores', request: 'timeSeries', ...scorer, ...series } as DashboardQuery,
+    ],
+    options: { ...options, average: 'average', series: 'series' },
+  };
+};
+
+const TO_VIEW = {
+  kpis: toKpisView,
+  timeseries: toTimeseriesView,
+  table: toTableView,
+  scores: toScoresView,
+} as Record<WidgetKind, (draft: never) => DashboardWidgetView>;
 
 const toWidget = (draft: ObservabilityWidgetDraft): DashboardWidget => {
-  const { kpis, timeseries, table, scores, ...widget } = draft as Omit<DashboardWidget, 'id' | 'kind' | 'views'> & {
-    id?: string;
-  } & Partial<Record<WidgetKind, KindDraft>>;
-  const [kind] = keysIn({ kpis, timeseries, table, scores }, WIDGET_KINDS);
-  const { tabs = [], ...first } = { kpis, timeseries, table, scores }[kind!]!;
-  return { ...widget, id: widget.id ?? crypto.randomUUID(), kind: kind!, views: [first, ...tabs].map(toView) };
+  const { kpis, timeseries, table, scores, ...widget } = draft as Omit<ObservabilityWidgetDraft, WidgetKind> &
+    Partial<Record<WidgetKind, ViewBody & { tabs?: ViewBody[] }>>;
+  const kind = keysIn({ kpis, timeseries, table, scores }, WIDGET_KINDS)[0]!;
+  const first = { kpis, timeseries, table, scores }[kind]!;
+  const views = [first, ...(first.tabs ?? [])].map(view => TO_VIEW[kind](view as never));
+  return { ...widget, id: widget.id ?? crypto.randomUUID(), kind, views };
 };
+
+/** What the draft can say wrong that its schema can't: a table's sort and its `unpricedWhen` column. */
+const tableDraftIssues = (draft: ObservabilityTableDraft, context: z.core.$RefinementCtx) => {
+  const before = context.issues.length;
+  const { columns } = draft;
+  const ids = columnIds(columns);
+  const valueIds = columns.flatMap((column, i) => (columnType(column) === 'value' ? [ids[i]!] : []));
+  if (!valueIds.length) report(context, ['A table needs at least one `value` column'], ['columns']);
+  const sorted = columns.flatMap((column, i) => (column.sort === undefined ? [] : [i]));
+  if (sorted.length > 1) {
+    report(
+      context,
+      ['At most one column sets `sort`; without one, the table sorts by its emphasized value column'],
+      ['columns', sorted[1]!, 'sort'],
+    );
+  }
+  const seen = new Set<string>();
+  ids.forEach((id, i) => {
+    if (seen.has(id)) report(context, [`Duplicate column id '${id}'`], ['columns', i, 'id']);
+    seen.add(id);
+  });
+  columns.forEach((column, i) => {
+    const unpricedWhen = ((column as Draft).value as Draft | undefined)?.unpricedWhen as string | undefined;
+    if (unpricedWhen === undefined || (valueIds.includes(unpricedWhen) && unpricedWhen !== ids[i])) return;
+    report(
+      context,
+      [
+        `unpricedWhen names column '${unpricedWhen}', which is not another value column; value column ids are ${keysList(valueIds.filter(id => id !== ids[i]))}`,
+      ],
+      ['columns', i, 'value', 'unpricedWhen'],
+    );
+  });
+  return context.issues.length === before;
+};
+
+/** A KPI shows one figure, so a scores aggregate it reads names a scorer. */
+const kpisDraftIssues = (draft: ObservabilityKpisDraft, context: z.core.$RefinementCtx) => {
+  const before = context.issues.length;
+  const reads = (value: ObservabilityValue): ObservabilityRead[] =>
+    'sum' in value ? value.sum.flatMap(reads) : [value as ObservabilityRead];
+  draft.items.forEach((item, i) => {
+    if (reads(item.value).some(read => 'scoreAggregate' in read && read.scoreAggregate?.scorerId === undefined)) {
+      report(context, ['A KPI reading `scoreAggregate` names its `scorerId`'], ['items', i, 'value']);
+    }
+  });
+  return context.issues.length === before;
+};
+
+const SPAN_DESCRIPTION = 'Columns of a 12-column row: 12 is the full width, 6 half, 4 a third, 3 a quarter.';
 
 const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
   const metricNames = [...new Set(catalog.metricNames)].sort();
   const listed = metricNames.length > 0 && metricNames.length <= OBSERVABILITY_CATALOG_MAX_METRIC_NAMES;
   const reads = readSchemas(listed ? (metricNames as [string, ...string[]]) : undefined);
-  const querySchema = authoringQuerySchema(reads).meta({ id: 'MastraDashboardQuery', description: QUERY_DESCRIPTION });
 
-  const { label, description, drilldown: _drilldown, scope } = dashboardWidgetViewSchema.shape;
-  const viewOf = <Options extends z.ZodType, Extra extends z.ZodRawShape>(
-    query: z.ZodType,
-    options: Options,
-    extra: Extra,
-    kindIssues: (view: DashboardWidgetView & { options: z.output<Options> }) => string[],
+  const chartValue = valueSchema(reads, CHART_READS, 'MastraChartValue', "A series' number per bucket of the chart.");
+  const rangeValue = valueSchema(reads, RANGE_READS, 'MastraRangeValue', 'A number over the whole range.');
+  const tableValue = valueSchema(
+    reads,
+    TABLE_READS,
+    'MastraTableValue',
+    "A row's number: its reads are grouped by the table's `groupBy` unless they set their own.",
+  );
+  const kpiValue = valueSchema(
+    reads,
+    KPI_READS,
+    'MastraKpiValue',
+    'A KPI figure: one aggregate or the sum of several.',
+    true,
+  );
+
+  const { label, description } = dashboardWidgetViewSchema.shape;
+  // Named, so JSON Schema lists it once under `$defs` rather than once per widget kind.
+  const drilldown = dashboardDrilldownSchema.meta({ id: 'MastraDashboardDrilldown' }).optional();
+  const viewOf = <T extends Draft>(
+    kind: WidgetKind,
+    shape: z.ZodRawShape,
+    draftIssues: (draft: T, context: z.core.$RefinementCtx) => boolean,
+    kindIssues: (view: DashboardWidgetView) => string[],
   ) =>
-    z
-      .strictObject({
-        label,
-        description,
-        queries: z.array(query).min(1).max(DASHBOARD_MAX_QUERIES_PER_VIEW),
-        options,
-        drilldown: drilldownSchema.optional(),
-        scope,
-        ...extra,
-      })
-      // Checked as the stored view and its renderer check it, e.g. unique query ids and refs to them.
-      .superRefine((draft, context) => {
-        const view = toView(draft as unknown as ObservabilityViewDraft);
-        const checked = dashboardWidgetViewSchema.safeParse(view);
-        if (!checked.success) return reportAt(context, [], checked.error);
-        // As the renderer does, at each scope the view shows at, without the other scope's columns.
-        const scopes = view.scope ? [view.scope] : (['org', 'project'] as const);
-        const issues = scopes.flatMap(scope =>
-          kindIssues({
-            ...view,
-            columns: view.columns?.filter(column => column.scope === undefined || column.scope === scope),
-          } as DashboardWidgetView & { options: z.output<Options> }),
+    z.strictObject({ label, description, drilldown, ...shape }).superRefine((draft, context) => {
+      if (!draftIssues(draft as unknown as T, context)) return;
+      const view = TO_VIEW[kind](draft as never);
+      if (view.queries.length > DASHBOARD_MAX_QUERIES_PER_VIEW) {
+        return report(context, [
+          `This view sends ${view.queries.length} requests, past the ${DASHBOARD_MAX_QUERIES_PER_VIEW} a view can send. Reads that differ only in ${keysList(PICKS)} share one.`,
+        ]);
+      }
+      // What the stored view checks across fields, and what its renderer checks: a safety net.
+      const checked = dashboardWidgetViewSchema.safeParse(view);
+      if (!checked.success)
+        return report(
+          context,
+          checked.error.issues.map(issue => issue.message),
         );
-        report(context, [...new Set(issues)]);
-      });
+      report(context, [...new Set(kindIssues(view))]);
+    });
 
-  const tableColumn = dashboardColumnSchema.extend({ options: columnOptionsSchema });
-  const views = {
-    kpis: viewOf(querySchema, kpisOptionsSchema, {}, view => kpisIssues(view as never)),
-    timeseries: viewOf(querySchema, timeseriesOptionsSchema, {}, view =>
-      timeseriesIssues(view.options, view.queries as never),
-    ).describe("A chart's buckets follow the page's range, so its queries leave `interval` out."),
-    table: viewOf(querySchema, tableOptionsSchema, { columns: z.array(tableColumn).min(1) }, view =>
-      tableIssues(view.columns as never, view.options, view.queries as never),
-    ),
-    scores: viewOf(querySchema, scoresOptionsSchema, {}, view => scoresIssues(view as never)),
-  } satisfies Record<WidgetKind, z.ZodType>;
+  const kpiItem = kpisOptionsSchema.shape.items.element as z.ZodObject;
+  const kpis = viewOf<ObservabilityKpisDraft>(
+    'kpis',
+    {
+      items: z
+        .array(z.strictObject({ ...fieldsOf(kpiItem, ['value']), value: kpiValue }))
+        .min(1)
+        .describe('One figure each, compared with the window before when its reads set `compare`.'),
+    },
+    kpisDraftIssues,
+    view => kpisIssues(view as never),
+  );
 
-  const { span, title, description: widgetDescription, scope: widgetScope } = dashboardWidgetSchema.shape;
-  const widgetDraftSchema = oneKeyOf<ObservabilityWidgetDraft>(
+  const { total: storedTotal } = timeseriesOptionsSchema.shape;
+  const timeseries = viewOf<ObservabilityTimeseriesDraft>(
+    'timeseries',
+    {
+      ...fieldsOf(timeseriesOptionsSchema, ['series', 'totals', 'total', 'emptyWhenZero']),
+      series: z
+        .array(
+          z.strictObject({
+            ...fieldsOf(timeseriesSeriesSchema, ['dataKey', 'value', 'rangeTotal']),
+            value: chartValue,
+            rangeTotal: rangeValue
+              .optional()
+              .describe("The series' number over the whole range, shown beside the card's title."),
+          }),
+        )
+        .min(1),
+      total: z
+        .strictObject({
+          value: z
+            .union([z.enum(['total', 'peak']), rangeValue])
+            .describe(
+              '`total`: every series summed over the range; `peak`: the highest bucket of the emphasized series (the first, when none is); or a number over the range.',
+            ),
+          format: (storedTotal.unwrap() as z.ZodObject).shape.format as z.ZodType,
+        })
+        .optional()
+        .describe("The card's total, beside its title. Ignored when a series has a `rangeTotal`."),
+      emptyWhenZero: rangeValue
+        .optional()
+        .describe('Empty when this is zero over the range; by default, when every plotted value is zero.'),
+    },
+    () => true,
+    view => timeseriesIssues(view.options as never, view.queries as never),
+  );
+
+  const columnOptions = Object.fromEntries(
+    tableColumnOptionsSchema.options.map(option => [option.shape.type.value, option as z.ZodObject]),
+  ) as Record<ColumnType, z.ZodObject>;
+  const lookup = oneKeyOf<ObservabilityLookupDraft>(
+    LOOKUP_READS,
+    'A lookup',
+    z.strictObject({
+      joinOn: z.string().min(1).describe("The row's dimension the lookup's rows are matched on."),
+      ...Object.fromEntries(LOOKUP_READS.map(key => [key, reads[key].optional()])),
+    }),
+  ).describe(
+    "Shows `dimension` from another read's rows, grouped by `joinOn` and `dimension` unless it sets its own `groupBy`.",
+  );
+  const column = oneKeyOf<ObservabilityColumnDraft>(
+    COLUMN_TYPES,
+    'A column',
+    z.strictObject({
+      id: z.string().min(1).optional().describe("Needed only for another column's `unpricedWhen` to name it."),
+      label: z.string().optional(),
+      sort: z
+        .enum(['asc', 'desc'])
+        .optional()
+        .describe('Sorts the table by this column. Without one, it sorts by its emphasized value column, descending.'),
+      name: z.strictObject(fieldsOf(columnOptions.name, ['type'])).optional(),
+      dimension: z
+        .strictObject({ ...fieldsOf(columnOptions.dimension, ['type', 'query', 'joinOn']), lookup: lookup.optional() })
+        .optional(),
+      value: z
+        .strictObject({
+          ...fieldsOf(columnOptions.value, ['type', 'value']),
+          value: tableValue,
+          unpricedWhen: (columnOptions.value.shape.unpricedWhen as z.ZodType).describe(
+            '`usd` only: the `id` of the column whose value above 0 makes a missing price read "Not priced".',
+          ),
+        })
+        .optional(),
+      change: z
+        .strictObject(fieldsOf(columnOptions.change, ['type']))
+        .optional()
+        .describe("The emphasized value's % change against the window before; its reads set `compare`."),
+    }),
+  ).describe(`Exactly one of ${keysList(COLUMN_TYPES)} names the column's type and holds its options.`);
+  const table = viewOf<ObservabilityTableDraft>(
+    'table',
+    { ...fieldsOf(tableOptionsSchema, ['defaultSort']), columns: z.array(column).min(1) },
+    tableDraftIssues,
+    view => tableIssues(view.columns as never, view.options as never, view.queries as never),
+  );
+
+  const { scorerId, scoreSource } = reads.scoreAggregate.shape;
+  const scores = viewOf<ObservabilityScoresDraft>(
+    'scores',
+    {
+      ...fieldsOf(scoresOptionsSchema, ['average', 'series']),
+      scorerId,
+      scoreSource,
+      average: z
+        .strictObject(fieldsOf(reads.scoreAggregate, ['scorerId', 'scoreSource']))
+        .describe("Each scorer's mean over the range."),
+      series: z
+        .strictObject(fieldsOf(reads.scoreTimeSeries, ['scorerId', 'scoreSource', 'groups', 'notGroups']))
+        .describe("Each scorer's line over time."),
+    },
+    () => true,
+    view => scoresIssues(view as never),
+  );
+
+  const views = { kpis, timeseries, table, scores } satisfies Record<WidgetKind, z.ZodObject>;
+  const { span, title, description: widgetDescription } = dashboardWidgetSchema.shape;
+  const widget = oneKeyOf<ObservabilityWidgetDraft>(
     WIDGET_KINDS,
     'A widget',
     z.strictObject({
-      /** Left out, the server assigns one. */
-      id: dashboardWidgetSchema.shape.id.optional(),
-      span,
+      id: dashboardWidgetSchema.shape.id.optional().describe('Left out, the server assigns one.'),
+      span: (span as z.ZodType).describe(SPAN_DESCRIPTION),
       title,
       description: widgetDescription,
-      drilldown: drilldownSchema.optional(),
-      scope: widgetScope,
+      drilldown,
       ...Object.fromEntries(
         WIDGET_KINDS.map(kind => [
           kind,
@@ -320,15 +765,13 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
         ]),
       ),
     }),
-  ).describe(
-    `Exactly one of ${keysList(WIDGET_KINDS)} names the widget's kind and holds its view: the queries it reads and that kind's options.`,
-  );
+  ).describe(`Exactly one of ${keysList(WIDGET_KINDS)} names the widget's kind and holds its view.`);
 
   return z
     .strictObject({
       schemaVersion: z.literal(DASHBOARD_SCHEMA_VERSION).optional(),
       defaults: dashboardDefaultsSchema.optional(),
-      rows: z.array(z.strictObject({ widgets: z.array(widgetDraftSchema).min(1) })).min(1),
+      rows: z.array(z.strictObject({ widgets: z.array(widget).min(1) })).min(1),
     })
     .superRefine((dashboard, context) => {
       const widgets = dashboard.rows.flatMap(row => row.widgets);
@@ -345,40 +788,94 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
 };
 
 // Written out rather than inferred from the schemas: inferred, the published declarations would
-// spell out every query and option type once per use.
+// spell out every read and option type once per use.
 
 /** One object per case, holding only that case's key. */
 type OneKeyOf<T> = { [K in keyof T]: { [P in K]: T[P] } }[keyof T];
 
-/**
- * A dashboard query as the model writes it: `id` and `compare` beside one key naming the read,
- * e.g. `{ id: 'runs', metricAggregate: { name: [...], aggregation: 'count' } }`.
- */
-export type ObservabilityQueryDraft = Pick<DashboardQuery, 'id' | 'compare'> &
-  OneKeyOf<{
-    [R in QueryRead]: Omit<Extract<DashboardQuery, (typeof QUERY_READS)[R]>, 'source' | 'request' | 'id' | 'compare'>;
-  }>;
+type Args<Q, Omitted extends PropertyKey = never> = Omit<Q, 'source' | 'request' | 'id' | 'interval' | Omitted>;
+type MetricQuery<R> = Extract<DashboardQuery, { source: 'metrics'; request: R }>;
+type ScoreQuery<R> = Extract<DashboardQuery, { source: 'scores'; request: R }>;
+type TraceQuery = Extract<DashboardQuery, { source: 'traceAggregate' }>;
+type SpanQuery = Extract<DashboardQuery, { source: 'spanAggregate' }>;
+type Field = { field?: 'value' | 'estimatedCost' };
+type Groups = { groups?: string[]; notGroups?: string[] };
+type TraceArgs<Q extends { measures: unknown[] }> = Args<Q, 'measures' | 'having' | 'orderBy'> & {
+  measure?: Q['measures'][number];
+} & Groups;
 
-/** A table column whose `options` name the column type by a key, e.g. `{ value: { value, format } }`. */
-export type ObservabilityColumnDraft = Omit<DashboardColumn, 'options'> & {
-  options: Record<string, Record<string, unknown>>;
+/** Each read's arguments, with what picks the number out of its answer. */
+export type ObservabilityReads = {
+  traceAggregate: TraceArgs<TraceQuery>;
+  spanAggregate: TraceArgs<SpanQuery>;
+  metricAggregate: Args<MetricQuery<'aggregate'>> & Field;
+  metricBreakdown: Args<MetricQuery<'breakdown'>, 'groupBy'> & { groupBy?: string[] } & Field;
+  metricTimeSeries: Args<MetricQuery<'timeSeries'>> & Field & Groups;
+  metricPercentiles: Args<MetricQuery<'percentiles'>, 'percentiles'> & { percentile: number };
+  scoreAggregate: Args<ScoreQuery<'aggregate'>>;
+  scoreBreakdown: Args<ScoreQuery<'breakdown'>, 'groupBy'> & { groupBy?: string[] };
+  scoreTimeSeries: Args<ScoreQuery<'timeSeries'>> & Groups;
+  scorePercentiles: Args<ScoreQuery<'percentiles'>, 'percentiles'> & { percentile: number };
 };
 
-/** A widget view as the model writes it. */
-export type ObservabilityViewDraft = Omit<DashboardWidgetView, 'queries' | 'columns'> & {
-  queries: ObservabilityQueryDraft[];
-  columns?: ObservabilityColumnDraft[];
+/** One read, named by its key, e.g. `{ metricAggregate: { name: [...], aggregation: 'count' } }`. */
+export type ObservabilityRead = OneKeyOf<ObservabilityReads>;
+
+/** A number a view shows: a read, or an operator over values. */
+export type ObservabilityValue =
+  | ObservabilityRead
+  | { const: number }
+  | { sum: ObservabilityValue[] }
+  | { minus: [ObservabilityValue, ObservabilityValue] }
+  | { ratio: { of: ObservabilityValue; over: ObservabilityValue } }
+  | { max: ObservabilityValue[] }
+  | { coalesce: ObservabilityValue[] };
+
+type ViewDraft = { label?: string; description?: string; drilldown?: DashboardWidgetView['drilldown'] } & Draft;
+
+export type ObservabilityKpisDraft = ViewDraft & { items: (Draft & { value: ObservabilityValue })[] };
+
+export type ObservabilityTimeseriesDraft = ViewDraft & {
+  series: (Draft & { value: ObservabilityValue; rangeTotal?: ObservabilityValue; emphasis?: boolean })[];
+  total?: { value: 'total' | 'peak' | ObservabilityValue; format?: string };
+  emptyWhenZero?: ObservabilityValue;
 };
 
-type KindDraft = ObservabilityViewDraft & { tabs?: ObservabilityViewDraft[] };
+/** A dimension column's lookup: one trace or span read, matched to the row on `joinOn`. */
+export type ObservabilityLookupDraft = { joinOn: string } & OneKeyOf<
+  Pick<ObservabilityReads, 'traceAggregate' | 'spanAggregate'>
+>;
+
+/** A table column, its type named by the key holding its options, e.g. `{ value: { value, format } }`. */
+export type ObservabilityColumnDraft = { id?: string; label?: string; sort?: 'asc' | 'desc' } & OneKeyOf<{
+  name: Draft;
+  dimension: Draft & { dimension: string; lookup?: ObservabilityLookupDraft };
+  value: Draft & { value: ObservabilityValue; unpricedWhen?: string };
+  change: Draft;
+}>;
+
+export type ObservabilityTableDraft = ViewDraft & { groupBy: string[]; columns: ObservabilityColumnDraft[] };
+
+export type ObservabilityScoresDraft = ViewDraft &
+  Pick<ObservabilityReads['scoreAggregate'], 'scorerId' | 'scoreSource'> & {
+    average: Omit<ObservabilityReads['scoreAggregate'], 'scorerId' | 'scoreSource'>;
+    series: Omit<ObservabilityReads['scoreTimeSeries'], 'scorerId' | 'scoreSource' | 'groups' | 'notGroups'>;
+  };
+
+type WithTabs<V> = V & { tabs?: V[] };
 
 /**
  * A dashboard widget as the model writes it: its kind is the key holding its view, e.g.
- * `{ span: 6, timeseries: { queries, options } }`. Left out, the server assigns the `id`.
+ * `{ span: 6, timeseries: { chart, format, series } }`. Left out, the server assigns the `id`.
  */
-export type ObservabilityWidgetDraft = Omit<DashboardWidget, 'id' | 'kind' | 'views'> & {
+export type ObservabilityWidgetDraft = Omit<DashboardWidget, 'id' | 'kind' | 'views' | 'scope'> & {
   id?: string;
-} & OneKeyOf<Record<WidgetKind, KindDraft>>;
+} & OneKeyOf<{
+    kpis: WithTabs<ObservabilityKpisDraft>;
+    timeseries: WithTabs<ObservabilityTimeseriesDraft>;
+    table: WithTabs<ObservabilityTableDraft>;
+    scores: WithTabs<ObservabilityScoresDraft>;
+  }>;
 
 /** A dashboard definition as the model writes it. */
 export type ObservabilityDashboardDraft = {
@@ -395,7 +892,7 @@ export type ObservabilityDashboardInput = {
 };
 
 /**
- * The opening tool's input schema, with metrics reads limited to `catalog.metricNames`, so the
+ * The opening tool's input schema, with metric names limited to `catalog.metricNames`, so the
  * model can only name metrics that have data. With no names, or more than
  * `OBSERVABILITY_CATALOG_MAX_METRIC_NAMES`, metric names stay free strings. Build it again when the
  * catalog changes: the schema is a snapshot.
@@ -405,9 +902,13 @@ export function createObservabilityDashboardInputSchema(
 ): z.ZodType<ObservabilityDashboardInput> {
   return z.object({
     dashboard: buildDashboardDraftSchema(catalog),
-    /** Left out, the dashboard's `defaults.datePreset` when it is one of these, else `24h`. */
-    datePreset: z.enum(OBSERVABILITY_DATE_PRESETS).optional(),
-  });
+    datePreset: z
+      .enum(OBSERVABILITY_DATE_PRESETS)
+      .optional()
+      .describe(
+        "The range drawn. Left out, the dashboard's `defaults.datePreset` when it is one of these, else `24h`.",
+      ),
+  }) as z.ZodType<ObservabilityDashboardInput>;
 }
 
 /**
@@ -426,10 +927,10 @@ export const observabilityDashboardOutputSchema: z.ZodType<ObservabilityDashboar
 export type ObservabilityDashboardOpened = { dashboard: DashboardDefinition; datePreset?: ObservabilityDatePreset };
 
 /**
- * The stored definition for `input`: each widget, query and column option turned from the
- * authoring shape into the definition's, and every widget without an id given a fresh UUID, so the
- * host can pin each widget by an id that stays the same whenever the result is shown. Throws when `input` doesn't pass `observabilityDashboardInputSchema`, or the
- * definition doesn't validate once the ids are in (e.g. over the size limit).
+ * The stored definition for `input`: each value's reads gathered into the view's queries, and every
+ * widget without an id given a fresh UUID, so the host can pin each widget by an id that stays the
+ * same whenever the result is shown. Throws when `input` doesn't pass
+ * `observabilityDashboardInputSchema`, or the definition doesn't validate (e.g. over the size limit).
  */
 export function toObservabilityDashboard(input: ObservabilityDashboardInput): ObservabilityDashboardOpened {
   const checked = observabilityDashboardInputSchema.safeParse(input);

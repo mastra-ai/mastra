@@ -1,4 +1,5 @@
 import { DASHBOARD_MAX_WIDGETS, dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
+import type { DashboardWidget } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { METRICS_DASHBOARD } from '@mastra/playground-ui/domains/dashboards/metrics-dashboard';
 import { afterEach, expect, it } from 'vitest';
@@ -8,7 +9,7 @@ import {
   observabilityDashboardOutputSchema,
   toObservabilityDashboard,
 } from '../observability-dashboard';
-import type { ObservabilityDashboardInput } from '../observability-dashboard';
+import type { ObservabilityDashboardInput, ObservabilityWidgetDraft } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
 
@@ -34,18 +35,17 @@ const dashboardToolFor = (metricNames: string[]) =>
   });
 
 const metricNamesIn = (inputSchema: unknown) => {
-  const query = (inputSchema as { $defs: Record<string, unknown> }).$defs.MastraDashboardQuery;
-  const names = JSON.stringify(query).match(/"enum":\["mastra_[^\]]*\]/g) ?? [];
+  const names = JSON.stringify(inputSchema).match(/"enum":\["mastra_[^\]]*\]/g) ?? [];
   return [...new Set(names)];
 };
 
-const { id: _id, ...kpiDraft } = draftOf(agentRunsKpi);
-const chartDraft = draftOf(agentRunsChart);
+const { id: _id, ...kpiDraft } = draftOf(agentRunsKpi) as Extract<ObservabilityWidgetDraft, { kpis: unknown }>;
+const chartDraft = draftOf(agentRunsChart) as Extract<ObservabilityWidgetDraft, { timeseries: unknown }>;
 
 const widgets = (opened: ReturnType<typeof toObservabilityDashboard>) =>
   opened.dashboard.rows.flatMap(row => row.widgets);
 
-it("advertises each kind's options to the model, with the shared query schema listed once", async () => {
+it("advertises each kind's options to the model, with each read's arguments listed once", async () => {
   const client = await connect();
 
   const { tools } = await client.listTools();
@@ -54,7 +54,11 @@ it("advertises each kind's options to the model, with the shared query schema li
 
   expect(schema).toContain('"stackedBar"');
   expect(schema).toContain('"lowerIsBetter"');
-  expect(schema.match(/"MastraDashboardQuery":/g)).toHaveLength(1);
+  expect(schema.match(/"MastraMetricTimeSeriesRead":/g)).toHaveLength(1);
+  // Nothing in a view points at anything else by id but `unpricedWhen`.
+  expect(schema).not.toContain('"defaultSort"');
+  expect(schema).not.toContain('"totals"');
+  expect(schema).not.toContain('"dataKey"');
   // An unknown metric name reads as zero, so the model is told the ones Mastra emits.
   expect(schema).toContain('mastra_agent_duration_ms');
   expect(schema).toContain('mastra_model_total_input_tokens');
@@ -85,7 +89,8 @@ it('opens through the tool with missing ids assigned and given ids kept', async 
   expect(chart).toEqual(agentRunsChart);
 });
 
-it('names each case by a key holding its fields, and opens to the stored definition', () => {
+it('gathers the reads a view makes into its queries, one per distinct read', () => {
+  const tokens = { name: ['mastra_model_total_input_tokens'], aggregation: 'sum' as const };
   const opened = toObservabilityDashboard({
     dashboard: {
       rows: [
@@ -96,17 +101,42 @@ it('names each case by a key holding its fields, and opens to the stored definit
               span: 6,
               title: 'Agent runs over time',
               timeseries: {
-                queries: [
+                chart: 'stackedBar',
+                format: 'count',
+                series: [
                   {
-                    id: 'runs',
-                    metricTimeSeries: { name: ['mastra_agent_duration_ms'], aggregation: 'count', groupBy: ['status'] },
+                    label: 'Runs',
+                    color: 'green',
+                    value: {
+                      metricTimeSeries: {
+                        name: ['mastra_agent_duration_ms'],
+                        aggregation: 'count',
+                        groupBy: ['status'],
+                      },
+                    },
                   },
                 ],
-                options: {
-                  chart: 'stackedBar',
-                  format: 'count',
-                  series: [{ dataKey: 'runs', label: 'Runs', color: 'green', value: { query: 'runs' } }],
-                },
+              },
+            },
+            {
+              span: 6,
+              kpis: {
+                items: [
+                  {
+                    label: 'Input',
+                    icon: 'coins',
+                    format: 'count',
+                    detail: 'tokens',
+                    value: { metricAggregate: tokens },
+                  },
+                  {
+                    label: 'Input cost',
+                    icon: 'coins',
+                    format: 'usd',
+                    detail: 'estimated',
+                    value: { metricAggregate: { ...tokens, field: 'estimatedCost' } },
+                  },
+                ],
               },
             },
           ],
@@ -115,15 +145,39 @@ it('names each case by a key holding its fields, and opens to the stored definit
     },
   });
 
-  expect(widgets(opened)).toEqual([agentRunsChart]);
+  const [chart, kpis] = widgets(opened);
+  expect(chart).toEqual(agentRunsChart);
+  // The two KPIs read one query, each picking its own field.
+  expect(kpis!.views[0]!.queries).toEqual([{ id: 'q1', source: 'metrics', request: 'aggregate', ...tokens }]);
+  expect(kpis!.views[0]!.options).toMatchObject({
+    items: [{ value: { query: 'q1' } }, { value: { query: 'q1', field: 'estimatedCost' } }],
+  });
 });
 
-it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget.id, widget] as const))(
-  "opens Studio's %s widget, written as a draft, to the same widget",
-  (_, widget) => {
-    const opened = toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draftOf(widget)] }] } });
+/** `widget` as the observability widget draws it: at project scope, with org-only views and columns left out. */
+function atProjectScope({ scope: _scope, ...widget }: DashboardWidget): DashboardWidget {
+  const inScope = (item: { scope?: string }) => item.scope !== 'org';
+  return {
+    ...widget,
+    views: widget.views.filter(inScope).map(({ scope: _s, columns, ...view }) => ({
+      ...view,
+      ...(columns ? { columns: columns.filter(inScope).map(({ scope: _c, ...column }) => column) } : {}),
+    })),
+  };
+}
 
-    expect(widgets(opened)).toEqual([widget]);
+it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget.id, atProjectScope(widget)] as const))(
+  "opens Studio's %s widget, written as a draft, to a widget making the same reads",
+  (_, widget) => {
+    const draft = draftOf(widget);
+
+    const [opened] = widgets(toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } }));
+
+    expect(dashboardDefinitionSchema.safeParse({ schemaVersion: 1, rows: [{ widgets: [opened] }] }).success).toBe(true);
+    expect(draftOf(opened!)).toEqual(draft);
+    opened!.views.forEach((view, i) =>
+      expect(view.queries.length).toBeLessThanOrEqual(widget.views[i]!.queries.length),
+    );
   },
 );
 
@@ -136,84 +190,59 @@ it("gives a fresh id on every open, so a widget doesn't collide with the one pin
   expect(a!.id).not.toBe(b!.id);
 });
 
+const chart = chartDraft.timeseries!;
+const runs = chart.series[0]!.value as { metricTimeSeries: object };
+const tableDraft = (columns: unknown[]) =>
+  ({
+    span: 12,
+    table: { groupBy: ['entityName'], pageSize: 20, emptyMessage: 'No runs', columns },
+  }) as never;
+const name = { name: {} };
+const count = { value: { value: { traceAggregate: { measure: 'count' } }, format: 'count' } };
+const dashboardOf = (...widgets: unknown[]) => ({ rows: [{ widgets }] }) as ObservabilityDashboardInput['dashboard'];
+
 it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
   [
-    'a KPI reading a query its view lacks',
-    {
-      rows: [
-        {
-          widgets: [
-            {
-              ...kpiDraft,
-              kpis: {
-                ...kpiDraft.kpis!,
-                options: {
-                  items: [
-                    {
-                      label: 'Runs',
-                      icon: 'bot',
-                      format: 'count',
-                      value: { query: 'missing' },
-                      detail: 'in this range',
-                    },
-                  ],
-                },
-              },
-            } as never,
-          ],
-        },
-      ],
-    },
-    "reads query 'missing', which the view doesn't have",
+    'a KPI reading something other than an aggregate',
+    dashboardOf({
+      ...kpiDraft,
+      kpis: { items: [{ label: 'Runs', icon: 'bot', format: 'count', detail: 'in range', value: runs }] },
+    }),
+    'A value takes exactly one of `metricAggregate`, `scoreAggregate`, `sum`, not `metricTimeSeries`',
   ],
   [
     'a kind no renderer draws',
-    { rows: [{ widgets: [{ span: 12, pie: kpiDraft.kpis } as never] }] },
+    dashboardOf({ span: 12, pie: kpiDraft.kpis }),
     'A widget takes exactly one of `kpis`, `timeseries`, `table`, `scores`',
   ],
+  ['a widget of two kinds', dashboardOf({ ...kpiDraft, timeseries: chart }), 'not `kpis`, `timeseries`'],
   [
-    'a widget of two kinds',
-    { rows: [{ widgets: [{ ...kpiDraft, scores: kpiDraft.kpis } as never] }] },
-    'not `kpis`, `scores`',
+    'a value of two reads',
+    dashboardOf({
+      ...chartDraft,
+      timeseries: { ...chart, series: [{ ...chart.series[0], value: { ...runs, const: 1 } }] },
+    }),
+    'A value takes exactly one of',
+  ],
+  ['a table with no value column', dashboardOf(tableDraft([name])), 'at least one `value` column'],
+  [
+    'a table sorted by two columns',
+    dashboardOf(tableDraft([name, { sort: 'desc', ...count }, { sort: 'asc', ...count }])),
+    'At most one column sets `sort`',
   ],
   [
-    'a chart query setting its own interval',
-    {
-      rows: [
-        {
-          widgets: [
-            {
-              ...chartDraft,
-              timeseries: {
-                ...chartDraft.timeseries!,
-                queries: [
-                  {
-                    id: 'runs',
-                    metricTimeSeries: { ...chartDraft.timeseries!.queries[0]!.metricTimeSeries!, interval: '1h' },
-                  } as never,
-                ],
-              },
-            },
-          ],
-        },
-      ],
-    },
-    'interval',
+    'a value column unpriced when a column the table lacks',
+    dashboardOf(tableDraft([name, { value: { ...count.value, unpricedWhen: 'tokens' } }])),
+    "unpricedWhen names column 'tokens'",
   ],
   [
     'two widgets with one id',
-    { rows: [{ widgets: [draftOf(agentRunsKpi), draftOf(agentRunsKpi)] }] },
+    dashboardOf(draftOf(agentRunsKpi), draftOf(agentRunsKpi)),
     "Duplicate widget id 'agent-runs'",
   ],
   [
     'more widgets than a dashboard holds',
-    {
-      rows: [
-        {
-          widgets: Array.from({ length: DASHBOARD_MAX_WIDGETS + 1 }, () => kpiDraft),
-        },
-      ],
-    },
+    dashboardOf(...Array.from({ length: DASHBOARD_MAX_WIDGETS + 1 }, () => kpiDraft)),
     `At most ${DASHBOARD_MAX_WIDGETS} widgets`,
   ],
 ])('rejects %s, saying why, both from the tool and from toObservabilityDashboard', async (_, dashboard, message) => {
@@ -232,7 +261,7 @@ it("lists the catalog's metric names, rejects any other, and lists new ones once
   const client = await connect(server);
   const toolSchema = async () =>
     (await client.listTools()).tools.find(t => t.name === 'showObservabilityDashboard')!.inputSchema;
-  const open = (name: string) =>
+  const open = (metric: string) =>
     client.callTool({
       name: 'showObservabilityDashboard',
       arguments: {
@@ -243,15 +272,15 @@ it("lists the catalog's metric names, rejects any other, and lists new ones once
                 {
                   ...chartDraft,
                   timeseries: {
-                    ...chartDraft.timeseries!,
-                    queries: [
+                    ...chart,
+                    series: [
                       {
-                        id: 'runs',
-                        metricTimeSeries: { ...chartDraft.timeseries!.queries[0]!.metricTimeSeries!, name: [name] },
-                      } as never,
+                        ...chart.series[0]!,
+                        value: { metricTimeSeries: { ...runs.metricTimeSeries, name: [metric] } },
+                      },
                     ],
                   },
-                },
+                } as never,
               ],
             },
           ],

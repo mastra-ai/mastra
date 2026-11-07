@@ -117,11 +117,20 @@ export const observabilityServer = new MCPServer({
 });
 ```
 
-The input names each widget, read and column option by a key instead of a `kind`, `source` or `type` field, so a validation error points at the part that's wrong:
+The input names each widget, read and column type by a key instead of a `kind`, `source` or `type` field, so a validation error points at the part that's wrong. Each number holds the read it comes from, so nothing points at a query by id:
 
 ```ts
-{ id: 'runs', timeseries: { queries: [{ id: 'runs', metricTimeSeries: { name: 'mastra_agent_duration_ms', aggregation: 'count' } }], options: { … } } }
+{
+  span: 6,
+  timeseries: {
+    chart: 'stackedBar',
+    format: 'count',
+    series: [{ label: 'Runs', color: 'green', value: { metricTimeSeries: { name: ['mastra_agent_duration_ms'], aggregation: 'count' } } }],
+  },
+}
 ```
+
+`toObservabilityDashboard` gathers the reads into each view's queries, one per distinct read, and fills in what the stored definition points at: series keys, a chart's whole-range totals, a table's default sort.
 
 A host can also build a dashboard itself: `toObservabilityDashboard({ dashboard: { rows: [{ widgets: [runsWidget] }] }, datePreset: '7d' })` returns `{ dashboard, datePreset? }` as a regular `dashboardDefinitionSchema` definition and throws when the input is invalid.
 
