@@ -269,6 +269,8 @@ describe('Settings', () => {
       expect(rows?.[1]?.getAttribute('data-slot')).toBe('settings-item');
       fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
       expect(added).toBe(1);
+      // A truncated string title can still be read in full on hover.
+      expect(screen.getByText('mastra-ai').getAttribute('title')).toBe('mastra-ai');
     });
 
     it('shows an empty list as one row with its empty text and action', () => {

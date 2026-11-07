@@ -81,7 +81,10 @@ export function SettingsItem({ media, title, description, children, className, .
     <div data-slot="settings-item" className={cn('flex min-w-0 items-center gap-3', className)} {...props}>
       {media}
       <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <div className="truncate text-label text-foreground">{title}</div>
+        {/* A string title truncates, so it also goes in the hover title to stay readable in full. */}
+        <div className="truncate text-label text-foreground" title={typeof title === 'string' ? title : undefined}>
+          {title}
+        </div>
         {description != null && <div className="truncate text-caption text-muted-foreground">{description}</div>}
       </div>
       {children != null && <div className="flex shrink-0 items-center gap-2">{children}</div>}
