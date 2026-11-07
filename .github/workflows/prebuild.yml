@@ -445,6 +445,8 @@ jobs:
         run: |
           shards=$(node .github/scripts/test-shards.cjs /tmp/affected-outputs/unit_test_files.txt /tmp/affected-outputs/shards "$TIMINGS")
           echo "unit_shards=$shards" >> "$GITHUB_OUTPUT"
+          # The shards start their slowest files first from the same timings.
+          if [ -f "$TIMINGS" ]; then cp "$TIMINGS" /tmp/affected-outputs/test-timings.json; fi
 
       - name: Save affected-tests outputs for downstream workflow
         if: always()
