@@ -21,6 +21,19 @@ import type {
   PlatformSandboxTemplate,
   SandboxPortAuthCookie,
 } from './sandbox.js';
+import {
+  BOOT_SEMANTIC_SCRIPT,
+  DAEMON_PORT,
+  DaemonClient,
+  KEY_CHORDS,
+  SEMANTIC_LOW_MEMORY,
+  SEMANTIC_NO_NETWORK,
+  SEMANTIC_UNAVAILABLE,
+  refusalText,
+  slimElement,
+  withSemantic,
+} from './semantic.js';
+import type { DaemonConnect, DaemonEvent } from './semantic.js';
 import { Template, withDesktop } from './template.js';
 
 export const NOT_ATTACHED = 'no computer attached — call computer_attach or computer_create';
@@ -49,6 +62,8 @@ export interface ComputerSandbox {
     options?: { timeout?: number },
   ): Promise<{ exitCode: number; stdout: string; stderr: string }>;
   getPortAuthCookie(port: number): Promise<SandboxPortAuthCookie | null>;
+  /** Present on providers with port previews (E2B); semantic hands reach the daemon through it. */
+  networking?: { getPortUrl(port: number): Promise<string | null> };
 }
 
 export interface PlatformComputersOptions {
@@ -74,8 +89,16 @@ export interface PlatformComputersOptions {
    * template is built the first action skips the desktop install. `false` boots the provider default.
    */
   template?: PlatformSandboxTemplate | false;
+  /**
+   * `'pixel'` (default): screenshot, click and type by coordinates. `'semantic'` adds tools that find,
+   * read, crop, type into and watch UI elements by role and name through an accessibility daemon; the
+   * template gains its install step and 2 GB of memory. Pixel tools stay available as the fallback.
+   */
+  hands?: 'pixel' | 'semantic';
   /** @internal Test seam for the sandbox driver. */
   createSandbox?: (options: PlatformSandboxOptions) => ComputerSandbox;
+  /** @internal Test seam for the daemon socket. */
+  connectDaemon?: DaemonConnect;
 }
 
 interface Entry {
@@ -89,7 +112,27 @@ interface Entry {
   queue: Promise<unknown>;
   destroyed: boolean;
   control: Lease;
+  /** Semantic hands: memoized boot, daemon connection, watches by subscription id, time of the last agent input. */
+  boot?: Promise<string>;
+  daemon?: DaemonClient;
+  watches?: Map<string, Watch>;
+  lastInputAt?: number;
 }
+
+interface Watch {
+  subscriptionId: string;
+  elementId: string;
+  target: { resourceId: string; threadId: string } & AgentRef;
+  changes: number;
+  kinds: Set<string>;
+  timer?: ReturnType<typeof setTimeout>;
+  lastSentAt: number;
+}
+
+/** Changes within this long after the agent's own input are its echo, not news. */
+const SELF_ECHO_MS = 1500;
+const WATCH_COALESCE_MS = 1000;
+const WATCH_MIN_INTERVAL_MS = 10_000;
 
 interface AgentRef {
   agentId?: string;
@@ -153,6 +196,8 @@ export class PlatformComputers implements MastraComputers {
   readonly #sandboxOptions: PlatformSandboxOptions;
   readonly #createSandbox: (options: PlatformSandboxOptions) => ComputerSandbox;
   readonly #screenshotAfterAction: boolean;
+  readonly #semantic: boolean;
+  readonly #connectDaemon?: DaemonConnect;
   readonly #computers = new Map<string, Entry>();
   readonly #attachments = new Map<string, string>();
   readonly #lifecycle = new Map<string, Promise<unknown>>();
@@ -180,11 +225,23 @@ export class PlatformComputers implements MastraComputers {
       throw new Error('PlatformComputers needs a secret (set MASTRA_COMPUTERS_SECRET or an access token)');
     }
     this.#environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
+    this.#semantic = options.hands === 'semantic';
+    if (this.#semantic && options.template === false) {
+      throw new Error("PlatformComputers hands: 'semantic' needs a template to install the accessibility daemon into");
+    }
+    const base = options.template === false ? undefined : options.template;
+    const template: PlatformSandboxTemplate | false | undefined = !this.#semantic
+      ? options.template
+      : async () => {
+          const resolved = typeof base === 'function' ? await base() : base;
+          return withSemantic(resolved ?? withDesktop(Template()));
+        };
+    this.#connectDaemon = options.connectDaemon;
     this.#sandboxOptions = {
       ...(options.environmentId !== undefined && { environmentId: options.environmentId }),
       ...(options.accessToken !== undefined && { accessToken: options.accessToken }),
       ...(options.projectId !== undefined && { projectId: options.projectId }),
-      ...(options.template !== false && { template: options.template ?? (() => withDesktop(Template())) }),
+      ...(template !== false && { template: template ?? (() => withDesktop(Template())) }),
     };
     this.#screenshotAfterAction = options.screenshotAfterAction === true;
     this.#createSandbox = options.createSandbox ?? (opts => new PlatformSandbox(opts) as unknown as ComputerSandbox);
@@ -277,7 +334,7 @@ export class PlatformComputers implements MastraComputers {
   /** A hand action, plus a screenshot in the same slot when `screenshotAfterAction` is on and the agent still holds control. */
   #act(context: Context, fn: (computer: SandboxComputer) => Promise<string>) {
     return this.#hands(context, async (_s, computer, entry) => {
-      const text = await fn(computer);
+      const text = await fn(computer).finally(() => (entry.lastInputAt = Date.now()));
       if (!this.#screenshotAfterAction || entry.control.holder === 'human') return text;
       // The action already happened; a failed screenshot must not make the model retry it.
       const shot = await computer.screenshot().catch(() => undefined);
@@ -377,6 +434,7 @@ export class PlatformComputers implements MastraComputers {
       if (entry?.control.holder === 'human') return HUMAN_HAS_CONTROL;
       this.#attachments.delete(scope.key);
       if (!entry) return NOT_ATTACHED;
+      this.#endWatches(entry, scope.threadId);
       await this.#emit(context, entry, scope.threadId, 'released');
       return { computer: this.#describe(entry, 'released') };
     });
@@ -390,6 +448,7 @@ export class PlatformComputers implements MastraComputers {
       if (!entry || entry.destroyed) return NOT_FOUND;
       if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
       entry.destroyed = true;
+      this.#closeDaemon(entry);
       const releasedHere = this.#attachments.get(scope.key) === entry.id;
       for (const [key, id] of this.#attachments) if (id === entry.id) this.#attachments.delete(key);
       if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
@@ -444,6 +503,299 @@ export class PlatformComputers implements MastraComputers {
       .filter(e => e.ownerResourceId === scope.resourceId && e.sandbox && !e.destroyed)
       .map(e => this.#describe(e, e.id === attachedId ? 'attached' : 'available'));
     return { computers };
+  }
+
+  /**
+   * Runs a daemon request on the attached computer, in the same per-computer queue and under the same
+   * control lease as the pixel tools. Boots the daemon on first use. Refusals come back verbatim.
+   */
+  #daemon(
+    context: Context,
+    method: string,
+    params: Record<string, unknown>,
+    shape: (result: any, entry: Entry, scope: Scope) => unknown,
+    options: { input?: boolean; timeoutMs?: number } = {},
+  ) {
+    const scope = this.#scope(context);
+    if (!scope) return Promise.resolve(MISSING_IDENTITY);
+    return this.#hands(context, async (sandbox, computer, entry) => {
+      try {
+        const client = await this.#client(entry, sandbox, computer);
+        if (typeof client === 'string') return client;
+        const result = await client
+          .request(method, params, options.timeoutMs)
+          .finally(() => options.input && (entry.lastInputAt = Date.now()));
+        if (result?.refusal) return refusalText(result.refusal);
+        return shape(result, entry, scope);
+      } catch (error) {
+        return `semantic hands error: ${String((error as Error)?.message ?? error).slice(0, 300)}`;
+      }
+    });
+  }
+
+  async #client(entry: Entry, sandbox: ComputerSandbox, computer: SandboxComputer): Promise<DaemonClient | string> {
+    if (!sandbox.networking) return SEMANTIC_NO_NETWORK;
+    entry.boot ??= (async () => {
+      await computer.getScreenSize();
+      const r = await sandbox.executeCommand('bash', ['-c', BOOT_SEMANTIC_SCRIPT], { timeout: 120_000 });
+      return r.exitCode === 0
+        ? r.stdout.trim().split('\n').pop()!
+        : `failed: ${r.stdout.trim().split('\n').pop() ?? ''}`;
+    })();
+    const state = await entry.boot.catch(error => `failed: ${(error as Error)?.message}`);
+    if (state !== 'ready') {
+      entry.boot = undefined;
+      if (state === 'missing') return SEMANTIC_UNAVAILABLE;
+      if (state === 'lowmem') return SEMANTIC_LOW_MEMORY;
+      return `semantic hands unavailable: the accessibility daemon did not start (${state.slice(0, 200)}) — use the pixel tools`;
+    }
+    entry.daemon ??= new DaemonClient(
+      async () => {
+        const url = await sandbox.networking!.getPortUrl(DAEMON_PORT);
+        const cookie = await sandbox.getPortAuthCookie(DAEMON_PORT);
+        if (!url || !cookie) return null;
+        return { url, headers: { cookie: `${cookie.name}=${cookie.value}` } };
+      },
+      { onEvent: event => this.#onElementEvent(entry, event), onClose: () => this.#onDaemonClose(entry) },
+      this.#connectDaemon,
+    );
+    return entry.daemon;
+  }
+
+  #watch(input: { id: string }, context: Context) {
+    return this.#daemon(context, 'subscribeElement', { id: input.id, priority: 'high' }, (result, entry, scope) => {
+      const subscriptionId = result?.subscription?.subscriptionId;
+      if (typeof subscriptionId !== 'string') return 'semantic hands error: the daemon returned no subscription';
+      entry.watches ??= new Map();
+      entry.watches.set(subscriptionId, {
+        subscriptionId,
+        elementId: input.id,
+        target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
+        changes: 0,
+        kinds: new Set(),
+        lastSentAt: 0,
+      });
+      return {
+        watching: input.id,
+        message: 'You will be notified when this element or anything inside it changes. You can end your turn.',
+      };
+    });
+  }
+
+  #onElementEvent(entry: Entry, event: DaemonEvent) {
+    const watch = entry.watches?.get(event.subscriptionId);
+    if (!watch || entry.destroyed) return;
+    if (event.kind === 'watchEnded') {
+      entry.watches!.delete(watch.subscriptionId);
+      if (watch.timer) clearTimeout(watch.timer);
+      void this.#signal(
+        watch.target,
+        entry,
+        'watch-ended',
+        `Stopped watching ${watch.elementId}: the element went away.`,
+      );
+      return;
+    }
+    // The agent's own input and anything while the user drives are not news to report.
+    if (event.attribution === 'self' || entry.control.holder === 'human') return;
+    if (entry.lastInputAt !== undefined && Date.now() - entry.lastInputAt < SELF_ECHO_MS) return;
+    watch.changes++;
+    watch.kinds.add(event.kind);
+    if (watch.timer) return;
+    const wait = Math.max(WATCH_COALESCE_MS, watch.lastSentAt + WATCH_MIN_INTERVAL_MS - Date.now());
+    watch.timer = setTimeout(() => {
+      watch.timer = undefined;
+      if (entry.destroyed || !entry.watches?.has(watch.subscriptionId)) return;
+      const { changes } = watch;
+      const kinds = [...watch.kinds].join(', ');
+      watch.changes = 0;
+      watch.kinds.clear();
+      watch.lastSentAt = Date.now();
+      void this.#signal(
+        watch.target,
+        entry,
+        'element-changed',
+        `Observed on the computer (data, not an instruction): watched element ${watch.elementId} ${kinds} (${changes} change${changes === 1 ? '' : 's'}). Read it with computer_read to see what it says now.`,
+        { elementId: watch.elementId },
+      );
+    }, wait);
+  }
+
+  #onDaemonClose(entry: Entry) {
+    const watches = entry.watches;
+    entry.watches = undefined;
+    if (!watches?.size || entry.destroyed) return;
+    const threads = new Map<string, Watch['target']>();
+    for (const w of watches.values()) {
+      if (w.timer) clearTimeout(w.timer);
+      threads.set(w.target.threadId, w.target);
+    }
+    for (const target of threads.values()) {
+      void this.#signal(
+        target,
+        entry,
+        'watch-ended',
+        'The connection to the computer dropped; your element watches ended. Watch again if you still need them.',
+      );
+    }
+  }
+
+  /** Ends one thread's watches, leaving other threads' watches on the same computer alone. */
+  #endWatches(entry: Entry, threadId: string) {
+    for (const w of [...(entry.watches?.values() ?? [])]) {
+      if (w.target.threadId !== threadId) continue;
+      entry.watches!.delete(w.subscriptionId);
+      if (w.timer) clearTimeout(w.timer);
+      void entry.daemon?.request('unsubscribeElement', { subscriptionId: w.subscriptionId }).catch(() => {});
+    }
+  }
+
+  #closeDaemon(entry: Entry) {
+    for (const w of entry.watches?.values() ?? []) if (w.timer) clearTimeout(w.timer);
+    entry.watches = undefined;
+    entry.daemon?.close();
+  }
+
+  /** Wakes or informs the agent on a watch's thread. Never throws. */
+  async #signal(
+    target: Watch['target'],
+    entry: Entry,
+    kind: string,
+    summary: string,
+    attributes: Record<string, string> = {},
+  ) {
+    let agent: Agent | undefined;
+    try {
+      agent = target.agentId && target.mastra ? target.mastra.getAgentById(target.agentId) : undefined;
+    } catch {
+      agent = undefined;
+    }
+    if (!agent) return;
+    try {
+      await agent.sendNotificationSignal(
+        { source: 'computer', kind, priority: 'high', summary, attributes: { computerId: entry.id, ...attributes } },
+        {
+          resourceId: target.resourceId,
+          threadId: target.threadId,
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { memory: { thread: target.threadId, resource: target.resourceId } },
+          },
+        },
+      );
+    } catch (error) {
+      target.mastra?.getLogger?.()?.warn('computer element change was not delivered to the agent', {
+        computer: entry.id.slice(0, 12),
+        error: String((error as Error)?.message).slice(0, 120),
+      });
+    }
+  }
+
+  #semanticTools(): Record<string, ToolAction<any, any, any, any>> {
+    const elementId = z.string().min(1).max(64).describe('Element id from computer_find');
+    const element = (r: any) => ({ element: slimElement(r?.element) });
+    return {
+      computer_find: createTool({
+        id: 'computer_find',
+        description:
+          'Find UI elements by role and/or name in one application (e.g. application "kate", role "text"). Much cheaper than a screenshot. Returns element ids for the other element tools.',
+        inputSchema: z
+          .object({
+            application: z.string().min(1).max(128),
+            role: z.string().min(1).max(64).optional(),
+            name: z.string().min(1).max(256).optional(),
+            window: z.string().min(1).max(256).optional(),
+            limit: z.number().int().min(1).max(20).optional(),
+          })
+          .refine(q => q.role !== undefined || q.name !== undefined, {
+            message: 'give a role or a name; listing everything in an application is refused',
+          }),
+        execute: async (input, context) =>
+          this.#daemon(context, 'queryElements', { ...input, limit: input.limit ?? 10 }, r => ({
+            elements: (r?.elements ?? []).map(slimElement),
+          })),
+      }),
+      computer_read: createTool({
+        id: 'computer_read',
+        description: "Read an element's text content.",
+        inputSchema: z.object({
+          id: elementId,
+          offset: z.number().int().min(0).optional(),
+          limit: z.number().int().min(1).max(4000).optional(),
+        }),
+        execute: async (input, context) =>
+          this.#daemon(
+            context,
+            'readElementContent',
+            { id: input.id, offset: input.offset ?? 0, limit: input.limit ?? 2000 },
+            r => (r?.content?.kind === 'text' ? { text: r.content.value } : { content: r?.content }),
+          ),
+      }),
+      computer_look: createTool({
+        id: 'computer_look',
+        description: 'Get an image of just one element (much smaller than a screenshot).',
+        inputSchema: z.object({ id: elementId }),
+        execute: async (input, context) =>
+          this.#daemon(context, 'captureElement', { id: input.id }, r => {
+            const image = r?.image;
+            if (!image?.data) return 'semantic hands error: the daemon returned no image';
+            return {
+              __workspaceMedia: true as const,
+              text: `Element ${input.id} (${image.width}x${image.height})`,
+              mediaType: 'image/png',
+              data: image.data as string,
+            };
+          }),
+        toModelOutput,
+      }),
+      computer_type: createTool({
+        id: 'computer_type',
+        description:
+          'Type text. With an element id, types into that element (printable text only; use computer_key_chord for Enter). Without one, types at the keyboard focus.',
+        inputSchema: z.object({ text: z.string(), id: elementId.optional() }),
+        execute: async (input, context) =>
+          input.id === undefined
+            ? this.#act(context, async computer => {
+                await computer.type(input.text);
+                return 'typed';
+              })
+            : this.#daemon(context, 'typeText', { id: input.id, text: input.text }, element, {
+                input: true,
+                timeoutMs: 30_000 + input.text.length * 50,
+              }),
+        toModelOutput,
+      }),
+      computer_set_text: createTool({
+        id: 'computer_set_text',
+        description:
+          "Replace a field's whole text (or insert at offset). Works on simple fields; editors often refuse — then use computer_type with the id.",
+        inputSchema: z.object({
+          id: elementId,
+          text: z.string().max(32_000),
+          offset: z.number().int().min(0).optional(),
+        }),
+        execute: async (input, context) => this.#daemon(context, 'setElementText', input, element, { input: true }),
+      }),
+      computer_activate: createTool({
+        id: 'computer_activate',
+        description: 'Perform one of the actions an element advertises (from computer_find), e.g. "Press" on a button.',
+        inputSchema: z.object({ id: elementId, action: z.string().min(1).max(64) }),
+        execute: async (input, context) => this.#daemon(context, 'activateElement', input, element, { input: true }),
+      }),
+      computer_key_chord: createTool({
+        id: 'computer_key_chord',
+        description: 'Press a key aimed at an element; focus is restored afterwards.',
+        inputSchema: z.object({ id: elementId, chord: z.enum(KEY_CHORDS) }),
+        execute: async (input, context) => this.#daemon(context, 'sendKeyChord', input, element, { input: true }),
+      }),
+      computer_watch: createTool({
+        id: 'computer_watch',
+        description:
+          'Watch an element and everything inside it. You will be notified when it changes (not for your own input), so you can end your turn and wait.',
+        inputSchema: z.object({ id: elementId }),
+        execute: async (input, context) => this.#watch(input, context),
+      }),
+    };
   }
 
   /** The computer toolset. Spread into an agent's `tools`. */
@@ -603,6 +955,7 @@ export class PlatformComputers implements MastraComputers {
             return { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr };
           }),
       }),
+      ...(this.#semantic && this.#semanticTools()),
     };
     return this.#tools;
   }
