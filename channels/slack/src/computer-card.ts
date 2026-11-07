@@ -207,7 +207,6 @@ export class ComputerCards {
   readonly #key: Buffer;
   readonly #cards = new Map<string, CardState>();
   readonly #chains = new Map<string, Promise<void>>();
-  readonly #refs = new Map<string, ComputerRef>();
   #warnedScope = false;
 
   constructor(opts: ComputerCardsOptions) {
@@ -216,10 +215,13 @@ export class ComputerCards {
   }
 
   #signCompactRef(ref: ComputerRef): string {
-    const payload = b64url(crypto.randomBytes(16));
-    const value = `c2:${payload}:${mac(this.#key, payload)}`;
-    this.#refs.set(value, ref);
-    return value;
+    const computer = /^cmp_e_([0-9a-f-]{36})_([0-9A-Za-z_-]+)$/.exec(ref.computerId);
+    const thread = /^[0-9a-f-]{36}$/.test(ref.threadId) ? ref.threadId : undefined;
+    if (!computer || !thread) return signRef(this.#key, ref);
+    const uuidBytes = (uuid: string) => Buffer.from(uuid.replaceAll('-', ''), 'hex');
+    const suffix = Buffer.from(computer[2]!, 'base64url');
+    const payload = b64url(Buffer.concat([uuidBytes(computer[1]!), Buffer.from([suffix.length]), suffix, uuidBytes(thread)]));
+    return `c2:${payload}:${mac(this.#key, payload).slice(0, 11)}`;
   }
 
   #verifyCompactRef(value: unknown): ComputerRef | null {
@@ -229,10 +231,22 @@ export class ComputerCards {
     const parts = value.split(':');
     if (parts.length !== 3 || parts[0] !== 'c2') return null;
     const [, payload, sig] = parts as [string, string, string];
-    const expected = Buffer.from(mac(this.#key, payload));
+    const expected = Buffer.from(mac(this.#key, payload).slice(0, 11));
     const given = Buffer.from(sig);
     if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
-    return this.#refs.get(value) ?? null;
+    try {
+      const bytes = Buffer.from(payload, 'base64url');
+      const suffixLength = bytes[16]!;
+      if (bytes.length !== 33 + suffixLength) return null;
+      const uuid = (value: Buffer) => value.toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+      return {
+        teamId: this.#opts.installation.teamId,
+        computerId: `cmp_e_${uuid(bytes.subarray(0, 16))}_${bytes.subarray(17, 17 + suffixLength).toString('base64url')}`,
+        threadId: uuid(bytes.subarray(17 + suffixLength)),
+      };
+    } catch {
+      return null;
+    }
   }
 
   /** Entity URL used for Work Objects; a static page that never echoes the ref. */
