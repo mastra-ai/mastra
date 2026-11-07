@@ -279,7 +279,7 @@ export function phaseContext(phase: Pick<ContextPhase, 'context' | 'role'>): str
 /** A context named after its one phase, else by its well-known name, else by its key. */
 export function contextLabel(context: string, phases: readonly ContextPhase[] | undefined): string {
   const running = phases?.filter(phase => phaseContext(phase) === context) ?? [];
-  if (running.length === 1) return running[0]!.name ?? running[0]!.title;
+  if (running.length === 1) return running[0].name ?? running[0].title;
   return CONTEXT_LABELS[context] ?? context.charAt(0).toUpperCase() + context.slice(1);
 }
 
@@ -314,7 +314,7 @@ export function cardContextSessions(
   const order = [...new Set([...visited, ...Object.keys(item.sessions)])];
   const seen = new Set<string>();
   return order.flatMap(context => {
-    const ref = item.sessions[context]!;
+    const ref = item.sessions[context];
     const key = `${ref.sessionId}:${ref.threadId}`;
     if (seen.has(key)) return [];
     seen.add(key);

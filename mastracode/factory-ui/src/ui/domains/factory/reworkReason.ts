@@ -82,7 +82,7 @@ function historyMove(item: Pick<WorkItem, 'stageHistory'>, current: string) {
   const entered = item.stageHistory.findLastIndex(entry => entry.stage === current);
   const previous = entered > 0 ? item.stageHistory[entered - 1] : undefined;
   if (!previous) return undefined;
-  const by: string = item.stageHistory[entered]!.by;
+  const by: string = item.stageHistory[entered].by;
   const movedBy: AuditActorType = by.startsWith('agent:') ? 'agent' : isHumanActorId(by) ? 'human' : 'system';
   return { from: previous.stage, to: current, movedBy, cause: undefined };
 }

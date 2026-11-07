@@ -6,14 +6,14 @@ import type { InstalledPhaseInfo } from '../../../../api/types';
 
 export type PhaseExitToolInfo = InstalledPhaseInfo['exitTool'];
 
-/** "Planning ends when submit_plan succeeds · a person approves". */
-export function phaseExitToolDescription(phaseLabel: string, exitTool: NonNullable<PhaseExitToolInfo>): string {
+/** "Planning ends when submit_plan succeeds. A person approves it." */
+function phaseExitToolDescription(phaseLabel: string, exitTool: NonNullable<PhaseExitToolInfo>): string {
   const approval = !exitTool.autoApprove
-    ? 'a person approves'
+    ? 'A person approves it.'
     : exitTool.autoApproveWhen
-      ? 'approved on its own for matching cards'
-      : 'approved on its own';
-  return `${phaseLabel} ends when ${exitTool.id} succeeds · ${approval}`;
+      ? 'It is approved on its own for matching cards.'
+      : 'It is approved on its own.';
+  return `${phaseLabel} ends when ${exitTool.id} succeeds. ${approval}`;
 }
 
 /** The tool whose success ends a working phase, and who approves it. */

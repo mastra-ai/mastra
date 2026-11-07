@@ -129,7 +129,7 @@ describe('Board phase exit tools', () => {
 
     const planning = await columnHeader('Planning');
     const chip = await within(planning).findByRole('img', {
-      name: 'Planning ends when submit_plan succeeds · a person approves',
+      name: 'Planning ends when submit_plan succeeds. A person approves it.',
     });
     expect(chip).toHaveTextContent('submit_plan');
 
@@ -144,7 +144,7 @@ describe('Board phase exit tools', () => {
     const planning = await columnHeader('Planning');
     expect(
       await within(planning).findByRole('img', {
-        name: 'Planning ends when submit_plan succeeds · approved on its own for matching cards',
+        name: 'Planning ends when submit_plan succeeds. It is approved on its own for matching cards.',
       }),
     ).toHaveTextContent('submit_plan');
   });
@@ -156,7 +156,7 @@ describe('Board phase exit tools', () => {
     const planning = await screen.findByTestId('board-column-planning');
     expect(
       await within(planning).findByRole('img', {
-        name: 'Planning ends when submit_plan succeeds · a person approves',
+        name: 'Planning ends when submit_plan succeeds. A person approves it.',
       }),
     ).toHaveTextContent('submit_plan');
     const building = await screen.findByTestId('board-column-execute');

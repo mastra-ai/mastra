@@ -253,8 +253,9 @@ describe('FactorySessionPage', () => {
     it("names the session's context and the phase the card moved on to", async () => {
       renderContextHeader('triage-session', 'triage-thread');
 
-      await screen.findByText('Triage · card is now in Building');
-      expect(currentCrumb()).toHaveTextContent('Triage · card is now in Building');
+      const cardPhase = await screen.findByText('card is now in Building');
+      expect(currentCrumb()).toContainElement(cardPhase);
+      expect(currentCrumb()).toHaveTextContent(/^Triagecard is now in Building$/);
       expect(screen.getByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
     });
 
