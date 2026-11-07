@@ -22,9 +22,15 @@ export function verifyChromeRows({ desktopRows, mobileCrumbs }: { desktopRows: n
     await expect(rows).toHaveLength(1);
     const [row] = rows;
     if (!row) return;
+    const fullPath = row.querySelector('[aria-label="Show the full path"]');
+    const fullPathShown = Boolean(fullPath && fullPath.getBoundingClientRect().width > 0);
     if (mobileCrumbs !== undefined) {
-      const crumbs = Array.from(row.querySelectorAll('ol > li:not([role="separator"])'));
-      await expect(crumbs.filter(crumb => crumb.getBoundingClientRect().width > 0)).toHaveLength(mobileCrumbs);
+      const crumbs = Array.from(row.querySelectorAll('ol > li[data-slot="crumb"]'));
+      const shown = crumbs.filter(crumb => crumb.getBoundingClientRect().width > 0);
+      await expect(shown).toHaveLength(Math.min(crumbs.length, mobileCrumbs));
+      await expect(fullPathShown).toBe(crumbs.length > shown.length);
+    } else {
+      await expect(fullPathShown).toBe(false);
     }
     const rowBox = row.getBoundingClientRect();
     const menu = row.querySelector('[aria-label="Open navigation menu"]');

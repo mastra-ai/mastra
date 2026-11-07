@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -80,6 +81,40 @@ function pageBar() {
   return bar;
 }
 
+function rowButtons() {
+  return within(pageBar())
+    .getAllByRole('button')
+    .filter(button => !button.closest('[data-breadcrumb-overflow]'))
+    .map(button => button.getAttribute('aria-label') ?? button.textContent);
+}
+
+function deepTrail(openProject: () => void) {
+  return (
+    <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
+      <Crumb
+        as={RouterLink}
+        to="/projects/pltfrm-1389"
+        onClick={event => {
+          event.preventDefault();
+          openProject();
+        }}
+      >
+        PLTFRM-1389 browser automation sandbox
+      </Crumb>
+      <Crumb as={RouterLink} to="/projects/pltfrm-1389/datasets">
+        Datasets
+      </Crumb>
+      <Crumb as="span">Support conversations</Crumb>
+      <Crumb as={RouterLink} to="/projects/pltfrm-1389/datasets/support/versions">
+        Versions
+      </Crumb>
+      <Crumb as="span" isCurrent>
+        Version 42
+      </Crumb>
+    </Breadcrumb>
+  );
+}
+
 function shellRow() {
   const row = document.querySelector('[data-slot="app-shell-content"] > header');
   return row instanceof HTMLElement ? row : undefined;
@@ -106,9 +141,7 @@ describe('AppShell mobile row', () => {
       const bar = within(pageBar());
       expect(bar.getByRole('link', { name: 'PLTFRM-1389 browser automation sandbox' })).toBeDefined();
       expect(bar.getByText('Overview').closest('[aria-current="page"]')).not.toBeNull();
-      expect(bar.getAllByRole('button').map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual(
-        ['Open navigation menu', 'Docs', 'Search'],
-      );
+      expect(rowButtons()).toEqual(['Open navigation menu', 'Docs', 'Search']);
       expect(bar.queryByText('Mastra Projects')).toBeNull();
     });
 
@@ -124,6 +157,46 @@ describe('AppShell mobile row', () => {
       expect(shellRow()).toBeUndefined();
       expect(document.querySelectorAll('header:not(main header)')).toHaveLength(1);
       expect(screen.getAllByRole('button', { name: 'Open navigation menu' })).toHaveLength(1);
+    });
+  });
+
+  describe('when the trail is deeper than the row shows', () => {
+    it('lists the hidden levels behind the full path button, in order, as links', async () => {
+      render(
+        <Shell>
+          <PageLayout breadcrumbs={deepTrail(vi.fn())}>
+            <p>Body</p>
+          </PageLayout>
+        </Shell>,
+      );
+
+      await userEvent.click(within(pageBar()).getByRole('button', { name: 'Show the full path' }));
+
+      const items = await screen.findAllByRole('menuitem');
+      expect(items.map(item => item.textContent)).toEqual([
+        'PLTFRM-1389 browser automation sandbox',
+        'Datasets',
+        'Support conversations',
+      ]);
+      expect(items[1]?.getAttribute('href')).toBe('/projects/pltfrm-1389/datasets');
+      expect(items[2]?.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('navigates through the hidden crumb’s own link', async () => {
+      const openProject = vi.fn();
+      render(
+        <Shell>
+          <PageLayout breadcrumbs={deepTrail(openProject)}>
+            <p>Body</p>
+          </PageLayout>
+        </Shell>,
+      );
+
+      await userEvent.click(within(pageBar()).getByRole('button', { name: 'Show the full path' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'PLTFRM-1389 browser automation sandbox' }));
+
+      expect(openProject).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     });
   });
 
@@ -250,6 +323,7 @@ describe('AppShell mobile row', () => {
       ).toEqual(['Docs']);
       expect(screen.queryByText('Mastra Projects')).toBeNull();
       expect(screen.queryByLabelText('Open navigation menu')).toBeNull();
+      expect(screen.queryByLabelText('Show the full path')).toBeNull();
     });
 
     it('renders no page row for a page with only a title', () => {

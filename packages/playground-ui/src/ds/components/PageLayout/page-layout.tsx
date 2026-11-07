@@ -49,12 +49,7 @@ export function PageLayout({
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions || mobileBar) && (
-        <Header
-          className={cn(
-            'min-h-header-default shrink-0 gap-2 overflow-hidden px-2',
-            mobileBar && '[&_ol>li:nth-last-child(n+4)]:hidden',
-          )}
-        >
+        <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
           {mobileBar && <SidebarMobileTrigger className="shrink-0" />}
           {breadcrumbs || mobileBar?.brand}
           {(headerActions || mobileActions) && (

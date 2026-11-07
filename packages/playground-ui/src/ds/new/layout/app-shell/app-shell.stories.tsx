@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BookOpen, Bot, Search, Settings, Workflow } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { verifyChromeRows } from '../../../../../.storybook/tests/app-shell-mobile-row';
 import { PageHeader } from '../page-header';
@@ -301,18 +301,22 @@ function ProjectOverview() {
   );
 }
 
+function StoryLink({ to, ...props }: ComponentProps<'a'> & { to?: string }) {
+  return <a href={to} {...props} />;
+}
+
 const longTrail = (
   <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
-    <Crumb as="a" to="#project">
+    <Crumb as={StoryLink} to="#project">
       PLTFRM-1389 browser automation sandbox for the customer success team
     </Crumb>
-    <Crumb as="a" to="#datasets">
+    <Crumb as={StoryLink} to="#datasets">
       Datasets
     </Crumb>
-    <Crumb as="a" to="#dataset">
+    <Crumb as={StoryLink} to="#dataset">
       Support conversations sampled from the last ninety days of production traffic
     </Crumb>
-    <Crumb as="a" to="#versions">
+    <Crumb as={StoryLink} to="#versions">
       Versions
     </Crumb>
     <Crumb as="span" isCurrent>
