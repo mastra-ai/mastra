@@ -9,7 +9,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
 import { KeyRound, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
@@ -19,13 +19,15 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
-import { settingsSectionPath } from '../../../settings/settingsSections';
+import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
 import { LockedModelButton } from './LockedModelButton';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelProviderMark } from './ModelProviderMark';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
+import { SessionThinkingBars } from './SessionThinkingBars';
+import { SessionThinkingSettings } from './SessionThinkingSettings';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -96,6 +98,8 @@ interface ModelMenuProps {
   triggerAriaLabel?: string;
   side?: 'top' | 'bottom';
   align?: 'start' | 'end';
+  /** Controls under the model list, e.g. the thinking level. */
+  settings?: ReactNode;
   children: ReactNode;
 }
 
@@ -103,9 +107,18 @@ const renderProviderIcon = (provider: string) => (
   <ProviderBrandIcon provider={provider} fallback={<KeyRound className="size-3.5" />} />
 );
 
-function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, side, align, children }: ModelMenuProps) {
+function ModelMenu({
+  modelSwitch,
+  triggerClassName,
+  triggerAriaLabel,
+  side,
+  align,
+  settings,
+  children,
+}: ModelMenuProps) {
   const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const location = useLocation();
+  const { factoryId, modelScope } = useChatModelScope();
   const organizationScoped = useOrganizationScopedFactory();
   const providers: ModelPickerProvider[] = groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => ({
     id: provider,
@@ -144,7 +157,21 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, side, alig
       }}
       renderProviderIcon={renderProviderIcon}
       header={<ModelCredentialSummary modelId={selectedModelId} />}
-      footer={organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
+      settings={settings}
+      footer={organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : undefined}
+      addProvider={
+        factoryId
+          ? {
+              label: 'Connect a provider',
+              render: (
+                <Link
+                  to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
+                  state={{ from: location }}
+                />
+              ),
+            }
+          : undefined
+      }
       actions={close =>
         canReset && defaultModelId ? (
           <>
@@ -163,7 +190,7 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, side, alig
               </CommandItem>
             </CommandGroup>
           </>
-        ) : null
+        ) : undefined
       }
       busy={locked}
       side={side}
@@ -260,19 +287,19 @@ export function ModelPicker() {
   }
 
   return (
-    <ModelThinkingGroup modelId={activeModelId} switchingModel={busy}>
-      <ModelMenu
-        modelSwitch={modelSwitch}
-        triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
-        triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
-      >
-        <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
-        <Metadata singleLine className="max-w-48 max-sm:max-w-28">
-          <Metadata.Item>{label}</Metadata.Item>
-          {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
-        </Metadata>
-      </ModelMenu>
-    </ModelThinkingGroup>
+    <ModelMenu
+      modelSwitch={modelSwitch}
+      triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+      triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
+      settings={activeModelId ? <SessionThinkingSettings modelId={activeModelId} switchingModel={busy} /> : undefined}
+    >
+      <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
+      <Metadata singleLine className="max-w-48 max-sm:max-w-28">
+        <Metadata.Item>{label}</Metadata.Item>
+        {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
+      </Metadata>
+      {activeModelId ? <SessionThinkingBars modelId={activeModelId} switchingModel={busy} /> : undefined}
+    </ModelMenu>
   );
 }
 

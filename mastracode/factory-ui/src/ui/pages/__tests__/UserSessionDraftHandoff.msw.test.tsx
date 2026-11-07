@@ -106,7 +106,10 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium (Built-in default)' }));
+    const modelPicker = await screen.findByLabelText('Session model');
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    await user.click(modelPicker);
+    await screen.findByRole('group', { name: 'Thinking: Medium (Built-in default)' });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -130,7 +133,10 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium (Built-in default)' }));
+    const modelPicker = await screen.findByLabelText('Session model');
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    await user.click(modelPicker);
+    await screen.findByRole('group', { name: 'Thinking: Medium (Built-in default)' });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -407,7 +413,9 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    if (modelPicker.getAttribute('aria-expanded') !== 'true') await user.click(modelPicker);
+    await screen.findByRole('group', { name: /^Thinking: Medium/ });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -451,7 +459,9 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    if (modelPicker.getAttribute('aria-expanded') !== 'true') await user.click(modelPicker);
+    await screen.findByRole('group', { name: /^Thinking: Medium/ });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);

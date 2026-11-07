@@ -1,6 +1,6 @@
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { ProviderLogo } from './provider-logo';
 import { Button } from '@/ds/components/Button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ds/components/Command';
@@ -41,8 +41,15 @@ export interface ModelPickerProps {
   renderProviderIcon?: (providerId: string) => ReactNode;
   /** Above the search field, e.g. the credential the selected model runs on. */
   header?: ReactNode;
-  /** Below the list. */
+  /**
+   * Controls for the selected model below the list, e.g. its thinking level. Rendered outside the
+   * command list so sliders and other inputs keep their own arrow-key handling.
+   */
+  settings?: ReactNode;
+  /** Below the list and settings. */
   footer?: ReactNode;
+  /** A "+" at the end of the provider row, e.g. a link to connect another provider. */
+  addProvider?: { label: string; render: ReactElement };
   /** Extra command groups after the models; call `close` after acting. */
   actions?: (close: () => void) => ReactNode;
   /** Open filtered to the selected model's provider instead of "All". Suits large catalogs. */
@@ -72,7 +79,9 @@ export function ModelPicker({
   children,
   renderProviderIcon = defaultProviderIcon,
   header,
+  settings,
   footer,
+  addProvider,
   actions,
   openOnSelectedProvider = false,
   disabled,
@@ -137,43 +146,60 @@ export function ModelPicker({
         <Command loop shouldFilter>
           {header}
           <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
-          {filtering ? (
+          {filtering || addProvider ? (
             <div
               role="group"
               aria-label="Filter by provider"
               className="flex [scrollbar-width:thin] items-center gap-1 overflow-x-auto border-b border-border px-2 py-1.5"
             >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground"
-                aria-pressed={!providerFilter}
-                onClick={() => setProviderFilter(undefined)}
-              >
-                All
-              </Button>
-              {providers.map(provider => (
+              {filtering ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground"
+                    aria-pressed={!providerFilter}
+                    onClick={() => setProviderFilter(undefined)}
+                  >
+                    All
+                  </Button>
+                  {providers.map(provider => (
+                    <Button
+                      key={provider.id}
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="relative shrink-0 aria-pressed:bg-fill"
+                      aria-pressed={providerFilter === provider.id}
+                      aria-label={provider.connected === false ? `${provider.name}, not connected` : provider.name}
+                      tooltip={provider.connected === false ? `${provider.name} (not connected)` : provider.name}
+                      onClick={() => setProviderFilter(current => (current === provider.id ? undefined : provider.id))}
+                    >
+                      {renderProviderIcon(provider.id)}
+                      {provider.connected === false ? (
+                        <span
+                          aria-hidden
+                          className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive-indicator"
+                        />
+                      ) : null}
+                    </Button>
+                  ))}
+                </>
+              ) : null}
+              {addProvider ? (
                 <Button
-                  key={provider.id}
-                  type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="relative shrink-0 aria-pressed:bg-fill"
-                  aria-pressed={providerFilter === provider.id}
-                  aria-label={provider.connected === false ? `${provider.name}, not connected` : provider.name}
-                  tooltip={provider.connected === false ? `${provider.name} (not connected)` : provider.name}
-                  onClick={() => setProviderFilter(current => (current === provider.id ? undefined : provider.id))}
+                  className="ml-auto shrink-0"
+                  aria-label={addProvider.label}
+                  tooltip={addProvider.label}
+                  render={addProvider.render}
+                  onClick={close}
                 >
-                  {renderProviderIcon(provider.id)}
-                  {provider.connected === false ? (
-                    <span
-                      aria-hidden
-                      className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive-indicator"
-                    />
-                  ) : null}
+                  <Plus aria-hidden />
                 </Button>
-              ))}
+              ) : null}
             </div>
           ) : null}
           <CommandList className="max-h-80 max-sm:max-h-[50dvh]">
@@ -211,8 +237,9 @@ export function ModelPicker({
             ))}
             {actions?.(close)}
           </CommandList>
-          {footer}
         </Command>
+        {settings ? <div className="border-t border-border p-3">{settings}</div> : null}
+        {footer}
       </PopoverContent>
     </Popover>
   );
