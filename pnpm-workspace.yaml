@@ -37,7 +37,7 @@ packages:
 enableGlobalVirtualStore: true
 
 catalog:
-  '@microsoft/api-extractor': ^7.59.4
+  '@microsoft/api-extractor': ^7.60.1
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
   '@vitest/coverage-v8': 5.1.0
@@ -366,7 +366,7 @@ overrides:
   'miniflare@4.20260730.0>workerd': 1.20261023.1
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
-  '@types/node': 22.19.15
+  '@types/node': 22.20.5
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
   # which breaks react-router's build when renovate's pnpm dedupe floats it up.
   cookie: '>=1.1.1 <2'
