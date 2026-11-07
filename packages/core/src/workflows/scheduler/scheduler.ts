@@ -555,7 +555,8 @@ export class Scheduler extends MastraBase {
   async #publishTargetStart(schedule: Schedule, claimId: string): Promise<void> {
     switch (schedule.target.type) {
       case 'workflow': {
-        const { workflowId, inputData, initialState, requestContext, resourceId, definitionHash } = schedule.target;
+        const { workflowId, inputData, initialState, requestContext, resourceId, definitionHash, actor } =
+          schedule.target;
         // Claim/execute affinity (#19169). When this process also consumes
         // workflow events, keep the fire local so the instance that proved
         // the target ready and current is the one that runs it. A
@@ -576,6 +577,9 @@ export class Scheduler extends MastraBase {
               requestContext: requestContext ?? {},
               initialState: initialState ?? {},
               ...(resourceId ? { resourceId } : {}),
+              // Trusted actor is opt-in per schedule (code-only), never
+              // defaulted: scheduled fires otherwise carry no identity.
+              ...(actor !== undefined ? { actor } : {}),
               // Only stamped when the row carries a hash, so legacy and
               // imperative schedules stay unfenced (fail open).
               ...(definitionHash ? { scheduleDefinitionHash: definitionHash } : {}),

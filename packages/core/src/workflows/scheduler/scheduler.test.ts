@@ -98,6 +98,37 @@ describe('Scheduler', () => {
     expect(events[0]!.data).toMatchObject({ workflowId: 'wf-test', resourceId: 'tenant-1' });
   });
 
+  it('carries the schedule actor into the workflow.start event only when set', async () => {
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+
+    const past = Date.now() - 5_000;
+    const actor = { actorKind: 'system', sourceWorkflow: 'scheduler' } as const;
+    for (const [id, target] of [
+      ['sched-actor', { type: 'workflow', workflowId: 'wf-actor', actor }],
+      ['sched-no-actor', { type: 'workflow', workflowId: 'wf-no-actor' }],
+    ] as const) {
+      await store.createSchedule({
+        id,
+        target,
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+    }
+
+    await scheduler.tick();
+
+    expect(events).toHaveLength(2);
+    const byWorkflow = Object.fromEntries(events.map(e => [(e.data as any).workflowId, e.data as any]));
+    expect(byWorkflow['wf-actor'].actor).toEqual(actor);
+    expect(byWorkflow['wf-no-actor']).not.toHaveProperty('actor');
+  });
+
   it('fires the final occurrence of a year-pinned cron once and marks it completed', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-23T10:00:01Z'));
