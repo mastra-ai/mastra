@@ -54,7 +54,19 @@ export default defineConfig({
     {
       // Test stubs aren't UI people see.
       files: ['src/**/*.test.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
+      rules: {
+        'mastra/sentence-case-labels': 'off',
+        'playground-ui/placeholder-text': 'off',
+        'playground-ui/no-transition-all': 'off',
+      },
+    },
+    {
+      files: [
+        'src/ds/primitives/transitions.ts',
+        'src/ds/components/Card/Card.tsx',
+        'src/ds/primitives/resize-handle-indicator.tsx',
+      ],
+      rules: { 'playground-ui/no-transition-all': 'off' },
     },
     {
       files: ['**/*.stories.tsx'],

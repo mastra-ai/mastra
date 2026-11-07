@@ -14,6 +14,7 @@
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
 //   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
 //   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
+//   playground-ui/no-transition-all  transitions name their properties, not transition-all
 //   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
 //   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
 
@@ -315,6 +316,7 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/no-transition-all': 'error',
   ...copyRules,
 };
 
