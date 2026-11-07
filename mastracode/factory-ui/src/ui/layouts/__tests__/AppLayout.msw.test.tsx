@@ -1,5 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
@@ -279,5 +279,24 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(screen.getByRole('link', { name: 'go-draft-2' })).toBeInTheDocument());
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
+  });
+
+  it('puts the PWA install banner in its own row above the shell instead of over the page', async () => {
+    stubFactory();
+    const { container } = renderApp();
+    await screen.findByRole('heading', { name: 'Page A' });
+
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn(() => Promise.resolve()),
+      userChoice: Promise.resolve({ outcome: 'accepted', platform: 'web' }),
+    });
+    act(() => void window.dispatchEvent(event));
+
+    const banner = await screen.findByRole('region', { name: 'Install app' });
+    expect(banner).not.toHaveClass('fixed');
+    expect(banner).not.toHaveClass('absolute');
+    const shell = container.querySelector('[data-slot="app-shell"]')!;
+    expect(banner.compareDocumentPosition(shell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(banner).getByRole('button', { name: 'Install' })).toHaveAttribute('data-variant', 'primary');
   });
 });

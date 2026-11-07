@@ -8,7 +8,6 @@ import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider, createApiConfig } from '../api/config';
 import { createQueryClient } from '../query-client';
-import { PwaInstallBanner } from './lib/pwa';
 import { createAppRouter } from './router';
 import '@fontsource-variable/mona-sans/standard.css';
 import '@fontsource-variable/mona-sans/standard-italic.css';
@@ -36,7 +35,6 @@ createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider config={api}>
             <RouterProvider router={router} />
-            <PwaInstallBanner />
             <Toaster position="bottom-right" />
           </ApiConfigProvider>
         </QueryClientProvider>
