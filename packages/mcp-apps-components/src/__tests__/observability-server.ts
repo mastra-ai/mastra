@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import type { AppResources } from '@mastra/mcp';
 import { z } from 'zod';
-import { QUERY_OBSERVABILITY_TOOL } from '../apps/observability-widget/tool';
+import { OBSERVABILITY_READ_ACTIONS, QUERY_OBSERVABILITY_TOOL } from '../apps/observability-widget/tool';
 import type { ObservabilityWidgetDraft } from '../observability-dashboard';
 import {
   observabilityDashboardInputSchema,
@@ -172,8 +172,8 @@ export const agentRunsChart: DashboardWidget = {
 /**
  * The server a host writes around the observability widget: `showObservabilityDashboard` opens it
  * with a dashboard built by `toObservabilityDashboard`, and the app-only `queryObservability`
- * answers each action the app asks for from `answers` (keyed by action), recording every call in
- * `calls`.
+ * accepts only `OBSERVABILITY_READ_ACTIONS` and answers each from `answers` (keyed by action),
+ * recording every call in `calls`.
  */
 export function observabilityServer({
   appResources = {},
@@ -198,7 +198,8 @@ export function observabilityServer({
       [QUERY_OBSERVABILITY_TOOL]: createTool({
         id: QUERY_OBSERVABILITY_TOOL,
         description: 'Runs one observability read',
-        inputSchema: z.object({ action: z.string(), args: z.record(z.string(), z.unknown()) }),
+        // As the README's server: an action outside the list fails, so the app must ask only for these.
+        inputSchema: z.object({ action: z.enum(OBSERVABILITY_READ_ACTIONS), args: z.record(z.string(), z.unknown()) }),
         outputSchema: z.object({ data: z.unknown() }),
         mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI, visibility: ['app'] } } },
         execute: async call => {

@@ -4,10 +4,11 @@ import { createTool } from '@mastra/core/tools';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
+  OBSERVABILITY_READ_ACTIONS,
   QUERY_OBSERVABILITY_TOOL,
   createObservabilityDashboardInputSchema,
+  observabilityDashboardApp,
   observabilityDashboardOutputSchema,
-  observabilityWidgetApp,
   toObservabilityDashboard,
 } from '@mastra/mcp-apps-components';
 import { Memory } from '@mastra/memory';
@@ -27,27 +28,13 @@ const observabilityClient = new MastraClient({
   headers: OBSERVABILITY_API_TOKEN ? { authorization: `Bearer ${OBSERVABILITY_API_TOKEN}` } : undefined,
 });
 
-// The read-only client methods the widget may ask for. Anything else fails input validation.
-const ACTIONS = [
-  'aggregateTraces',
-  'aggregateSpans',
-  'getMetricAggregate',
-  'getMetricBreakdown',
-  'getMetricTimeSeries',
-  'getMetricPercentiles',
-  'getScoreAggregate',
-  'getScoreBreakdown',
-  'getScoreTimeSeries',
-  'getScorePercentiles',
-  'listScores',
-] as const satisfies readonly (keyof MastraClient)[];
-
 // Visible to the app only: the widget asks for each read by action, and the server runs it on its
 // own client. A failed read throws, so the app shows the widget as failed.
 const queryObservability = createTool({
   id: QUERY_OBSERVABILITY_TOOL,
   description: 'Runs one observability read for the observability widget.',
-  inputSchema: z.object({ action: z.enum(ACTIONS), args: z.record(z.string(), z.unknown()) }),
+  // The read-only client methods the widget asks for. Anything else fails input validation.
+  inputSchema: z.object({ action: z.enum(OBSERVABILITY_READ_ACTIONS), args: z.record(z.string(), z.unknown()) }),
   outputSchema: z.object({ data: z.unknown() }),
   mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI, visibility: ['app'] } } },
   execute: async ({ action, args }) => {
@@ -109,7 +96,7 @@ export const observabilityMcpServer = new MCPServer({
   id: OBSERVABILITY_SERVER_ID,
   name: 'Observability MCP Server',
   version: '1.0.0',
-  appResources: { [OBSERVABILITY_WIDGET_URI]: observabilityWidgetApp },
+  appResources: { [OBSERVABILITY_WIDGET_URI]: observabilityDashboardApp },
   tools: {
     discoverObservability,
     // Free metric names until the first run reads the catalog.

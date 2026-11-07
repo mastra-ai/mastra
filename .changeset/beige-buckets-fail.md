@@ -13,6 +13,9 @@ The model writes each widget, read and column under a key that names it, and eac
 - `observabilityDashboardInputSchema` lists every widget kind's options, so the model gets clear errors when a widget is wrong. It also names the metrics Mastra records, such as `mastra_agent_duration_ms` and `mastra_model_total_input_tokens`, so the model doesn't guess names that read as zero.
 - `createObservabilityDashboardInputSchema({ metricNames })` builds the same schema with the project's metric names as the only allowed values, so a dashboard can't name a metric without data. Rebuild the tool when the names change.
 - `toObservabilityDashboard(input)` gives each widget without an id a fresh UUID, makes a widget without a `span` full width, and checks the result.
+- `OBSERVABILITY_READ_ACTIONS` lists every `MastraClient` read the app sends to `queryObservability`, from `aggregateTraces` to `listScores`. Allow exactly these with `z.enum(OBSERVABILITY_READ_ACTIONS)`, so no widget fails for a missing action.
+
+**Renamed:** `observabilityWidgetApp` is now `observabilityDashboardApp`, named `Observability dashboard`.
 
 **Before**
 

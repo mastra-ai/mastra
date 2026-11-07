@@ -55,10 +55,10 @@ export const greetingServer = new MCPServer({
 
 ### Observability dashboard
 
-`observabilityWidgetApp` draws a Studio dashboard (rows of KPIs, time series, tables and scores widgets) with the same components Studio uses. Each widget loads and fails on its own.
+`observabilityDashboardApp` draws a Studio dashboard (rows of KPIs, time series, tables and scores widgets) with the same components Studio uses. Each widget loads and fails on its own.
 
 1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ dashboard, datePreset? }`, where `dashboard` passes `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` and `datePreset` is one of `24h`, `3d`, `7d`, `14d` or `30d`. Without `datePreset`, the app uses the dashboard's `defaults.datePreset` when it is one of those, else `24h`. The window ends when the app opens. The dashboard's top-level `defaults.filters` chips filter every widget.
-2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args }`, where `action` is a `MastraClient` observability method (`getMetricAggregate`, `getMetricTimeSeries`, `listScores`, `aggregateTraces`, …) and `args` are that method's arguments, with dates as ISO strings. The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
+2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), and `args` are that method's arguments, with dates as ISO strings. The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
 
 Use `observabilityDashboardInputSchema` as the opening tool's input and `toObservabilityDashboard` as its `execute`:
 
@@ -67,30 +67,30 @@ Use `observabilityDashboardInputSchema` as the opening tool's input and `toObser
 - Label keys and values aren't listed. Give the model a tool that looks them up (for example with `MastraClient#getMetricLabelKeys` and `getMetricLabelValues`).
 - Widgets without an `id` get a fresh UUID on every open, so the host can pin each one by an id that stays stable when the result is shown again.
 
-The tools run on your server, so you decide which Mastra server the dashboard reads from and how it authenticates. Only allow read actions:
+The tools run on your server, so you decide which Mastra server the dashboard reads from and how it authenticates. Allow `OBSERVABILITY_READ_ACTIONS` and nothing else: a widget whose read is missing from the list fails.
 
 ```typescript
 import { MastraClient } from '@mastra/client-js';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import {
+  OBSERVABILITY_READ_ACTIONS,
   QUERY_OBSERVABILITY_TOOL,
+  observabilityDashboardApp,
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
-  observabilityWidgetApp,
   toObservabilityDashboard,
 } from '@mastra/mcp-apps-components';
 import { z } from 'zod';
 
 const uri = 'ui://mastra/observability-widget';
 const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! });
-const ACTIONS = ['getMetricAggregate', 'getMetricTimeSeries', 'getMetricPercentiles'] as const;
 
 export const observabilityServer = new MCPServer({
   id: 'observability',
   name: 'Observability',
   version: '1.0.0',
-  appResources: { [uri]: observabilityWidgetApp },
+  appResources: { [uri]: observabilityDashboardApp },
   tools: {
     // Visible to the model: opens the app with a dashboard.
     showObservabilityDashboard: createTool({
@@ -105,7 +105,7 @@ export const observabilityServer = new MCPServer({
     [QUERY_OBSERVABILITY_TOOL]: createTool({
       id: QUERY_OBSERVABILITY_TOOL,
       description: 'Runs one observability read',
-      inputSchema: z.object({ action: z.enum(ACTIONS), args: z.record(z.string(), z.unknown()) }),
+      inputSchema: z.object({ action: z.enum(OBSERVABILITY_READ_ACTIONS), args: z.record(z.string(), z.unknown()) }),
       outputSchema: z.object({ data: z.unknown() }),
       mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
       execute: async ({ action, args }) => {

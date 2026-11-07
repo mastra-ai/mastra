@@ -2,11 +2,13 @@
  * @vitest-environment jsdom
  */
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
+import type { DashboardRequest } from '@mastra/playground-ui/domains/dashboards';
 import type { Client, Transport } from '@modelcontextprotocol/client';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, expectTypeOf, it } from 'vitest';
 import { ObservabilityWidget } from '../apps/observability-widget/observability-widget';
+import type { ObservabilityReadAction } from '../apps/observability-widget/tool';
 import { OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY, observabilityWidgetPins } from '../host';
 import type { McpAppRef, ObservabilityWidgetPin } from '../host';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
@@ -67,6 +69,11 @@ const windowOf = (call: { args: Record<string, unknown> } | undefined) => {
   return Date.parse(end) - Date.parse(start);
 };
 const DAY = 24 * 60 * 60 * 1000;
+
+// A server that allows only `OBSERVABILITY_READ_ACTIONS` must still answer every read a widget plans.
+it('lists every client method the app can send as an action, and nothing else', () => {
+  expectTypeOf<ObservabilityReadAction>().toEqualTypeOf<DashboardRequest['method']>();
+});
 
 it('draws the widget from the answer the server reads for it, over the preset window', async () => {
   const mcp = observabilityServer({
