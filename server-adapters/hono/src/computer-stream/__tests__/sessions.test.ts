@@ -80,6 +80,17 @@ describe('ComputerSessionStore', () => {
     expect(session.revoked).toBe(true);
     expect(store.touch(session.id, 'c1')).toBeUndefined();
   });
+  it('get does not count as activity, so idle sessions still expire', () => {
+    let now = 0;
+    const store = new ComputerSessionStore({ now: () => now });
+    const session = store.insert(input('c1'))!;
+    for (let t = 1; t <= 3; t++) {
+      now = t * 4 * 60_000;
+      expect(store.get(session.id, 'c1')).toBe(session);
+    }
+    now = SESSION_IDLE_TTL_MS;
+    expect(store.get(session.id, 'c1')).toBeUndefined();
+  });
 });
 
 describe('ComputerTicketStore', () => {

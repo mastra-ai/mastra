@@ -226,7 +226,7 @@ describe('requestComputerSession', () => {
 });
 
 describe('ComputerCard', () => {
-  it('renders the desktop with the bundled noVNC client over the ticketed socket, view-only in Watch', async () => {
+  it('hands the ticketed socket to the noVNC client in our own element, with no iframe or extra requests', async () => {
     serveSession();
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     renderThread([message('m1', [computerPart('attached')])]);
@@ -237,8 +237,9 @@ describe('ComputerCard', () => {
     expect(client.viewOnly).toBe(true);
     expect(client.scaleViewport).toBe(true);
     expect(client.target).toBe(screen.getByRole('application', { name: 'Computer desktop' }));
-    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'watch' });
-    // Nothing served by the sandbox is ever loaded: no iframe, no vnc.html / rfb.js fetch.
+    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'control' });
+    // The card itself loads no page and fetches nothing else. (The server test and the live
+    // network audit prove the real noVNC client never requests sandbox HTTP content.)
     expect(document.querySelector('iframe')).toBeNull();
     const fetched = fetchSpy.mock.calls.map(([input]) => String(input instanceof Request ? input.url : input));
     expect(fetched.filter(u => !u.endsWith('/api/computers/c1/session'))).toEqual([]);
@@ -247,26 +248,34 @@ describe('ComputerCard', () => {
     expect(screen.queryByText('Starting desktop…')).toBeNull();
   });
 
-  it('mints a control ticket on first Take over, then toggles viewOnly live', async () => {
+  it('toggles viewOnly live on Take over and Watch, without reconnecting', async () => {
     serveSession();
     renderThread([message('m1', [computerPart('attached')])]);
     await waitFor(() => expect(live()).toHaveLength(1));
+    const client = live()[0];
+    expect(client.viewOnly).toBe(true);
 
     fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
-    await waitFor(() => expect(live()[0]?.url).toContain('ticket=t2'));
-    expect(requests[1]?.body.mode).toBe('control');
-    expect(rfb.FakeRFB.instances[0]?.disconnected).toBe(true);
-    const control = live()[0];
-    expect(control.viewOnly).toBe(false);
+    expect(client.viewOnly).toBe(false);
     expect(screen.getByText('You are controlling the desktop')).toBeTruthy();
-
     fireEvent.click(screen.getByRole('radio', { name: 'Watch' }));
-    expect(control.viewOnly).toBe(true);
+    expect(client.viewOnly).toBe(true);
     fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
-    expect(control.viewOnly).toBe(false);
+    expect(client.viewOnly).toBe(false);
+
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(requests).toHaveLength(2);
-    expect(live()).toEqual([control]);
+    expect(requests).toHaveLength(1);
+    expect(live()).toEqual([client]);
+  });
+
+  it('starts a fresh connection in Take over when the user had already switched', async () => {
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await waitFor(() => expect(live()[0]?.url).toContain('ticket=t2'));
+    expect(live()[0]?.viewOnly).toBe(false);
   });
 
   it('reconnects with a fresh ticket and reports a dropped connection', async () => {
@@ -315,7 +324,7 @@ describe('ComputerCard', () => {
     renderThread([message('m1', [attachResult()])]);
     await waitFor(() => expect(live()).toHaveLength(1));
     expect(requests).toHaveLength(1);
-    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'watch' });
+    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'control' });
   });
 
   it('shows one live card when both the tool call and its data part are present', async () => {

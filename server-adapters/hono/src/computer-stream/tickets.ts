@@ -35,9 +35,9 @@ export function randomId(): string {
 
 /**
  * Short-lived, single-use tickets that carry an authorized viewer request from
- * the authenticated session route to the iframe's `/connect` navigation, which
- * can't carry an `Authorization` header. Same bounds as the browser-stream
- * upgrade tickets, keyed per computer.
+ * the authenticated session route to the websockify upgrade, which a browser
+ * WebSocket can't authenticate with an `Authorization` header. Same bounds as
+ * the browser-stream upgrade tickets, keyed per computer.
  */
 export class ComputerTicketStore {
   readonly #tickets = new Map<string, ComputerTicketPayload & { expiresAt: number }>();

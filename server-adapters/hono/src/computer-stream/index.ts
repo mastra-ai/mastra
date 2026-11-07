@@ -49,6 +49,8 @@ export interface ComputerStreamResult {
 
 export const REVALIDATE_INTERVAL_MS = 15_000;
 export const MAX_PENDING_CLIENT_BYTES = 1024 * 1024;
+/** A session whose upgrade never completes is dropped after this long. */
+const OPEN_DEADLINE_MS = 10_000;
 const SESSION_BODY_MAX_BYTES = 1024;
 
 class ViewerUnavailable extends Error {}
@@ -106,18 +108,21 @@ function statusError(error: unknown): number | undefined {
  * desktop is agent-writable, so its viewer page and scripts are untrusted.
  *
  * - `POST {apiPrefix}/computers/:computerId/session` — authenticated; checks the
- *   caller may read (`watch`) or write (`control`) the thread in the memory store
- *   (403 when no memory store is configured) and that the computer is attached
+ *   caller may write the thread in the memory store (403 when no memory store
+ *   is configured or the thread is unknown) and that the computer is attached
  *   to it, then mints a 30 s single-use ticket.
  * - `GET /computer/:computerId/websockify?ticket=` — WebSocket upgrade from the
- *   same origin that minted the ticket; relays binary RFB frames to the desktop.
+ *   same origin that minted the ticket; relays binary RFB frames only (a text
+ *   frame from either side closes the socket with 1003).
  * - Every other `/computer/:computerId/*` request is 404.
  *
  * The upstream auth (the sandbox preview cookie) is added server-side and never
  * reaches the browser. Live sockets are revalidated every 15 s, so releasing a
- * computer from the thread cuts its viewers within that interval. `watch` is a
- * viewer setting, not a security boundary: a `watch` ticket still needs read
- * access, and control requires a `control` ticket (write access).
+ * computer from the thread cuts its viewers within that interval; thread
+ * permissions are checked when the ticket is minted, not re-checked live.
+ *
+ * Both modes require write access to the thread: the proxy does not filter RFB
+ * input, so "watch" is a display setting on the viewer, not a security boundary.
  *
  * Requires a long-running Node server that accepts WebSocket upgrades (not
  * serverless). Sockets are in-process, so multi-instance deployments need
@@ -153,6 +158,7 @@ export async function setupComputerStream(
   }
   const liveSockets = new Map<string, Set<LiveSocket>>();
   const revalidators = new Map<string, ReturnType<typeof setInterval>>();
+  const openDeadlines = new Map<string, ReturnType<typeof setTimeout>>();
   const refreshes = new Map<string, Promise<ComputerSession | undefined>>();
 
   const closeSessionSockets = (sessionId: string, code: number, reason: string) => {
@@ -206,7 +212,8 @@ export async function setupComputerStream(
   const startRevalidation = (session: ComputerSession) => {
     if (revalidators.has(session.id)) return;
     const timer = setInterval(() => {
-      if (!sessions.touch(session.id, session.computerId)) return;
+      // Upkeep, not activity: idle sessions still expire.
+      if (!sessions.get(session.id, session.computerId)) return;
       void refresh(session).then(result => {
         if (!result && !session.revoked) closeSessionSockets(session.id, 1011, 'computer unavailable');
       });
@@ -275,7 +282,8 @@ export async function setupComputerStream(
       const memoryStore = await mastra.getStorage()?.getStore('memory');
       if (!memoryStore) return c.json({ state: 'forbidden' }, 403);
       const thread = await memoryStore.getThreadById({ threadId });
-      if (!thread) return c.json({ error: 'Thread not found' }, 404);
+      // Unknown thread: refuse without revealing whether it exists.
+      if (!thread) return c.json({ state: 'forbidden' }, 403);
       try {
         await enforceThreadAccess({
           mastra,
@@ -283,7 +291,8 @@ export async function setupComputerStream(
           threadId,
           thread,
           effectiveResourceId: resourceId,
-          permission: mode === 'watch' ? 'memory:read' : 'memory:write',
+          // The relay doesn't filter input, so viewing a desktop is as powerful as driving it.
+          permission: 'memory:write',
         });
       } catch (error) {
         const status = statusError(error);
@@ -340,6 +349,10 @@ export async function setupComputerStream(
     }
     const session = sessions.insert({ ...payload, viewer });
     if (!session) return c.text('Too Many Requests', 429);
+    // If the handshake fails after this point no socket hook runs; free the slot.
+    const deadline = setTimeout(() => sessions.end(session), OPEN_DEADLINE_MS);
+    deadline.unref?.();
+    openDeadlines.set(session.id, deadline);
     c.set('computerSession', session);
     return next();
   };
@@ -351,7 +364,7 @@ export async function setupComputerStream(
     webSocket.upgradeWebSocket(c => {
       const session = (c as Context).get('computerSession') as ComputerSession;
       const live: LiveSocket = { client: { close: () => {} } };
-      let pending: (ArrayBuffer | string)[] = [];
+      let pending: ArrayBuffer[] = [];
       let pendingBytes = 0;
       let clientClosed = false;
       let retried = false;
@@ -370,7 +383,13 @@ export async function setupComputerStream(
           pendingBytes = 0;
         });
         upstream.on('message', (data: ArrayBuffer, isBinary: boolean) => {
-          ws.send(isBinary ? data : Buffer.from(data).toString('utf-8'));
+          // RFB is binary; sandbox-controlled text is never decoded or relayed.
+          if (!isBinary) {
+            upstream.terminate();
+            ws.close(1003);
+            return;
+          }
+          ws.send(data);
         });
         let refused = false;
         upstream.on('unexpected-response', (_req, res) => {
@@ -397,6 +416,8 @@ export async function setupComputerStream(
 
       return {
         onOpen(_event, ws) {
+          clearTimeout(openDeadlines.get(session.id));
+          openDeadlines.delete(session.id);
           live.client = ws;
           let set = liveSockets.get(session.id);
           if (!set) liveSockets.set(session.id, (set = new Set()));
@@ -406,12 +427,17 @@ export async function setupComputerStream(
         },
         onMessage(event, ws) {
           const data = event.data as ArrayBuffer | string;
+          if (typeof data === 'string') {
+            ws.close(1003, 'binary frames only');
+            return;
+          }
+          sessions.touch(session.id, session.computerId);
           const upstream = live.upstream;
           if (upstream?.readyState === WebSocketClient.OPEN) {
             upstream.send(data);
             return;
           }
-          pendingBytes += typeof data === 'string' ? data.length : data.byteLength;
+          pendingBytes += data.byteLength;
           if (pendingBytes > MAX_PENDING_CLIENT_BYTES) {
             ws.close(1009, 'Message too big');
             return;

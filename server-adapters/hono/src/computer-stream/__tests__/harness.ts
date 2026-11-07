@@ -82,8 +82,13 @@ export async function startUpstream() {
       upstreamSockets.add(ws);
       ws.on('close', () => upstreamSockets.delete(ws));
       ws.on('message', (data, isBinary) => {
-        if (!isBinary && data.toString() === 'close-me') {
+        // Control words arrive as binary, like real RFB traffic.
+        if (data.toString() === 'close-me') {
           ws.close(4000, 'upstream bye');
+          return;
+        }
+        if (data.toString() === 'text-please') {
+          ws.send('sandbox text', { binary: false });
           return;
         }
         ws.send(data, { binary: isBinary });

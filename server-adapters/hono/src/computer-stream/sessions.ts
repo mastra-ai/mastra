@@ -7,7 +7,7 @@ export const MAX_SESSIONS_PER_COMPUTER = 10;
 export const MAX_SESSIONS = 500;
 
 export interface ComputerViewerTarget {
-  /** Directory URL the viewer's assets and `websockify` resolve against. */
+  /** Directory URL of the viewer; used only to derive the upstream `websockify` socket. */
   base: URL;
   /** Upstream-only auth headers; never sent to the browser. */
   headers: Record<string, string>;
@@ -79,6 +79,13 @@ export class ComputerSessionStore {
     };
     this.#sessions.set(session.id, session);
     return session;
+  }
+
+  /** Look up a live session without counting it as activity. */
+  get(id: string, computerId: string): ComputerSession | undefined {
+    this.#prune();
+    const session = this.#sessions.get(id);
+    return session && session.computerId === computerId && !session.revoked ? session : undefined;
   }
 
   /** Look up a live session for `computerId` and mark it seen. */

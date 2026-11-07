@@ -83,14 +83,13 @@ type ConnectionState =
  *
  * Each connection mints its own single-use ticket inside the effect, so a
  * remount (including React StrictMode's) never replays a consumed ticket.
- * Watch → Take over mints a `control` ticket (write access) and reconnects;
- * Take over → Watch just sets `viewOnly` on the live connection.
+ * Watch / Take over only flips `viewOnly` on the live connection: the server
+ * requires write access for any viewer, so Watch is a display choice.
  */
 function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const client = useMastraClient();
   const { baseUrl, apiPrefix, headers } = client.options;
   const [mode, setMode] = useState<ComputerViewMode>('watch');
-  const [grant, setGrant] = useState<ComputerViewMode>('watch');
   const [attempt, setAttempt] = useState(0);
   const [connection, setConnection] = useState<ConnectionState>({ phase: 'connecting' });
   const screenRef = useRef<HTMLDivElement>(null);
@@ -113,7 +112,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
         computerId,
         threadId,
         resourceId,
-        mode: grant,
+        mode: 'control',
         baseUrl,
         apiPrefix,
         headers: JSON.parse(headersKey) as Record<string, string>,
@@ -133,11 +132,14 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
       rfb.scaleViewport = true;
       rfb.resizeSession = false;
       rfbRef.current = rfb;
-      connectTimer = setTimeout(
-        () => setConnection({ phase: 'disconnected', message: 'The desktop did not connect in time.' }),
-        CONNECT_TIMEOUT_MS,
-      );
+      connectTimer = setTimeout(() => {
+        rfbRef.current = undefined;
+        controller.abort();
+        rfb?.disconnect();
+        setConnection({ phase: 'disconnected', message: 'The desktop did not connect in time.' });
+      }, CONNECT_TIMEOUT_MS);
       rfb.addEventListener('connect', () => {
+        if (signal.aborted) return;
         clearTimeout(connectTimer);
         setConnection({ phase: 'connected' });
       });
@@ -159,23 +161,18 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
       rfbRef.current = undefined;
       rfb?.disconnect();
     };
-  }, [computerId, threadId, resourceId, grant, attempt, baseUrl, apiPrefix, headersKey]);
+  }, [computerId, threadId, resourceId, attempt, baseUrl, apiPrefix, headersKey]);
 
   useEffect(() => {
     if (rfbRef.current) rfbRef.current.viewOnly = mode === 'watch';
   }, [mode]);
-
-  const changeMode = (next: ComputerViewMode) => {
-    setMode(next);
-    if (next === 'control' && grant !== 'control') setGrant('control');
-  };
 
   const sessionMessage = connection.phase === 'session' ? SESSION_MESSAGES[connection.state] : undefined;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<ComputerViewMode> value={mode} onValueChange={changeMode} aria-label="Computer view mode">
+        <SegmentedControl<ComputerViewMode> value={mode} onValueChange={setMode} aria-label="Computer view mode">
           <SegmentedControlItem value="watch">Watch</SegmentedControlItem>
           <SegmentedControlItem value="control">Take over</SegmentedControlItem>
         </SegmentedControl>

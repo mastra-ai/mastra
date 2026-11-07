@@ -95,7 +95,7 @@ describe('session route', () => {
     expect((await mintSession(origin, 'c1', body)).status).toBe(status);
   });
 
-  it('404s for an unknown thread and 403s for a thread of another resource', async () => {
+  it('403s for an unknown thread and for a thread of another resource', async () => {
     const mastra = createStubMastra({
       threads: [
         { id: 'thread-1', resourceId: 'res-1' },
@@ -103,11 +103,13 @@ describe('session route', () => {
       ],
     });
     const { origin } = await start({ mastra });
-    expect((await mintSession(origin, 'c1', { threadId: 'nope' })).status).toBe(404);
+    const unknown = await mintSession(origin, 'c1', { threadId: 'nope' });
+    expect(unknown.status).toBe(403);
+    expect(await unknown.json()).toEqual({ state: 'forbidden' });
     expect((await mintSession(origin, 'c1', { threadId: 'thread-2' })).status).toBe(403);
   });
 
-  it('checks memory:read for watch and memory:write for control through FGA', async () => {
+  it('requires memory:write for both modes, since the relay does not filter input', async () => {
     const checked: string[] = [];
     const fga = {
       check: async () => true,
@@ -118,9 +120,10 @@ describe('session route', () => {
       filterAccessible: async (_u: unknown, items: unknown[]) => items,
     };
     const { origin } = await start({ mastra: createStubMastra({ fga }) });
-    expect((await mintSession(origin, 'c1', { mode: 'watch' })).status).toBe(200);
+    expect((await mintSession(origin, 'c1', { mode: 'watch' })).status).toBe(403);
     expect((await mintSession(origin, 'c1', { mode: 'control' })).status).toBe(403);
-    expect(checked).toEqual(['memory:read', 'memory:write']);
+    expect(checked).toEqual(['memory:write', 'memory:write']);
+    expect(viewer.state.calls).toBe(0);
   });
 
   it('rejects disallowed, malformed and non-http origins without minting', async () => {
@@ -233,8 +236,27 @@ describe('websocket proxy', () => {
     const { ws } = await openSocket((await mintSocketUrl(origin, 'c1')).url, { origin });
     await waitFor(() => upstream.upstreamSockets.size === 1);
     const closed = nextClose(ws!);
-    ws!.send('close-me');
+    ws!.send(Buffer.from('close-me'));
     expect(await closed).toBe(4000);
+    await waitFor(() => upstream.upstreamSockets.size === 0);
+  });
+
+  it('relays binary frames only: text from either side closes with 1003', async () => {
+    const { origin } = await start();
+    const client = await openSocket((await mintSocketUrl(origin, 'c1')).url, { origin });
+    await waitFor(() => upstream.upstreamSockets.size === 1);
+    const clientClosed = nextClose(client.ws!);
+    client.ws!.send('hello as text');
+    expect(await clientClosed).toBe(1003);
+
+    const fromSandbox = await openSocket((await mintSocketUrl(origin, 'c1')).url, { origin });
+    await waitFor(() => upstream.upstreamSockets.size === 1);
+    const received: unknown[] = [];
+    fromSandbox.ws!.on('message', data => received.push(data));
+    const sandboxClosed = nextClose(fromSandbox.ws!);
+    fromSandbox.ws!.send(Buffer.from('text-please'));
+    expect(await sandboxClosed).toBe(1003);
+    expect(received).toEqual([]);
     await waitFor(() => upstream.upstreamSockets.size === 0);
   });
 
