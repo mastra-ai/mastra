@@ -9,13 +9,16 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-4-8": [
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "claude-opus-5": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -27,13 +30,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
+    "claude-opus-5": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
