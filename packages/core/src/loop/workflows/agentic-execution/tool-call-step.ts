@@ -1667,6 +1667,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
     },
   });
+  // Wraps `step.execute` in place, so every holder of this step (the foreach and the eager
+  // coordinator) runs the gated version.
   return withOrderedToolGate(step, { mastra, runId, _internal }, () => options?.abortSignal);
 }
 
@@ -1691,8 +1693,9 @@ function withOrderedToolGate<S extends { execute: (executionContext: any) => Pro
     const gate = readScoped(scopeCtx, ORDERED_TOOL_GATES_KEY, 'orderedToolGates')?.get(inputData.toolCallId);
     if (!gate) return run(executionContext);
     try {
+      // Tool input schemas carry an optional `resumeData`; match the body's `!= null` test.
       const args = inputData.args as { resumeData?: unknown } | undefined;
-      const resumed = executionContext.resumeData !== undefined || args?.resumeData !== undefined;
+      const resumed = executionContext.resumeData != null || args?.resumeData != null;
       if (!resumed) {
         // The workflow signal carries run cancellation; the run signal carries caller aborts.
         const signals = [executionContext.abortSignal, getRunAbortSignal()].filter((s): s is AbortSignal => !!s);
