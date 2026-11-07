@@ -4464,8 +4464,37 @@ describe('PlatformSandbox computer driven by an agent', () => {
     expect(gets).toBe(4);
   });
 
+  it('does not hand a lookup for a replaced sandbox to callers of the new one', async () => {
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    const gets: string[] = [];
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if ((init?.method ?? 'GET') === 'GET' && /\/sandbox\/sbx_[12]$/.test(path)) {
+        gets.push(path.slice(path.lastIndexOf('/sandbox/')));
+        if (path.endsWith('/sbx_1')) await held;
+        return json({ id: path.split('/').pop(), createdAt: '2026-06-26T00:00:00.000Z' });
+      }
+      return json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' });
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+    await sandbox._start();
+    const old = sandbox.getInfo();
+    (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_2';
+    const fresh = await sandbox.getInfo();
+    release();
+    expect(fresh.id).toBe('sbx_2');
+    await old;
+    expect(gets).toEqual(['/sandbox/sbx_1', '/sandbox/sbx_2']);
+  });
+
   // Regression: on staging, separate getInfo() round trips sent Enter before the text.
-  it('runs the actions of one step in the model order under the default tool-call concurrency', async () => {
+  it("a shared getInfo() lookup keeps one step's actions in model order under the default concurrency", async () => {
     expect(await runClickTypeEnter({})).toEqual([
       'xdotool mousemove 1 2 click 1',
       "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
