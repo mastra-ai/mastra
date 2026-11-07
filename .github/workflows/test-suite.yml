@@ -151,6 +151,10 @@ jobs:
         # One vitest run for the shard's whole list. xargs would split a long list into several
         # runs that overwrite each other's blob report.
         run: |
+          # Start the slowest files first (scripts/vitest-slow-first-sequencer.ts), when timings exist.
+          if [ -f /tmp/affected-outputs/test-timings.json ]; then
+            export VITEST_SLOW_FIRST_TIMINGS=/tmp/affected-outputs/test-timings.json
+          fi
           mapfile -t test_files < /tmp/affected-outputs/shards/shard-${{ matrix.shard }}.txt
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
