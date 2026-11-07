@@ -316,7 +316,7 @@ const releaseBoard = defineBoard({
 });
 ```
 
-Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`.
+Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`. When a project [intake route](#status-events-move-existing-cards) on the card's board handles `work_item.closed`, as the default close routes do on Work, the routes decide the move instead and `sourceClosed` is only the fallback.
 
 ### Board tool-result rules
 
@@ -720,9 +720,9 @@ A project's [intake routes](#intake-routes) are checked before these bindings an
 
 ### Intake routes
 
-Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. Routes place a card once, when it arrives. Nothing reads them again later.
+Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route names the board events it handles in `on`. A route on `work_item.created`, the default, decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. A route on `work_item.closed` or `work_item.reopened` decides where an existing card moves when its source closes or reopens (see [Status events](#status-events-move-existing-cards)).
 
-**The default routes.** Every project starts with two routes. The first, `Outside authors wait in Intake`:
+**The default routes.** Every project starts with five routes: two that place new cards, and three that move cards when their issue closes or reopens. The first, `Outside authors wait in Intake`:
 
 ```json
 {
@@ -739,18 +739,30 @@ Each project has an ordered list of intake routes, managed through the API (ther
 
 It files GitHub and GitLab issues and pull requests from authors outside the write-access circle in Work › Intake, ahead of any label route or binding. Intake is a resting phase, so nothing starts there on its own. Any session, a person's or an agent's, can move the card on, and that move starts the next phase's run. Pushes to a pull request resting in Intake don't re-review it, and comments and edits on an issue never re-run Triage (see GitHub event rules). Trusted authors' cards, and Linear, Jira and incident.io cards (which carry no trust stamp), land where they did before. The second, `Pull requests go to PR review`, sends every other pull request and merge request (`source.kind equals pull_request`) to Work › PR review, where the reviewer runs once a person or the project's auto-run lets it start. Because it comes second, an outside author's pull request still waits in Intake. A pull request Factory opened for one of its own cards is filed by that card's rule, which no route re-places: it waits in Intake while the authoring card goes out for review.
 
-The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. A project set up before the pull request route existed gets it this way too.
+The other three move Work cards when their issue's status changes:
+
+| Route                                         | `on`                     | `when`                          | Target          |
+| --------------------------------------------- | ------------------------ | ------------------------------- | --------------- |
+| `Closed issues go to Done`                    | `["work_item.closed"]`   | `event.reason equals completed` | Work › Done     |
+| `Issues closed as not planned go to Canceled` | `["work_item.closed"]`   | `event.reason equals canceled`  | Work › Canceled |
+| `Reopened issues go back to Intake`           | `["work_item.reopened"]` | none                            | Work › Intake   |
+
+They replace the close handlers each integration used to apply on its own, so a closed GitHub, GitLab, Linear, Jira or incident.io issue lands where it did before, but you can now edit or disable that move. To stop closes from moving Work cards, disable both close routes. Deleting them does not stop the move: with no route left that handles closes, Work's `sourceClosed` mapping moves closed cards to Done or Canceled again.
+
+The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. Deleting a default is permanent: recreate it by hand to get it back. A project set up before the pull request route or the close and reopen routes existed gets them this way too.
 
 **Trust only decides where a card arrives.** Once a card is moved out of Intake, later input on it runs like on any card: a maintainer's push re-reviews an outside author's pull request. A phase that should only auto-start for trusted authors says so in its `autoStartWhen` (`author.trusted equals true`). Runs on untrusted cards still use their own isolated memory.
 
 **Route shape.**
 
-| Field     | Meaning                                                                                                                                                                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`    | Up to 120 characters.                                                                                                                                                                                                                                                         |
-| `enabled` | Defaults to `true`. Disabled routes are skipped.                                                                                                                                                                                                                              |
-| `when`    | A rule over the card's facts (the same format as `autoStartWhen`). `null`, the default, matches every card.                                                                                                                                                                   |
-| `target`  | Required. `{ boardKey, phaseKey? }` sets where matching cards land; without `phaseKey` they land in the board's first phase. The board must be installed in the project (code or stored), and the phase can't be terminal and must be reachable from the board's first phase. |
+| Field               | Meaning                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`              | Up to 120 characters.                                                                                                                                                                                                                                                                                                                                                                              |
+| `enabled`           | Defaults to `true`. Disabled routes are skipped.                                                                                                                                                                                                                                                                                                                                                   |
+| `on`                | The board events the route handles: `work_item.created` (the default), `work_item.closed` and `work_item.reopened`. Each at most once. `work_item.commented` and `work_item.edited` are activity, which never moves a card, so a route can't name them.                                                                                                                                            |
+| `when`              | A rule over the card's facts (the same format as `autoStartWhen`). `null`, the default, matches every card. A route that handles more than `work_item.created` can also test `event.type` and `event.reason`.                                                                                                                                                                                      |
+| `target`            | Required. `{ boardKey, phaseKey? }` sets where matching cards land; without `phaseKey` they land in the board's first phase. The board must be installed in the project (code or stored). For a route on `work_item.created`, the phase can't be terminal and must be reachable from the board's first phase; a route that only moves existing cards can target any phase, terminal ones included. |
+| `allowWorkingPhase` | Defaults to `false`. A status move into a working phase (one that starts runs, such as Triage) is refused unless this is `true`, so a reopened card doesn't re-run Triage by accident.                                                                                                                                                                                                             |
 
 Routes are evaluated in `position` order (0 first). Rules can test these card facts: `item.labels`, `item.title`, `item.author`, `source.kind` (`issue`, `pull_request`, …), `source.integration` (`github`, `gitlab`, `linear`, `jira`, `incidentio`, …) and `author.trusted`. `author.trusted` is `true` when the card carries an `authorTrusted: true` or `factoryAuthored: true` stamp. GitHub and GitLab stamp `authorTrusted` from the author's repository permission, and a stamp that is missing counts as untrusted.
 
@@ -765,16 +777,46 @@ A card a route placed records the route's id in its `intakeRouteId` metadata and
 
 Not covered: a pull request routed to a board other than Work or Review no longer gets Factory review, because review requests and pushes only act on pull request cards on those boards.
 
+#### Status events move existing cards
+
+Every integration reports issue status changes with the same names: `work_item.created` when an issue is first seen, `work_item.closed` when it closes, and `work_item.reopened` when it reopens (GitHub and GitLab; Linear, Jira and incident.io report opens and closes only). A close carries `event.reason`: `canceled` for GitHub's "not planned" and "duplicate" and for Linear, Jira and incident.io canceled states, `completed` otherwise (GitLab closes are always `completed`).
+
+When one of these arrives for a card that already exists, the first enabled route on the card's board whose `on` names the event and whose `when` matches the card and the event moves the card to the route's phase:
+
+- The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route`, made by actor `intake-route:<routeId>`).
+- The move clears the card's armed autonomy. A provider event is not a person's go-ahead, so a reopened card waits for a person or the project's auto-run before a phase run starts.
+- It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
+- It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
+- A move into a working or resting phase waits for a run in flight on the card to end, then moves the card. While it waits it goes back to the queue, so it never holds a dispatch slot.
+- The source's last status wins. When an issue is closed and reopened before Factory applies the close, the close is dropped and the card stays where it was.
+- A move into a terminal phase doesn't wait: it runs terminal cleanup like any other, so a session still running on the card is aborted at once, as a close always has.
+- A close moves only an unfinished card, and a reopen only a finished one. Redelivered or reconciled webhooks move the card once.
+
+Only routes targeting the card's own board apply; a route naming another board is skipped. A route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
+
+A deployment that answers an event itself keeps routes out of it: a handler or `null` set explicitly on the integration's `rules` for `issueClosed`, `issueReopened`, `issueCommentCreated` and so on, or `null` on the card's board handlers. An override that moves nothing really moves nothing. A board handler that wraps or returns the stock close move is different: that move still goes to the routes, as the stock handler's own would.
+
+#### Activity reaches the card's session
+
+A new comment on a card's GitHub or GitLab issue, or an edit to its title or description, tells the session working the card, with pointers only:
+
+```text
+New comment by @alice on acme/repo#42: https://github.com/acme/repo/issues/42#issuecomment-100
+acme/repo#42 was edited by @bob (untrusted author): https://github.com/acme/repo/issues/42
+```
+
+The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped, and so are edits to an existing GitLab comment. An idle session is woken by GitHub activity from a trusted author. Activity from an untrusted author never wakes a session, and neither does GitLab activity: GitLab deliveries don't say whether Factory wrote a comment, so a session could otherwise wake itself with its own comments. That activity is sent as a `low` priority notification, which never starts a run: it waits in the session's notifications, and the session's next run is told it is there. Otherwise, activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
+
 **Routes.** Reading needs a signed-in user of the project's organization. Changes need an organization admin when auth is enabled. Deleting or reordering routes renumbers the routes after it and bumps their `revision`, so an update sent with an older `expectedRevision` is refused with 409 and must be retried with the current one. Changes are recorded in the audit log as `factory.intake_route.created`, `updated`, `deleted` and `reordered`.
 
-| Method   | Path                                                                  | Body                                                       | Result                                                                                                                                                                                           |
-| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/web/factory/projects/:id/intake-routes`                             | —                                                          | `intakeRoutes` in order.                                                                                                                                                                         |
-| `GET`    | `/web/factory/projects/:id/intake-routes/:routeId`                    | —                                                          | The route.                                                                                                                                                                                       |
-| `POST`   | `/web/factory/projects/:id/intake-routes`                             | The route.                                                 | `201` and the route, added at the end. `422 unknown_board`, `unknown_phase`, `terminal_phase` or `unreachable_phase` for a target cards can't land on. `409 intake_route_limit` past 100 routes. |
-| `PATCH`  | `/web/factory/projects/:id/intake-routes/:routeId`                    | The fields to change, plus `expectedRevision`.             | The route.                                                                                                                                                                                       |
-| `DELETE` | `/web/factory/projects/:id/intake-routes/:routeId?expectedRevision=n` | —                                                          | `204`.                                                                                                                                                                                           |
-| `POST`   | `/web/factory/projects/:id/intake-routes/reorder`                     | `{ "ids": [...] }`: every route of the project, once each. | The routes in their new order. `409 intake_route_set_mismatch` if the list differs from the project's routes.                                                                                    |
+| Method   | Path                                                                  | Body                                                       | Result                                                                                                                                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/web/factory/projects/:id/intake-routes`                             | —                                                          | `intakeRoutes` in order.                                                                                                                                                                                                                                                                            |
+| `GET`    | `/web/factory/projects/:id/intake-routes/:routeId`                    | —                                                          | The route.                                                                                                                                                                                                                                                                                          |
+| `POST`   | `/web/factory/projects/:id/intake-routes`                             | The route.                                                 | `201` and the route, added at the end. `422 unknown_board`, `unknown_phase`, `terminal_phase` or `unreachable_phase` for a target cards can't land on; `422 invalid_intake_route` for a bad `on` or a `when` testing `event.*` on a placement-only route. `409 intake_route_limit` past 100 routes. |
+| `PATCH`  | `/web/factory/projects/:id/intake-routes/:routeId`                    | The fields to change, plus `expectedRevision`.             | The route.                                                                                                                                                                                                                                                                                          |
+| `DELETE` | `/web/factory/projects/:id/intake-routes/:routeId?expectedRevision=n` | —                                                          | `204`.                                                                                                                                                                                                                                                                                              |
+| `POST`   | `/web/factory/projects/:id/intake-routes/reorder`                     | `{ "ids": [...] }`: every route of the project, once each. | The routes in their new order. `409 intake_route_set_mismatch` if the list differs from the project's routes.                                                                                                                                                                                       |
 
 A stale `expectedRevision` is refused with `409 revision_mismatch`. Each route reports `problems`, for example when its board has since been deleted. Such a route places no cards.
 
@@ -787,6 +829,25 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'cont
     { "field": "source.kind", "operator": "equals", "value": "issue" }
   ] },
   "target": { "boardKey": "work", "phaseKey": "triage" }
+}'
+
+# Send issues closed as not planned to Done, too, instead of Canceled.
+curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$CLOSED_CANCELED_ROUTE" -H 'content-type: application/json' -d '{
+  "target": { "boardKey": "work", "phaseKey": "done" },
+  "expectedRevision": 1
+}'
+
+# Send reopened bugs back to Triage to run again. A new route is added at the end, after the
+# default reopen route that matches every reopen, so then move it ahead of that one with
+# POST .../intake-routes/reorder.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "Reopened bugs re-run Triage",
+  "on": ["work_item.reopened"],
+  "when": { "operator": "AND", "conditions": [
+    { "field": "item.labels", "operator": "contains", "value": "bug" }
+  ] },
+  "target": { "boardKey": "work", "phaseKey": "triage" },
+  "allowWorkingPhase": true
 }'
 
 # Let outside authors' issues go where label routes send them, instead of Intake.
