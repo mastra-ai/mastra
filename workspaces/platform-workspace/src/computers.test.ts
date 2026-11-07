@@ -7,6 +7,7 @@ import { z } from 'zod/v4';
 import type { ComputerSandbox } from './computers.js';
 import {
   DESTROY_FAILED,
+  HUMAN_HAS_CONTROL,
   MISSING_IDENTITY,
   NOT_ATTACHED,
   NOT_FOUND,
@@ -18,12 +19,29 @@ import type { PlatformSandboxOptions } from './sandbox.js';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
+interface Gate {
+  entered: Promise<void>;
+  enter(): void;
+  opened: Promise<void>;
+  open(): void;
+}
+
+function gate(): Gate {
+  let enter!: () => void;
+  let open!: () => void;
+  const entered = new Promise<void>(r => (enter = r));
+  const opened = new Promise<void>(r => (open = r));
+  return { entered, enter, opened, open };
+}
+
 /** A shared fake platform: VMs outlive any one PlatformComputers instance, like the real proxy. */
 class FakeBackend {
   vms = new Map<string, { alive: boolean }>();
   createCalls: { kind: 'provision' | 'reattach'; sandboxId?: string }[] = [];
   actions: string[] = [];
   latency: Record<string, number> = {};
+  gates: Record<string, Gate> = {};
+  destroys = 0;
   startDelayMs = 0;
   nextSandboxId?: string;
   failStart?: Error;
@@ -38,6 +56,12 @@ class FakeBackend {
     let id: string | undefined;
     const act = async (name: string) => {
       await sleep(backend.latency[name] ?? 0);
+      const gate = backend.gates[name];
+      if (gate) {
+        delete backend.gates[name];
+        gate.enter();
+        await gate.opened;
+      }
       backend.actions.push(name);
     };
     return {
@@ -64,6 +88,7 @@ class FakeBackend {
         backend.vms.set(id, { alive: true });
       },
       async destroy() {
+        backend.destroys++;
         if (backend.failDestroy) throw new Error('proxy 500 sbx internal');
         if (id) backend.vms.set(id, { alive: false });
       },
@@ -173,6 +198,7 @@ describe('PlatformComputers construction', () => {
         'computer_key',
         'computer_screen_info',
         'computer_exec',
+        'computer_request_human',
       ].sort(),
     );
     for (const [id, tool] of Object.entries(computers.tools())) expect(tool.id).toBe(id);
@@ -659,5 +685,209 @@ describe('ordering through a real agent at default tool concurrency', () => {
       });
     await run({ computer_click: naive('click'), computer_type: naive('type'), computer_key: naive('key') });
     expect(seen).toEqual(['key', 'type', 'click']);
+  });
+});
+
+describe('control lease', () => {
+  const scope = { resourceId: 'r1', threadId: 't1' };
+
+  async function handedOver() {
+    const computers = make();
+    const events: any[] = [];
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const out = await call(computers, 'computer_request_human', { reason: 'log in please' }, ctx('r1', 't1', events));
+    return { computers, id, out, events };
+  }
+
+  it('computer_request_human hands control to the user with a status-free part', async () => {
+    const { computers, id, out, events } = await handedOver();
+    expect(out).toEqual({
+      computerId: id,
+      reason: 'log in please',
+      control: 'human',
+      message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
+    });
+    await sleep(0);
+    expect(events).toEqual([
+      { type: 'data-computer', data: { computerId: id, threadId: 't1', control: 'human', reason: 'log in please' } },
+    ]);
+    expect(events[0].data).not.toHaveProperty('status');
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'log in please' });
+  });
+
+  it('is idempotent and keeps the first reason', async () => {
+    const { computers, id } = await handedOver();
+    const again = await call(computers, 'computer_request_human', { reason: 'other' }, ctx('r1', 't1'));
+    expect(again.reason).toBe('log in please');
+    await expect(computers.controlState(id, scope)).resolves.toMatchObject({ reason: 'log in please' });
+  });
+
+  it('refuses every hand and lifecycle tool with the exact text without touching the driver', async () => {
+    const { computers, id } = await handedOver();
+    backend.actions = [];
+    const calls: [string, unknown][] = [
+      ['computer_screenshot', {}],
+      ['computer_click', { x: 1, y: 1 }],
+      ['computer_move', { x: 1, y: 1 }],
+      ['computer_drag', { from: { x: 0, y: 0 }, to: { x: 1, y: 1 } }],
+      ['computer_scroll', { direction: 'down', amount: 1 }],
+      ['computer_type', { text: 'x' }],
+      ['computer_key', { keys: 'Enter' }],
+      ['computer_screen_info', {}],
+      ['computer_exec', { command: 'id' }],
+      ['computer_snapshot', {}],
+      ['computer_release', {}],
+      ['computer_destroy', { id }],
+    ];
+    for (const [tool, input] of calls) {
+      expect(await call(computers, tool, input, ctx('r1', 't1')), tool).toBe(HUMAN_HAS_CONTROL);
+    }
+    expect(backend.actions).toEqual([]);
+    expect(backend.destroys).toBe(0);
+    await expect(computers.viewer(id, scope)).resolves.not.toBeNull();
+  });
+
+  it('refuses request_human without an attached computer', async () => {
+    const computers = make();
+    expect(await call(computers, 'computer_request_human', { reason: 'x' }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+    expect(await call(computers, 'computer_request_human', { reason: 'x' }, ctx(undefined, 't1'))).toBe(
+      MISSING_IDENTITY,
+    );
+  });
+
+  it('hand back restores the hands; repeated actions are no-ops', async () => {
+    const { computers, id } = await handedOver();
+    await expect(computers.control(id, scope, { action: 'take' })).resolves.toEqual({
+      holder: 'human',
+      notified: false,
+      reason: 'no-change',
+    });
+    await expect(computers.control(id, scope, { action: 'release', note: 'done' })).resolves.toMatchObject({
+      holder: 'agent',
+    });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent' });
+    await expect(computers.control(id, scope, { action: 'release' })).resolves.toMatchObject({ reason: 'no-change' });
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe('clicked at (1, 1)');
+  });
+
+  it('user take works at any time and records a reason', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    await expect(computers.control(id, scope, { action: 'take' })).resolves.toMatchObject({ holder: 'human' });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'user took control' });
+    expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe(HUMAN_HAS_CONTROL);
+  });
+
+  it('control and controlState throw for another thread or resource, and on long notes', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    for (const other of [
+      { resourceId: 'r1', threadId: 't2' },
+      { resourceId: 'r2', threadId: 't1' },
+    ]) {
+      await expect(computers.controlState(id, other)).rejects.toThrow('computer not attached');
+      await expect(computers.control(id, other, { action: 'take' })).rejects.toThrow('computer not attached');
+    }
+    await expect(computers.control(id, scope, { action: 'take', note: 'x'.repeat(501) })).rejects.toThrow(
+      'note too long',
+    );
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent' });
+  });
+
+  it('a take while an action is in flight lets it finish and refuses the queued ones', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const g = (backend.gates.click = gate());
+    const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
+    const type = call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'));
+    await g.entered;
+    await computers.control(id, scope, { action: 'take' });
+    g.open();
+    expect(await click).toBe('clicked at (1, 1)');
+    expect(await type).toBe(HUMAN_HAS_CONTROL);
+    expect(backend.actions).toEqual(['click']);
+  });
+
+  it('request_human refuses a queued screenshot but lets an in-flight one finish', async () => {
+    const computers = make();
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    const g = (backend.gates.click = gate());
+    const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
+    const queued = call(computers, 'computer_screenshot', {}, ctx('r1', 't1'));
+    await g.entered;
+    await call(computers, 'computer_request_human', { reason: 'r' }, ctx('r1', 't1'));
+    g.open();
+    await click;
+    expect(await queued).toBe(HUMAN_HAS_CONTROL);
+    expect(backend.actions).toEqual(['click']);
+
+    const computers2 = make();
+    await call(computers2, 'computer_create', {}, ctx('r1', 't9'));
+    backend.actions = [];
+    const g2 = (backend.gates.screenshot = gate());
+    const inflight = call(computers2, 'computer_screenshot', {}, ctx('r1', 't9'));
+    await g2.entered;
+    await call(computers2, 'computer_request_human', { reason: 'r' }, ctx('r1', 't9'));
+    g2.open();
+    expect((await inflight).text).toMatch(/^Screenshot/);
+    expect(backend.actions).toEqual(['screenshot']);
+  });
+
+  it('a destroy queued before a take refuses when it runs', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const other = (await call(computers, 'computer_create', {}, ctx('r1', 't2'))).computer.id;
+    backend.startDelayMs = 20;
+    const slow = call(computers, 'computer_attach', { id: other }, ctx('r1', 't1'));
+    const destroy = call(computers, 'computer_destroy', { id }, ctx('r1', 't1'));
+    await computers.control(id, scope, { action: 'take' });
+    await slow;
+    expect(await destroy).toBe(HUMAN_HAS_CONTROL);
+    expect(backend.destroys).toBe(0);
+  });
+
+  it('a release queued before a take refuses when it runs', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const reattach = call(computers, 'computer_attach', { id }, ctx('r1', 't1'));
+    const release = call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    await computers.control(id, scope, { action: 'take' });
+    await reattach;
+    expect(await release).toBe(HUMAN_HAS_CONTROL);
+    await expect(computers.controlState(id, scope)).resolves.toMatchObject({ holder: 'human' });
+  });
+
+  it('a take during one model step lets the click finish and refuses type and key (real agent)', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const agent = new Agent({
+      id: 'computer-take',
+      name: 'computer-take',
+      instructions: 'Use the computer.',
+      model: parallelToolCallModel([
+        { toolName: 'computer_click', input: { x: 1, y: 2 } },
+        { toolName: 'computer_type', input: { text: 'echo hi' } },
+        { toolName: 'computer_key', input: { keys: 'Enter' } },
+      ]) as any,
+      tools: computers.tools(),
+    });
+    const rc = new RequestContext();
+    rc.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    rc.set(MASTRA_THREAD_ID_KEY, 't1');
+    const g = (backend.gates.click = gate());
+    const run = agent.generate('go', { maxSteps: 3, requestContext: rc });
+    await g.entered;
+    await computers.control(id, scope, { action: 'take' });
+    g.open();
+    const result = await run;
+    expect(backend.actions).toEqual(['click']);
+    const outputs = Object.fromEntries(
+      result.toolResults.map((r: any) => [r.payload?.toolName ?? r.toolName, r.payload?.result ?? r.result]),
+    );
+    expect(outputs).toEqual({
+      computer_click: 'clicked at (1, 2)',
+      computer_type: HUMAN_HAS_CONTROL,
+      computer_key: HUMAN_HAS_CONTROL,
+    });
   });
 });
