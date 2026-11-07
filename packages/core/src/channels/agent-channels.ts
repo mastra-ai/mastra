@@ -512,7 +512,7 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onMessage, onSubscribedMessage, onSlashCommand, onAction } =
+      const { onDirectMessage, onMention, onMessage, onSubscribedMessage, onSlashCommand, onAction, onModalSubmit } =
         this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
@@ -688,6 +688,21 @@ export class AgentChannels {
       if (onAction !== false) {
         chat.onAction(event => {
           const { handlerContext } = beginMessage();
+          handlerContext.prepareInteractiveReply = async (thread, messageId, actor, requesterId) => {
+            const platform = event.adapter.name;
+            const { channelContext } = await this.buildEventContext({
+              chatThread: thread,
+              platform,
+              eventType: 'action',
+              messageId,
+              actor,
+            });
+            handlerContext.requestContext.set('channel', channelContext);
+            handlerContext.requestContext.set(
+              CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+              this._buildRenderContext(thread, platform, { requesterId }),
+            );
+          };
           // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
           const defaultHandler = async () => {
             const { actionId } = event;
@@ -1014,6 +1029,27 @@ export class AgentChannels {
             return onAction(event, defaultHandler, handlerContext);
           }
           return defaultHandler();
+        });
+      }
+      if (onModalSubmit) {
+        chat.onModalSubmit(event => {
+          const { handlerContext } = beginMessage();
+          handlerContext.prepareInteractiveReply = async (thread, messageId, actor, requesterId) => {
+            const platform = event.adapter.name;
+            const { channelContext } = await this.buildEventContext({
+              chatThread: thread,
+              platform,
+              eventType: 'action',
+              messageId,
+              actor,
+            });
+            handlerContext.requestContext.set('channel', channelContext);
+            handlerContext.requestContext.set(
+              CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+              this._buildRenderContext(thread, platform, { requesterId }),
+            );
+          };
+          return onModalSubmit(event, handlerContext);
         });
       }
       await chat.initialize();
