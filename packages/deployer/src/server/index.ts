@@ -321,6 +321,11 @@ export async function createHonoServer(
         apiPrefix,
         allowedOrigins: browserStreamOrigins,
         getViewer: (computerId, scope) => computers.viewer(computerId, scope),
+        ...(computers.control &&
+          computers.controlState && {
+            getControl: (computerId, scope) => computers.controlState!(computerId, scope),
+            setControl: (computerId, scope, change) => computers.control!(computerId, scope, change),
+          }),
       })
     : null;
   if (computers && !computerStreamSetup) {

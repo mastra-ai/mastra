@@ -70,6 +70,56 @@ describe('deployer computer stream wiring', () => {
     expect(viewer).toHaveBeenCalledWith('c1', { threadId: 'thread-1', resourceId: 'res-1' });
   });
 
+  it('routes the control lease to the registry when it implements control', async () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    const controlState = vi.fn().mockResolvedValue({ holder: 'agent' });
+    const control = vi.fn().mockResolvedValue({ holder: 'human', notified: true });
+    const mastra = new Mastra({
+      logger: false,
+      computers: { tools: () => ({}), viewer: vi.fn<Viewer>(), control, controlState },
+    });
+    const app = await createServer(mastra);
+    const read = await app.request('http://localhost/api/computers/c1/control?threadId=thread-1&resourceId=res-1');
+    await expect(read.json()).resolves.toEqual({ holder: 'agent' });
+    const take = await app.request('http://localhost/api/computers/c1/control', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', action: 'take' }),
+    });
+    await expect(take.json()).resolves.toEqual({ holder: 'human', notified: true });
+    const scope = { threadId: 'thread-1', resourceId: 'res-1' };
+    expect(controlState).toHaveBeenCalledWith('c1', scope);
+    expect(control).toHaveBeenCalledWith('c1', scope, { action: 'take' });
+  });
+
+  it('mounts no control routes for a registry without control', async () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    const app = await createServer(mastraWithComputers(vi.fn<Viewer>()));
+    const res = await app.request('http://localhost/api/computers/c1/control', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', action: 'take' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('mounts no control routes while MASTRA_EXPERIMENTAL_COMPUTER is off', async () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', '');
+    const control = vi.fn();
+    const mastra = new Mastra({
+      logger: false,
+      computers: { tools: () => ({}), viewer: vi.fn<Viewer>(), control, controlState: vi.fn() },
+    });
+    const app = await createServer(mastra);
+    const res = await app.request('http://localhost/api/computers/c1/control', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', action: 'take' }),
+    });
+    expect(res.status).toBe(404);
+    expect(control).not.toHaveBeenCalled();
+  });
+
   it('respects computerStream: false', async () => {
     vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
     const viewer = vi.fn<Viewer>();

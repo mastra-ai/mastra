@@ -286,7 +286,13 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
  * });
  * ```
  */
-export type { MastraComputers, MastraComputerViewer } from './computers';
+export type {
+  MastraComputerControl,
+  MastraComputerControlResult,
+  MastraComputers,
+  MastraComputerScope,
+  MastraComputerViewer,
+} from './computers';
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,

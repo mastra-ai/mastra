@@ -1,5 +1,13 @@
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
-import type { MastraComputers, MastraComputerViewer } from '@mastra/core/mastra';
+import type { Agent } from '@mastra/core/agent';
+import type {
+  Mastra,
+  MastraComputerControl,
+  MastraComputerControlResult,
+  MastraComputers,
+  MastraComputerScope,
+  MastraComputerViewer,
+} from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, ToolExecutionContext } from '@mastra/core/tools';
@@ -14,6 +22,9 @@ export const NOT_FOUND = 'computer not found';
 export const UNAVAILABLE = 'computer unavailable, try again';
 export const DESTROY_FAILED = 'computer destroy failed';
 export const MISSING_IDENTITY = 'missing thread or resource id';
+/** @experimental */
+export const HUMAN_HAS_CONTROL = 'the user has control of this computer; wait for them to hand it back';
+const NOTE_MAX = 500;
 
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9-]{1,128}$/;
@@ -61,6 +72,20 @@ interface Entry {
   ownerResourceId: string;
   queue: Promise<unknown>;
   destroyed: boolean;
+  control: Lease;
+}
+
+interface AgentRef {
+  agentId?: string;
+  mastra?: Mastra;
+}
+
+/** Who drives the computer's input. Read and written synchronously only. */
+interface Lease {
+  holder: 'agent' | 'human';
+  reason?: string;
+  /** The thread (and its agent) to notify when the user hands control back. */
+  target?: { resourceId: string; threadId: string } & AgentRef;
 }
 
 interface Scope {
@@ -93,6 +118,8 @@ export class PlatformComputers implements MastraComputers {
   readonly #computers = new Map<string, Entry>();
   readonly #attachments = new Map<string, string>();
   readonly #lifecycle = new Map<string, Promise<unknown>>();
+  /** Last agent seen per thread, so a user take can notify it. */
+  readonly #agents = new Map<string, AgentRef>();
   #tools?: Record<string, ToolAction<any, any, any, any>>;
 
   constructor(options: PlatformComputersOptions = {}) {
@@ -152,7 +179,11 @@ export class PlatformComputers implements MastraComputers {
     const resourceId = firstNonEmpty(context?.agent?.resourceId, rc?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
     const threadId = firstNonEmpty(context?.agent?.threadId, rc?.get(MASTRA_THREAD_ID_KEY) as string | undefined);
     if (!resourceId || !threadId) return undefined;
-    return { resourceId, threadId, key: JSON.stringify([resourceId, threadId]) };
+    const key = JSON.stringify([resourceId, threadId]);
+    const agentId = context?.agent?.agentId;
+    const mastra = context?.mastra as Mastra | undefined;
+    if (agentId && mastra) this.#agents.set(key, { agentId, mastra });
+    return { resourceId, threadId, key };
   }
 
   #describe(entry: Entry, status: 'attached' | 'released' | 'available') {
@@ -194,7 +225,11 @@ export class PlatformComputers implements MastraComputers {
     const id = this.#attachments.get(scope.key);
     const entry = id ? this.#computers.get(id) : undefined;
     if (!entry || entry.ownerResourceId !== scope.resourceId) return Promise.resolve(NOT_ATTACHED);
-    const run = entry.queue.then(() => fn(entry.sandbox!, entry.sandbox!.computer!));
+    if (entry.control.holder === 'human') return Promise.resolve(HUMAN_HAS_CONTROL);
+    // Re-checked when the action runs: a take while earlier actions are in flight refuses the rest.
+    const run = entry.queue.then((): T | string | Promise<T> =>
+      entry.control.holder === 'human' ? HUMAN_HAS_CONTROL : fn(entry.sandbox!, entry.sandbox!.computer!),
+    );
     entry.queue = run.catch(() => {});
     return run;
   }
@@ -219,6 +254,7 @@ export class PlatformComputers implements MastraComputers {
       ownerResourceId,
       queue: Promise.resolve(),
       destroyed: false,
+      control: { holder: 'agent' },
     };
     entry.queue = entry.ready.catch(() => {});
     entry.ready.then(
@@ -252,6 +288,7 @@ export class PlatformComputers implements MastraComputers {
           ownerResourceId: scope.resourceId,
           queue: Promise.resolve(),
           destroyed: false,
+          control: { holder: 'agent' },
         };
       } catch {
         await sandbox.destroy().catch(() => {});
@@ -286,6 +323,7 @@ export class PlatformComputers implements MastraComputers {
     return this.#serial(context, async scope => {
       const id = this.#attachments.get(scope.key);
       const entry = id ? this.#computers.get(id) : undefined;
+      if (entry?.control.holder === 'human') return HUMAN_HAS_CONTROL;
       this.#attachments.delete(scope.key);
       if (!entry) return NOT_ATTACHED;
       await this.#emit(context, entry, scope.threadId, 'released');
@@ -299,6 +337,7 @@ export class PlatformComputers implements MastraComputers {
       if (!verified) return NOT_FOUND;
       const entry = this.#lookup(input.id, verified, scope.resourceId);
       if (!entry || entry.destroyed) return NOT_FOUND;
+      if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
       entry.destroyed = true;
       const releasedHere = this.#attachments.get(scope.key) === entry.id;
       for (const [key, id] of this.#attachments) if (id === entry.id) this.#attachments.delete(key);
@@ -313,6 +352,37 @@ export class PlatformComputers implements MastraComputers {
       if (releasedHere) await this.#emit(context, entry, scope.threadId, 'released');
       return { destroyed: entry.id };
     });
+  }
+
+  async #requestHuman(input: { reason: string }, context: Context) {
+    const scope = this.#scope(context);
+    if (!scope) return MISSING_IDENTITY;
+    const id = this.#attachments.get(scope.key);
+    const entry = id ? this.#computers.get(id) : undefined;
+    if (!entry || entry.ownerResourceId !== scope.resourceId || !entry.sandbox || entry.destroyed) return NOT_ATTACHED;
+    const reason = input.reason.trim();
+    if (entry.control.holder !== 'human') {
+      entry.control = {
+        holder: 'human',
+        reason,
+        target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
+      };
+    }
+    const shown = entry.control.reason ?? reason;
+    try {
+      await context?.writer?.custom({
+        type: 'data-computer',
+        data: { computerId: entry.id, threadId: scope.threadId, control: 'human', reason: shown },
+      });
+    } catch {
+      // A closed stream must not undo the handoff.
+    }
+    return {
+      computerId: entry.id,
+      reason: shown,
+      control: 'human' as const,
+      message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
+    };
   }
 
   #list(context: Context) {
@@ -358,6 +428,13 @@ export class PlatformComputers implements MastraComputers {
         description: 'Detach the computer from this conversation without destroying it.',
         inputSchema: z.object({}),
         execute: async (_input, context) => this.#release(context),
+      }),
+      computer_request_human: createTool({
+        id: 'computer_request_human',
+        description:
+          'Ask the user to take over the attached computer (e.g. to log in or solve a CAPTCHA). Your computer tools stop working until they hand it back; end your turn after calling this.',
+        inputSchema: z.object({ reason: z.string().trim().min(1).max(NOTE_MAX) }),
+        execute: async (input, context) => this.#requestHuman(input, context),
       }),
       computer_snapshot: createTool({
         id: 'computer_snapshot',
@@ -495,20 +572,113 @@ export class PlatformComputers implements MastraComputers {
    * Upstream viewer access for a server-side proxy. `headers` must never reach the browser.
    * Returns `null` when the computer isn't running; throws when it isn't attached to this thread.
    */
-  async viewer(
-    computerId: string,
-    scope: { threadId: string; resourceId: string },
-  ): Promise<MastraComputerViewer | null> {
-    const entry = this.#computers.get(computerId);
-    const key = JSON.stringify([scope.resourceId, scope.threadId]);
-    if (this.#attachments.get(key) !== computerId || !entry?.sandbox || entry.ownerResourceId !== scope.resourceId) {
-      throw new Error('computer not attached');
-    }
-    const sandbox = entry.sandbox;
+  async viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
+    const sandbox = this.#attached(computerId, scope).sandbox!;
     const url = await sandbox.computer?.streamUrl?.();
     if (!url) return null;
     const cookie = await sandbox.getPortAuthCookie(COMPUTER_VIEWER_PORT);
     if (!cookie) return null;
     return { url, headers: { cookie: `${cookie.name}=${cookie.value}` } };
+  }
+
+  #attached(computerId: string, scope: MastraComputerScope): Entry {
+    const entry = this.#computers.get(computerId);
+    const key = JSON.stringify([scope.resourceId, scope.threadId]);
+    if (this.#attachments.get(key) !== computerId || !entry?.sandbox || entry.ownerResourceId !== scope.resourceId) {
+      throw new Error('computer not attached');
+    }
+    return entry;
+  }
+
+  /**
+   * Who holds the computer's input. Throws when it isn't attached to this thread.
+   *
+   * @experimental
+   */
+  async controlState(computerId: string, scope: MastraComputerScope): Promise<MastraComputerControl> {
+    const { control } = this.#attached(computerId, scope);
+    return { holder: control.holder, ...(control.reason !== undefined && { reason: control.reason }) };
+  }
+
+  /**
+   * The user takes the computer's input (`take`) or hands it back to the agent (`release`).
+   * The change applies immediately; an in-flight action finishes, later ones refuse.
+   *
+   * @experimental
+   */
+  async control(
+    computerId: string,
+    scope: MastraComputerScope,
+    input: { action: 'take' | 'release'; note?: string },
+  ): Promise<MastraComputerControlResult> {
+    const entry = this.#attached(computerId, scope);
+    const note = input.note?.trim() || undefined;
+    if (note && note.length > NOTE_MAX) throw new Error('note too long');
+    const holder = input.action === 'take' ? 'human' : 'agent';
+    if (entry.control.holder === holder) return { holder, notified: false, reason: 'no-change' };
+    const key = JSON.stringify([scope.resourceId, scope.threadId]);
+    const target =
+      holder === 'human'
+        ? { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(key) }
+        : entry.control.target;
+    entry.control =
+      holder === 'human'
+        ? { holder, reason: 'user took control', target }
+        : { holder };
+    return { holder, ...(await this.#notify(entry, holder, target, note)) };
+  }
+
+  /** Tells the agent on the lease's thread that control changed hands. Never throws. */
+  async #notify(
+    entry: Entry,
+    holder: 'agent' | 'human',
+    target: Lease['target'],
+    note: string | undefined,
+  ): Promise<Omit<MastraComputerControlResult, 'holder'>> {
+    const mastra = target?.mastra;
+    let agent: Agent | undefined;
+    try {
+      agent = target?.agentId && mastra ? mastra.getAgentById(target.agentId) : undefined;
+    } catch {
+      agent = undefined;
+    }
+    if (!agent || !target) return { notified: false, reason: 'no-agent' };
+    const released = holder === 'agent';
+    let reason: MastraComputerControlResult['reason'];
+    try {
+      const result = await agent.sendNotificationSignal(
+        {
+          source: 'computer',
+          kind: released ? 'control-returned' : 'control-taken',
+          // `urgent` delivers into an active run and wakes an idle one; `high` can be
+          // summarized with a non-waking signal while the thread is active.
+          priority: 'urgent',
+          summary: released
+            ? `The user handed control back${note ? `: ${note}` : ''}`
+            : 'The user took control of the computer',
+          attributes: { computerId: entry.id },
+        },
+        {
+          resourceId: target.resourceId,
+          threadId: target.threadId,
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { memory: { thread: target.threadId, resource: target.resourceId } },
+          },
+        },
+      );
+      const accepted = await result.accepted;
+      if (accepted?.action === 'wake' || accepted?.action === 'deliver') return { notified: true };
+      reason = 'not-delivered';
+    } catch (error) {
+      reason = String((error as Error)?.message).includes('notifications storage domain')
+        ? 'no-notifications-storage'
+        : 'error';
+    }
+    mastra?.getLogger?.()?.warn('computer control change was not delivered to the agent', {
+      computer: entry.id.slice(0, 12),
+      reason,
+    });
+    return { notified: false, reason };
   }
 }

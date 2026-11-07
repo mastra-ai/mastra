@@ -6,11 +6,7 @@ export interface RfbClient extends EventTarget {
   disconnect(): void;
 }
 
-export type RfbConstructor = new (
-  target: HTMLElement,
-  url: string,
-  options?: { wsProtocols?: string[] },
-) => RfbClient;
+export type RfbConstructor = new (target: HTMLElement, url: string, options?: { wsProtocols?: string[] }) => RfbClient;
 
 /**
  * Load the bundled noVNC client on demand. It is imported lazily because its
