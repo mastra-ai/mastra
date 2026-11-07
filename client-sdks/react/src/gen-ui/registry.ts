@@ -1,4 +1,11 @@
-import type { Catalog, InferCatalogComponents } from '@json-render/core';
+import type {
+  Catalog,
+  ComputedFunction,
+  DirectiveDefinition,
+  EditMode,
+  InferCatalogComponents,
+  ValidationFunction,
+} from '@json-render/core';
 import { defineRegistry } from '@json-render/react';
 import type { ComponentRegistry, Components } from '@json-render/react';
 import type { ComponentType } from 'react';
@@ -129,6 +136,19 @@ export interface GenUISpecToolOptions {
   name?: string;
   /** Extra guidance appended to the generated tool description. */
   instructions?: string;
+  /**
+   * The edit tool, through which the model changes an earlier interface into a new one. On by default with
+   * json-render's `patch` mode; `false` turns it off.
+   */
+  edit?: boolean | GenUISpecEditToolOptions;
+}
+
+/** @experimental Generative UI is in beta and may change without notice. */
+export interface GenUISpecEditToolOptions {
+  /** Defaults to `ui_spec_edit`. */
+  name?: string;
+  /** json-render edit modes the model may use. Defaults to `['patch']`. */
+  modes?: EditMode[];
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -144,6 +164,12 @@ export interface CreateGenUIOptions<C extends Catalog = Catalog> {
   fallbacks?: GenUIFallbacks;
   /** Expose `ui_spec`, through which the model composes catalog components into a json-render spec. */
   specTool?: boolean | GenUISpecToolOptions;
+  /** Functions specs may call with `$computed`. */
+  functions?: Record<string, ComputedFunction>;
+  /** Validation functions form fields may use in `checks`, besides json-render's built-in ones. */
+  validationFunctions?: Record<string, ValidationFunction>;
+  /** Custom `$`-prefixed prop expressions specs may use. Their descriptions are sent to the model. */
+  directives?: DirectiveDefinition[];
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -152,6 +178,8 @@ export interface GenUIComponentEntry {
   props: z.ZodType;
   description?: string;
   events: readonly string[];
+  /** Named slots specs may fill besides `children`. */
+  slots: readonly string[];
   /** Whether model-composed specs may use the component. */
   declarative: boolean;
   /** JSON Schema of the props, sent to the model. */
@@ -183,7 +211,10 @@ export interface GenUIRegistry<C extends Catalog = Catalog> {
   readonly componentTools: Readonly<Record<string, string>>;
   readonly tools: Readonly<Record<string, GenUIToolRendererDefinition<any, any>>>;
   readonly fallbacks: GenUIFallbacks;
-  readonly specTool?: { name: string; instructions?: string };
+  readonly specTool?: { name: string; instructions?: string; edit?: { name: string; modes: EditMode[] } };
+  readonly functions: Readonly<Record<string, ComputedFunction>>;
+  readonly validationFunctions: Readonly<Record<string, ValidationFunction>>;
+  readonly directives: DirectiveDefinition[];
 }
 
 const COMPONENT_NAME = /^[A-Za-z0-9_\-.:]{1,128}$/;
@@ -204,7 +235,7 @@ function modelSchema(schema: z.ZodType): JSONObject {
 export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOptions<C>): GenUIRegistry<C> {
   const { catalog } = options;
   const data = (catalog?.data ?? {}) as {
-    components?: Record<string, { props: z.ZodType; description?: string; events?: string[] }>;
+    components?: Record<string, { props: z.ZodType; description?: string; events?: string[]; slots?: string[] }>;
     actions?: Record<string, { params?: z.ZodType; description?: string }>;
   };
   const catalogComponents = data.components ?? {};
@@ -230,6 +261,7 @@ export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOpt
       name,
       props: definition.props,
       events: definition.events ?? [],
+      slots: (definition.slots ?? []).filter(slot => slot !== 'default'),
       declarative: tool?.declarative ?? true,
       propsSchema: modelSchema(definition.props),
     };
@@ -264,7 +296,23 @@ export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOpt
     const name = config.name ?? 'ui_spec';
     if (!TOOL_NAME.test(name)) throw new Error(`Invalid GenUI tool name "${name}"`);
     if (componentTools[name] || options.tools?.[name]) throw new Error(`GenUI tool name "${name}" is used twice`);
-    specTool = { name, ...(config.instructions ? { instructions: config.instructions } : {}) };
+    let edit: NonNullable<GenUIRegistry['specTool']>['edit'];
+    if (config.edit !== false) {
+      const editConfig = config.edit === true || !config.edit ? {} : config.edit;
+      const editName = editConfig.name ?? 'ui_spec_edit';
+      if (!TOOL_NAME.test(editName)) throw new Error(`Invalid GenUI tool name "${editName}"`);
+      if (editName === name || componentTools[editName] || options.tools?.[editName]) {
+        throw new Error(`GenUI tool name "${editName}" is used twice`);
+      }
+      const modes = [...new Set<EditMode>(editConfig.modes ?? ['patch'])];
+      if (!modes.length) throw new Error('The GenUI spec edit tool needs at least one edit mode');
+      edit = { name: editName, modes };
+    }
+    specTool = {
+      name,
+      ...(config.instructions ? { instructions: config.instructions } : {}),
+      ...(edit ? { edit } : {}),
+    };
   }
 
   const { registry } = catalog
@@ -280,5 +328,8 @@ export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOpt
     tools: Object.freeze({ ...options.tools }),
     fallbacks: options.fallbacks ?? {},
     ...(specTool ? { specTool } : {}),
+    functions: Object.freeze({ ...options.functions }),
+    validationFunctions: Object.freeze({ ...options.validationFunctions }),
+    directives: [...(options.directives ?? [])],
   });
 }
