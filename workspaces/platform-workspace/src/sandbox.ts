@@ -146,9 +146,6 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * The first computer call installs the desktop (about 80 s) unless the
    * template was built with {@link withDesktop} and has finished building.
    * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
-   *
-   * Call the agent with `toolCallConcurrency: 1`: by default the tool calls of
-   * one model step run concurrently and can reach the desktop out of order.
    */
   computer?: boolean;
 }
@@ -1943,6 +1940,14 @@ export class PlatformSandbox extends MastraSandbox {
     }
   }
 
+  /**
+   * Shared proxy lookup for concurrent `getInfo()` calls. Workspace tools
+   * (including the computer tools) await `getInfo()` before acting; one shared
+   * request makes concurrent callers resume together, in the order they called,
+   * so a model step's click, type and Enter reach the desktop in model order.
+   */
+  private _infoRequest?: Promise<SandboxInfo>;
+
   async getInfo(): Promise<SandboxInfo> {
     // Before this process has started the sandbox, `_sandboxId` is at best a
     // caller-supplied hint for `start()` to reattach by. Asking the proxy
@@ -1982,7 +1987,14 @@ export class PlatformSandbox extends MastraSandbox {
         },
       };
     }
-    const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+    this._infoRequest ??= this._fetchInfo(this._sandboxId).finally(() => {
+      this._infoRequest = undefined;
+    });
+    return this._infoRequest;
+  }
+
+  private async _fetchInfo(sandboxId: string): Promise<SandboxInfo> {
+    const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
       id: json.id,

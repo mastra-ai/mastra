@@ -4372,8 +4372,8 @@ describe('PlatformSandbox computer driven by an agent', () => {
 
   /**
    * One model step that clicks, types and presses Enter. Every computer tool awaits
-   * `getInfo()` (a proxy round trip on a running sandbox) before acting, so the
-   * slowest round trip is given to the first call, as on staging.
+   * `getInfo()` (a proxy round trip on a running sandbox) before acting. Each
+   * request is slower than the next, so separate round trips would reverse the order.
    */
   async function runClickTypeEnter(generateOptions: { toolCallConcurrency?: number }) {
     const infoDelaysMs = [150, 100, 50];
@@ -4430,13 +4430,46 @@ describe('PlatformSandbox computer driven by an agent', () => {
     ]);
   });
 
-  // Canary for a core limitation, not desired behaviour. It fails when core changes how it
-  // schedules a step's tool calls; if core then keeps model order, drop it and the docs requirement.
-  it("documents a known core limitation: default tool-call concurrency reorders one step's actions", async () => {
+  it('shares one in-flight getInfo() request between concurrent callers, and retries after a failure', async () => {
+    let gets = 0;
+    let fail = false;
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/sandbox/sbx_1') && (init?.method ?? 'GET') === 'GET') {
+        gets++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        if (fail) return new Response('boom', { status: 500 });
+        return json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' });
+      }
+      return json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' });
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+    await sandbox._start();
+
+    const infos = await Promise.all([sandbox.getInfo(), sandbox.getInfo(), sandbox.getInfo()]);
+    expect(gets).toBe(1);
+    expect(infos.map(i => i.id)).toEqual(['sbx_1', 'sbx_1', 'sbx_1']);
+
+    await sandbox.getInfo();
+    expect(gets).toBe(2);
+
+    fail = true;
+    await expect(sandbox.getInfo()).rejects.toThrow();
+    fail = false;
+    await expect(sandbox.getInfo()).resolves.toMatchObject({ id: 'sbx_1' });
+    expect(gets).toBe(4);
+  });
+
+  // Regression: on staging, separate getInfo() round trips sent Enter before the text.
+  it('runs the actions of one step in the model order under the default tool-call concurrency', async () => {
     expect(await runClickTypeEnter({})).toEqual([
-      'xdotool key --clearmodifiers -- Return',
-      "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
       'xdotool mousemove 1 2 click 1',
+      "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
+      'xdotool key --clearmodifiers -- Return',
     ]);
   });
 });
