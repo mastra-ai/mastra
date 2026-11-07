@@ -1,9 +1,9 @@
 import type { Catalog, InferCatalogComponents } from '@json-render/core';
 import { defineRegistry } from '@json-render/react';
 import type { ComponentRegistry, Components } from '@json-render/react';
-import type { GenUILimits, GenUIPlacement, JSONObject } from '@mastra/client-js/gen-ui';
 import type { ComponentType } from 'react';
 import { z } from 'zod/v4';
+import type { JSONObject } from './json';
 
 /**
  * Props for the optional preview rendered while a component tool's arguments are still streaming.
@@ -30,7 +30,7 @@ export interface GenUIComponentToolOptions {
   responseSchema?: z.ZodType;
   /** Rendered instead of the component while the model is still writing the arguments. */
   streaming?: ComponentType<GenUIStreamingProps>;
-  /** Also offer the component in `ui_surface` specs. Defaults to `true`. */
+  /** Also offer the component in specs the model composes through the spec tool. Defaults to `true`. */
   declarative?: boolean;
 }
 
@@ -103,12 +103,12 @@ export function defineGenUIToolRenderer<
 export interface GenUIFallbackProps {
   /** Human-readable reason, safe to display. */
   reason: string;
-  kind: 'unknown-component' | 'invalid-props' | 'render-error' | 'invalid-surface';
+  kind: 'unknown-component' | 'invalid-props' | 'render-error' | 'invalid-spec';
   component?: string;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUISurfaceStatusProps {
+export interface GenUISpecStatusProps {
   status: 'streaming' | 'failed' | 'aborted';
   error?: string;
 }
@@ -119,23 +119,21 @@ export interface GenUIFallbacks {
   Fallback?: ComponentType<GenUIFallbackProps>;
   /** Rendered while a tool's arguments are streaming. */
   Loading?: ComponentType<{ component?: string }>;
-  /** Rendered next to a surface while it streams, or after it failed or was aborted. */
-  SurfaceStatus?: ComponentType<GenUISurfaceStatusProps>;
+  /** Rendered next to a spec while the model writes it, or after its tool call failed or was stopped. */
+  SpecStatus?: ComponentType<GenUISpecStatusProps>;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUISurfaceToolOptions {
-  /** Defaults to `ui_surface`. */
+export interface GenUISpecToolOptions {
+  /** Defaults to `ui_spec`. */
   name?: string;
   /** Extra guidance appended to the generated tool description. */
   instructions?: string;
-  /** Placements the model may choose. Defaults to `['inline']`. */
-  placements?: readonly GenUIPlacement[];
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface CreateGenUIOptions<C extends Catalog = Catalog> {
-  /** json-render catalog: component props schemas, descriptions and events, plus the actions surfaces may bind. */
+  /** json-render catalog: component props schemas, descriptions and events, plus the actions specs may bind. */
   catalog?: C;
   /** One React implementation per catalog component, exactly as passed to json-render's `defineRegistry`. */
   components?: Components<C>;
@@ -144,9 +142,8 @@ export interface CreateGenUIOptions<C extends Catalog = Catalog> {
   /** Renderers for backend tools, by tool name. */
   tools?: Record<string, GenUIToolRendererDefinition<any, any>>;
   fallbacks?: GenUIFallbacks;
-  /** Expose `ui_surface`, through which the model composes catalog components into a json-render spec. */
-  surfaceTool?: boolean | GenUISurfaceToolOptions;
-  limits?: Partial<GenUILimits>;
+  /** Expose `ui_spec`, through which the model composes catalog components into a json-render spec. */
+  specTool?: boolean | GenUISpecToolOptions;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -155,7 +152,7 @@ export interface GenUIComponentEntry {
   props: z.ZodType;
   description?: string;
   events: readonly string[];
-  /** Whether surfaces may use the component. */
+  /** Whether model-composed specs may use the component. */
   declarative: boolean;
   /** JSON Schema of the props, sent to the model. */
   propsSchema: JSONObject;
@@ -186,8 +183,7 @@ export interface GenUIRegistry<C extends Catalog = Catalog> {
   readonly componentTools: Readonly<Record<string, string>>;
   readonly tools: Readonly<Record<string, GenUIToolRendererDefinition<any, any>>>;
   readonly fallbacks: GenUIFallbacks;
-  readonly surfaceTool?: { name: string; instructions?: string; placements: readonly GenUIPlacement[] };
-  readonly limits?: Partial<GenUILimits>;
+  readonly specTool?: { name: string; instructions?: string };
 }
 
 const COMPONENT_NAME = /^[A-Za-z0-9_\-.:]{1,128}$/;
@@ -201,7 +197,7 @@ function modelSchema(schema: z.ZodType): JSONObject {
 
 /**
  * Build a GenUI setup around a json-render catalog. The catalog declares what the model may render; the
- * options decide how it reaches the model (component tools, `ui_surface`) and how backend tools render.
+ * options decide how it reaches the model (component tools, `ui_spec`) and how backend tools render.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
@@ -259,17 +255,16 @@ export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOpt
     actions[name] = { name, ...definition };
   }
 
-  let surfaceTool: GenUIRegistry['surfaceTool'];
-  if (options.surfaceTool) {
+  let specTool: GenUIRegistry['specTool'];
+  if (options.specTool) {
     if (!Object.values(components).some(entry => entry.declarative)) {
-      throw new Error('The GenUI surface tool needs at least one catalog component surfaces may use');
+      throw new Error('The GenUI spec tool needs at least one catalog component specs may use');
     }
-    const config = options.surfaceTool === true ? {} : options.surfaceTool;
-    const name = config.name ?? 'ui_surface';
+    const config = options.specTool === true ? {} : options.specTool;
+    const name = config.name ?? 'ui_spec';
     if (!TOOL_NAME.test(name)) throw new Error(`Invalid GenUI tool name "${name}"`);
     if (componentTools[name] || options.tools?.[name]) throw new Error(`GenUI tool name "${name}" is used twice`);
-    const placements = config.placements?.length ? [...config.placements] : (['inline'] as GenUIPlacement[]);
-    surfaceTool = { name, placements, ...(config.instructions ? { instructions: config.instructions } : {}) };
+    specTool = { name, ...(config.instructions ? { instructions: config.instructions } : {}) };
   }
 
   const { registry } = catalog
@@ -284,7 +279,6 @@ export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOpt
     componentTools: Object.freeze(componentTools),
     tools: Object.freeze({ ...options.tools }),
     fallbacks: options.fallbacks ?? {},
-    ...(surfaceTool ? { surfaceTool } : {}),
-    ...(options.limits ? { limits: options.limits } : {}),
+    ...(specTool ? { specTool } : {}),
   });
 }

@@ -1,4 +1,7 @@
+import { parsePartialJson } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { isJSONObject } from './json';
+import type { JSONObject } from './json';
 import type { GenUIToolPhase } from './registry';
 
 /**
@@ -15,6 +18,13 @@ export interface NormalizedToolCall {
   args: unknown;
   output: unknown;
   errorText?: string;
+}
+
+/** Arguments so far: repaired from the streamed text while the model writes them, the parsed input afterwards. */
+export function partialArgsOf(call: NormalizedToolCall): JSONObject | undefined {
+  const value =
+    call.phase === 'input-streaming' && call.argsText !== undefined ? parsePartialJson(call.argsText).value : call.args;
+  return isJSONObject(value) ? value : undefined;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;

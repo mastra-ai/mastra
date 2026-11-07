@@ -1,68 +1,15 @@
 import { JSONUIProvider } from '@json-render/react';
 import type { EventHandle } from '@json-render/react';
-import { GENUI_DATA_PART_TYPE, parsePartialJSON } from '@mastra/client-js/gen-ui';
-import type { GenUISurface, JSONObject, JSONValue } from '@mastra/client-js/gen-ui';
-import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { z } from 'zod/v4';
-import type { DataPart, DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
+import type { DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
 import { GenUIProvider, GenUIToolCallScope, useGenUIController, useGenUIToolApproval } from './context';
 import type { GenUIController } from './controller';
 import type { GenUIToolCallProps, GenUIToolPhase } from './registry';
-import { GenUIErrorBoundary, SurfaceFrame, resolveFallbacks } from './surface';
-import { normalizeToolPart } from './tool-parts';
+import { GenUIErrorBoundary, GenUISpecView, resolveFallbacks } from './spec-view';
+import { normalizeToolPart, partialArgsOf } from './tool-parts';
 import type { NormalizedToolCall } from './tool-parts';
 import { validate, validateModelInput } from './validate';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-function isJSONValue(value: unknown): value is JSONValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJSONValue);
-  return isJSONObject(value);
-}
-
-function isJSONObject(value: unknown): value is JSONObject {
-  return isRecord(value) && Object.values(value).every(isJSONValue);
-}
-
-function partialArgsOf(call: NormalizedToolCall): JSONObject | undefined {
-  const value =
-    call.phase === 'input-streaming' && call.argsText !== undefined ? parsePartialJSON(call.argsText).value : call.args;
-  return isJSONObject(value) ? value : undefined;
-}
-
-/**
- * Inline anchor for a `data-gen-ui` part: draws the surface this event created, nothing otherwise.
- * `preview` stands in until the controller has that surface.
- */
-function SurfaceAnchor({ eventId, envelope, preview }: { eventId: string; envelope?: object; preview?: GenUISurface }) {
-  const controller = useGenUIController();
-  // A reconnect may replay an event in a later message; only its first part draws the surface.
-  const isAnchor = () => !envelope || controller.isAnchor(eventId, envelope);
-  const getSurfaceId = () => {
-    if (!isAnchor()) return undefined;
-    const state = controller.getState();
-    return state.surfaceOrder.find(id => state.surfaces[id]?.anchorEventId === eventId);
-  };
-  const getRejection = () =>
-    isAnchor() ? controller.getState().diagnostics.find(d => d.eventId === eventId)?.message : undefined;
-  const getPlacement = () => {
-    const id = getSurfaceId();
-    return id ? controller.getState().surfaces[id]?.placement : undefined;
-  };
-  const surfaceId = useSyncExternalStore(controller.subscribe, getSurfaceId, getSurfaceId);
-  const rejection = useSyncExternalStore(controller.subscribe, getRejection, getRejection);
-  const placement = useSyncExternalStore(controller.subscribe, getPlacement, getPlacement);
-  const { Fallback } = resolveFallbacks(controller.registry.fallbacks);
-  if (surfaceId) return placement === 'inline' ? <SurfaceFrame surfaceId={surfaceId} /> : null;
-  if (preview) return <SurfaceFrame surfaceId={preview.id} preview={preview} />;
-  if (rejection)
-    return <Fallback kind="invalid-surface" reason={`This interface could not be displayed: ${rejection}`} />;
-  return null;
-}
 
 function resolvePhase(call: NormalizedToolCall, approvalKind: 'approval' | 'suspended' | undefined): GenUIToolPhase {
   // A finished call wins over approval metadata that may linger in hydrated history.
@@ -136,7 +83,7 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
       />
     );
   }
-  // Catalog components may use json-render hooks, which need a provider even without a surface.
+  // Catalog components may use json-render hooks, which need a provider even outside a spec.
   return (
     <JSONUIProvider registry={controller.registry.registry}>
       <Rendered
@@ -149,26 +96,15 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
   );
 }
 
-/** Component tools have no surface to bind actions in, so their events go nowhere. */
+/** Component tools have no spec to bind actions in, so their events go nowhere. */
 const ignoreEvent = () => {};
 const UNBOUND: EventHandle = Object.freeze({ emit: ignoreEvent, shouldPreventDefault: false, bound: false });
 const unboundEvent = () => UNBOUND;
 
-/** The surface created by a surface tool call, anchored at the call's position in the message. */
-function SurfaceToolView({ call }: { call: NormalizedToolCall }) {
-  const controller = useGenUIController();
-  const { Loading } = resolveFallbacks(controller.registry.fallbacks);
-  const preview = controller.previewSurface(call);
-  // Surfaces placed outside the message show up in their outlet once complete.
-  const inlinePreview = preview?.placement === 'inline' ? preview : undefined;
-  if (call.phase === 'input-streaming' && !inlinePreview) return <Loading />;
-  return <SurfaceAnchor eventId={`tool:${call.toolCallId}`} preview={inlinePreview} />;
-}
-
 function renderToolCall(controller: GenUIController, call: NormalizedToolCall): ReactNode | undefined {
   const { registry } = controller;
   let view: ReactNode;
-  if (registry.surfaceTool?.name === call.toolName) view = <SurfaceToolView call={call} />;
+  if (registry.specTool?.name === call.toolName) view = <GenUISpecView call={call} />;
   else if (registry.componentTools[call.toolName]) {
     view = <ComponentToolView call={call} componentName={registry.componentTools[call.toolName]!} />;
   } else if (registry.tools[call.toolName]) view = <BackendToolView call={call} />;
@@ -204,19 +140,8 @@ function renderToolCall(controller: GenUIController, call: NormalizedToolCall): 
 export function createGenUIRenderers(
   controller: GenUIController,
   base: MessageRenderers = {},
-): Required<Pick<MessageRenderers, 'Data' | 'ToolInvocation' | 'DynamicTool'>> {
+): Required<Pick<MessageRenderers, 'ToolInvocation' | 'DynamicTool'>> {
   return {
-    Data: (part: DataPart) => {
-      if (part.type !== GENUI_DATA_PART_TYPE) return base.Data?.(part);
-      const envelope = isRecord(part.data) ? part.data : undefined;
-      // `false` renders nothing without falling through to MessageFactory's fallback.
-      if (!envelope || typeof envelope.eventId !== 'string') return false;
-      return (
-        <GenUIProvider controller={controller}>
-          <SurfaceAnchor eventId={envelope.eventId} envelope={envelope} />
-        </GenUIProvider>
-      );
-    },
     ToolInvocation: (part: ToolInvocationPart) => {
       const call = normalizeToolPart(part);
       return (call && renderToolCall(controller, call)) ?? base.ToolInvocation?.(part);

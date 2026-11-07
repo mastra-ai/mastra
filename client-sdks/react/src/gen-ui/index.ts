@@ -7,9 +7,9 @@ export type {
   GenUIFallbackProps,
   GenUIFallbacks,
   GenUIRegistry,
+  GenUISpecStatusProps,
+  GenUISpecToolOptions,
   GenUIStreamingProps,
-  GenUISurfaceStatusProps,
-  GenUISurfaceToolOptions,
   GenUIToolApproval,
   GenUIToolCallProps,
   GenUIToolPhase,
@@ -28,27 +28,24 @@ export {
   GenUIProvider,
   useGenUIController,
   useGenUIPublishedContext,
-  useGenUISurface,
-  useGenUISurfaceIds,
-  useGenUISurfaceState,
   useGenUIToolApproval,
   useGenUIToolResponse,
 } from './context';
-export type { GenUISurfaceState, GenUIToolResponse } from './context';
+export type { GenUIToolResponse } from './context';
+export type { GenUIContextEntry, GenUIContextStore } from './context-store';
+export type { JSONObject, JSONValue } from './json';
 export {
   DefaultGenUIFallback,
   DefaultGenUILoading,
-  DefaultGenUISurfaceStatus,
+  DefaultGenUISpecStatus,
   GenUIErrorBoundary,
-  GenUISurfaceView,
-} from './surface';
-export type { GenUISurfaceViewProps } from './surface';
-export type { GenUIEditsStore, GenUISurfaceStateSnapshot } from './surface-store';
+  GenUISpecView,
+} from './spec-view';
+export type { GenUISpecViewProps } from './spec-view';
+export type { GenUISpecStatus } from './spec';
 export type { GenUIValidationResult } from './validate';
 export { createGenUIRenderers } from './renderers';
 export { useGenUIChat } from './chat';
 export type { GenUIChatHandle, UseGenUIChatProps } from './chat';
-export { GenUISurfaceOutlet } from './outlet';
-export type { GenUISurfaceOutletProps } from './outlet';
 export { normalizeToolPart } from './tool-parts';
 export type { NormalizedToolCall } from './tool-parts';

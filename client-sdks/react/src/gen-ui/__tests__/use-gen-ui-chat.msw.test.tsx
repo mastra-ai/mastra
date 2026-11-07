@@ -4,7 +4,7 @@ import { useBoundProp } from '@json-render/react';
 import type { BaseComponentProps } from '@json-render/react';
 import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http } from 'msw';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -15,16 +15,14 @@ import { renderWithProviders } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
 import {
   createGenUI,
-  createGenUIController,
   defineGenUIToolRenderer,
   GenUIProvider,
-  GenUISurfaceOutlet,
   useGenUIChat,
   useGenUIPublishedContext,
   useGenUIToolResponse,
 } from '../index';
 import type { CreateGenUIOptions, GenUIActionHandlers, GenUIRegistry } from '../index';
-import { chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
+import { chunk, controllableStream, finish, sseResponse, STREAM_URL } from './sse';
 
 const weatherCard = {
   description: 'Current weather for a city',
@@ -55,12 +53,10 @@ function GenUIChat({
   genUI,
   actions,
   initialMessages,
-  outlet,
 }: {
   genUI: GenUIRegistry<any>;
   actions?: GenUIActionHandlers<any>;
   initialMessages?: MastraDBMessage[];
-  outlet?: boolean;
 }) {
   const chat = useGenUIChat({
     agentId: 'agent-1',
@@ -81,11 +77,6 @@ function GenUIChat({
           {...chat.genUI.renderers}
         />
       ))}
-      {outlet && (
-        <div data-testid="panel">
-          <GenUISurfaceOutlet controller={chat.genUI.controller} placement="panel" />
-        </div>
-      )}
     </div>
   );
 }
@@ -96,149 +87,39 @@ const send = async (message: string) => {
   });
 };
 
-afterEach(() => {
-  cleanup();
+/** One streamed response in which the model calls the spec tool; the browser then answers it. */
+const specCall = (toolCallId: string, args: unknown) => [
+  chunk('start'),
+  chunk('tool-call', { toolCallId, toolName: 'ui_spec', args }),
+  finish('tool-calls'),
+];
+
+const specView = (toolCallId: string) => document.querySelector(`[data-genui-spec="${toolCallId}"]`);
+
+const assistantWith = (parts: unknown[]): MastraDBMessage => ({
+  id: 'm1',
+  role: 'assistant',
+  createdAt: new Date(0),
+  threadId: 'thread-1',
+  resourceId: 'resource-1',
+  content: { format: 2, parts: parts as MastraDBMessage['content']['parts'] },
 });
 
-describe('useGenUIChat — declarative surfaces from the native stream', () => {
-  it('renders a surface the agent streams as data-gen-ui chunks and updates it without remounting', async () => {
-    weatherMounts = 0;
-    const stream = controllableStream();
-    server.use(http.post(STREAM_URL, () => stream.response()));
-    renderWithProviders(<GenUIChat genUI={weatherUI()} />);
+const specInvocation = (toolCallId: string, args: object, result?: unknown) => ({
+  type: 'tool-invocation' as const,
+  toolInvocation:
+    result === undefined
+      ? { state: 'call' as const, toolCallId, toolName: 'ui_spec', args }
+      : { state: 'result' as const, toolCallId, toolName: 'ui_spec', args, result },
+});
 
-    await send('Weather in Paris?');
-    act(() =>
-      stream.push(
-        chunk('start'),
-        genUIChunk({
-          version: 1,
-          eventId: 'e1',
-          surfaceId: 'weather',
-          operations: [
-            {
-              op: 'createSurface',
-              spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Paris', temp: 21 } } } },
-            },
-          ],
-        }),
-      ),
-    );
-    expect((await screen.findByTestId('weather')).textContent).toContain('Paris: 21°');
+const weatherSpec = {
+  root: 'card',
+  elements: [{ id: 'card', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
+};
 
-    act(() =>
-      stream.push(
-        genUIChunk({
-          version: 1,
-          eventId: 'e2',
-          surfaceId: 'weather',
-          operations: [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/card/props/temp', value: 23 }] }],
-        }),
-        // A replayed event (reconnect) must not apply twice or add a second surface.
-        genUIChunk({
-          version: 1,
-          eventId: 'e2',
-          surfaceId: 'weather',
-          operations: [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/card/props/temp', value: 99 }] }],
-        }),
-        chunk('text-start', { id: 't1' }),
-        chunk('text-delta', { id: 't1', text: 'Here you go.' }),
-        chunk('text-end', { id: 't1' }),
-        finish('stop'),
-      ),
-    );
-    stream.close();
-
-    await waitFor(() => expect(screen.getByTestId('weather').textContent).toContain('Paris: 23°'));
-    expect(screen.getAllByTestId('weather')).toHaveLength(1);
-    expect(screen.getByText('Here you go.')).toBeTruthy();
-    expect(weatherMounts).toBe(1);
-  });
-
-  it('shows a surface as failed when the tool that was building it throws', async () => {
-    const stream = controllableStream();
-    server.use(http.post(STREAM_URL, () => stream.response()));
-    renderWithProviders(<GenUIChat genUI={weatherUI()} />);
-
-    await send('Weather in Paris?');
-    act(() =>
-      stream.push(
-        chunk('start'),
-        chunk('tool-call', { toolCallId: 'c1', toolName: 'weatherReport', args: { city: 'Paris' } }),
-        genUIChunk({
-          version: 1,
-          eventId: 'e1',
-          surfaceId: 'weather',
-          operations: [
-            {
-              op: 'createSurface',
-              source: { toolCallId: 'c1' },
-              spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Paris', temp: 0 } } } },
-            },
-          ],
-        }),
-      ),
-    );
-    await screen.findByTestId('weather');
-    expect(screen.queryByRole('alert')).toBeNull();
-
-    act(() =>
-      stream.push(
-        chunk('tool-error', { toolCallId: 'c1', toolName: 'weatherReport', error: 'Weather service unavailable' }),
-        finish('stop'),
-      ),
-    );
-    stream.close();
-
-    await waitFor(() => expect(current.isRunning).toBe(false));
-    expect(current.genUI.controller.getSurfaceStatus('weather')).toBe('failed');
-    expect(current.genUI.controller.getSurfaceError('weather')).toBe('Weather service unavailable');
-    expect(screen.getByRole('alert').textContent).toContain('Weather service unavailable');
-  });
-
-  it('shows a fallback instead of executing anything for unknown components or invalid props', async () => {
-    server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
-          chunk('start'),
-          genUIChunk({
-            version: 1,
-            eventId: 'e1',
-            surfaceId: 's',
-            operations: [
-              {
-                op: 'createSurface',
-                spec: {
-                  root: 'root',
-                  elements: { root: { type: 'WeatherCard', props: { city: 'Oslo', temp: 'cold' }, children: [] } },
-                },
-              },
-              { op: 'setStatus', status: 'ready' },
-            ],
-          }),
-          genUIChunk({
-            version: 1,
-            eventId: 'e2',
-            surfaceId: 'other',
-            operations: [
-              {
-                op: 'createSurface',
-                spec: { root: 'x', elements: { x: { type: 'Script', props: { html: '<img onerror=alert(1)>' } } } },
-              },
-              { op: 'setStatus', status: 'ready' },
-            ],
-          }),
-          finish('stop'),
-        ]),
-      ),
-    );
-    renderWithProviders(<GenUIChat genUI={weatherUI()} />);
-    await send('go');
-
-    expect(await screen.findByText(/"WeatherCard" received invalid data/)).toBeTruthy();
-    expect(await screen.findByText(/Script/)).toBeTruthy();
-    expect(document.querySelector('img')).toBeNull();
-  });
+afterEach(() => {
+  cleanup();
 });
 
 describe('useGenUIChat — opt-in', () => {
@@ -249,12 +130,12 @@ describe('useGenUIChat — opt-in', () => {
         bodies.push((await request.json()) as Record<string, unknown>);
         return sseResponse([
           chunk('start'),
-          genUIChunk({
-            version: 1,
-            eventId: `e${bodies.length}`,
-            surfaceId: 's',
-            operations: [{ op: 'createSurface' }],
+          chunk('tool-call', {
+            toolCallId: `c${bodies.length}`,
+            toolName: 'ui_WeatherCard',
+            args: { city: 'Oslo', temp: 4 },
           }),
+          chunk('tool-result', { toolCallId: `c${bodies.length}`, toolName: 'ui_WeatherCard', result: { ok: true } }),
           finish('stop'),
         ]);
       }),
@@ -264,7 +145,7 @@ describe('useGenUIChat — opt-in', () => {
       plain = useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
       return null;
     }
-    const registry = weatherUI({ componentTools: { WeatherCard: true } });
+    const registry = weatherUI({ componentTools: { WeatherCard: true }, specTool: true });
     renderWithProviders(
       <>
         <PlainChat />
@@ -279,24 +160,29 @@ describe('useGenUIChat — opt-in', () => {
     await waitFor(() => expect(bodies).toHaveLength(2));
 
     expect(bodies[0]!.clientTools).toBeUndefined();
-    expect(Object.keys(bodies[1]!.clientTools as object)).toEqual(['ui_WeatherCard']);
-    // The plain chat still receives the raw data part exactly as before.
+    expect(Object.keys(bodies[1]!.clientTools as object).sort()).toEqual(['ui_WeatherCard', 'ui_spec']);
+    // The plain chat still receives the raw tool call exactly as before.
     await waitFor(() =>
-      expect(plain.messages.at(-1)?.content.parts).toContainEqual(expect.objectContaining({ type: 'data-gen-ui' })),
+      expect(plain.messages.at(-1)?.content.parts).toContainEqual(
+        expect.objectContaining({
+          type: 'tool-invocation',
+          toolInvocation: expect.objectContaining({ toolName: 'ui_WeatherCard' }),
+        }),
+      ),
     );
   });
 
-  it('refuses a surface tool with no components the model can compose', () => {
+  it('refuses a spec tool with no components the model can compose', () => {
     const catalog = defineCatalog(schema, { components: { Custom: { props: z.object({}) } }, actions: {} });
-    expect(() => createGenUI({ surfaceTool: true })).toThrow(/surface tool/);
+    expect(() => createGenUI({ specTool: true })).toThrow(/spec tool/);
     expect(() =>
       createGenUI({
         catalog,
         components: { Custom: () => null },
         componentTools: { Custom: { declarative: false } },
-        surfaceTool: true,
+        specTool: true,
       }),
-    ).toThrow(/surface tool/);
+    ).toThrow(/spec tool/);
   });
 
   it('refuses a client tool that collides with a GenUI frontend tool', () => {
@@ -561,25 +447,13 @@ describe('useGenUIChat — tool UI', () => {
   });
 });
 
-describe('useGenUIChat — surface tool', () => {
-  const surfaceArgs = {
-    surfaceId: 'weather',
-    root: 'card',
-    elements: [{ id: 'card', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
-  };
-
-  it('the model builds a surface through the surface tool and learns it was applied', async () => {
+describe('useGenUIChat — spec tool', () => {
+  it('the model renders an interface through the spec tool and learns it was accepted', async () => {
     const bodies: Record<string, unknown>[] = [];
     server.use(
       http.post(STREAM_URL, async ({ request }) => {
         bodies.push((await request.json()) as Record<string, unknown>);
-        if (bodies.length === 1) {
-          return sseResponse([
-            chunk('start'),
-            chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args: surfaceArgs }),
-            finish('tool-calls'),
-          ]);
-        }
+        if (bodies.length === 1) return sseResponse(specCall('c1', weatherSpec));
         return sseResponse([
           chunk('text-start', { id: 't2' }),
           chunk('text-delta', { id: 't2', text: 'Done.' }),
@@ -588,22 +462,22 @@ describe('useGenUIChat — surface tool', () => {
         ]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ specTool: true })} />);
     await send('Weather in Rome?');
 
     expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
     expect(await screen.findByText('Done.')).toBeTruthy();
-    const tool = (bodies[0]!.clientTools as Record<string, { description: string }>).ui_surface!;
+    const tool = (bodies[0]!.clientTools as Record<string, { description: string }>).ui_spec!;
     expect(tool.description).toContain('WeatherCard');
     expect(tool.description).toContain('Current weather for a city');
     // Prop schemas are advertised once, in the input schema, not repeated in the description.
     expect(tool.description).not.toContain('propsSchema');
     expect(JSON.stringify(tool)).toContain('"temp"');
     expect(JSON.stringify(bodies[1]!.messages)).toContain('"ok":true');
-    expect(document.querySelector('[data-genui-surface="weather"]')?.getAttribute('data-genui-status')).toBe('ready');
+    expect(specView('c1')?.getAttribute('data-genui-status')).toBe('ready');
   });
 
-  it('shows a surface element by element while the model is still writing it, without remounting once it completes', async () => {
+  it('shows a spec element by element while the model is still writing it, without remounting once it completes', async () => {
     weatherMounts = 0;
     const catalog = defineCatalog(schema, {
       components: { WeatherCard: weatherCard, List: { description: 'A vertical list', props: z.object({}) } },
@@ -612,10 +486,9 @@ describe('useGenUIChat — surface tool', () => {
     const genUI = createGenUI({
       catalog,
       components: { WeatherCard, List: ({ children }) => <div data-testid="list">{children}</div> },
-      surfaceTool: true,
+      specTool: true,
     });
     const args = {
-      surfaceId: 'cities',
       elements: [
         { id: 'list', type: 'List', props: {}, children: ['rome', 'oslo'] },
         { id: 'rome', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } },
@@ -647,13 +520,12 @@ describe('useGenUIChat — surface tool', () => {
     act(() =>
       stream.push(
         chunk('start'),
-        chunk('tool-call-input-streaming-start', { toolCallId: 'c1', toolName: 'ui_surface' }),
+        chunk('tool-call-input-streaming-start', { toolCallId: 'c1', toolName: 'ui_spec' }),
         chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: text.slice(0, cut) }),
       ),
     );
     await waitFor(() => expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 30°']));
-    const surface = () => document.querySelector('[data-genui-surface="cities"]');
-    expect(surface()?.getAttribute('data-genui-status')).toBe('streaming');
+    expect(specView('c1')?.getAttribute('data-genui-status')).toBe('streaming');
     expect(document.querySelector('[data-genui-fallback]')).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
 
@@ -661,15 +533,85 @@ describe('useGenUIChat — surface tool', () => {
       stream.push(
         chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: text.slice(cut) }),
         chunk('tool-call-input-streaming-end', { toolCallId: 'c1' }),
-        chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args }),
+        chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_spec', args }),
         finish('tool-calls'),
       ),
     );
     stream.close();
     expect(await screen.findByText('Done.')).toBeTruthy();
     expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 30°', 'Oslo: 4°']);
-    expect(surface()?.getAttribute('data-genui-status')).toBe('ready');
+    expect(specView('c1')?.getAttribute('data-genui-status')).toBe('ready');
     expect(weatherMounts).toBe(2);
+  });
+
+  it('keeps what the user typed into bound state while the model is still writing the spec', async () => {
+    const catalog = defineCatalog(schema, {
+      components: {
+        Stack: { props: z.object({}) },
+        CityInput: { props: z.object({ value: z.string() }) },
+        WeatherCard: weatherCard,
+      },
+      actions: {},
+    });
+    function CityInput({ props, bindings }: BaseComponentProps<{ value: string }>) {
+      const [city, setCity] = useBoundProp(props.value, bindings?.value);
+      return (
+        <label>
+          City
+          <input value={city} onChange={event => setCity(event.target.value)} />
+        </label>
+      );
+    }
+    const genUI = createGenUI({
+      catalog,
+      components: { Stack: ({ children }) => <div>{children}</div>, CityInput, WeatherCard },
+      specTool: true,
+    });
+    const args = {
+      state: { city: 'Rome' },
+      root: 'stack',
+      elements: [
+        { id: 'stack', type: 'Stack', props: {}, children: ['input', 'card'] },
+        { id: 'input', type: 'CityInput', props: { value: { $bindState: '/city' } } },
+        { id: 'card', type: 'WeatherCard', props: { city: { $state: '/city' }, temp: 30 } },
+      ],
+    };
+    const text = JSON.stringify(args);
+    const cut = text.indexOf('"id":"card"');
+    const stream = controllableStream();
+    let requests = 0;
+    server.use(
+      http.post(STREAM_URL, () => {
+        requests++;
+        return requests === 1 ? stream.response() : sseResponse([finish('stop')]);
+      }),
+    );
+    renderWithProviders(<GenUIChat genUI={genUI} />);
+    await send('Pick a city');
+
+    act(() =>
+      stream.push(
+        chunk('start'),
+        chunk('tool-call-input-streaming-start', { toolCallId: 'c1', toolName: 'ui_spec' }),
+        chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: text.slice(0, cut) }),
+      ),
+    );
+    const input = (await screen.findByLabelText('City')) as HTMLInputElement;
+    expect(input.value).toBe('Rome');
+    fireEvent.change(input, { target: { value: 'Lyon' } });
+
+    act(() =>
+      stream.push(
+        chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: text.slice(cut) }),
+        chunk('tool-call-input-streaming-end', { toolCallId: 'c1' }),
+        chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_spec', args }),
+        finish('tool-calls'),
+      ),
+    );
+    stream.close();
+    await waitFor(() => expect(specView('c1')?.getAttribute('data-genui-status')).toBe('ready'));
+    expect((screen.getByLabelText('City') as HTMLInputElement).value).toBe('Lyon');
+    expect(screen.getByTestId('weather').textContent).toBe('Lyon: 30°');
   });
 
   type Schema = {
@@ -712,28 +654,19 @@ describe('useGenUIChat — surface tool', () => {
     return value;
   };
 
-  it('a strict-mode model can build a surface from the advertised schema alone', async () => {
+  it('a strict-mode model can build a spec from the advertised schema alone', async () => {
     const bodies: Record<string, unknown>[] = [];
     server.use(
       http.post(STREAM_URL, async ({ request }) => {
         bodies.push((await request.json()) as Record<string, unknown>);
         if (bodies.length === 1) {
           const tools = bodies[0]!.clientTools as Record<string, { inputSchema: Schema }>;
-          const args = asStrictModelSends(tools.ui_surface!.inputSchema, {
-            placement: 'inline',
-            root: 'card',
-            elements: [{ id: 'card', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
-          });
-          return sseResponse([
-            chunk('start'),
-            chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args }),
-            finish('tool-calls'),
-          ]);
+          return sseResponse(specCall('c1', asStrictModelSends(tools.ui_spec!.inputSchema, weatherSpec)));
         }
         return sseResponse([finish('stop')]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ specTool: true })} />);
     await send('Weather in Rome?');
 
     expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
@@ -750,7 +683,7 @@ describe('useGenUIChat — surface tool', () => {
         bodies.push((await request.json()) as Record<string, unknown>);
         if (bodies.length === 1) {
           const tools = bodies[0]!.clientTools as Record<string, { inputSchema: Schema }>;
-          const args = asStrictModelSends(tools.ui_surface!.inputSchema, {
+          const args = asStrictModelSends(tools.ui_spec!.inputSchema, {
             root: 'stack',
             state: JSON.stringify({ city: 'Rome' }),
             elements: [
@@ -764,11 +697,7 @@ describe('useGenUIChat — surface tool', () => {
               },
             ],
           });
-          return sseResponse([
-            chunk('start'),
-            chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args }),
-            finish('tool-calls'),
-          ]);
+          return sseResponse(specCall('c1', args));
         }
         return sseResponse([finish('stop')]);
       }),
@@ -792,26 +721,11 @@ describe('useGenUIChat — surface tool', () => {
           </button>
         ),
       },
-      surfaceTool: true,
+      specTool: true,
     });
     const asked: string[] = [];
-    function App() {
-      const chat = useGenUIChat({
-        agentId: 'agent-1',
-        threadId: 'thread-1',
-        genUI,
-        actions: { ask: ({ prompt }) => void asked.push(prompt) },
-      });
-      current = chat;
-      return (
-        <>
-          {chat.messages.map(message => (
-            <MessageFactory key={message.id} message={message} {...chat.genUI.renderers} />
-          ))}
-        </>
-      );
-    }
-    renderWithProviders(<App />);
+    const actions: GenUIActionHandlers<typeof catalog> = { ask: ({ prompt }) => void asked.push(prompt) };
+    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} />);
     await send('Weather in Rome?');
 
     expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
@@ -820,83 +734,21 @@ describe('useGenUIChat — surface tool', () => {
     await waitFor(() => expect(asked).toEqual(['Weather in Paris?']));
   });
 
-  // A model asked for a big layout picked `standalone`; with no outlet for it the surface was
-  // accepted with ok:true and shown nowhere.
-  it('only lets the model place a surface where the app renders it', async () => {
+  it('rejects a spec built from unregistered components, tells the model why, and accepts its retry', async () => {
     const bodies: Record<string, unknown>[] = [];
-    const surfaceCall = (toolCallId: string, placement: string, city: string) => [
-      chunk('start'),
-      chunk('tool-call', {
-        toolCallId,
-        toolName: 'ui_surface',
-        args: {
-          surfaceId: `weather-${city}`,
-          placement,
-          root: 'card',
-          elements: [{ id: 'card', type: 'WeatherCard', props: { city, temp: 20 } }],
-        },
-      }),
-      finish('tool-calls'),
-    ];
-    server.use(
-      http.post(STREAM_URL, async ({ request }) => {
-        bodies.push((await request.json()) as Record<string, unknown>);
-        if (bodies.length === 1) return sseResponse(surfaceCall('c1', 'standalone', 'Oslo'));
-        if (bodies.length === 2) return sseResponse(surfaceCall('c2', 'panel', 'Rome'));
-        return sseResponse([finish('stop')]);
-      }),
-    );
-    const genUI = weatherUI({ surfaceTool: { placements: ['inline', 'panel'] } });
-    renderWithProviders(<GenUIChat genUI={genUI} outlet />);
-    await send('Weather?');
-
-    const tools = bodies[0]!.clientTools as Record<string, { inputSchema: unknown; description: string }>;
-    const createSurface = JSON.stringify(tools.ui_surface!.inputSchema).match(/"placement":\{[^}]*\}/)?.[0];
-    expect(createSurface).toContain('["inline","panel"]');
-    expect(tools.ui_surface!.description).not.toContain('standalone');
-
-    await waitFor(() => expect(bodies).toHaveLength(3));
-    expect(JSON.stringify(bodies[1]!.messages)).toMatch(
-      /placement \\"standalone\\" is not available[^"]*inline, panel/,
-    );
-    expect(JSON.stringify(bodies[2]!.messages)).toContain('"ok":true,"surfaceId":"weather-Rome"');
-    expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 20°');
-    expect(within(screen.getByTestId('panel')).getByTestId('weather')).toBeTruthy();
-    expect(screen.queryByText('Oslo: 20°')).toBeNull();
-  });
-
-  it('offers only inline surfaces when the app declares no other placements', async () => {
-    const genUI = weatherUI({ surfaceTool: true });
-    const controller = createGenUIController({ registry: genUI });
-    const schema = JSON.stringify((controller.clientTools.ui_surface as { inputSchema: unknown }).inputSchema);
-    expect(schema.match(/"placement":\{[^}]*\}/)?.[0]).toContain('"enum":["inline"]');
-  });
-
-  it('rejects a surface built from unregistered components, tells the model why, and accepts its retry', async () => {
-    const bodies: Record<string, unknown>[] = [];
-    const surfaceCall = (toolCallId: string, args: unknown) => [
-      chunk('start'),
-      chunk('tool-call', { toolCallId, toolName: 'ui_surface', args }),
-      finish('tool-calls'),
-    ];
     server.use(
       http.post(STREAM_URL, async ({ request }) => {
         bodies.push((await request.json()) as Record<string, unknown>);
         if (bodies.length === 1) {
           return sseResponse(
-            surfaceCall('c1', {
-              surfaceId: 'weather',
-              root: 'n',
-              elements: [{ id: 'n', type: 'Script', props: { html: '<b>' } }],
-            }),
+            specCall('c1', { root: 'n', elements: [{ id: 'n', type: 'Script', props: { html: '<b>' } }] }),
           );
         }
-        // The model retries with the same surface id, as it naturally would.
-        if (bodies.length === 2) return sseResponse(surfaceCall('c2', surfaceArgs));
+        if (bodies.length === 2) return sseResponse(specCall('c2', weatherSpec));
         return sseResponse([finish('stop')]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ specTool: true })} />);
     await send('Do it');
 
     await waitFor(() => expect(bodies).toHaveLength(3));
@@ -905,72 +757,85 @@ describe('useGenUIChat — surface tool', () => {
     expect(rejection).toContain('unknown component \\"Script\\"');
     expect(JSON.stringify(bodies[2]!.messages)).toContain('"ok":true');
     expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
-    expect(document.querySelectorAll('[data-genui-surface="weather"]')).toHaveLength(1);
+    expect(screen.getByText(/could not be displayed: unknown component "Script"/)).toBeTruthy();
     expect(document.querySelector('b')).toBeNull();
   });
 
-  it('rebuilds a surface-tool surface from persisted history after a reload', () => {
-    const history: MastraDBMessage[] = [
-      {
-        id: 'm1',
-        role: 'assistant',
-        createdAt: new Date(0),
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: 'c1',
-                toolName: 'ui_surface',
-                args: surfaceArgs,
-                result: { ok: true, surfaceId: 'weather' },
-              },
-            },
-          ],
-        },
-      },
-    ];
-    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} initialMessages={history} />);
-    expect(screen.getByTestId('weather').textContent).toBe('Rome: 30°');
+  it('rejects invalid props and specs whose elements contain themselves, without rendering them', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const catalog = defineCatalog(schema, {
+      components: { WeatherCard: weatherCard, Box: { props: z.object({}) } },
+      actions: {},
+    });
+    const genUI = createGenUI({
+      catalog,
+      components: { WeatherCard, Box: ({ children }) => <div data-testid="box">{children}</div> },
+      specTool: true,
+    });
+    server.use(
+      http.post(STREAM_URL, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        if (bodies.length === 1) {
+          return sseResponse(
+            specCall('c1', {
+              root: 'card',
+              elements: [{ id: 'card', type: 'WeatherCard', props: { city: 'Rome', temp: 'hot' } }],
+            }),
+          );
+        }
+        if (bodies.length === 2) {
+          return sseResponse(
+            specCall('c2', { root: 'a', elements: [{ id: 'a', type: 'Box', props: {}, children: ['a'] }] }),
+          );
+        }
+        return sseResponse([finish('stop')]);
+      }),
+    );
+    renderWithProviders(<GenUIChat genUI={genUI} />);
+    await send('Do it');
+
+    await waitFor(() => expect(bodies).toHaveLength(3));
+    expect(JSON.stringify(bodies[1]!.messages)).toContain('invalid props for element \\"card\\"');
+    expect(JSON.stringify(bodies[2]!.messages)).toContain('element \\"a\\" contains itself');
+    expect(await screen.findAllByText(/This interface could not be displayed/)).toHaveLength(2);
+    expect(screen.queryByTestId('weather')).toBeNull();
+    expect(screen.queryByTestId('box')).toBeNull();
   });
 
-  it('a later surface tool call with the same surface id replaces the surface in place on reload', () => {
-    const call = (toolCallId: string, args: object) => ({
-      type: 'tool-invocation' as const,
-      toolInvocation: {
-        state: 'result' as const,
-        toolCallId,
-        toolName: 'ui_surface',
-        args,
-        result: { ok: true, surfaceId: 'weather' },
-      },
-    });
-    const history: MastraDBMessage[] = [
-      {
-        id: 'm1',
-        role: 'assistant',
-        createdAt: new Date(0),
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-        content: {
-          format: 2,
-          parts: [
-            call('c1', surfaceArgs),
-            call('c2', {
-              ...surfaceArgs,
-              elements: [{ ...surfaceArgs.elements[0]!, props: { city: 'Rome', temp: 12 } }],
-            }),
-          ],
-        },
-      },
+  it('shows a spec whose tool call failed on the server as failed', async () => {
+    server.use(
+      http.post(STREAM_URL, () =>
+        sseResponse([
+          chunk('start'),
+          chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_spec', args: weatherSpec }),
+          chunk('tool-error', { toolCallId: 'c1', toolName: 'ui_spec', error: 'Tool execution failed' }),
+          finish('stop'),
+        ]),
+      ),
+    );
+    renderWithProviders(<GenUIChat genUI={weatherUI({ specTool: true })} />);
+    await send('Weather?');
+
+    await waitFor(() => expect(specView('c1')?.getAttribute('data-genui-status')).toBe('failed'));
+    expect(document.querySelector('[data-genui-spec-status="failed"]')).toBeTruthy();
+  });
+
+  it('rebuilds each spec tool call from persisted history after a reload, each in its own place', () => {
+    const history = [
+      assistantWith([
+        specInvocation('c1', weatherSpec, { ok: true }),
+        { type: 'text', text: 'And later:' },
+        specInvocation(
+          'c2',
+          { ...weatherSpec, elements: [{ ...weatherSpec.elements[0]!, props: { city: 'Rome', temp: 12 } }] },
+          { ok: true },
+        ),
+      ]),
     ];
-    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} initialMessages={history} />);
-    expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 12°']);
-    expect(document.querySelectorAll('[data-genui-surface="weather"]')).toHaveLength(1);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ specTool: true })} initialMessages={history} />);
+    expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 30°', 'Rome: 12°']);
+    expect(specView('c1')?.getAttribute('data-genui-status')).toBe('ready');
+    expect(specView('c2')?.getAttribute('data-genui-status')).toBe('ready');
   });
 });
 
@@ -981,31 +846,20 @@ describe('useGenUIChat — actions and context', () => {
       http.post(STREAM_URL, async ({ request }) => {
         bodies.push((await request.json()) as Record<string, unknown>);
         if (bodies.length > 1) return sseResponse([chunk('start'), finish('stop')]);
-        return sseResponse([
-          chunk('start'),
-          genUIChunk({
-            version: 1,
-            eventId: 'f1',
-            surfaceId: 'filters',
-            operations: [
+        return sseResponse(
+          specCall('c1', {
+            root: 'form',
+            state: { city: '' },
+            elements: [
               {
-                op: 'createSurface',
-                spec: {
-                  root: 'form',
-                  state: { city: '' },
-                  elements: {
-                    form: {
-                      type: 'CityFilter',
-                      props: { value: { $bindState: '/city' } },
-                      on: { submit: { action: 'applyFilter', params: { city: { $state: '/city' } } } },
-                    },
-                  },
-                },
+                id: 'form',
+                type: 'CityFilter',
+                props: { value: { $bindState: '/city' } },
+                on: { submit: { action: 'applyFilter', params: { city: { $state: '/city' } } } },
               },
             ],
           }),
-          finish('stop'),
-        ]);
+        );
       }),
     );
     const catalog = defineCatalog(schema, {
@@ -1034,10 +888,14 @@ describe('useGenUIChat — actions and context', () => {
         await chat.sendMessage(`Filter by ${city}`);
       },
     };
-    renderWithProviders(<GenUIChat genUI={createGenUI({ catalog, components: { CityFilter } })} actions={actions} />);
+    renderWithProviders(
+      <GenUIChat genUI={createGenUI({ catalog, components: { CityFilter }, specTool: true })} actions={actions} />,
+    );
     await send('show filters');
 
     const input = await screen.findByLabelText('City');
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    await waitFor(() => expect(current.isRunning).toBe(false));
     // An empty city fails the action schema, so nothing is sent.
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -1045,59 +903,51 @@ describe('useGenUIChat — actions and context', () => {
 
     fireEvent.change(input, { target: { value: 'Lyon' } });
     expect((input as HTMLInputElement).value).toBe('Lyon');
-    expect(bodies).toHaveLength(1);
+    expect(bodies).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    await waitFor(() => expect(bodies).toHaveLength(2));
-    expect(JSON.stringify(bodies[1]!.messages)).toContain('Filter by Lyon');
+    await waitFor(() => expect(bodies).toHaveLength(3));
+    expect(JSON.stringify(bodies[2]!.messages)).toContain('Filter by Lyon');
   });
 
-  // A double click on a button whose handler calls the agent sent the same request twice.
-  it('runs an action once while a previous run on the same surface is still in flight', async () => {
-    server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
-          chunk('start'),
-          genUIChunk({
-            version: 1,
-            eventId: 'b1',
-            surfaceId: 'book',
-            operations: [
-              {
-                op: 'createSurface',
-                spec: { root: 'go', elements: { go: { type: 'Book', props: {}, on: { press: { action: 'book' } } } } },
-              },
-            ],
-          }),
-          finish('stop'),
-        ]),
+  const bookCatalog = defineCatalog(schema, {
+    components: { Book: { props: z.object({}), events: ['press'] } },
+    actions: { book: { params: z.object({}) } },
+  });
+  const bookUI = createGenUI({
+    catalog: bookCatalog,
+    components: {
+      Book: ({ emit }) => (
+        <button type="button" onClick={() => emit('press')}>
+          Book
+        </button>
       ),
+    },
+    specTool: true,
+  });
+  const bookSpec = { root: 'go', elements: [{ id: 'go', type: 'Book', props: {}, on: { press: { action: 'book' } } }] };
+
+  // A double click on a button whose handler calls the agent sent the same request twice.
+  it('runs an action once while a previous run from the same spec is still in flight', async () => {
+    let requests = 0;
+    server.use(
+      http.post(STREAM_URL, () => {
+        requests++;
+        return sseResponse(requests === 1 ? specCall('b1', bookSpec) : [finish('stop')]);
+      }),
     );
-    const catalog = defineCatalog(schema, {
-      components: { Book: { props: z.object({}), events: ['press'] } },
-      actions: { book: { params: z.object({}) } },
-    });
-    const genUI = createGenUI({
-      catalog,
-      components: {
-        Book: ({ emit }) => (
-          <button type="button" onClick={() => emit('press')}>
-            Book
-          </button>
-        ),
-      },
-    });
     let runs = 0;
     let finishRun!: () => void;
-    const actions: GenUIActionHandlers<typeof catalog> = {
+    const actions: GenUIActionHandlers<typeof bookCatalog> = {
       book: () => {
         runs++;
         return new Promise<void>(resolve => (finishRun = resolve));
       },
     };
-    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} />);
+    renderWithProviders(<GenUIChat genUI={bookUI} actions={actions} />);
     await send('book it');
     const button = await screen.findByRole('button', { name: 'Book' });
+    await waitFor(() => expect(specView('b1')?.getAttribute('data-genui-status')).toBe('ready'));
     await waitFor(() => expect(current.isRunning).toBe(false));
 
     fireEvent.click(button);
@@ -1109,31 +959,41 @@ describe('useGenUIChat — actions and context', () => {
     await waitFor(() => expect(runs).toBe(2));
   });
 
+  it('ignores actions from a spec the run stopped before it was answered, and says it was interrupted', async () => {
+    let runs = 0;
+    const history = [assistantWith([specInvocation('b1', bookSpec)])];
+    renderWithProviders(<GenUIChat genUI={bookUI} actions={{ book: () => void runs++ }} initialMessages={history} />);
+
+    expect(specView('b1')?.getAttribute('data-genui-status')).toBe('aborted');
+    expect(document.querySelector('[data-genui-spec-status="aborted"]')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Book' }));
+    });
+    expect(runs).toBe(0);
+  });
+
   it('actions and renderers defined inline see the app state of the latest render', async () => {
+    let requests = 0;
     server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
+      http.post(STREAM_URL, () => {
+        requests++;
+        if (requests > 1) return sseResponse([finish('stop')]);
+        return sseResponse([
           chunk('start'),
           chunk('text-start', { id: 't1' }),
           chunk('text-delta', { id: 't1', text: 'Pick a plan' }),
           chunk('text-end', { id: 't1' }),
-          genUIChunk({
-            version: 1,
-            eventId: 'p1',
-            surfaceId: 'plans',
-            operations: [
-              {
-                op: 'createSurface',
-                spec: {
-                  root: 'pick',
-                  elements: { pick: { type: 'PlanPicker', props: {}, on: { press: { action: 'choose' } } } },
-                },
-              },
-            ],
+          chunk('tool-call', {
+            toolCallId: 'p1',
+            toolName: 'ui_spec',
+            args: {
+              root: 'pick',
+              elements: [{ id: 'pick', type: 'PlanPicker', props: {}, on: { press: { action: 'choose' } } }],
+            },
           }),
-          finish('stop'),
-        ]),
-      ),
+          finish('tool-calls'),
+        ]);
+      }),
     );
     const catalog = defineCatalog(schema, {
       components: { PlanPicker: { props: z.object({}), events: ['press'] } },
@@ -1148,6 +1008,7 @@ describe('useGenUIChat — actions and context', () => {
           </button>
         ),
       },
+      specTool: true,
     });
     const chosen: string[] = [];
     function App({ currency }: { currency: string }) {
@@ -1170,6 +1031,7 @@ describe('useGenUIChat — actions and context', () => {
     const view = renderWithProviders(<App currency="EUR" />);
     await send('show plans');
     expect(await screen.findByText('EUR: Pick a plan')).toBeTruthy();
+    await waitFor(() => expect(specView('p1')?.getAttribute('data-genui-status')).toBe('ready'));
 
     view.rerender(<App currency="USD" />);
     expect(await screen.findByText('USD: Pick a plan')).toBeTruthy();

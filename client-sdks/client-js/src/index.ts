@@ -28,6 +28,7 @@ export type {
   KnowledgeTreeResponse,
 } from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
+export { parsePartialJson } from './utils/ai-sdk-v4/parse-partial-json';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,

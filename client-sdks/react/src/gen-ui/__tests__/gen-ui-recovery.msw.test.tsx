@@ -3,60 +3,42 @@ import { defineCatalog } from '@json-render/core';
 import type { BaseComponentProps } from '@json-render/react';
 import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { server } from '../../test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
-import { createGenUI, GenUISurfaceOutlet, useGenUIChat } from '../index';
-import type { GenUIActionHandlers, GenUIRegistry } from '../index';
-import { AGENT_URL, chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
+import { createGenUI, useGenUIChat } from '../index';
+import type { GenUIRegistry } from '../index';
+import { AGENT_URL, chunk, controllableStream, finish, sseResponse, STREAM_URL } from './sse';
 
 type Chat = ReturnType<typeof useGenUIChat>;
 const chats: Record<string, Chat> = {};
 
 function GenUIChat({
   genUI,
-  actions,
   initialMessages,
   agentId = 'agent-1',
-  outlet = false,
 }: {
   genUI: GenUIRegistry<any>;
-  actions?: GenUIActionHandlers<any>;
   initialMessages?: MastraDBMessage[];
   agentId?: string;
-  outlet?: boolean;
 }) {
-  const chat = useGenUIChat({
-    agentId,
-    resourceId: 'resource-1',
-    threadId: 'thread-1',
-    genUI,
-    actions,
-    initialMessages,
-  });
+  const chat = useGenUIChat({ agentId, resourceId: 'resource-1', threadId: 'thread-1', genUI, initialMessages });
   chats[agentId] = chat;
   return (
     <div data-testid={`chat-${agentId}`}>
-      <main data-testid="messages">
-        {chat.messages.map(message => (
-          <MessageFactory
-            key={message.id}
-            message={message}
-            Text={part => <span>{part.text}</span>}
-            {...chat.genUI.renderers}
-          />
-        ))}
-      </main>
-      {outlet ? (
-        <aside data-testid="panel">
-          <GenUISurfaceOutlet controller={chat.genUI.controller} empty={<p>No panel</p>} />
-        </aside>
-      ) : null}
+      {chat.messages.map(message => (
+        <MessageFactory
+          key={message.id}
+          message={message}
+          Text={part => <span>{part.text}</span>}
+          {...chat.genUI.renderers}
+        />
+      ))}
     </div>
   );
 }
@@ -81,51 +63,62 @@ function WeatherCard({ props }: BaseComponentProps<z.infer<typeof weatherProps>>
   );
 }
 const weatherCatalog = defineCatalog(schema, {
-  components: { WeatherCard: { description: 'Current weather for a city', props: weatherProps } },
+  components: {
+    WeatherCard: { description: 'Current weather for a city', props: weatherProps },
+    List: { props: z.object({}) },
+  },
   actions: {},
 });
-const weatherOnly = createGenUI({ catalog: weatherCatalog, components: { WeatherCard } });
+const weatherUI = createGenUI({
+  catalog: weatherCatalog,
+  components: { WeatherCard, List: ({ children }) => <div>{children}</div> },
+  specTool: true,
+});
 
-const create = (eventId: string, temp = 21, extra: object = {}) => ({
-  version: 1,
-  eventId,
-  surfaceId: 'weather',
-  operations: [
-    {
-      op: 'createSurface',
-      ...extra,
-      spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Paris', temp } } } },
-    },
+const twoCities = {
+  root: 'list',
+  elements: [
+    { id: 'list', type: 'List', props: {}, children: ['paris', 'oslo'] },
+    { id: 'paris', type: 'WeatherCard', props: { city: 'Paris', temp: 21 } },
+    { id: 'oslo', type: 'WeatherCard', props: { city: 'Oslo', temp: 4 } },
   ],
-});
-const setTemp = (eventId: string, temp: number, baseRevision?: number) => ({
-  version: 1,
-  eventId,
-  surfaceId: 'weather',
-  ...(baseRevision !== undefined ? { baseRevision } : {}),
-  operations: [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/card/props/temp', value: temp }] }],
-});
-const ready = (eventId: string) => ({
-  version: 1,
-  eventId,
-  surfaceId: 'weather',
-  operations: [{ op: 'setStatus', status: 'ready' }],
-});
+};
+const argsText = JSON.stringify(twoCities);
+// Up to the middle of the second card, so only Paris can render.
+const partialArgs = argsText.slice(0, argsText.indexOf('"id":"oslo"'));
 
-const assistant = (id: string, envelopes: object[], createdAt = 1): MastraDBMessage => ({
-  id,
+const specView = (toolCallId = 'c1') =>
+  document.querySelector(`[data-genui-spec="${toolCallId}"]`) as HTMLElement | null;
+
+const specInvocation = (toolInvocation: object): MastraDBMessage => ({
+  id: 'a1',
   role: 'assistant',
-  createdAt: new Date(createdAt),
+  createdAt: new Date(1),
   threadId: 'thread-1',
   resourceId: 'resource-1',
-  content: { format: 2, parts: envelopes.map(data => ({ type: 'data-gen-ui', data })) as never },
+  content: {
+    format: 2,
+    parts: [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { toolCallId: 'c1', toolName: 'ui_spec', args: twoCities, ...toolInvocation },
+      },
+    ] as never,
+  },
 });
-
-const surfaceEl = (id = 'weather') => document.querySelector(`[data-genui-surface="${id}"]`) as HTMLElement | null;
 
 /** What @mastra/core saves as the result of a tool call cut off by a stopped run. */
 const CORE_TOOL_ABORT_NOTICE =
   'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';
+
+const streamPartialSpec = (stream: ReturnType<typeof controllableStream>) =>
+  act(() =>
+    stream.push(
+      chunk('start'),
+      chunk('tool-call-input-streaming-start', { toolCallId: 'c1', toolName: 'ui_spec' }),
+      chunk('tool-call-delta', { toolCallId: 'c1', argsTextDelta: partialArgs }),
+    ),
+  );
 
 beforeEach(() => {
   weatherMounts = 0;
@@ -135,277 +128,88 @@ afterEach(() => {
 });
 
 describe('useGenUIChat — persistence and recovery', () => {
-  it('rebuilds a surface from history as the user last saw it, and a new run keeps updating it in place', async () => {
-    const history = [assistant('a1', [create('e1'), setTemp('e2', 22, 1), ready('e3')])];
-    server.use(
-      http.post(STREAM_URL, () => sseResponse([chunk('start'), genUIChunk(setTemp('e4', 25, 3)), finish('stop')])),
-    );
-    renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={history} />);
-
-    expect(screen.getByTestId('weather').textContent).toBe('Paris: 22°');
-    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('ready');
-
-    await send('warmer now?');
-    await waitFor(() => expect(screen.getByTestId('weather').textContent).toBe('Paris: 25°'));
-    expect(screen.getAllByTestId('weather')).toHaveLength(1);
-    expect(weatherMounts).toBe(1);
-  });
-
-  it('applies updates in revision order even when they arrive out of order', async () => {
-    server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
-          chunk('start'),
-          genUIChunk(create('e1')),
-          genUIChunk(setTemp('e3', 23, 2)),
-          genUIChunk(setTemp('e2', 22, 1)),
-          genUIChunk(ready('e4')),
-          finish('stop'),
-        ]),
-      ),
-    );
-    renderWithProviders(<GenUIChat genUI={weatherOnly} />);
-    await send('weather');
-
-    await waitFor(() => expect(surfaceEl()?.getAttribute('data-genui-status')).toBe('ready'));
-    expect(screen.getByTestId('weather').textContent).toBe('Paris: 23°');
-    expect(document.querySelector('[data-genui-fallback]')).toBeNull();
-  });
-
-  it('a reconnect that replays events already in history does not apply them twice', async () => {
-    // e2 is a relative change in the agent's eyes; applying it twice would be visible.
-    const history = [assistant('a1', [create('e1'), setTemp('e2', 22, 1)])];
-    server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
-          chunk('start'),
-          genUIChunk(create('e1', 99)),
-          genUIChunk(setTemp('e2', 98, 1)),
-          genUIChunk(setTemp('e3', 24, 2)),
-          finish('stop'),
-        ]),
-      ),
-    );
-    renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={history} />);
-    await send('resume');
-
-    await waitFor(() => expect(screen.getByTestId('weather').textContent).toBe('Paris: 24°'));
-    expect(screen.getAllByTestId('weather')).toHaveLength(1);
-    expect(document.querySelector('[data-genui-fallback]')).toBeNull();
-  });
-
-  it('stopping a run marks its unfinished surfaces as interrupted, keeping what was shown', async () => {
+  it('stopping a run while the model writes a spec marks it interrupted, keeping what was shown', async () => {
     const stream = controllableStream();
     server.use(
       http.post(STREAM_URL, () => stream.response()),
       http.post(`${AGENT_URL}/threads/abort`, () => HttpResponse.json({ aborted: true })),
     );
-    renderWithProviders(<GenUIChat genUI={weatherOnly} />);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithProviders(<GenUIChat genUI={weatherUI} />);
     await send('weather');
-    act(() => stream.push(chunk('start'), genUIChunk(create('e1'))));
-    await waitFor(() => expect(surfaceEl()?.getAttribute('aria-busy')).toBe('true'));
+    streamPartialSpec(stream);
+    await waitFor(() => expect(specView()?.getAttribute('aria-busy')).toBe('true'));
+    expect(screen.getByTestId('weather').textContent).toBe('Paris: 21°');
 
     await act(async () => {
       await chats['agent-1']!.cancelRun();
     });
 
-    await waitFor(() => expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('aborted'));
-    expect(surfaceEl()!.getAttribute('aria-busy')).toBeNull();
+    await waitFor(() => expect(specView()!.getAttribute('data-genui-status')).toBe('aborted'));
+    expect(specView()!.getAttribute('aria-busy')).toBeNull();
     expect(screen.getByTestId('weather').textContent).toBe('Paris: 21°');
-    expect(within(surfaceEl()!).getByRole('note').textContent).toMatch(/interrupted/);
+    expect(within(specView()!).getByRole('note').textContent).toMatch(/interrupted/);
+    expect(weatherMounts).toBe(1);
+    // The element the model never finished is simply absent, not reported as a broken reference.
+    expect(warn.mock.calls.flat().join('\n')).not.toMatch(/Missing element/);
+    warn.mockRestore();
   });
 
-  it('a surface the agent never marked ready stops looking busy once the run is over', async () => {
+  it('a spec whose stream ended before the model finished it stops looking busy', async () => {
     const stream = controllableStream();
     server.use(http.post(STREAM_URL, () => stream.response()));
-    renderWithProviders(<GenUIChat genUI={weatherOnly} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI} />);
     await send('weather');
-    act(() => stream.push(chunk('start'), genUIChunk(create('e1'))));
-    await waitFor(() => expect(surfaceEl()?.getAttribute('aria-busy')).toBe('true'));
+    streamPartialSpec(stream);
+    await waitFor(() => expect(specView()?.getAttribute('aria-busy')).toBe('true'));
 
     act(() => {
       stream.push(finish('stop'));
       stream.close();
     });
     await waitFor(() => expect(chats['agent-1']!.isRunning).toBe(false));
-    expect(surfaceEl()!.getAttribute('aria-busy')).toBeNull();
-    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('ready');
-  });
-
-  it('a surface left unfinished in history is not shown as loading forever', () => {
-    renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={[assistant('a1', [create('e1')])]} />);
+    expect(specView()!.getAttribute('aria-busy')).toBeNull();
+    expect(specView()!.getAttribute('data-genui-status')).toBe('aborted');
     expect(screen.getByTestId('weather').textContent).toBe('Paris: 21°');
-    expect(surfaceEl()!.getAttribute('aria-busy')).toBeNull();
   });
-
-  const toolCall = (toolInvocation: object): MastraDBMessage['content']['parts'][number] =>
-    ({
-      type: 'tool-invocation',
-      toolInvocation: { toolCallId: 'c1', toolName: 'getWeather', args: {}, ...toolInvocation },
-    }) as never;
-  const linkedSurface = (call: object, metadata?: Record<string, unknown>): MastraDBMessage => {
-    const message = assistant('a1', [create('e1', 21, { source: { toolCallId: 'c1' } })]);
-    message.content.parts = [toolCall(call), ...message.content.parts];
-    if (metadata) message.content.metadata = metadata;
-    return message;
-  };
 
   it.each([
     ['the user stopped the run', { state: 'result', result: CORE_TOOL_ABORT_NOTICE }],
-    ['the stream ended before the tool returned', { state: 'call' }],
-  ])('after a reload, a surface whose tool was cut off shows as interrupted when %s', (_case, call) => {
-    renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={[linkedSurface(call)]} />);
+    ['the run ended before the spec was answered', { state: 'call' }],
+  ])('after a reload, a spec shows as interrupted when %s', (_case, call) => {
+    renderWithProviders(<GenUIChat genUI={weatherUI} initialMessages={[specInvocation(call)]} />);
 
-    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('aborted');
-    expect(screen.getByTestId('weather').textContent).toBe('Paris: 21°');
-    expect(within(surfaceEl()!).getByRole('note').textContent).toMatch(/interrupted/);
+    expect(specView()!.getAttribute('data-genui-status')).toBe('aborted');
+    expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Paris: 21°', 'Oslo: 4°']);
+    expect(within(specView()!).getByRole('note').textContent).toMatch(/interrupted/);
   });
 
-  it('after a reload, a surface whose tool finished or is waiting for approval is not shown as interrupted', () => {
+  it('after a reload, an accepted spec renders as ready and a rejected one explains why', () => {
     const { unmount } = renderWithProviders(
-      <GenUIChat genUI={weatherOnly} initialMessages={[linkedSurface({ state: 'result', result: { ok: true } })]} />,
+      <GenUIChat genUI={weatherUI} initialMessages={[specInvocation({ state: 'result', result: { ok: true } })]} />,
     );
-    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('ready');
+    expect(specView()!.getAttribute('data-genui-status')).toBe('ready');
+    expect(screen.getAllByTestId('weather')).toHaveLength(2);
     unmount();
 
     renderWithProviders(
       <GenUIChat
-        genUI={weatherOnly}
-        initialMessages={[
-          linkedSurface(
-            { state: 'call' },
-            { pendingToolApprovals: { getWeather: { toolCallId: 'c1', toolName: 'getWeather' } } },
-          ),
-        ]}
+        genUI={weatherUI}
+        initialMessages={[specInvocation({ state: 'result', result: { ok: false, error: 'root is missing' } })]}
       />,
     );
-    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('ready');
-  });
-});
-
-describe('useGenUIChat — surfaces outside the chat', () => {
-  it('a panel surface renders in the outlet, not in the message, and its actions still reach the agent', async () => {
-    const bodies: Record<string, unknown>[] = [];
-    server.use(
-      http.post(STREAM_URL, async ({ request }) => {
-        bodies.push((await request.json()) as Record<string, unknown>);
-        return bodies.length === 1
-          ? sseResponse([
-              chunk('start'),
-              genUIChunk({
-                version: 1,
-                eventId: 'e1',
-                surfaceId: 'weather',
-                operations: [
-                  {
-                    op: 'createSurface',
-                    placement: 'panel',
-                    spec: {
-                      root: 'card',
-                      elements: {
-                        card: {
-                          type: 'WeatherCard',
-                          props: { city: 'Paris', temp: 21 },
-                          on: { press: { action: 'refresh', params: { city: 'Paris' } } },
-                        },
-                      },
-                    },
-                  },
-                ],
-              }),
-              finish('stop'),
-            ])
-          : sseResponse([chunk('start'), finish('stop')]);
-      }),
-    );
-    const catalog = defineCatalog(schema, {
-      components: { WeatherCard: { props: weatherProps, events: ['press'] } },
-      actions: { refresh: { params: z.object({ city: z.string() }) } },
-    });
-    const genUI = createGenUI({
-      catalog,
-      components: {
-        WeatherCard: ({ props, emit }) => <button onClick={() => emit('press')}>Refresh {props.city}</button>,
-      },
-    });
-    const actions: GenUIActionHandlers<typeof catalog> = {
-      refresh: async ({ city }, { chat }) => {
-        await chat.sendMessage(`Refresh ${city}`);
-      },
-    };
-    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} outlet />);
-    expect(screen.getByText('No panel')).toBeTruthy();
-    await send('weather');
-
-    const panel = screen.getByTestId('panel');
-    const button = await within(panel).findByRole('button', { name: 'Refresh Paris' });
-    expect(within(screen.getByTestId('messages')).queryByRole('button')).toBeNull();
-    await waitFor(() => expect(chats['agent-1']!.isRunning).toBe(false));
-
-    fireEvent.click(button);
-    await waitFor(() => expect(bodies).toHaveLength(2));
-    expect(JSON.stringify(bodies[1]!.messages)).toContain('Refresh Paris');
-  });
-
-  it('an out-of-band surface (e.g. a workflow stream) keeps streaming while the chat is idle and survives history rebuilds', async () => {
-    renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={[assistant('a1', [create('e1')])]} outlet />);
-    const controller = chats['agent-1']!.genUI.controller;
-
-    act(() =>
-      controller.ingest({
-        version: 1,
-        eventId: 'wf-1',
-        surfaceId: 'deploy',
-        operations: [
-          {
-            op: 'createSurface',
-            placement: 'panel',
-            spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Deploy', temp: 1 } } } },
-          },
-        ],
-      }),
-    );
-    const panel = screen.getByTestId('panel');
-    expect(within(panel).getByTestId('weather').textContent).toBe('Deploy: 1°');
-    expect(surfaceEl('deploy')!.getAttribute('aria-busy')).toBe('true');
-
-    // Editing history (not an append) forces a deterministic rebuild from messages.
-    act(() => chats['agent-1']!.setMessages(() => []));
-    await waitFor(() => expect(surfaceEl('weather')).toBeNull());
-    expect(within(panel).getByTestId('weather').textContent).toBe('Deploy: 1°');
-    expect(surfaceEl('deploy')!.getAttribute('aria-busy')).toBe('true');
-  });
-});
-
-describe('useGenUIChat — protocol mismatch', () => {
-  it('renders surfaces in the supported protocol version and falls back for others', async () => {
-    server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
-          chunk('start'),
-          genUIChunk(create('e1')),
-          genUIChunk({ version: 2, eventId: 'e2', surfaceId: 'future', operations: [] }),
-          finish('stop'),
-        ]),
-      ),
-    );
-    renderWithProviders(<GenUIChat genUI={weatherOnly} />);
-    await send('weather');
-
-    await waitFor(() => expect(screen.getAllByTestId('weather')).toHaveLength(1));
-    const fallbacks = [...document.querySelectorAll('[data-genui-fallback]')].map(node => node.textContent);
-    expect(fallbacks).toHaveLength(1);
-    expect(fallbacks[0]).toMatch(/unsupported GenUI protocol version 2/);
+    expect(screen.queryByTestId('weather')).toBeNull();
+    expect(screen.getByRole('note').textContent).toMatch(/could not be displayed: root is missing/);
   });
 });
 
 describe('useGenUIChat — multiple agents', () => {
-  it('each chat renders only its own registry, with isolated surfaces and state', async () => {
+  it('each chat renders only the components of its own registry', async () => {
     const taskCatalog = defineCatalog(schema, {
       components: { TaskList: { props: z.object({ items: z.array(z.string()) }) } },
       actions: {},
     });
-    const taskOnly = createGenUI({
+    const taskUI = createGenUI({
       catalog: taskCatalog,
       components: {
         TaskList: ({ props }) => (
@@ -416,29 +220,20 @@ describe('useGenUIChat — multiple agents', () => {
           </ul>
         ),
       },
+      specTool: true,
     });
-    const taskSurface = {
-      version: 1,
-      eventId: 'e1',
-      surfaceId: 'shared-id',
-      operations: [
-        {
-          op: 'createSurface',
-          source: { agentId: 'agent-2' },
-          spec: { root: 'root', elements: { root: { type: 'TaskList', props: { items: ['ship'] } } } },
-        },
-      ],
-    };
-    server.use(
-      http.post(STREAM_URL, () => sseResponse([chunk('start'), genUIChunk(taskSurface), finish('stop')])),
-      http.post(`${TEST_BASE_URL}/api/agents/agent-2/stream`, () =>
-        sseResponse([chunk('start'), genUIChunk(taskSurface), finish('stop')]),
-      ),
-    );
+    const taskSpec = { root: 'root', elements: [{ id: 'root', type: 'TaskList', props: { items: ['ship'] } }] };
+    const answer = () =>
+      sseResponse([
+        chunk('start'),
+        chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_spec', args: taskSpec }),
+        finish('stop'),
+      ]);
+    server.use(http.post(STREAM_URL, answer), http.post(`${TEST_BASE_URL}/api/agents/agent-2/stream`, answer));
     renderWithProviders(
       <>
-        <GenUIChat genUI={weatherOnly} />
-        <GenUIChat genUI={taskOnly} agentId="agent-2" />
+        <GenUIChat genUI={weatherUI} />
+        <GenUIChat genUI={taskUI} agentId="agent-2" />
       </>,
     );
     await send('tasks?', 'agent-1');
@@ -447,11 +242,7 @@ describe('useGenUIChat — multiple agents', () => {
     const second = screen.getByTestId('chat-agent-2');
     await waitFor(() => expect(within(second).getByTestId('tasks').textContent).toBe('ship'));
     const first = screen.getByTestId('chat-agent-1');
-    await waitFor(() => expect(within(first).getByRole('note').textContent).toMatch(/TaskList/));
+    expect(first.querySelector('[data-genui-fallback]')?.textContent).toMatch(/"TaskList" is not available/);
     expect(within(first).queryByTestId('tasks')).toBeNull();
-
-    expect(chats['agent-2']!.genUI.controller.getState().surfaces['shared-id']!.source).toEqual({ agentId: 'agent-2' });
-    chats['agent-1']!.genUI.controller.edits.set('shared-id', { '/picked': { value: 1 } });
-    expect(chats['agent-2']!.genUI.controller.edits.get('shared-id')).toEqual({});
   });
 });
