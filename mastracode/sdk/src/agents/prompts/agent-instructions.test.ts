@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import { createSignal, MessageList } from '@mastra/core/agent';
@@ -9,6 +9,11 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   home: '',
 }));
+
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync) };
+});
 
 vi.mock('node:os', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -23,6 +28,7 @@ import {
   createGitRefReminderReader,
   getStaticallyLoadedInstructionPaths,
   loadAgentInstructions,
+  loadSessionInstructions,
 } from './agent-instructions.js';
 
 function write(path: string, content: string): void {
@@ -150,6 +156,16 @@ describe('git-ref instruction readers', () => {
   let repo: string;
 
   const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'ignore' });
+  const loadAtRef = (baseRef = 'main', workingDir = repo) =>
+    loadSessionInstructions({ workingDir, untrustedCheckout: true, baseRef, skipGlobal: true }).map(
+      source => source.content,
+    );
+  const contentReads = () =>
+    vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('show') || args?.includes('blob'));
+  const refLookups = () => [
+    ...contentReads(),
+    ...vi.mocked(execFileSync).mock.calls.filter(([, args]) => args?.includes('ls-tree')),
+  ];
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'mastracode-gitref-'));
@@ -339,6 +355,97 @@ describe('git-ref instruction readers', () => {
     const paths = getStaticallyLoadedInstructionPaths(alias, undefined, reader);
     expect(paths).toContain(join(alias, 'AGENTS.md'));
     expect(paths).toContain(join(realpathSync(repo), 'AGENTS.md'));
+  });
+
+  it('serves repeated session instruction loads without re-reading the ref', () => {
+    loadAtRef();
+    vi.mocked(execFileSync).mockClear();
+    expect(loadAtRef()).toEqual(['trusted base instructions']);
+    expect(refLookups()).toEqual([]);
+  });
+
+  it('serves repeated reminder path checks without re-reading the ref', () => {
+    const probe = () => {
+      const reader = createGitRefReminderReader(repo, 'main');
+      return [
+        reader.pathExists(join(repo, 'src', 'AGENTS.md')),
+        reader.isDirectory(join(repo, 'src')),
+        reader.pathExists(join(repo, 'AGENTS.md')),
+      ];
+    };
+    probe();
+    vi.mocked(execFileSync).mockClear();
+    expect(probe()).toEqual([false, false, true]);
+    expect(refLookups()).toEqual([]);
+  });
+
+  it('reads the new content once origin/<ref> moves', () => {
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    expect(loadAtRef()).toEqual(['trusted base instructions']);
+    writeFileSync(join(repo, 'AGENTS.md'), 'fetched base instructions');
+    git('commit', '-am', 'fetched');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('update-ref', 'refs/heads/main', 'HEAD~1');
+    expect(loadAtRef()).toEqual(['fetched base instructions']);
+  });
+
+  it('does not read an unchanged instruction file again after the base branch moves', () => {
+    writeFileSync(join(repo, 'AGENTS.md'), 'instructions kept across commits');
+    git('commit', '-am', 'kept');
+    expect(loadAtRef()).toEqual(['instructions kept across commits']);
+    writeFileSync(join(repo, 'unrelated.txt'), 'unrelated');
+    git('add', 'unrelated.txt');
+    git('commit', '-m', 'unrelated change');
+    vi.mocked(execFileSync).mockClear();
+    expect(loadAtRef()).toEqual(['instructions kept across commits']);
+    expect(contentReads()).toEqual([]);
+  });
+
+  it('falls back to the local ref per file when origin/<ref> lacks it', () => {
+    git('rm', '--cached', 'AGENTS.md');
+    git('commit', '-m', 'drop instructions');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('update-ref', 'refs/heads/main', 'HEAD~1');
+    expect([loadAtRef(), loadAtRef()]).toEqual([['trusted base instructions'], ['trusted base instructions']]);
+    expect(createGitRefReminderReader(repo, 'main').pathExists(join(repo, 'AGENTS.md'))).toBe(true);
+  });
+
+  it('sees a ref created after a lookup missed it', () => {
+    expect(loadAtRef('release')).toEqual([]);
+    git('branch', 'release');
+    expect(loadAtRef('release')).toEqual(['trusted base instructions']);
+  });
+
+  it('retries a file whose content could not be fetched into a blobless clone', () => {
+    writeFileSync(join(repo, 'AGENTS.md'), 'instructions behind a fetch');
+    git('commit', '-am', 'fetch-only');
+    git('config', 'uploadpack.allowFilter', 'true');
+    git('config', 'uploadpack.allowAnySHA1InWant', 'true');
+    const clone = join(root, 'clone');
+    execFileSync('git', ['clone', '--quiet', '--filter=blob:none', '--no-checkout', `file://${repo}`, clone], {
+      stdio: 'ignore',
+    });
+    renameSync(repo, `${repo}-offline`);
+    expect(loadAtRef('main', clone)).toEqual([]);
+    renameSync(`${repo}-offline`, repo);
+    expect(loadAtRef('main', clone)).toEqual(['instructions behind a fetch']);
+  });
+
+  it("keeps a replace ref in one checkout out of another checkout's instructions", () => {
+    writeFileSync(join(repo, 'AGENTS.md'), 'instructions both checkouts share');
+    git('commit', '-am', 'shared');
+    const clone = join(root, 'clone');
+    execFileSync('git', ['clone', '--quiet', '--no-checkout', repo, clone], { stdio: 'ignore' });
+    const blob = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD:AGENTS.md'], { encoding: 'utf-8' }).trim();
+    const replacement = execFileSync('git', ['-C', repo, 'hash-object', '-w', '--stdin'], {
+      encoding: 'utf-8',
+      input: 'INJECTED through a replace ref',
+    }).trim();
+    git('replace', blob, replacement);
+    expect([loadAtRef(), loadAtRef('main', clone)]).toEqual([
+      ['instructions both checkouts share'],
+      ['instructions both checkouts share'],
+    ]);
   });
 
   it('reminder reader resolves project paths at the ref and falls back to fs outside the project', () => {
