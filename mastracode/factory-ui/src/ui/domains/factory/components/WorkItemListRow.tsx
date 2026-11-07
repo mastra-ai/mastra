@@ -23,7 +23,8 @@ import {
 } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
-import { columnReviewVerdict, ReviewVerdictBadge } from './WorkItemCardRows';
+import type { ReworkReason } from '../reworkReason';
+import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemCardRows';
 
 export function WorkItemListRow({
   item,
@@ -41,6 +42,7 @@ export function WorkItemListRow({
   status,
   actions,
   menu,
+  rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -57,6 +59,7 @@ export function WorkItemListRow({
   status: BoardCardStatus;
   actions: CardAction[];
   menu: ReactNode;
+  rework?: ReworkReason;
 }) {
   const verdict = columnReviewVerdict(item, columnStage);
   return (
@@ -99,10 +102,11 @@ export function WorkItemListRow({
             <MetadataLabels metadata={sourceMetadata(item)} />
           </span>
         ),
-        status: (status.kind !== 'idle' || verdict) && (
+        status: (status.kind !== 'idle' || verdict || rework) && (
           <span className="flex min-w-0 items-center gap-2">
             <CardStatus status={status} compact />
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
+            {rework && <ReworkLine rework={rework} />}
           </span>
         ),
         action: <CardActions actions={actions} />,
