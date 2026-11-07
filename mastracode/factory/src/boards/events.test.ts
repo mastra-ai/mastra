@@ -113,7 +113,6 @@ describe('rulePhaseContext', () => {
       id: 'queued',
       kind: 'resting',
       nextPhases: ['shipping', 'shipped'],
-      outcomes: ['ship', 'skip'],
     });
     expect(rulePhaseContext(boards, item(['shipping']))).toEqual({
       id: 'shipping',
@@ -121,14 +120,12 @@ describe('rulePhaseContext', () => {
       context: 'release',
       role: 'release',
       nextPhases: ['shipped'],
-      outcomes: [],
     });
-    // Work declares nextPhases and no outcome names, so rules test the targets through nextPhases.
+    // Phases carry no outcome names, so rules test the targets through nextPhases.
     expect(rulePhaseContext(boards, item(['execute'], null))).toMatchObject({
       kind: 'working',
       context: 'work',
       role: 'work',
-      outcomes: [],
       nextPhases: expect.arrayContaining(['review', 'done', 'canceled']),
     });
   });

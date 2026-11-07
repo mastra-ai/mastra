@@ -619,7 +619,7 @@ export class MastraFactory {
    * it, and each one that has it, edited or not, has it replaced at the next revision. Use it to
    * push a board from code into projects; it isn't run for you, and projects created later don't
    * get it until you run it again. A Work or app board's key keeps that board's code behaviour,
-   * so the definition is checked as an edit is; a new key gets none (no handlers, outcomes, tool or
+   * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
    * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `reserved_board` for the
@@ -1276,11 +1276,6 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.selfReviewEnabled ?? false;
-          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           onTransitionCommitted: (() => {
             const notifyStageChange = createStageChangeNotifier({

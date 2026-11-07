@@ -769,10 +769,12 @@ describe('GitLabRules', () => {
       // transition commits, before the webhook handler has finished.
       const commitRuleEvaluation = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
       const pushStatuses: string[] = [];
+      const headsAtDispatch: unknown[] = [];
       seeded.workItems.commitRuleEvaluation = async input => {
         const committed = await commitRuleEvaluation(input);
         if (input.ingress.identity.includes('d-push-b')) pushStatuses.push(committed.status);
         if (committed.status === 'committed' && input.ingress.identity.includes('d-push-b')) {
+          headsAtDispatch.push((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha);
           await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
         }
         return committed;
@@ -795,11 +797,11 @@ describe('GitLabRules', () => {
       const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
       expect(invocations).toHaveLength(1);
       const kickoff = invocations[0]!.decision;
-      expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-gitlab-rereview', role: 'review' });
-      const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
-      expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
-      expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
-      expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+      // The runner starts factory-review; the work-item signal picks the GitLab re-review
+      // procedure and renders the head line from the card's recorded head, which must already be
+      // the pushed one when the run starts (rendering is covered in work-item-state-processor.test.ts).
+      expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' });
+      expect(headsAtDispatch).toEqual([pushedHeadSha]);
       expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata).toMatchObject({
         pullRequestHeadSha: pushedHeadSha,
         reviewedHeadSha,
@@ -1170,7 +1172,9 @@ describe('merge request cards on the Work board', () => {
     });
     expect(recorded.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
       role: 'review',
-      skillName: 'factory-gitlab-rereview',
+      skillName: 'factory-review',
+      cancelInFlight: true,
+      resume: true,
     });
   });
 

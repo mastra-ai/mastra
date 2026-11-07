@@ -389,7 +389,7 @@ describe('bundled Factory skill assets', () => {
 
     expect(assetNames).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
+      'factory-build',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
       'factory-plan',
@@ -472,7 +472,11 @@ describe('bundled Factory skill assets', () => {
       // Terminal batched handoff + governed terminal call, never a mid-run human gate.
       // Review passes end by recording the verdict; the card stays in Reviewing.
       expect(prose).toContain(
-        skillName.includes('review') ? 'factory_record_review_verdict' : 'factory_transition_work_item',
+        skillName.includes('review')
+          ? 'factory_record_review_verdict'
+          : skillName === 'factory-plan'
+            ? 'submit_plan'
+            : 'factory_transition_work_item',
       );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
@@ -579,7 +583,18 @@ describe('bundled Factory skill assets', () => {
 
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
-    expect(plan).toContain('Do not call `submit_plan`');
+    // Planning ends on submit_plan; its approval, not the planner, moves the card to Building.
+    expect(plan).toContain('make `submit_plan` your terminal step');
+    expect(plan).toContain('Do not move the card with `factory_transition_work_item`');
+
+    // Building runs as a goal: it may ask a person, but only through ask_user, and hands off by
+    // the project's self-review setting.
+    const build = await read('factory-build');
+    expect(build).toContain('only with `ask_user`');
+    expect(build).toContain('**Self-review on:** do not open a pull or merge request. Move the card to Review');
+    expect(build).toContain('**Self-review off:** open the change request');
+    expect(build).toContain('Then move the card to PR review (`stage: "pr-review"`)');
+    expect(build).toContain('**Before moving to Done:**');
 
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');
@@ -3678,7 +3693,7 @@ describe('FactorySkillSource layering', () => {
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
       'configure-factory-rules',
-      'factory-complete-issue',
+      'factory-build',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
       'factory-plan',
@@ -3697,12 +3712,7 @@ describe('FactorySkillSource layering', () => {
     const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
 
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
-    expect(hiddenNames).toEqual([
-      'configure-factory-rules',
-      'factory-complete-issue',
-      'factory-plan',
-      'factory-triage',
-    ]);
+    expect(hiddenNames).toEqual(['configure-factory-rules', 'factory-build', 'factory-plan', 'factory-triage']);
     for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
       expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
       await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');

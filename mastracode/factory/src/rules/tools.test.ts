@@ -1,8 +1,9 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { BoardTransitionPolicy } from '../boards/index.js';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { createPolicyTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactoryTransitionTools } from './tools.js';
@@ -547,11 +548,11 @@ describe('factory_transition_work_item', () => {
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({
-        planning: {
-          issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }) },
-        },
-      }),
+      boards: createPolicyTestRegistry(context =>
+        context.toStage === 'planning'
+          ? { type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }
+          : undefined,
+      ),
     });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
@@ -568,11 +569,11 @@ describe('factory_transition_work_item', () => {
   it('deduplicates repeated execution of one immutable bound tool call', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareBoundItem(storage);
-    const onEnter = vi.fn(() => undefined);
+    const policy = vi.fn<BoardTransitionPolicy>(() => undefined);
     const service = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createLifecycleTestRegistry({ planning: { issue: { onEnter } } }),
+      boards: createPolicyTestRegistry(policy),
     });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
@@ -583,7 +584,7 @@ describe('factory_transition_work_item', () => {
     const replay = await execute(tool, context, input, 'immutable-call');
 
     expect(replay).toEqual(first);
-    expect(onEnter).toHaveBeenCalledTimes(1);
+    expect(policy).toHaveBeenCalledTimes(1);
   });
 
   it('moves a PR binding on Work and ignores linked-card presence for Work authority', async () => {

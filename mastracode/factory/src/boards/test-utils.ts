@@ -1,12 +1,36 @@
-import type { FactoryRuleHandler, FactoryStageRuleContext } from '../rules/types.js';
+import { randomUUID } from 'node:crypto';
+import { validateFactoryRuleDecisions } from '../rules/validation.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { defineBoard } from './define-board.js';
-import type { BoardDefinition } from './define-board.js';
+import type { BoardDefinition, BoardPhaseDefinition, BoardPhaseRunner } from './define-board.js';
 import type { BoardRegistry } from './registry.js';
+import type { BoardTransitionPolicy } from './transition-policy.js';
 import { workBoard } from './work.js';
+import type { WorkBoardPhase } from './work.js';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
 // Production installation still reserves built-in IDs and has no override API.
-export function createLifecycleTestRegistry(handlers: BoardDefinition<string, string>['rules']): BoardRegistry {
+/** The lifecycle registry's Work board with a board policy standing in for the rules a move is evaluated against. */
+export function createPolicyTestRegistry(transitionPolicy: BoardTransitionPolicy): BoardRegistry {
+  const lifecycle = createLifecycleTestRegistry().get('work')!;
+  const board = defineBoard({
+    id: 'work',
+    name: 'Work',
+    initialPhase: 'intake',
+    phases: lifecycle.phases as unknown as Record<string, BoardPhaseDefinition<string>>,
+    transitionPolicy,
+  });
+  return new Map([[board.id, board]]);
+}
+
+/**
+ * Work with every phase allowed to move to every other, and the given phases' stored fields
+ * overridden (a runner, manualEntry, …). Lifecycle tests jump straight to the phase they
+ * exercise; the Work board's own topology is tested against workBoard itself.
+ */
+export function createLifecycleTestRegistry(
+  overrides: Partial<Record<WorkBoardPhase, { runner?: BoardPhaseRunner; manualEntry?: boolean }>> = {},
+): BoardRegistry {
   const board = defineBoard({
     id: 'work',
     title: 'Work lifecycle fixture',
@@ -14,27 +38,13 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
     sourceClosed: workBoard.sourceClosed,
     phases: Object.fromEntries(
       Object.entries(workBoard.phases).map(([stage, phase]) => {
-        const leaves = Object.entries(handlers[stage] ?? {});
         return [
           stage,
           {
             ...phase,
-            // Lifecycle tests jump straight to the phase whose handlers they exercise; the
-            // Work board's own topology is tested against workBoard itself.
             nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
-            onEnter: {
-              ...phase.onEnter,
-              ...Object.fromEntries(
-                leaves.filter(([, leaf]) => leaf && 'onEnter' in leaf).map(([source, leaf]) => [source, leaf?.onEnter]),
-              ),
-            },
-            onExit: {
-              ...phase.onExit,
-              ...Object.fromEntries(
-                leaves.filter(([, leaf]) => leaf && 'onExit' in leaf).map(([source, leaf]) => [source, leaf?.onExit]),
-              ),
-            },
-          },
+            ...overrides[stage as WorkBoardPhase],
+          } as BoardPhaseDefinition<string>,
         ];
       }),
     ),
@@ -42,13 +52,25 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
   return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
-/** Work board with its tool-result rules replaced, for exercising the processor's tool ingress. */
+/**
+ * Work board with the given tool-result rules, for exercising the processor's tool ingress. An
+ * exit tool a rule is given for no longer moves the card itself, so the rule decides instead.
+ */
 export function createToolRuleTestRegistry(tools: BoardDefinition<string, string>['tools']): BoardRegistry {
+  const phases = Object.fromEntries(
+    Object.entries(workBoard.phases).map(([stage, phase]) => {
+      if (phase.kind !== 'working' || !phase.exitTool || !Object.hasOwn(tools, phase.exitTool.id)) {
+        return [stage, phase];
+      }
+      const { next: _next, ...exitTool } = phase.exitTool;
+      return [stage, { ...phase, exitTool }];
+    }),
+  );
   const board = defineBoard({
     id: 'work',
     title: 'Work tool-rule fixture',
     initialPhase: 'intake',
-    phases: workBoard.phases,
+    phases,
     transitionPolicy: workBoard.transitionPolicy,
     sourceClosed: workBoard.sourceClosed,
     tools: { ...tools },
@@ -56,21 +78,60 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
   return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
-export function createTestBoard(
-  options: { id?: string; onShipped?: FactoryRuleHandler<FactoryStageRuleContext> } = {},
+/**
+ * Commits a move of the card into `stage` whose evaluation queued `decisions`, the way an accepted
+ * transition persists the decisions its rules returned. Tests that exercise how the dispatcher
+ * executes a decision queue it this way; phases themselves only ever start their runner.
+ */
+export async function commitDecisions(
+  storage: WorkItemsStorage,
+  input: {
+    orgId?: string;
+    factoryProjectId: string;
+    workItemId: string;
+    stage: string;
+    decisions: readonly unknown[];
+    ingress?: string;
+    actorId?: string;
+    configVersion?: string;
+    causalChain?: Array<{ ingressId: string; decisionType: string }>;
+  },
 ) {
+  const orgId = input.orgId ?? 'org-1';
+  const item = await storage.get({ orgId, id: input.workItemId });
+  if (!item) throw new Error(`Expected work item ${input.workItemId}.`);
+  const decisions = validateFactoryRuleDecisions(input.decisions, input.causalChain?.length ?? 0);
+  const ingress = input.ingress ?? `commit-${randomUUID()}`;
+  const committed = await storage.commitTransition({
+    orgId,
+    factoryProjectId: input.factoryProjectId,
+    workItemId: input.workItemId,
+    expectedRevision: item.revision,
+    destinationStage: input.stage,
+    actorId: input.actorId ?? 'factory-rule-dispatcher',
+    ingress: { identity: ingress, triggerType: 'rule', transitionId: randomUUID() },
+    configVersion: input.configVersion ?? 'rules-v1',
+    causalChain: input.causalChain ?? [],
+    evaluation: { outcome: 'accepted', decisions: decisions as unknown as Record<string, unknown>[] },
+  });
+  if (committed.status === 'missing') throw new Error(`Expected work item ${input.workItemId}.`);
+  return committed;
+}
+
+export function createTestBoard(options: { id?: string; shippingRunner?: Omit<BoardPhaseRunner, 'context'> } = {}) {
   return defineBoard({
     id: options.id ?? 'release',
     title: 'Release',
     initialPhase: 'queued',
     phases: {
-      queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipping', skip: 'shipped' } },
-      shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
-      shipped: {
-        title: 'Shipped',
-        kind: 'terminal',
-        onEnter: options.onShipped ? { issue: options.onShipped } : undefined,
+      queued: { title: 'Queued', kind: 'resting', nextPhases: ['shipping', 'shipped'] },
+      shipping: {
+        title: 'Shipping',
+        kind: 'working',
+        runner: { ...options.shippingRunner, context: 'release' },
+        next: 'shipped',
       },
+      shipped: { title: 'Shipped', kind: 'terminal' },
     },
   });
 }

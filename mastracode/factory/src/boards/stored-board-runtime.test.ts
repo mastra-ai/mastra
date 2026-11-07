@@ -937,7 +937,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       it('brings back an app board a project deleted, in the projects named, and nowhere else', async () => {
         stubModel();
         const orgId = `org-${randomUUID()}`;
-        const shipped = vi.fn(() => undefined);
         const release = compileBoardDefinition({
           id: 'release',
           name: 'Release',
@@ -947,9 +946,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             shipping: {
               name: 'Shipping',
               kind: 'working',
-              runner: { context: 'work' },
+              runner: { context: 'work', skill: 'factory-plan' },
               nextPhases: ['shipped'],
-              onEnter: { manual: shipped },
             },
             shipped: { name: 'Shipped', kind: 'terminal' },
           },
@@ -986,7 +984,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         });
         const back = await catalog(replica, gone);
         expect(back.find(board => board.id === 'release')).toMatchObject({ source: 'app' });
-        // It runs with the app board's code behaviour again; the project not named stays without it.
+        // It runs again: entering its working phase queues that phase's runner; the project not named stays without it.
         const base = `/web/factory/projects/${gone}`;
         const card = (await replica.send('POST', `${base}/work-items`, { board: 'release', title: 'Ship it' })).json
           .workItem;
@@ -998,7 +996,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           cause: 'test',
         });
         expect(moved.status).toBe(200);
-        await vi.waitFor(() => expect(shipped).toHaveBeenCalled(), { timeout: 10_000 });
+        const runs = await replica.workItems.listDeferredDecisions(orgId, gone, { workItemId: card.id });
+        expect(runs.map(record => record.decision)).toContainEqual(
+          expect.objectContaining({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' }),
+        );
         expect((await replica.boards.get({ orgId, factoryProjectId: gone }, 'release'))!.revision).toBe(1);
         expect(await replica.boards.get({ orgId, factoryProjectId: other }, 'release')).toBeNull();
 
@@ -1051,19 +1052,66 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         ).find(record => record.decision.type === 'invokeSkill');
         expect(largePlan?.status).toBe('proposed');
 
-        const conflicting = await patch(
+        // Runner fields are the project's to edit: no code handler holds Triage's context any more.
+        const recontexted = await patch(
           work.phases.map(phase =>
             phase.key === 'triage' ? { ...phase, runner: { ...phase.runner, context: 'work' } } : phase,
           ) as StoredPhase[],
           saved.json.board.revision,
         );
+        expect(recontexted.status, JSON.stringify(recontexted.json)).toBe(200);
+
+        // What Work's code still depends on stays locked: Done closes cards when their source closes.
+        const conflicting = await patch(
+          work.phases.map(phase => (phase.key === 'done' ? { ...phase, kind: 'resting' } : phase)) as StoredPhase[],
+          recontexted.json.board.revision,
+        );
         expect(conflicting).toMatchObject({
           status: 422,
           json: {
             error: 'code_behaviour',
-            message: 'Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
+            message: 'Phase "done" must stay terminal; its code behaviour depends on it.',
           },
         });
+      }, 60_000);
+
+      it("runs an edited Triage runner — another skill, with its instructions — instead of Work's seed", async () => {
+        const TRIAGE_NOTE = 'Shipyard: label the card before anything else.';
+        const requests = stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId);
+        const projectId = await runnableProject(replica, orgId);
+        const read = await replica.send('GET', `/web/factory/projects/${projectId}/boards/work`);
+        const work = read.json.board as { name: string; revision: number; phases: StoredPhase[] };
+        const saved = await replica.send('PATCH', `/web/factory/projects/${projectId}/boards/work`, {
+          name: work.name,
+          expectedRevision: work.revision,
+          phases: work.phases.map(phase =>
+            phase.key === 'triage'
+              ? {
+                  ...phase,
+                  runner: { ...phase.runner, skill: 'factory-plan', instructions: TRIAGE_NOTE },
+                  autoStart: true,
+                }
+              : phase,
+          ),
+        });
+        expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+
+        const card = await githubIssue(replica, projectId, 'Edited triage', { trusted: true, labels: [] });
+        await ruleMoves(replica, orgId, projectId, card, 'triage');
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-plan', 'Edited triage')).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-plan', 'Edited triage')[0]).toContain(TRIAGE_NOTE);
+        const runs = (await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id })).filter(
+          record => record.decision.type === 'invokeSkill',
+        );
+        // The stored runner is the only start path: Work's seeded factory-triage never runs.
+        expect(runs.map(record => record.decision)).toEqual([
+          expect.objectContaining({ role: 'triage', skillName: 'factory-plan' }),
+        ]);
+        expect(runsOf(requests, 'factory-triage', 'Edited triage')).toEqual([]);
       }, 60_000);
     });
   },

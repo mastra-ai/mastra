@@ -1,5 +1,6 @@
 import type { BoardRegistry } from '../boards/index.js';
 import { autoApprovedExitTool } from '../boards/phase-automation.js';
+import { phaseRunDecision } from '../boards/phase-runner.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { boardForWorkItem, hasPullRequest } from '../boards/semantics.js';
@@ -9,7 +10,6 @@ import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../st
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleActor,
@@ -51,9 +51,9 @@ export interface FactoryTransitionRequest {
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
   cause: string;
   causalChain?: readonly FactoryRuleCausalEntry[];
-  /** Internal materialization path: evaluate only the destination onEnter leaf even when already at that stage. */
+  /** Internal materialization path: start the destination phase's runner even when already at that stage. */
   initialEntry?: boolean;
-  /** Re-runs the stage's entry rules when the item already holds that stage, to restart work the entry invalidated. */
+  /** Starts the stage's runner again when the item already holds that stage, to restart work the entry invalidated. */
   reenter?: boolean;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
@@ -119,8 +119,6 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     item: Card;
   }) => Promise<void> | void;
-  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
-  selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
 function rejection(
@@ -247,7 +245,6 @@ export class FactoryTransitionService {
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
-  readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
@@ -259,7 +256,6 @@ export class FactoryTransitionService {
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
-    this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -460,13 +456,14 @@ export class FactoryTransitionService {
       );
     }
 
-    // A people-only phase: agents and rules can't move cards in; people, provider event routes and
-    // intake routes placing a new card can.
+    // A people-only phase: agents and rules can't move cards in, nor file a new card straight into
+    // it; people, provider event routes and intake routes placing a new card can.
     const placedByPerson =
       request.actor.type === 'human' ||
       request.eventRoute !== undefined ||
       (request.actor.type === 'system' && request.actor.id === INTAKE_ROUTE_ACTOR_ID);
-    if (fromStage !== request.stage && board.phases[request.stage]?.manualEntry && !placedByPerson) {
+    const enters = fromStage !== request.stage || request.initialEntry === true;
+    if (enters && board.phases[request.stage]?.manualEntry && !placedByPerson) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -559,35 +556,16 @@ export class FactoryTransitionService {
           if (policy?.type === 'reject') {
             return { outcome: 'rejected' as const, code: policy.code, reason: policy.reason };
           }
-          const selfReviewEnabled =
-            request.board === 'work' && this.#selfReviewEnabled
-              ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false;
-          const decisions: FactoryCommitDecision[] = [];
-          for (const rule of resolveFactoryStageRules(boards, {
-            board: request.board,
-            source,
-            fromStage,
-            toStage: request.stage,
+          const run = phaseRunDecision(board, request.stage, contextBase, {
             initialEntry: request.initialEntry,
             reenter: request.reenter,
-          })) {
-            const context: FactoryStageRuleContext = Object.freeze({
-              ...contextBase,
-              selfReviewEnabled,
-              stage: rule.phase === 'exit' ? fromStage : request.stage,
-            });
-            const raw = await rule.handler(context);
-            if (raw === undefined) continue;
-            const decision = validateFactoryRuleDecision(raw, context.causalChain.length);
-            if (decision.type === 'reject') {
-              return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
-            }
-            assertFactoryDecisionTarget(decision, boards, itemBoard);
-            if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
-            decisions.push(decision);
-          }
-          const validated = validateFactoryRuleDecisions(decisions);
+          });
+          const validated = validateFactoryRuleDecisions(run ? [run] : [], contextBase.causalChain.length).filter(
+            decision => {
+              assertFactoryDecisionTarget(decision, boards, itemBoard);
+              return !(startsRun(decision) && runAlreadyUnderway(request, decision));
+            },
+          );
           if (humanMove) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');

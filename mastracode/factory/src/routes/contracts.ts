@@ -73,18 +73,11 @@ const storedBoardResponseSchema = z.object({
     editable: z.boolean(),
     /**
      * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
-     * phase stays with its kind, phases with code handlers keep their runner context and skill,
-     * the exit tool id stays, and the moves code makes from it stay in nextPhases. Null for stored boards.
+     * phase stays with its kind and the moves code makes from it stay in nextPhases. Null for
+     * stored boards.
      */
     codeBehaviour: z
-      .record(
-        z.string(),
-        z.object({
-          handlers: z.boolean(),
-          exitToolId: z.string().nullable(),
-          requiredNextPhases: z.array(z.string()),
-        }),
-      )
+      .record(z.string(), z.object({ requiredNextPhases: z.array(z.string()) }))
       .nullable()
       .optional(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
