@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { clearRunLeaseFence, setRunLeaseFence } from '../../../agent/run-lease-fence';
+import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { delay } from '../../../utils';
@@ -275,14 +276,18 @@ describe('computer tool calls run in model order', () => {
       abortSignal: controller.signal,
     });
     const errors: string[] = [];
+    const results: Record<string, unknown> = {};
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-error') errors.push((chunk.payload as any).toolCallId);
+      if (chunk.type === 'tool-result') results[(chunk.payload as any).toolCallId] = (chunk.payload as any).result;
     }
     // The run settles once the in-flight click returns; queued calls never wait out a gate.
     expect(Date.now() - startedAt).toBeLessThan(1500);
     await delay(300);
     expect(actions(log)).toEqual(['leftClick']);
     expect(errors).toEqual([]);
+    expect(results.c2).toBe(TOOL_ABORT_NOTICE);
+    expect(results.c3).toBe(TOOL_ABORT_NOTICE);
   }, 5000);
 
   it('an unknown tool before the computer calls neither blocks nor reorders them', async () => {
