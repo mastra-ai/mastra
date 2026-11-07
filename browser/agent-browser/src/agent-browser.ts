@@ -23,6 +23,7 @@ import type { Tool } from '@mastra/core/tools';
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page, Locator } from 'playwright-core';
+import { NetworkGuard } from './network-guard';
 import type {
   GotoInput,
   SnapshotInput,
@@ -71,10 +72,19 @@ export class AgentBrowser extends MastraBrowser {
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
   private browserConfig: BrowserConfig;
+  private readonly networkGuard?: NetworkGuard;
 
   constructor(config: AgentBrowserConfig = {}) {
     super(config);
     this.browserConfig = config;
+    if (config.blockPrivateNetwork) {
+      if (config.cdpUrl || config.createThreadManager) {
+        throw new Error(
+          "blockPrivateNetwork only protects browsers AgentBrowser launches itself, so it can't be combined with cdpUrl or createThreadManager.",
+        );
+      }
+      this.networkGuard = new NetworkGuard(config.blockPrivateNetwork === true ? [] : config.blockPrivateNetwork.allow);
+    }
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
@@ -106,6 +116,7 @@ export class AgentBrowser extends MastraBrowser {
       },
       // Cookies go in before saved tabs reload, so restored pages load signed in.
       onBrowserOpened: (threadId: string) => this.addPendingCookies(threadId),
+      networkGuard: this.networkGuard,
     };
     const createTm =
       config.createThreadManager ??
@@ -215,8 +226,12 @@ export class AgentBrowser extends MastraBrowser {
     if (localConfig.cdpHeaders) {
       launchOptions.cdpHeaders = localConfig.cdpHeaders;
     }
+    if (this.networkGuard) {
+      launchOptions.proxy = { server: await this.networkGuard.start() };
+    }
 
     await this.sharedManager.launch(launchOptions);
+    if (this.networkGuard) await this.networkGuard.guardContext(this.sharedManager.getContext());
 
     // Register the shared manager with ThreadManager
     this.threadManager.setSharedManager(this.sharedManager);
@@ -296,6 +311,7 @@ export class AgentBrowser extends MastraBrowser {
 
     // Close all thread sessions via ThreadManager
     await this.threadManager.destroyAllSessions();
+    await this.networkGuard?.close();
     this.setCurrentThread(undefined); // Reset to default thread
 
     // Close the main browser manager (only for 'shared' scope where it's actually launched)
@@ -762,6 +778,18 @@ export class AgentBrowser extends MastraBrowser {
     await context.storageState({ path });
   }
 
+  /** With `blockPrivateNetwork`, refuses a blocked URL up front with a reason the agent can act on. */
+  private async blockedUrl(url: string): Promise<BrowserToolError | undefined> {
+    if (!this.networkGuard) return undefined;
+    const reason = await this.networkGuard.check(url);
+    if (!reason) return undefined;
+    return this.createError(
+      'browser_error',
+      `This browser can't open ${url}: ${reason}.`,
+      'Only public websites can be opened from this browser.',
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // 1. browser_goto - Navigate to URL
   // ---------------------------------------------------------------------------
@@ -771,6 +799,8 @@ export class AgentBrowser extends MastraBrowser {
     threadId?: string,
   ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
     try {
+      const blocked = await this.blockedUrl(input.url);
+      if (blocked) return blocked;
       const page = await this.getPage(threadId);
 
       await page.goto(input.url, {
@@ -1361,6 +1391,10 @@ export class AgentBrowser extends MastraBrowser {
               'Tab management not supported',
               'This browser provider does not support tab management.',
             );
+          }
+          if (input.url) {
+            const blocked = await this.blockedUrl(input.url);
+            if (blocked) return blocked;
           }
           const result = await browser.newTab();
           // If URL provided, navigate to it after creating the tab

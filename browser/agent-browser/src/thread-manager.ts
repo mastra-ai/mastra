@@ -10,6 +10,7 @@ import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/c
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page } from 'playwright-core';
+import type { NetworkGuard } from './network-guard';
 import type { BrowserConfig } from './types';
 
 /**
@@ -32,6 +33,8 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
   onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
   /** Runs once a thread's browser is open, before saved tabs are restored (e.g. to add cookies) */
   onBrowserOpened?: (threadId: string) => Promise<void>;
+  /** Proxy and route that keep launched browsers off private networks (`blockPrivateNetwork`) */
+  networkGuard?: NetworkGuard;
 }
 
 /**
@@ -52,6 +55,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   protected readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
   protected readonly onBrowserOpened?: (threadId: string) => Promise<void>;
+  protected readonly networkGuard?: NetworkGuard;
 
   constructor(config: AgentBrowserThreadManagerConfig) {
     super(config);
@@ -59,6 +63,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
     this.resolveCdpUrl = config.resolveCdpUrl;
     this.onBrowserCreated = config.onBrowserCreated;
     this.onBrowserOpened = config.onBrowserOpened;
+    this.networkGuard = config.networkGuard;
   }
 
   /**
@@ -100,9 +105,13 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       if (this.browserConfig.cdpHeaders) {
         launchOptions.cdpHeaders = this.browserConfig.cdpHeaders;
       }
+      if (this.networkGuard) {
+        launchOptions.proxy = { server: await this.networkGuard.start() };
+      }
 
       try {
         await manager.launch(launchOptions);
+        if (this.networkGuard) await this.networkGuard.guardContext(manager.getContext());
       } catch (error) {
         // Clean up manager on launch failure
         try {
