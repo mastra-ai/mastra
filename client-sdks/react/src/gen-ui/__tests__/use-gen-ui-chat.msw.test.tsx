@@ -993,6 +993,62 @@ describe('useGenUIChat — actions and context', () => {
     await waitFor(() => expect(chosen).toEqual(['USD']));
   });
 
+  it('streaming a new answer does not re-render earlier messages', async () => {
+    const stream = controllableStream();
+    server.use(http.post(STREAM_URL, () => stream.response()));
+    const renders: Record<string, number> = {};
+    const renderers = {
+      Text: (part: { text: string }) => {
+        renders[part.text] = (renders[part.text] ?? 0) + 1;
+        return <span>{part.text}</span>;
+      },
+    };
+    const history: MastraDBMessage[] = [
+      {
+        id: 'm1',
+        role: 'assistant',
+        createdAt: new Date(0),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2, parts: [{ type: 'text', text: 'Earlier answer' }] },
+      },
+    ];
+    function App() {
+      const chat = useGenUIChat({
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        genUI: createGenUI({ components: { WeatherCard } }),
+        initialMessages: history,
+        renderers,
+      });
+      current = chat;
+      return (
+        <>
+          {chat.messages.map(message => (
+            <MessageFactory key={message.id} message={message} {...chat.genUI.renderers} />
+          ))}
+        </>
+      );
+    }
+    renderWithProviders(<App />);
+    expect(screen.getByText('Earlier answer')).toBeTruthy();
+    const before = renders['Earlier answer'];
+
+    await send('Tell me more');
+    act(() => stream.push(chunk('start'), chunk('text-start', { id: 't1' })));
+    for (const word of ['One', ' two', ' three', ' four']) {
+      act(() => stream.push(chunk('text-delta', { id: 't1', text: word })));
+    }
+    expect(await screen.findByText('One two three four')).toBeTruthy();
+    act(() => {
+      stream.push(chunk('text-end', { id: 't1' }), finish('stop'));
+      stream.close();
+    });
+    await waitFor(() => expect(current.isRunning).toBe(false));
+
+    expect(renders['Earlier answer']).toBe(before);
+  });
+
   it('published app context travels with the next message only while the publisher is mounted', async () => {
     const bodies: Record<string, unknown>[] = [];
     server.use(

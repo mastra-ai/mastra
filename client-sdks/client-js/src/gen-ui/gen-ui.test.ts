@@ -129,15 +129,58 @@ describe('createGenUIEmitter', () => {
     expect(state.buffered).toEqual({});
     expect(state.surfaces.w!.nodes.card!.props.temp).toBe(20);
   });
+
+  it('keeps later updates applicable when an earlier un-awaited write fails', async () => {
+    const { chunks, generateEventId } = recorder();
+    let calls = 0;
+    const writer = {
+      custom: async (chunk: GenUIChunk) => {
+        calls += 1;
+        const call = calls;
+        await new Promise(resolve => setTimeout(resolve, 5));
+        if (call === 2) throw new Error('stream closed');
+        chunks.push(chunk);
+      },
+    };
+    const ui = createGenUIEmitter(writer, { generateEventId }).surface('w');
+    const results = await Promise.allSettled([
+      ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { temp: 0 } }] }),
+      ui.updateProps('card', { temp: 10 }),
+      ui.updateProps('card', { temp: 20 }),
+    ]);
+
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    expect(state.diagnostics).toEqual([]);
+    expect(state.buffered).toEqual({});
+    expect(state.surfaces.w!.nodes.card!.props.temp).toBe(20);
+  });
+
+  it('links surfaces to the tool call when given the tool execution context', async () => {
+    const { chunks, writer, generateEventId } = recorder();
+    const context = { writer, agent: { toolCallId: 'call-1' } };
+    await createGenUIEmitter(context, { generateEventId, source: { agentId: 'weather' } })
+      .surface('w')
+      .create({ nodes: [{ id: 'card', component: 'WeatherCard', props: {} }] });
+    await createGenUIEmitter(context, { generateEventId, source: { toolCallId: 'explicit' } })
+      .surface('x')
+      .create({ nodes: [{ id: 'card', component: 'WeatherCard', props: {} }] });
+
+    const sources = chunks.map(chunk => chunk.data.operations[0]);
+    expect(sources).toMatchObject([
+      { op: 'createSurface', source: { agentId: 'weather', toolCallId: 'call-1' } },
+      { op: 'createSurface', source: { toolCallId: 'explicit' } },
+    ]);
+  });
 });
 
 describe('createGenUISession', () => {
-  it('applies only new events while messages stream, keeping unchanged surfaces stable', () => {
+  it('applies only new events while messages stream, keeping unchanged surfaces stable', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const emitter = createGenUIEmitter(writer, { generateEventId });
-    void emitter.surface('a').create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'a' } }] });
-    void emitter.surface('b').create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'b' } }] });
-    void emitter.surface('b').updateProps('root', { text: 'b2' });
+    await emitter.surface('a').create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'a' } }] });
+    await emitter.surface('b').create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'b' } }] });
+    await emitter.surface('b').updateProps('root', { text: 'b2' });
 
     const session = createGenUISession();
     const listener = vi.fn();
@@ -169,11 +212,11 @@ describe('createGenUISession', () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it('rebuilds deterministically when history is replaced (reload, regenerate)', () => {
+  it('rebuilds deterministically when history is replaced (reload, regenerate)', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('s');
-    void ui.create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'v1' } }] });
-    void ui.updateProps('root', { text: 'v2' });
+    await ui.create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'v1' } }] });
+    await ui.updateProps('root', { text: 'v2' });
 
     const session = createGenUISession();
     session.sync([
@@ -204,11 +247,11 @@ describe('createGenUISession', () => {
     expect(reloaded.getState()).toEqual(session.getState());
   });
 
-  it('keeps out-of-band envelopes across rebuilds and deduplicates them against history', () => {
+  it('keeps out-of-band envelopes across rebuilds and deduplicates them against history', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('panel');
-    void ui.create({ placement: 'panel', nodes: [{ id: 'root', component: 'Progress', props: { pct: 0 } }] });
-    void ui.updateProps('root', { pct: 50 });
+    await ui.create({ placement: 'panel', nodes: [{ id: 'root', component: 'Progress', props: { pct: 0 } }] });
+    await ui.updateProps('root', { pct: 50 });
 
     const session = createGenUISession();
     chunks.forEach(chunk => session.ingest(chunk.data));
@@ -350,10 +393,10 @@ describe('createGenUIContextStore', () => {
 });
 
 describe('createGenUIActionDispatcher', () => {
-  const surfaceState = () => {
+  const surfaceState = async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('form');
-    void ui.create({ nodes: [{ id: 'approve', component: 'ApproveButton', props: { label: 'Approve' } }] });
+    await ui.create({ nodes: [{ id: 'approve', component: 'ApproveButton', props: { label: 'Approve' } }] });
     return {
       ui,
       chunks,
@@ -365,7 +408,7 @@ describe('createGenUIActionDispatcher', () => {
     typeof value === 'object' && value !== null && typeof (value as { amount?: unknown }).amount === 'number';
 
   it('validates the payload, runs the handler once per action id, and returns the cached result on retry', async () => {
-    const { state } = surfaceState();
+    const { state } = await surfaceState();
     const handle = vi.fn(async (payload: { amount: number }) => payload.amount * 2);
     const dispatcher = createGenUIActionDispatcher({
       getSurface: id => state().surfaces[id],
@@ -390,8 +433,8 @@ describe('createGenUIActionDispatcher', () => {
   });
 
   it('rejects actions from a node that changed after it was rendered', async () => {
-    const { ui, state } = surfaceState();
-    void ui.updateProps('approve', { label: 'Amount changed — review again' });
+    const { ui, state } = await surfaceState();
+    await ui.updateProps('approve', { label: 'Amount changed — review again' });
     const handle = vi.fn();
     const dispatcher = createGenUIActionDispatcher({
       getSurface: id => state().surfaces[id],
