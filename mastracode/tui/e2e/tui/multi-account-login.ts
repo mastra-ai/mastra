@@ -134,11 +134,10 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
-    terminal.write('\x1b[B');
-    await runtime.waitForScreenText(/→ Anthropic \(Claude Pro\/Max\) Account B/i, terminal, 8_000);
-    terminal.write('\r');
+    // Clicks run the same path as Enter: click the account, then its action.
+    await terminal.clickText?.('Anthropic (Claude Pro/Max) Account B');
     await runtime.waitForScreenText(/→ Set as active/i, terminal, 8_000);
-    terminal.write('\r');
+    await terminal.clickText?.('Set as active');
     await runtime.waitForScreenText(/Switched to Anthropic \(Claude Pro\/Max\) Account B/i, terminal, 8_000);
 
     // Re-authenticate account A in place from its submenu: fresh tokens

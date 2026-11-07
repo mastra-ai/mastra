@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { CustomEditor } from '../components/custom-editor.js';
 import { GithubPRPickerDialog } from '../components/github-pr-picker.js';
+import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
+import { LoginModeSelectorComponent } from '../components/login-mode-selector.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
@@ -407,5 +409,60 @@ describe('hand-drawn pickers on PickerList', () => {
     const pr101 = harness.find('pr-101');
     await harness.click(pr101.row, pr101.col);
     expect(confirmed).toEqual([['#102'], ['#102']]);
+  });
+
+  it('login mode selector: clicking a mode description picks that mode, like Enter', async () => {
+    harness = createHarness();
+    const picked: string[] = [];
+    const modes = [
+      { id: 'oauth', name: 'OAuth', description: 'Sign in with the browser' },
+      { id: 'key', name: 'API key', description: 'Paste a key you already have' },
+    ];
+    showModalOverlay(
+      harness.ui,
+      new LoginModeSelectorComponent(
+        'Acme',
+        modes as never,
+        id => picked.push(id),
+        () => {},
+      ),
+    );
+    await harness.render();
+
+    const description = harness.find('Paste a key you already have');
+    await harness.hover(description.row, description.col);
+    await harness.render();
+    expect(harness.markedRows()).toContain(harness.find('API key').row);
+
+    await harness.click(description.row, description.col);
+    expect(picked).toEqual(['key']);
+  });
+
+  it('login account manager: clicks walk into an account and run its action, like Enter', async () => {
+    harness = createHarness();
+    const activated: string[] = [];
+    const manager = new LoginAccountManagerComponent(
+      'Acme',
+      [
+        { id: 'a', label: 'first@acme.dev', active: true },
+        { id: 'b', label: 'second@acme.dev', active: false },
+      ],
+      {
+        onAddAnother() {},
+        onReauthenticate() {},
+        onRemove() {},
+        onActivate: id => activated.push(id),
+        onBack() {},
+      },
+    );
+    showModalOverlay(harness.ui, manager);
+    await harness.render();
+
+    const second = harness.find('second@acme.dev');
+    await harness.click(second.row, second.col);
+    await harness.render();
+    const activate = harness.find('Set as active');
+    await harness.click(activate.row, activate.col);
+    expect(activated).toEqual(['b']);
   });
 });

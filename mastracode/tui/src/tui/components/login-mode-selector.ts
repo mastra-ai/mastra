@@ -5,14 +5,15 @@
  * an env var.
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import type { AuthMode } from '@mastra/code-sdk/auth/types';
 import { showModalOverlay } from '../overlay.js';
 import { theme } from '../theme.js';
+import { PickerList } from './picker-list.js';
 
 export class LoginModeSelectorComponent extends Box {
-  private listContainer: Container;
+  private list: PickerList<AuthMode>;
   private modes: ReadonlyArray<AuthMode>;
   private selectedIndex = 0;
   private onSelectCallback: (modeId: string) => void;
@@ -33,8 +34,23 @@ export class LoginModeSelectorComponent extends Box {
     this.addChild(new Text(theme.fg('text', `How do you want to sign in to ${providerName}?`)));
     this.addChild(new Spacer(1));
 
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
+    this.list = new PickerList({
+      maxVisible: Number.POSITIVE_INFINITY,
+      paddingX: 1,
+      paddingY: 1,
+      renderItem: (mode, isSelected) => {
+        const prefix = isSelected ? theme.fg('accent', '→ ') : '  ';
+        const label = isSelected ? theme.fg('accent', mode.name) : mode.name;
+        return mode.description
+          ? [`${prefix}${label}`, theme.fg('muted', `    ${mode.description}`)]
+          : [`${prefix}${label}`];
+      },
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
+    });
+    this.addChild(this.list);
 
     this.addChild(new Spacer(1));
     this.addChild(new Text(theme.fg('muted', 'Press Enter to select, Escape to cancel')));
@@ -43,21 +59,7 @@ export class LoginModeSelectorComponent extends Box {
   }
 
   private updateList(): void {
-    this.listContainer.clear();
-
-    for (let i = 0; i < this.modes.length; i++) {
-      const mode = this.modes[i];
-      if (!mode) continue;
-
-      const isSelected = i === this.selectedIndex;
-      const prefix = isSelected ? theme.fg('accent', '→ ') : '  ';
-      const label = isSelected ? theme.fg('accent', mode.name) : mode.name;
-      this.listContainer.addChild(new Text(`${prefix}${label}`));
-
-      if (mode.description) {
-        this.listContainer.addChild(new Text(theme.fg('muted', `    ${mode.description}`)));
-      }
-    }
+    this.list.setItems([...this.modes], this.selectedIndex);
   }
 
   handleInput(keyData: string): void {

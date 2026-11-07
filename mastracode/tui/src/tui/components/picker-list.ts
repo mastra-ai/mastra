@@ -12,10 +12,14 @@ import { theme } from '../theme.js';
 export interface PickerListOptions<T> {
   maxVisible: number;
   /** Lines for one item; each line wraps to the list width like a `Text`. */
-  renderItem: (item: T, selected: boolean) => string[];
+  renderItem: (item: T, selected: boolean, index: number) => string[];
   /** Called with the clicked item's index. Pickers should do whatever Enter does. */
   onActivate: (index: number) => void;
-  emptyText: () => string;
+  /** Shown when there are no items; omit to render nothing. */
+  emptyText?: () => string;
+  /** `Text` padding around each line, for pickers that draw rows as padded `Text`s. */
+  paddingX?: number;
+  paddingY?: number;
 }
 
 export class PickerList<T> implements Component, MouseAware {
@@ -30,7 +34,10 @@ export class PickerList<T> implements Component, MouseAware {
   }
 
   render(width: number): string[] {
-    if (this.items.length === 0) return new Text(theme.fg('muted', this.options.emptyText()), 0, 0).render(width);
+    if (this.items.length === 0) {
+      const { emptyText } = this.options;
+      return emptyText ? new Text(theme.fg('muted', emptyText()), 0, 0).render(width) : [];
+    }
 
     const { startIndex, endIndex } = this.visibleRange();
     const lines: string[] = [];
@@ -58,9 +65,10 @@ export class PickerList<T> implements Component, MouseAware {
 
   private renderRows(index: number, width: number): string[] {
     const item = this.items[index] as T;
+    const { paddingX = 0, paddingY = 0 } = this.options;
     return this.options
-      .renderItem(item, index === this.selectedIndex)
-      .flatMap(line => new Text(line, 0, 0).render(width));
+      .renderItem(item, index === this.selectedIndex, index)
+      .flatMap(line => new Text(line, paddingX, paddingY).render(width));
   }
 
   private visibleRange(): { startIndex: number; endIndex: number } {
