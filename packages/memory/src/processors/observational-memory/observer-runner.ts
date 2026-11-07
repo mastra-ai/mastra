@@ -5,13 +5,14 @@ import type { WidenedMastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
+import { ImageDownscaler } from '@mastra/core/processors';
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
+import { formatOmError, isOmModelExecutionFailure, isOmRequestRejection, OmModelExecutionError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -120,6 +121,14 @@ interface MultiThreadObserverResult {
   extractors?: readonly Extractor<any>[];
 }
 
+function shouldRetryWithoutAttachments(error: unknown, messages: ReadonlyArray<{ content: unknown }>): boolean {
+  if (!isOmRequestRejection(error)) return false;
+  return messages.some(
+    message =>
+      Array.isArray(message.content) && message.content.some(part => part?.type === 'image' || part?.type === 'file'),
+  );
+}
+
 function filterObserverExtractors(
   extractors: ResolvedObservationConfig['extractors'] | undefined,
   skipContinuationHints?: boolean,
@@ -194,6 +203,9 @@ export class ObserverRunner {
       // withRetry owns retries and restarts each attempt from a clean prompt.
       // Processor retries would continue from the failed attempt instead.
       errorProcessorDefaults: false,
+      // Screenshots and pasted images can exceed provider limits (Anthropic rejects >8000px).
+      // Shrink them for the Observer prompt; stored messages keep the originals.
+      inputProcessors: [new ImageDownscaler()],
       instructions: buildObserverSystemPrompt(
         isMultiThread,
         this.observationConfig.instruction,
@@ -337,7 +349,7 @@ export class ObserverRunner {
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
-    const observerMessages = [
+    const buildMessages = (filter: ObserverAttachmentFilter) => [
       buildObserverRequestMessage(
         existingObservations,
         messagesToObserve,
@@ -346,9 +358,10 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
           extractors: activeExtractors,
         },
-        { attachmentFilter, timeZone: options?.timeZone },
+        { attachmentFilter: filter, timeZone: options?.timeZone },
       ),
     ];
+    let observerMessages = buildMessages(attachmentFilter);
 
     const doGenerate = async () => {
       return withRetry(
@@ -387,11 +400,12 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
+                  const output = await streamResult.getFullOutput();
+                  // A rejected request can resolve with the error instead of throwing it; surface it
+                  // so the empty-output checks below don't turn it into a retryable empty response.
+                  if (shouldRetryWithoutAttachments(output.error, observerMessages)) throw output.error;
                   return assertRecognizedObserverOutput(
-                    assertNonEmptyObserverOutput(
-                      assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer'),
-                      'OM observer',
-                    ),
+                    assertNonEmptyObserverOutput(assertCompleteModelResponse(output, 'OM observer'), 'OM observer'),
                     'OM observer',
                     text => hasSingleThreadObserverContent(text, activeExtractors),
                   );
@@ -427,7 +441,15 @@ export class ObserverRunner {
       );
     };
 
-    let result = await doGenerate();
+    let result: Awaited<ReturnType<typeof doGenerate>>;
+    try {
+      result = await doGenerate();
+    } catch (error) {
+      if (!shouldRetryWithoutAttachments(error, observerMessages)) throw error;
+      omDebug(`[OM:callObserver] request rejected, retrying without attachments: ${formatOmError(error)}`);
+      observerMessages = buildMessages(false);
+      result = await doGenerate();
+    }
     let parsed = parseObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
@@ -683,7 +705,7 @@ export class ObserverRunner {
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
-    const observerMessages = [
+    const buildMessages = (filter: ObserverAttachmentFilter) => [
       buildMultiThreadObserverRequestMessage(
         existingObservations,
         messagesByThread,
@@ -692,9 +714,10 @@ export class ObserverRunner {
         wasTruncated,
         this.observationConfig.threadTitle,
         activeExtractors,
-        { attachmentFilter: multiThreadAttachmentFilter, timeZone },
+        { attachmentFilter: filter, timeZone },
       ),
     ];
+    let observerMessages = buildMessages(multiThreadAttachmentFilter);
 
     const doGenerate = async () => {
       return withRetry(
@@ -731,9 +754,13 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
+                  const output = await streamResult.getFullOutput();
+                  // A rejected request can resolve with the error instead of throwing it; surface it
+                  // so the empty-output checks below don't turn it into a retryable empty response.
+                  if (shouldRetryWithoutAttachments(output.error, observerMessages)) throw output.error;
                   return assertRecognizedObserverOutput(
                     assertNonEmptyObserverOutput(
-                      assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer'),
+                      assertCompleteModelResponse(output, 'OM multi-thread observer'),
                       'OM multi-thread observer',
                     ),
                     'OM multi-thread observer',
@@ -773,7 +800,15 @@ export class ObserverRunner {
       );
     };
 
-    let result = await doGenerate();
+    let result: Awaited<ReturnType<typeof doGenerate>>;
+    try {
+      result = await doGenerate();
+    } catch (error) {
+      if (!shouldRetryWithoutAttachments(error, observerMessages)) throw error;
+      omDebug(`[OM:callMultiThreadObserver] request rejected, retrying without attachments: ${formatOmError(error)}`);
+      observerMessages = buildMessages(false);
+      result = await doGenerate();
+    }
     let parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 

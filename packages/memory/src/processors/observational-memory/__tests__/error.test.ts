@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
-import { formatOmError, getOmFailureMetadata, isOmModelExecutionFailure } from '../error';
+import { formatOmError, getOmFailureMetadata, isOmModelExecutionFailure, isOmRequestRejection } from '../error';
 import { createBufferingFailedMarker, createObservationFailedMarker } from '../markers';
 
 const providerError = () =>
@@ -16,6 +16,26 @@ const providerError = () =>
   });
 
 const diagnostic = 'Bad Request: HTTP 400: Unsupported parameter: temperature';
+
+describe('isOmRequestRejection', () => {
+  it.each([400, 413, 415, 422])('recognizes HTTP %i through wrappers', statusCode => {
+    const rejection = Object.assign(new Error('rejected'), { statusCode });
+    expect(isOmRequestRejection(rejection)).toBe(true);
+    expect(isOmRequestRejection(new Error('wrapper', { cause: rejection }))).toBe(true);
+    expect(isOmRequestRejection({ error: rejection })).toBe(true);
+    expect(isOmRequestRejection({ cause: new Error('unrelated'), error: rejection })).toBe(true);
+  });
+
+  it.each([401, 403, 404, 429, 500, 529])('ignores HTTP %i', statusCode => {
+    expect(isOmRequestRejection(Object.assign(new Error('failed'), { statusCode }))).toBe(false);
+  });
+
+  it('ignores aborts and errors without a status', () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError', statusCode: 400 });
+    expect(isOmRequestRejection(abort)).toBe(false);
+    expect(isOmRequestRejection(new TypeError('terminated'))).toBe(false);
+  });
+});
 
 describe('isOmModelExecutionFailure', () => {
   const apiCallErrorBrand = Symbol.for('vercel.ai.error.AI_APICallError');
