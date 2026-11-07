@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import { useEntityLearningProgress, useThemeEntities, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
-import { orderedSignals } from '../signal-formatting';
+import { selectableSignals } from '../signal-formatting';
 import { SignalsErrorState } from '../signals-error-state';
 import { SignalsLoadingSkeleton } from '../signals-loading-skeleton';
 import { TraceIntelligenceProvider } from '../trace-intelligence-provider';
@@ -34,7 +34,7 @@ export function TraceIntelligenceEntityDetail({
     candidate => candidate.entityType === entityType && candidate.entityId === entityId,
   );
   const signalCatalog = entity?.signalCatalog ?? context.signalCatalog;
-  const signalNames = entity ? orderedSignals(signalCatalog, entity.availableSignals) : [];
+  const signalNames = entity ? selectableSignals(signalCatalog, entity.availableSignals) : [];
   const progressQuery = useEntityLearningProgress(
     entityId,
     entityType,

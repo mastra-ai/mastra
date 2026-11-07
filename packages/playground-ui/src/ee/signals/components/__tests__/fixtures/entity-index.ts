@@ -80,4 +80,37 @@ export const customSignalEntityResponse: ThemeEntitiesResponse = {
   ],
 };
 
+const builtInCatalogEntry = (name: string, order: number, enabled: boolean) => ({
+  name,
+  label: name.charAt(0).toUpperCase() + name.slice(1),
+  description: `${name} description`,
+  order,
+  builtIn: true,
+  enabled,
+  status: 'ready' as const,
+});
+
+/** Entity whose historical theme output still lists a paused built-in signal. */
+export const pausedSignalEntityResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'paused-agent',
+      entityType: 'agent',
+      availableSignals: ['behavior', 'goal', 'issues', 'outcome', 'sentiment'],
+      signalCatalog: [
+        builtInCatalogEntry('goal', 0, true),
+        builtInCatalogEntry('sentiment', 1, true),
+        builtInCatalogEntry('behavior', 2, false),
+        builtInCatalogEntry('outcome', 3, true),
+        builtInCatalogEntry('issues', 4, true),
+      ],
+      traceCount: 12,
+      readySignalCount: 4,
+      enabledSignalCount: 4,
+      status: 'ready',
+      updatedAt: '2026-08-18T16:00:00.000Z',
+    },
+  ],
+};
+
 export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };

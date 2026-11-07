@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
@@ -8,7 +8,12 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../test/msw-server';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
 import { TraceIntelligenceEntityDetail } from '../trace-intelligence-entity-detail';
-import { customSignalEntityResponse, emptyThemeSnapshotsResponse, entityIndexResponse } from './fixtures/entity-index';
+import {
+  customSignalEntityResponse,
+  emptyThemeSnapshotsResponse,
+  entityIndexResponse,
+  pausedSignalEntityResponse,
+} from './fixtures/entity-index';
 
 function TestWrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -56,6 +61,25 @@ describe('TraceIntelligenceEntityDetail', () => {
       expect(screen.getByText('How effectively the agent uses tools.')).toBeTruthy();
       expect(screen.getAllByText('Response quality')).toHaveLength(2);
       expect(screen.queryByText('Goal')).not.toBeTruthy();
+    });
+  });
+
+  describe('when historical theme output includes a paused signal', () => {
+    it('requests snapshots for enabled signals only', async () => {
+      let requestedSignalNames: string | null = null;
+      server.use(
+        http.get('/api/learning/entities', () => HttpResponse.json(pausedSignalEntityResponse)),
+        http.get('/api/learning/entities/paused-agent/theme-snapshots', ({ request }) => {
+          requestedSignalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(emptyThemeSnapshotsResponse);
+        }),
+      );
+
+      render(<TraceIntelligenceEntityDetail entityType="agent" entityId="paused-agent" />, {
+        wrapper: TestWrapper,
+      });
+
+      await waitFor(() => expect(requestedSignalNames).toBe('goal,sentiment,outcome,issues'));
     });
   });
 });
