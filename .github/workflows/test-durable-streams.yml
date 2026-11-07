@@ -19,10 +19,19 @@ permissions: {}
 
 jobs:
   worker-takeover:
-    name: Worker takeover (Redis + Postgres)
+    name: Worker takeover (Redis + Postgres, shard ${{ matrix.shard }}/${{ strategy.job-total }})
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: starsling-ubuntu-26.04
+    # Half-price 2 vCPU runners: a shard spends its time waiting on leases and restarts, and ran
+    # as fast on 2 vCPUs as on 4 (207 s against 205 s, Redis and Postgres on the same CPUs).
+    runs-on: starsling-ubuntu-26.04-2
     timeout-minutes: 30
+    # The suites are a few files of slow tests that spend most of their time waiting on leases
+    # and restarts, so they split by test (pubsub/redis-streams/vitest.test-shard.ts). Each shard
+    # gets its own Redis and Postgres.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     permissions:
       contents: read
     services:
@@ -95,3 +104,4 @@ jobs:
         working-directory: pubsub/redis-streams
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
+          VITEST_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}

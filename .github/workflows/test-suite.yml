@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'false'
+      # JSON array of shard numbers from "Plan unit test shards" in prebuild.yml.
+      unit_shards:
+        required: false
+        type: string
+        default: '[]'
       e2e_test_files:
         required: false
         type: string
@@ -42,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -75,7 +80,7 @@ jobs:
       - name: Build packages
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
-      - name: Run changed tests (Shard ${{ matrix.shard }}/4)
+      - name: Run changed tests (Shard ${{ matrix.shard }}/8)
         run: |
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
@@ -83,7 +88,7 @@ jobs:
             --reporter=verbose \
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-unit-${{ matrix.shard }}.json \
-            --shard=${{ matrix.shard }}/4 \
+            --shard=${{ matrix.shard }}/8 \
             --passWithNoTests
 
       - name: Upload test results
@@ -96,10 +101,14 @@ jobs:
           retention-days: 1
 
   affected-unit-test:
-    name: Affected UNIT Test
-    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
+    name: Affected UNIT Test (Shard ${{ matrix.shard }})
+    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true' && inputs.unit_shards != '[]'
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.unit_shards) }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -139,16 +148,20 @@ jobs:
           path: /tmp/affected-outputs
 
       - name: Run affected tests
-        # One vitest run for the whole list. xargs would split a long list into several runs
-        # that overwrite each other's blob report.
+        # One vitest run for the shard's whole list. xargs would split a long list into several
+        # runs that overwrite each other's blob report.
         run: |
-          mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
+          # Start the slowest files first (scripts/vitest-slow-first-sequencer.ts), when timings exist.
+          if [ -f /tmp/affected-outputs/test-timings.json ]; then
+            export VITEST_SLOW_FIRST_TIMINGS=/tmp/affected-outputs/test-timings.json
+          fi
+          mapfile -t test_files < /tmp/affected-outputs/shards/shard-${{ matrix.shard }}.txt
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+            --outputFile.blob=.vitest-reports/blob-unit-affected-${{ matrix.shard }}.json \
             --passWithNoTests \
             "${test_files[@]}"
 
@@ -156,7 +169,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: vitest-blob-unit-affected
+          name: vitest-blob-unit-affected-${{ matrix.shard }}
           path: .vitest-reports/
           include-hidden-files: true
           retention-days: 1
@@ -252,57 +265,26 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
+  # The required check. It only reads the test jobs' results, so it finishes seconds after the
+  # last shard instead of checking out and installing the repo to merge reports first. The
+  # merged report is "Test Report" below, which no merge waits for.
   merge-reports:
     name: Merge Test Reports
-    runs-on: starsling-ubuntu-26.04
+    runs-on: starsling-ubuntu-26.04-2
     needs: [unit-test, affected-unit-test, e2e-test]
-    # Required check: stays always() so a run cancelled mid-tests still reaches the
-    # "Require every test job to finish" step and fails. A skipped required job counts
-    # as a pass. The heavy steps below keep the implicit success() guard, which is
-    # false once the run is cancelled, so a superseded run spends seconds here.
+    # Required check: stays always() so a run cancelled mid-tests still fails here. A skipped
+    # required job counts as a pass.
     if: always()
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-
+    permissions: {}
     steps:
-      - name: Skip tests when no test selection is needed
-        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.has_unit_tests != 'true' && inputs.e2e_test_files == '')
-        run: echo "No unit or E2E tests selected; skipping report merge."
-
-      - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          fetch-depth: 1
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          pattern: vitest-blob-*
-          path: .vitest-reports
-          merge-multiple: true
-
-      - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
-        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
-
-      # A test job that failed or was cancelled before uploading its blob would otherwise
-      # be missing from the merged report, and this required check would pass without it.
+      # A test job that failed or was cancelled would otherwise leave this required check green.
       - name: Require every test job to finish
-        if: always()
         env:
           UNIT: ${{ needs.unit-test.result }}
           AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
           E2E: ${{ needs.e2e-test.result }}
+          # Affected unit tests were selected, so their shards must have run.
+          EXPECT_AFFECTED: ${{ inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true' }}
         run: |
           status=0
           for job in UNIT AFFECTED_UNIT E2E; do
@@ -313,4 +295,56 @@ jobs:
               status=1
             fi
           done
+          if [ "$EXPECT_AFFECTED" = "true" ] && [ "$AFFECTED_UNIT" != "success" ]; then
+            echo "::error::Affected unit tests were selected but no shard ran them."
+            status=1
+          fi
           exit $status
+
+  # Merges the shards' reports into one summary. On a full-suite run it also records how long
+  # each test file took, which "Plan unit test shards" in prebuild.yml balances shards with.
+  # Only runs on main (the alpha cron) can seed it: a PR's cache is visible to that PR alone.
+  test-report:
+    name: Test Report
+    runs-on: starsling-ubuntu-26.04
+    needs: [unit-test, affected-unit-test, e2e-test]
+    if: ${{ !cancelled() && inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Download test results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: vitest-blob-*
+          path: .vitest-reports
+          merge-multiple: true
+
+      - name: Merge reports
+        run: |
+          pnpm vitest --merge-reports=.vitest-reports \
+            --reporter=default --reporter=github-actions \
+            --reporter=json --outputFile.json=.vitest-reports/merged.json \
+            --passWithNoTests
+
+      - name: Record unit test timings
+        if: ${{ !cancelled() && inputs.run_full != 'false' }}
+        run: node .github/scripts/test-timings.cjs .vitest-reports/merged.json "$RUNNER_TEMP/test-timings.json"
+
+      - name: Save unit test timings
+        if: ${{ !cancelled() && inputs.run_full != 'false' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/test-timings.json
+          key: test-timings-v1-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}

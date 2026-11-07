@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { SlowFirstSequencer } from './scripts/vitest-slow-first-sequencer';
 
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
@@ -135,6 +136,8 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
 export default defineConfig(async () => ({
   test: {
     projects: await discoverProjects(),
+    // CI unit-test shards start their slowest files first (no effect without the env var).
+    ...(process.env.VITEST_SLOW_FIRST_TIMINGS ? { sequence: { sequencer: SlowFirstSequencer } } : {}),
     // Vitest only honours onUnhandledError at the root, so the playground packages' filter is repeated here.
     // @mcp-ui/client's AppRenderer sends hostContext before its bridge connects and drops the rejected promise.
     onUnhandledError: error => !(error.message === 'Not connected' && error.stack?.includes('sendHostContextChange')),

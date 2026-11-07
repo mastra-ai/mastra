@@ -6,6 +6,11 @@ on:
       head_sha:
         required: true
         type: string
+      # 'all', or a JSON array of store directory names whose tests the change affects.
+      stores:
+        required: false
+        type: string
+        default: 'all'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -43,6 +48,7 @@ jobs:
       - id: set-stores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELECTED_STORES: ${{ inputs.stores }}
         run: |
           STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
           INVALID_STORES=$(echo "$STORES" | jq -r '.[] | select(test("^[a-zA-Z0-9_-]+$") | not)')
@@ -76,12 +82,27 @@ jobs:
           LIGHT_STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s))]')
           STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s) | not)]')
 
+          # Only the stores the change affects, when prebuild.yml narrowed them down.
+          if [ "$SELECTED_STORES" != "all" ]; then
+            STORES=$(jq -c -n --argjson all "$STORES" --argjson selected "$SELECTED_STORES" '[$all[] | select(. as $s | $selected | index($s))]')
+            LIGHT_STORES=$(jq -c -n --argjson all "$LIGHT_STORES" --argjson selected "$SELECTED_STORES" '[$all[] | select(. as $s | $selected | index($s))]')
+            echo "Running the affected stores only: $SELECTED_STORES"
+          fi
+
+          # pg runs its (sequential) test files across several jobs, each with its own database
+          # containers: it took about 11 minutes in one job. clickhouse stays whole: one file takes
+          # most of its time, so splitting it only added a job.
+          SHARDS='{"pg":3}'
+          STORES=$(jq -c -n --argjson all "$STORES" --argjson shards "$SHARDS" \
+            '[$all[] as $s | ($shards[$s] // 1) as $n | range(1; $n + 1) | {store: $s, shard: ., shards: $n}]')
+
           echo "stores=$STORES" >> $GITHUB_OUTPUT
           echo "light_stores=$LIGHT_STORES" >> $GITHUB_OUTPUT
 
   test:
+    name: test (${{ matrix.store }}${{ matrix.shards > 1 && format(', shard {0}/{1}', matrix.shard, matrix.shards) || '' }})
     needs: setup
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.stores != '[]' }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
@@ -90,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        store: ${{fromJson(needs.setup.outputs.stores)}}
+        include: ${{ fromJson(needs.setup.outputs.stores) }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -112,9 +133,12 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Run ${{ matrix.store }} tests
-        run: pnpm test
+        run: |
+          if [ "$SHARDS" -gt 1 ]; then pnpm test --shard="$SHARD/$SHARDS"; else pnpm test; fi
         working-directory: stores/${{ matrix.store }}
         env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.shards }}
           NODE_OPTIONS: '--max_old_space_size=8192'
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
