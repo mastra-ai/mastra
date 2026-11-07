@@ -441,12 +441,30 @@ function isLikelyFilesystemPath(value: string): boolean {
   );
 }
 
+function isBase64Char(code: number): boolean {
+  return (
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    (code >= 48 && code <= 57) || // 0-9
+    code === 43 || // +
+    code === 47 // /
+  );
+}
+
+// Image payloads are often several megabytes, so this scans without a regex: V8 can run
+// out of backtracking stack on a pattern like /^[A-Za-z0-9+/]+={0,2}$/ for inputs that size.
 function isLikelyBase64Content(value: string): boolean {
-  if (value.length < 16 || value.length % 4 !== 0 || /\s/.test(value) || isLikelyFilesystemPath(value)) {
+  if (value.length < 16 || value.length % 4 !== 0 || isLikelyFilesystemPath(value)) {
     return false;
   }
 
-  return /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+  let end = value.length;
+  if (value.charCodeAt(end - 1) === 61) end--; // =
+  if (value.charCodeAt(end - 1) === 61) end--;
+  for (let i = 0; i < end; i++) {
+    if (!isBase64Char(value.charCodeAt(i))) return false;
+  }
+  return end > 0;
 }
 
 /**
@@ -1329,10 +1347,25 @@ export class TokenCounter {
       return undefined;
     }
 
-    const resultKey = buildEstimateKey('tool-result-multimodal-content-source', JSON.stringify(toolResult));
+    // Key the estimate on the raw result and the model so a stored estimate can be reused
+    // without decoding the attached media again.
+    const modelContext = this.getModelContext();
+    const resultKey = buildEstimateKey(
+      'tool-result-multimodal-content',
+      JSON.stringify({
+        resultHash: createHash('sha256').update(JSON.stringify(toolResult)).digest('hex'),
+        provider: modelContext?.provider ?? null,
+        modelId: modelContext?.modelId ?? null,
+      }),
+    );
     const cached = this.multimodalToolResultCounts.get(part);
     if (cached?.resultKey === resultKey) {
       return cached.tokens;
+    }
+    const persisted = getPartCacheEntry(part, resultKey);
+    if (isValidCacheEntry(persisted, resultKey, this.cacheSource)) {
+      this.multimodalToolResultCounts.set(part, { resultKey, tokens: persisted.tokens });
+      return persisted.tokens;
     }
 
     const output = toolResult as Record<string, unknown>;
@@ -1343,11 +1376,9 @@ export class TokenCounter {
 
     let hasAttachment = false;
     let tokens = 0;
-    const cacheParts: unknown[] = [];
     const countJsonContentPart = (contentPart: Record<string, unknown>) => {
       const formatted = serializeToolResultForTokenCounting(contentPart);
       tokens += this.countString(formatted);
-      cacheParts.push({ type: 'json', valueHash: createHash('sha256').update(formatted).digest('hex') });
     };
 
     for (const item of content) {
@@ -1361,7 +1392,6 @@ export class TokenCounter {
       if (partType === 'text') {
         const text = typeof contentPart.text === 'string' ? contentPart.text : String(contentPart.value ?? '');
         tokens += this.countString(text);
-        cacheParts.push({ type: 'text', textHash: createHash('sha256').update(text).digest('hex') });
         continue;
       }
 
@@ -1385,17 +1415,11 @@ export class TokenCounter {
         const clientEstimate = getClientPartTokenEstimate(imagePart);
         if (clientEstimate) {
           tokens += clientEstimate.tokens;
-          cacheParts.push({
-            type: 'image-data-client-estimate',
-            key: clientEstimate.key,
-            tokens: clientEstimate.tokens,
-          });
           continue;
         }
 
         const estimate = this.estimateImageTokens(imagePart);
         tokens += estimate.tokens;
-        cacheParts.push({ type: 'image-data', estimate: JSON.parse(estimate.cachePayload) });
         continue;
       }
 
@@ -1417,31 +1441,23 @@ export class TokenCounter {
         const clientEstimate = getClientPartTokenEstimate(filePart);
         if (clientEstimate) {
           tokens += clientEstimate.tokens;
-          cacheParts.push({
-            type: 'file-data-client-estimate',
-            key: clientEstimate.key,
-            tokens: clientEstimate.tokens,
-          });
           continue;
         }
 
         if (isImageLikeFilePart(filePart)) {
           const estimate = this.estimateImageLikeFileTokens(filePart);
           tokens += estimate.tokens;
-          cacheParts.push({ type: 'image-like-file-data', estimate: JSON.parse(estimate.cachePayload) });
           continue;
         }
 
         const byteEstimate = estimateNonImageFileTokens(this.getModelContext(), filePart);
         if (byteEstimate) {
           tokens += byteEstimate.tokens;
-          cacheParts.push({ type: 'file-data', estimate: JSON.parse(byteEstimate.cachePayload) });
           continue;
         }
 
         const descriptor = serializeNonImageFilePartForTokenCounting(filePart);
         tokens += this.countString(descriptor);
-        cacheParts.push({ type: 'file-data-descriptor', descriptor });
         continue;
       }
 
@@ -1452,14 +1468,14 @@ export class TokenCounter {
       return undefined;
     }
 
-    const estimate = this.readOrPersistFixedPartEstimate(
-      part,
-      'tool-result-multimodal-content',
-      JSON.stringify({ type: 'content', value: cacheParts }),
+    setPartCacheEntry(part, resultKey, {
+      v: TOKEN_ESTIMATE_CACHE_VERSION,
+      source: this.cacheSource,
+      key: resultKey,
       tokens,
-    );
-    this.multimodalToolResultCounts.set(part, { resultKey, tokens: estimate });
-    return estimate;
+    });
+    this.multimodalToolResultCounts.set(part, { resultKey, tokens });
+    return tokens;
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
