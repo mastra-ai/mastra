@@ -1,4 +1,4 @@
-import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
+import { buildDeferredStepFinishChunk, durableStopConditionSteps } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableGoalStep,
@@ -523,8 +523,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             return false;
           }
           // Hand stopWhen the full step content stream.steps reports, not the
-          // compacted snapshot records (tool-result outputs restored).
-          const steps = expandDurableSteps(state.accumulatedSteps) as any;
+          // compacted snapshot records, with AI SDK tool-result parts as toolResults.
+          const steps = durableStopConditionSteps(state.accumulatedSteps) as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
               try {
