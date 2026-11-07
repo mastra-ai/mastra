@@ -261,16 +261,60 @@ describe('computer tool calls run in model order', () => {
     expect((result as any).text).toBe('done');
   }, 5000);
 
-  it('an abort while calls are queued settles every call', async () => {
+  it('an abort while calls are queued settles every call without running them', async () => {
     const log: string[] = [];
     const controller = new AbortController();
-    const computer = recordingComputer(log, { leftClick: 300 });
-    const workspace = new Workspace({ sandbox: sandbox(computer), tools: computerToolsConfig(false) });
+    const workspace = new Workspace({
+      sandbox: sandbox(recordingComputer(log, { leftClick: 300 })),
+      tools: computerToolsConfig(false),
+    });
     setTimeout(() => controller.abort(), 100);
-    await run(agentWith(workspace, CLICK_TYPE_PRESS), 'stream', { abortSignal: controller.signal }).catch(() => {});
-    await delay(400);
+    const startedAt = Date.now();
+    const stream = await agentWith(workspace, CLICK_TYPE_PRESS).stream('go', {
+      maxSteps: 2,
+      abortSignal: controller.signal,
+    });
+    const errors: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-error') errors.push((chunk.payload as any).toolCallId);
+    }
+    // The run settles once the in-flight click returns; queued calls never wait out a gate.
+    expect(Date.now() - startedAt).toBeLessThan(1500);
+    await delay(300);
     expect(actions(log)).toEqual(['leftClick']);
+    expect(errors).toEqual([]);
   }, 5000);
+
+  it('an unknown tool before the computer calls neither blocks nor reorders them', async () => {
+    const log: string[] = [];
+    const workspace = new Workspace({
+      sandbox: sandbox(recordingComputer(log), [0, 300, 150, 0]),
+      tools: computerToolsConfig(false),
+    });
+    const result = await run(
+      agentWith(workspace, [{ id: 'u1', tool: 'no_such_tool', args: {} }, ...CLICK_TYPE_PRESS]),
+      'generate',
+    );
+    expect(actions(log)).toEqual(['leftClick', 'type', 'press']);
+    expect((result as any).text).toBe('done');
+  }, 5000);
+
+  it('orders renamed computer tools', async () => {
+    const log: string[] = [];
+    const config = computerToolsConfig(false);
+    config[C.CLICK] = { ...(config[C.CLICK] as object), name: 'click' };
+    config[C.TYPE] = { ...(config[C.TYPE] as object), name: 'type_text' };
+    const workspace = new Workspace({ sandbox: sandbox(recordingComputer(log), [300, 150, 0]), tools: config });
+    await run(
+      agentWith(workspace, [
+        { id: 'c1', tool: 'click', args: { x: 1, y: 1 } },
+        { id: 'c2', tool: 'type_text', args: { text: 'x' } },
+        { id: 'c3', tool: C.PRESS_KEY, args: { key: 'Enter' } },
+      ]),
+      'stream',
+    );
+    expect(actions(log)).toEqual(['leftClick', 'type', 'press']);
+  });
 });
 
 describe('computer tools carry the ordered marker', () => {
