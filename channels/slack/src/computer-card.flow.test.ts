@@ -27,7 +27,7 @@ describe('signed computer refs', () => {
   it('round-trips awkward ids and fits the Slack external_ref charset', () => {
     const signed = signRef(key, ref);
     expect(signed).toMatch(REF_CHARSET);
-    expect(signed.length).toBeLessThanOrEqual(2000);
+    expect(signed.length).toBeLessThanOrEqual(128);
     expect(verifyRef(key, signed)).toEqual(ref);
   });
 
