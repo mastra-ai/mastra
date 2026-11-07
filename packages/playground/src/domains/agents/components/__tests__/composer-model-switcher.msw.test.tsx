@@ -66,11 +66,11 @@ describe('ComposerModelSwitcher', () => {
       renderSwitcher();
 
       expect(await screen.findByTestId('composer-model-switcher-skeleton')).not.toBeNull();
-      expect(screen.queryByText('Select provider')).toBeNull();
+      expect(screen.queryByText('Select model')).toBeNull();
 
       providersGate.release();
 
-      await waitFor(() => expect(screen.getByText('Select provider')).not.toBeNull());
+      await waitFor(() => expect(screen.getByText('Select model')).not.toBeNull());
       expect(screen.queryByTestId('composer-model-switcher-skeleton')).toBeNull();
     });
   });
