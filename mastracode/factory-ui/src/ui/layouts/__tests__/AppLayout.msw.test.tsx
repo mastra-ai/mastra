@@ -146,7 +146,7 @@ describe('AppLayout', () => {
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
   });
 
-  it('replaces every page with one blocking error when the server reports a startup problem', async () => {
+  it('shows a startup problem as a banner above every page', async () => {
     stubFactory();
     server.use(
       http.get(`${TEST_BASE_URL}/web/status`, () =>
@@ -176,9 +176,12 @@ describe('AppLayout', () => {
     );
     // Nothing to retry: only a redeploy fixes it, so the copy button is the only control.
     expect(within(alert).getAllByRole('button')).toHaveLength(1);
-    expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
-    // The sidebar stays, so the account menu is still reachable.
+    // Pages and the sidebar still render under the banner, so settings stay reachable.
+    expect(screen.getByRole('heading', { name: 'Page A' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('link', { name: 'go-b' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
+    expect(screen.getByRole('alert')).toBe(alert);
   });
 
   it('still shows the startup problem when the first status check fails', async () => {
