@@ -147,7 +147,7 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * template was built with {@link withDesktop} and has finished building.
    * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
    *
-   * Call the agent with `toolCallConcurrency: 1`: by default the tool calls of
+   * Give the agent `defaultOptions: { toolCallConcurrency: 1 }`: by default the tool calls of
    * one model step run concurrently and can reach the desktop out of order.
    */
   computer?: boolean;
