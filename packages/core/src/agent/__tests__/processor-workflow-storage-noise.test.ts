@@ -105,7 +105,7 @@ describe('agent processor-workflow storage noise (issue #17137 follow-up to #173
     expect(processorLookups).toEqual([]);
   });
 
-  it('does not read the run status of the internal agent workflows on generate', async () => {
+  it.each(['generate', 'stream'] as const)('does not read internal workflow status on %s', async method => {
     const storage = new InMemoryStore();
     const agent = new Agent({
       id: AGENT_ID,
@@ -122,7 +122,8 @@ describe('agent processor-workflow storage noise (issue #17137 follow-up to #173
     const workflowsStore = await storage.getStore('workflows');
     const statusSpy = vi.spyOn(workflowsStore!, 'loadWorkflowRunStatus');
 
-    await mastra.getAgent(AGENT_ID).generate('Hello!');
+    const response = await mastra.getAgent(AGENT_ID)[method]('Hello!');
+    expect(await response.text).toBe('Dummy response');
 
     const internalWorkflowIds = ['execution-workflow', PROCESSOR_WORKFLOW_ID, `${AGENT_ID}-output-processor`];
     const internalStatusReads = statusSpy.mock.calls.filter(([{ workflowName }]) =>

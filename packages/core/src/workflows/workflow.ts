@@ -72,7 +72,6 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
-import { WORKFLOW_RUN_STATUSES } from '../storage/domains/workflows/run-statuses';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -116,6 +115,7 @@ import type {
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
 import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
+import { getTransientAgentWorkflowPolicy } from './transient-agent-workflows';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -3207,7 +3207,9 @@ export class Workflow<
       globalThis.crypto.randomUUID();
 
     const cachedRun = this.#runs.get(runIdToUse);
-    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
+    const transientPolicy = getTransientAgentWorkflowPolicy(this);
+    const persistencePolicy = transientPolicy ?? options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot;
+    const shouldPersistSnapshot = persistencePolicy({
       workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
       stepResults: {},
     });
@@ -3310,25 +3312,19 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    if (options?.shouldPersistSnapshot) {
-      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+    if (transientPolicy || options?.shouldPersistSnapshot) {
+      // Framework-owned workflows are always transient, including when a processor phase
+      // supplies a run override. Their local-only cancellation must not acquire stored state.
+      this.executionEngine.setRunPersistenceOverride(runIdToUse, persistencePolicy);
     }
 
     if (stored) {
       run.workflowRunStatus = stored.status;
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
-    // Another instance creating or starting this id under the workflow's own policy must not be able
-    // to store a row either. Like the DurableAgent policy guardrail, this probes with no step results;
-    // a policy that throws without them may store, so it keeps the reads.
-    const policyNeverStores = (workflowStatus: WorkflowRunStatus) => {
-      try {
-        return !this.#options.shouldPersistSnapshot({ workflowStatus, stepResults: {} });
-      } catch {
-        return false;
-      }
-    };
-    run.unstored = !lookUpStoredRun && WORKFLOW_RUN_STATUSES.every(policyNeverStores);
+    // Only private agent workflows can skip stored cancellation. A user policy, even one
+    // returning false today, cannot rule out another instance storing the same run ID.
+    run.unstored = !!transientPolicy && !lookUpStoredRun;
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {

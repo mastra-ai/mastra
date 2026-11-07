@@ -15,6 +15,7 @@ import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
 import { createWorkflow } from '../../../workflows/create';
+import { markTransientAgentWorkflow } from '../../../workflows/transient-agent-workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -234,7 +235,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     runScope,
   });
 
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
@@ -254,4 +255,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     .map(mapResultsStep)
     .then(streamStep)
     .commit();
+
+  return markTransientAgentWorkflow(workflow);
 }

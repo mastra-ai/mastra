@@ -13,7 +13,8 @@ import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
 import { createWorkflow } from './create';
 import { createDefaultEngineTestSuite } from './test-utils/default-engine-suite';
-import type { ShouldPersistSnapshotFn, Workflow } from './types';
+import { markTransientAgentWorkflow } from './transient-agent-workflows';
+import type { Workflow } from './types';
 import { createStep } from './workflow';
 
 // ============================================================================
@@ -1666,7 +1667,7 @@ describe('createRun storage existence read (issue #19015)', () => {
   });
 });
 
-describe('run status reads for a run created without a stored row', () => {
+describe('cancellation reads for user workflows without an initial snapshot', () => {
   const noopStep = (id: string, execute: () => Promise<void> = async () => {}) =>
     createStep({
       id,
@@ -1678,7 +1679,7 @@ describe('run status reads for a run created without a stored row', () => {
       },
     });
 
-  it('never reads the status of a run that never persists', async () => {
+  it('keeps status reads even when the workflow policy never persists', async () => {
     const storage = new MockStore();
     const workflow = createWorkflow({
       id: 'transient-status-wf',
@@ -1698,7 +1699,7 @@ describe('run status reads for a run created without a stored row', () => {
     const result = await run.start({ inputData: {} });
 
     expect(result.status).toBe('success');
-    expect(statusSpy).not.toHaveBeenCalled();
+    expect(statusSpy).toHaveBeenCalled();
   });
 
   it('runs a workflow whose persistence policy reads step results, keeping its status reads', async () => {
@@ -1724,83 +1725,27 @@ describe('run status reads for a run created without a stored row', () => {
     expect(statusSpy).toHaveBeenCalled();
   });
 
-  it.each<{
-    when: string;
-    shouldPersistSnapshot?: ShouldPersistSnapshotFn;
-    createRunOptions: { runId?: string; shouldPersistSnapshot?: ShouldPersistSnapshotFn };
-    remoteStarts?: boolean;
-  }>([
-    {
-      when: 'that stored a row after it started',
-      shouldPersistSnapshot: ({ workflowStatus, stepResults }) =>
-        workflowStatus === 'running' && stepResults.first?.status === 'running',
-      createRunOptions: {},
-    },
-    {
-      when: 'started unstored under a caller-supplied id',
-      createRunOptions: { runId: 'caller-supplied-cancel-run', shouldPersistSnapshot: () => false },
-    },
-    {
-      when: 'started unstored under a per-run policy its workflow does not share',
-      createRunOptions: { shouldPersistSnapshot: () => false },
-    },
-    {
-      when: 'that another instance also starts under a workflow storing only waiting snapshots',
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'waiting',
-      createRunOptions: {},
-      remoteStarts: true,
-    },
-  ])(
-    'stops at the next step when another instance cancels a run $when',
-    async ({ shouldPersistSnapshot, createRunOptions, remoteStarts }) => {
-      const workflowId = 'late-stored-cancel-wf';
+  it.each([1, 2] as const)(
+    'keeps framework-owned transient runs out of storage despite an override (v%s)',
+    async storageVersion => {
       const storage = new MockStore();
-      const buildWorkflow = (first: () => Promise<void>, later: () => Promise<void>) =>
+      const workflow = markTransientAgentWorkflow(
         createWorkflow({
-          id: workflowId,
+          id: 'private-agent-workflow',
           inputSchema: z.object({}),
           outputSchema: z.object({}),
-          options: { validateInputs: false, shouldPersistSnapshot },
+          options: { storageVersion, shouldPersistSnapshot: () => false },
         })
-          .then(noopStep('first', first))
-          .then(noopStep('later', later))
-          .commit();
+          .then(noopStep('first'))
+          .commit(),
+      );
+      new Mastra({ logger: false, storage, workflows: { 'private-agent-workflow': workflow } });
 
-      let releaseFirst = () => {};
-      let markFirstStarted = () => {};
-      const firstStarted = new Promise<void>(resolve => (markFirstStarted = resolve));
-      const later = vi.fn(async () => {});
-      const owner = new Mastra({
-        logger: false,
-        storage,
-        workflows: {
-          [workflowId]: buildWorkflow(
-            () =>
-              new Promise<void>(resolve => {
-                releaseFirst = resolve;
-                markFirstStarted();
-              }),
-            later,
-          ),
-        },
-      });
-      const remoteStep = async () => {};
-      const other = new Mastra({
-        logger: false,
-        storage,
-        workflows: { [workflowId]: buildWorkflow(remoteStep, remoteStep) },
-      });
+      const run = await workflow.createRun({ shouldPersistSnapshot: () => true });
+      expect((await run.start({ inputData: {} })).status).toBe('success');
 
-      const run = await owner.getWorkflow(workflowId).createRun(createRunOptions);
-      const resultPromise = run.start({ inputData: {} });
-      await firstStarted;
-      const remoteRun = await other.getWorkflow(workflowId).createRun({ runId: run.runId });
-      if (remoteStarts) await remoteRun.startAsync({ inputData: {} });
-      await remoteRun.cancel();
-      releaseFirst();
-
-      expect((await resultPromise).status).toBe('canceled');
-      expect(later).not.toHaveBeenCalled();
+      const store = await storage.getStore('workflows');
+      expect(await store!.loadWorkflowRunStatus({ workflowName: workflow.id, runId: run.runId })).toBeNull();
     },
   );
 });
