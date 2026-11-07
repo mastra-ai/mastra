@@ -1,6 +1,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
+import type { Processor } from '../processors';
 import type { ModelManagerModelConfig } from '../stream/types';
 import { loop } from './loop';
 import {
@@ -11,7 +12,7 @@ import {
   mockDate,
   testUsage,
 } from './test-utils/utils';
-import { isMastraTimeoutError } from './timeout';
+import { isMastraTimeoutError, MastraTimeoutError } from './timeout';
 
 const hangingModel = (id: string): ModelManagerModelConfig => ({
   id,
@@ -60,10 +61,14 @@ describe('modelSettings.timeout.totalMs', () => {
     models,
     totalMs,
     abortSignal,
+    outputProcessors,
+    beforeDeadlineSave,
   }: {
     models: ModelManagerModelConfig[];
     totalMs?: number;
     abortSignal?: AbortSignal;
+    outputProcessors?: Processor[];
+    beforeDeadlineSave?: () => Promise<void>;
   }) => {
     const settings = defaultSettings();
     const result = loop({
@@ -74,7 +79,8 @@ describe('modelSettings.timeout.totalMs', () => {
       messageList: createMessageListWithUserMessage(),
       models,
       modelSettings: { ...settings.modelSettings, timeout: totalMs ? { totalMs } : undefined },
-      options: { ...settings.options, abortSignal },
+      options: { ...settings.options, abortSignal, beforeDeadlineSave },
+      outputProcessors,
     } as any);
 
     const chunks: any[] = [];
@@ -153,5 +159,49 @@ describe('modelSettings.timeout.totalMs', () => {
     if (errorChunk) {
       expect(isMastraTimeoutError(errorChunk.payload.error)).toBe(false);
     }
+  });
+
+  it.each([undefined, 30_000])(
+    'ends as an abort when the caller signal aborts with a parent run timeout (totalMs %s)',
+    async totalMs => {
+      // A sub-agent's caller signal carries the parent run's own total-timeout error.
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 50 })), 50);
+
+      const chunks = await runLoop({ models: [hangingModel('slow')], totalMs, abortSignal: controller.signal });
+
+      expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
+    },
+  );
+
+  // The deadline pass runs the output processors, and with them the memory write. It is only for
+  // callers that supply the write check, so it never writes without one.
+  it.each([
+    ['skips', false],
+    ['runs', true],
+  ])('%s the deadline output pass when the write check is supplied: %s', async (_label, withCheck) => {
+    const events: string[] = [];
+    const probe: Processor = {
+      id: 'probe',
+      processOutputResult: async ({ messages }) => {
+        events.push('output-pass');
+        return messages;
+      },
+    };
+    const beforeDeadlineSave = withCheck
+      ? async () => {
+          events.push('write-check');
+        }
+      : undefined;
+
+    const chunks = await runLoop({
+      models: [hangingModel('slow')],
+      totalMs: 100,
+      outputProcessors: [probe],
+      beforeDeadlineSave,
+    });
+
+    expect(chunks.some(chunk => chunk.type === 'error')).toBe(true);
+    expect(events).toEqual(withCheck ? ['write-check', 'output-pass'] : []);
   });
 });
