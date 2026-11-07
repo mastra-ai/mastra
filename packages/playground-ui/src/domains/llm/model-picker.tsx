@@ -44,6 +44,8 @@ export interface ModelPickerProps {
   footer?: ReactNode;
   /** Extra command groups after the models; call `close` after acting. */
   actions?: (close: () => void) => ReactNode;
+  /** Open filtered to the selected model's provider instead of "All". Suits large catalogs. */
+  openOnSelectedProvider?: boolean;
   disabled?: boolean;
   busy?: boolean;
   side?: 'top' | 'bottom';
@@ -78,6 +80,7 @@ export function ModelPicker({
   header,
   footer,
   actions,
+  openOnSelectedProvider = false,
   disabled,
   busy,
   side = 'top',
@@ -101,7 +104,9 @@ export function ModelPicker({
   const changeOpen = (next: boolean) => {
     setOpen(next);
     setQuery('');
-    setProviderFilter(undefined);
+    setProviderFilter(
+      next && openOnSelectedProvider && filtering && selectedProvider ? selectedProvider.id : undefined,
+    );
   };
   const close = () => changeOpen(false);
 
@@ -113,12 +118,13 @@ export function ModelPicker({
         type="button"
         className={cn('max-w-full min-w-0 gap-1.5', triggerClassName)}
         disabled={disabled || busy}
-        aria-label={ariaLabel ?? (children ? undefined : 'Model')}
+        aria-label={ariaLabel}
         aria-busy={busy}
         title={title ?? (value ? `${value.provider}/${value.model}` : undefined)}
       >
         {children ?? (
           <>
+            <span className="sr-only">Model: </span>
             {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
             <span className="truncate max-sm:max-w-28">{selectedModel?.name ?? value?.model ?? 'Select model'}</span>
           </>

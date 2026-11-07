@@ -14,6 +14,8 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
   ComposerBox,
   ComposerInput,
   ComposerRing,
@@ -555,24 +557,19 @@ const ComposerActionRow = ({
 }: ComposerActionRowProps) => {
   return (
     <>
-      {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex max-w-full shrink-0 items-center gap-1.5">
-          {showModelSwitcher && agentId && (
-            <>
-              <ComposerModelSwitcher />
-              <ComposerModelSettings agentId={agentId} />
-            </>
-          )}
-          {runOptionsSlot}
-        </div>
-      )}
-
-      <div className="flex shrink-0 items-center gap-1.5">
-        <div className="flex items-center gap-2">
-          {canExecute && <AttachFilePopover />}
-          {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
-          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </div>
+      <ComposerActionsStart>
+        {canExecute && <AttachFilePopover />}
+        {runOptionsSlot}
+      </ComposerActionsStart>
+      <ComposerActionsEnd>
+        {showModelSwitcher && agentId && (
+          <>
+            <ComposerModelSwitcher />
+            <ComposerModelSettings agentId={agentId} />
+          </>
+        )}
+        {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+        {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
@@ -580,7 +577,7 @@ const ComposerActionRow = ({
           canSendWhileStreaming={canSendWhileStreaming}
           onCancel={onCancel}
         />
-      </div>
+      </ComposerActionsEnd>
     </>
   );
 };
@@ -605,7 +602,7 @@ const ComposerSendButton = ({
   if (isRunning && !draftCanSteerRun) {
     return (
       <Button
-        variant="default"
+        variant="primary"
         size="icon-md"
         type="button"
         tooltip="Cancel"
@@ -623,7 +620,7 @@ const ComposerSendButton = ({
   return (
     <Button
       type="submit"
-      variant="default"
+      variant="primary"
       size="icon-md"
       tooltip={canExecute ? 'Send' : 'No permission to execute'}
       disabled={!canExecute || isEmpty || isAddingAttachments}

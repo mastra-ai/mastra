@@ -1,23 +1,39 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { ModelPicker, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Lock, TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
-import { useBuilderModelPolicy } from '@/domains/agent-builder';
+import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, findProviderById } from '@/domains/llm';
+import { findProviderById } from '@/domains/llm';
+import { useAllModels } from '@/domains/llm/hooks/use-filtered-models';
+import { useFilteredProviders } from '@/domains/llm/hooks/use-filtered-providers';
 
 export const ComposerModelSwitcher = () => {
   const selection = usePlaygroundModelOptional();
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
-
-  const [modelOpen, setModelOpen] = useState(false);
+  const allProviders = dataProviders?.providers || [];
+  const sortedProviders = useFilteredProviders(useBuilderFilteredProviders(allProviders, policy), '', false);
+  const allowedModels = useBuilderFilteredModels(useAllModels(allProviders), policy);
+  const pickerProviders = useMemo<ModelPickerProvider[]>(
+    () =>
+      sortedProviders.map(provider => ({
+        id: provider.id,
+        name: provider.name,
+        connected: provider.connected,
+        models: allowedModels
+          .filter(model => model.provider === provider.id)
+          .sort((a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model))
+          .map(model => ({ id: model.model, name: model.model })),
+      })),
+    [sortedProviders, allowedModels],
+  );
 
   if (!selection) return null;
   // Reserve the picker footprint so the action row doesn't collapse then pop in.
@@ -26,34 +42,13 @@ export const ComposerModelSwitcher = () => {
     // skeleton would otherwise read as a dark pill instead of a placeholder.
     return (
       <Skeleton
-        className="h-control-md w-40 rounded-full bg-fill-subtle before:via-fill"
+        className="h-control-sm w-32 rounded-full bg-fill-subtle before:via-fill"
         data-testid="composer-model-switcher-skeleton"
       />
     );
   }
 
-  const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
-  const providers = dataProviders?.providers || [];
-
-  const currentModelProvider = cleanProviderId(selectedProvider);
-
-  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
-  const resolvedProvider = findProviderById(providers, currentModelProvider);
-  const fullProviderId = resolvedProvider?.id || currentModelProvider;
-
-  const handleModelSelect = (modelId: string) => {
-    if (modelId && fullProviderId) setModel(fullProviderId, modelId);
-  };
-
-  // Handle provider selection
-  const handleProviderSelect = (providerId: string) => {
-    const cleanedId = cleanProviderId(providerId);
-    // Only clear model selection and open model combobox when switching to a different provider
-    if (cleanedId !== currentModelProvider) {
-      setProvider(cleanedId);
-      setModelOpen(true);
-    }
-  };
+  const { provider: selectedProvider, model: selectedModel, setModel } = selection;
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
@@ -65,26 +60,18 @@ export const ComposerModelSwitcher = () => {
     );
   }
 
+  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
+  const currentModelProvider = cleanProviderId(selectedProvider);
+  const fullProviderId = findProviderById(allProviders, currentModelProvider)?.id || currentModelProvider;
+
   return (
-    <ButtonsGroup className="max-w-full">
-      <LLMProviders
-        value={currentModelProvider}
-        onValueChange={handleProviderSelect}
-        className={cn(
-          'w-auto min-w-0 shrink-0 gap-1 px-3',
-          // Collapse provider to icon-only in narrow containers.
-          '@max-md:px-2 @max-md:[&>span>span]:hidden @max-md:[&>svg]:hidden',
-        )}
-      />
-      <LLMModels
-        llmId={currentModelProvider}
-        value={selectedModel}
-        onValueChange={handleModelSelect}
-        open={modelOpen}
-        onOpenChange={setModelOpen}
-        className="w-auto max-w-[10rem] min-w-0 gap-1 px-3"
-      />
-    </ButtonsGroup>
+    <ModelPicker
+      providers={pickerProviders}
+      value={fullProviderId ? { provider: fullProviderId, model: selectedModel } : undefined}
+      onValueChange={({ provider, model }) => setModel(provider, model)}
+      openOnSelectedProvider
+      triggerClassName="max-w-48"
+    />
   );
 };
 
