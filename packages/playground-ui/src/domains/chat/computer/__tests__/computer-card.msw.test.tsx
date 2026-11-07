@@ -526,6 +526,31 @@ describe('ComputerCard', () => {
     expect(live().every(c => c.viewOnly)).toBe(true);
   });
 
+  it("an old thread's pending or failed take never disables or errors the new thread", async () => {
+    let answer!: () => void;
+    const held = new Promise<void>(r => (answer = r));
+    serveSession();
+    server.use(
+      http.post(CONTROL_URL, async () => {
+        await held;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const { rerenderThread } = renderThread([message('m1', [computerPart('attached')])]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Take control' }));
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Take control' }) as HTMLButtonElement).disabled).toBe(true),
+    );
+    rerenderThread([message('m1', [computerPart('attached')])], { threadId: 'thread-2', resourceId: scope.resourceId });
+    await waitFor(() => expect(requests.some(r => r.body.threadId === 'thread-2')).toBe(true));
+    const take = await screen.findByRole('button', { name: 'Take control' });
+    expect((take as HTMLButtonElement).disabled).toBe(false);
+    answer();
+    await new Promise(r => setTimeout(r, 50));
+    expect(screen.queryByText(/Could not change control/)).toBeNull();
+    expect((screen.getByRole('button', { name: 'Take control' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('a take that finds the lease already moved does not claim the agent missed it', async () => {
     serveSession();
     renderThread([message('m1', [computerPart('attached')])]);

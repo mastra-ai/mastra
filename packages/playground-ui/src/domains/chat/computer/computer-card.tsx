@@ -98,14 +98,21 @@ function useControlRequest(computerId: string, threadId: string, resourceId: str
 function useControlActions(computerId: string, threadId: string, resourceId: string) {
   const { reportControl, scopeKey } = useComputerThread();
   const request = useControlRequest(computerId, threadId, resourceId);
-  const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const change = async (action: 'take' | 'release', note?: string) => {
+  // Action state belongs to the thread it started on: after a switch, an old request
+  // neither disables the new thread's buttons nor reports its failure there.
+  const [action, setAction] = useState({ scopeKey, pending: false, failed: false });
+  const current = action.scopeKey === scopeKey;
+  const pending = current && action.pending;
+  const failed = current && action.failed;
+  const change = async (kind: 'take' | 'release', note?: string) => {
     const started = { scopeKey };
-    setPending(true);
-    setFailed(false);
-    const result = await postComputerControl({ ...request, action, ...(note && { note }) });
-    setPending(false);
+    setAction({ scopeKey, pending: true, failed: false });
+    const result = await postComputerControl({ ...request, action: kind, ...(note && { note }) });
+    setAction(state =>
+      state.scopeKey === started.scopeKey
+        ? { scopeKey: started.scopeKey, pending: false, failed: result.state !== 'ok' }
+        : state,
+    );
     // A no-change answer (a double submit, or the lease already moved) says nothing about notifying.
     if (result.state === 'ok')
       reportControl(
@@ -116,7 +123,6 @@ function useControlActions(computerId: string, threadId: string, resourceId: str
         },
         started,
       );
-    else setFailed(true);
   };
   return { change, pending, failed };
 }
