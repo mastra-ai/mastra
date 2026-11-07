@@ -1,13 +1,13 @@
-import { createClient } from '@libsql/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createClient } from '../shared/create-client';
 import { LibSQLStore } from './index';
 
 const mockCreateClient = vi.mocked(createClient);
 
 type ExecutedStatement = { sql: string; kind: 'execute' | 'batch' };
 
-vi.mock('@libsql/client', () => ({
+vi.mock('../shared/create-client', () => ({
   createClient: vi.fn(),
 }));
 
