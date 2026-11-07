@@ -32,6 +32,11 @@ export interface ComputerCardProps {
   messageId: string;
   partIndex: number;
   computerId: string;
+  /**
+   * Rendered at an attach tool call. Stands in for the `data-computer` part when
+   * stored history has none, so it shows only while it owns the live viewer.
+   */
+  standIn?: boolean;
 }
 
 /**
@@ -40,11 +45,12 @@ export interface ComputerCardProps {
  *
  * @experimental
  */
-export function ComputerCard({ messageId, partIndex, computerId }: ComputerCardProps) {
+export function ComputerCard({ messageId, partIndex, computerId, standIn = false }: ComputerCardProps) {
   const { computers, scope } = useComputerThread();
   const entry = computers.get(computerId);
   const name = entry?.name ?? computerId;
   const isOwner = entry?.status === 'attached' && entry.ownerKey === computerPartKey(messageId, partIndex);
+  if (standIn && !isOwner) return null;
 
   return (
     <section aria-label={`Computer ${name}`} className="flex flex-col gap-2 py-2">

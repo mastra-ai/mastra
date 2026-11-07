@@ -6,6 +6,8 @@ import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { MessageAttachments } from '../attachments/message-attachments';
 import { splitMessageAttachments } from '../attachments/split-message-attachments';
+import { ComputerCard } from '../computer/computer-card';
+import { attachedComputerId } from '../computer/computer-state';
 import { AssistantMessageActions, DatasetSaveAction } from '@/domains/chat';
 import { ChatRunningContext, useChatRunning } from '@/domains/chat/context/chat-context';
 import { AssistantTextPartRenderer } from '@/domains/chat/messages/renderers/assistant-text-part-renderer';
@@ -162,6 +164,21 @@ export const MessageRow = memo(function MessageRow({
   const toolGroups = useMemo(() => collectToolGroups(shownParts, toolContext), [shownParts, toolContext]);
 
   const sharedRenderers = useMemo<MessageRenderers>(() => {
+    // Stand-in Computer cards for attach calls, for threads whose stored history lost the `data-computer` part.
+    const computerCards = (parts: ToolPart[]) =>
+      parts.map(toolPart => {
+        const { toolName, toolCallId, output } = readToolPart(toolPart);
+        const computerId = attachedComputerId(toolName, output);
+        return computerId ? (
+          <ComputerCard
+            key={`computer-${toolCallId}`}
+            messageId={message.id}
+            partIndex={(message.content.parts as unknown[]).indexOf(toolPart)}
+            computerId={computerId}
+            standIn
+          />
+        ) : null;
+      });
     const renderTool = (part: ToolPart) => {
       const fields = readToolPart(part);
       const group = toolGroups.byFirstKey.get(fields.toolCallId);
@@ -203,6 +220,7 @@ export const MessageRow = memo(function MessageRow({
                 })}
               </ToolCallGroup>
             </Arriving>
+            {computerCards(group)}
           </>
         );
       }
@@ -213,6 +231,7 @@ export const MessageRow = memo(function MessageRow({
           <Arriving>
             <ToolCard {...fields} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
           </Arriving>
+          {computerCards([part])}
         </>
       );
     };

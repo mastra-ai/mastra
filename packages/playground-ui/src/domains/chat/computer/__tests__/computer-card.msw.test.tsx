@@ -5,8 +5,9 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DataPartRenderer } from '../../messages/renderers/data-part-renderer';
+import { ComputerCard } from '../computer-card';
 import { IFRAME_LOAD_TIMEOUT_MS, requestComputerSession } from '../computer-session';
-import { deriveComputers } from '../computer-state';
+import { attachedComputerId, deriveComputers } from '../computer-state';
 import { ComputerThreadProvider } from '../computer-thread-context';
 import type { ComputerThreadScope } from '../computer-thread-context';
 import { server } from '@/test/msw-server';
@@ -33,16 +34,17 @@ const computerPart = (status: 'attached' | 'released', overrides: Part = {}): Pa
   data: { computerId: 'c1', threadId: scope.threadId, name: 'Desk', status, persistent: false, ...overrides },
 });
 
-const attachResult = (toolName = 'computer_create'): Part => ({
+// Results as `PlatformComputers` returns them.
+const toolResult = (toolName: string, result: unknown, args: unknown = {}): Part => ({
   type: 'tool-invocation',
-  toolInvocation: {
-    toolCallId: `call-${toolName}`,
-    toolName,
-    state: 'result',
-    args: {},
-    result: { computer: { id: 'c1', name: 'Desk', template: 'desktop', status: 'running', persistent: true } },
-  },
+  toolInvocation: { toolCallId: `call-${toolName}-${Math.random()}`, toolName, state: 'result', args, result },
 });
+const describeComputer = (status: 'attached' | 'released') => ({
+  computer: { id: 'c1', name: 'Desk', template: 'desktop', status, persistent: true },
+});
+const attachResult = (toolName = 'computer_create'): Part => toolResult(toolName, describeComputer('attached'));
+const releaseResult = (): Part => toolResult('computer_release', describeComputer('released'));
+const destroyResult = (): Part => toolResult('computer_destroy', { destroyed: 'c1' }, { id: 'c1' });
 
 interface SessionRequest {
   computerId: string;
@@ -74,11 +76,17 @@ function renderThread(messages: MastraDBMessage[], threadScope: ComputerThreadSc
   const tree = (msgs: MastraDBMessage[], s: ComputerThreadScope | null) => (
     <ComputerThreadProvider messages={msgs} scope={s ?? undefined}>
       {msgs.flatMap(m =>
-        (m.content.parts as Part[]).map((part, index) =>
-          String(part.type).startsWith('data-') ? (
-            <DataPartRenderer key={`${m.id}-${index}`} part={part as never} messageId={m.id} partIndex={index} />
-          ) : null,
-        ),
+        (m.content.parts as Part[]).map((part, index) => {
+          if (String(part.type).startsWith('data-')) {
+            return <DataPartRenderer key={`${m.id}-${index}`} part={part as never} messageId={m.id} partIndex={index} />;
+          }
+          // As MessageRow does for attach tool calls.
+          const invocation = (part as { toolInvocation?: { toolName: string; result?: unknown } }).toolInvocation;
+          const computerId = invocation && attachedComputerId(invocation.toolName, invocation.result);
+          return computerId ? (
+            <ComputerCard key={`${m.id}-${index}`} messageId={m.id} partIndex={index} computerId={computerId} standIn />
+          ) : null;
+        }),
       )}
     </ComputerThreadProvider>
   );
@@ -105,11 +113,43 @@ describe('deriveComputers', () => {
     expect(released.get('c1')).toMatchObject({ status: 'released', ownerKey: undefined });
   });
 
-  it('uses create/attach results only to mark a computer attached', () => {
+  it('falls back to tool results when stored history has no parts', () => {
     expect(deriveComputers([message('m1', [attachResult('computer_attach')])]).get('c1')).toMatchObject({
       status: 'attached',
       persistent: true,
+      ownerKey: 'm1:0',
     });
+    expect(
+      deriveComputers([message('m1', [attachResult()]), message('m2', [releaseResult()])]).get('c1'),
+    ).toMatchObject({ status: 'released', ownerKey: undefined });
+    expect(
+      deriveComputers([message('m1', [attachResult()]), message('m2', [destroyResult()])]).get('c1'),
+    ).toMatchObject({ status: 'released', ownerKey: undefined });
+    // A fresh attach after release takes ownership again.
+    expect(
+      deriveComputers([message('m1', [attachResult(), releaseResult()]), message('m2', [attachResult('computer_attach')])]).get('c1')
+        ?.ownerKey,
+    ).toBe('m2:0');
+  });
+
+  it('reads tool results stored as JSON strings', () => {
+    const stored = (part: Part) => {
+      const invocation = (part as { toolInvocation: { result: unknown } }).toolInvocation;
+      return { ...part, toolInvocation: { ...invocation, result: JSON.stringify(invocation.result) } } as Part;
+    };
+    expect(deriveComputers([message('m1', [stored(attachResult())])]).get('c1')).toMatchObject({
+      status: 'attached',
+      ownerKey: 'm1:0',
+    });
+    expect(
+      deriveComputers([message('m1', [stored(attachResult())]), message('m2', [stored(destroyResult())])]).get('c1')?.status,
+    ).toBe('released');
+    expect(deriveComputers([message('m1', [toolResult('computer_create', '{not json')])]).size).toBe(0);
+    expect(attachedComputerId('computer_create', JSON.stringify(describeComputer('attached')))).toBe('c1');
+  });
+
+  it('lets the data part own an attach that also has a result, in either order', () => {
+    expect(deriveComputers([message('m1', [attachResult(), computerPart('attached')])]).get('c1')?.ownerKey).toBe('m1:1');
     const afterRelease = deriveComputers([
       message('m1', [computerPart('attached'), attachResult()]),
       message('m2', [computerPart('released')]),
@@ -187,6 +227,30 @@ describe('ComputerCard', () => {
     serveSession();
     renderThread([message('m1', [computerPart('attached')]), message('m2', [computerPart('released')])]);
     expect(screen.getAllByText('Computer released')).toHaveLength(2);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(requests).toHaveLength(0);
+    expect(screen.queryByTitle('Computer desktop')).toBeNull();
+  });
+
+  it('connects from the attach tool call when a reloaded thread has no data parts', async () => {
+    serveSession();
+    renderThread([message('m1', [attachResult()])]);
+    expect(await screen.findAllByTitle('Computer desktop')).toHaveLength(1);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'watch' });
+  });
+
+  it('shows one live card when both the tool call and its data part are present', async () => {
+    serveSession();
+    renderThread([message('m1', [attachResult(), computerPart('attached')])]);
+    expect(await screen.findAllByTitle('Computer desktop')).toHaveLength(1);
+    expect(screen.queryByText('Shown in a later message')).toBeNull();
+    expect(screen.getAllByRole('region', { name: 'Computer Desk' })).toHaveLength(1);
+  });
+
+  it('stops connecting a reloaded thread once a release result follows', async () => {
+    serveSession();
+    renderThread([message('m1', [attachResult()]), message('m2', [releaseResult()])]);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(requests).toHaveLength(0);
     expect(screen.queryByTitle('Computer desktop')).toBeNull();
