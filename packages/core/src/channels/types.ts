@@ -4,6 +4,7 @@ import type {
   CardElement,
   ChatConfig,
   Message,
+  ModalSubmitEvent,
   SlashCommandEvent,
   StateAdapter,
   StreamChunk,
@@ -424,6 +425,13 @@ export interface ChannelHandlerContext {
    * uses this same instance when the Signal wakes an idle run.
    */
   requestContext: RequestContext;
+  /** Prepare a custom interactive action or modal reply for inline channel rendering. */
+  prepareInteractiveReply?: (
+    thread: Thread,
+    messageId: string,
+    actor: { userId: string },
+    requesterId: string,
+  ) => Promise<void>;
   /**
    * Metadata attached to this message's Agent Signal, constructed fresh per
    * message. A handler may add JSON-serializable, non-sensitive values before
@@ -586,6 +594,8 @@ export interface ChannelHandlers {
    * Setting `false` also disables the built-in tool approval buttons.
    */
   onAction?: ActionChannelHandlerConfig;
+  /** Handle modal submissions from interactive channel cards. */
+  onModalSubmit?: (event: ModalSubmitEvent, ctx: ChannelHandlerContext) => Promise<void>;
 }
 
 /** Configuration for agent chat channels. */

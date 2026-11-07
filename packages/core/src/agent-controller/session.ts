@@ -6007,6 +6007,34 @@ export class Session<TState = unknown> {
     return { accepted: true, toolCallId: address.toolCallId, address, claimKey };
   }
 
+  /** Recover a persisted suspension after a controller restart before claiming its answer. */
+  async claimPersistedToolSuspension(toolCallId?: string, runId?: string) {
+    const claim = this.claimToolSuspension(toolCallId, runId);
+    if (claim.accepted || claim.reason !== 'no_pending_suspension' || !toolCallId) return claim;
+
+    const threadId = this.thread.getId();
+    if (!threadId) return claim;
+    const resourceId = this.identity.getResourceId();
+    const addresses = new Map<string, SuspensionAddress>();
+    for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+      const perPage = 100;
+      for (let page = 0; ; page++) {
+        const { runs, total } = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
+        for (const run of runs) {
+          if (run.threadId !== threadId || run.resourceId !== resourceId || (runId && run.runId !== runId)) continue;
+          if (run.toolCalls.some(call => call.toolCallId === toolCallId)) {
+            const address = { runId: run.runId, threadId, resourceId, toolCallId };
+            addresses.set(getSuspensionAddressKey(address), address);
+          }
+        }
+        if ((page + 1) * perPage >= total) break;
+      }
+    }
+    if (addresses.size !== 1) return claim;
+    await this.resolveSuspensionAgent(addresses.values().next().value!);
+    return this.claimToolSuspension(toolCallId, runId);
+  }
+
   /**
    * Respond to a pending tool suspension. Provides resume data so the suspended
    * tool can continue. `toolCallId` selects which suspended tool to resume —
