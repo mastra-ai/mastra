@@ -17,6 +17,8 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 const rfb = vi.hoisted(() => {
   class FakeRFB extends EventTarget {
     static instances: FakeRFB[] = [];
+    /** Whether a new client reports `connect` on its own, like a desktop that answers. */
+    static autoConnect = true;
     viewOnly = false;
     scaleViewport = false;
     resizeSession = true;
@@ -28,6 +30,7 @@ const rfb = vi.hoisted(() => {
     ) {
       super();
       FakeRFB.instances.push(this);
+      if (FakeRFB.autoConnect) queueMicrotask(() => this.dispatchEvent(new Event('connect')));
     }
     disconnect() {
       this.disconnected = true;
@@ -181,6 +184,7 @@ const requestHumanResult = (reason = 'log in please'): Part =>
 beforeEach(() => {
   requests = [];
   rfb.FakeRFB.instances = [];
+  rfb.FakeRFB.autoConnect = true;
   lease = { holder: 'agent', notified: true, gets: 0, posts: [], headers: [] };
   serveControl();
 });
@@ -469,7 +473,7 @@ describe('ComputerCard', () => {
     expect(client.viewOnly).toBe(false);
   });
 
-  it('a thread switch starts view-only: the old thread\'s control never carries over', async () => {
+  it("a thread switch starts view-only: the old thread's control never carries over", async () => {
     serveSession();
     const { rerenderThread } = renderThread([message('m1', [computerPart('attached')])]);
     fireEvent.click(await screen.findByRole('button', { name: 'Take control' }));
@@ -481,6 +485,45 @@ describe('ComputerCard', () => {
     await waitFor(() => expect(live()).toHaveLength(1));
     expect(live()[0].viewOnly).toBe(true);
     expect(screen.getByText('Agent has control')).toBeTruthy();
+  });
+
+  it('offers Take control only on a live desktop, but keeps Hand back while the user holds it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    rfb.FakeRFB.autoConnect = false;
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: 'Take control' })).toBeNull();
+    act(() => live()[0].dispatchEvent(new Event('connect')));
+    fireEvent.click(await screen.findByRole('button', { name: 'Take control' }));
+    await screen.findByRole('button', { name: 'Hand back' });
+    act(() => live()[0].dispatchEvent(new Event('disconnect')));
+    expect(await screen.findByText(/live view disconnected/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hand back' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Hand back' }));
+    await waitFor(() => expect(lease.holder).toBe('agent'));
+    expect(screen.queryByRole('button', { name: 'Take control' })).toBeNull();
+  });
+
+  it('drops a take that resolves after the user switched threads', async () => {
+    let answer!: () => void;
+    const held = new Promise<void>(r => (answer = r));
+    serveSession();
+    server.use(
+      http.post(CONTROL_URL, async () => {
+        await held;
+        return HttpResponse.json({ holder: 'human', notified: true });
+      }),
+    );
+    const { rerenderThread } = renderThread([message('m1', [computerPart('attached')])]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Take control' }));
+    lease.hold = new Promise<void>(() => {});
+    rerenderThread([message('m1', [computerPart('attached')])], { threadId: 'thread-2', resourceId: scope.resourceId });
+    await waitFor(() => expect(requests.some(r => r.body.threadId === 'thread-2')).toBe(true));
+    answer();
+    await new Promise(r => setTimeout(r, 50));
+    expect(screen.getByText('Agent has control')).toBeTruthy();
+    expect(live().every(c => c.viewOnly)).toBe(true);
   });
 
   it('a take that finds the lease already moved does not claim the agent missed it', async () => {
@@ -646,6 +689,7 @@ describe('ComputerCard', () => {
 
   it('times out a desktop that never connects, and not one that does', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    rfb.FakeRFB.autoConnect = false;
     serveSession();
     renderThread([
       message('m1', [computerPart('attached')]),

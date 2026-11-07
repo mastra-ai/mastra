@@ -96,21 +96,26 @@ function useControlRequest(computerId: string, threadId: string, resourceId: str
  * prompt for the computer agrees.
  */
 function useControlActions(computerId: string, threadId: string, resourceId: string) {
-  const { reportControl } = useComputerThread();
+  const { reportControl, scopeKey } = useComputerThread();
   const request = useControlRequest(computerId, threadId, resourceId);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const change = async (action: 'take' | 'release', note?: string) => {
+    const started = { scopeKey };
     setPending(true);
     setFailed(false);
     const result = await postComputerControl({ ...request, action, ...(note && { note }) });
     setPending(false);
     // A no-change answer (a double submit, or the lease already moved) says nothing about notifying.
     if (result.state === 'ok')
-      reportControl(computerId, {
-        holder: result.holder,
-        ...(result.reason !== 'no-change' && { notified: result.notified }),
-      });
+      reportControl(
+        computerId,
+        {
+          holder: result.holder,
+          ...(result.reason !== 'no-change' && { notified: result.notified }),
+        },
+        started,
+      );
     else setFailed(true);
   };
   return { change, pending, failed };
@@ -157,7 +162,7 @@ function HandBack({ computerId, threadId, resourceId }: LiveComputerProps) {
 function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const client = useMastraClient();
   const { baseUrl, apiPrefix, headers } = client.options;
-  const { computers, live, reportControl, readEpoch } = useComputerThread();
+  const { computers, live, reportControl, readEpoch, scopeKey } = useComputerThread();
   const entry = computers.get(computerId);
   const control = effectiveHolder(entry, live.get(computerId));
   const [attempt, setAttempt] = useState(0);
@@ -244,7 +249,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      const epoch = readEpoch(computerId);
+      const started = { scopeKey, epoch: readEpoch(computerId) };
       const result = await getComputerControl({
         computerId,
         threadId,
@@ -255,7 +260,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
         signal: controller.signal,
       }).catch(() => undefined);
       if (controller.signal.aborted) return;
-      if (result?.state === 'ok') reportControl(computerId, { holder: result.holder }, epoch);
+      if (result?.state === 'ok') reportControl(computerId, { holder: result.holder }, started);
       timer = setTimeout(() => void poll(), CONTROL_POLL_MS);
     };
     void poll();
@@ -263,18 +268,20 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [computerId, threadId, resourceId, baseUrl, apiPrefix, headersKey, reportControl, readEpoch]);
+  }, [computerId, threadId, resourceId, baseUrl, apiPrefix, headersKey, reportControl, readEpoch, scopeKey]);
 
   const sessionMessage = connection.phase === 'session' ? SESSION_MESSAGES[connection.state] : undefined;
   const human = control.holder === 'human';
-  // No session (forbidden, not attached, unavailable): nothing to control.
-  const controllable = connection.phase !== 'session';
+  // Take control needs a live desktop. Hand back stays available whenever the user
+  // holds the lease (even if the view dropped), unless the server refused this thread.
+  const canTake = connection.phase === 'connected';
+  const canHandBack = !(connection.phase === 'session' && connection.state === 'forbidden');
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {human ? <Badge variant="warning">You have control</Badge> : <Badge>Agent has control</Badge>}
-        {controllable && !human && (
+        {canTake && !human && (
           <Button size="sm" disabled={pending} onClick={() => void change('take')}>
             Take control
           </Button>
@@ -286,7 +293,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
           Reconnect
         </Button>
       </div>
-      {controllable && human && <HandBack computerId={computerId} threadId={threadId} resourceId={resourceId} />}
+      {canHandBack && human && <HandBack computerId={computerId} threadId={threadId} resourceId={resourceId} />}
       {human && entry?.holder === 'human' && entry.reason && (
         <Txt variant="body-sm">The agent asked: {entry.reason}</Txt>
       )}

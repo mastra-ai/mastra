@@ -15,17 +15,25 @@ interface ComputerThreadValue {
   scope?: ComputerThreadScope;
   /** Latest server-reported control per computer; shared by the card and request prompts. */
   live: Map<string, ComputerLiveControl>;
+  /** Identifies the displayed thread; a report started under another scope is dropped. */
+  scopeKey: string;
   /**
-   * Reports a control read or change. Pass the `readEpoch` taken when a read started:
-   * a read that started before the latest change lands is stale and is dropped.
+   * Reports a control read or change. Pass the `scopeKey` current when the request
+   * started, and for reads the `readEpoch` taken then: a read that started before
+   * the latest change, or anything started on another thread, is stale and dropped.
    */
-  reportControl: (computerId: string, control: Omit<ComputerLiveControl, 'basis'>, readEpoch?: number) => void;
+  reportControl: (
+    computerId: string,
+    control: Omit<ComputerLiveControl, 'basis'>,
+    started: { scopeKey: string; epoch?: number },
+  ) => void;
   readEpoch: (computerId: string) => number;
 }
 
 const ComputerThreadContext = createContext<ComputerThreadValue>({
   computers: new Map(),
   live: new Map(),
+  scopeKey: '',
   reportControl: () => {},
   readEpoch: () => 0,
 });
@@ -58,18 +66,22 @@ export function ComputerThreadProvider({ messages, scope, children }: ComputerTh
   const computersRef = useRef(computers);
   computersRef.current = computers;
   const scopeRef = useRef(scopeKey);
+  scopeRef.current = scopeKey;
+  // Epochs are keyed by thread too, so a switch starts every computer at zero.
   const epochs = useRef(new Map<string, number>());
-  if (scopeRef.current !== scopeKey) {
-    scopeRef.current = scopeKey;
-    epochs.current = new Map();
-  }
-  const readEpoch = useCallback((computerId: string) => epochs.current.get(computerId) ?? 0, []);
+  const epochKey = (computerId: string) => `${scopeRef.current}\n${computerId}`;
+  const readEpoch = useCallback((computerId: string) => epochs.current.get(epochKey(computerId)) ?? 0, []);
   const reportControl = useCallback(
-    (computerId: string, control: Omit<ComputerLiveControl, 'basis'>, epoch?: number) => {
-      if (epoch === undefined) epochs.current.set(computerId, readEpoch(computerId) + 1);
-      else if (epoch !== readEpoch(computerId)) return;
+    (
+      computerId: string,
+      control: Omit<ComputerLiveControl, 'basis'>,
+      started: { scopeKey: string; epoch?: number },
+    ) => {
+      if (started.scopeKey !== scopeRef.current) return;
+      if (started.epoch === undefined) epochs.current.set(epochKey(computerId), readEpoch(computerId) + 1);
+      else if (started.epoch !== readEpoch(computerId)) return;
       setState(stored => {
-        const key = scopeRef.current;
+        const key = started.scopeKey;
         const previous = stored.scopeKey === key ? stored.live : new Map<string, ComputerLiveControl>();
         const current = previous.get(computerId);
         const basis = computersRef.current.get(computerId)?.holder ?? 'agent';
@@ -94,10 +106,11 @@ export function ComputerThreadProvider({ messages, scope, children }: ComputerTh
       computers,
       scope: threadId && resourceId ? { threadId, resourceId } : undefined,
       live,
+      scopeKey,
       reportControl,
       readEpoch,
     }),
-    [computers, threadId, resourceId, live, reportControl, readEpoch],
+    [computers, threadId, resourceId, live, scopeKey, reportControl, readEpoch],
   );
   return <ComputerThreadContext.Provider value={value}>{children}</ComputerThreadContext.Provider>;
 }
