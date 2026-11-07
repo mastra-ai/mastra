@@ -319,6 +319,38 @@ describe('analyzeEntry', () => {
     expect(openaiDep?.isWorkspace).toBe(false);
   });
 
+  it('should externalize global subpaths from workspace packages', async () => {
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@mastra/schema-compat',
+        {
+          location: '/workspace/packages/schema-compat',
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry(
+      {
+        entry: `import { compileDefault } from '@mastra/schema-compat/validation-runtime';\nexport { compileDefault };`,
+        isVirtualFile: true,
+      },
+      '',
+      {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap,
+        projectRoot: process.cwd(),
+      },
+    );
+
+    expect(result.dependencies.get('@mastra/schema-compat/validation-runtime')).toMatchObject({
+      isWorkspace: false,
+      exports: ['compileDefault'],
+    });
+  });
+
   it('should handle dynamic imports', async () => {
     const entryWithDynamicImport = `
       import { Mastra } from '@mastra/core/mastra';

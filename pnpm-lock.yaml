@@ -1613,6 +1613,9 @@ importers:
       '@babel/core':
         specifier: ^8.0.9
         version: 8.1.0
+      '@cfworker/json-schema':
+        specifier: 4.1.1
+        version: 4.1.1
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -5366,6 +5369,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
@@ -5424,9 +5430,6 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../observability/mastra
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../schema-compat
       '@mendable/firecrawl-js':
         specifier: ^1.29.3
         version: 1.29.3(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
@@ -6366,6 +6369,9 @@ importers:
 
   packages/schema-compat:
     dependencies:
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       json-schema-to-zod:
         specifier: ^2.8.1
         version: 2.8.1
@@ -6418,9 +6424,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
       arktype:
         specifier: ^2.2.9
         version: 2.2.9
@@ -6451,6 +6454,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       hono:
         specifier: ^4.13.13
         version: 4.13.16
@@ -6485,9 +6491,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../schema-compat
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -12718,6 +12721,9 @@ packages:
     resolution: {integrity: sha512-fGFfq6F3l0GCoKOZeyjjm3q+NHO7jo8ILtQ93U3rYJOgG2BGLS/QmBdoFLNEsoWPjyxAS8svWhTyo73MTDawog==}
     cpu: [x64]
     os: [win32]
+
+  '@cfworker/json-schema@4.1.1':
+    resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
 
   '@cfworker/json-schema@4.1.4':
     resolution: {integrity: sha512-20rPE8EX0dSg6JGOVe31HpqsLYZTDSlcFJZA5mpZqQxcZ71vh/SXCMX+UuHO1mMcZBDKeb752z+3L8IWa+0Svg==}
@@ -35129,6 +35135,8 @@ snapshots:
 
   '@cbor-extract/cbor-extract-win32-x64@2.2.3':
     optional: true
+
+  '@cfworker/json-schema@4.1.1': {}
 
   '@cfworker/json-schema@4.1.4': {}
 

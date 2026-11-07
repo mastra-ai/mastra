@@ -43,6 +43,58 @@ describe('CloudflareDeployer', () => {
     });
   });
 
+  describe('JSON Schema validation compatibility', () => {
+    it('uses the Workers runtime while preserving user AJV aliases during Mastra bundling', async () => {
+      deployer = new CloudflareDeployer({
+        name: 'test-worker',
+        alias: {
+          ajv: './custom-ajv.js',
+          '@mastra/schema-compat/validation-runtime': './custom-validation-runtime.js',
+        },
+      });
+      // @ts-expect-error - accessing protected method for testing
+      const bundle = vi.spyOn(deployer, '_bundle').mockResolvedValue(undefined);
+      vi.spyOn(deployer as any, 'getWorkersValidationRuntimeAlias').mockReturnValue({
+        '@mastra/schema-compat/validation-runtime': '/resolved/validation-runtime-worker.js',
+      });
+
+      await deployer.bundle(join(tempDir, 'src', 'mastra', 'index.ts'), tempDir, {
+        toolsPaths: [],
+        projectRoot: tempDir,
+      });
+
+      expect(bundle).toHaveBeenCalledWith(
+        expect.any(String),
+        join(tempDir, 'src', 'mastra', 'index.ts'),
+        expect.objectContaining({
+          alias: {
+            '@mastra/schema-compat/validation-runtime': './custom-validation-runtime.js',
+            ajv: './custom-ajv.js',
+          },
+        }),
+        [],
+      );
+    });
+
+    it('writes the Workers validation runtime alias to Wrangler configuration', async () => {
+      const outputDirectory = join(tempDir, '.mastra');
+      await mkdir(join(outputDirectory, 'output'), { recursive: true });
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+      vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+      await deployer.writeFiles(outputDirectory);
+
+      const outputConfig = JSON.parse(await readFile(join(outputDirectory, 'output', 'wrangler.json'), 'utf-8'));
+      const rootConfig = JSON.parse(
+        (await readFile(join(tempDir, 'wrangler.jsonc'), 'utf-8')).replace(/\/\*[\s\S]*?\*\//, ''),
+      );
+      const runtimeSpecifier = '@mastra/schema-compat/validation-runtime';
+
+      expect(outputConfig.alias[runtimeSpecifier]).toMatch(/validation-runtime-worker\.ts$/);
+      expect(rootConfig.alias[runtimeSpecifier]).toBe(outputConfig.alias[runtimeSpecifier]);
+    });
+  });
+
   describe('writeFiles', () => {
     describe('environment variable handling', () => {
       it('should exclude .env variables from wrangler config vars', async () => {

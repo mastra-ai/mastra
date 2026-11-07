@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
-import { dirname, join, relative } from 'node:path';
+import { dirname, extname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
@@ -12,6 +13,7 @@ import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 const nodeBuiltins = new Set(builtinModules);
+const validationRuntimeSpecifier = '@mastra/schema-compat/validation-runtime';
 
 /**
  * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
@@ -231,6 +233,7 @@ throw new Error('@opentelemetry/api is not installed');
         'readable-stream': `./${readableStreamStubPath}`,
         module: `./${moduleStubPath}`,
         'node:module': `./${moduleStubPath}`,
+        ...this.getWorkersValidationRuntimeAlias(),
         ...(stubOtelApi ? { '@opentelemetry/api': `./${otelApiStubPath}` } : {}),
         ...userAlias,
       },
@@ -345,12 +348,34 @@ try {
     return inputOptions;
   }
 
+  private getWorkersValidationRuntimeAlias(): Record<string, string> {
+    const modulePath = fileURLToPath(import.meta.url);
+    const workersRuntimePath = join(dirname(modulePath), `validation-runtime-worker${extname(modulePath)}`);
+
+    return {
+      [validationRuntimeSpecifier]: workersRuntimePath,
+    };
+  }
+
   async bundle(
     entryFile: string,
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
+    return this._bundle(
+      this.getEntry(),
+      entryFile,
+      {
+        outputDirectory,
+        projectRoot,
+        enableEsmShim: false,
+        alias: {
+          ...this.getWorkersValidationRuntimeAlias(),
+          ...this.userConfig.alias,
+        },
+      },
+      toolsPaths,
+    );
   }
 
   async deploy(): Promise<void> {

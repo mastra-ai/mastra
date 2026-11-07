@@ -13,7 +13,9 @@ export default defineConfig([
     treeshake: true,
     sourcemap: true,
     deps: {
-      alwaysBundle: ['@mastra/schema-compat'],
+      neverBundle: ['@mastra/schema-compat/validation-runtime'],
+      // Keep the private validation-runtime import replaceable by deployers while bundling every other schema-compat entry.
+      alwaysBundle: [/^@mastra\/schema-compat(?:$|\/(?!validation-runtime$).+)/],
     },
     onSuccess: async () => {
       await generateTypes(process.cwd(), new Set(['hono', 'hono-mcp-server-sse-transport']));

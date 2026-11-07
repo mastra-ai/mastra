@@ -348,6 +348,16 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
 
+    it('bundles schema validation dependencies into development output', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
+
+      expect(output).not.toMatch(
+        /(?:^|\n)(?:import|export)[^;\n]*["']@mastra\/schema-compat(?:["']|\/(?!validation-runtime["']))/,
+      );
+    });
+
     it('should resolve createRoute api routes', async () => {
       const res = await fetch(`http://localhost:${port}/create-route`);
       const body = await res.json();
@@ -1109,6 +1119,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
         expect.objectContaining({
           '@mastra/core': expect.any(String),
           '@mastra/mcp': expect.any(String),
+          '@mastra/schema-compat': expect.any(String),
           zod: expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
@@ -1748,7 +1759,7 @@ class AliasDeployer extends Deployer {
           const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join(
             '\n',
           );
-          expect(output).toContain('MASTRA_BROWSER_CJS_ALIAS_SHIM');
+          expect(output).toContain('MASTRA_BROWSER_ALIAS_SHIM');
           expect(output).not.toContain('MASTRA_NODE_ALIAS_SHIM');
           // #29572: the deployer is stripped from the entry
           expect(output).not.toContain('alias-test');

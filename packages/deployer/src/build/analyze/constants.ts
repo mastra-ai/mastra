@@ -8,6 +8,8 @@ export const GLOBAL_EXTERNALS = [
   'libsql',
   '#tools',
   'typescript',
+  '@mastra/schema-compat',
+  '@mastra/schema-compat/validation-runtime',
   'undici',
   'readable-stream',
   'bufferutil',
@@ -16,4 +18,5 @@ export const GLOBAL_EXTERNALS = [
   '@ast-grep/napi',
   '@hono/node-ws',
 ];
+export const OUTPUT_DEPENDENCIES = ['@mastra/schema-compat'];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];
