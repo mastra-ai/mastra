@@ -1056,6 +1056,7 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.initialState).toMatchObject({ skipGlobalInstructions: true, factoryOrgUnresolved: true });
     expect(config.disableSettingsOmSeed).toBe(true);
+    expect(config.planApprovalStartsGoal).toBe(false);
   });
 
   it('heals a cold pull request review binding before the SDK reads repository instructions', async () => {
