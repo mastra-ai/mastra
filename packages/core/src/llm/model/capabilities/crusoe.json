@@ -21,18 +21,7 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai/GLM-5.2": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }
@@ -52,7 +41,18 @@
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31b-it": [
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "zai/GLM-5.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }
