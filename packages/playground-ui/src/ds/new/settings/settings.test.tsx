@@ -81,7 +81,7 @@ describe('Settings', () => {
       );
 
       const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.className).toContain('*:py-3.25');
+      expect(container?.className).toContain('*:py-3.25!');
       expect(container?.className).toContain('*:empty:hidden');
       expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
       for (const row of container?.querySelectorAll('[data-slot="settings-row"]') ?? []) {

@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
  * draw no hairline, so a list can always render its notice row.
  */
 const settingsCardStyle = cn(
-  'flex min-w-0 flex-col rounded-xl bg-card px-3.5 py-px *:py-3.25 *:empty:hidden',
+  // `!`: the card owns row spacing, so a row's own reset (`Fieldset`'s `p-0`) can't remove it.
+  'flex min-w-0 flex-col rounded-xl bg-card px-3.5 py-px *:py-3.25! *:empty:hidden',
   '[&>:not(:empty)~:not(:empty)]:border-t [&>:not(:empty)~:not(:empty)]:border-border',
   fieldsOnSurface,
 );
