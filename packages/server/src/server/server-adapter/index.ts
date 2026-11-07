@@ -275,6 +275,18 @@ function isExpectedResponseCloseError(error: unknown): boolean {
   );
 }
 
+/**
+ * Keeps each re-dispatched custom route `Request` alive for as long as the
+ * client signal that can abort it.
+ *
+ * `new Request(url, { signal })` gives the request its own signal and forwards
+ * the outer abort to it through a listener that only weakly references the
+ * request's controller (nodejs/undici#4068). Once a custom route returns a
+ * streaming Response, nothing else holds that inner Request, so a GC can drop
+ * it and a client disconnect never reaches `c.req.raw.signal` (#29154).
+ */
+const customRouteRequestsBySignal = new WeakMap<AbortSignal, Request>();
+
 function isResponseClosed(response: { writableEnded?: boolean; destroyed?: boolean }): boolean {
   return Boolean(response.writableEnded || response.destroyed);
 }
@@ -1274,6 +1286,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     const request = new globalThis.Request(url, init);
+    if (signal) customRouteRequestsBySignal.set(signal, request);
     const response = await this.customRouteHandler(request, { requestContext }, executionCtx);
 
     if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
