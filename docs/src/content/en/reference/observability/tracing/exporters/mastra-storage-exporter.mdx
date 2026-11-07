@@ -187,9 +187,12 @@ Failed flushes are retried with exponential backoff:
 For `batch-with-updates` strategy:
 
 - Tracks which spans have been created
-- Rejects updates/ends for spans not yet created
+- Holds updates/ends for spans this exporter started until their create is written
+- Sends updates/ends for spans another process started straight to storage, and retries an end up to `maxRetries` times if it doesn't apply
 - Logs warnings for out-of-order events
 - Maintains sequence numbers for ordered updates
+
+The default retries last about 7.5 seconds. Keep them longer than the `maxBatchWaitMs` of the process that started the span, or the end is dropped with `span-not-updatable`. `realtime` doesn't retry these ends and drops them right away. This retry needs a store with conditional span updates: libSQL, PostgreSQL, or the in-memory store. For the full behavior, see [Spans ended by another process](/docs/observability/integrations/exporters/mastra-storage#spans-ended-by-another-process).
 
 ## Usage
 

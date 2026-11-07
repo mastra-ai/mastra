@@ -199,6 +199,23 @@ The MastraStorageExporter includes reliable error handling for production use:
 - **Persistent Failures**: Drop batch after 4 failed attempts
 - **Buffer Overflow**: Prevent memory issues during storage outages
 
+### Spans ended by another process
+
+With durable execution, a worker can end a span before the process that started it stores the span. With `batch-with-updates`, the worker's exporter holds that end and retries it with `maxRetries` and `retryDelayMs`. Other flushes don't send it before its retry time. With `realtime`, the exporter doesn't retry and drops the end right away. An update that doesn't apply is dropped right away, because the end carries the span's full state.
+
+This retry needs a store with conditional span updates: libSQL, PostgreSQL, or the in-memory store. On other stores, the exporter holds the end until its retries run out, then drops it with `retry-exhausted`.
+
+The retries must last longer than the other process takes to store the span:
+
+- **Worker**: The defaults retry for about 7.5 seconds (500ms, 1s, 2s, 4s).
+- **Process that started the span**: It stores the span within its `maxBatchWaitMs` (5 seconds by default), plus write time and any retries of its own.
+
+If you raise `maxBatchWaitMs` on that process, or lower `maxRetries` or `retryDelayMs` on the worker, change the other settings to keep this margin. When the retries run out, the exporter drops the end with `span-not-updatable` and the span stays open in Studio.
+
+At `shutdown()`, the exporter tries each held end one last time. It reports an end that still doesn't apply as `span-not-updatable`, and an end whose write fails as `retry-exhausted`.
+
+A serverless worker can freeze right after a run's flush. The retry timer may then never fire, so the end isn't stored and no drop event is emitted.
+
 ## Dropped observability events
 
 `DefaultExporter` emits structured drop events when it can't persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
@@ -207,7 +224,7 @@ Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
 - `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
-- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change. With `batch-with-updates`, an end for a span another process started is dropped only after its [retries](#spans-ended-by-another-process) run out.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 

@@ -399,6 +399,17 @@ describe('EventBuffer', () => {
   });
 
   describe('span tracking', () => {
+    it('should forget the oldest ended span past its bound', () => {
+      const buffer = new EventBuffer({ maxRetries: 3 });
+
+      buffer.rememberEndedSpans(
+        Array.from({ length: 10_001 }, (_, i) => ({ traceId: 'trace-1', spanId: `span-${i}` })),
+      );
+
+      expect(buffer.wasEnded({ traceId: 'trace-1', id: 'span-0' } as AnyExportedSpan)).toBe(false);
+      expect(buffer.wasEnded({ traceId: 'trace-1', id: 'span-10000' } as AnyExportedSpan)).toBe(true);
+    });
+
     it('should track created spans for batch-with-updates', () => {
       const buffer = new EventBuffer({ maxRetries: 3 });
       buffer.init({ strategy: 'batch-with-updates' });

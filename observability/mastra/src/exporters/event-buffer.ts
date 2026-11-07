@@ -7,6 +7,12 @@ export interface RetryCount {
   retryCount: number;
 }
 
+/**
+ * How many ended spans a buffer remembers, so a long-lived worker doesn't grow the set forever.
+ * A second end of a forgotten span looks like a span that isn't stored yet, so it's retried before it's dropped.
+ */
+const MAX_ENDED_SPANS = 10_000;
+
 /** A partial span update record keyed by trace and span ID. */
 export interface UpdateSpanPartial {
   traceId: string;
@@ -26,9 +32,13 @@ export class EventBuffer {
   #preInit: BufferedEvent[] = [];
   #creates: BufferedEvent[] = [];
   #updates: BufferedEvent[] = [];
+  /** Span ends storage didn't apply, each held until its retry time. Outside `totalSize`, so they can't trigger a flush. */
+  #heldRetries: { event: BufferedEvent; retryAt: number }[] = [];
   #allCreatedSpans: Set<string> = new Set();
   /** Spans whose SPAN_STARTED this buffer has seen but whose create isn't confirmed yet */
   #pendingCreateSpans: Set<string> = new Set();
+  /** Spans whose end storage accepted, oldest first */
+  #endedSpans: Set<string> = new Set();
   #firstEventTime?: Date;
   #storageStrategy?: ObservabilityStorageStrategy;
   #maxRetries: number;
@@ -170,6 +180,47 @@ export class EventBuffer {
     return dropped;
   }
 
+  /** Hold span ends storage didn't apply until their retry time, returning events that exceed max retries. */
+  holdForRetry(events: BufferedEvent[], retryDelay: (retryCount: number) => number): BufferedEvent[] {
+    const now = Date.now();
+    const dropped: BufferedEvent[] = [];
+
+    for (const event of events) {
+      if (++event.retryCount <= this.#maxRetries) {
+        this.#heldRetries.push({ event, retryAt: now + retryDelay(event.retryCount) });
+      } else {
+        dropped.push(event);
+      }
+    }
+
+    return dropped;
+  }
+
+  /** Move held ends whose retry time is at or before `until` into the update buffer. */
+  releaseHeldRetries(until = Date.now()): void {
+    const due = this.#heldRetries.filter(held => held.retryAt <= until);
+    if (due.length === 0) return;
+
+    this.#heldRetries = this.#heldRetries.filter(held => held.retryAt > until);
+    this.setFirstEventTime();
+    this.#updates.push(...due.map(held => held.event));
+  }
+
+  /** Remove and return every held end. */
+  takeHeldRetries(): BufferedEvent[] {
+    const events = this.#heldRetries.map(held => held.event);
+    this.#heldRetries = [];
+    return events;
+  }
+
+  /** Epoch milliseconds of the earliest held retry. */
+  get nextRetryAt(): number | undefined {
+    return this.#heldRetries.reduce<number | undefined>(
+      (earliest, { retryAt }) => (earliest === undefined ? retryAt : Math.min(earliest, retryAt)),
+      undefined,
+    );
+  }
+
   /** Snapshot of buffered create events. */
   get creates(): BufferedEvent[] {
     return [...this.#creates];
@@ -238,6 +289,22 @@ export class EventBuffer {
   /** Check whether this buffer saw the span's SPAN_STARTED but its create hasn't been confirmed yet. */
   isAwaitingCreate(span: AnyExportedSpan): boolean {
     return this.#pendingCreateSpans.has(this.exportedSpanKey(span));
+  }
+
+  /** Remember spans whose end storage accepted, forgetting the oldest once the set is full. */
+  rememberEndedSpans(spans: { traceId: string; spanId: string }[]): void {
+    for (const span of spans) {
+      this.#endedSpans.add(this.buildSpanKey(span));
+    }
+    for (const key of this.#endedSpans) {
+      if (this.#endedSpans.size <= MAX_ENDED_SPANS) break;
+      this.#endedSpans.delete(key);
+    }
+  }
+
+  /** Check whether storage accepted this span's end through this buffer. */
+  wasEnded(span: AnyExportedSpan): boolean {
+    return this.#endedSpans.has(this.exportedSpanKey(span));
   }
 
   /** Remove completed spans from tracking after their SPAN_ENDED updates are flushed. */
