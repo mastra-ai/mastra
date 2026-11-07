@@ -5,7 +5,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Editor, matchesKey } from '@earendil-works/pi-tui';
+import { CURSOR_MARKER, Editor, matchesKey } from '@earendil-works/pi-tui';
 import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/index';
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
@@ -126,6 +126,11 @@ export class CustomEditor extends Editor {
   // starts, cleared on a real user keystroke so late async transcripts that
   // arrive after the user resumed typing are ignored rather than re-appended.
   private voiceDictationActive = false;
+
+  // Layout of the last render, used to map mouse clicks onto autocomplete rows.
+  // Row indexes are into the array returned by render().
+  private lastCursorRow = -1;
+  private lastAutocompleteStartRow = -1;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
@@ -310,7 +315,32 @@ export class CustomEditor extends Editor {
       result.push(ind);
     }
 
+    const autocompleteList = this.visibleAutocompleteList();
+    // fadePanel adds one edge row above the content; autocomplete rows trail the content.
+    this.lastAutocompleteStartRow = autocompleteList ? 1 + contentLines.length - autocompleteList.renderedRowCount : -1;
+    this.lastCursorRow = result.findIndex(line => line.includes(CURSOR_MARKER));
+
     return result;
+  }
+
+  private visibleAutocompleteList(): WrappingAutocompleteList | undefined {
+    const list = (this as unknown as { autocompleteList?: unknown }).autocompleteList;
+    return this.isShowingAutocomplete() && list instanceof WrappingAutocompleteList ? list : undefined;
+  }
+
+  /**
+   * Applies the autocomplete item rendered `rowsFromCursor` rows below the
+   * hardware cursor (negative = above), exactly as Tab would. Returns false when
+   * that row is not an autocomplete item.
+   */
+  clickAutocompleteRow(rowsFromCursor: number): boolean {
+    const list = this.visibleAutocompleteList();
+    if (!list || this.lastCursorRow < 0 || this.lastAutocompleteStartRow < 0) return false;
+    const index = list.itemIndexAtRow(this.lastCursorRow + rowsFromCursor - this.lastAutocompleteStartRow);
+    if (index === undefined) return false;
+    list.setSelectedIndex(index);
+    this.handleInput('\t');
+    return true;
   }
 
   private maybeHandleBracketedPaste(data: string): boolean {

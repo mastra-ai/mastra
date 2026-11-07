@@ -35,6 +35,12 @@ vi.mock('@earendil-works/pi-tui', () => {
   };
 });
 
+vi.mock('../mouse/controller.js', () => ({
+  MouseController: class {
+    dispose() {}
+  },
+}));
+
 vi.mock('../components/custom-editor.js', () => ({
   CustomEditor: class {
     getModeColor?: () => string | undefined;

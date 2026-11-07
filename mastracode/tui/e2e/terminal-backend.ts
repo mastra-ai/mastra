@@ -93,6 +93,28 @@ class EmulatedTerminal implements Terminal {
 
   write(data: string): void {
     this.writeToXterm(data);
+    if (data.includes('\x1b[6n')) {
+      // Headless xterm runs with stdin disabled, so answer cursor position
+      // requests ourselves once the preceding output has been applied.
+      this.outputQueue = this.outputQueue.then(() => {
+        const buffer = this.xterm.buffer.active;
+        this.inputHandler?.(`\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+      });
+    }
+  }
+
+  mouseTracking(): string {
+    return this.xterm.modes.mouseTrackingMode;
+  }
+
+  /** 1-based screen position of the first visible occurrence of `text`. */
+  findOnScreen(text: string): { row: number; col: number } | undefined {
+    const rows = this.serialize().view.split('\n');
+    for (let index = 0; index < rows.length; index += 1) {
+      const col = rows[index]!.indexOf(text);
+      if (col >= 0) return { row: index + 1, col: col + 1 };
+    }
+    return undefined;
   }
 
   get columns(): number {
@@ -216,6 +238,21 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
     },
     keyCtrlC() {
       terminal.sendInput('\x03');
+    },
+    clickText(text: string) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`clickText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      terminal.sendInput(`\x1b[<0;${position.col};${position.row}M`);
+      terminal.sendInput(`\x1b[<0;${position.col};${position.row}m`);
+    },
+    wheel(direction: 'up' | 'down', count = 1) {
+      const button = direction === 'up' ? 64 : 65;
+      const row = Math.ceil(terminal.rows / 2);
+      const col = Math.ceil(terminal.columns / 2);
+      for (let index = 0; index < count; index += 1) terminal.sendInput(`\x1b[<${button};${col};${row}M`);
+    },
+    mouseTracking() {
+      return terminal.mouseTracking();
     },
     resize(columns: number, rows: number) {
       terminal.resize(columns, rows);

@@ -738,6 +738,7 @@ export class MastraTUI {
       this.state.unsubscribe();
     }
     this.state.renderScheduler?.dispose();
+    this.state.mouseController?.dispose();
     disposeAssistantRenderState(this.state);
     this.state.ui.stop();
   }

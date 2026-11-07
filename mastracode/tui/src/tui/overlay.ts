@@ -1,6 +1,8 @@
 import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@earendil-works/pi-tui';
 import { visibleWidth } from '@earendil-works/pi-tui';
 
+import { dispatchClick } from './mouse/hit-test.js';
+import type { MouseAware, MouseClick } from './mouse/hit-test.js';
 import { theme } from './theme.js';
 
 type ModalOverlayOptions = {
@@ -25,7 +27,9 @@ function modalMinHeight(tui: TUI, options: ModalOverlayOptions): number {
   return Math.max(1, Math.min(minHeight, maxHeight));
 }
 
-class MinHeightOverlay implements Component {
+class MinHeightOverlay implements Component, MouseAware {
+  private lastTopPadding = 0;
+
   constructor(
     private component: Component,
     private tui: TUI,
@@ -54,14 +58,20 @@ class MinHeightOverlay implements Component {
     this.component.invalidate?.();
   }
 
+  handleMouse(click: MouseClick): boolean {
+    return dispatchClick(this.component, { ...click, row: click.row - this.lastTopPadding });
+  }
+
   render(width: number): string[] {
     const lines = this.component.render(width);
     const minHeight = modalMinHeight(this.tui, this.options);
+    this.lastTopPadding = 0;
     if (lines.length >= minHeight) return lines;
 
     const blank = theme.bg('overlayBg', ' '.repeat(width));
     const missingLines = minHeight - lines.length;
     const topPadding = Math.min(Math.floor(missingLines / 2), this.options.maxTopPadding ?? 4);
+    this.lastTopPadding = topPadding;
     const padded = [
       ...Array.from({ length: topPadding }, () => blank),
       ...lines,

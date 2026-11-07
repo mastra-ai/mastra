@@ -6,6 +6,7 @@
 import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
+import { ClickableText } from '../mouse/hit-test.js';
 import { theme } from '../theme.js';
 
 // =============================================================================
@@ -252,7 +253,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
         const line = isSelected
           ? theme.fg('accent', '→ ') + theme.bold(theme.fg('accent', `Use: ${query}`))
           : '  ' + theme.fg('muted', `Use: ${query}`);
-        this.listContainer.addChild(new Text(line, 0, 0));
+        this.listContainer.addChild(new ClickableText(line, () => this.confirmIndex(0)));
         continue;
       }
 
@@ -277,7 +278,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
         line = '  ' + modelText + checkmark + noKeyIndicator;
       }
 
-      this.listContainer.addChild(new Text(line, 0, 0));
+      this.listContainer.addChild(new ClickableText(line, () => this.confirmIndex(i)));
     }
 
     // Scroll indicator
@@ -290,6 +291,12 @@ export class ModelSelectorComponent extends Box implements Focusable {
     if (totalItems === 0) {
       this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
     }
+  }
+
+  private confirmIndex(index: number): void {
+    this.selectedIndex = index;
+    this.updateList();
+    this.handleInput('\r');
   }
 
   handleInput(keyData: string): void {

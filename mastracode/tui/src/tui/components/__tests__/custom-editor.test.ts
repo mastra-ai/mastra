@@ -55,6 +55,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   return {
+    CURSOR_MARKER: '\x1b_pi:c\x07',
     Editor: MockEditor,
     matchesKey: mocks.matchesKey,
     visibleWidth: (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '').length,
