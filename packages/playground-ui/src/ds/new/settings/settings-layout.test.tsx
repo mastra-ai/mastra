@@ -32,4 +32,17 @@ describe('SettingsLayout', () => {
     expect(output).not.toContain('<h1');
     expect(output).toContain('General settings');
   });
+
+  it('renders an app header in place of the title, with the same inset', () => {
+    const output = renderToStaticMarkup(
+      <SettingsLayout title="Ignored" header={<h1 id="announced">Repositories</h1>}>
+        <section>Sections</section>
+      </SettingsLayout>,
+    );
+
+    expect(output).toContain('data-slot="settings-page-header"');
+    expect(output).toContain('<h1 id="announced">Repositories</h1>');
+    expect(output).not.toContain('Ignored');
+    expect(output.match(/<h1/g)).toHaveLength(1);
+  });
 });

@@ -61,7 +61,7 @@ export function CustomProvidersSection() {
             <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
           </div>
         </SkeletonRows>
-      ) : providers.length === 0 ? (
+      ) : queryError ? null : providers.length === 0 ? (
         <SettingsEmptyRow action={addProvider}>No custom providers</SettingsEmptyRow>
       ) : (
         <SettingsListHeader action={addProvider}>

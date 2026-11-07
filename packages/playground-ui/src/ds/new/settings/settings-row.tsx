@@ -131,7 +131,7 @@ export function SettingsFieldsetRow({
       <div className={headingClassName}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
-          <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
+          <div id={descriptionId} className="text-caption text-muted-foreground flex flex-col gap-0.5 text-pretty">
             {description}
           </div>
         )}

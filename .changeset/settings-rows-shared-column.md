@@ -11,7 +11,12 @@ One settings layout for Studio, Factory and Platform, from `@mastra/playground-u
 - Lists: `SettingsListHeader` puts a count and the list's action at the top of its card, `SettingsEmptyRow` holds the empty text and that same action in one row, and `SettingsItem` (with `SettingsItemIcon` for logos and icons, the same size as `Avatar size="md"`) is one thing in a list. `SettingsNoticeRow` keeps a list's errors inside its card.
 - `CopyInput` (`@mastra/playground-ui/components/CopyInput`) shows a read-only value, like an ID, with a copy button.
 
-Removed: `SettingsAddRow` (use `SettingsListHeader` or `SettingsEmptyRow` with an `action`), and `SettingsContainer`'s `variant`. Input, InputGroup and select values now use the regular-weight `text-body-sm`, like Textarea.
+Breaking changes in `@mastra/playground-ui/new/settings`:
+
+- `SettingsLayout` no longer takes `description`, `inset` or `variant`. Put a page description in the first section, and pass `header` for a header of your own instead of `variant="header"`.
+- `SettingsContainer` no longer takes `variant`, and `SettingsContainerVariant` is no longer exported. Drop `variant="inset"`; every settings card has the same look.
+
+Input, InputGroup and select values now use the regular-weight `text-body-sm`, like Textarea.
 
 ```tsx
 <SettingsLayout title="General">

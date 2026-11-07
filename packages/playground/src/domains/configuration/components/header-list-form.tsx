@@ -7,6 +7,8 @@ import { Plus, Trash } from 'lucide-react';
 export type HeaderListFormItem = {
   name: string;
   value: string;
+  /** Keeps a row's inputs with its header when an earlier one is removed. Rows without one key by index. */
+  id?: number;
 };
 
 export interface HeaderListFormProps {
@@ -29,7 +31,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
-              <li key={index}>
+              <li key={header.id ?? index}>
                 <HeaderFieldsRow index={index} header={header} onRemove={() => onRemoveHeader(index)} />
               </li>
             ))}
