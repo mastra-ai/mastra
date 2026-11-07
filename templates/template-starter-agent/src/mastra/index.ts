@@ -1,4 +1,3 @@
-import { channels } from '@mastra/connect';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
@@ -10,7 +9,8 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 import { platformFilesystemProvider, platformSandboxProvider } from '@mastra/platform-workspace';
-import { agent, hasConnectEnv } from './agents/agent';
+import { agent, hasConnectEnv, listConnectionsTool } from './agents/agent';
+import { getConnectChannels } from './connect';
 import { startScheduleTool, stopScheduleTool } from './tools/schedule-tools';
 import { seedWelcomeThread } from './welcome';
 import { activityDigestWorkflow } from './workflows/activity-digest';
@@ -37,12 +37,12 @@ export const mastra = new Mastra({
     },
   }),
   agents: { agent },
-  tools: { startScheduleTool, stopScheduleTool },
+  tools: { startScheduleTool, stopScheduleTool, listConnectionsTool },
   workflows: { activityDigestWorkflow },
   // Chat channels (Slack, Telegram, Discord, …) resolved live from the Mastra
   // platform project's connections; connecting a channel on the platform takes
   // effect without redeploying. Skipped when the platform env isn't configured.
-  channels: hasConnectEnv ? await channels() : undefined,
+  channels: await getConnectChannels(hasConnectEnv),
   storage: new PostgresStore({
     id: 'mastra-storage',
     connectionString: databaseUrl,

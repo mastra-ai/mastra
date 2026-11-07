@@ -4,6 +4,8 @@ Welcome to your new [Mastra](https://mastra.ai) project! We're excited to see wh
 
 This starter provides you with a general-purpose Mastra agent that can research current information, manage multi-step tasks, work with files, run approved shell commands, create recurring schedules, and use the integrations you connect from your Mastra platform project as its tools and chat channels.
 
+Ask the agent "Help me get set up". The setup skill checks your project's connections and walks you through the next step in the platform and Studio.
+
 ## Features
 
 - The agent introduces itself in a "👋 Welcome" thread the first time you open Studio
