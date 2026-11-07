@@ -1,4 +1,5 @@
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
+import type { Agent } from '@mastra/core/agent';
 import type {
   Mastra,
   MastraComputerControl,
@@ -631,12 +632,58 @@ export class PlatformComputers implements MastraComputers {
     return { holder, ...(await this.#notify(entry, holder, target, note)) };
   }
 
+  /** Tells the agent on the lease's thread that control changed hands. Never throws. */
   async #notify(
-    _entry: Entry,
-    _holder: 'agent' | 'human',
-    _target: Lease['target'],
-    _note: string | undefined,
+    entry: Entry,
+    holder: 'agent' | 'human',
+    target: Lease['target'],
+    note: string | undefined,
   ): Promise<Omit<MastraComputerControlResult, 'holder'>> {
-    return { notified: false, reason: 'no-agent' };
+    const mastra = target?.mastra;
+    let agent: Agent | undefined;
+    try {
+      agent = target?.agentId && mastra ? mastra.getAgentById(target.agentId) : undefined;
+    } catch {
+      agent = undefined;
+    }
+    if (!agent || !target) return { notified: false, reason: 'no-agent' };
+    const released = holder === 'agent';
+    let reason: MastraComputerControlResult['reason'];
+    try {
+      const result = await agent.sendNotificationSignal(
+        {
+          source: 'computer',
+          kind: released ? 'control-returned' : 'control-taken',
+          // `urgent` delivers into an active run and wakes an idle one; `high` can be
+          // summarized with a non-waking signal while the thread is active.
+          priority: 'urgent',
+          summary: released
+            ? `The user handed control back${note ? `: ${note}` : ''}`
+            : 'The user took control of the computer',
+          attributes: { computerId: entry.id },
+          payload: { computerId: entry.id, holder },
+        },
+        {
+          resourceId: target.resourceId,
+          threadId: target.threadId,
+          ifIdle: {
+            behavior: 'wake',
+            streamOptions: { memory: { thread: target.threadId, resource: target.resourceId } },
+          },
+        },
+      );
+      const accepted = await result.accepted;
+      if (accepted?.action === 'wake' || accepted?.action === 'deliver') return { notified: true };
+      reason = 'not-delivered';
+    } catch (error) {
+      reason = String((error as Error)?.message).includes('notifications storage domain')
+        ? 'no-notifications-storage'
+        : 'error';
+    }
+    mastra?.getLogger?.()?.warn('computer control change was not delivered to the agent', {
+      computer: entry.id.slice(0, 12),
+      reason,
+    });
+    return { notified: false, reason };
   }
 }
