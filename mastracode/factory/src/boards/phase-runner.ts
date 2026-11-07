@@ -5,7 +5,11 @@ import type { FactoryRuleDecision, FactoryRuleHandler, FactoryStageRuleContext }
  * Entering from another phase starts it even when that phase's agent shares the context and
  * made the move: the skill is queued onto its run.
  */
-export function startSkill(skill: string, context: string): FactoryRuleHandler<FactoryStageRuleContext> {
+export function startSkill(
+  skill: string,
+  context: string,
+  goal?: { objective: string; maxRuns?: number },
+): FactoryRuleHandler<FactoryStageRuleContext> {
   return rule => ({
     type: 'invokeSkill',
     idempotencyKey: `${rule.ingress.id}:${skill}`,
@@ -13,6 +17,7 @@ export function startSkill(skill: string, context: string): FactoryRuleHandler<F
     skillName: skill,
     arguments: rule.item.url ? `Work item (${rule.item.url})` : rule.item.title,
     ...(rule.fromStage !== rule.stage ? { startsAfterOwnMove: true } : {}),
+    ...(goal ? { goal: { ...goal } } : {}),
   });
 }
 

@@ -17,6 +17,7 @@ const storedRunnerSchema = z
     skill: z.string().optional(),
     context: z.string().optional(),
     instructions: z.string().optional(),
+    goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).strict().optional(),
   })
   .strict();
 
@@ -463,6 +464,7 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
             skill: phase.runner.skill,
             context: phase.runner.context,
             instructions: phase.runner.instructions,
+            goal: phase.runner.goal ? { ...phase.runner.goal } : undefined,
           }),
           autoStart: phase.autoStart ? true : undefined,
           autoStartWhen: phase.autoStartWhen,

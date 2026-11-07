@@ -8,6 +8,7 @@ export type {
   BoardPhaseDefinition,
   BoardPhaseExitTool,
   BoardPhaseKind,
+  BoardPhaseGoal,
   BoardPhaseRunner,
   FactoryPhaseTool,
   BoardSourceClosed,

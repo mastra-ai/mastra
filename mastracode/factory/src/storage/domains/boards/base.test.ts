@@ -143,6 +143,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
     expect((await boards.list(scope))[0]!.phases[1]).toEqual(created.phases[1]);
   });
 
+  it("reads back the goal a phase's runner pursues", async () => {
+    const { boards, scope } = await setup();
+    const input = board('release');
+    const runner = {
+      context: 'release',
+      skill: 'release-notes',
+      goal: { objective: 'Notes are published.', maxRuns: 9 },
+    };
+    input.phases = [input.phases[0]!, { ...input.phases[1]!, runner }, input.phases[2]!];
+
+    const created = await boards.create(scope, input, 'user-1');
+
+    expect(created.phases[1]).toMatchObject({ runner });
+    expect((await boards.list(scope))[0]!.phases[1]).toEqual(created.phases[1]);
+  });
+
   it('reads back the Factory tools a phase grants', async () => {
     const { boards, scope } = await setup();
     const input = board('release');
