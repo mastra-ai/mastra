@@ -262,12 +262,23 @@ export async function evaluateGoal(deps: {
   // A model-resolver function is the consumer's own resolver: run it first so
   // it can inject provider credentials. It may return `undefined` (e.g. no
   // judge configured) → fall back to the effective id, then no-op.
+  // A resolver that throws (e.g. the goal names a model id it can't resolve)
+  // is a judge failure, handled by the catch below so the goal is paused.
   let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
+  let judgeResolveError: unknown;
   if (typeof judgeModelConfig === 'function') {
-    judgeModelConfig =
-      (await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra })) ?? effective.judgeModelId;
+    try {
+      judgeModelConfig =
+        (await (judgeModelConfig as (args: any) => unknown)({
+          requestContext,
+          mastra,
+          judgeModelId: record.judgeModelId,
+        })) ?? effective.judgeModelId;
+    } catch (error) {
+      judgeResolveError = error;
+    }
   }
-  if (!judgeModelConfig) {
+  if (!judgeModelConfig && !judgeResolveError) {
     return { evaluated: false };
   }
 
@@ -283,6 +294,7 @@ export async function evaluateGoal(deps: {
   // uniformly regardless of where the failure originated.
   let result: Awaited<ReturnType<typeof runStreamCompletionScorers>>;
   try {
+    if (judgeResolveError) throw judgeResolveError;
     const emitJudgeActivity = (activity: GoalEvaluationActivity, args?: unknown) => {
       const name =
         activity.type === 'reason' ? activity.name : formatJudgeActivityName(activity.name ?? activity.message);

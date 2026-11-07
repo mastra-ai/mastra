@@ -1481,11 +1481,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // over these defaults.
     goal: {
       // Resolve the judge model through mastracode's gateway (a model-resolver
-      // function) so provider credentials are injected; returns undefined when no
-      // judge model is configured, keeping the goal step a no-op. Bind the same
+      // function) so provider credentials are injected. The judge is the configured
+      // setting, then the goal's own `judgeModelId`, then the session's model. Bind the same
       // `settingsPath` used above so the judge model and `maxRuns` come from one
       // config (a custom settings file would otherwise diverge).
-      judge: withCredentialTenantPreparation(ctx => getGoalJudgeModel(ctx, config?.settingsPath)),
+      judge: withCredentialTenantPreparation((ctx: { requestContext: RequestContext; judgeModelId?: string }) =>
+        getGoalJudgeModel(ctx, config?.settingsPath),
+      ),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       maxSteps: 1000,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,

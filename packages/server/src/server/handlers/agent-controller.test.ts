@@ -36,6 +36,8 @@ import {
   GET_AGENT_CONTROLLER_OM_RECORD_ROUTE,
   GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE,
   GET_AGENT_CONTROLLER_GOAL_ROUTE,
+  SET_AGENT_CONTROLLER_GOAL_ROUTE,
+  UPDATE_AGENT_CONTROLLER_GOAL_ROUTE,
   GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE,
 } from './agent-controller';
 
@@ -368,6 +370,116 @@ describe('agent-controller routes', () => {
       ).rejects.toMatchObject({ status: 404 });
       expect(await controller.getSession('missing-resource')).toBeUndefined();
       expect(await controller.queryThreads({ resourceId: 'missing-resource' })).toEqual([]);
+    });
+  });
+
+  describe('goal routes', () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'ship the refactor',
+      status: 'active' as const,
+      runsUsed: 0,
+      maxRuns: 5,
+      startedAt: '2026-11-06T00:00:00.000Z',
+      updatedAt: '2026-11-06T00:00:00.000Z',
+    };
+
+    async function startSession(id: string) {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: id, id, ownerId: 'code' });
+      const sendSignal = vi
+        .spyOn(session, 'sendSignal')
+        .mockReturnValue({ id: 'signal-1', type: 'system-reminder', accepted: Promise.resolve() } as any);
+      const setObjective = vi.spyOn(Agent.prototype, 'setObjective').mockResolvedValue(goal as any);
+      const updateObjectiveOptions = vi
+        .spyOn(Agent.prototype, 'updateObjectiveOptions')
+        .mockImplementation(async ({ status }: any) => ({ ...goal, ...(status ? { status } : {}) }) as any);
+      return { session, sendSignal, setObjective, updateObjectiveOptions };
+    }
+
+    it('only stores the goal unless asked to start', async () => {
+      const { session, sendSignal } = await startSession('goal-store');
+      await session.thread.ensureId({});
+
+      const res = await SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'goal-store',
+        objective: goal.objective,
+      } as any);
+
+      expect(res).toEqual({ goal });
+      expect(sendSignal).not.toHaveBeenCalled();
+    });
+
+    it('starts the agent on the goal with the same goal reminder the TUI sends', async () => {
+      const { session, sendSignal, setObjective } = await startSession('goal-start');
+
+      await SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'goal-start',
+        objective: goal.objective,
+        start: true,
+      } as any);
+
+      const threadId = session.thread.getId();
+      expect(threadId).toBeTruthy();
+      expect(setObjective).toHaveBeenCalledWith(goal.objective, expect.objectContaining({ threadId }));
+      expect(sendSignal).toHaveBeenCalledWith(
+        {
+          type: 'system-reminder',
+          contents: goal.objective,
+          attributes: { type: 'goal' },
+          metadata: { goalId: 'goal-1', goalMaxTurns: 5, judgeModelId: undefined },
+        },
+        expect.objectContaining({ requireDelivery: true }),
+      );
+    });
+
+    it('parks the goal as paused when it cannot start', async () => {
+      const { session, sendSignal, updateObjectiveOptions } = await startSession('goal-fail');
+      sendSignal.mockReturnValue({
+        id: 'signal-1',
+        type: 'system-reminder',
+        accepted: Promise.reject(new Error('no model')),
+      } as any);
+      vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
+
+      await expect(
+        SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'goal-fail',
+          objective: goal.objective,
+          start: true,
+        } as any),
+      ).rejects.toThrow();
+      expect(updateObjectiveOptions).toHaveBeenCalledWith({ threadId: session.thread.getId(), status: 'paused' });
+    });
+
+    it('resumes work when a goal is set back to active with start, but not when paused', async () => {
+      const { session, sendSignal } = await startSession('goal-resume');
+      await session.thread.ensureId({});
+
+      await UPDATE_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'goal-resume',
+        status: 'paused',
+        start: true,
+      } as any);
+      expect(sendSignal).not.toHaveBeenCalled();
+
+      await UPDATE_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'goal-resume',
+        status: 'active',
+        start: true,
+      } as any);
+      expect(sendSignal).toHaveBeenCalledTimes(1);
     });
   });
 

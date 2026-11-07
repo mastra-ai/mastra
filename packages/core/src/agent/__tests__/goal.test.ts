@@ -516,6 +516,38 @@ describe('in-loop goal scoring', () => {
     });
   });
 
+  it("passes the goal's own judge model id to a judge resolver", async () => {
+    const judge = vi.fn(() => goalJudgeModel([{ decision: 'done', reason: 'goal satisfied' }]) as any);
+    const agent = makeAgent({ judge, maxRuns: 5 });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE, judgeModelId: 'goal-judge' });
+
+    const stream = await agent.stream('go', { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 10 });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(judge).toHaveBeenCalledWith(expect.objectContaining({ judgeModelId: 'goal-judge' }));
+    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('done');
+  });
+
+  it('pauses the goal when the judge resolver throws', async () => {
+    const judge = vi.fn(() => {
+      throw new Error('Unknown model: nope/judge');
+    });
+    const agent = makeAgent({ judge: judge as any, maxRuns: 5 });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE, judgeModelId: 'nope/judge' });
+
+    const stream = await agent.stream('go', { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 10 });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(record?.status).toBe('paused');
+    expect(record?.pausedReason).toContain('Unknown model: nope/judge');
+  });
+
   it('direct agent goal loop completes with built-in scorer without manual continuation', async () => {
     const agent = makeAgent({
       judge: goalJudgeModel([

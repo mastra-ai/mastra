@@ -1,9 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Target } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatRuntime } from '../context/useChatRuntime';
 import {
+  useAgentControllerGoal,
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
@@ -15,7 +17,7 @@ const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-ba
 
 export function GoalPanel() {
   const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
-  const { goal } = useChatRuntime();
+  const { goal: evaluation } = useChatRuntime();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -25,10 +27,21 @@ export function GoalPanel() {
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
+  const goalQuery = useAgentControllerGoal(hookArgs);
+  const { refetch } = goalQuery;
 
+  // The stored goal is the source of truth (set, paused, cleared); each judge verdict moves it on.
+  useEffect(() => {
+    if (evaluation) void refetch();
+  }, [evaluation, refetch]);
+
+  const goal = goalQuery.data;
   if (!sessionEnabled || !goal) return null;
 
-  const progress = `${goal.iteration}/${goal.maxRuns}`;
+  const latest = evaluation?.objective === goal.objective ? evaluation : undefined;
+  const maxRuns = goal.maxRuns ?? latest?.maxRuns;
+  const progress = maxRuns ? `${goal.runsUsed}/${maxRuns}` : `${goal.runsUsed}`;
+  const reason = goal.status === 'paused' ? (goal.pausedReason ?? latest?.reason) : latest?.reason;
 
   return (
     <div className={goalBar}>
@@ -41,14 +54,14 @@ export function GoalPanel() {
       <Txt as="span" variant="caption" tone="muted" className="bg-fill rounded-full px-2 py-px tabular-nums">
         {progress}
       </Txt>
-      {goal.reason && (
+      {reason && (
         <Txt
           as="span"
           variant="caption"
           tone="muted"
           className="max-w-52 overflow-hidden text-ellipsis whitespace-nowrap"
         >
-          {goal.reason}
+          {reason}
         </Txt>
       )}
       {goal.status === 'active' && (
