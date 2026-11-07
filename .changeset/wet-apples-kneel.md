@@ -27,5 +27,3 @@ function Chat() {
   return chat.messages.map(m => <MessageFactory key={m.id} message={m} {...chat.genUI.renderers} />);
 }
 ```
-
-See the [Generative UI docs](https://mastra.ai/docs/agents/generative-ui) for tool renderers with approvals, actions, shared state, and side-panel surfaces.
