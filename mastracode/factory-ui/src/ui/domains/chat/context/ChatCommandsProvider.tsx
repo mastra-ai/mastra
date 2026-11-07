@@ -18,6 +18,7 @@ export interface ChatCommandsApi {
   showComposerPreview: (text: string) => void;
   clearComposerPreview: (text: string) => void;
   prefillComposer: (draft: string) => void;
+  restoreComposerDraft: (draft: string) => void;
   submitComposer: (draft: string) => void;
   commands: SlashCommand[];
   runComposerCommand: (text: string) => Promise<boolean>;
@@ -39,6 +40,11 @@ export function ChatCommandsProvider({ children, initialDraft = '' }: { children
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());
   };
+  // Gives back a message that never sent without dropping what was typed since.
+  const restoreComposerDraft = (draft: string) => {
+    setComposerDraft(current => (current.trim() ? `${draft}\n\n${current}` : draft));
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  };
   // Committed before submitting so the composer's own Send path, gates included, reads it.
   const submitComposer = (draft: string) => {
     flushSync(() => setComposerDraft(draft));
@@ -54,6 +60,7 @@ export function ChatCommandsProvider({ children, initialDraft = '' }: { children
     showComposerPreview,
     clearComposerPreview,
     prefillComposer,
+    restoreComposerDraft,
     submitComposer,
     commands,
     runComposerCommand,

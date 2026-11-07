@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { IntegrationContext } from '../base.js';
 import {
+  githubItemSources,
   githubRulesOptions,
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
@@ -114,6 +115,25 @@ export function createGithubIssueReconciler(
             installationId: repository.installationId,
             repository: repository.fullName,
           });
+          // A finished card may still be only in the legacy table; copy it so it counts.
+          const uncarded = openIssues.filter(issue => !carded.has(issue.number));
+          if (uncarded.length && options.storage.legacyBackfillPending) {
+            for (const project of projects) {
+              await options.storage.copyLegacyCards({
+                orgId: project.orgId,
+                factoryProjectId: project.factoryProjectId,
+                sources: uncarded.flatMap(issue => githubItemSources(repository.id, 'issue', issue.number)),
+              });
+              const items = await options.storage.list({
+                orgId: project.orgId,
+                factoryProjectId: project.factoryProjectId,
+              });
+              for (const item of items) {
+                const issueNumber = reconcilableIssueNumber(item, repository);
+                if (issueNumber) carded.add(issueNumber);
+              }
+            }
+          }
           for (const issue of openIssues) {
             if (carded.has(issue.number)) continue;
             const createdAt = issue.createdAt ? Date.parse(issue.createdAt) : Number.NaN;

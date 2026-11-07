@@ -36,6 +36,7 @@ createPreviewTests(() => storage, {
 describe('DuckDB stored previews', () => {
   const startedAt = new Date('2026-05-01T12:00:00Z');
   const endedAt = new Date('2026-05-01T12:00:01Z');
+  const timeRange = { from: '2026-05-01T00:00:00.000Z', to: '2026-05-02T00:00:00.000Z' };
   const span = (extra: Partial<CreateSpanRecord> = {}): CreateSpanRecord => ({
     traceId: 'trace-rows',
     spanId: 'root-rows',
@@ -101,32 +102,69 @@ describe('DuckDB stored previews', () => {
     expect(spans[0]!.inputPreview).toBe('the input');
   });
 
-  it('lists traces without scanning the input or output payloads', async () => {
-    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
-    await storage.batchCreateSpans({ records: [span()] });
+  async function columnsScannedBy(read: () => Promise<void>): Promise<string[][]> {
     const query = vi.spyOn(store.db, 'query');
     let calls: unknown[][];
     try {
-      const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
-      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
-      calls = query.mock.calls;
+      await read();
+      calls = query.mock.calls.slice();
     } finally {
       query.mockRestore();
     }
-
+    type PlanNode = { name?: string; extra_info?: { Projections?: string | string[] }; children?: PlanNode[] };
+    const scans = (node: PlanNode): string[][] => [
+      ...(node.name?.includes('SCAN') && node.extra_info?.Projections ? [[node.extra_info.Projections].flat()] : []),
+      ...(node.children ?? []).flatMap(scans),
+    ];
     const scanned: string[][] = [];
     for (const [sql, params] of calls) {
-      const plan = await store.db.query<{ explain_value: string }>(`EXPLAIN ${sql}`, params as unknown[]);
-      const text = plan.map(row => row.explain_value).join('\n');
-      for (const [, projections] of text.matchAll(/SCAN[\s\S]*?Projections:([\s\S]*?)(?:Filters:|Estimated|└)/g)) {
-        scanned.push(
-          projections!
-            .split(/[│\n]/)
-            .map(column => column.trim())
-            .filter(Boolean),
-        );
-      }
+      const [plan] = await store.db.query<{ explain_value: string }>(
+        `EXPLAIN (FORMAT JSON) ${sql}`,
+        params as unknown[],
+      );
+      scanned.push(...(JSON.parse(plan!.explain_value) as PlanNode[]).flatMap(scans));
     }
+    return scanned;
+  }
+
+  it('lists traces without scanning the input or output payloads', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span()] });
+
+    const scanned = await columnsScannedBy(async () => {
+      const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+    });
+
+    expect(scanned.some(columns => columns.includes('inputPreview'))).toBe(true);
+    expect(scanned.flat()).not.toContain('input');
+    expect(scanned.flat()).not.toContain('output');
+  });
+
+  it('queries spans without scanning the payloads when every preview is stored', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span()] });
+
+    const scanned = await columnsScannedBy(async () => {
+      const { spans } = await storage.querySpans(planSpanQuery({ timeRange }));
+      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+    });
+
+    expect(scanned.flat()).not.toContain('input');
+    expect(scanned.flat()).not.toContain('output');
+    const previewLookup = scanned.find(columns => columns.includes('inputPreview'));
+    expect(previewLookup).not.toContain('error');
+  });
+
+  it('queries threads without scanning the input or output payloads when every preview is stored', async () => {
+    await storage.batchCreateSpans({ records: [span({ threadId: 'thread-rows', endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span({ threadId: 'thread-rows' })] });
+
+    const scanned = await columnsScannedBy(async () => {
+      const { threads } = await storage.queryThreads(planThreadRowsQuery({ timeRange: { traces: timeRange } }));
+      expect(threads[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+    });
+
     expect(scanned.some(columns => columns.includes('inputPreview'))).toBe(true);
     expect(scanned.flat()).not.toContain('input');
     expect(scanned.flat()).not.toContain('output');

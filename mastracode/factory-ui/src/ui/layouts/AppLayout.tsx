@@ -5,27 +5,8 @@ import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
-import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { OverlaysProvider } from '../lib/overlays';
 import { AppSidebar } from '../AppSidebar';
-
-/**
- * Mobile-only bar above the page frame: the drawer trigger and global search.
- * Keyed off the sidebar's own media signal so it can never desync from the drawer.
- */
-function MobileHeader() {
-  const { isMobile } = useSidebar();
-  if (!isMobile) return null;
-
-  return (
-    <header className="flex h-12 shrink-0 items-center gap-2 px-3">
-      <Sidebar.MobileTrigger id="mobile-navigation-trigger" />
-      <div className="ml-auto shrink-0">
-        <GlobalSearchButton id="global-search-mobile-trigger" />
-      </div>
-    </header>
-  );
-}
 
 /** `[` toggles the sidebar, as the trigger's tooltip says. Needs the `Sidebar.Provider` context. */
 function SidebarShortcuts() {
@@ -39,7 +20,7 @@ function AppFrame() {
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
 
   return (
-    <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
+    <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
         <Outlet />
       </MainCard>

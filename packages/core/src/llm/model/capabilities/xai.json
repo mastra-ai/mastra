@@ -46,12 +46,6 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "grok-4.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
     "grok-4.6": [
       {
         "type": "effort",
@@ -62,6 +56,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "grok-4.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ]
   }
