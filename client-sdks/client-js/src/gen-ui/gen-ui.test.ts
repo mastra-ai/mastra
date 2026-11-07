@@ -11,12 +11,12 @@ import type { StandardSchemaV1 } from './standard-schema';
 import {
   createGenUIContextStore,
   createGenUIStateStore,
-  editGenUIData,
+  editGenUIState,
   formatGenUIContext,
-  mergeGenUIData,
+  mergeGenUIState,
   rebaseGenUIEdit,
 } from './state';
-import type { GenUIEnvelope, JSONObject } from './types';
+import type { GenUIEnvelope, GenUIPatch, GenUISpec, JSONObject } from './types';
 
 const recorder = () => {
   const chunks: GenUIChunk[] = [];
@@ -63,29 +63,67 @@ describe('validateModelInput', () => {
   });
 });
 
+const card = (type: string, props: JSONObject, state?: JSONObject): GenUISpec => ({
+  root: 'card',
+  elements: { card: { type, props, children: [] } },
+  ...(state ? { state } : {}),
+});
+
+const replay = (chunks: GenUIChunk[]) =>
+  chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+
 describe('createGenUIEmitter', () => {
   it('writes validated, versioned data-gen-ui chunks that the client reducer accepts', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId, source: { agentId: 'weather' } }).surface('w1');
-    await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Paris' } }] });
-    await ui.updateProps('card', { temperature: 21 });
+    await ui.create({ spec: card('WeatherCard', { city: 'Paris' }) });
+    await ui.patch([{ op: 'add', path: '/elements/card/props/temperature', value: 21 }]);
     await ui.setStatus('ready');
 
     expect(chunks.map(chunk => chunk.type)).toEqual(['data-gen-ui', 'data-gen-ui', 'data-gen-ui']);
     expect(chunks[0]!.data).toMatchObject({ version: 1, eventId: 'e1', surfaceId: 'w1' });
 
-    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    const state = replay(chunks);
     expect(state.diagnostics).toEqual([]);
     expect(state.surfaces.w1).toMatchObject({ status: 'ready', source: { agentId: 'weather' } });
-    expect(state.surfaces.w1!.nodes.card!.props).toEqual({ city: 'Paris', temperature: 21 });
+    expect(state.surfaces.w1!.spec.elements.card!.props).toEqual({ city: 'Paris', temperature: 21 });
+  });
+
+  it('writes agent state that elements read with $state, creating the state object when missing', async () => {
+    const { chunks, writer, generateEventId } = recorder();
+    const ui = createGenUIEmitter(writer, { generateEventId }).surface('w');
+    await ui.create({ spec: card('WeatherCard', { temp: { $state: '/forecast/temp' } }) });
+    await ui.setState('/forecast', { temp: 18 });
+    await ui.setState('/forecast/temp', 21);
+
+    const state = replay(chunks);
+    expect(state.diagnostics).toEqual([]);
+    expect(state.surfaces.w!.spec.state).toEqual({ forecast: { temp: 21 } });
+  });
+
+  it('replaces the whole spec in one envelope', async () => {
+    const { chunks, writer, generateEventId } = recorder();
+    const ui = createGenUIEmitter(writer, { generateEventId }).surface('w');
+    await ui.create({ spec: card('Skeleton', {}) });
+    await ui.replace(card('WeatherCard', { city: 'Oslo' }));
+
+    expect(replay(chunks).surfaces.w!.spec.elements.card).toEqual({
+      type: 'WeatherCard',
+      props: { city: 'Oslo' },
+      children: [],
+    });
   });
 
   it('rejects invalid operations on the server before anything is written', async () => {
     const { chunks, writer } = recorder();
     const ui = createGenUIEmitter(writer).surface('s');
     await expect(
-      ui.upsertNodes([{ id: 'n', component: 'C', props: { bad: (() => 1) as unknown as string } }]),
+      ui.patch([{ op: 'add', path: '/elements/n', value: { type: 'C', props: { bad: () => 1 } } }]),
     ).rejects.toThrow(/Invalid GenUI operations/);
+    await expect(ui.patch([{ op: 'add', path: '/constructor/x', value: 1 }])).rejects.toThrow(
+      /Invalid GenUI operations/,
+    );
+    await expect(ui.setState('', 1)).rejects.toThrow(/Invalid GenUI operations/);
     expect(chunks).toEqual([]);
   });
 
@@ -93,17 +131,17 @@ describe('createGenUIEmitter', () => {
     const { chunks, writer } = recorder();
     const weatherTool = async (city: string, temp: number) => {
       const ui = createGenUIEmitter(writer).surface();
-      await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 0 } }] });
-      await ui.updateProps('card', { temp });
+      await ui.create({ spec: card('WeatherCard', { city, temp: 0 }) });
+      await ui.patch([{ op: 'replace', path: '/elements/card/props/temp', value: temp }]);
       await ui.setStatus('ready');
     };
     await weatherTool('Paris', 18);
     await weatherTool('Paris', 25);
 
-    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    const state = replay(chunks);
     expect(state.diagnostics).toEqual([]);
     expect(state.surfaceOrder).toHaveLength(2);
-    expect(state.surfaceOrder.map(id => state.surfaces[id]!.nodes.card!.props.temp)).toEqual([18, 25]);
+    expect(state.surfaceOrder.map(id => state.surfaces[id]!.spec.elements.card!.props.temp)).toEqual([18, 25]);
   });
 
   it('keeps later updates applicable when a write fails', async () => {
@@ -119,15 +157,15 @@ describe('createGenUIEmitter', () => {
       },
     };
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('w');
-    await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { temp: 0 } }] });
+    await ui.create({ spec: card('WeatherCard', {}, { temp: 0 }) });
     failNext = true;
-    await expect(ui.updateProps('card', { temp: 10 })).rejects.toThrow('stream closed');
-    await ui.updateProps('card', { temp: 20 });
+    await expect(ui.setState('/temp', 10)).rejects.toThrow('stream closed');
+    await ui.setState('/temp', 20);
 
-    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    const state = replay(chunks);
     expect(state.diagnostics).toEqual([]);
     expect(state.buffered).toEqual({});
-    expect(state.surfaces.w!.nodes.card!.props.temp).toBe(20);
+    expect(state.surfaces.w!.spec.state!.temp).toBe(20);
   });
 
   it('keeps later updates applicable when an earlier un-awaited write fails', async () => {
@@ -144,16 +182,16 @@ describe('createGenUIEmitter', () => {
     };
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('w');
     const results = await Promise.allSettled([
-      ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { temp: 0 } }] }),
-      ui.updateProps('card', { temp: 10 }),
-      ui.updateProps('card', { temp: 20 }),
+      ui.create({ spec: card('WeatherCard', {}, { temp: 0 }) }),
+      ui.setState('/temp', 10),
+      ui.setState('/temp', 20),
     ]);
 
     expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
-    const state = chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState());
+    const state = replay(chunks);
     expect(state.diagnostics).toEqual([]);
     expect(state.buffered).toEqual({});
-    expect(state.surfaces.w!.nodes.card!.props.temp).toBe(20);
+    expect(state.surfaces.w!.spec.state!.temp).toBe(20);
   });
 
   it('links surfaces to the tool call when given the tool execution context', async () => {
@@ -161,10 +199,10 @@ describe('createGenUIEmitter', () => {
     const context = { writer, agent: { toolCallId: 'call-1' } };
     await createGenUIEmitter(context, { generateEventId, source: { agentId: 'weather' } })
       .surface('w')
-      .create({ nodes: [{ id: 'card', component: 'WeatherCard', props: {} }] });
+      .create({ spec: card('WeatherCard', {}) });
     await createGenUIEmitter(context, { generateEventId, source: { toolCallId: 'explicit' } })
       .surface('x')
-      .create({ nodes: [{ id: 'card', component: 'WeatherCard', props: {} }] });
+      .create({ spec: card('WeatherCard', {}) });
 
     const sources = chunks.map(chunk => chunk.data.operations[0]);
     expect(sources).toMatchObject([
@@ -175,12 +213,15 @@ describe('createGenUIEmitter', () => {
 });
 
 describe('createGenUISession', () => {
+  const text = (value: string) => card('Text', { text: value });
+  const setText = (value: string): GenUIPatch[] => [{ op: 'replace', path: '/elements/card/props/text', value }];
+
   it('applies only new events while messages stream, keeping unchanged surfaces stable', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const emitter = createGenUIEmitter(writer, { generateEventId });
-    await emitter.surface('a').create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'a' } }] });
-    await emitter.surface('b').create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'b' } }] });
-    await emitter.surface('b').updateProps('root', { text: 'b2' });
+    await emitter.surface('a').create({ spec: text('a') });
+    await emitter.surface('b').create({ spec: text('b') });
+    await emitter.surface('b').patch(setText('b2'));
 
     const session = createGenUISession();
     const listener = vi.fn();
@@ -208,15 +249,15 @@ describe('createGenUISession', () => {
       ]),
     ]);
     expect(third.surfaces.a).toBe(first.surfaces.a);
-    expect(third.surfaces.b!.nodes.root!.props.text).toBe('b2');
+    expect(third.surfaces.b!.spec.elements.card!.props.text).toBe('b2');
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it('rebuilds deterministically when history is replaced (reload, regenerate)', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('s');
-    await ui.create({ nodes: [{ id: 'root', component: 'Text', props: { text: 'v1' } }] });
-    await ui.updateProps('root', { text: 'v2' });
+    await ui.create({ spec: text('v1') });
+    await ui.patch(setText('v2'));
 
     const session = createGenUISession();
     session.sync([
@@ -225,11 +266,11 @@ describe('createGenUISession', () => {
         chunks.map(chunk => part(chunk.data)),
       ),
     ]);
-    expect(session.getState().surfaces.s!.nodes.root!.props.text).toBe('v2');
+    expect(session.getState().surfaces.s!.spec.elements.card!.props.text).toBe('v2');
 
     // History replaced by a regenerated answer that only contains the first event.
     session.sync([assistant('m2', [part(chunks[0]!.data)])]);
-    expect(session.getState().surfaces.s!.nodes.root!.props.text).toBe('v1');
+    expect(session.getState().surfaces.s!.spec.elements.card!.props.text).toBe('v1');
 
     const reloaded = createGenUISession();
     reloaded.sync([
@@ -250,12 +291,12 @@ describe('createGenUISession', () => {
   it('keeps out-of-band envelopes across rebuilds and deduplicates them against history', async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('panel');
-    await ui.create({ placement: 'panel', nodes: [{ id: 'root', component: 'Progress', props: { pct: 0 } }] });
-    await ui.updateProps('root', { pct: 50 });
+    await ui.create({ placement: 'panel', spec: card('Progress', { pct: { $state: '/pct' } }, { pct: 0 }) });
+    await ui.setState('/pct', 50);
 
     const session = createGenUISession();
     chunks.forEach(chunk => session.ingest(chunk.data));
-    expect(session.getState().surfaces.panel!.nodes.root!.props.pct).toBe(50);
+    expect(session.getState().surfaces.panel!.spec.state!.pct).toBe(50);
 
     // The same events later show up in persisted history: no duplicates, same result.
     session.sync([
@@ -266,7 +307,7 @@ describe('createGenUISession', () => {
     ]);
     session.sync([]);
     expect(session.getState().surfaces.panel!.revision).toBe(2);
-    expect(session.getState().surfaces.panel!.nodes.root!.props.pct).toBe(50);
+    expect(session.getState().surfaces.panel!.spec.state!.pct).toBe(50);
   });
 });
 
@@ -334,37 +375,56 @@ describe('createGenUIStateStore', () => {
   });
 });
 
-describe('shared agent data with local edits', () => {
-  it('overlays user edits on agent data and flags only keys the agent changed after the user edited them', () => {
-    let data: JSONObject = { region: 'EU', limit: 10, sort: 'name' };
-    let edits = editGenUIData({}, data, 'region', 'US');
-    edits = editGenUIData(edits, data, 'limit', 25);
-    expect(mergeGenUIData(data, edits)).toEqual({ value: { region: 'US', limit: 25, sort: 'name' }, conflicts: [] });
+describe('agent state with local edits', () => {
+  it('overlays user edits on agent state and flags only paths the agent changed after the user edited them', () => {
+    let state: JSONObject = { region: 'EU', limit: 10, sort: 'name' };
+    let edits = editGenUIState({}, state, '/region', 'US');
+    edits = editGenUIState(edits, state, '/limit', 25);
+    expect(mergeGenUIState(state, edits)).toEqual({ value: { region: 'US', limit: 25, sort: 'name' }, conflicts: [] });
 
-    // The agent changes an unedited key, an edited key, and converges on the user's value for another.
-    data = { region: 'APAC', limit: 25, sort: 'date' };
-    const merged = mergeGenUIData(data, edits);
+    // The agent changes an unedited path, an edited path, and converges on the user's value for another.
+    state = { region: 'APAC', limit: 25, sort: 'date' };
+    const merged = mergeGenUIState(state, edits);
     expect(merged.value).toEqual({ region: 'US', limit: 25, sort: 'date' });
-    expect(merged.conflicts).toEqual(['region']);
+    expect(merged.conflicts).toEqual(['/region']);
 
     // Keeping the local value acknowledges the agent's new value and clears the conflict.
-    edits = rebaseGenUIEdit(edits, data, 'region');
-    expect(mergeGenUIData(data, edits)).toEqual({ value: { region: 'US', limit: 25, sort: 'date' }, conflicts: [] });
+    edits = rebaseGenUIEdit(edits, state, '/region');
+    expect(mergeGenUIState(state, edits)).toEqual({ value: { region: 'US', limit: 25, sort: 'date' }, conflicts: [] });
+  });
+
+  it('edits nested paths without touching their siblings, and a parent edit replaces edits beneath it', () => {
+    const state: JSONObject = { filters: { region: 'EU', tags: ['a'] }, page: 1 };
+    let edits = editGenUIState({}, state, '/filters/region', 'US');
+    edits = editGenUIState(edits, state, '/filters/tags/1', 'b');
+    const merged = mergeGenUIState(state, edits);
+    expect(merged.value).toEqual({ filters: { region: 'US', tags: ['a', 'b'] }, page: 1 });
+    expect(state).toEqual({ filters: { region: 'EU', tags: ['a'] }, page: 1 });
+    expect(merged.value.page).toBe(1);
+
+    edits = editGenUIState(edits, state, '/filters', { region: 'APAC' });
+    expect(Object.keys(edits)).toEqual(['/filters']);
+    expect(mergeGenUIState(state, edits).value).toEqual({ filters: { region: 'APAC' }, page: 1 });
   });
 
   it('drops an edit that matches the agent value and compares structured values by content', () => {
-    const data: JSONObject = { tags: ['a', 'b'], range: { from: 1, to: 2 } };
-    expect(editGenUIData({}, data, 'tags', ['a', 'b'])).toEqual({});
-    const edits = editGenUIData({}, data, 'range', { to: 3, from: 1 });
-    expect(mergeGenUIData({ range: { to: 2, from: 1 }, tags: ['a', 'b'] }, edits).conflicts).toEqual([]);
-    expect(mergeGenUIData({ range: { from: 0, to: 2 } }, edits).conflicts).toEqual(['range']);
+    const state: JSONObject = { tags: ['a', 'b'], range: { from: 1, to: 2 } };
+    expect(editGenUIState({}, state, '/tags', ['a', 'b'])).toEqual({});
+    const edits = editGenUIState({}, state, '/range', { to: 3, from: 1 });
+    expect(mergeGenUIState({ range: { to: 2, from: 1 }, tags: ['a', 'b'] }, edits).conflicts).toEqual([]);
+    expect(mergeGenUIState({ range: { from: 0, to: 2 } }, edits).conflicts).toEqual(['/range']);
   });
 
-  it('treats a key the agent adds after a local-only edit as a conflict, and a removed key as one too', () => {
-    const edits = editGenUIData({}, {}, 'note', 'mine');
-    expect(mergeGenUIData({ note: 'agent' }, edits).conflicts).toEqual(['note']);
-    const edited = editGenUIData({}, { note: 'agent' }, 'note', 'mine');
-    expect(mergeGenUIData({}, edited)).toEqual({ value: { note: 'mine' }, conflicts: ['note'] });
+  it('treats a path the agent adds after a local-only edit as a conflict, and a removed path as one too', () => {
+    const edits = editGenUIState({}, {}, '/note', 'mine');
+    expect(mergeGenUIState({ note: 'agent' }, edits).conflicts).toEqual(['/note']);
+    const edited = editGenUIState({}, { note: 'agent' }, '/note', 'mine');
+    expect(mergeGenUIState({}, edited)).toEqual({ value: { note: 'mine' }, conflicts: ['/note'] });
+  });
+
+  it('refuses paths that could pollute prototypes', () => {
+    expect(() => editGenUIState({}, {}, '/__proto__/polluted', true)).toThrow();
+    expect(() => editGenUIState({}, {}, 'region', 'US')).toThrow();
   });
 });
 
@@ -396,7 +456,16 @@ describe('createGenUIActionDispatcher', () => {
   const surfaceState = async () => {
     const { chunks, writer, generateEventId } = recorder();
     const ui = createGenUIEmitter(writer, { generateEventId }).surface('form');
-    await ui.create({ nodes: [{ id: 'approve', component: 'ApproveButton', props: { label: 'Approve' } }] });
+    await ui.create({
+      spec: {
+        root: 'form',
+        elements: {
+          form: { type: 'Stack', props: {}, children: ['title', 'approve'] },
+          title: { type: 'Text', props: { text: 'Refund' }, children: [] },
+          approve: { type: 'ApproveButton', props: { label: 'Approve' }, children: [] },
+        },
+      },
+    });
     return {
       ui,
       chunks,
@@ -414,7 +483,7 @@ describe('createGenUIActionDispatcher', () => {
       getSurface: id => state().surfaces[id],
       handlers: { submit: defineGenUIAction({ schema: schema(isAmount, 'amount must be a number'), handle }) },
     });
-    const action = { actionId: 'a1', surfaceId: 'form', nodeId: 'approve', name: 'submit', sourceRevision: 1 };
+    const action = { actionId: 'a1', surfaceId: 'form', elementId: 'approve', name: 'submit', sourceRevision: 1 };
 
     expect(await dispatcher.dispatch({ ...action, payload: { amount: 'x' } })).toEqual({
       status: 'invalid',
@@ -432,29 +501,50 @@ describe('createGenUIActionDispatcher', () => {
     expect(handle).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects actions from a node that changed after it was rendered', async () => {
+  it('rejects actions from an element that changed after it was rendered, but not when a sibling changed', async () => {
     const { ui, state } = await surfaceState();
-    await ui.updateProps('approve', { label: 'Amount changed — review again' });
+    await ui.patch([{ op: 'replace', path: '/elements/title/props/text', value: 'Refund (updated)' }]);
     const handle = vi.fn();
     const dispatcher = createGenUIActionDispatcher({
       getSurface: id => state().surfaces[id],
       handlers: { submit: { handle } },
     });
-    const result = await dispatcher.dispatch({
-      surfaceId: 'form',
-      nodeId: 'approve',
-      name: 'submit',
-      sourceRevision: 1,
+    const action = { surfaceId: 'form', elementId: 'approve', name: 'submit', sourceRevision: 1 };
+    expect((await dispatcher.dispatch(action)).status).toBe('success');
+
+    await ui.patch([{ op: 'replace', path: '/elements/approve/props/label', value: 'Amount changed — review again' }]);
+    expect((await dispatcher.dispatch(action)).status).toBe('stale');
+    await ui.patch([
+      { op: 'remove', path: '/elements/approve' },
+      { op: 'replace', path: '/elements/form/children', value: ['title'] },
+    ]);
+    expect(await dispatcher.dispatch({ ...action, sourceRevision: 4 })).toMatchObject({ status: 'stale' });
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs surface-level actions raised by spec event bindings, which carry no element, until the surface stops', async () => {
+    const { ui, state } = await surfaceState();
+    const handle = vi.fn();
+    const dispatcher = createGenUIActionDispatcher({
+      getSurface: id => state().surfaces[id],
+      handlers: { submit: { handle } },
     });
-    expect(result.status).toBe('stale');
-    expect(handle).not.toHaveBeenCalled();
+    await ui.patch([{ op: 'replace', path: '/elements/approve/props/label', value: 'Changed' }]);
+    expect((await dispatcher.dispatch({ surfaceId: 'form', name: 'submit', payload: { ok: true } })).status).toBe(
+      'success',
+    );
+    expect(handle).toHaveBeenCalledWith({ ok: true }, expect.anything());
+
+    await ui.setStatus('aborted');
+    expect(await dispatcher.dispatch({ surfaceId: 'form', name: 'submit' })).toMatchObject({ status: 'stale' });
+    expect(handle).toHaveBeenCalledTimes(1);
   });
 
   it('reports unhandled actions and busy duplicates, and exposes pending state for loading UI', async () => {
     let release!: () => void;
     const handle = vi.fn(() => new Promise<void>(resolve => (release = resolve)));
     const dispatcher = createGenUIActionDispatcher({ handlers: { save: { handle } } });
-    const base = { surfaceId: 's', nodeId: 'n', sourceRevision: 0 };
+    const base = { surfaceId: 's', elementId: 'n', sourceRevision: 0 };
 
     expect((await dispatcher.dispatch({ ...base, name: 'nope' })).status).toBe('unhandled');
 
@@ -478,7 +568,7 @@ describe('createGenUIActionDispatcher', () => {
         },
       },
     });
-    const input = { actionId: 'x', surfaceId: 's', nodeId: 'n', name: 'slow', sourceRevision: 0 };
+    const input = { actionId: 'x', surfaceId: 's', elementId: 'n', name: 'slow', sourceRevision: 0 };
     const first = dispatcher.dispatch(input);
     dispatcher.cancel('x');
     expect(await first).toEqual({ status: 'cancelled' });
@@ -495,7 +585,7 @@ describe('createGenUIActionDispatcher', () => {
         },
       },
     });
-    expect(await dispatcher.dispatch({ surfaceId: 's', nodeId: 'n', name: 'boom', sourceRevision: 0 })).toEqual({
+    expect(await dispatcher.dispatch({ surfaceId: 's', elementId: 'n', name: 'boom', sourceRevision: 0 })).toEqual({
       status: 'error',
       error: 'network down',
     });

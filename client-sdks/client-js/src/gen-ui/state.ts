@@ -76,8 +76,8 @@ export function createGenUIStateStore(options: { limits?: Partial<GenUILimits> }
     }
     const raw = typeof update === 'function' ? update(current.value) : update;
     const value = toSafeJSONObject(raw, limits.maxValueDepth, key);
-    if (jsonSize(value) > limits.maxDataSize) {
-      throw new Error(`GenUI state for ${key} exceeds ${limits.maxDataSize} characters`);
+    if (jsonSize(value) > limits.maxSpecSize) {
+      throw new Error(`GenUI state for ${key} exceeds ${limits.maxSpecSize} characters`);
     }
     const entry = { value, revision: current.revision + 1 };
     entries.set(key, entry);
@@ -112,13 +112,17 @@ export function createGenUIStateStore(options: { limits?: Partial<GenUILimits> }
 }
 
 /**
- * A user edit of one key of agent-owned surface data. `base` is the agent's value when the user
- * edited it (absent when the agent had none), so a later agent change to the same key is detectable.
+ * A user edit of one path of the agent's spec state. `base` is the agent's value at that path when the
+ * user edited it (absent when the agent had none), so a later agent change to the same path is detectable.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
 export type GenUIEdit = { value: JSONValue; base?: JSONValue };
-/** @experimental Generative UI is in beta and may change without notice. */
+/**
+ * User edits keyed by JSON pointer into the spec state (for example `/filters/region`).
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export type GenUIEdits = Record<string, GenUIEdit>;
 
 function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): boolean {
@@ -133,49 +137,102 @@ function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): boolean 
 
 const hasOwn = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key);
 
+const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function segmentsOf(pointer: string): string[] {
+  if (!pointer.startsWith('/')) throw new Error(`state path "${pointer}" must be a JSON pointer starting with "/"`);
+  const segments = pointer
+    .split('/')
+    .slice(1)
+    .map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+  if (segments.some(segment => FORBIDDEN_SEGMENTS.has(segment))) {
+    throw new Error(`state path "${pointer}" is not allowed`);
+  }
+  return segments;
+}
+
+function readPath(state: JSONObject, pointer: string): JSONValue | undefined {
+  let current: JSONValue | undefined = state;
+  for (const segment of segmentsOf(pointer)) {
+    if (typeof current !== 'object' || current === null || !hasOwn(current, segment)) return undefined;
+    current = (current as JSONObject)[segment];
+  }
+  return current;
+}
+
+/** Copy-on-write set: only the containers along `pointer` are copied. */
+function writePath(state: JSONObject, pointer: string, value: JSONValue): JSONObject {
+  const segments = segmentsOf(pointer);
+  const write = (container: JSONValue | undefined, index: number): JSONValue => {
+    const segment = segments[index]!;
+    const isIndex = /^(\d+|-)$/.test(segment);
+    const copy: JSONObject | JSONValue[] = Array.isArray(container)
+      ? [...container]
+      : typeof container === 'object' && container !== null
+        ? { ...container }
+        : isIndex
+          ? []
+          : {};
+    const key = Array.isArray(copy) && segment === '-' ? String(copy.length) : segment;
+    const next = index === segments.length - 1 ? value : write((copy as JSONObject)[key], index + 1);
+    (copy as JSONObject)[key] = next;
+    return copy;
+  };
+  return segments.length ? (write(state, 0) as JSONObject) : state;
+}
+
+const isWithin = (pointer: string, ancestor: string) => pointer.startsWith(`${ancestor}/`);
+
 /**
- * Record a user edit on top of the agent's current data. Editing a key back to the agent's value drops the edit.
+ * Record a user edit at `pointer` on top of the agent's current state. Editing a path back to the
+ * agent's value drops the edit; editing a path replaces any edits beneath it.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function editGenUIData(edits: GenUIEdits, data: JSONObject, key: string, value: JSONValue): GenUIEdits {
-  const agentValue = hasOwn(data, key) ? data[key] : undefined;
-  const { [key]: previous, ...rest } = edits;
+export function editGenUIState(edits: GenUIEdits, state: JSONObject, pointer: string, value: JSONValue): GenUIEdits {
+  const agentValue = readPath(state, pointer);
+  const previous = edits[pointer];
+  const rest: GenUIEdits = {};
+  for (const [path, edit] of Object.entries(edits)) {
+    if (path !== pointer && !isWithin(path, pointer)) rest[path] = edit;
+  }
   if (jsonEqual(value, agentValue)) return rest;
   // Keep the original base so an agent change that happened before this edit is still reported.
   const base = previous ? previous.base : agentValue;
-  return { ...rest, [key]: base === undefined ? { value } : { value, base } };
+  return { ...rest, [pointer]: base === undefined ? { value } : { value, base } };
 }
 
 /**
- * Keep the local value of `key` and accept the agent's current value as its new base, clearing the conflict.
+ * Keep the local value at `pointer` and accept the agent's current value as its new base, clearing the conflict.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function rebaseGenUIEdit(edits: GenUIEdits, data: JSONObject, key: string): GenUIEdits {
-  const edit = edits[key];
+export function rebaseGenUIEdit(edits: GenUIEdits, state: JSONObject, pointer: string): GenUIEdits {
+  const edit = edits[pointer];
   if (!edit) return edits;
-  const agentValue = hasOwn(data, key) ? data[key] : undefined;
+  const agentValue = readPath(state, pointer);
   return {
     ...edits,
-    [key]: agentValue === undefined ? { value: edit.value } : { value: edit.value, base: agentValue },
+    [pointer]: agentValue === undefined ? { value: edit.value } : { value: edit.value, base: agentValue },
   };
 }
 
 /**
- * Agent data with local edits on top. Local edits win; `conflicts` lists keys the agent changed after
+ * Agent state with local edits on top. Local edits win; `conflicts` lists paths the agent changed after
  * the user edited them (unless the agent converged on the user's value), so the UI can surface them.
+ * Unchanged branches of the agent state keep their identity.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function mergeGenUIData(data: JSONObject, edits: GenUIEdits): { value: JSONObject; conflicts: string[] } {
-  const value: JSONObject = { ...data };
+export function mergeGenUIState(state: JSONObject, edits: GenUIEdits): { value: JSONObject; conflicts: string[] } {
+  let value = state;
   const conflicts: string[] = [];
-  for (const key of Object.keys(edits)) {
-    const edit = edits[key]!;
-    const agentValue = hasOwn(data, key) ? data[key] : undefined;
-    value[key] = edit.value;
-    if (!jsonEqual(agentValue, edit.base) && !jsonEqual(agentValue, edit.value)) conflicts.push(key);
+  // Shorter pointers first, so an edit beneath an edited parent lands on top of it.
+  for (const pointer of Object.keys(edits).sort((a, b) => a.length - b.length)) {
+    const edit = edits[pointer]!;
+    const agentValue = readPath(state, pointer);
+    value = writePath(value, pointer, edit.value);
+    if (!jsonEqual(agentValue, edit.base) && !jsonEqual(agentValue, edit.value)) conflicts.push(pointer);
   }
   return { value, conflicts };
 }

@@ -138,8 +138,11 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
     );
   }
   const Rendered = entry.definition.component;
-  return <Rendered props={validation.value} />;
+  return <Rendered props={validation.value} emit={ignoreEvent} />;
 }
+
+/** Component tools have no surface to bind actions in, so their events go nowhere. */
+const ignoreEvent = () => {};
 
 /** The surface created by a surface tool call, anchored at the call's position in the message. */
 function SurfaceToolView({ call }: { call: NormalizedToolCall }) {

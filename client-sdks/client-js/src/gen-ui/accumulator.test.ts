@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { accumulateGenUI, createGenUIState, extractGenUIEnvelopes, reduceGenUIMessages } from './accumulator';
-import type { GenUIEnvelope, GenUIOperation, GenUIState } from './types';
 
-let counter = 0;
+import { accumulateGenUI, createGenUIState, extractGenUIEnvelopes, reduceGenUIMessages } from './accumulator';
+import type { GenUIEnvelope, GenUIOperation, GenUISpec, GenUIState } from './types';
+
+let seq = 0;
 const env = (surfaceId: string, operations: GenUIOperation[], extra: Partial<GenUIEnvelope> = {}): GenUIEnvelope => ({
   version: 1,
-  eventId: `evt-${++counter}`,
+  eventId: `e${++seq}`,
   surfaceId,
   operations,
   ...extra,
@@ -14,183 +15,285 @@ const env = (surfaceId: string, operations: GenUIOperation[], extra: Partial<Gen
 const applyAll = (envelopes: unknown[], state: GenUIState = createGenUIState()) =>
   envelopes.reduce<GenUIState>((acc, envelope) => accumulateGenUI(acc, envelope), state);
 
-const dashboard = () =>
-  env('dash', [
-    {
-      op: 'createSurface',
-      title: 'Sales',
-      nodes: [
-        { id: 'root', component: 'Stack', children: ['kpi', 'chart'] },
-        { id: 'kpi', component: 'Metric', props: { label: 'Revenue', value: 10 } },
-        { id: 'chart', component: 'Chart', props: { series: [1, 2, 3] } },
-      ],
-    },
-  ]);
+const dashboardSpec = (): GenUISpec => ({
+  root: 'root',
+  elements: {
+    root: { type: 'Stack', props: { gap: 2 }, children: ['title', 'kpi'] },
+    title: { type: 'Text', props: { text: 'Sales' } },
+    kpi: { type: 'Metric', props: { label: 'Revenue', value: { $state: '/revenue' } } },
+  },
+  state: { revenue: 42 },
+});
+
+const dashboard = () => env('dash', [{ op: 'createSurface', title: 'Sales', spec: dashboardSpec() }]);
 
 describe('accumulateGenUI', () => {
-  it('builds a normalized surface tree from a createSurface envelope', () => {
+  it('creates a surface from a json-render spec', () => {
     const state = applyAll([dashboard()]);
-    const surface = state.surfaces.dash!;
     expect(state.surfaceOrder).toEqual(['dash']);
-    expect(surface.rootId).toBe('root');
-    expect(surface.status).toBe('streaming');
-    expect(surface.placement).toBe('inline');
-    expect(surface.revision).toBe(1);
-    expect(surface.nodes.root!.children).toEqual(['kpi', 'chart']);
-    expect(surface.nodes.kpi!.props).toEqual({ label: 'Revenue', value: 10 });
-    expect(surface.anchorEventId).toBe(state.surfaces.dash!.anchorEventId);
+    expect(state.surfaces.dash).toMatchObject({
+      status: 'streaming',
+      placement: 'inline',
+      title: 'Sales',
+      revision: 1,
+      spec: dashboardSpec(),
+    });
   });
 
-  it('updating one node keeps every other node, and the previous state, untouched', () => {
-    const before = applyAll([dashboard()]);
-    const after = accumulateGenUI(before, env('dash', [{ op: 'updateProps', nodeId: 'kpi', set: { value: 42 } }]));
-
-    expect(after.surfaces.dash!.nodes.kpi!.props).toEqual({ label: 'Revenue', value: 42 });
-    expect(after.surfaces.dash!.nodes.chart).toBe(before.surfaces.dash!.nodes.chart);
-    expect(after.surfaces.dash!.nodes.root).toBe(before.surfaces.dash!.nodes.root);
-    expect(before.surfaces.dash!.nodes.kpi!.props.value).toBe(10);
-    expect(after.surfaces.dash!.nodes.kpi!.revision).toBe(2);
-    expect(after.surfaces.dash!.nodes.chart!.revision).toBe(1);
+  it('starts from an empty spec that patches fill in, like a streamed json-render spec', () => {
+    const state = applyAll([
+      env('s', [{ op: 'createSurface' }]),
+      env('s', [
+        {
+          op: 'patch',
+          patches: [
+            { op: 'add', path: '/root', value: 'card' },
+            { op: 'add', path: '/elements/card', value: { type: 'Card', props: { title: 'Hi' }, children: [] } },
+            { op: 'add', path: '/elements/card/children/-', value: 'body' },
+            { op: 'add', path: '/elements/body', value: { type: 'Text', props: { text: 'Hello' } } },
+            { op: 'add', path: '/state/count', value: 1 },
+          ],
+        },
+      ]),
+    ]);
+    expect(state.surfaces.s!.spec).toEqual({
+      root: 'card',
+      elements: {
+        card: { type: 'Card', props: { title: 'Hi' }, children: ['body'] },
+        body: { type: 'Text', props: { text: 'Hello' } },
+      },
+      state: { count: 1 },
+    });
   });
 
-  it('an upsert with identical content keeps the node reference (no remount, no re-render)', () => {
+  it('is idempotent for duplicate event ids', () => {
+    const create = dashboard();
+    const once = applyAll([create]);
+    expect(accumulateGenUI(once, create)).toBe(once);
+  });
+
+  it('never mutates the previous state and keeps untouched elements by identity', () => {
     const before = applyAll([dashboard()]);
+    const snapshot = structuredClone(before);
     const after = accumulateGenUI(
       before,
-      env('dash', [{ op: 'upsertNodes', nodes: [{ id: 'chart', component: 'Chart', props: { series: [1, 2, 3] } }] }]),
+      env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/title/props/text', value: 'Q4' }] }]),
     );
-    expect(after.surfaces.dash!.nodes.chart).toBe(before.surfaces.dash!.nodes.chart);
+    expect(before).toEqual(snapshot);
+    expect(after.surfaces.dash!.spec.elements.title!.props.text).toBe('Q4');
+    expect(after.surfaces.dash!.spec.elements.kpi).toBe(before.surfaces.dash!.spec.elements.kpi);
+    expect(after.surfaces.dash!.spec.elements.root).toBe(before.surfaces.dash!.spec.elements.root);
+    expect(after.surfaces.dash!.spec.state).toBe(before.surfaces.dash!.spec.state);
+    expect(after.surfaces.dash!.revision).toBe(2);
   });
 
-  it('duplicate event ids are ignored and return the same state reference (reconnect / replay)', () => {
-    const create = dashboard();
-    const update = env('dash', [{ op: 'patchData', set: { region: 'EU' } }]);
-    const once = applyAll([create, update]);
-    const twice = applyAll([create, update, create, update]);
-    expect(twice).toEqual(once);
-    expect(accumulateGenUI(once, update)).toBe(once);
+  it('tracks the revision at which each element last changed, for stale-action checks', () => {
+    const created = applyAll([dashboard()]);
+    expect(created.surfaces.dash!.elementRevisions).toEqual({ root: 1, title: 1, kpi: 1 });
+    const patched = applyAll(
+      [
+        env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/title/props/text', value: 'Q4' }] }]),
+        env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/state/revenue', value: 1 }] }]),
+        env('dash', [
+          {
+            op: 'patch',
+            patches: [
+              { op: 'remove', path: '/elements/root/children/1' },
+              { op: 'remove', path: '/elements/kpi' },
+            ],
+          },
+        ]),
+      ],
+      created,
+    );
+    expect(patched.surfaces.dash!.elementRevisions).toEqual({ root: 4, title: 2 });
   });
 
-  it('reorders, inserts and deletes children through setChildren', () => {
+  it('a copied value does not share containers with its source', () => {
     const state = applyAll([
       dashboard(),
       env('dash', [
-        { op: 'upsertNodes', nodes: [{ id: 'note', component: 'Text', props: { text: 'hi' } }] },
-        { op: 'setChildren', nodeId: 'root', children: ['chart', 'note'] },
+        {
+          op: 'patch',
+          patches: [
+            { op: 'copy', from: '/elements/title', path: '/elements/subtitle' },
+            { op: 'replace', path: '/elements/subtitle/props/text', value: 'Copy' },
+            { op: 'add', path: '/elements/root/children/-', value: 'subtitle' },
+          ],
+        },
       ]),
     ]);
-    expect(state.surfaces.dash!.nodes.root!.children).toEqual(['chart', 'note']);
-    // kpi is detached but still exists until removed
-    expect(state.surfaces.dash!.nodes.kpi).toBeDefined();
+    expect(state.surfaces.dash!.spec.elements.title!.props.text).toBe('Sales');
+    expect(state.surfaces.dash!.spec.elements.subtitle!.props.text).toBe('Copy');
   });
 
-  it('removeNodes cascades to descendants and strips references from parents', () => {
+  it('moves an element between parents within one envelope', () => {
     const state = applyAll([
       env('s', [
         {
           op: 'createSurface',
-          nodes: [
-            { id: 'root', component: 'Stack', children: ['group'] },
-            { id: 'group', component: 'Stack', children: ['leaf'] },
-            { id: 'leaf', component: 'Text' },
-          ],
+          spec: {
+            root: 'root',
+            elements: {
+              root: { type: 'Stack', props: {}, children: ['a', 'b'] },
+              a: { type: 'Box', props: {}, children: ['x'] },
+              b: { type: 'Box', props: {}, children: [] },
+              x: { type: 'Text', props: {} },
+            },
+          },
         },
       ]),
-      env('s', [{ op: 'removeNodes', nodeIds: ['group'] }]),
+      env('s', [
+        {
+          op: 'patch',
+          patches: [{ op: 'move', from: '/elements/a/children/0', path: '/elements/b/children/-' }],
+        },
+      ]),
     ]);
-    expect(Object.keys(state.surfaces.s!.nodes)).toEqual(['root']);
-    expect(state.surfaces.s!.nodes.root!.children).toEqual([]);
+    expect(state.surfaces.s!.spec.elements.a!.children).toEqual([]);
+    expect(state.surfaces.s!.spec.elements.b!.children).toEqual(['x']);
+    expect(state.diagnostics).toEqual([]);
   });
 
-  it('applies an envelope atomically: a failing operation leaves the surface unchanged', () => {
+  it('applies an envelope atomically: a failing patch leaves the surface untouched', () => {
     const before = applyAll([dashboard()]);
     const after = accumulateGenUI(
       before,
       env('dash', [
-        { op: 'updateProps', nodeId: 'kpi', set: { value: 99 } },
-        { op: 'updateProps', nodeId: 'missing', set: { value: 1 } },
+        {
+          op: 'patch',
+          patches: [
+            { op: 'replace', path: '/elements/title/props/text', value: 'changed' },
+            { op: 'test', path: '/state/revenue', value: 0 },
+          ],
+        },
       ]),
     );
     expect(after.surfaces.dash).toBe(before.surfaces.dash);
     expect(after.diagnostics.at(-1)).toMatchObject({ code: 'invalid-operation', surfaceId: 'dash' });
   });
 
-  it('rejects cycles', () => {
-    const after = applyAll([dashboard(), env('dash', [{ op: 'setChildren', nodeId: 'kpi', children: ['root'] }])]);
-    expect(after.surfaces.dash!.nodes.kpi!.children).toEqual([]);
-    expect(after.diagnostics.at(-1)?.code).toBe('invalid-graph');
+  it('replaceSpec swaps the whole body', () => {
+    const next: GenUISpec = { root: 't', elements: { t: { type: 'Text', props: { text: 'new' } } } };
+    const state = applyAll([dashboard(), env('dash', [{ op: 'replaceSpec', spec: next }])]);
+    expect(state.surfaces.dash!.spec).toEqual(next);
   });
 
-  // Each path to a shared child renders it again, so a few dozen nodes can expand into billions of renders.
-  it('rejects a surface whose nodes share children, which would freeze the tab when rendered', () => {
-    const layers = 30;
-    const layer = (l: number) => [`l${l}a`, `l${l}b`];
-    const nodes = [
-      { id: 'root', component: 'Box', children: layer(0) },
-      ...Array.from({ length: layers }, (_, l) =>
-        layer(l).map(id => ({ id, component: 'Box', children: l + 1 < layers ? layer(l + 1) : [] })),
-      ).flat(),
-    ];
-    const state = applyAll([env('bomb', [{ op: 'createSurface', rootId: 'root', nodes }])]);
-    expect(state.surfaces.bomb).toBeUndefined();
-    expect(state.diagnostics.at(-1)).toMatchObject({ code: 'invalid-graph', surfaceId: 'bomb' });
-
-    const before = applyAll([dashboard()]);
-    const after = accumulateGenUI(before, env('dash', [{ op: 'setChildren', nodeId: 'kpi', children: ['chart'] }]));
-    expect(after.surfaces.dash).toBe(before.surfaces.dash);
-    expect(after.diagnostics.at(-1)?.code).toBe('invalid-graph');
-  });
-
-  it('moves a node to another parent when both parents change in the same envelope', () => {
+  it('createSurface with replace rebuilds an existing surface in place instead of rejecting it', () => {
+    const next: GenUISpec = { root: 'note', elements: { note: { type: 'Text', props: { text: 'Updated' } } } };
     const state = applyAll([
       dashboard(),
-      env('dash', [
-        { op: 'setChildren', nodeId: 'root', children: ['kpi'] },
-        { op: 'setChildren', nodeId: 'kpi', children: ['chart'] },
-      ]),
+      env('dash', [{ op: 'setStatus', status: 'ready' }]),
+      env('dash', [{ op: 'createSurface', replace: true, spec: next, title: 'Notes', placement: 'panel' }]),
     ]);
-    expect(state.surfaces.dash!.nodes.root!.children).toEqual(['kpi']);
-    expect(state.surfaces.dash!.nodes.kpi!.children).toEqual(['chart']);
+    expect(state.diagnostics).toEqual([]);
+    expect(state.surfaceOrder).toEqual(['dash']);
+    expect(state.surfaces.dash).toMatchObject({
+      spec: next,
+      title: 'Notes',
+      placement: 'panel',
+      revision: 3,
+      status: 'streaming',
+      elementRevisions: { note: 3 },
+    });
+
+    const created = applyAll([env('fresh', [{ op: 'createSurface', replace: true, spec: next }])]);
+    expect(created.surfaces.fresh).toMatchObject({ spec: next, revision: 1 });
+
+    const rejected = applyAll([dashboard(), env('dash', [{ op: 'createSurface', spec: next }])]);
+    expect(rejected.diagnostics[0]?.code).toBe('surface-exists');
   });
 
-  it('tells the model a child is listed twice instead of reporting two parents', () => {
+  it('only lets patches target root, elements and state', () => {
     const before = applyAll([dashboard()]);
-    const after = accumulateGenUI(
-      before,
-      env('dash', [{ op: 'setChildren', nodeId: 'root', children: ['kpi', 'kpi'] }]),
-    );
-    expect(after.surfaces.dash).toBe(before.surfaces.dash);
-    expect(after.diagnostics.at(-1)?.message).toBe('operations[0].children contains duplicate ids');
+    for (const path of ['', '/title', '/elements/__proto__/x', '/state/constructor/prototype']) {
+      const after = accumulateGenUI(before, env('dash', [{ op: 'patch', patches: [{ op: 'add', path, value: 1 }] }]));
+      expect(after.surfaces.dash).toBe(before.surfaces.dash);
+      expect(after.diagnostics.at(-1)?.code).toBe('invalid-envelope');
+    }
+  });
+
+  it('rejects cycles', () => {
+    const after = applyAll([
+      dashboard(),
+      env('dash', [{ op: 'patch', patches: [{ op: 'add', path: '/elements/kpi/children', value: ['root'] }] }]),
+    ]);
+    expect(after.surfaces.dash!.spec.elements.kpi!.children).toBeUndefined();
+    expect(after.diagnostics.at(-1)?.code).toBe('invalid-graph');
+  });
+
+  // Each path to a shared child renders it again, so a few dozen elements can expand into billions of renders.
+  it('rejects a spec whose elements share children, which would freeze the tab when rendered', () => {
+    const elements: GenUISpec['elements'] = {};
+    for (let level = 0; level < 30; level++) {
+      elements[`l${level}a`] = { type: 'Box', props: {}, children: [`l${level + 1}a`, `l${level + 1}b`] };
+      elements[`l${level}b`] = { type: 'Box', props: {}, children: [`l${level + 1}a`, `l${level + 1}b`] };
+    }
+    const state = applyAll([env('dag', [{ op: 'createSurface', spec: { root: 'l0a', elements } }])]);
+    expect(state.surfaces.dag).toBeUndefined();
+    expect(state.diagnostics[0]?.code).toBe('invalid-graph');
+    expect(state.diagnostics[0]?.message).toMatch(/has two parents/);
+  });
+
+  it('allows children that have not streamed in yet', () => {
+    const state = applyAll([
+      env('s', [
+        {
+          op: 'createSurface',
+          spec: { root: 'root', elements: { root: { type: 'Stack', props: {}, children: ['later'] } } },
+        },
+      ]),
+    ]);
+    expect(state.surfaces.s).toBeDefined();
+    expect(state.diagnostics).toEqual([]);
   });
 
   it('enforces configurable limits', () => {
-    const limits = { maxNodesPerSurface: 3 };
-    const create = env('big', [
-      { op: 'createSurface', nodes: Array.from({ length: 3 }, (_, i) => ({ id: `n${i}`, component: 'Text' })) },
-    ]);
-    const full = accumulateGenUI(createGenUIState(), create, { limits });
+    const limits = { maxElementsPerSurface: 3 };
+    const full = accumulateGenUI(
+      createGenUIState(),
+      env('big', [
+        {
+          op: 'createSurface',
+          spec: {
+            root: 'n0',
+            elements: Object.fromEntries(Array.from({ length: 3 }, (_, i) => [`n${i}`, { type: 'Text', props: {} }])),
+          },
+        },
+      ]),
+      { limits },
+    );
     const overflow = accumulateGenUI(
       full,
-      env('big', [{ op: 'upsertNodes', nodes: [{ id: 'n3', component: 'Text' }] }]),
-      {
-        limits,
-      },
+      env('big', [{ op: 'patch', patches: [{ op: 'add', path: '/elements/n3', value: { type: 'Text', props: {} } }] }]),
+      { limits },
     );
-    expect(Object.keys(overflow.surfaces.big!.nodes)).toHaveLength(3);
+    expect(Object.keys(overflow.surfaces.big!.spec.elements)).toHaveLength(3);
     expect(overflow.diagnostics[0]?.code).toBe('limit-exceeded');
 
     const deep = env('deep', [
       {
         op: 'createSurface',
-        nodes: [
-          { id: 'a', component: 'Box', children: ['b'] },
-          { id: 'b', component: 'Box', children: ['c'] },
-          { id: 'c', component: 'Box' },
-        ],
+        spec: {
+          root: 'a',
+          elements: {
+            a: { type: 'Box', props: {}, children: ['b'] },
+            b: { type: 'Box', props: {}, children: ['c'] },
+            c: { type: 'Box', props: {} },
+          },
+        },
       },
     ]);
     expect(accumulateGenUI(createGenUIState(), deep, { limits: { maxTreeDepth: 2 } }).surfaces.deep).toBeUndefined();
     expect(accumulateGenUI(createGenUIState(), deep, { limits: { maxTreeDepth: 3 } }).surfaces.deep).toBeDefined();
+
+    const big = accumulateGenUI(
+      createGenUIState(),
+      env('size', [{ op: 'createSurface', spec: { root: '', elements: {}, state: { blob: 'x'.repeat(200) } } }]),
+      { limits: { maxSpecSize: 100 } },
+    );
+    expect(big.surfaces.size).toBeUndefined();
+    expect(big.diagnostics[0]?.code).toBe('limit-exceeded');
   });
 
   it('never throws on untrusted input and records a diagnostic instead', () => {
@@ -205,8 +308,11 @@ describe('accumulateGenUI', () => {
         version: 1,
         eventId: 'z',
         surfaceId: 's',
-        operations: [{ op: 'createSurface', nodes: [{ id: 'n', component: 'C', props: { fn: () => 1 } }] }],
+        operations: [
+          { op: 'createSurface', spec: { root: 'n', elements: { n: { type: 'C', props: { fn: () => 1 } } } } },
+        ],
       },
+      { version: 1, eventId: 'w', surfaceId: 's', operations: [{ op: 'createSurface', spec: { elements: {} } }] },
     ];
     let state = createGenUIState();
     for (const item of garbage) state = accumulateGenUI(state, item);
@@ -219,12 +325,13 @@ describe('accumulateGenUI', () => {
       'invalid-envelope',
       'invalid-envelope',
       'invalid-envelope',
+      'invalid-envelope',
     ]);
   });
 
   it('does not let model output pollute prototypes', () => {
     const payload = JSON.parse(
-      '{"version":1,"eventId":"p","surfaceId":"s","operations":[{"op":"createSurface","data":{"__proto__":{"polluted":true}},"nodes":[{"id":"n","component":"C","props":{"constructor":{"prototype":{"polluted":true}}}}]}]}',
+      '{"version":1,"eventId":"p","surfaceId":"s","operations":[{"op":"createSurface","spec":{"root":"n","elements":{"n":{"type":"C","props":{"constructor":{"prototype":{"polluted":true}}}}},"state":{"__proto__":{"polluted":true}}}}]}',
     );
     const state = accumulateGenUI(createGenUIState(), payload);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -233,35 +340,32 @@ describe('accumulateGenUI', () => {
   });
 
   it('buffers updates that arrive before their surface is created, then applies them in order', () => {
-    const create = dashboard();
-    const update = env('dash', [{ op: 'updateProps', nodeId: 'kpi', set: { value: 7 } }]);
-    const state = applyAll([update, create]);
-    expect(state.surfaces.dash!.nodes.kpi!.props.value).toBe(7);
+    const update = env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/state/revenue', value: 7 }] }]);
+    const state = applyAll([update, dashboard()]);
+    expect(state.surfaces.dash!.spec.state).toEqual({ revenue: 7 });
     expect(state.buffered).toEqual({});
   });
 
   it('uses baseRevision to reorder out-of-order envelopes and reject stale ones', () => {
-    const create = dashboard(); // -> revision 1
-    const second = env('dash', [{ op: 'patchData', set: { step: 2 } }], { baseRevision: 1 });
-    const third = env('dash', [{ op: 'patchData', set: { step: 3 } }], { baseRevision: 2 });
+    const step = (value: number, baseRevision: number) =>
+      env('dash', [{ op: 'patch', patches: [{ op: 'add', path: '/state/step', value }] }], { baseRevision });
 
-    const outOfOrder = applyAll([create, third, second]);
-    expect(outOfOrder.surfaces.dash!.data).toEqual({ step: 3 });
+    const outOfOrder = applyAll([dashboard(), step(3, 2), step(2, 1)]);
+    expect(outOfOrder.surfaces.dash!.spec.state).toEqual({ revenue: 42, step: 3 });
     expect(outOfOrder.surfaces.dash!.revision).toBe(3);
 
-    const stale = accumulateGenUI(
-      outOfOrder,
-      env('dash', [{ op: 'patchData', set: { step: 0 } }], { baseRevision: 1 }),
-    );
-    expect(stale.surfaces.dash!.data).toEqual({ step: 3 });
+    const stale = accumulateGenUI(outOfOrder, step(0, 1));
+    expect(stale.surfaces.dash!.spec.state).toEqual({ revenue: 42, step: 3 });
     expect(stale.diagnostics.at(-1)?.code).toBe('stale-revision');
   });
 
   it('keeps independent surfaces isolated', () => {
     const state = applyAll([
       dashboard(),
-      env('other', [{ op: 'createSurface', placement: 'panel', nodes: [{ id: 'root', component: 'Text' }] }]),
-      env('other', [{ op: 'updateProps', nodeId: 'root', set: { text: 'x' } }]),
+      env('other', [
+        { op: 'createSurface', placement: 'panel', spec: { root: 't', elements: { t: { type: 'Text', props: {} } } } },
+      ]),
+      env('other', [{ op: 'patch', patches: [{ op: 'add', path: '/elements/t/props/text', value: 'x' }] }]),
     ]);
     expect(state.surfaceOrder).toEqual(['dash', 'other']);
     expect(state.surfaces.dash!.revision).toBe(1);
@@ -276,17 +380,24 @@ describe('accumulateGenUI', () => {
     expect(ready.surfaces.dash!.error).toBeUndefined();
   });
 
-  it('deleteSurface removes the surface', () => {
+  it('deleteSurface removes the surface and must come last', () => {
     const state = applyAll([dashboard(), env('dash', [{ op: 'deleteSurface' }])]);
     expect(state.surfaces.dash).toBeUndefined();
     expect(state.surfaceOrder).toEqual([]);
+
+    const misplaced = applyAll([
+      dashboard(),
+      env('dash', [{ op: 'deleteSurface' }, { op: 'setStatus', status: 'ready' }]),
+    ]);
+    expect(misplaced.surfaces.dash).toBeDefined();
+    expect(misplaced.diagnostics.at(-1)?.code).toBe('invalid-operation');
   });
 });
 
 describe('reduceGenUIMessages', () => {
   it('rebuilds the same state from persisted message history, ignoring other parts', () => {
     const create = dashboard();
-    const update = env('dash', [{ op: 'updateProps', nodeId: 'kpi', set: { value: 5 } }]);
+    const update = env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/state/revenue', value: 5 }] }]);
     const messages = [
       { id: 'u1', role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'show sales' }] } },
       {

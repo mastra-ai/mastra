@@ -25,10 +25,10 @@ export type {
 export {
   createGenUIContextStore,
   createGenUIStateStore,
-  editGenUIData,
+  editGenUIState,
   formatGenUIContext,
   genUIScopeKey,
-  mergeGenUIData,
+  mergeGenUIState,
   rebaseGenUIEdit,
 } from './state';
 export type {

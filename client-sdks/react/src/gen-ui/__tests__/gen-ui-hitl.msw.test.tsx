@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useBoundProp } from '@json-render/react';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -13,10 +14,8 @@ import {
   defineGenUIChatAction,
   defineGenUIComponent,
   defineGenUIToolRenderer,
-  useGenUIAction,
   useGenUIChat,
-  useGenUILocalState,
-  useGenUISharedData,
+  useGenUISurfaceState,
 } from '../index';
 import type { GenUIRegistry } from '../index';
 import { AGENT_URL, chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
@@ -310,16 +309,19 @@ describe('useGenUIChat — human in the loop', () => {
   });
 });
 
-describe('useGenUIChat — shared state', () => {
-  const surface = (eventId: string, surfaceId: string, component: string, data?: object) =>
+describe('useGenUIChat — surface state', () => {
+  const counter = { type: 'Counter', props: { count: { $bindState: '/count' } } };
+  const surface = (eventId: string, surfaceId: string, element: object, state?: object) =>
     genUIChunk({
       version: 1,
       eventId,
       surfaceId,
-      operations: [{ op: 'createSurface', ...(data ? { data } : {}), nodes: [{ id: 'root', component, props: {} }] }],
+      operations: [
+        { op: 'createSurface', spec: { root: 'root', elements: { root: element }, ...(state ? { state } : {}) } },
+      ],
     });
 
-  it('user edits of agent data stay local, win over agent updates, and conflicts are reported, not overwritten', async () => {
+  it('user edits of agent state stay local, win over agent updates, and conflicts are reported, not overwritten', async () => {
     const stream = controllableStream();
     const bodies: Record<string, unknown>[] = [];
     server.use(
@@ -329,24 +331,22 @@ describe('useGenUIChat — shared state', () => {
       }),
     );
     const ReportFilters = defineGenUIComponent({
-      schema: z.object({}),
-      component: () => {
-        const shared = useGenUISharedData();
-        const apply = useGenUIAction('apply');
+      schema: z.object({ region: z.string(), limit: z.number() }),
+      events: ['apply'],
+      component: ({ props, bindings, emit }) => {
+        const [region, setRegion] = useBoundProp(props.region, bindings?.region);
+        const surfaceState = useGenUISurfaceState();
         return (
           <div>
             <label>
               Region
-              <input
-                value={String(shared.value.region ?? '')}
-                onChange={event => shared.set('region', event.target.value)}
-              />
+              <input value={region} onChange={event => setRegion(event.target.value)} />
             </label>
-            <output data-testid="limit">{String(shared.value.limit)}</output>
-            <output data-testid="conflicts">{shared.conflicts.join(',')}</output>
-            <button onClick={() => shared.keepLocal('region')}>Keep mine</button>
-            <button onClick={() => shared.discard('region')}>Use agent value</button>
-            <button onClick={() => void apply.dispatch(shared.value)}>Apply</button>
+            <output data-testid="limit">{String(props.limit)}</output>
+            <output data-testid="conflicts">{surfaceState.conflicts.join(',')}</output>
+            <button onClick={() => surfaceState.keepLocal('/region')}>Keep mine</button>
+            <button onClick={() => surfaceState.discard('/region')}>Use agent value</button>
+            <button onClick={() => emit('apply')}>Apply</button>
           </div>
         );
       },
@@ -359,27 +359,49 @@ describe('useGenUIChat — shared state', () => {
     });
     renderWithProviders(<GenUIChat genUI={createGenUI({ components: { ReportFilters } })} actions={{ apply }} />);
     await send('show report filters');
-    act(() => stream.push(chunk('start'), surface('e1', 'filters', 'ReportFilters', { region: 'EU', limit: 10 })));
+    act(() =>
+      stream.push(
+        chunk('start'),
+        surface(
+          'e1',
+          'filters',
+          {
+            type: 'ReportFilters',
+            props: { region: { $bindState: '/region' }, limit: { $state: '/limit' } },
+            on: { apply: { action: 'apply', params: { region: { $state: '/region' }, limit: { $state: '/limit' } } } },
+          },
+          { region: 'EU', limit: 10 },
+        ),
+      ),
+    );
 
     const input = (await screen.findByLabelText('Region')) as HTMLInputElement;
     expect(input.value).toBe('EU');
     fireEvent.change(input, { target: { value: 'US' } });
     expect(input.value).toBe('US');
 
-    // The agent changes the edited key and an unedited one in the same update.
+    // The agent changes the edited path and an unedited one in the same update.
     act(() =>
       stream.push(
         genUIChunk({
           version: 1,
           eventId: 'e2',
           surfaceId: 'filters',
-          operations: [{ op: 'patchData', set: { region: 'APAC', limit: 50 } }],
+          operations: [
+            {
+              op: 'patch',
+              patches: [
+                { op: 'replace', path: '/state/region', value: 'APAC' },
+                { op: 'replace', path: '/state/limit', value: 50 },
+              ],
+            },
+          ],
         }),
       ),
     );
     await waitFor(() => expect(screen.getByTestId('limit').textContent).toBe('50'));
     expect(input.value).toBe('US');
-    expect(screen.getByTestId('conflicts').textContent).toBe('region');
+    expect(screen.getByTestId('conflicts').textContent).toBe('/region');
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep mine' }));
     expect(screen.getByTestId('conflicts').textContent).toBe('');
@@ -399,37 +421,25 @@ describe('useGenUIChat — shared state', () => {
     expect(input.value).toBe('APAC');
   });
 
-  it('thread state is shared across surfaces, surface state is not, and both reset when the thread changes', async () => {
+  it('each surface keeps its own state, and edits reset when the thread changes', async () => {
     server.use(
       http.post(STREAM_URL, () =>
         sseResponse([
           chunk('start'),
-          surface('e1', 'left', 'Counter'),
-          surface('e2', 'right', 'Counter'),
+          surface('e1', 'left', counter, { count: 0 }),
+          surface('e2', 'right', counter, { count: 0 }),
           finish('stop'),
         ]),
       ),
     );
     const Counter = defineGenUIComponent({
-      schema: z.object({}),
-      component: () => {
-        const own = useGenUILocalState();
-        const thread = useGenUILocalState('thread');
-        const ownCount = Number(own.value.count ?? 0);
-        const threadCount = Number(thread.value.count ?? 0);
+      schema: z.object({ count: z.number() }),
+      component: ({ props, bindings }) => {
+        const [count, setCount] = useBoundProp(props.count, bindings?.count);
         return (
           <div data-testid="counter">
-            <button
-              onClick={() => {
-                own.patch({ count: ownCount + 1 });
-                thread.patch({ count: threadCount + 1 });
-              }}
-            >
-              +1
-            </button>
-            <span>
-              own {ownCount} / thread {threadCount}
-            </span>
+            <button onClick={() => setCount((count ?? 0) + 1)}>+1</button>
+            <span>count {count}</span>
           </div>
         );
       },
@@ -444,13 +454,11 @@ describe('useGenUIChat — shared state', () => {
     fireEvent.click(left!);
     fireEvent.click(right!);
     const texts = () => screen.getAllByTestId('counter').map(node => node.textContent);
-    expect(texts()).toEqual(['+1own 2 / thread 3', '+1own 1 / thread 3']);
+    expect(texts()).toEqual(['+1count 2', '+1count 1']);
 
     // Same controller, new thread: no state from the previous conversation leaks in.
     view.rerender(<GenUIChat genUI={registry} threadId="thread-2" />);
-    await waitFor(() =>
-      expect(current.genUI.controller.state.get(current.genUI.controller.threadScope()).value).toEqual({}),
-    );
-    expect(current.genUI.controller.state.get({ kind: 'surface', id: 'left' }).value).toEqual({});
+    await waitFor(() => expect(current.genUI.controller.state.get({ kind: 'surface', id: 'left' }).value).toEqual({}));
+    expect(current.genUI.controller.state.get({ kind: 'surface', id: 'right' }).value).toEqual({});
   });
 });

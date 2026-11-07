@@ -1,17 +1,19 @@
+import { addByPath, applySpecStreamPatch, getByPath } from '@json-render/core';
+
 import { DEFAULT_GENUI_LIMITS, GENUI_PROTOCOL_VERSION } from './types';
 import type {
   GenUIDiagnostic,
   GenUIEnvelope,
   GenUILimits,
-  GenUINode,
-  GenUINodeInput,
   GenUIOperation,
+  GenUIPatch,
+  GenUISpec,
   GenUIState,
   GenUISurface,
   JSONObject,
   JSONValue,
 } from './types';
-import { jsonSize, parseGenUIEnvelope } from './validate';
+import { checkGenUISpec, parseGenUIEnvelope } from './validate';
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface AccumulateGenUIOptions {
@@ -43,9 +45,6 @@ export function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): b
   return keysA.every(key => Object.prototype.hasOwnProperty.call(objB, key) && jsonEqual(objA[key], objB[key]));
 }
 
-const arraysEqual = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((item, index) => item === b[index]);
-
 class OperationError extends Error {
   constructor(
     readonly code: GenUIDiagnostic['code'],
@@ -65,207 +64,64 @@ const markSeen = (state: GenUIState, eventId: string): GenUIState => ({
   seenEventIds: { ...state.seenEventIds, [eventId]: true },
 });
 
-/** Shallow-merge `set` into `base` and drop `unset`, returning `base` itself when nothing changes. */
-const mergeObject = (base: JSONObject, set: JSONObject | undefined, unset: string[] | undefined): JSONObject => {
-  let next: JSONObject | undefined;
-  for (const [key, value] of Object.entries(set ?? {})) {
-    if (Object.prototype.hasOwnProperty.call(base, key) && jsonEqual(base[key], value)) continue;
-    next ??= { ...base };
-    next[key] = value;
-  }
-  for (const key of unset ?? []) {
-    if (!Object.prototype.hasOwnProperty.call(next ?? base, key)) continue;
-    next ??= { ...base };
-    delete next[key];
-  }
-  return next ?? base;
-};
+type Container = Record<string, unknown> | unknown[];
 
-/** Mutable working copy of one surface while an envelope's operations are applied. */
-class SurfaceDraft {
-  private nodes: Record<string, GenUINode>;
-  private nodesCopied = false;
-  surface: GenUISurface;
-  deleted = false;
+const pointerSegments = (pointer: string) =>
+  pointer
+    .split('/')
+    .slice(1)
+    .map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
 
-  constructor(
-    base: GenUISurface,
-    private readonly revision: number,
-    private readonly limits: GenUILimits,
-  ) {
-    this.surface = base;
-    this.nodes = base.nodes as Record<string, GenUINode>;
+const isContainer = (value: unknown): value is Container => typeof value === 'object' && value !== null;
+
+/**
+ * Working copy of one surface's spec while an envelope applies. Patches go through json-render's
+ * RFC 6902 helpers, which mutate in place, so every container on a patch's path is shallow-copied
+ * first: the previous spec is never touched and untouched elements keep their identity.
+ */
+class SpecDraft {
+  private readonly owned = new WeakSet<object>();
+  spec: GenUISpec;
+
+  constructor(base: GenUISpec) {
+    this.spec = { ...base };
+    this.owned.add(this.spec);
   }
 
-  private writableNodes() {
-    if (!this.nodesCopied) {
-      this.nodes = { ...this.nodes };
-      this.nodesCopied = true;
+  replace(spec: GenUISpec) {
+    this.spec = spec;
+    this.owned.add(spec);
+  }
+
+  /** Copy every container from the root down to the parent of the pointer's target. */
+  private own(pointer: string) {
+    const segments = pointerSegments(pointer);
+    let current: Container = this.spec as unknown as Container;
+    for (const segment of segments.slice(0, -1)) {
+      const key: string | number = Array.isArray(current) ? Number(segment) : segment;
+      const child = (current as Record<string | number, unknown>)[key];
+      if (!isContainer(child)) return;
+      if (!this.owned.has(child)) {
+        const copy: Container = Array.isArray(child) ? [...child] : { ...child };
+        this.owned.add(copy);
+        (current as Record<string | number, unknown>)[key] = copy;
+        current = copy;
+      } else {
+        current = child;
+      }
     }
-    return this.nodes;
   }
 
-  private patch(update: Partial<GenUISurface>) {
-    this.surface = { ...this.surface, ...update };
-  }
-
-  private requireNode(id: string): GenUINode {
-    const node = Object.prototype.hasOwnProperty.call(this.nodes, id) ? this.nodes[id] : undefined;
-    if (!node) throw new OperationError('invalid-operation', `node "${id}" does not exist`);
-    return node;
-  }
-
-  private upsert(input: GenUINodeInput) {
-    const existing = Object.prototype.hasOwnProperty.call(this.nodes, input.id) ? this.nodes[input.id] : undefined;
-    const props = input.props ?? {};
-    const children = input.children ?? [];
-    if (
-      existing &&
-      existing.component === input.component &&
-      arraysEqual(existing.children, children) &&
-      jsonEqual(existing.props, props)
-    ) {
+  apply(patch: GenUIPatch) {
+    this.own(patch.path);
+    if (patch.op === 'move') this.own(patch.from!);
+    const target = this.spec as unknown as Record<string, unknown>;
+    if (patch.op === 'copy') {
+      // A copy must not share containers with its source, or a later write to one would change both.
+      addByPath(target, patch.path, structuredClone(getByPath(target, patch.from!)));
       return;
     }
-    this.writableNodes()[input.id] = {
-      id: input.id,
-      component: input.component,
-      props,
-      children,
-      revision: this.revision,
-    };
-  }
-
-  apply(op: GenUIOperation) {
-    if (this.deleted) throw new OperationError('invalid-operation', `surface was deleted earlier in this envelope`);
-    switch (op.op) {
-      case 'createSurface':
-        throw new OperationError('invalid-operation', 'createSurface must be the first operation of an envelope');
-      case 'upsertNodes':
-        op.nodes.forEach(node => this.upsert(node));
-        return;
-      case 'updateProps': {
-        const node = this.requireNode(op.nodeId);
-        const props = mergeObject(node.props, op.set, op.unset);
-        if (props === node.props) return;
-        if (jsonSize(props) > this.limits.maxPropsSize) {
-          throw new OperationError('limit-exceeded', `props of node "${op.nodeId}" exceed ${this.limits.maxPropsSize}`);
-        }
-        this.writableNodes()[op.nodeId] = { ...node, props, revision: this.revision };
-        return;
-      }
-      case 'removeNodes': {
-        const removed = new Set<string>();
-        const stack = [...op.nodeIds];
-        while (stack.length) {
-          const id = stack.pop()!;
-          if (removed.has(id) || !Object.prototype.hasOwnProperty.call(this.nodes, id)) continue;
-          removed.add(id);
-          stack.push(...this.nodes[id]!.children);
-        }
-        if (removed.size === 0) return;
-        const nodes = this.writableNodes();
-        removed.forEach(id => delete nodes[id]);
-        for (const node of Object.values(nodes)) {
-          if (node.children.some(child => removed.has(child))) {
-            nodes[node.id] = {
-              ...node,
-              children: node.children.filter(child => !removed.has(child)),
-              revision: this.revision,
-            };
-          }
-        }
-        if (this.surface.rootId && removed.has(this.surface.rootId)) this.patch({ rootId: null });
-        return;
-      }
-      case 'setChildren': {
-        const node = this.requireNode(op.nodeId);
-        if (arraysEqual(node.children, op.children)) return;
-        this.writableNodes()[op.nodeId] = { ...node, children: op.children, revision: this.revision };
-        return;
-      }
-      case 'setRoot':
-        if (this.surface.rootId !== op.rootId) this.patch({ rootId: op.rootId });
-        return;
-      case 'replaceData':
-        if (!jsonEqual(this.surface.data, op.data)) this.patch({ data: op.data });
-        return;
-      case 'patchData': {
-        const data = mergeObject(this.surface.data, op.set, op.unset);
-        if (data === this.surface.data) return;
-        if (jsonSize(data) > this.limits.maxDataSize) {
-          throw new OperationError('limit-exceeded', `surface data exceeds ${this.limits.maxDataSize}`);
-        }
-        this.patch({ data });
-        return;
-      }
-      case 'setStatus': {
-        const { error: _error, ...rest } = this.surface;
-        this.surface =
-          op.status === 'failed'
-            ? { ...rest, status: op.status, error: op.error ?? 'Surface failed' }
-            : { ...rest, status: op.status };
-        return;
-      }
-      case 'deleteSurface':
-        this.deleted = true;
-    }
-  }
-
-  /** Validate graph invariants and produce the next immutable surface. */
-  finish(): GenUISurface {
-    const nodes = this.nodes;
-    const ids = Object.keys(nodes);
-    if (ids.length > this.limits.maxNodesPerSurface) {
-      throw new OperationError('limit-exceeded', `surface exceeds ${this.limits.maxNodesPerSurface} nodes`);
-    }
-    // A tree, not a DAG: the renderer walks every path, so a child shared by two parents renders once per
-    // path and a few dozen nodes could expand into billions of renders.
-    const parentOf = new Map<string, string>();
-    for (const id of ids) {
-      for (const child of nodes[id]!.children) {
-        const parent = parentOf.get(child);
-        if (parent !== undefined) {
-          throw new OperationError(
-            'invalid-graph',
-            `node "${child}" has two parents ("${parent}" and "${id}"); to move it, update both parents in the same envelope`,
-          );
-        }
-        parentOf.set(child, id);
-      }
-    }
-    // Iterative three-color DFS over all nodes: rejects cycles anywhere and
-    // computes each node's subtree height in post-order to enforce the depth
-    // limit on every path. Missing child ids are allowed so a parent can stream
-    // in before its children.
-    const visiting = new Set<string>();
-    const height = new Map<string, number>();
-    for (const start of ids) {
-      if (height.has(start)) continue;
-      const stack: Array<{ id: string; next: number }> = [{ id: start, next: 0 }];
-      visiting.add(start);
-      while (stack.length) {
-        const frame = stack[stack.length - 1]!;
-        const children = nodes[frame.id]!.children;
-        if (frame.next >= children.length) {
-          const childHeights = children.map(child => height.get(child) ?? 0);
-          const nodeHeight = 1 + Math.max(0, ...childHeights);
-          if (nodeHeight > this.limits.maxTreeDepth) {
-            throw new OperationError('limit-exceeded', `tree depth exceeds ${this.limits.maxTreeDepth}`);
-          }
-          height.set(frame.id, nodeHeight);
-          visiting.delete(frame.id);
-          stack.pop();
-          continue;
-        }
-        const child = children[frame.next++]!;
-        if (!Object.prototype.hasOwnProperty.call(nodes, child) || height.has(child)) continue;
-        if (visiting.has(child)) throw new OperationError('invalid-graph', `cycle detected at node "${child}"`);
-        visiting.add(child);
-        stack.push({ id: child, next: 0 });
-      }
-    }
-    return { ...this.surface, nodes, revision: this.revision };
+    applySpecStreamPatch(target, patch);
   }
 }
 
@@ -278,9 +134,8 @@ const createSurfaceBase = (
     protocolVersion: GENUI_PROTOCOL_VERSION,
     revision: 0,
     status: 'streaming',
-    rootId: op.rootId ?? op.nodes?.[0]?.id ?? null,
-    nodes: {},
-    data: op.data ?? {},
+    spec: op.spec ?? { root: '', elements: {} },
+    elementRevisions: {},
     placement: op.placement ?? 'inline',
     anchorEventId: envelope.eventId,
   };
@@ -289,6 +144,81 @@ const createSurfaceBase = (
   if (op.title !== undefined) surface.title = op.title;
   if (op.source !== undefined) surface.source = op.source;
   return surface;
+};
+
+/** Header of an existing surface that a `createSurface` with `replace` rebuilds; the spec follows as a `replaceSpec`. */
+const rebuildSurfaceBase = (
+  existing: GenUISurface,
+  op: Extract<GenUIOperation, { op: 'createSurface' }>,
+): GenUISurface => {
+  const { error: _error, title: _title, ...rest } = existing;
+  const surface: GenUISurface = { ...rest, status: 'streaming', placement: op.placement ?? existing.placement };
+  if (op.title !== undefined) surface.title = op.title;
+  if (op.catalogId !== undefined) surface.catalogId = op.catalogId;
+  if (op.catalogVersion !== undefined) surface.catalogVersion = op.catalogVersion;
+  if (op.source !== undefined) surface.source = op.source;
+  return surface;
+};
+
+/** Apply an envelope's operations to a surface, or throw an `OperationError`. `null` means deleted. */
+const applyOperations = (
+  base: GenUISurface,
+  operations: readonly GenUIOperation[],
+  limits: GenUILimits,
+): GenUISurface | null => {
+  let surface = base;
+  // A new surface always goes through the draft so its initial spec gets element revisions.
+  let draft = base.revision === 0 ? new SpecDraft(base.spec) : undefined;
+  for (const op of operations) {
+    switch (op.op) {
+      case 'createSurface':
+        throw new OperationError('invalid-operation', 'createSurface must be the first operation of an envelope');
+      case 'patch':
+        draft ??= new SpecDraft(surface.spec);
+        for (const patch of op.patches) {
+          try {
+            draft.apply(patch);
+          } catch (error) {
+            throw new OperationError(
+              'invalid-operation',
+              `patch ${patch.op} ${patch.path} failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+        break;
+      case 'replaceSpec':
+        draft ??= new SpecDraft(surface.spec);
+        draft.replace(op.spec);
+        break;
+      case 'setStatus': {
+        const { error: _error, ...rest } = surface;
+        surface =
+          op.status === 'failed'
+            ? { ...rest, status: op.status, error: op.error ?? 'Surface failed' }
+            : { ...rest, status: op.status };
+        break;
+      }
+      case 'deleteSurface':
+        if (op !== operations[operations.length - 1]) {
+          throw new OperationError('invalid-operation', 'deleteSurface must be the last operation of an envelope');
+        }
+        return null;
+    }
+  }
+  if (draft) {
+    const checked = checkGenUISpec(draft.spec, limits);
+    if (!checked.ok) {
+      throw new OperationError(checked.code === 'invalid' ? 'invalid-operation' : checked.code, checked.error);
+    }
+    const revision = base.revision + 1;
+    const previous = base.spec.elements;
+    const elementRevisions: Record<string, number> = {};
+    for (const [id, element] of Object.entries(draft.spec.elements)) {
+      elementRevisions[id] = element === previous[id] ? (base.elementRevisions[id] ?? revision) : revision;
+    }
+    return { ...surface, spec: draft.spec, elementRevisions, revision };
+  }
+  return { ...surface, revision: base.revision + 1 };
 };
 
 type ApplyResult = { state: GenUIState } | { buffer: true } | { reject: GenUIDiagnostic };
@@ -302,7 +232,7 @@ const applyEnvelope = (state: GenUIState, envelope: GenUIEnvelope, limits: GenUI
   const [first, ...rest] = envelope.operations;
   const creating = first?.op === 'createSurface';
 
-  if (creating && existing) {
+  if (creating && existing && !first.replace) {
     return { reject: { code: 'surface-exists', message: `surface "${surfaceId}" already exists`, eventId, surfaceId } };
   }
   if (!creating && !existing) return { buffer: true };
@@ -325,25 +255,26 @@ const applyEnvelope = (state: GenUIState, envelope: GenUIEnvelope, limits: GenUI
     };
   }
 
-  const base = existing ?? createSurfaceBase(envelope, first as Extract<GenUIOperation, { op: 'createSurface' }>);
-  const draft = new SurfaceDraft(base, base.revision + 1, limits);
+  const rebuilding = creating && existing !== undefined;
+  const base = rebuilding
+    ? rebuildSurfaceBase(existing, first)
+    : (existing ?? createSurfaceBase(envelope, first as Extract<GenUIOperation, { op: 'createSurface' }>));
+  const operations: readonly GenUIOperation[] = rebuilding
+    ? [{ op: 'replaceSpec', spec: first.spec ?? { root: '', elements: {} } }, ...rest]
+    : creating
+      ? rest
+      : envelope.operations;
   try {
-    if (creating) {
-      (first as Extract<GenUIOperation, { op: 'createSurface' }>).nodes?.forEach(node =>
-        draft.apply({ op: 'upsertNodes', nodes: [node] }),
-      );
-    }
-    (creating ? rest : envelope.operations).forEach(op => draft.apply(op));
-    if (draft.deleted) {
+    const surface = applyOperations(base, operations, limits);
+    if (!surface) {
       const { [surfaceId]: _removed, ...surfaces } = state.surfaces;
       return { state: { ...state, surfaces, surfaceOrder: state.surfaceOrder.filter(id => id !== surfaceId) } };
     }
-    const surface = draft.finish();
     return {
       state: {
         ...state,
         surfaces: { ...state.surfaces, [surfaceId]: surface },
-        surfaceOrder: creating ? [...state.surfaceOrder, surfaceId] : state.surfaceOrder,
+        surfaceOrder: creating && !rebuilding ? [...state.surfaceOrder, surfaceId] : state.surfaceOrder,
       },
     };
   } catch (error) {
@@ -388,7 +319,7 @@ const flushBuffered = (state: GenUIState, surfaceId: string, limits: GenUILimits
  * Accepts an untrusted envelope (the `data` of a `data-gen-ui` part) and
  * returns the next immutable state. Duplicate event ids return the same state
  * reference, so replaying a stream or reloading history is idempotent.
- * Unchanged surfaces and nodes keep their object identity (structural sharing).
+ * Unchanged surfaces and spec elements keep their object identity (structural sharing).
  * Invalid envelopes never throw — they are recorded in `state.diagnostics`.
  *
  * @experimental Generative UI is in beta and may change without notice.
@@ -420,7 +351,12 @@ export function accumulateGenUI(state: GenUIState, rawEnvelope: unknown, options
   if (!parsed.ok) {
     const next = withDiagnostic(
       state,
-      { code: 'invalid-envelope', message: parsed.error, eventId: rawEventId, surfaceId: rawSurfaceId },
+      {
+        code: parsed.code === 'invalid' ? 'invalid-envelope' : parsed.code,
+        message: parsed.error,
+        eventId: rawEventId,
+        surfaceId: rawSurfaceId,
+      },
       limits,
     );
     return rawEventId ? markSeen(next, rawEventId) : next;

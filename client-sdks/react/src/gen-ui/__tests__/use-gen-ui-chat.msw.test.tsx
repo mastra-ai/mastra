@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useBoundProp } from '@json-render/react';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
@@ -18,9 +19,7 @@ import {
   defineGenUIToolRenderer,
   GenUIProvider,
   GenUISurfaceOutlet,
-  useGenUIAction,
   useGenUIChat,
-  useGenUILocalState,
   useGenUIPublishedContext,
   useGenUIToolResponse,
 } from '../index';
@@ -113,7 +112,7 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
           operations: [
             {
               op: 'createSurface',
-              nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Paris', temp: 21 } }],
+              spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Paris', temp: 21 } } } },
             },
           ],
         }),
@@ -127,14 +126,14 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
           version: 1,
           eventId: 'e2',
           surfaceId: 'weather',
-          operations: [{ op: 'updateProps', nodeId: 'card', set: { temp: 23 } }],
+          operations: [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/card/props/temp', value: 23 }] }],
         }),
         // A replayed event (reconnect) must not apply twice or add a second surface.
         genUIChunk({
           version: 1,
           eventId: 'e2',
           surfaceId: 'weather',
-          operations: [{ op: 'updateProps', nodeId: 'card', set: { temp: 99 } }],
+          operations: [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/card/props/temp', value: 99 }] }],
         }),
         chunk('text-start', { id: 't1' }),
         chunk('text-delta', { id: 't1', text: 'Here you go.' }),
@@ -168,7 +167,7 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
             {
               op: 'createSurface',
               source: { toolCallId: 'c1' },
-              nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Paris', temp: 0 } }],
+              spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Paris', temp: 0 } } } },
             },
           ],
         }),
@@ -203,8 +202,10 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
             operations: [
               {
                 op: 'createSurface',
-                rootId: 'root',
-                nodes: [{ id: 'root', component: 'WeatherCard', props: { city: 'Oslo', temp: 'cold' }, children: [] }],
+                spec: {
+                  root: 'root',
+                  elements: { root: { type: 'WeatherCard', props: { city: 'Oslo', temp: 'cold' }, children: [] } },
+                },
               },
               { op: 'setStatus', status: 'ready' },
             ],
@@ -216,7 +217,7 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
             operations: [
               {
                 op: 'createSurface',
-                nodes: [{ id: 'x', component: 'Script', props: { html: '<img onerror=alert(1)>' } }],
+                spec: { root: 'x', elements: { x: { type: 'Script', props: { html: '<img onerror=alert(1)>' } } } },
               },
               { op: 'setStatus', status: 'ready' },
             ],
@@ -539,9 +540,8 @@ describe('useGenUIChat — tool UI', () => {
 describe('useGenUIChat — surface tool', () => {
   const surfaceArgs = {
     surfaceId: 'weather',
-    operations: [
-      { op: 'createSurface', nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Rome', temp: 30 } }] },
-    ],
+    root: 'card',
+    elements: [{ id: 'card', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
   };
 
   it('the model builds a surface through the surface tool and learns it was applied', async () => {
@@ -579,7 +579,7 @@ describe('useGenUIChat — surface tool', () => {
     expect(document.querySelector('[data-genui-surface="weather"]')?.getAttribute('data-genui-status')).toBe('ready');
   });
 
-  it('shows a surface node by node while the model is still writing it, without remounting once it completes', async () => {
+  it('shows a surface element by element while the model is still writing it, without remounting once it completes', async () => {
     weatherMounts = 0;
     const List = defineGenUIComponent({
       description: 'A vertical list',
@@ -588,23 +588,17 @@ describe('useGenUIChat — surface tool', () => {
     });
     const args = {
       surfaceId: 'cities',
-      operations: [
-        // Models usually send the root last, as here.
-        { op: 'createSurface' },
-        {
-          op: 'upsertNodes',
-          nodes: [
-            { id: 'list', component: 'List', props: {}, children: ['rome', 'oslo'] },
-            { id: 'rome', component: 'WeatherCard', props: { city: 'Rome', temp: 30 } },
-            { id: 'oslo', component: 'WeatherCard', props: { city: 'Oslo', temp: 4 } },
-          ],
-        },
-        { op: 'setRoot', rootId: 'list' },
+      elements: [
+        { id: 'list', type: 'List', props: {}, children: ['rome', 'oslo'] },
+        { id: 'rome', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } },
+        { id: 'oslo', type: 'WeatherCard', props: { city: 'Oslo', temp: 4 } },
       ],
+      // Models often send the root last, as here.
+      root: 'list',
     };
     const text = JSON.stringify(args);
-    // Stop in the middle of the last node's component name.
-    const cut = text.indexOf('Wea', text.indexOf('"oslo","component"')) + 3;
+    // Stop in the middle of the last element's type.
+    const cut = text.indexOf('Wea', text.indexOf('"id":"oslo"')) + 3;
     const stream = controllableStream();
     let requests = 0;
     server.use(
@@ -650,39 +644,47 @@ describe('useGenUIChat — surface tool', () => {
     expect(weatherMounts).toBe(2);
   });
 
-  it('a strict-mode model can build a surface from the advertised schema alone', async () => {
-    type Schema = {
-      type?: string;
-      properties?: Record<string, Schema>;
-      items?: Schema;
-      anyOf?: Schema[];
-      enum?: unknown[];
-    };
-    // Strict structured outputs close every object: undeclared keys never reach the browser and
-    // every declared key is sent, as null when the model has nothing to say.
-    const asStrictModelSends = (schema: Schema, value: unknown): unknown => {
-      if (schema.anyOf) {
-        const branch =
-          schema.anyOf.find(b =>
-            Object.entries(b.properties ?? {}).some(
-              ([k, p]) => p.enum?.length === 1 && (value as Record<string, unknown>)?.[k] === p.enum[0],
-            ),
-          ) ?? schema.anyOf.find(b => b.type === (Array.isArray(value) ? 'array' : typeof value));
-        return branch ? asStrictModelSends(branch, value) : null;
-      }
-      if (Array.isArray(value)) return value.map(v => asStrictModelSends(schema.items ?? {}, v));
-      if (value && typeof value === 'object') {
-        const record = value as Record<string, unknown>;
-        return Object.fromEntries(
-          Object.entries(schema.properties ?? {}).map(([k, s]) => [
-            k,
-            record[k] === undefined ? null : asStrictModelSends(s, record[k]),
-          ]),
-        );
-      }
-      return value;
-    };
+  type Schema = {
+    type?: string;
+    properties?: Record<string, Schema>;
+    items?: Schema;
+    anyOf?: Schema[];
+    enum?: unknown[];
+  };
+  // Strict structured outputs close every object: undeclared keys never reach the browser and
+  // every declared key is sent, as null when the model has nothing to say.
+  const asStrictModelSends = (schema: Schema, value: unknown): unknown => {
+    if (schema.anyOf) {
+      const branch =
+        schema.anyOf.find(b =>
+          Object.entries(b.properties ?? {}).some(
+            ([k, p]) => p.enum?.length === 1 && (value as Record<string, unknown>)?.[k] === p.enum[0],
+          ),
+        ) ??
+        schema.anyOf.find(
+          b =>
+            b.type === 'object' &&
+            !!value &&
+            typeof value === 'object' &&
+            Object.keys(value).every(k => k in (b.properties ?? {})),
+        ) ??
+        schema.anyOf.find(b => b.type === (Array.isArray(value) ? 'array' : typeof value));
+      return branch ? asStrictModelSends(branch, value) : null;
+    }
+    if (Array.isArray(value)) return value.map(v => asStrictModelSends(schema.items ?? {}, v));
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.entries(schema.properties ?? {}).map(([k, s]) => [
+          k,
+          record[k] === undefined ? null : asStrictModelSends(s, record[k]),
+        ]),
+      );
+    }
+    return value;
+  };
 
+  it('a strict-mode model can build a surface from the advertised schema alone', async () => {
     const bodies: Record<string, unknown>[] = [];
     server.use(
       http.post(STREAM_URL, async ({ request }) => {
@@ -690,15 +692,9 @@ describe('useGenUIChat — surface tool', () => {
         if (bodies.length === 1) {
           const tools = bodies[0]!.clientTools as Record<string, { inputSchema: Schema }>;
           const args = asStrictModelSends(tools.ui_surface!.inputSchema, {
-            surfaceId: 'weather',
-            operations: [
-              { op: 'createSurface', placement: 'inline' },
-              {
-                op: 'upsertNodes',
-                nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
-              },
-              { op: 'setRoot', rootId: 'card' },
-            ],
+            placement: 'inline',
+            root: 'card',
+            elements: [{ id: 'card', type: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
           });
           return sseResponse([
             chunk('start'),
@@ -717,6 +713,82 @@ describe('useGenUIChat — surface tool', () => {
     expect(JSON.stringify(bodies[1]!.messages)).toContain('"ok":true');
   });
 
+  // Strict mode closed the open `on` and `state` objects to `{}`, so a model-composed button
+  // arrived with `on: null` and did nothing when pressed, and bound props read empty state.
+  it('a strict-mode model can bind state and events from the advertised schema alone', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.post(STREAM_URL, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        if (bodies.length === 1) {
+          const tools = bodies[0]!.clientTools as Record<string, { inputSchema: Schema }>;
+          const args = asStrictModelSends(tools.ui_surface!.inputSchema, {
+            root: 'stack',
+            state: JSON.stringify({ city: 'Rome' }),
+            elements: [
+              { id: 'stack', type: 'Stack', props: {}, children: ['card', 'more'] },
+              { id: 'card', type: 'WeatherCard', props: { city: { $state: '/city' }, temp: 30 } },
+              {
+                id: 'more',
+                type: 'FollowUp',
+                props: { label: 'Paris instead' },
+                on: [{ event: 'press', action: 'ask', params: JSON.stringify({ prompt: 'Weather in Paris?' }) }],
+              },
+            ],
+          });
+          return sseResponse([
+            chunk('start'),
+            chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args }),
+            finish('tool-calls'),
+          ]);
+        }
+        return sseResponse([finish('stop')]);
+      }),
+    );
+    const Stack = defineGenUIComponent({
+      schema: z.object({}),
+      component: ({ children }) => <div>{children}</div>,
+    });
+    const FollowUp = defineGenUIComponent({
+      schema: z.object({ label: z.string() }),
+      events: ['press'],
+      component: ({ props, emit }) => (
+        <button type="button" onClick={() => emit('press')}>
+          {props.label}
+        </button>
+      ),
+    });
+    const asked: string[] = [];
+    function App() {
+      const chat = useGenUIChat({
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        genUI: createGenUI({ components: { Stack, WeatherCard, FollowUp }, surfaceTool: true }),
+        actions: {
+          ask: {
+            schema: z.object({ prompt: z.string() }),
+            handle: ({ prompt }: { prompt: string }) => void asked.push(prompt),
+          },
+        },
+      });
+      current = chat;
+      return (
+        <>
+          {chat.messages.map(message => (
+            <MessageFactory key={message.id} message={message} {...chat.genUI.renderers} />
+          ))}
+        </>
+      );
+    }
+    renderWithProviders(<App />);
+    await send('Weather in Rome?');
+
+    expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
+    await waitFor(() => expect(JSON.stringify(bodies[1]?.messages)).toContain('"ok":true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Paris instead' }));
+    await waitFor(() => expect(asked).toEqual(['Weather in Paris?']));
+  });
+
   // A model asked for a big layout picked `standalone`; with no outlet for it the surface was
   // accepted with ok:true and shown nowhere.
   it('only lets the model place a surface where the app renders it', async () => {
@@ -728,10 +800,9 @@ describe('useGenUIChat — surface tool', () => {
         toolName: 'ui_surface',
         args: {
           surfaceId: `weather-${city}`,
-          operations: [
-            { op: 'createSurface', rootId: 'card', placement },
-            { op: 'upsertNodes', nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 20 } }] },
-          ],
+          placement,
+          root: 'card',
+          elements: [{ id: 'card', type: 'WeatherCard', props: { city, temp: 20 } }],
         },
       }),
       finish('tool-calls'),
@@ -784,7 +855,8 @@ describe('useGenUIChat — surface tool', () => {
           return sseResponse(
             surfaceCall('c1', {
               surfaceId: 'weather',
-              operations: [{ op: 'createSurface', nodes: [{ id: 'n', component: 'Script', props: { html: '<b>' } }] }],
+              root: 'n',
+              elements: [{ id: 'n', type: 'Script', props: { html: '<b>' } }],
             }),
           );
         }
@@ -837,7 +909,7 @@ describe('useGenUIChat — surface tool', () => {
     expect(screen.getByTestId('weather').textContent).toBe('Rome: 30°');
   });
 
-  it('does not bring back a surface from history that a later surface tool call deleted', () => {
+  it('a later surface tool call with the same surface id replaces the surface in place on reload', () => {
     const call = (toolCallId: string, args: object) => ({
       type: 'tool-invocation' as const,
       toolInvocation: {
@@ -857,19 +929,26 @@ describe('useGenUIChat — surface tool', () => {
         resourceId: 'resource-1',
         content: {
           format: 2,
-          parts: [call('c1', surfaceArgs), call('c2', { surfaceId: 'weather', operations: [{ op: 'deleteSurface' }] })],
+          parts: [
+            call('c1', surfaceArgs),
+            call('c2', {
+              ...surfaceArgs,
+              elements: [{ ...surfaceArgs.elements[0]!, props: { city: 'Rome', temp: 12 } }],
+            }),
+          ],
         },
       },
     ];
     renderWithProviders(
       <GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} initialMessages={history} />,
     );
-    expect(screen.queryByTestId('weather')).toBeNull();
+    expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 12°']);
+    expect(document.querySelectorAll('[data-genui-surface="weather"]')).toHaveLength(1);
   });
 });
 
 describe('useGenUIChat — actions and context', () => {
-  it('an explicit action reaches the agent once; local state changes send nothing', async () => {
+  it('a spec-bound action reaches the agent once; edits to bound state send nothing', async () => {
     const bodies: Record<string, unknown>[] = [];
     server.use(
       http.post(STREAM_URL, async ({ request }) => {
@@ -881,33 +960,44 @@ describe('useGenUIChat — actions and context', () => {
             version: 1,
             eventId: 'f1',
             surfaceId: 'filters',
-            operations: [{ op: 'createSurface', nodes: [{ id: 'form', component: 'CityFilter', props: {} }] }],
+            operations: [
+              {
+                op: 'createSurface',
+                spec: {
+                  root: 'form',
+                  state: { city: '' },
+                  elements: {
+                    form: {
+                      type: 'CityFilter',
+                      props: { value: { $bindState: '/city' } },
+                      on: { submit: { action: 'applyFilter', params: { city: { $state: '/city' } } } },
+                    },
+                  },
+                },
+              },
+            ],
           }),
           finish('stop'),
         ]);
       }),
     );
     const CityFilter = defineGenUIComponent({
-      schema: z.object({}),
-      component: () => {
-        const local = useGenUILocalState();
-        const apply = useGenUIAction('applyFilter');
-        const city = typeof local.value.city === 'string' ? local.value.city : '';
+      schema: z.object({ value: z.string() }),
+      events: ['submit'],
+      component: ({ props, bindings, emit }) => {
+        const [city, setCity] = useBoundProp(props.value, bindings?.value);
         return (
           <form
             onSubmit={event => {
               event.preventDefault();
-              void apply.dispatch({ city });
+              emit('submit');
             }}
           >
             <label>
               City
-              <input value={city} onChange={event => local.patch({ city: event.target.value })} />
+              <input value={city} onChange={event => setCity(event.target.value)} />
             </label>
-            <button type="submit" disabled={apply.isPending}>
-              Apply
-            </button>
-            <output>{apply.status}</output>
+            <button type="submit">Apply</button>
           </form>
         );
       },
@@ -922,16 +1012,17 @@ describe('useGenUIChat — actions and context', () => {
     await send('show filters');
 
     const input = await screen.findByLabelText('City');
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    expect(await screen.findByText('invalid')).toBeTruthy();
+    // An empty city fails the action schema, so nothing is sent.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    });
 
     fireEvent.change(input, { target: { value: 'Lyon' } });
     expect((input as HTMLInputElement).value).toBe('Lyon');
     expect(bodies).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    expect(await screen.findByText('success')).toBeTruthy();
-    expect(bodies).toHaveLength(2);
+    await waitFor(() => expect(bodies).toHaveLength(2));
     expect(JSON.stringify(bodies[1]!.messages)).toContain('Filter by Lyon');
   });
 
@@ -947,7 +1038,15 @@ describe('useGenUIChat — actions and context', () => {
             version: 1,
             eventId: 'p1',
             surfaceId: 'plans',
-            operations: [{ op: 'createSurface', nodes: [{ id: 'pick', component: 'PlanPicker', props: {} }] }],
+            operations: [
+              {
+                op: 'createSurface',
+                spec: {
+                  root: 'pick',
+                  elements: { pick: { type: 'PlanPicker', props: {}, on: { press: { action: 'choose' } } } },
+                },
+              },
+            ],
           }),
           finish('stop'),
         ]),
@@ -955,14 +1054,11 @@ describe('useGenUIChat — actions and context', () => {
     );
     const PlanPicker = defineGenUIComponent({
       schema: z.object({}),
-      component: () => {
-        const choose = useGenUIAction('choose');
-        return (
-          <button type="button" onClick={() => void choose.dispatch(null)}>
-            Choose
-          </button>
-        );
-      },
+      component: ({ emit }) => (
+        <button type="button" onClick={() => emit('press')}>
+          Choose
+        </button>
+      ),
     });
     const registry = createGenUI({ components: { PlanPicker } });
     const chosen: string[] = [];

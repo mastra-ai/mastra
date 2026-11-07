@@ -1,48 +1,33 @@
 import type {
-  GenUIActionResult,
   GenUIContextEntry,
   GenUIEdits,
-  GenUINode,
-  GenUIStateEntry,
-  GenUIStateScope,
   GenUISurface,
-  GenUISetOptions,
-  GenUISetResult,
-  GenUIStateUpdater,
   GenUIValidationResult,
   JSONObject,
   JSONValue,
 } from '@mastra/client-js/gen-ui';
-import { editGenUIData, mergeGenUIData, rebaseGenUIEdit } from '@mastra/client-js/gen-ui';
-import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { rebaseGenUIEdit } from '@mastra/client-js/gen-ui';
+import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { GenUIController } from './controller';
 import type { GenUIToolApproval } from './registry';
-
-export interface GenUINodeScopeValue {
-  surfaceId: string;
-  nodeId: string;
-}
+import { readSurfaceEdits, surfaceEditsScope } from './surface-store';
+import type { GenUISurfaceStore } from './surface-store';
 
 const ControllerContext = createContext<GenUIController | undefined>(undefined);
-const NodeContext = createContext<GenUINodeScopeValue | undefined>(undefined);
 const ToolCallContext = createContext<string | undefined>(undefined);
+
+/** The surface a declarative component is rendered in, and its state store. */
+export interface GenUISurfaceScope {
+  surfaceId: string;
+  store: GenUISurfaceStore;
+}
+
+export const SurfaceScopeContext = createContext<GenUISurfaceScope | undefined>(undefined);
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export function GenUIProvider({ controller, children }: { controller: GenUIController; children?: ReactNode }) {
   return <ControllerContext.Provider value={controller}>{children}</ControllerContext.Provider>;
-}
-
-export function GenUINodeScope({
-  surfaceId,
-  nodeId,
-  children,
-}: {
-  surfaceId: string;
-  nodeId: string;
-  children?: ReactNode;
-}) {
-  return <NodeContext.Provider value={{ surfaceId, nodeId }}>{children}</NodeContext.Provider>;
 }
 
 export function GenUIToolCallScope({ toolCallId, children }: { toolCallId: string; children?: ReactNode }) {
@@ -57,15 +42,6 @@ export function useGenUIController(): GenUIController {
 }
 
 /**
- * The surface and node the calling component was rendered for, or `undefined` outside a declarative surface.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function useGenUINodeScope(): GenUINodeScopeValue | undefined {
-  return useContext(NodeContext);
-}
-
-/**
  * Subscribe to one surface. Only re-renders when that surface object changes.
  *
  * @experimental Generative UI is in beta and may change without notice.
@@ -73,17 +49,6 @@ export function useGenUINodeScope(): GenUINodeScopeValue | undefined {
 export function useGenUISurface(surfaceId: string): GenUISurface | undefined {
   const controller = useGenUIController();
   const get = () => controller.getState().surfaces[surfaceId];
-  return useSyncExternalStore(controller.subscribe, get, get);
-}
-
-/**
- * Subscribe to one node. Unchanged nodes keep their identity, so this skips token-level re-renders.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function useGenUINode(surfaceId: string, nodeId: string): GenUINode | undefined {
-  const controller = useGenUIController();
-  const get = () => controller.getState().surfaces[surfaceId]?.nodes[nodeId];
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
@@ -98,125 +63,54 @@ export function useGenUISurfaceIds(placement?: GenUISurface['placement']): reado
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
-function useCurrentNodeScope(hook: string) {
-  const scope = useContext(NodeContext);
-  if (!scope) throw new Error(`${hook} must be used inside a component rendered by a GenUI surface`);
-  return scope;
-}
-
-/**
- * Agent-owned data of the surface the calling component belongs to. Read-only on the client.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function useGenUISurfaceData(): JSONObject {
-  const { surfaceId } = useCurrentNodeScope('useGenUISurfaceData');
-  return useGenUISurface(surfaceId)?.data ?? EMPTY;
-}
-
-const EMPTY: JSONObject = {};
-
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUILocalState {
+export interface GenUISurfaceState {
+  surfaceId: string;
+  /** The agent's surface state with the user's edits on top; what `$state` bindings read. */
   value: JSONObject;
-  revision: number;
-  set(update: GenUIStateUpdater, options?: GenUISetOptions): GenUISetResult;
-  patch(values: JSONObject, options?: GenUISetOptions): GenUISetResult;
-  reset(): void;
-}
-
-/**
- * Client-local state scoped to the current surface (default) or the chat thread. Updates re-render
- * subscribers immediately and are never sent to the agent unless you send them explicitly.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function useGenUILocalState(scope: 'surface' | 'thread' | GenUIStateScope = 'surface'): GenUILocalState {
-  const controller = useGenUIController();
-  const node = useContext(NodeContext);
-  let resolved: GenUIStateScope;
-  if (typeof scope === 'object') resolved = scope;
-  else if (scope === 'thread') resolved = controller.threadScope();
-  else {
-    if (!node) throw new Error('useGenUILocalState("surface") must be used inside a GenUI surface');
-    resolved = { kind: 'surface', id: node.surfaceId };
-  }
-  const { kind, id } = resolved;
-  const store = controller.state;
-  const entry = useStateEntry(store, { kind, id });
-  return {
-    value: entry.value,
-    revision: entry.revision,
-    set: (update, options) => store.set({ kind, id }, update, options),
-    patch: (values, options) => store.patch({ kind, id }, values, options),
-    reset: () => store.reset({ kind, id }),
-  };
-}
-
-function useStateEntry(store: GenUIController['state'], scope: GenUIStateScope): GenUIStateEntry {
-  const get = () => store.get(scope);
-  return useSyncExternalStore(listener => store.subscribe(scope, listener), get, get);
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUISharedData {
-  /** Agent data with the user's edits on top. */
-  value: JSONObject;
-  /** Keys the user edited locally. */
+  /** The agent's surface state without local edits, e.g. to show what the agent changed in a conflict. */
+  agentValue: JSONObject;
+  /** State paths (JSON pointers) the user changed locally. */
   edited: readonly string[];
-  /** Edited keys the agent changed after the user edited them. The local value is kept until resolved. */
+  /** Edited paths the agent changed after the user edited them. Local values keep winning until resolved. */
   conflicts: readonly string[];
-  set(key: string, value: JSONValue): void;
-  /** Keep the local value of a conflicting key and accept the agent's change as seen. */
-  keepLocal(key: string): void;
-  /** Drop local edits (one key, or all) so the agent's value shows again. */
-  discard(key?: string): void;
+  /** Write a value at a state path, like a `$bindState` binding or a `setState` action does. */
+  set(path: string, value: unknown): void;
+  /** Keep the local value at `path` and accept the agent's change underneath it, clearing the conflict. */
+  keepLocal(path: string): void;
+  /** Drop the local edit at `path` (or every edit) and show the agent's value again. */
+  discard(path?: string): void;
 }
 
 /**
- * The current surface's agent-owned data, editable by the user. Edits stay local and win over agent
- * updates; when the agent changes a key the user already edited, it is reported in `conflicts`
- * instead of silently overwriting either side. Send `value` to the agent explicitly (e.g. in an action).
+ * State of the surface the calling component was rendered in: the agent's `spec.state` with the user's
+ * edits on top, plus conflicts when the agent changes a value the user already edited. Edits stay in the
+ * browser; send them to the agent explicitly (an action, a message, or published context).
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function useGenUISharedData(): GenUISharedData {
+export function useGenUISurfaceState(): GenUISurfaceState {
   const controller = useGenUIController();
-  const { surfaceId } = useCurrentNodeScope('useGenUISharedData');
-  const data = useGenUISurface(surfaceId)?.data ?? EMPTY;
-  const store = controller.state;
-  // Surface ids cannot contain "/", so this scope never collides with a surface's own local state.
-  const scope: GenUIStateScope = { kind: 'surface', id: `${surfaceId}/edits` };
-  const edits = readEdits(useStateEntry(store, scope).value);
-  const merged = mergeGenUIData(data, edits);
-  const update = (next: (edits: GenUIEdits, data: JSONObject) => GenUIEdits) =>
-    store.set(scope, previous => next(readEdits(previous), controller.getState().surfaces[surfaceId]?.data ?? EMPTY));
+  const scope = useContext(SurfaceScopeContext);
+  if (!scope) throw new Error('useGenUISurfaceState must be used inside a component rendered by a GenUI surface');
+  const { surfaceId, store } = scope;
+  const merged = useSyncExternalStore(store.subscribe, store.getMerged, store.getMerged);
+  const writeEdits = (edits: GenUIEdits) => controller.state.set(surfaceEditsScope(surfaceId), edits as JSONObject);
   return {
+    surfaceId,
     value: merged.value,
-    edited: Object.keys(edits),
+    agentValue: store.getAgentState(),
+    edited: Object.keys(merged.edits),
     conflicts: merged.conflicts,
-    set: (key, value) => update((current, agentData) => editGenUIData(current, agentData, key, value)),
-    keepLocal: key => update((current, agentData) => rebaseGenUIEdit(current, agentData, key)),
-    discard: key => {
-      if (key === undefined) return store.reset(scope);
-      update(current => {
-        const { [key]: _dropped, ...rest } = current;
-        return rest;
-      });
+    set: (path, value) => store.set(path, value),
+    keepLocal: path =>
+      writeEdits(rebaseGenUIEdit(readSurfaceEdits(controller.state, surfaceId), store.getAgentState(), path)),
+    discard(path) {
+      if (path === undefined) return controller.state.reset(surfaceEditsScope(surfaceId));
+      const { [path]: _dropped, ...rest } = readSurfaceEdits(controller.state, surfaceId);
+      writeEdits(rest);
     },
   };
-}
-
-/** Edits are stored as plain JSON in the state store; keep only well-formed entries. */
-function readEdits(stored: JSONObject): GenUIEdits {
-  const edits: GenUIEdits = {};
-  for (const [key, edit] of Object.entries(stored)) {
-    if (typeof edit !== 'object' || edit === null || Array.isArray(edit) || !('value' in edit)) continue;
-    const { value, base } = edit;
-    if (value === undefined) continue;
-    edits[key] = base === undefined ? { value } : { value, base };
-  }
-  return edits;
 }
 
 /**
@@ -241,40 +135,6 @@ export function useGenUIPublishedContext(
     context.publish(key, entry);
     return () => context.unpublish(key);
   }, [context, key, serialized, description, enabled]);
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export type GenUIActionStatus = 'idle' | 'pending' | GenUIActionResult['status'];
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface UseGenUIActionResult {
-  dispatch(payload?: unknown): Promise<GenUIActionResult>;
-  status: GenUIActionStatus;
-  result: GenUIActionResult | undefined;
-  isPending: boolean;
-}
-
-/**
- * Dispatch a named action for the current node. The surface id, node id and the node revision the
- * user saw are attached automatically so stale or duplicate submissions are rejected.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function useGenUIAction(name: string): UseGenUIActionResult {
-  const controller = useGenUIController();
-  const { surfaceId, nodeId } = useCurrentNodeScope('useGenUIAction');
-  const node = useGenUINode(surfaceId, nodeId);
-  const sourceRevision = node?.revision ?? 0;
-  const [state, setState] = useState<{ status: GenUIActionStatus; result?: GenUIActionResult }>({ status: 'idle' });
-
-  async function dispatch(payload?: unknown) {
-    setState({ status: 'pending' });
-    const result = await controller.actions.dispatch({ surfaceId, nodeId, name, payload, sourceRevision });
-    setState({ status: result.status, result });
-    return result;
-  }
-
-  return { dispatch, status: state.status, result: state.result, isPending: state.status === 'pending' };
 }
 
 function useToolSubscription<T>(get: () => T): T {
