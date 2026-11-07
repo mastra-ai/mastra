@@ -1582,15 +1582,17 @@ describe('TracesExplorer.Layout', () => {
     );
 
   describe('when the traces have loaded', () => {
-    it('pins the tabs above the page body', async () => {
+    it('puts the tabs at the top of the page body, above the toolbar', async () => {
       setExplorerHandlers();
 
       renderLayout();
 
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
       const tabs = screen.getByRole('navigation', { name: 'Views' });
-      expect(tabs.closest('main')).toBeNull();
+      const toolbar = screen.getByRole('toolbar', { name: 'Trace filters' });
+      expect(tabs.closest('main')).not.toBeNull();
       expect(tabs.closest('header')).toBeNull();
+      expect(tabs.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('puts the toolbar in the page body, above the list', async () => {
