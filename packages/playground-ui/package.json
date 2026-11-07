@@ -12,7 +12,8 @@
     "components.css",
     "sources.css",
     "theme",
-    "oxlint"
+    "oxlint",
+    "design"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
@@ -162,7 +163,7 @@
     "dev": "node scripts/prune-dist.mjs && vite build --watch --mode development",
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p design/examples",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
     "build:publish": "pnpm build && yalc push",

@@ -26,5 +26,6 @@ applicable.
 
 Include mobile, tablet, and desktop screenshots when handing off UI changes.
 Preserve design-system consistency and existing component APIs where possible.
-Typography: use DS tokens only (`Txt` variants, or `text-ui-*` / `text-header-*` classes). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
+Design rules live in `design/README.md`. Read it before any UI change; it routes to the rule files for the job. To add or change a rule, use the `design-rules` skill.
+Typography: use DS text roles only (`Txt` variants, or `text-<role>` utilities from `theme/typography.css`). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
 No new `asChild`; prefer Base UI's native `render` prop.

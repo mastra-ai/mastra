@@ -600,7 +600,7 @@ The root `pnpm lint` command includes Playground, Playground UI, and Factory UI 
 
 ## Documentation
 
-This README is the package guide. Import the global stylesheet once, then use the package's explicit `components/*`, `domains/*`, `hooks/*`, `icons/*`, `primitives/*`, `store/*`, `tokens`, and `utils/*` entry points rather than a package-root import.
+Design rules, decision records, and example pages ship in `design/` (start at `design/README.md`). This README is the package guide. Import the global stylesheet once, then use the package's explicit `components/*`, `domains/*`, `hooks/*`, `icons/*`, `primitives/*`, `store/*`, `tokens`, and `utils/*` entry points rather than a package-root import.
 
 ## Changelog
 
