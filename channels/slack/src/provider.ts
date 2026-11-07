@@ -158,6 +158,10 @@ export function hashConfig(
  * }
  * ```
  */
+/** Host handlers behind a computer-card wrapper, so re-creating channels never nests wrappers. */
+const hostHandlersOf = new WeakMap<ChannelHandlers, ChannelHandlers | undefined>();
+const unwrapHostHandlers = (h: ChannelHandlers | undefined) => (h && hostHandlersOf.has(h) ? hostHandlersOf.get(h) : h);
+
 export class SlackProvider implements ChannelProvider {
   readonly id = 'slack';
   readonly #channelConfig: SlackProviderConfig;
@@ -879,7 +883,11 @@ export class SlackProvider implements ChannelProvider {
    * with a separate, bounded Slack client so card calls never change or stall the
    * conversation adapter.
    */
-  #computerCardsFor(installation: SlackInstallation, adapter: SlackAdapter): ComputerCards | undefined {
+  #computerCardsFor(
+    installation: SlackInstallation,
+    adapter: SlackAdapter,
+    hostHandlers: ChannelHandlers | undefined,
+  ): ComputerCards | undefined {
     if (!computerCardsEnabled() || installation.ownerType === 'agentController') return undefined;
     const existing = this.#computerCards.get(installation.id);
     if (existing) return existing;
@@ -888,7 +896,6 @@ export class SlackProvider implements ChannelProvider {
       botUserId: installation.botUserId,
       signingSecret: installation.signingSecret,
     });
-    const handlers = this.#channelConfig.handlers;
     const cards = new ComputerCards({
       installation: {
         id: installation.id,
@@ -901,7 +908,7 @@ export class SlackProvider implements ChannelProvider {
       embedUrl: this.#channelConfig.computerEmbedUrl,
       getBaseUrl: () => this.#getBaseUrl(),
       getMastra: () => this.#mastra,
-      buttons: handlers?.onAction !== false,
+      buttons: hostHandlers?.onAction !== false,
       logger: this.#mastra?.getLogger?.() ?? console,
     });
     this.#computerCards.set(installation.id, cards);
@@ -912,13 +919,15 @@ export class SlackProvider implements ChannelProvider {
   #withComputerActions(cards: ComputerCards, handlers: ChannelHandlers | undefined): ChannelHandlers | undefined {
     const userOnAction = handlers?.onAction;
     if (userOnAction === false) return handlers;
-    return {
+    const wrapped: ChannelHandlers = {
       ...handlers,
       onAction: async (event, defaultHandler, ctx) => {
         if (await cards.handleAction(event)) return;
         return userOnAction ? userOnAction(event, defaultHandler, ctx) : defaultHandler();
       },
     };
+    hostHandlersOf.set(wrapped, handlers);
+    return wrapped;
   }
 
   /** See {@link resolveSlackAdapterConfig}. */
@@ -938,7 +947,10 @@ export class SlackProvider implements ChannelProvider {
    */
   #createAgentChannels(agent: any, adapter: SlackAdapter, installation?: SlackInstallation): AgentChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
-    const cards = installation ? this.#computerCardsFor(installation, adapter) : undefined;
+    const existing = agent.getChannels() as AgentChannels | undefined;
+    const existingConfig = existing?.channelConfig;
+    const hostHandlers = unwrapHostHandlers(this.#channelConfig.handlers ?? existingConfig?.handlers);
+    const cards = installation ? this.#computerCardsFor(installation, adapter, hostHandlers) : undefined;
     // The spread merges fields from a SlackAdapterChannelConfig union; TS can't
     // confirm which branch the runtime object satisfies, but the merge always
     // produces a valid ChannelAdapterConfig at runtime.
@@ -949,13 +961,11 @@ export class SlackProvider implements ChannelProvider {
           ? { adapter, ...adapterConfig }
           : adapter
     ) as ChannelAdapterConfig | SlackAdapter;
-    const existing = agent.getChannels() as AgentChannels | undefined;
-    const existingConfig = existing?.channelConfig;
     const forwarded = this.#forwardedChannelOptions();
     const agentChannels = new AgentChannels({
       ...existingConfig,
       ...forwarded,
-      ...(cards ? { handlers: this.#withComputerActions(cards, this.#channelConfig.handlers ?? existingConfig?.handlers) } : {}),
+      ...(cards ? { handlers: this.#withComputerActions(cards, hostHandlers) } : {}),
       adapters: { ...existingConfig?.adapters, slack: slackEntry },
       userName: agent.name,
     });
@@ -977,8 +987,7 @@ export class SlackProvider implements ChannelProvider {
   #createAgentControllerChannels(controller: AgentController<any>, adapter: SlackAdapter): AgentControllerChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
     const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
-      | ChannelAdapterConfig
-      | SlackAdapter;
+      ChannelAdapterConfig | SlackAdapter;
     const existing = controller.getChannels() as AgentControllerChannels | null;
     const existingConfig = existing?.channelConfig;
     const controllerChannels = new AgentControllerChannels({
@@ -1678,13 +1687,6 @@ export class SlackProvider implements ChannelProvider {
     // url_verification challenge; everything else is forwarded as-is to the adapter's
     // handleWebhook, which sniffs content-type and routes interactivity, slash commands,
     // and events itself.
-    // Resolve waitUntil for this request. Lookup order: bare fn from config (Vercel
-    // users pass `waitUntil` from `@vercel/functions` here), user resolver, then the
-    // core default (Cloudflare Workers + Netlify). Without waitUntil, the serverless
-    // invocation freezes after returning 200 and kills the agent run mid-flight.
-    const waitUntilFn =
-      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
-
     const contentType = c.req.header('content-type') || '';
     if (contentType.includes('application/json')) {
       let event: Record<string, unknown>;
@@ -1697,18 +1699,17 @@ export class SlackProvider implements ChannelProvider {
         return c.json({ challenge: event.challenge });
       }
       const inner = event.event as { type?: unknown } | undefined;
-      if (
-        computerCardsEnabled() &&
-        event.type === 'event_callback' &&
-        inner?.type === 'entity_details_requested'
-      ) {
+      if (computerCardsEnabled() && event.type === 'event_callback' && inner?.type === 'entity_details_requested') {
         // trigger_id is single-use, so a retried delivery is acked and ignored.
         if (c.req.header('x-slack-retry-num')) return c.json({ ok: true });
         const cards = this.#computerCards.get(installation.id);
         if (cards) {
-          const work = cards.handleDetails(event as { team_id?: string; event?: Record<string, unknown> });
-          if (waitUntilFn) waitUntilFn(work);
-          else void work;
+          const work = cards
+            .handleDetails(event as { team_id?: string; event?: Record<string, unknown> })
+            .catch(() => undefined);
+          const waitUntil =
+            this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+          if (waitUntil) waitUntil(work);
         }
         return c.json({ ok: true });
       }
@@ -1744,6 +1745,13 @@ export class SlackProvider implements ChannelProvider {
       headers: c.req.raw.headers,
       body: rawBody,
     });
+
+    // Resolve waitUntil for this request. Lookup order: bare fn from config (Vercel
+    // users pass `waitUntil` from `@vercel/functions` here), user resolver, then the
+    // core default (Cloudflare Workers + Netlify). Without waitUntil, the serverless
+    // invocation freezes after returning 200 and kills the agent run mid-flight.
+    const waitUntilFn =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
 
     try {
       return await agentChannels.handleWebhookEvent(

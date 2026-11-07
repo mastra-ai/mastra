@@ -242,6 +242,38 @@ async function bootProvider() {
   return { provider, channels: set, mastra: fakeMastra };
 }
 
+describe('card failure + ordering', () => {
+  it('a failed post is retried on the next attach for the same computer', async () => {
+    const { client, calls } = fakeClient();
+    const post = client.chat.postMessage;
+    let fail = true;
+    client.chat.postMessage = async a => {
+      if (fail) {
+        fail = false;
+        throw new Error('An API error occurred: missing_scope');
+      }
+      return post(a);
+    };
+    const { cards } = makeCards({ client, logger: { warn: vi.fn() } });
+    const p = part({ computerId: 'c1', status: 'attached' });
+    await cards.onDataPart(p, ctx('slack:C1:1.1'));
+    await cards.onDataPart(p, ctx('slack:C1:1.1'));
+    expect(calls.map(c => c.method)).toEqual(['chat.postMessage']);
+  });
+
+  it('a post with no ts is not tracked', async () => {
+    const { client, calls } = fakeClient();
+    client.chat.postMessage = async a => {
+      calls.push({ method: 'chat.postMessage', args: a });
+      return { ok: true } as any;
+    };
+    const { cards } = makeCards({ client, logger: { warn: vi.fn() } });
+    await cards.onDataPart(part({ computerId: 'c1', status: 'attached' }), ctx('slack:C1:1.1'));
+    await cards.onDataPart(part({ computerId: 'c1', status: 'released' }), ctx('slack:C1:1.1'));
+    expect(calls.map(c => c.method)).toEqual(['chat.postMessage']);
+  });
+});
+
 describe('provider wiring', () => {
   afterEach(() => {
     delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
@@ -350,6 +382,17 @@ describe('details + buttons', () => {
       expect(await cards.handleAction(click())).toBe(true);
       expect(calls.map(c => c.method)).toEqual(['chat.postEphemeral']);
     }
+  });
+
+  it('a click queued behind released refuses and never calls control', async () => {
+    const { cards, calls, control } = harness();
+    const c = ctx(chatThreadId);
+    await cards.onDataPart(part({ computerId: 'c1', status: 'attached' }), c);
+    const released = cards.onDataPart(part({ computerId: 'c1', status: 'released' }), c);
+    const clicked = cards.handleAction(click());
+    await Promise.all([released, clicked]);
+    expect(control).not.toHaveBeenCalled();
+    expect(calls.map(x => x.method)).toEqual(['chat.postMessage', 'chat.update', 'chat.postEphemeral']);
   });
 
   it('other action ids fall through', async () => {

@@ -26,6 +26,9 @@ export type ComputerEmbedUrlFn = (args: ComputerEmbedUrlArgs) => string | null |
 export const COMPUTER_TAKE_ACTION = 'computer_take';
 export const COMPUTER_RELEASE_ACTION = 'computer_release';
 export const EMBED_MIME_TYPE = 'application/vnd.slack-embed';
+const ENDED_TEXT = 'This computer is no longer attached to this conversation.';
+const FALLBACK_NAME = 'Computer';
+
 export const OWNER_ONLY_TEXT = 'Only the person who started this conversation can control its computer.';
 
 // --------------------------------------------------------------------------
@@ -233,13 +236,26 @@ export class ComputerCards {
     if (typeof data.threadId === 'string' && data.threadId !== ctx.threadId) return;
     const threadId = ctx.threadId;
     const key = `${computerId}:${threadId}`;
-    const prev = this.#chains.get(key) ?? Promise.resolve();
-    const next = prev
-      .then(() => this.#apply(key, { computerId, threadId, chatThreadId: ctx.chatThread.id, data }))
-      .catch(err => this.#warn('Computer card update failed', err));
-    this.#chains.set(key, next);
-    return next;
+    return this.#serial(key, () => this.#apply(key, { computerId, threadId, chatThreadId: ctx.chatThread.id, data }));
   };
+
+  /** Runs card work for one computer/thread in order; errors are logged, never thrown. */
+  #serial<T>(key: string, fn: () => Promise<T>): Promise<T | undefined> {
+    const prev = this.#chains.get(key) ?? Promise.resolve();
+    const run = prev.then(fn).catch(err => {
+      this.#warn('Computer card update failed', err);
+      return undefined;
+    });
+    const done = run.then(() => undefined);
+    this.#chains.set(key, done);
+    void done.then(() => {
+      if (this.#chains.get(key) === done && this.#cards.get(key)?.ended !== false) {
+        this.#chains.delete(key);
+        if (this.#cards.get(key)?.ended) this.#cards.delete(key);
+      }
+    });
+    return run;
+  }
 
   async #apply(
     key: string,
@@ -258,7 +274,6 @@ export class ComputerCards {
       const name = typeof p.data.name === 'string' && p.data.name ? p.data.name : p.computerId;
       const ref = signRef(this.#key, { teamId: installation.teamId, computerId: p.computerId, threadId: p.threadId });
       const card: CardState = { channel, name, holder: 'agent', ended: false, ref };
-      this.#cards.set(key, card);
       const url = this.#opts.embedUrl ? this.#entityUrl(ref) : undefined;
       const res = await client.chat.postMessage({
         channel,
@@ -267,7 +282,10 @@ export class ComputerCards {
         blocks: buildCardBlocks({ name, holder: card.holder, ended: false, ref, buttons: this.#opts.buttons }),
         ...(url ? { metadata: { entities: [buildEntity({ ref, url, name })] } } : {}),
       });
+      // Only a posted card is tracked, so a failed post is retried on the next attach.
+      if (!res.ts) throw new Error('chat.postMessage returned no ts');
       card.ts = res.ts;
+      this.#cards.set(key, card);
       return;
     }
 
@@ -342,36 +360,36 @@ export class ComputerCards {
     }
 
     const computers = this.#opts.getMastra()?.getComputers();
-    if (!computers?.control) {
+    const control = computers?.control?.bind(computers);
+    if (!control) {
       await refuse('Taking control of this computer is not supported here.');
       return true;
     }
 
     const action = event.actionId === COMPUTER_TAKE_ACTION ? 'take' : 'release';
-    let result: { holder: Holder };
-    try {
-      result = await computers.control(
-        ref.computerId,
-        { threadId: ref.threadId, resourceId: thread.resourceId },
-        { action },
-      );
-    } catch (err) {
-      this.#warn('Computer control failed', err);
-      await refuse('This computer is no longer attached to this conversation.');
-      return true;
-    }
     const key = `${ref.computerId}:${ref.threadId}`;
-    const card: CardState = this.#cards.get(key) ?? {
-      channel,
-      name: ref.computerId,
-      holder: result.holder,
-      ended: false,
-      ref: event.value!,
-    };
-    card.ts ??= event.messageId;
-    card.holder = result.holder;
-    this.#cards.set(key, card);
-    await this.#update(card).catch(err => this.#warn('Computer card update failed', err));
+    await this.#serial(key, async () => {
+      if (this.#cards.get(key)?.ended) return refuse(ENDED_TEXT);
+      let result: { holder: Holder };
+      try {
+        result = await control(ref.computerId, { threadId: ref.threadId, resourceId: thread.resourceId }, { action });
+      } catch (err) {
+        this.#warn('Computer control failed', err);
+        return refuse(ENDED_TEXT);
+      }
+      // After a restart the card isn't tracked; rebuild it from the clicked message.
+      const card: CardState = this.#cards.get(key) ?? {
+        channel,
+        name: FALLBACK_NAME,
+        holder: result.holder,
+        ended: false,
+        ref: event.value!,
+        ts: event.messageId,
+      };
+      card.holder = result.holder;
+      this.#cards.set(key, card);
+      await this.#update(card);
+    });
     return true;
   }
 
@@ -389,7 +407,7 @@ export class ComputerCards {
 
     const url = this.#entityUrl(externalRef as string);
     if (!url) return;
-    const name = this.#cards.get(`${ref.computerId}:${ref.threadId}`)?.name ?? ref.computerId;
+    const name = this.#cards.get(`${ref.computerId}:${ref.threadId}`)?.name ?? FALLBACK_NAME;
 
     let previewUrl: string | null = null;
     try {
