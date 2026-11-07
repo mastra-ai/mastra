@@ -4752,6 +4752,9 @@ importers:
       '@ai-sdk/azure':
         specifier: ^2.0.146
         version: 2.0.147(zod@4.6.7)
+      '@ai-sdk/azure-v6':
+        specifier: npm:@ai-sdk/azure@3.0.147
+        version: '@ai-sdk/azure@3.0.147(zod@4.6.7)'
       '@ai-sdk/cerebras-v7':
         specifier: npm:@ai-sdk/cerebras@3.0.82
         version: '@ai-sdk/cerebras@3.0.82(zod@4.6.7)'
@@ -10639,6 +10642,12 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
+  '@ai-sdk/azure@3.0.147':
+    resolution: {integrity: sha512-2CBOWKiTSYlImFVNeYFQLFUlq8vrGXoCvuigF7lDPrLvcONA4KMrmNagPIEENeZ66s6iYZYJRWrD4+9/Tz/mpw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: 4.6.7
+
   '@ai-sdk/cerebras@1.0.66':
     resolution: {integrity: sha512-j7UP+9Qi5gysJtK1kxmNlg2vdCRdROxLFQfA/aFpTqTaVKH1v/an8CyG9EzJmTsNY+IcHnd8VEFOdadWc0K0qA==}
     engines: {node: '>=18'}
@@ -10665,6 +10674,12 @@ packages:
 
   '@ai-sdk/deepseek@1.0.66':
     resolution: {integrity: sha512-DizlmDSyPgPwgBKC79nUEpvh84t1ZuwRz574vfTQd2U4hxpPQUeoSgKaA/xpM1R2O0t1ldRfJdT0NMHFMQINaQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/deepseek@2.0.79':
+    resolution: {integrity: sha512-/xY6XPy4dKf5kJW/RL9aViPDAJY8+BP5MUfrBaqeT8yuOj410rJk2ugPWc0PUuZYHB0G0Ky+dtGF73WEOJxelQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.6.7
@@ -32440,6 +32455,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.44(zod@4.6.7)
       zod: 4.6.7
 
+  '@ai-sdk/azure@3.0.147(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/deepseek': 2.0.79(zod@4.6.7)
+      '@ai-sdk/openai': 3.0.136(zod@4.6.7)
+      '@ai-sdk/provider': 3.0.19
+      '@ai-sdk/provider-utils': 4.0.64(zod@4.6.7)
+      zod: 4.6.7
+
   '@ai-sdk/cerebras@1.0.66(zod@4.6.7)':
     dependencies:
       '@ai-sdk/openai-compatible': 1.0.61(zod@4.6.7)
@@ -32472,6 +32495,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.5
       '@ai-sdk/provider-utils': 3.0.44(zod@4.6.7)
+      zod: 4.6.7
+
+  '@ai-sdk/deepseek@2.0.79(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.19
+      '@ai-sdk/provider-utils': 4.0.64(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/deepseek@3.0.77(zod@4.6.7)':
