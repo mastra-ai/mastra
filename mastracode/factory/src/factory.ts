@@ -104,6 +104,7 @@ import {
 import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
+import { createPhaseGoalEnder } from './rules/phase-goal.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import type { FactoryStartCoordinator } from './rules/start-coordinator.js';
@@ -1273,10 +1274,20 @@ export class MastraFactory {
             return project?.selfReviewEnabled ?? false;
           },
           ...(onTerminalStage ? { onTerminalStage } : {}),
-          onTransitionCommitted: createStageChangeNotifier({
-            workItems: workItemsStorage,
-            reporting: factoryReporting,
-          }),
+          onTransitionCommitted: (() => {
+            const notifyStageChange = createStageChangeNotifier({
+              workItems: workItemsStorage,
+              reporting: factoryReporting,
+            });
+            const endPhaseGoal = createPhaseGoalEnder({
+              workItems: workItemsStorage,
+              agentFor: async goal =>
+                (await this.#prepared?.base.controller.getSession(goal.sessionId))?.machinery.getAgent(),
+            });
+            return async (args: Parameters<typeof notifyStageChange>[0]) => {
+              await Promise.all([notifyStageChange(args), endPhaseGoal(args)]);
+            };
+          })(),
           ...(githubIntegration
             ? {
                 onAccepted: (args: { orgId: string; factoryProjectId: string; item: Card }) =>

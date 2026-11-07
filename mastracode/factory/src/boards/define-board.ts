@@ -118,6 +118,19 @@ export interface BoardPhaseRunner {
   readonly context?: string;
   /** Appended to every run the phase starts. */
   readonly instructions?: string;
+  /**
+   * Pursue the phase's work as a goal: the run's thread holds `objective` and the agent's goal
+   * judge keeps it working until the objective is met. The judge sees only this text and the
+   * latest messages, so it must say when the work is done.
+   */
+  readonly goal?: BoardPhaseGoal;
+}
+
+/** The objective a phase's runs pursue, judged in-loop until met. */
+export interface BoardPhaseGoal {
+  readonly objective: string;
+  /** Judged turns before the goal pauses for a person; defaults to the agent's setting. */
+  readonly maxRuns?: number;
 }
 
 /**
@@ -305,7 +318,10 @@ function validateBoardIdentifier(value: unknown, label: string): void {
 const MAX_NAME_LENGTH = 128;
 const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_INSTRUCTIONS_LENGTH = 1_000;
-const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions']);
+const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
+const MAX_GOAL_RUNS = 50;
+const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions', 'goal']);
+const GOAL_KEYS: ReadonlySet<string> = new Set(['objective', 'maxRuns']);
 const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen', 'next']);
 const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool', 'tools'] as const;
 const MOVE_TOOL = 'factory_transition_work_item';
@@ -358,7 +374,9 @@ function isContext(value: unknown): value is string {
 function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): ResolvedRunner {
   const runner: unknown = phase.runner ?? {};
   if (!isPlainObject(runner) || Object.keys(runner).some(key => !RUNNER_KEYS.has(key))) {
-    throw new BoardDefinitionError(`Phase "${phaseId}" runner may only set agentId, skill, context and instructions.`);
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" runner may only set agentId, skill, context, instructions and goal.`,
+    );
   }
   const role: unknown = phase.role;
   if (role !== undefined && runner.context !== undefined && role !== runner.context) {
@@ -384,12 +402,39 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
     `Phase "${phaseId}" runner.instructions`,
     MAX_INSTRUCTIONS_LENGTH,
   );
+  const goal = resolveGoal(phaseId, runner.goal);
   return Object.freeze({
     agentId,
     context,
     ...(skill !== undefined ? { skill } : {}),
     ...(instructions !== undefined ? { instructions } : {}),
+    ...(goal !== undefined ? { goal } : {}),
   });
+}
+
+function resolveGoal(phaseId: string, value: unknown): BoardPhaseGoal | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value) || Object.keys(value).some(key => !GOAL_KEYS.has(key))) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.goal may only set objective and maxRuns.`);
+  }
+  const objective = optionalText(
+    value.objective,
+    `Phase "${phaseId}" runner.goal.objective`,
+    MAX_GOAL_OBJECTIVE_LENGTH,
+  );
+  if (objective === undefined) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.goal must state an objective.`);
+  }
+  const maxRuns = value.maxRuns;
+  if (
+    maxRuns !== undefined &&
+    (typeof maxRuns !== 'number' || !Number.isInteger(maxRuns) || maxRuns < 1 || maxRuns > MAX_GOAL_RUNS)
+  ) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" runner.goal.maxRuns must be a whole number from 1 to ${MAX_GOAL_RUNS}.`,
+    );
+  }
+  return Object.freeze({ objective, ...(maxRuns !== undefined ? { maxRuns } : {}) });
 }
 
 function resolveExitTool(phaseId: string, value: unknown, nextPhases: readonly string[]): ResolvedExitTool {
@@ -523,7 +568,8 @@ function phaseEnterHandlers(
 ): ReadonlyBoardPhaseHandlers | undefined {
   const handlers: BoardPhaseHandlers = { ...declared };
   if (runner.skill) {
-    for (const source of FACTORY_RULE_SOURCES) handlers[source] ??= startSkill(runner.skill, runner.context);
+    for (const source of FACTORY_RULE_SOURCES)
+      handlers[source] ??= startSkill(runner.skill, runner.context, runner.goal);
   }
   if (runner.instructions) {
     for (const source of Object.keys(handlers) as FactoryRuleSource[]) {

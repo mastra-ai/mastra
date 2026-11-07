@@ -332,6 +332,37 @@ describe('defineBoard phase fields', () => {
     ).toThrow('cannot declare tools');
   });
 
+  it('lets a runner pursue its work as a goal, carried on the run it starts', async () => {
+    const board = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: {
+        name: 'Build',
+        kind: 'working',
+        runner: { context: 'release', skill: 'release-notes', goal: { objective: 'Notes are published.', maxRuns: 5 } },
+      },
+    });
+    expect(board.phases.build).toMatchObject({
+      runner: { goal: { objective: 'Notes are published.', maxRuns: 5 } },
+    });
+    expect(await board.rules.build!.issue!.onEnter!(stageContext('build'))).toMatchObject({
+      skillName: 'release-notes',
+      goal: { objective: 'Notes are published.', maxRuns: 5 },
+    });
+
+    const withGoal = (goal: unknown) => () =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+        build: { name: 'Build', kind: 'working', runner: { skill: 'release-notes', goal: goal as never } },
+      });
+    expect(withGoal({})).toThrow('Phase "build" runner.goal must state an objective.');
+    expect(withGoal({ objective: ' ' })).toThrow('runner.goal.objective must be non-empty text of at most 2000');
+    expect(withGoal({ objective: 'x'.repeat(2001) })).toThrow('runner.goal.objective must be non-empty text');
+    expect(withGoal({ objective: 'Ship.', maxRuns: 0 })).toThrow('must be a whole number from 1 to 50.');
+    expect(withGoal({ objective: 'Ship.', maxRuns: 51 })).toThrow('must be a whole number from 1 to 50.');
+    expect(withGoal({ objective: 'Ship.', maxRuns: 2.5 })).toThrow('must be a whole number from 1 to 50.');
+    expect(withGoal({ objective: 'Ship.', judge: 'x' })).toThrow('runner.goal may only set objective and maxRuns.');
+  });
+
   it('starts the runner skill for sources without a handler and adds instructions to every run', async () => {
     const board = release({
       backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },

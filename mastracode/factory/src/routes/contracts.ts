@@ -821,6 +821,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
               role: z.string().optional(),
               /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
               skill: z.string().optional(),
+              /** The objective the phase's runs pursue as a goal (`runner.goal`). */
+              goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).optional(),
               autoStart: z.boolean().optional(),
               /** Cards the phase starts on its own for; absent means every card. */
               autoStartWhen: cardRuleGroupSchema.optional(),

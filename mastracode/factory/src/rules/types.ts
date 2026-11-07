@@ -724,6 +724,11 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
    * Without it, an agent's own move into a phase of its role starts nothing.
    */
   startsAfterOwnMove?: boolean;
+  /**
+   * Pursue the run's work as a goal: the session's thread holds `objective` until the card
+   * leaves the phase, and the agent's goal judge keeps the run going until it is met.
+   */
+  goal?: { objective: string; maxRuns?: number };
 }
 
 /**

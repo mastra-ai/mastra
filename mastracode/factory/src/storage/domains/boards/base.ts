@@ -28,6 +28,8 @@ export interface StoredPhaseRunner {
   skill?: string;
   context?: string;
   instructions?: string;
+  /** The objective the phase's runs pursue as a goal. */
+  goal?: { objective: string; maxRuns?: number };
 }
 
 export interface StoredPhaseExitTool {

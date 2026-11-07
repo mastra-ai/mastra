@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto';
+
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
-import { describe, expect, it, vi } from 'vitest';
+import { LibSQLStore } from '@mastra/libsql';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
@@ -18,6 +23,7 @@ import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../st
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import type { FactoryReviewStatusEvent } from './dispatcher.js';
+import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -8305,5 +8311,220 @@ describe('review status comment lifecycle', () => {
     expect(conversation.comments()).toHaveLength(1);
     expect(conversation.comments()[0]!.body).toContain('Review cancelled');
     expect(conversation.comments()[0]!.body).not.toContain('Review finished');
+  });
+});
+
+describe('phase goals', () => {
+  const OBJECTIVE = 'Done when the approved plan is implemented, its gates pass and the branch is pushed.';
+
+  /** The agent a Factory session runs, holding its thread state where the session's Mastra keeps it. */
+  async function goalAgent() {
+    const agent = new Agent({ id: 'factory', name: 'factory', instructions: 'You build.', model: 'openai/gpt-5' });
+    const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+    let storage;
+    if (process.env.FACTORY_TEST_STORAGE_BACKEND === 'postgres' && postgresUrl) {
+      const { PostgresStore } = await import('@mastra/pg');
+      const admin = new PostgresStore({
+        id: `goal-admin-${randomUUID()}`,
+        connectionString: postgresUrl,
+        disableInit: true,
+      });
+      const schema = `factory_goal_${randomUUID().replaceAll('-', '')}`;
+      await admin.pool.query(`CREATE SCHEMA "${schema}"`);
+      storage = new PostgresStore({ id: `goal-${schema}`, connectionString: postgresUrl, schemaName: schema });
+      onTestFinished(async () => {
+        await storage!.close();
+        await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+        await admin.close();
+      });
+    } else {
+      storage = new LibSQLStore({ id: `goals-${randomUUID()}`, url: ':memory:' });
+    }
+    new Mastra({ agents: { factory: agent }, storage, logger: false });
+    return agent;
+  }
+
+  /** Work with Building started by its stored runner alone, as phase-runner boards declare it. */
+  function boardsWithRunner(runner: {
+    context: string;
+    skill: string;
+    goal?: { objective: string; maxRuns?: number };
+  }) {
+    const { onEnter: _onEnter, ...execute } = workBoard.phases.execute as typeof workBoard.phases.execute & {
+      onEnter?: unknown;
+    };
+    const board = defineBoard({
+      id: 'work',
+      name: 'Work',
+      initialPhase: 'intake',
+      sourceClosed: workBoard.sourceClosed,
+      transitionPolicy: workBoard.transitionPolicy,
+      phases: {
+        ...workBoard.phases,
+        // Cards reach Building straight from Intake here, so each test starts with the runner's run.
+        intake: { ...workBoard.phases.intake, nextPhases: [...workBoard.phases.intake.nextPhases!, 'execute'] },
+        execute: { ...execute, runner },
+      },
+    });
+    return new Map([[board.id, board]]) as BoardRegistry;
+  }
+
+  async function enterBuilding(boards: BoardRegistry, agent: Agent) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const transitionService = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      boards,
+      onTransitionCommitted: createPhaseGoalEnder({ workItems: storage, agentFor: async () => agent }),
+    });
+    const entered = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: 'move-to-building' },
+      cause: 'rule_decision',
+    });
+    expect(entered.status).toBe('accepted');
+    await bindWorkRun(storage, item.id);
+    const fake = createSession();
+    Object.assign(fake.session, { machinery: { getAgent: () => agent } });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: fake.controller as never,
+      transitionService,
+      storage,
+      boards,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+    return { storage, item, transitionService, dispatcher, ...fake };
+  }
+
+  const sentIds = (session: { sendSignal: { mock: { calls: Array<[{ id: string }, ...unknown[]]> } } }) =>
+    session.sendSignal.mock.calls.map(call => call[0].id);
+
+  it("holds the runner's goal on the session thread, then shows it after the kickoff", async () => {
+    const agent = await goalAgent();
+    const boards = boardsWithRunner({
+      context: 'work',
+      skill: 'factory-build',
+      goal: { objective: OBJECTIVE, maxRuns: 7 },
+    });
+    const { storage, item, dispatcher, session } = await enterBuilding(boards, agent);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({ status: 'succeeded' });
+    expect(await agent.getObjective({ threadId: 'thread-1' })).toMatchObject({
+      id: decision!.id,
+      objective: OBJECTIVE,
+      status: 'active',
+      maxRuns: 7,
+      judgeModelId: 'openai/gpt-5.6-sol',
+    });
+    // The skill kickoff first, then the goal reminder carrying the objective.
+    expect(sentIds(session)).toEqual([decision!.id, `${decision!.id}:goal`]);
+    expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ attributes: { name: 'factory-build' } });
+    expect(session.sendSignal.mock.calls[1]![0]).toMatchObject({
+      type: 'system-reminder',
+      contents: OBJECTIVE,
+      attributes: { type: 'goal' },
+      metadata: { goalId: decision!.id, goalMaxTurns: 7, judgeModelId: 'openai/gpt-5.6-sol' },
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.metadata?.[PHASE_GOAL_METADATA_KEY]).toEqual({
+      phaseKey: 'execute',
+      goalId: decision!.id,
+      threadId: 'thread-1',
+      sessionId: 'session-1',
+    });
+  });
+
+  it('keeps the goal it already holds when the decision is retried', async () => {
+    const agent = await goalAgent();
+    const boards = boardsWithRunner({ context: 'work', skill: 'factory-build', goal: { objective: OBJECTIVE } });
+    const { storage, dispatcher, session } = await enterBuilding(boards, agent);
+    // The first kickoff never reaches the agent; the goal is already held by then.
+    session.sendSignal.mockImplementationOnce(() => ({
+      accepted: Promise.resolve({ accepted: true as const, action: 'discard' }),
+    }));
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    const [failed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(failed).toMatchObject({ status: 'retry', deliveryGeneration: 1 });
+    const held = await agent.getObjective({ threadId: 'thread-1' });
+    expect(held).toMatchObject({ id: failed!.id, status: 'active' });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    // Same record, never re-set: a second setObjective would restart it.
+    expect(await agent.getObjective({ threadId: 'thread-1' })).toEqual(held);
+    expect(sentIds(session)).toEqual([failed!.id, `${failed!.id}:retry:1`, `${failed!.id}:goal`]);
+  });
+
+  it('ends the goal once the card leaves the phase, and only that goal', async () => {
+    const agent = await goalAgent();
+    const boards = boardsWithRunner({ context: 'work', skill: 'factory-build', goal: { objective: OBJECTIVE } });
+    const { storage, item, transitionService, dispatcher } = await enterBuilding(boards, agent);
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+
+    const moved = await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'planning',
+      expectedRevision: current!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'back-to-planning' },
+      cause: 'human_move',
+    });
+    expect(moved.status).toBe('accepted');
+
+    await vi.waitFor(async () =>
+      expect(await agent.getObjective({ threadId: 'thread-1' })).toMatchObject({ status: 'done' }),
+    );
+
+    // A goal a person set on the thread afterwards is theirs: a later move leaves it alone.
+    await agent.setObjective('A person’s own goal', { threadId: 'thread-1' });
+    const again = await storage.get({ orgId: 'org-1', id: item.id });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'canceled',
+      expectedRevision: again!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'cancel' },
+      cause: 'human_move',
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(await agent.getObjective({ threadId: 'thread-1' })).toMatchObject({
+      objective: 'A person’s own goal',
+      status: 'active',
+    });
+  });
+
+  it('sets no goal for a runner without one', async () => {
+    const agent = await goalAgent();
+    const { storage, item, dispatcher, session } = await enterBuilding(
+      boardsWithRunner({ context: 'work', skill: 'factory-build' }),
+      agent,
+    );
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({ status: 'succeeded' });
+    expect(await agent.getObjective({ threadId: 'thread-1' })).toBeUndefined();
+    expect(sentIds(session)).toEqual([decision!.id]);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.metadata?.[PHASE_GOAL_METADATA_KEY]).toBeUndefined();
   });
 });
