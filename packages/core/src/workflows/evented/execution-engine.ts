@@ -48,13 +48,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
    * are resolvable from the workflow event processor but `Mastra.getWorkflow`
    * intentionally only sees public ones. The `execute` resume/time-travel
    * branches need access to the workflow's step graph by id, so prefer the
-   * internal registry when present.
+   * internal registry when present. Public workflows are looked up by id:
+   * `workflowId` is the workflow's `id`, which can differ from the key it is
+   * registered under in `new Mastra({ workflows })`.
    */
   private resolveWorkflow(workflowId: string, runId?: string) {
     if (this.mastra?.__hasInternalWorkflow(workflowId, runId)) {
       return this.mastra.__getInternalWorkflow(workflowId, runId);
     }
-    return this.mastra!.getWorkflow(workflowId);
+    return this.mastra!.getWorkflowById(workflowId);
   }
 
   /**
