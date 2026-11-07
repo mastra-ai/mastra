@@ -443,6 +443,7 @@ jobs:
         env:
           # Benchmark only: timings recorded from an earlier run of this branch.
           TIMINGS: .github/data/bench-test-timings.json
+          TEST_SHARDS_MAX: 16
         run: |
           shards=$(node .github/scripts/test-shards.cjs /tmp/affected-outputs/unit_test_files.txt /tmp/affected-outputs/shards "$TIMINGS")
           echo "unit_shards=$shards" >> "$GITHUB_OUTPUT"
