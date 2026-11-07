@@ -17,6 +17,8 @@ export interface UseGenUIChatProps<C extends Catalog = Catalog> extends MastraCh
   genUI: GenUIRegistry<C>;
   /** Handlers for the catalog's actions, which specs bind to component events through `on`. Handlers from the latest render run. */
   actions?: GenUIActionHandlers<C>;
+  /** Where specs navigate to, through an action's `onSuccess: { navigate }`. The latest render's function runs. */
+  navigate?: (path: string) => void;
   /**
    * Your own `MessageFactory` renderers, for parts GenUI does not render. Define them outside the
    * component (or memoize them) so messages don't re-render on every streamed token.
@@ -49,10 +51,10 @@ function withContext(system: string | undefined, contextBlock: string | undefine
 }
 
 function createController(
-  { genUI, actions }: Pick<UseGenUIChatProps, 'genUI' | 'actions'>,
+  { genUI, actions, navigate }: Pick<UseGenUIChatProps, 'genUI' | 'actions' | 'navigate'>,
   history: { messages?: MastraDBMessage[]; threadId?: string },
 ): GenUIController {
-  const controller = createGenUIController({ registry: genUI, actions });
+  const controller = createGenUIController({ registry: genUI, actions, navigate });
   // Approvals from history are ready on the first render.
   if (history.messages) controller.sync(history.messages, { threadId: history.threadId });
   return controller;
@@ -67,11 +69,15 @@ function createController(
 export function useGenUIChat<C extends Catalog = Catalog>({
   genUI,
   actions,
+  navigate,
   renderers,
   ...chatProps
 }: UseGenUIChatProps<C>) {
   const [controller] = useState(() =>
-    createController({ genUI, actions }, { messages: chatProps.initialMessages, threadId: chatProps.threadId }),
+    createController(
+      { genUI, actions, navigate },
+      { messages: chatProps.initialMessages, threadId: chatProps.threadId },
+    ),
   );
   // Built once so memoized messages skip re-rendering while a reply streams. They read your
   // renderers from a ref, so parts GenUI hands back to you use the latest ones.
@@ -80,6 +86,7 @@ export function useGenUIChat<C extends Catalog = Catalog>({
     createGenUIRenderers(controller, {
       ToolInvocation: part => baseRenderers.current?.ToolInvocation?.(part),
       DynamicTool: part => baseRenderers.current?.DynamicTool?.(part),
+      Data: part => baseRenderers.current?.Data?.(part),
     }),
   );
   const { threadId } = chatProps;
@@ -113,7 +120,7 @@ export function useGenUIChat<C extends Catalog = Catalog>({
       declineToolCall: toolCallId => chat.declineToolCall(toolCallId),
       threadId,
     });
-    controller.setActions(actions);
+    controller.setActions(actions, navigate);
     baseRenderers.current = renderers;
   });
 

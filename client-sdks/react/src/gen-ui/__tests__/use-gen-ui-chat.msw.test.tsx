@@ -23,6 +23,8 @@ import {
 } from '../index';
 import type { CreateGenUIOptions, GenUIActionHandlers, GenUIRegistry } from '../index';
 import { chunk, controllableStream, finish, sseResponse, STREAM_URL } from './sse';
+import { asStrictModelSends } from './strict';
+import type { Schema } from './strict';
 
 const weatherCard = {
   description: 'Current weather for a city',
@@ -160,7 +162,7 @@ describe('useGenUIChat — opt-in', () => {
     await waitFor(() => expect(bodies).toHaveLength(2));
 
     expect(bodies[0]!.clientTools).toBeUndefined();
-    expect(Object.keys(bodies[1]!.clientTools as object).sort()).toEqual(['ui_WeatherCard', 'ui_spec']);
+    expect(Object.keys(bodies[1]!.clientTools as object).sort()).toEqual(['ui_WeatherCard', 'ui_spec', 'ui_spec_edit']);
     // The plain chat still receives the raw tool call exactly as before.
     await waitFor(() =>
       expect(plain.messages.at(-1)?.content.parts).toContainEqual(
@@ -613,46 +615,6 @@ describe('useGenUIChat — spec tool', () => {
     expect((screen.getByLabelText('City') as HTMLInputElement).value).toBe('Lyon');
     expect(screen.getByTestId('weather').textContent).toBe('Lyon: 30°');
   });
-
-  type Schema = {
-    type?: string;
-    properties?: Record<string, Schema>;
-    items?: Schema;
-    anyOf?: Schema[];
-    enum?: unknown[];
-  };
-  // Strict structured outputs close every object: undeclared keys never reach the browser and
-  // every declared key is sent, as null when the model has nothing to say.
-  const asStrictModelSends = (schema: Schema, value: unknown): unknown => {
-    if (schema.anyOf) {
-      const branch =
-        schema.anyOf.find(b =>
-          Object.entries(b.properties ?? {}).some(
-            ([k, p]) => p.enum?.length === 1 && (value as Record<string, unknown>)?.[k] === p.enum[0],
-          ),
-        ) ??
-        schema.anyOf.find(
-          b =>
-            b.type === 'object' &&
-            !!value &&
-            typeof value === 'object' &&
-            Object.keys(value).every(k => k in (b.properties ?? {})),
-        ) ??
-        schema.anyOf.find(b => b.type === (Array.isArray(value) ? 'array' : typeof value));
-      return branch ? asStrictModelSends(branch, value) : null;
-    }
-    if (Array.isArray(value)) return value.map(v => asStrictModelSends(schema.items ?? {}, v));
-    if (value && typeof value === 'object') {
-      const record = value as Record<string, unknown>;
-      return Object.fromEntries(
-        Object.entries(schema.properties ?? {}).map(([k, s]) => [
-          k,
-          record[k] === undefined ? null : asStrictModelSends(s, record[k]),
-        ]),
-      );
-    }
-    return value;
-  };
 
   it('a strict-mode model can build a spec from the advertised schema alone', async () => {
     const bodies: Record<string, unknown>[] = [];

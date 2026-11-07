@@ -8,6 +8,7 @@ export type {
   GenUIFallbacks,
   GenUIRegistry,
   GenUISpecStatusProps,
+  GenUISpecEditToolOptions,
   GenUISpecToolOptions,
   GenUIStreamingProps,
   GenUIToolApproval,
@@ -38,10 +39,11 @@ export {
   DefaultGenUIFallback,
   DefaultGenUILoading,
   DefaultGenUISpecStatus,
+  GenUIDataSpecView,
   GenUIErrorBoundary,
   GenUISpecView,
 } from './spec-view';
-export type { GenUISpecViewProps } from './spec-view';
+export type { GenUIDataSpecViewProps, GenUISpecViewProps } from './spec-view';
 export type { GenUISpecStatus } from './spec';
 export type { GenUIValidationResult } from './validate';
 export { createGenUIRenderers } from './renderers';

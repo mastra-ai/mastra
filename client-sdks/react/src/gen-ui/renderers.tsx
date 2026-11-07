@@ -1,12 +1,13 @@
+import { SPEC_DATA_PART_TYPE } from '@json-render/core';
 import { JSONUIProvider } from '@json-render/react';
 import type { EventHandle } from '@json-render/react';
 import type { ReactNode } from 'react';
 import type { z } from 'zod/v4';
-import type { DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
+import type { DataPart, DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
 import { GenUIProvider, GenUIToolCallScope, useGenUIController, useGenUIToolApproval } from './context';
 import type { GenUIController } from './controller';
 import type { GenUIToolCallProps, GenUIToolPhase } from './registry';
-import { GenUIErrorBoundary, GenUISpecView, resolveFallbacks } from './spec-view';
+import { GenUIDataSpecView, GenUIErrorBoundary, GenUISpecView, resolveFallbacks } from './spec-view';
 import { normalizeToolPart, partialArgsOf } from './tool-parts';
 import type { NormalizedToolCall } from './tool-parts';
 import { validate, validateModelInput } from './validate';
@@ -85,7 +86,10 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
   }
   // Catalog components may use json-render hooks, which need a provider even outside a spec.
   return (
-    <JSONUIProvider registry={controller.registry.registry}>
+    <JSONUIProvider
+      registry={controller.registry.registry}
+      validationFunctions={controller.registry.validationFunctions}
+    >
       <Rendered
         element={{ type: componentName, props: validation.value as Record<string, unknown> }}
         emit={ignoreEvent}
@@ -101,46 +105,49 @@ const ignoreEvent = () => {};
 const UNBOUND: EventHandle = Object.freeze({ emit: ignoreEvent, shouldPreventDefault: false, bound: false });
 const unboundEvent = () => UNBOUND;
 
-function renderToolCall(controller: GenUIController, call: NormalizedToolCall): ReactNode | undefined {
-  const { registry } = controller;
-  let view: ReactNode;
-  if (registry.specTool?.name === call.toolName) view = <GenUISpecView call={call} />;
-  else if (registry.componentTools[call.toolName]) {
-    view = <ComponentToolView call={call} componentName={registry.componentTools[call.toolName]!} />;
-  } else if (registry.tools[call.toolName]) view = <BackendToolView call={call} />;
-  else return undefined;
-
-  const { Fallback } = resolveFallbacks(registry.fallbacks);
+/** GenUI's context and a boundary so a throwing component only takes down its own part. */
+function frame(controller: GenUIController, name: string, resetKey: unknown, view: ReactNode) {
+  const { Fallback } = resolveFallbacks(controller.registry.fallbacks);
   return (
     <GenUIProvider controller={controller}>
-      <GenUIToolCallScope toolCallId={call.toolCallId}>
-        <GenUIErrorBoundary
-          resetKey={call}
-          fallback={() => (
-            <Fallback
-              kind="render-error"
-              component={call.toolName}
-              reason={`"${call.toolName}" could not be displayed.`}
-            />
-          )}
-        >
-          {view}
-        </GenUIErrorBoundary>
-      </GenUIToolCallScope>
+      <GenUIErrorBoundary
+        resetKey={resetKey}
+        fallback={() => <Fallback kind="render-error" component={name} reason={`"${name}" could not be displayed.`} />}
+      >
+        {view}
+      </GenUIErrorBoundary>
     </GenUIProvider>
   );
 }
 
+function renderToolCall(controller: GenUIController, call: NormalizedToolCall): ReactNode | undefined {
+  const { registry } = controller;
+  let view: ReactNode;
+  if (registry.specTool?.name === call.toolName || registry.specTool?.edit?.name === call.toolName) {
+    view = <GenUISpecView call={call} />;
+  } else if (registry.componentTools[call.toolName]) {
+    view = <ComponentToolView call={call} componentName={registry.componentTools[call.toolName]!} />;
+  } else if (registry.tools[call.toolName]) view = <BackendToolView call={call} />;
+  else return undefined;
+  return frame(
+    controller,
+    call.toolName,
+    call,
+    <GenUIToolCallScope toolCallId={call.toolCallId}>{view}</GenUIToolCallScope>,
+  );
+}
+
 /**
- * MessageFactory renderers for GenUI parts. Parts GenUI does not own are passed to `base`, and when
- * `base` has no renderer for them they fall through to MessageFactory's own `fallback` as before.
+ * MessageFactory renderers for GenUI parts: GenUI tool calls and json-render `data-spec` parts. Parts GenUI
+ * does not own are passed to `base`, and when `base` has no renderer for them they fall through to
+ * MessageFactory's own `fallback` as before.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
 export function createGenUIRenderers(
   controller: GenUIController,
   base: MessageRenderers = {},
-): Required<Pick<MessageRenderers, 'ToolInvocation' | 'DynamicTool'>> {
+): Required<Pick<MessageRenderers, 'ToolInvocation' | 'DynamicTool' | 'Data'>> {
   return {
     ToolInvocation: (part: ToolInvocationPart) => {
       const call = normalizeToolPart(part);
@@ -149,6 +156,11 @@ export function createGenUIRenderers(
     DynamicTool: (part: DynamicToolPart) => {
       const call = normalizeToolPart(part);
       return (call && renderToolCall(controller, call)) ?? base.DynamicTool?.(part);
+    },
+    Data: (part: DataPart) => {
+      if (part.type !== SPEC_DATA_PART_TYPE) return base.Data?.(part);
+      // Always mounted: the view finds its message once the controller has synced the part.
+      return frame(controller, SPEC_DATA_PART_TYPE, part, <GenUIDataSpecView part={part} />);
     },
   };
 }

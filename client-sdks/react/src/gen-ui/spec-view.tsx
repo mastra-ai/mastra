@@ -7,9 +7,8 @@ import { Component, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import type { ErrorInfo, ReactNode } from 'react';
 import { useGenUIController } from './context';
 import type { GenUIFallbackProps, GenUIFallbacks, GenUIRegistry, GenUISpecStatusProps } from './registry';
-import { findSpecCycle, readSpecToolArgs, specStatus } from './spec';
+import { specStatus } from './spec';
 import type { GenUISpecStatus } from './spec';
-import { partialArgsOf } from './tool-parts';
 import type { NormalizedToolCall } from './tool-parts';
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -177,22 +176,17 @@ function useSpecStore(agentState: StateModel | undefined): StateStore {
   return store;
 }
 
-function readCall(call: NormalizedToolCall): { spec?: Spec; error?: string } {
-  const args = partialArgsOf(call);
-  if (!args) return {};
-  const read = readSpecToolArgs(args, call.phase !== 'input-streaming');
-  if (!read.ok) return { error: read.error };
-  const cycle = findSpecCycle(read.spec);
-  return cycle ? { error: cycle } : { spec: read.spec };
-}
-
 /** A spec cut off mid-stream still names children the model never wrote; drop those references. */
 function withoutMissingChildren(spec: Spec): Spec {
+  const present = (ids: string[]) => ids.filter(child => Object.hasOwn(spec.elements, child));
   const elements: Spec['elements'] = {};
   for (const [id, element] of Object.entries(spec.elements)) {
-    elements[id] = element.children
-      ? { ...element, children: element.children.filter(child => Object.hasOwn(spec.elements, child)) }
-      : element;
+    const pruned = { ...element };
+    if (element.children) pruned.children = present(element.children);
+    if (element.slots) {
+      pruned.slots = Object.fromEntries(Object.entries(element.slots).map(([name, ids]) => [name, present(ids)]));
+    }
+    elements[id] = pruned;
   }
   return { ...spec, elements };
 }
@@ -203,31 +197,29 @@ export interface GenUISpecViewProps {
   className?: string;
 }
 
-/**
- * The json-render spec of one spec tool call, drawn where the call appears in the message. It renders
- * progressively while the model writes it; its state and actions are local to this call.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function GenUISpecView({ call, className }: GenUISpecViewProps) {
+interface SpecFrameProps {
+  /** The tool call or message the spec belongs to; its actions run in its name. */
+  id: string;
+  status: GenUISpecStatus;
+  statusError?: string;
+  spec?: Spec;
+  error?: string;
+  className?: string;
+}
+
+/** Draws one spec with its own json-render state and actions, whichever part of a message it came from. */
+function SpecFrame({ id, status, statusError, spec: read, error: readError, className }: SpecFrameProps) {
   const controller = useGenUIController();
-  const running = useRunning();
-  const { status, error: statusError } = specStatus(call, running);
-  const { spec: read, error: readError } = readCall(call);
   const spec = read && status !== 'streaming' ? withoutMissingChildren(read) : read;
   const store = useSpecStore(spec?.state);
+  useLayoutEffect(() => controller.trackStore(id, store), [controller, id, store]);
   const statusRef = useRef<GenUISpecStatus>(status);
   useLayoutEffect(() => {
     statusRef.current = status;
   }, [status]);
   const handlers = useMemo(
-    () =>
-      controller.actionHandlers({
-        toolCallId: call.toolCallId,
-        store,
-        isReady: () => statusRef.current === 'ready',
-      }),
-    [controller, call.toolCallId, store],
+    () => controller.actionHandlers({ toolCallId: id, store, isReady: () => statusRef.current === 'ready' }),
+    [controller, id, store],
   );
   const { Fallback, Loading, SpecStatus } = resolveFallbacks(controller.registry.fallbacks);
   const registry = specRegistry(controller.registry);
@@ -237,12 +229,20 @@ export function GenUISpecView({ call, className }: GenUISpecViewProps) {
   return (
     <div
       className={className}
-      data-genui-spec={call.toolCallId}
+      data-genui-spec={id}
       data-genui-status={status}
       aria-busy={status === 'streaming' || undefined}
     >
       {spec?.elements[spec.root] ? (
-        <JSONUIProvider registry={registry} store={store} handlers={handlers}>
+        <JSONUIProvider
+          registry={registry}
+          store={store}
+          handlers={handlers}
+          navigate={controller.navigate}
+          functions={controller.registry.functions}
+          validationFunctions={controller.registry.validationFunctions}
+          directives={controller.registry.directives}
+        >
           <Renderer spec={spec} registry={registry} loading={status === 'streaming'} fallback={ElementView} />
         </JSONUIProvider>
       ) : status === 'streaming' ? (
@@ -252,5 +252,67 @@ export function GenUISpecView({ call, className }: GenUISpecViewProps) {
         <SpecStatus status={status} error={statusError} />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The json-render spec of one spec or edit tool call, drawn where the call appears in the message. It renders
+ * progressively while the model writes it; its state and actions are local to this call. An edit renders its
+ * target with the edit applied, starting from the state the user had set in the target.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
+export function GenUISpecView({ call, className }: GenUISpecViewProps) {
+  const controller = useGenUIController();
+  const running = useRunning();
+  const { status, error: statusError } = specStatus(call, running);
+  useSyncExternalStore(controller.subscribeSpecs, controller.specsVersion, controller.specsVersion);
+  const { spec, error } = controller.readSpecCall(call);
+  return (
+    <SpecFrame
+      id={call.toolCallId}
+      status={status}
+      statusError={statusError}
+      spec={spec}
+      error={error}
+      className={className}
+    />
+  );
+}
+
+/** @experimental Generative UI is in beta and may change without notice. */
+export interface GenUIDataSpecViewProps {
+  /** A json-render `data-spec` part of an assistant message. */
+  part: object;
+  className?: string;
+}
+
+/**
+ * The spec json-render `data-spec` parts build (from `pipeJsonRender` or a tool writing to the stream), drawn
+ * once per message at its first such part. It renders progressively while the message streams; its state and
+ * actions are local to the message.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
+export function GenUIDataSpecView({ part, className }: GenUIDataSpecViewProps) {
+  const controller = useGenUIController();
+  const running = useRunning();
+  useSyncExternalStore(controller.subscribeSpecs, controller.specsVersion, controller.specsVersion);
+  const messageId = controller.dataSpecOf(part);
+  const read = messageId ? controller.readDataSpec(messageId) : undefined;
+  const streaming = running && !!read?.live;
+  const problem = useMemo(
+    () => (read?.spec && !streaming && !read.error ? controller.checkSpec(read.spec) : undefined),
+    [controller, read, streaming],
+  );
+  if (!messageId || !read) return null;
+  return (
+    <SpecFrame
+      id={messageId}
+      status={streaming ? 'streaming' : 'ready'}
+      spec={read.spec}
+      error={read.error ?? problem}
+      className={className}
+    />
   );
 }
