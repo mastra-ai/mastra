@@ -8,7 +8,7 @@ import type { MastraDBMessage } from '../../memory';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
-import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector, VectorFilter } from '../../vector';
 import { globalEmbeddingCache } from './embedding-cache';
 import { assertEmbeddingDimension, isEmbeddingDimensionMismatchError } from './embedding-dimension';
 
@@ -58,6 +58,18 @@ export interface SemanticRecallOptions {
    * Messages below this threshold will be filtered out
    */
   threshold?: number;
+
+  /**
+   * Metadata filter for semantic search queries, combined with the scope filter using `$and`.
+   * While a filter is set, messages are embedded with their thread's metadata, so it can match
+   * thread metadata.
+   *
+   * @example
+   * ```typescript
+   * filter: { projectId: { $eq: 'project-a' } }
+   * ```
+   */
+  filter?: VectorFilter;
 
   /**
    * Index name for the vector store
@@ -132,6 +144,7 @@ export class SemanticRecall implements Processor {
   private messageRange: { before: number; after: number };
   private scope: 'thread' | 'resource';
   private threshold?: number;
+  private filter?: VectorFilter;
   private indexName?: string;
   private logger?: IMastraLogger;
   private embedderOptions?: MastraEmbeddingOptions;
@@ -159,6 +172,7 @@ export class SemanticRecall implements Processor {
     this.topK = options.topK ?? DEFAULT_TOP_K;
     this.scope = options.scope ?? 'resource'; // Default to 'resource' to match main's behavior
     this.threshold = options.threshold;
+    this.filter = options.filter;
     this.indexName = options.indexName;
     this.logger = options.logger;
     this.embedderOptions = options.embedderOptions;
@@ -427,7 +441,9 @@ export class SemanticRecall implements Processor {
       metadata?: Record<string, any>;
     }> = [];
 
-    const filter = this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId };
+    const scopeFilter = this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId };
+    // Same combination as Memory.recall(), so agent runs and direct recall return the same messages.
+    const filter = this.filter ? { $and: [scopeFilter, this.filter] } : scopeFilter;
     if (this.isSelfEmbedding) {
       // `queryText` is not on the shared QueryVectorParams; only self-embedding stores accept
       // it, and they are the only ones reached here.
@@ -611,6 +627,15 @@ export class SemanticRecall implements Processor {
         return messageList || messages;
       }
 
+      // With a filter set, embeddings carry the thread's metadata so the filter can match them, as
+      // Memory.saveMessages() does. It is read from storage because durable and recovered runs put
+      // only the thread id in the memory context, and metadata can change during a run. Without a
+      // filter, writes stay unchanged: some stores reject nested metadata values, and a rejected
+      // upsert here is only logged.
+      const threadMetadata = this.filter
+        ? ((await this.storage.getThreadById({ threadId }))?.metadata ?? thread?.metadata)
+        : undefined;
+
       const indexName = this.indexName || this.getDefaultIndexName();
 
       // Collect all embeddings first
@@ -682,6 +707,7 @@ export class SemanticRecall implements Processor {
           }
           ids.push(message.id);
           metadataList.push({
+            ...threadMetadata,
             message_id: message.id,
             thread_id: threadId,
             resource_id: resourceId || '',
