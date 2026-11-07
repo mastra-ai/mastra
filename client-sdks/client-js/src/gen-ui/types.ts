@@ -75,13 +75,9 @@ export interface GenUISurface {
   /** Number of envelopes applied to this surface. Deterministic over replay. */
   revision: number;
   status: GenUISurfaceStatus;
-  /** Agent-owned spec. Client-local edits of `state` live in the GenUI state store, not here. */
+  /** Agent-owned spec. Edits the user makes to bound `state` are overlaid on the client, never written here. */
   spec: GenUISpec;
-  /** Surface revision at which each element last changed. Lets actions from an outdated element be rejected. */
-  elementRevisions: Record<string, number>;
   placement: GenUIPlacement;
-  catalogId?: string;
-  catalogVersion?: string;
   title?: string;
   source?: GenUISurfaceSource;
   error?: string;
@@ -101,14 +97,11 @@ export type GenUIOperation =
        */
       replace?: boolean;
       placement?: GenUIPlacement;
-      catalogId?: string;
-      catalogVersion?: string;
       title?: string;
       source?: GenUISurfaceSource;
     }
   /** Apply RFC 6902 patches to the spec, in order. */
   | { op: 'patch'; patches: GenUIPatch[] }
-  | { op: 'replaceSpec'; spec: GenUISpec }
   | { op: 'setStatus'; status: GenUISurfaceStatus; error?: string }
   | { op: 'deleteSurface' };
 
@@ -142,7 +135,6 @@ export interface GenUILimits {
   maxTreeDepth: number;
   maxOperationsPerEnvelope: number;
   maxPatchesPerOperation: number;
-  maxIdLength: number;
   maxChildrenPerElement: number;
   /** Max serialized size (UTF-16 code units) of a surface's spec, state included. */
   maxSpecSize: number;
@@ -161,7 +153,6 @@ export const DEFAULT_GENUI_LIMITS: Readonly<GenUILimits> = Object.freeze({
   maxTreeDepth: 32,
   maxOperationsPerEnvelope: 200,
   maxPatchesPerOperation: 500,
-  maxIdLength: 128,
   maxChildrenPerElement: 200,
   maxSpecSize: 262_144,
   maxValueDepth: 24,

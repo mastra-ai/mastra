@@ -1,12 +1,10 @@
-import {
-  GENUI_DATA_PART_TYPE,
-  parsePartialJSON,
-  validateModelInputSync,
-  validateSchemaSync,
-} from '@mastra/client-js/gen-ui';
-import type { GenUISurface, JSONObject, JSONValue, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
+import { JSONUIProvider } from '@json-render/react';
+import type { EventHandle } from '@json-render/react';
+import { GENUI_DATA_PART_TYPE, parsePartialJSON } from '@mastra/client-js/gen-ui';
+import type { GenUISurface, JSONObject, JSONValue } from '@mastra/client-js/gen-ui';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
+import type { z } from 'zod/v4';
 import type { DataPart, DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
 import { GenUIProvider, GenUIToolCallScope, useGenUIController, useGenUIToolApproval } from './context';
 import type { GenUIController } from './controller';
@@ -14,6 +12,7 @@ import type { GenUIToolCallProps, GenUIToolPhase } from './registry';
 import { GenUIErrorBoundary, SurfaceFrame, resolveFallbacks } from './surface';
 import { normalizeToolPart } from './tool-parts';
 import type { NormalizedToolCall } from './tool-parts';
+import { validate, validateModelInput } from './validate';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -75,10 +74,10 @@ function resolvePhase(call: NormalizedToolCall, approvalKind: 'approval' | 'susp
   return call.phase;
 }
 
-function validateOptional(schema: StandardSchemaV1 | undefined, value: unknown, fromModel = false) {
+function validateOptional(schema: z.ZodType | undefined, value: unknown, fromModel = false) {
   if (value === undefined) return { value: undefined };
   if (!schema) return { value };
-  const result = fromModel ? validateModelInputSync(schema, value) : validateSchemaSync(schema, value);
+  const result = fromModel ? validateModelInput(schema, value) : validate(schema, value);
   return result.ok ? { value: result.value } : { value: undefined, error: result.error };
 }
 
@@ -115,17 +114,17 @@ function BackendToolView({ call }: { call: NormalizedToolCall }) {
   return <Rendered {...props} />;
 }
 
-/** A registered component the model invoked as a frontend tool. */
+/** A catalog component the model invoked as a frontend tool. */
 function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; componentName: string }) {
   const controller = useGenUIController();
   const entry = controller.registry.components[componentName]!;
+  const Rendered = controller.registry.registry[componentName]!;
   const { Fallback, Loading } = resolveFallbacks(controller.registry.fallbacks);
   const partialArgs = partialArgsOf(call);
-  const validation =
-    call.phase === 'input-streaming' ? undefined : validateModelInputSync(entry.definition.schema, call.args);
+  const validation = call.phase === 'input-streaming' ? undefined : controller.validateProps(componentName, call.args);
 
   if (!validation) {
-    const Streaming = entry.definition.streaming;
+    const Streaming = entry.tool?.streaming;
     return Streaming && partialArgs ? <Streaming partialProps={partialArgs} /> : <Loading component={componentName} />;
   }
   if (!validation.ok) {
@@ -137,12 +136,23 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
       />
     );
   }
-  const Rendered = entry.definition.component;
-  return <Rendered props={validation.value} emit={ignoreEvent} />;
+  // Catalog components may use json-render hooks, which need a provider even without a surface.
+  return (
+    <JSONUIProvider registry={controller.registry.registry}>
+      <Rendered
+        element={{ type: componentName, props: validation.value as Record<string, unknown> }}
+        emit={ignoreEvent}
+        on={unboundEvent}
+        loading={false}
+      />
+    </JSONUIProvider>
+  );
 }
 
 /** Component tools have no surface to bind actions in, so their events go nowhere. */
 const ignoreEvent = () => {};
+const UNBOUND: EventHandle = Object.freeze({ emit: ignoreEvent, shouldPreventDefault: false, bound: false });
+const unboundEvent = () => UNBOUND;
 
 /** The surface created by a surface tool call, anchored at the call's position in the message. */
 function SurfaceToolView({ call }: { call: NormalizedToolCall }) {

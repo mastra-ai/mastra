@@ -1,4 +1,4 @@
-import { addByPath, applySpecStreamPatch, getByPath } from '@json-render/core';
+import { addByPath, applySpecPatch, getByPath } from '@json-render/core';
 
 import { DEFAULT_GENUI_LIMITS, GENUI_PROTOCOL_VERSION } from './types';
 import type {
@@ -6,12 +6,9 @@ import type {
   GenUIEnvelope,
   GenUILimits,
   GenUIOperation,
-  GenUIPatch,
   GenUISpec,
   GenUIState,
   GenUISurface,
-  JSONObject,
-  JSONValue,
 } from './types';
 import { checkGenUISpec, parseGenUIEnvelope } from './validate';
 
@@ -27,22 +24,6 @@ export const resolveGenUILimits = (limits?: Partial<GenUILimits>): GenUILimits =
 /** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIState(): GenUIState {
   return { surfaces: {}, surfaceOrder: [], seenEventIds: {}, buffered: {}, diagnostics: [] };
-}
-
-/** Structural equality for JSON values. */
-export function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): boolean {
-  if (a === b) return true;
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
-  if (Array.isArray(a)) {
-    const other = b as JSONValue[];
-    return a.length === other.length && a.every((item, index) => jsonEqual(item, other[index]));
-  }
-  const objA = a as JSONObject;
-  const objB = b as JSONObject;
-  const keysA = Object.keys(objA);
-  if (keysA.length !== Object.keys(objB).length) return false;
-  return keysA.every(key => Object.prototype.hasOwnProperty.call(objB, key) && jsonEqual(objA[key], objB[key]));
 }
 
 class OperationError extends Error {
@@ -64,120 +45,54 @@ const markSeen = (state: GenUIState, eventId: string): GenUIState => ({
   seenEventIds: { ...state.seenEventIds, [eventId]: true },
 });
 
-type Container = Record<string, unknown> | unknown[];
+const EMPTY_SPEC: GenUISpec = { root: '', elements: {} };
 
-const pointerSegments = (pointer: string) =>
-  pointer
-    .split('/')
-    .slice(1)
-    .map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+type CreateSurface = Extract<GenUIOperation, { op: 'createSurface' }>;
 
-const isContainer = (value: unknown): value is Container => typeof value === 'object' && value !== null;
-
-/**
- * Working copy of one surface's spec while an envelope applies. Patches go through json-render's
- * RFC 6902 helpers, which mutate in place, so every container on a patch's path is shallow-copied
- * first: the previous spec is never touched and untouched elements keep their identity.
- */
-class SpecDraft {
-  private readonly owned = new WeakSet<object>();
-  spec: GenUISpec;
-
-  constructor(base: GenUISpec) {
-    this.spec = { ...base };
-    this.owned.add(this.spec);
-  }
-
-  replace(spec: GenUISpec) {
-    this.spec = spec;
-    this.owned.add(spec);
-  }
-
-  /** Copy every container from the root down to the parent of the pointer's target. */
-  private own(pointer: string) {
-    const segments = pointerSegments(pointer);
-    let current: Container = this.spec as unknown as Container;
-    for (const segment of segments.slice(0, -1)) {
-      const key: string | number = Array.isArray(current) ? Number(segment) : segment;
-      const child = (current as Record<string | number, unknown>)[key];
-      if (!isContainer(child)) return;
-      if (!this.owned.has(child)) {
-        const copy: Container = Array.isArray(child) ? [...child] : { ...child };
-        this.owned.add(copy);
-        (current as Record<string | number, unknown>)[key] = copy;
-        current = copy;
-      } else {
-        current = child;
-      }
-    }
-  }
-
-  apply(patch: GenUIPatch) {
-    this.own(patch.path);
-    if (patch.op === 'move') this.own(patch.from!);
-    const target = this.spec as unknown as Record<string, unknown>;
-    if (patch.op === 'copy') {
-      // A copy must not share containers with its source, or a later write to one would change both.
-      addByPath(target, patch.path, structuredClone(getByPath(target, patch.from!)));
-      return;
-    }
-    applySpecStreamPatch(target, patch);
-  }
-}
-
-const createSurfaceBase = (
-  envelope: GenUIEnvelope,
-  op: Extract<GenUIOperation, { op: 'createSurface' }>,
-): GenUISurface => {
+/** Header of a new surface, or of an existing one that a `createSurface` with `replace` rebuilds in place. */
+const surfaceHeader = (envelope: GenUIEnvelope, op: CreateSurface, existing?: GenUISurface): GenUISurface => {
   const surface: GenUISurface = {
     id: envelope.surfaceId,
     protocolVersion: GENUI_PROTOCOL_VERSION,
-    revision: 0,
+    revision: existing?.revision ?? 0,
     status: 'streaming',
-    spec: op.spec ?? { root: '', elements: {} },
-    elementRevisions: {},
-    placement: op.placement ?? 'inline',
-    anchorEventId: envelope.eventId,
+    spec: structuredClone(op.spec ?? EMPTY_SPEC),
+    placement: op.placement ?? existing?.placement ?? 'inline',
+    anchorEventId: existing?.anchorEventId ?? envelope.eventId,
   };
-  if (op.catalogId !== undefined) surface.catalogId = op.catalogId;
-  if (op.catalogVersion !== undefined) surface.catalogVersion = op.catalogVersion;
   if (op.title !== undefined) surface.title = op.title;
-  if (op.source !== undefined) surface.source = op.source;
+  const source = op.source ?? existing?.source;
+  if (source !== undefined) surface.source = source;
   return surface;
 };
 
-/** Header of an existing surface that a `createSurface` with `replace` rebuilds; the spec follows as a `replaceSpec`. */
-const rebuildSurfaceBase = (
-  existing: GenUISurface,
-  op: Extract<GenUIOperation, { op: 'createSurface' }>,
-): GenUISurface => {
-  const { error: _error, title: _title, ...rest } = existing;
-  const surface: GenUISurface = { ...rest, status: 'streaming', placement: op.placement ?? existing.placement };
-  if (op.title !== undefined) surface.title = op.title;
-  if (op.catalogId !== undefined) surface.catalogId = op.catalogId;
-  if (op.catalogVersion !== undefined) surface.catalogVersion = op.catalogVersion;
-  if (op.source !== undefined) surface.source = op.source;
-  return surface;
-};
-
-/** Apply an envelope's operations to a surface, or throw an `OperationError`. `null` means deleted. */
+/**
+ * Apply an envelope's operations to a surface, or throw an `OperationError`. `null` means deleted.
+ * Patches run through json-render on a private copy of the spec, so the previous state is never touched.
+ */
 const applyOperations = (
   base: GenUISurface,
   operations: readonly GenUIOperation[],
   limits: GenUILimits,
+  created: boolean,
 ): GenUISurface | null => {
   let surface = base;
-  // A new surface always goes through the draft so its initial spec gets element revisions.
-  let draft = base.revision === 0 ? new SpecDraft(base.spec) : undefined;
+  let spec: GenUISpec | undefined = created ? base.spec : undefined;
   for (const op of operations) {
     switch (op.op) {
       case 'createSurface':
         throw new OperationError('invalid-operation', 'createSurface must be the first operation of an envelope');
       case 'patch':
-        draft ??= new SpecDraft(surface.spec);
+        spec ??= structuredClone(surface.spec);
         for (const patch of op.patches) {
+          const target = spec as unknown as Record<string, unknown>;
           try {
-            draft.apply(patch);
+            if (patch.op === 'copy') {
+              // json-render copies by reference; a later write to either side would change both.
+              addByPath(target, patch.path, structuredClone(getByPath(target, patch.from!)));
+            } else {
+              applySpecPatch(spec, patch);
+            }
           } catch (error) {
             throw new OperationError(
               'invalid-operation',
@@ -185,10 +100,6 @@ const applyOperations = (
             );
           }
         }
-        break;
-      case 'replaceSpec':
-        draft ??= new SpecDraft(surface.spec);
-        draft.replace(op.spec);
         break;
       case 'setStatus': {
         const { error: _error, ...rest } = surface;
@@ -205,18 +116,12 @@ const applyOperations = (
         return null;
     }
   }
-  if (draft) {
-    const checked = checkGenUISpec(draft.spec, limits);
+  if (spec) {
+    const checked = checkGenUISpec(spec, limits);
     if (!checked.ok) {
       throw new OperationError(checked.code === 'invalid' ? 'invalid-operation' : checked.code, checked.error);
     }
-    const revision = base.revision + 1;
-    const previous = base.spec.elements;
-    const elementRevisions: Record<string, number> = {};
-    for (const [id, element] of Object.entries(draft.spec.elements)) {
-      elementRevisions[id] = element === previous[id] ? (base.elementRevisions[id] ?? revision) : revision;
-    }
-    return { ...surface, spec: draft.spec, elementRevisions, revision };
+    surface = { ...surface, spec };
   }
   return { ...surface, revision: base.revision + 1 };
 };
@@ -256,16 +161,10 @@ const applyEnvelope = (state: GenUIState, envelope: GenUIEnvelope, limits: GenUI
   }
 
   const rebuilding = creating && existing !== undefined;
-  const base = rebuilding
-    ? rebuildSurfaceBase(existing, first)
-    : (existing ?? createSurfaceBase(envelope, first as Extract<GenUIOperation, { op: 'createSurface' }>));
-  const operations: readonly GenUIOperation[] = rebuilding
-    ? [{ op: 'replaceSpec', spec: first.spec ?? { root: '', elements: {} } }, ...rest]
-    : creating
-      ? rest
-      : envelope.operations;
   try {
-    const surface = applyOperations(base, operations, limits);
+    const surface = creating
+      ? applyOperations(surfaceHeader(envelope, first, existing), rest, limits, true)
+      : applyOperations(existing!, envelope.operations, limits, false);
     if (!surface) {
       const { [surfaceId]: _removed, ...surfaces } = state.surfaces;
       return { state: { ...state, surfaces, surfaceOrder: state.surfaceOrder.filter(id => id !== surfaceId) } };
@@ -319,7 +218,7 @@ const flushBuffered = (state: GenUIState, surfaceId: string, limits: GenUILimits
  * Accepts an untrusted envelope (the `data` of a `data-gen-ui` part) and
  * returns the next immutable state. Duplicate event ids return the same state
  * reference, so replaying a stream or reloading history is idempotent.
- * Unchanged surfaces and spec elements keep their object identity (structural sharing).
+ * Surfaces an envelope does not touch keep their object identity.
  * Invalid envelopes never throw — they are recorded in `state.diagnostics`.
  *
  * @experimental Generative UI is in beta and may change without notice.

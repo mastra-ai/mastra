@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { defineCatalog } from '@json-render/core';
+import type { BaseComponentProps } from '@json-render/react';
+import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,9 +11,8 @@ import { z } from 'zod';
 import { server } from '../../test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
-import type { GenUIChatActionHandler } from '../controller';
-import { createGenUI, defineGenUIChatAction, defineGenUIComponent, GenUISurfaceOutlet, useGenUIChat } from '../index';
-import type { GenUIRegistry } from '../index';
+import { createGenUI, GenUISurfaceOutlet, useGenUIChat } from '../index';
+import type { GenUIActionHandlers, GenUIRegistry } from '../index';
 import { AGENT_URL, chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
 
 type Chat = ReturnType<typeof useGenUIChat>;
@@ -23,8 +25,8 @@ function GenUIChat({
   agentId = 'agent-1',
   outlet = false,
 }: {
-  genUI: GenUIRegistry;
-  actions?: Record<string, GenUIChatActionHandler<any>>;
+  genUI: GenUIRegistry<any>;
+  actions?: GenUIActionHandlers<any>;
   initialMessages?: MastraDBMessage[];
   agentId?: string;
   outlet?: boolean;
@@ -67,21 +69,22 @@ const send = async (message: string, agentId = 'agent-1') => {
 };
 
 let weatherMounts = 0;
-const WeatherCard = defineGenUIComponent({
-  description: 'Current weather for a city',
-  schema: z.object({ city: z.string(), temp: z.number() }),
-  component: ({ props }) => {
-    useEffect(() => {
-      weatherMounts++;
-    }, []);
-    return (
-      <p data-testid="weather">
-        {props.city}: {props.temp}°
-      </p>
-    );
-  },
+const weatherProps = z.object({ city: z.string(), temp: z.number() });
+function WeatherCard({ props }: BaseComponentProps<z.infer<typeof weatherProps>>) {
+  useEffect(() => {
+    weatherMounts++;
+  }, []);
+  return (
+    <p data-testid="weather">
+      {props.city}: {props.temp}°
+    </p>
+  );
+}
+const weatherCatalog = defineCatalog(schema, {
+  components: { WeatherCard: { description: 'Current weather for a city', props: weatherProps } },
+  actions: {},
 });
-const weatherOnly = createGenUI({ components: { WeatherCard } });
+const weatherOnly = createGenUI({ catalog: weatherCatalog, components: { WeatherCard } });
 
 const create = (eventId: string, temp = 21, extra: object = {}) => ({
   version: 1,
@@ -315,20 +318,22 @@ describe('useGenUIChat — surfaces outside the chat', () => {
           : sseResponse([chunk('start'), finish('stop')]);
       }),
     );
-    const Refreshable = defineGenUIComponent({
-      schema: z.object({ city: z.string(), temp: z.number() }),
-      events: ['press'],
-      component: ({ props, emit }) => <button onClick={() => emit('press')}>Refresh {props.city}</button>,
+    const catalog = defineCatalog(schema, {
+      components: { WeatherCard: { props: weatherProps, events: ['press'] } },
+      actions: { refresh: { params: z.object({ city: z.string() }) } },
     });
-    const refresh = defineGenUIChatAction({
-      schema: z.object({ city: z.string() }),
-      handle: async ({ city }, { chat }) => {
-        await chat.sendMessage(`Refresh ${city}`);
+    const genUI = createGenUI({
+      catalog,
+      components: {
+        WeatherCard: ({ props, emit }) => <button onClick={() => emit('press')}>Refresh {props.city}</button>,
       },
     });
-    renderWithProviders(
-      <GenUIChat genUI={createGenUI({ components: { WeatherCard: Refreshable } })} actions={{ refresh }} outlet />,
-    );
+    const actions: GenUIActionHandlers<typeof catalog> = {
+      refresh: async ({ city }, { chat }) => {
+        await chat.sendMessage(`Refresh ${city}`);
+      },
+    };
+    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} outlet />);
     expect(screen.getByText('No panel')).toBeTruthy();
     await send('weather');
 
@@ -372,59 +377,46 @@ describe('useGenUIChat — surfaces outside the chat', () => {
   });
 });
 
-describe('useGenUIChat — capability mismatch', () => {
-  const catalogued = createGenUI({ components: { WeatherCard }, catalog: { id: 'acme', version: '2.3.0' } });
-  const withCatalog = (eventId: string, surfaceId: string, catalogId: string, catalogVersion: string) => ({
-    version: 1,
-    eventId,
-    surfaceId,
-    operations: [
-      {
-        op: 'createSurface',
-        catalogId,
-        catalogVersion,
-        spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: surfaceId, temp: 1 } } } },
-      },
-    ],
-  });
-
-  it('renders surfaces built for a compatible catalog and falls back for other catalogs or major versions', async () => {
+describe('useGenUIChat — protocol mismatch', () => {
+  it('renders surfaces in the supported protocol version and falls back for others', async () => {
     server.use(
       http.post(STREAM_URL, () =>
         sseResponse([
           chunk('start'),
-          genUIChunk(withCatalog('e1', 'minor', 'acme', '2.9.1')),
-          genUIChunk(withCatalog('e2', 'major', 'acme', '3.0.0')),
-          genUIChunk(withCatalog('e3', 'other', 'globex', '2.3.0')),
-          genUIChunk({ version: 2, eventId: 'e4', surfaceId: 'future', operations: [] }),
+          genUIChunk(create('e1')),
+          genUIChunk({ version: 2, eventId: 'e2', surfaceId: 'future', operations: [] }),
           finish('stop'),
         ]),
       ),
     );
-    renderWithProviders(<GenUIChat genUI={catalogued} />);
+    renderWithProviders(<GenUIChat genUI={weatherOnly} />);
     await send('weather');
 
     await waitFor(() => expect(screen.getAllByTestId('weather')).toHaveLength(1));
-    expect(screen.getByTestId('weather').textContent).toBe('minor: 1°');
     const fallbacks = [...document.querySelectorAll('[data-genui-fallback]')].map(node => node.textContent);
-    expect(fallbacks).toHaveLength(3);
-    expect(fallbacks.filter(text => /different version/.test(text ?? ''))).toHaveLength(2);
+    expect(fallbacks).toHaveLength(1);
+    expect(fallbacks[0]).toMatch(/unsupported GenUI protocol version 2/);
   });
 });
 
 describe('useGenUIChat — multiple agents', () => {
   it('each chat renders only its own registry, with isolated surfaces and state', async () => {
-    const TaskList = defineGenUIComponent({
-      schema: z.object({ items: z.array(z.string()) }),
-      component: ({ props }) => (
-        <ul data-testid="tasks">
-          {props.items.map(item => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      ),
+    const taskCatalog = defineCatalog(schema, {
+      components: { TaskList: { props: z.object({ items: z.array(z.string()) }) } },
+      actions: {},
     });
-    const taskOnly = createGenUI({ components: { TaskList } });
+    const taskOnly = createGenUI({
+      catalog: taskCatalog,
+      components: {
+        TaskList: ({ props }) => (
+          <ul data-testid="tasks">
+            {props.items.map(item => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ),
+      },
+    });
     const taskSurface = {
       version: 1,
       eventId: 'e1',
@@ -459,7 +451,7 @@ describe('useGenUIChat — multiple agents', () => {
     expect(within(first).queryByTestId('tasks')).toBeNull();
 
     expect(chats['agent-2']!.genUI.controller.getState().surfaces['shared-id']!.source).toEqual({ agentId: 'agent-2' });
-    chats['agent-1']!.genUI.controller.state.set({ kind: 'surface', id: 'shared-id' }, { picked: 1 });
-    expect(chats['agent-2']!.genUI.controller.state.get({ kind: 'surface', id: 'shared-id' }).value).toEqual({});
+    chats['agent-1']!.genUI.controller.edits.set('shared-id', { '/picked': { value: 1 } });
+    expect(chats['agent-2']!.genUI.controller.edits.get('shared-id')).toEqual({});
   });
 });

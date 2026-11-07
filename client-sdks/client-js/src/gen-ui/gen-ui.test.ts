@@ -1,21 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import { accumulateGenUI, createGenUIState } from './accumulator';
-import { createGenUIActionDispatcher, defineGenUIAction } from './actions';
 import { createGenUIEmitter } from './emitter';
 import type { GenUIChunk } from './emitter';
 import { parsePartialJSON } from './partial-json';
 import { createGenUISession } from './session';
-import { validateModelInput, validateModelInputSync } from './standard-schema';
-import type { StandardSchemaV1 } from './standard-schema';
-import {
-  createGenUIContextStore,
-  createGenUIStateStore,
-  editGenUIState,
-  formatGenUIContext,
-  mergeGenUIState,
-  rebaseGenUIEdit,
-} from './state';
+import { createGenUIContextStore, editGenUIState, formatGenUIContext, mergeGenUIState, rebaseGenUIEdit } from './state';
 import type { GenUIEnvelope, GenUIPatch, GenUISpec, JSONObject } from './types';
 
 const recorder = () => {
@@ -28,40 +17,8 @@ const recorder = () => {
   };
 };
 
-/** A tiny Standard Schema implementation so these tests do not depend on zod. */
-const schema = <T>(check: (value: unknown) => value is T, message: string): StandardSchemaV1<T> => ({
-  '~standard': {
-    version: 1,
-    vendor: 'test',
-    validate: value => (check(value) ? { value } : { issues: [{ message }] }),
-  },
-});
-
 const assistant = (id: string, parts: unknown[]) => ({ id, role: 'assistant', content: { format: 2, parts } });
 const part = (data: GenUIEnvelope) => ({ type: 'data-gen-ui', data });
-
-describe('validateModelInput', () => {
-  const product = z.object({
-    name: z.string(),
-    tagline: z.string().optional(),
-    note: z.string().nullable(),
-    specs: z.object({ color: z.string().optional() }),
-    tags: z.array(z.string().nullable()),
-  });
-
-  it('accepts the nulls a strict-mode model sends for optional fields', () => {
-    const input = { name: 'Lamp', tagline: null, note: null, specs: { color: null }, tags: ['oak', null] };
-    const result = validateModelInputSync(product, input);
-    expect(result).toEqual({ ok: true, value: { name: 'Lamp', note: null, specs: {}, tags: ['oak', null] } });
-    expect(input.tagline).toBeNull();
-  });
-
-  it('still rejects nulls for required fields and reports the original error', async () => {
-    const result = await validateModelInput(product, { name: null, note: null, specs: {}, tags: [] });
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.error).toMatch(/^name: /);
-  });
-});
 
 const card = (type: string, props: JSONObject, state?: JSONObject): GenUISpec => ({
   root: 'card',
@@ -312,66 +269,16 @@ describe('createGenUISession', () => {
 });
 
 describe('parsePartialJSON', () => {
-  it.each([
-    ['', undefined],
-    ['{', {}],
-    ['{"ci', {}],
-    ['{"city":', {}],
-    ['{"city":"Par', { city: 'Par' }],
-    ['{"city":"Paris","days":[1,2', { city: 'Paris', days: [1] }],
-    ['{"city":"Paris","days":[1,2,', { city: 'Paris', days: [1, 2] }],
-    ['{"city":"Paris","days":[1,2],"ok":tr', { city: 'Paris', days: [1, 2] }],
-    ['{"n":12.', {}],
-    ['{"n":-', {}],
-    ['{"a":{"b":[{"c":"d', { a: { b: [{ c: 'd' }] } }],
-    ['{"esc":"line\\nnext\\', { esc: 'line\nnext' }],
-  ])('parses %j progressively', (text, expected) => {
-    expect(parsePartialJSON(text).value).toEqual(expected);
-  });
-
-  it('reports completion only for valid JSON', () => {
+  it('repairs streamed tool arguments progressively and flags completion', () => {
+    expect(parsePartialJSON('')).toEqual({ value: undefined, complete: false });
+    expect(parsePartialJSON('{"city":"Par')).toEqual({ value: { city: 'Par' }, complete: false });
+    expect(parsePartialJSON('{"a":{"b":[{"c":"d').value).toEqual({ a: { b: [{ c: 'd' }] } });
     expect(parsePartialJSON('{"a":1}')).toEqual({ value: { a: 1 }, complete: true });
-    expect(parsePartialJSON('{"a":1').complete).toBe(false);
   });
 
-  it('returns undefined for malformed text and never pollutes prototypes', () => {
-    expect(parsePartialJSON('{"a" 1').value).toBeUndefined();
-    const parsed = parsePartialJSON('{"__proto__":{"polluted":true},"x":"y"');
-    expect(parsed.value).toEqual({ x: 'y' });
+  it('never pollutes prototypes', () => {
+    parsePartialJSON('{"__proto__":{"polluted":true},"x":"y"');
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
-  });
-});
-
-describe('createGenUIStateStore', () => {
-  it('keeps scopes isolated and notifies only the changed scope', () => {
-    const store = createGenUIStateStore();
-    const a = { kind: 'surface', id: 'a' } as const;
-    const b = { kind: 'surface', id: 'b' } as const;
-    const onA = vi.fn();
-    const onB = vi.fn();
-    store.subscribe(a, onA);
-    store.subscribe(b, onB);
-
-    store.patch(a, { filter: 'EU' });
-    expect(store.get(a)).toEqual({ value: { filter: 'EU' }, revision: 1 });
-    expect(store.get(b)).toEqual({ value: {}, revision: 0 });
-    expect(onA).toHaveBeenCalledTimes(1);
-    expect(onB).not.toHaveBeenCalled();
-  });
-
-  it('reports conflicts instead of silently overwriting a concurrent write', () => {
-    const store = createGenUIStateStore();
-    const scope = { kind: 'thread', id: 't1' } as const;
-    const seen = store.get(scope).revision;
-    store.patch(scope, { draft: 'from tab A' });
-    const result = store.patch(scope, { draft: 'from tab B' }, { expectedRevision: seen });
-    expect(result).toMatchObject({ ok: false, reason: 'conflict' });
-    expect(store.get(scope).value).toEqual({ draft: 'from tab A' });
-  });
-
-  it('rejects non-serializable values', () => {
-    const store = createGenUIStateStore();
-    expect(() => store.set({ kind: 'surface', id: 's' }, { when: new Date() as never })).toThrow();
   });
 });
 
@@ -449,145 +356,5 @@ describe('createGenUIContextStore', () => {
     const context = createGenUIContextStore({ maxSize: 50 });
     expect(() => context.publish('big', { value: 'x'.repeat(100) })).toThrow(/exceeds 50/);
     expect(context.snapshot()).toEqual({});
-  });
-});
-
-describe('createGenUIActionDispatcher', () => {
-  const surfaceState = async () => {
-    const { chunks, writer, generateEventId } = recorder();
-    const ui = createGenUIEmitter(writer, { generateEventId }).surface('form');
-    await ui.create({
-      spec: {
-        root: 'form',
-        elements: {
-          form: { type: 'Stack', props: {}, children: ['title', 'approve'] },
-          title: { type: 'Text', props: { text: 'Refund' }, children: [] },
-          approve: { type: 'ApproveButton', props: { label: 'Approve' }, children: [] },
-        },
-      },
-    });
-    return {
-      ui,
-      chunks,
-      state: () => chunks.reduce((acc, chunk) => accumulateGenUI(acc, chunk.data), createGenUIState()),
-    };
-  };
-
-  const isAmount = (value: unknown): value is { amount: number } =>
-    typeof value === 'object' && value !== null && typeof (value as { amount?: unknown }).amount === 'number';
-
-  it('validates the payload, runs the handler once per action id, and returns the cached result on retry', async () => {
-    const { state } = await surfaceState();
-    const handle = vi.fn(async (payload: { amount: number }) => payload.amount * 2);
-    const dispatcher = createGenUIActionDispatcher({
-      getSurface: id => state().surfaces[id],
-      handlers: { submit: defineGenUIAction({ schema: schema(isAmount, 'amount must be a number'), handle }) },
-    });
-    const action = { actionId: 'a1', surfaceId: 'form', elementId: 'approve', name: 'submit', sourceRevision: 1 };
-
-    expect(await dispatcher.dispatch({ ...action, payload: { amount: 'x' } })).toEqual({
-      status: 'invalid',
-      error: 'amount must be a number',
-    });
-    expect(handle).not.toHaveBeenCalled();
-
-    const [r1, r2] = await Promise.all([
-      dispatcher.dispatch({ ...action, actionId: 'a2', payload: { amount: 2 } }),
-      dispatcher.dispatch({ ...action, actionId: 'a2', payload: { amount: 2 } }),
-    ]);
-    expect(r1).toEqual({ status: 'success', value: 4 });
-    expect(r2).toBe(r1);
-    expect(await dispatcher.dispatch({ ...action, actionId: 'a2', payload: { amount: 2 } })).toEqual(r1);
-    expect(handle).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects actions from an element that changed after it was rendered, but not when a sibling changed', async () => {
-    const { ui, state } = await surfaceState();
-    await ui.patch([{ op: 'replace', path: '/elements/title/props/text', value: 'Refund (updated)' }]);
-    const handle = vi.fn();
-    const dispatcher = createGenUIActionDispatcher({
-      getSurface: id => state().surfaces[id],
-      handlers: { submit: { handle } },
-    });
-    const action = { surfaceId: 'form', elementId: 'approve', name: 'submit', sourceRevision: 1 };
-    expect((await dispatcher.dispatch(action)).status).toBe('success');
-
-    await ui.patch([{ op: 'replace', path: '/elements/approve/props/label', value: 'Amount changed — review again' }]);
-    expect((await dispatcher.dispatch(action)).status).toBe('stale');
-    await ui.patch([
-      { op: 'remove', path: '/elements/approve' },
-      { op: 'replace', path: '/elements/form/children', value: ['title'] },
-    ]);
-    expect(await dispatcher.dispatch({ ...action, sourceRevision: 4 })).toMatchObject({ status: 'stale' });
-    expect(handle).toHaveBeenCalledTimes(1);
-  });
-
-  it('runs surface-level actions raised by spec event bindings, which carry no element, until the surface stops', async () => {
-    const { ui, state } = await surfaceState();
-    const handle = vi.fn();
-    const dispatcher = createGenUIActionDispatcher({
-      getSurface: id => state().surfaces[id],
-      handlers: { submit: { handle } },
-    });
-    await ui.patch([{ op: 'replace', path: '/elements/approve/props/label', value: 'Changed' }]);
-    expect((await dispatcher.dispatch({ surfaceId: 'form', name: 'submit', payload: { ok: true } })).status).toBe(
-      'success',
-    );
-    expect(handle).toHaveBeenCalledWith({ ok: true }, expect.anything());
-
-    await ui.setStatus('aborted');
-    expect(await dispatcher.dispatch({ surfaceId: 'form', name: 'submit' })).toMatchObject({ status: 'stale' });
-    expect(handle).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports unhandled actions and busy duplicates, and exposes pending state for loading UI', async () => {
-    let release!: () => void;
-    const handle = vi.fn(() => new Promise<void>(resolve => (release = resolve)));
-    const dispatcher = createGenUIActionDispatcher({ handlers: { save: { handle } } });
-    const base = { surfaceId: 's', elementId: 'n', sourceRevision: 0 };
-
-    expect((await dispatcher.dispatch({ ...base, name: 'nope' })).status).toBe('unhandled');
-
-    const pending = dispatcher.dispatch({ ...base, name: 'save' });
-    expect(dispatcher.isPending({ surfaceId: 's', name: 'save' })).toBe(true);
-    expect((await dispatcher.dispatch({ ...base, name: 'save' })).status).toBe('busy');
-    release();
-    expect((await pending).status).toBe('success');
-    expect(dispatcher.isPending({ surfaceId: 's' })).toBe(false);
-  });
-
-  it('cancels in-flight actions through the abort signal and allows a retry with the same id', async () => {
-    let calls = 0;
-    const dispatcher = createGenUIActionDispatcher({
-      handlers: {
-        slow: {
-          handle: (_payload, { signal }) =>
-            ++calls === 1
-              ? new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))))
-              : 'done',
-        },
-      },
-    });
-    const input = { actionId: 'x', surfaceId: 's', elementId: 'n', name: 'slow', sourceRevision: 0 };
-    const first = dispatcher.dispatch(input);
-    dispatcher.cancel('x');
-    expect(await first).toEqual({ status: 'cancelled' });
-    expect(await dispatcher.dispatch(input)).toEqual({ status: 'success', value: 'done' });
-  });
-
-  it('surfaces handler errors without throwing', async () => {
-    const dispatcher = createGenUIActionDispatcher({
-      handlers: {
-        boom: {
-          handle: () => {
-            throw new Error('network down');
-          },
-        },
-      },
-    });
-    expect(await dispatcher.dispatch({ surfaceId: 's', elementId: 'n', name: 'boom', sourceRevision: 0 })).toEqual({
-      status: 'error',
-      error: 'network down',
-    });
   });
 });

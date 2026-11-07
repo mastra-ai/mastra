@@ -1,115 +1,9 @@
+import { getByPath } from '@json-render/core';
+import { immutableSetByPath } from '@json-render/core/store-utils';
+
 import { resolveGenUILimits } from './accumulator';
 import type { GenUILimits, JSONObject, JSONValue } from './types';
-import { jsonSize, toSafeJSONObject, toSafeJSONValue } from './validate';
-
-/**
- * Explicit state scopes.
- * - `surface`: client-side state for one GenUI surface (form drafts, selections, filters).
- * - `thread`: client-side state shared by every surface in one conversation thread.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export type GenUIStateScope = { kind: 'surface'; id: string } | { kind: 'thread'; id: string };
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export const genUIScopeKey = (scope: GenUIStateScope): string => `${scope.kind}:${scope.id}`;
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUIStateEntry {
-  value: JSONObject;
-  /** Increments on every effective local write. Use it for compare-and-set. */
-  revision: number;
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export type GenUISetResult =
-  | { ok: true; entry: GenUIStateEntry }
-  | { ok: false; reason: 'conflict'; entry: GenUIStateEntry };
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUISetOptions {
-  /** Only write when the scope is still at this revision (optimistic concurrency between writers). */
-  expectedRevision?: number;
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export type GenUIStateUpdater = JSONObject | ((previous: JSONObject) => JSONObject);
-
-/**
- * Framework-agnostic, client-local state for GenUI.
- *
- * Writes never leave the browser on their own. Data reaches the agent only
- * when application code explicitly passes it in an action payload, a message,
- * or {@link GenUIContextStore.snapshot}.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export interface GenUIStateStore {
-  get(scope: GenUIStateScope): GenUIStateEntry;
-  set(scope: GenUIStateScope, update: GenUIStateUpdater, options?: GenUISetOptions): GenUISetResult;
-  /** Shallow-merge keys into a scope. */
-  patch(scope: GenUIStateScope, values: JSONObject, options?: GenUISetOptions): GenUISetResult;
-  reset(scope: GenUIStateScope): void;
-  /** Subscribe to one scope. Listeners only fire when that scope changes. */
-  subscribe(scope: GenUIStateScope, listener: () => void): () => void;
-  /** Drop every scope (e.g. when the owning chat unmounts or switches thread). */
-  clear(): void;
-}
-
-const EMPTY_ENTRY: GenUIStateEntry = Object.freeze({ value: Object.freeze({}) as JSONObject, revision: 0 });
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export function createGenUIStateStore(options: { limits?: Partial<GenUILimits> } = {}): GenUIStateStore {
-  const limits = resolveGenUILimits(options.limits);
-  const entries = new Map<string, GenUIStateEntry>();
-  const listeners = new Map<string, Set<() => void>>();
-
-  const notify = (key: string) => listeners.get(key)?.forEach(listener => listener());
-
-  const get = (scope: GenUIStateScope) => entries.get(genUIScopeKey(scope)) ?? EMPTY_ENTRY;
-
-  const set: GenUIStateStore['set'] = (scope, update, setOptions) => {
-    const key = genUIScopeKey(scope);
-    const current = get(scope);
-    if (setOptions?.expectedRevision !== undefined && setOptions.expectedRevision !== current.revision) {
-      return { ok: false, reason: 'conflict', entry: current };
-    }
-    const raw = typeof update === 'function' ? update(current.value) : update;
-    const value = toSafeJSONObject(raw, limits.maxValueDepth, key);
-    if (jsonSize(value) > limits.maxSpecSize) {
-      throw new Error(`GenUI state for ${key} exceeds ${limits.maxSpecSize} characters`);
-    }
-    const entry = { value, revision: current.revision + 1 };
-    entries.set(key, entry);
-    notify(key);
-    return { ok: true, entry };
-  };
-
-  return {
-    get,
-    set,
-    patch: (scope, values, setOptions) => set(scope, previous => ({ ...previous, ...values }), setOptions),
-    reset(scope) {
-      const key = genUIScopeKey(scope);
-      if (entries.delete(key)) notify(key);
-    },
-    subscribe(scope, listener) {
-      const key = genUIScopeKey(scope);
-      let set = listeners.get(key);
-      if (!set) listeners.set(key, (set = new Set()));
-      set.add(listener);
-      return () => {
-        set.delete(listener);
-        if (set.size === 0) listeners.delete(key);
-      };
-    },
-    clear() {
-      const keys = [...entries.keys()];
-      entries.clear();
-      keys.forEach(notify);
-    },
-  };
-}
+import { toSafeJSONValue } from './validate';
 
 /**
  * A user edit of one path of the agent's spec state. `base` is the agent's value at that path when the
@@ -132,14 +26,13 @@ function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): boolean 
     return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => jsonEqual(item, b[i]));
   }
   const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every(key => hasOwn(b, key) && jsonEqual(a[key], b[key]));
+  return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && jsonEqual(a[key], b[key]));
 }
-
-const hasOwn = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key);
 
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function segmentsOf(pointer: string): string[] {
+/** json-render's path helpers don't reject prototype keys on write, so pointers are checked here first. */
+function checkPointer(pointer: string): string {
   if (!pointer.startsWith('/')) throw new Error(`state path "${pointer}" must be a JSON pointer starting with "/"`);
   const segments = pointer
     .split('/')
@@ -148,38 +41,11 @@ function segmentsOf(pointer: string): string[] {
   if (segments.some(segment => FORBIDDEN_SEGMENTS.has(segment))) {
     throw new Error(`state path "${pointer}" is not allowed`);
   }
-  return segments;
+  return pointer;
 }
 
-function readPath(state: JSONObject, pointer: string): JSONValue | undefined {
-  let current: JSONValue | undefined = state;
-  for (const segment of segmentsOf(pointer)) {
-    if (typeof current !== 'object' || current === null || !hasOwn(current, segment)) return undefined;
-    current = (current as JSONObject)[segment];
-  }
-  return current;
-}
-
-/** Copy-on-write set: only the containers along `pointer` are copied. */
-function writePath(state: JSONObject, pointer: string, value: JSONValue): JSONObject {
-  const segments = segmentsOf(pointer);
-  const write = (container: JSONValue | undefined, index: number): JSONValue => {
-    const segment = segments[index]!;
-    const isIndex = /^(\d+|-)$/.test(segment);
-    const copy: JSONObject | JSONValue[] = Array.isArray(container)
-      ? [...container]
-      : typeof container === 'object' && container !== null
-        ? { ...container }
-        : isIndex
-          ? []
-          : {};
-    const key = Array.isArray(copy) && segment === '-' ? String(copy.length) : segment;
-    const next = index === segments.length - 1 ? value : write((copy as JSONObject)[key], index + 1);
-    (copy as JSONObject)[key] = next;
-    return copy;
-  };
-  return segments.length ? (write(state, 0) as JSONObject) : state;
-}
+const readPath = (state: JSONObject, pointer: string) =>
+  getByPath(state, checkPointer(pointer)) as JSONValue | undefined;
 
 const isWithin = (pointer: string, ancestor: string) => pointer.startsWith(`${ancestor}/`);
 
@@ -231,7 +97,7 @@ export function mergeGenUIState(state: JSONObject, edits: GenUIEdits): { value: 
   for (const pointer of Object.keys(edits).sort((a, b) => a.length - b.length)) {
     const edit = edits[pointer]!;
     const agentValue = readPath(state, pointer);
-    value = writePath(value, pointer, edit.value);
+    value = immutableSetByPath(value, checkPointer(pointer), edit.value) as JSONObject;
     if (!jsonEqual(agentValue, edit.base) && !jsonEqual(agentValue, edit.value)) conflicts.push(pointer);
   }
   return { value, conflicts };
@@ -285,7 +151,7 @@ export function createGenUIContextStore(
       notify();
     },
     unpublish(key) {
-      if (!Object.prototype.hasOwnProperty.call(entries, key)) return;
+      if (!Object.hasOwn(entries, key)) return;
       const { [key]: _removed, ...rest } = entries;
       entries = rest;
       notify();

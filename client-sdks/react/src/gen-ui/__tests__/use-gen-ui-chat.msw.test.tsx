@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
+import { defineCatalog } from '@json-render/core';
 import { useBoundProp } from '@json-render/react';
+import type { BaseComponentProps } from '@json-render/react';
+import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
@@ -10,12 +13,9 @@ import { useChat } from '../../agent/hooks';
 import { server } from '../../test/msw-server';
 import { renderWithProviders } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
-import type { GenUIChatActionHandler } from '../controller';
 import {
   createGenUI,
   createGenUIController,
-  defineGenUIChatAction,
-  defineGenUIComponent,
   defineGenUIToolRenderer,
   GenUIProvider,
   GenUISurfaceOutlet,
@@ -23,24 +23,30 @@ import {
   useGenUIPublishedContext,
   useGenUIToolResponse,
 } from '../index';
-import type { GenUIRegistry } from '../index';
+import type { CreateGenUIOptions, GenUIActionHandlers, GenUIRegistry } from '../index';
 import { chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
 
-let weatherMounts = 0;
-const WeatherCard = defineGenUIComponent({
+const weatherCard = {
   description: 'Current weather for a city',
-  schema: z.object({ city: z.string(), temp: z.number() }),
-  component: ({ props }) => {
-    useEffect(() => {
-      weatherMounts++;
-    }, []);
-    return (
-      <p data-testid="weather">
-        {props.city}: {props.temp}°
-      </p>
-    );
-  },
-});
+  props: z.object({ city: z.string(), temp: z.number() }),
+};
+
+let weatherMounts = 0;
+function WeatherCard({ props }: BaseComponentProps<{ city: string; temp: number }>) {
+  useEffect(() => {
+    weatherMounts++;
+  }, []);
+  return (
+    <p data-testid="weather">
+      {props.city}: {props.temp}°
+    </p>
+  );
+}
+
+const weatherCatalog = defineCatalog(schema, { components: { WeatherCard: weatherCard }, actions: {} });
+type WeatherOptions = Omit<CreateGenUIOptions<typeof weatherCatalog>, 'catalog' | 'components'>;
+const weatherUI = (options: WeatherOptions = {}) =>
+  createGenUI({ catalog: weatherCatalog, components: { WeatherCard }, ...options });
 
 type Chat = ReturnType<typeof useGenUIChat>;
 let current: Chat;
@@ -51,8 +57,8 @@ function GenUIChat({
   initialMessages,
   outlet,
 }: {
-  genUI: GenUIRegistry;
-  actions?: Record<string, GenUIChatActionHandler<any>>;
+  genUI: GenUIRegistry<any>;
+  actions?: GenUIActionHandlers<any>;
   initialMessages?: MastraDBMessage[];
   outlet?: boolean;
 }) {
@@ -99,7 +105,7 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
     weatherMounts = 0;
     const stream = controllableStream();
     server.use(http.post(STREAM_URL, () => stream.response()));
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard } })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI()} />);
 
     await send('Weather in Paris?');
     act(() =>
@@ -152,7 +158,7 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
   it('shows a surface as failed when the tool that was building it throws', async () => {
     const stream = controllableStream();
     server.use(http.post(STREAM_URL, () => stream.response()));
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard } })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI()} />);
 
     await send('Weather in Paris?');
     act(() =>
@@ -226,7 +232,7 @@ describe('useGenUIChat — declarative surfaces from the native stream', () => {
         ]),
       ),
     );
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard } })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI()} />);
     await send('go');
 
     expect(await screen.findByText(/"WeatherCard" received invalid data/)).toBeTruthy();
@@ -258,7 +264,7 @@ describe('useGenUIChat — opt-in', () => {
       plain = useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1' });
       return null;
     }
-    const registry = createGenUI({ components: { WeatherCard: { ...WeatherCard, tool: true } } });
+    const registry = weatherUI({ componentTools: { WeatherCard: true } });
     renderWithProviders(
       <>
         <PlainChat />
@@ -281,20 +287,23 @@ describe('useGenUIChat — opt-in', () => {
   });
 
   it('refuses a surface tool with no components the model can compose', () => {
-    const Custom = defineGenUIComponent({
-      schema: z.object({}),
-      declarative: false,
-      component: () => null,
-    });
+    const catalog = defineCatalog(schema, { components: { Custom: { props: z.object({}) } }, actions: {} });
     expect(() => createGenUI({ surfaceTool: true })).toThrow(/surface tool/);
-    expect(() => createGenUI({ components: { Custom }, surfaceTool: true })).toThrow(/surface tool/);
+    expect(() =>
+      createGenUI({
+        catalog,
+        components: { Custom: () => null },
+        componentTools: { Custom: { declarative: false } },
+        surfaceTool: true,
+      }),
+    ).toThrow(/surface tool/);
   });
 
   it('refuses a client tool that collides with a GenUI frontend tool', () => {
     function Colliding() {
       useGenUIChat({
         agentId: 'agent-1',
-        genUI: createGenUI({ components: { WeatherCard: { ...WeatherCard, tool: true } } }),
+        genUI: weatherUI({ componentTools: { WeatherCard: true } }),
         clientTools: { ui_WeatherCard: { id: 'ui_WeatherCard', description: 'mine' } },
       });
       return null;
@@ -304,6 +313,14 @@ describe('useGenUIChat — opt-in', () => {
 });
 
 describe('useGenUIChat — tool UI', () => {
+  const bookingCatalog = defineCatalog(schema, {
+    components: {
+      ConfirmBooking: { description: 'Ask the user to confirm a booking', props: z.object({ hotel: z.string() }) },
+    },
+    actions: {},
+  });
+  const confirmBookingTool = { mode: 'interactive', responseSchema: z.object({ confirmed: z.boolean() }) } as const;
+
   it('renders a backend tool with progressively streamed arguments, then its validated output', async () => {
     const stream = controllableStream();
     server.use(http.post(STREAM_URL, () => stream.response()));
@@ -360,9 +377,7 @@ describe('useGenUIChat — tool UI', () => {
         ]);
       }),
     );
-    renderWithProviders(
-      <GenUIChat genUI={createGenUI({ components: { WeatherCard: { ...WeatherCard, tool: true } } })} />,
-    );
+    renderWithProviders(<GenUIChat genUI={weatherUI({ componentTools: { WeatherCard: true } })} />);
     await send('Weather in Oslo?');
 
     expect((await screen.findByTestId('weather')).textContent).toBe('Oslo: 4°');
@@ -392,22 +407,12 @@ describe('useGenUIChat — tool UI', () => {
         return sseResponse([finish('stop')]);
       }),
     );
-    const Product = defineGenUIComponent({
-      schema: z.object({ name: z.string(), tagline: z.string().optional() }),
-      tool: true,
-      component: ({ props }) => <p data-testid="product">{props.tagline ?? `${props.name} (no tagline)`}</p>,
-    });
-    const Pick = defineGenUIComponent({
-      schema: z.object({ label: z.string(), hint: z.string().optional() }),
-      tool: { mode: 'interactive', responseSchema: z.object({ choice: z.string() }) },
-      component: ({ props }) => {
-        const { canRespond, respond } = useGenUIToolResponse();
-        return (
-          <button disabled={!canRespond} onClick={() => void respond({ choice: 'oak' })}>
-            Pick {props.label}
-          </button>
-        );
+    const catalog = defineCatalog(schema, {
+      components: {
+        Product: { props: z.object({ name: z.string(), tagline: z.string().optional() }) },
+        Pick: { props: z.object({ label: z.string(), hint: z.string().optional() }) },
       },
+      actions: {},
     });
     const search = defineGenUIToolRenderer({
       argsSchema: z.object({ query: z.string(), limit: z.number().optional() }),
@@ -415,7 +420,26 @@ describe('useGenUIChat — tool UI', () => {
         <p data-testid="search">{validationError ?? `${args?.query} limit=${String(args?.limit)}`}</p>
       ),
     });
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { Product, Pick }, tools: { search } })} />);
+    const genUI = createGenUI({
+      catalog,
+      components: {
+        Product: ({ props }) => <p data-testid="product">{props.tagline ?? `${props.name} (no tagline)`}</p>,
+        Pick: ({ props }) => {
+          const { canRespond, respond } = useGenUIToolResponse();
+          return (
+            <button disabled={!canRespond} onClick={() => respond({ choice: 'oak' })}>
+              Pick {props.label}
+            </button>
+          );
+        },
+      },
+      componentTools: {
+        Product: true,
+        Pick: { mode: 'interactive', responseSchema: z.object({ choice: z.string() }) },
+      },
+      tools: { search },
+    });
+    renderWithProviders(<GenUIChat genUI={genUI} />);
     await send('Show me a lamp');
 
     expect((await screen.findByTestId('product')).textContent).toBe('Lamp (no tagline)');
@@ -447,20 +471,21 @@ describe('useGenUIChat — tool UI', () => {
         ]);
       }),
     );
-    const ConfirmBooking = defineGenUIComponent({
-      description: 'Ask the user to confirm a booking',
-      schema: z.object({ hotel: z.string() }),
-      tool: { mode: 'interactive', responseSchema: z.object({ confirmed: z.boolean() }) },
-      component: ({ props }) => {
-        const { canRespond, respond } = useGenUIToolResponse();
-        return (
-          <button disabled={!canRespond} onClick={() => void respond({ confirmed: true })}>
-            Confirm {props.hotel}
-          </button>
-        );
+    const genUI = createGenUI({
+      catalog: bookingCatalog,
+      components: {
+        ConfirmBooking: ({ props }) => {
+          const { canRespond, respond } = useGenUIToolResponse();
+          return (
+            <button disabled={!canRespond} onClick={() => respond({ confirmed: true })}>
+              Confirm {props.hotel}
+            </button>
+          );
+        },
       },
+      componentTools: { ConfirmBooking: confirmBookingTool },
     });
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { ConfirmBooking } })} />);
+    renderWithProviders(<GenUIChat genUI={genUI} />);
     await send('Book the Ritz');
 
     const button = await screen.findByRole('button', { name: 'Confirm Ritz' });
@@ -486,16 +511,17 @@ describe('useGenUIChat — tool UI', () => {
         ]);
       }),
     );
-    let respond: ((value: unknown) => Promise<{ ok: boolean }>) | undefined;
-    const ConfirmBooking = defineGenUIComponent({
-      description: 'Ask the user to confirm a booking',
-      schema: z.object({ hotel: z.string() }),
-      tool: { mode: 'interactive', responseSchema: z.object({ confirmed: z.boolean() }) },
-      component: ({ props }) => {
-        const response = useGenUIToolResponse();
-        respond = response.respond;
-        return <button disabled={!response.canRespond}>Confirm {props.hotel}</button>;
+    let respond: ((value: unknown) => { ok: boolean }) | undefined;
+    const genUI = createGenUI({
+      catalog: bookingCatalog,
+      components: {
+        ConfirmBooking: ({ props }) => {
+          const response = useGenUIToolResponse();
+          respond = response.respond;
+          return <button disabled={!response.canRespond}>Confirm {props.hotel}</button>;
+        },
       },
+      componentTools: { ConfirmBooking: confirmBookingTool },
     });
     const history: MastraDBMessage[] = [
       {
@@ -520,14 +546,12 @@ describe('useGenUIChat — tool UI', () => {
         },
       },
     ];
-    renderWithProviders(
-      <GenUIChat genUI={createGenUI({ components: { ConfirmBooking } })} initialMessages={history} />,
-    );
+    renderWithProviders(<GenUIChat genUI={genUI} initialMessages={history} />);
 
     const button = screen.getByRole('button', { name: 'Confirm Ritz' }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(current.isRunning).toBe(false);
-    expect((await respond!({ confirmed: true })).ok).toBe(false);
+    expect(respond!({ confirmed: true }).ok).toBe(false);
     expect(bodies).toHaveLength(0);
 
     await send('Actually, not the Ritz');
@@ -564,7 +588,7 @@ describe('useGenUIChat — surface tool', () => {
         ]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} />);
     await send('Weather in Rome?');
 
     expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
@@ -581,10 +605,14 @@ describe('useGenUIChat — surface tool', () => {
 
   it('shows a surface element by element while the model is still writing it, without remounting once it completes', async () => {
     weatherMounts = 0;
-    const List = defineGenUIComponent({
-      description: 'A vertical list',
-      schema: z.object({}),
-      component: ({ children }) => <div data-testid="list">{children}</div>,
+    const catalog = defineCatalog(schema, {
+      components: { WeatherCard: weatherCard, List: { description: 'A vertical list', props: z.object({}) } },
+      actions: {},
+    });
+    const genUI = createGenUI({
+      catalog,
+      components: { WeatherCard, List: ({ children }) => <div data-testid="list">{children}</div> },
+      surfaceTool: true,
     });
     const args = {
       surfaceId: 'cities',
@@ -613,7 +641,7 @@ describe('useGenUIChat — surface tool', () => {
         ]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard, List }, surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={genUI} />);
     await send('Weather in Rome and Oslo?');
 
     act(() =>
@@ -705,7 +733,7 @@ describe('useGenUIChat — surface tool', () => {
         return sseResponse([finish('stop')]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} />);
     await send('Weather in Rome?');
 
     expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
@@ -745,31 +773,34 @@ describe('useGenUIChat — surface tool', () => {
         return sseResponse([finish('stop')]);
       }),
     );
-    const Stack = defineGenUIComponent({
-      schema: z.object({}),
-      component: ({ children }) => <div>{children}</div>,
+    const catalog = defineCatalog(schema, {
+      components: {
+        Stack: { props: z.object({}) },
+        WeatherCard: weatherCard,
+        FollowUp: { props: z.object({ label: z.string() }), events: ['press'] },
+      },
+      actions: { ask: { params: z.object({ prompt: z.string() }) } },
     });
-    const FollowUp = defineGenUIComponent({
-      schema: z.object({ label: z.string() }),
-      events: ['press'],
-      component: ({ props, emit }) => (
-        <button type="button" onClick={() => emit('press')}>
-          {props.label}
-        </button>
-      ),
+    const genUI = createGenUI({
+      catalog,
+      components: {
+        Stack: ({ children }) => <div>{children}</div>,
+        WeatherCard,
+        FollowUp: ({ props, emit }) => (
+          <button type="button" onClick={() => emit('press')}>
+            {props.label}
+          </button>
+        ),
+      },
+      surfaceTool: true,
     });
     const asked: string[] = [];
     function App() {
       const chat = useGenUIChat({
         agentId: 'agent-1',
         threadId: 'thread-1',
-        genUI: createGenUI({ components: { Stack, WeatherCard, FollowUp }, surfaceTool: true }),
-        actions: {
-          ask: {
-            schema: z.object({ prompt: z.string() }),
-            handle: ({ prompt }: { prompt: string }) => void asked.push(prompt),
-          },
-        },
+        genUI,
+        actions: { ask: ({ prompt }) => void asked.push(prompt) },
       });
       current = chat;
       return (
@@ -815,7 +846,7 @@ describe('useGenUIChat — surface tool', () => {
         return sseResponse([finish('stop')]);
       }),
     );
-    const genUI = createGenUI({ components: { WeatherCard }, surfaceTool: { placements: ['inline', 'panel'] } });
+    const genUI = weatherUI({ surfaceTool: { placements: ['inline', 'panel'] } });
     renderWithProviders(<GenUIChat genUI={genUI} outlet />);
     await send('Weather?');
 
@@ -835,7 +866,7 @@ describe('useGenUIChat — surface tool', () => {
   });
 
   it('offers only inline surfaces when the app declares no other placements', async () => {
-    const genUI = createGenUI({ components: { WeatherCard }, surfaceTool: true });
+    const genUI = weatherUI({ surfaceTool: true });
     const controller = createGenUIController({ registry: genUI });
     const schema = JSON.stringify((controller.clientTools.ui_surface as { inputSchema: unknown }).inputSchema);
     expect(schema.match(/"placement":\{[^}]*\}/)?.[0]).toContain('"enum":["inline"]');
@@ -865,7 +896,7 @@ describe('useGenUIChat — surface tool', () => {
         return sseResponse([finish('stop')]);
       }),
     );
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} />);
+    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} />);
     await send('Do it');
 
     await waitFor(() => expect(bodies).toHaveLength(3));
@@ -903,9 +934,7 @@ describe('useGenUIChat — surface tool', () => {
         },
       },
     ];
-    renderWithProviders(
-      <GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} initialMessages={history} />,
-    );
+    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} initialMessages={history} />);
     expect(screen.getByTestId('weather').textContent).toBe('Rome: 30°');
   });
 
@@ -939,9 +968,7 @@ describe('useGenUIChat — surface tool', () => {
         },
       },
     ];
-    renderWithProviders(
-      <GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} initialMessages={history} />,
-    );
+    renderWithProviders(<GenUIChat genUI={weatherUI({ surfaceTool: true })} initialMessages={history} />);
     expect(screen.getAllByTestId('weather').map(node => node.textContent)).toEqual(['Rome: 12°']);
     expect(document.querySelectorAll('[data-genui-surface="weather"]')).toHaveLength(1);
   });
@@ -981,34 +1008,33 @@ describe('useGenUIChat — actions and context', () => {
         ]);
       }),
     );
-    const CityFilter = defineGenUIComponent({
-      schema: z.object({ value: z.string() }),
-      events: ['submit'],
-      component: ({ props, bindings, emit }) => {
-        const [city, setCity] = useBoundProp(props.value, bindings?.value);
-        return (
-          <form
-            onSubmit={event => {
-              event.preventDefault();
-              emit('submit');
-            }}
-          >
-            <label>
-              City
-              <input value={city} onChange={event => setCity(event.target.value)} />
-            </label>
-            <button type="submit">Apply</button>
-          </form>
-        );
-      },
+    const catalog = defineCatalog(schema, {
+      components: { CityFilter: { props: z.object({ value: z.string() }), events: ['submit'] } },
+      actions: { applyFilter: { params: z.object({ city: z.string().min(1) }) } },
     });
-    const applyFilter = defineGenUIChatAction({
-      schema: z.object({ city: z.string().min(1) }),
-      handle: async ({ city }, { chat }) => {
+    const CityFilter = ({ props, bindings, emit }: BaseComponentProps<{ value: string }>) => {
+      const [city, setCity] = useBoundProp(props.value, bindings?.value);
+      return (
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            emit('submit');
+          }}
+        >
+          <label>
+            City
+            <input value={city} onChange={event => setCity(event.target.value)} />
+          </label>
+          <button type="submit">Apply</button>
+        </form>
+      );
+    };
+    const actions: GenUIActionHandlers<typeof catalog> = {
+      applyFilter: async ({ city }, { chat }) => {
         await chat.sendMessage(`Filter by ${city}`);
       },
-    });
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { CityFilter } })} actions={{ applyFilter }} />);
+    };
+    renderWithProviders(<GenUIChat genUI={createGenUI({ catalog, components: { CityFilter } })} actions={actions} />);
     await send('show filters');
 
     const input = await screen.findByLabelText('City');
@@ -1024,6 +1050,63 @@ describe('useGenUIChat — actions and context', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(bodies).toHaveLength(2));
     expect(JSON.stringify(bodies[1]!.messages)).toContain('Filter by Lyon');
+  });
+
+  // A double click on a button whose handler calls the agent sent the same request twice.
+  it('runs an action once while a previous run on the same surface is still in flight', async () => {
+    server.use(
+      http.post(STREAM_URL, () =>
+        sseResponse([
+          chunk('start'),
+          genUIChunk({
+            version: 1,
+            eventId: 'b1',
+            surfaceId: 'book',
+            operations: [
+              {
+                op: 'createSurface',
+                spec: { root: 'go', elements: { go: { type: 'Book', props: {}, on: { press: { action: 'book' } } } } },
+              },
+            ],
+          }),
+          finish('stop'),
+        ]),
+      ),
+    );
+    const catalog = defineCatalog(schema, {
+      components: { Book: { props: z.object({}), events: ['press'] } },
+      actions: { book: { params: z.object({}) } },
+    });
+    const genUI = createGenUI({
+      catalog,
+      components: {
+        Book: ({ emit }) => (
+          <button type="button" onClick={() => emit('press')}>
+            Book
+          </button>
+        ),
+      },
+    });
+    let runs = 0;
+    let finishRun!: () => void;
+    const actions: GenUIActionHandlers<typeof catalog> = {
+      book: () => {
+        runs++;
+        return new Promise<void>(resolve => (finishRun = resolve));
+      },
+    };
+    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} />);
+    await send('book it');
+    const button = await screen.findByRole('button', { name: 'Book' });
+    await waitFor(() => expect(current.isRunning).toBe(false));
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(runs).toBe(1));
+    await act(async () => finishRun());
+
+    fireEvent.click(button);
+    await waitFor(() => expect(runs).toBe(2));
   });
 
   it('actions and renderers defined inline see the app state of the latest render', async () => {
@@ -1052,22 +1135,27 @@ describe('useGenUIChat — actions and context', () => {
         ]),
       ),
     );
-    const PlanPicker = defineGenUIComponent({
-      schema: z.object({}),
-      component: ({ emit }) => (
-        <button type="button" onClick={() => emit('press')}>
-          Choose
-        </button>
-      ),
+    const catalog = defineCatalog(schema, {
+      components: { PlanPicker: { props: z.object({}), events: ['press'] } },
+      actions: { choose: { params: z.object({}) } },
     });
-    const registry = createGenUI({ components: { PlanPicker } });
+    const registry = createGenUI({
+      catalog,
+      components: {
+        PlanPicker: ({ emit }) => (
+          <button type="button" onClick={() => emit('press')}>
+            Choose
+          </button>
+        ),
+      },
+    });
     const chosen: string[] = [];
     function App({ currency }: { currency: string }) {
       const chat = useGenUIChat({
         agentId: 'agent-1',
         threadId: 'thread-1',
         genUI: registry,
-        actions: { choose: { handle: () => void chosen.push(currency) } },
+        actions: { choose: () => void chosen.push(currency) },
         renderers: { Text: part => <span>{`${currency}: ${part.text}`}</span> },
       });
       current = chat;
@@ -1113,7 +1201,7 @@ describe('useGenUIChat — actions and context', () => {
       const chat = useGenUIChat({
         agentId: 'agent-1',
         threadId: 'thread-1',
-        genUI: createGenUI({ components: { WeatherCard } }),
+        genUI: weatherUI(),
         initialMessages: history,
         renderers,
       });
