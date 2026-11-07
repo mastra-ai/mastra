@@ -38,11 +38,6 @@ on:
 
 permissions: {}
 
-env:
-  # Workers per unit test job. Much of the suite waits on timers and leases rather than the CPU,
-  # so running more test files than the runner's 4 vCPUs keeps the CPU busy.
-  VITEST_MAX_WORKERS: 8
-
 jobs:
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
@@ -94,7 +89,6 @@ jobs:
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-unit-${{ matrix.shard }}.json \
             --shard=${{ matrix.shard }}/8 \
-            --maxWorkers=${{ env.VITEST_MAX_WORKERS }} \
             --passWithNoTests
 
       - name: Upload test results
@@ -159,7 +153,6 @@ jobs:
         run: |
           mapfile -t test_files < /tmp/affected-outputs/shards/shard-${{ matrix.shard }}.txt
           pnpm vitest run \
-            --maxWorkers=${{ env.VITEST_MAX_WORKERS }} \
             --project 'unit:*' --project 'typecheck:*' \
             --reporter=blob \
             --reporter=verbose \
