@@ -3,7 +3,17 @@
  * pinned to an exact version; `pi-tui-internals.test.ts` fails if these shapes
  * move on upgrade.
  */
-import type { Box, Component, OverlayOptions, SelectItem, SelectList, TUI } from '@earendil-works/pi-tui';
+import type {
+  Box,
+  Component,
+  Input,
+  OverlayOptions,
+  SelectItem,
+  SelectList,
+  SettingItem,
+  SettingsList,
+  TUI,
+} from '@earendil-works/pi-tui';
 
 export interface OverlayEntry {
   component: Component;
@@ -36,6 +46,17 @@ interface SelectListInternals {
   maxVisible: number;
 }
 
+interface SettingsListInternals {
+  items: SettingItem[];
+  filteredItems: SettingItem[];
+  selectedIndex: number;
+  maxVisible: number;
+  searchEnabled: boolean;
+  searchInput: Input | undefined;
+  submenuComponent: Component | null;
+  activateItem(): void;
+}
+
 export function tuiInternals(ui: TUI): TuiInternals {
   return ui as unknown as TuiInternals;
 }
@@ -46,4 +67,8 @@ export function boxPadding(box: Box): BoxInternals {
 
 export function selectListInternals(list: SelectList): SelectListInternals {
   return list as unknown as SelectListInternals;
+}
+
+export function settingsListInternals(list: SettingsList): SettingsListInternals {
+  return list as unknown as SettingsListInternals;
 }

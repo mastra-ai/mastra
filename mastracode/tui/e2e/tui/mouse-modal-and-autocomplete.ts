@@ -111,6 +111,21 @@ export const mouseModalAndAutocompleteScenario = {
     expectTracking(terminal, 'none', 'after the autocomplete item was applied');
     runtime.printScreen('after clicking slash item', terminal);
 
+    // /settings is a SettingsList: clicking a row opens its submenu, clicking a submenu row picks it.
+    terminal.keyCtrlC();
+    await runtime.waitForScreenTextAbsent(/\/mouse-bravo/i, terminal, 8_000);
+    terminal.submit('/settings');
+    await runtime.waitForScreenText(/Notifications/, terminal, 20_000);
+    await terminal.flushInput?.();
+    await runtime.sleep(200);
+    terminal.clickText?.('Notifications');
+    await runtime.waitForScreenText(/Terminal bell/, terminal, 8_000);
+    await terminal.flushInput?.();
+    await runtime.sleep(200);
+    terminal.clickText?.('Terminal bell');
+    await runtime.waitForScreenText(/Notifications\s+Bell/, terminal, 8_000);
+    runtime.printScreen('after picking a settings value by mouse', terminal);
+
     terminal.keyCtrlC();
     terminal.keyCtrlC();
   },

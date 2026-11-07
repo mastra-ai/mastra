@@ -1,11 +1,12 @@
-import { Box, SelectList, Text, TUI } from '@earendil-works/pi-tui';
-import type { SelectItem, Terminal } from '@earendil-works/pi-tui';
+import { Box, SelectList, SettingsList, Text, TUI } from '@earendil-works/pi-tui';
+import type { Component, SelectItem, SettingItem, Terminal } from '@earendil-works/pi-tui';
 import xterm from '@xterm/headless';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CustomEditor } from '../components/custom-editor.js';
+import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
-import { getEditorTheme, getSelectListTheme } from '../theme.js';
+import { getEditorTheme, getSelectListTheme, getSettingsListTheme } from '../theme.js';
 import { MouseController } from './controller.js';
 
 const ROWS = 30;
@@ -117,6 +118,13 @@ function modalWithList(ui: TUI, count: number) {
   return { list, selected, handle };
 }
 
+function modalWith(ui: TUI, list: Component & { handleInput(data: string): void }) {
+  const box = Object.assign(new Box(4, 2), { handleInput: (data: string) => list.handleInput(data) });
+  box.addChild(new Text('Pick one', 0, 0));
+  box.addChild(list);
+  showModalOverlay(ui, box);
+}
+
 let harness: ReturnType<typeof createHarness> | undefined;
 afterEach(() => {
   harness?.controller.dispose();
@@ -222,5 +230,111 @@ describe('MouseController on the real pi-tui renderer', () => {
     harness.ui.stop();
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(harness.screen.modes.mouseTrackingMode).toBe('none');
+  });
+});
+
+describe('shared list components', () => {
+  it('a wrapped WrappingSelectList item is picked from any of its rows', async () => {
+    harness = createHarness();
+    const items: SelectItem[] = [
+      { value: 'short', label: 'short' },
+      { value: 'long', label: `long ${'word '.repeat(40)}tail-marker` },
+      { value: 'after', label: 'after' },
+    ];
+    const list = new WrappingSelectList(items, 5, getSelectListTheme());
+    const selected: string[] = [];
+    list.onSelect = item => selected.push(item.value);
+    modalWith(harness.ui, list);
+    await harness.render();
+
+    const continuation = harness.find('tail-marker');
+    await harness.hover(continuation.row, continuation.col);
+    await harness.render();
+    const first = harness.find('long word');
+    expect(harness.markedRows()).toEqual(
+      Array.from({ length: continuation.row - first.row + 1 }, (_, index) => first.row + index),
+    );
+
+    await harness.click(continuation.row, continuation.col);
+    expect(selected).toEqual(['long']);
+
+    const after = harness.find('after');
+    await harness.click(after.row, after.col);
+    expect(selected).toEqual(['long', 'after']);
+  });
+
+  it('clicking a multi-select WrappingSelectList row toggles its checkbox without confirming', async () => {
+    harness = createHarness();
+    const items: SelectItem[] = ['alpha', 'bravo', 'charlie'].map(value => ({ value, label: value }));
+    const list = new WrappingSelectList(items, 5, getSelectListTheme(), true);
+    const confirmed: string[][] = [];
+    list.onConfirmMulti = checked => confirmed.push(checked.map(item => item.value));
+    modalWith(harness.ui, list);
+    await harness.render();
+
+    const bravo = harness.find('bravo');
+    await harness.click(bravo.row, bravo.col);
+    await harness.render();
+    expect(harness.lineAt(bravo.row)).toContain('[x] bravo');
+    expect(confirmed).toEqual([]);
+
+    await harness.click(bravo.row, bravo.col);
+    await harness.render();
+    expect(harness.lineAt(bravo.row)).toContain('[ ] bravo');
+
+    const charlie = harness.find('charlie');
+    await harness.click(charlie.row, charlie.col);
+    harness.send('\r');
+    expect(confirmed).toEqual([['charlie']]);
+  });
+
+  it('SettingsList rows cycle values or open submenus, and submenu rows are clickable', async () => {
+    harness = createHarness();
+    const changes: Array<[string, string]> = [];
+    const items: SettingItem[] = [
+      { id: 'mode', label: 'Mode', currentValue: 'on', values: ['on', 'off'] },
+      {
+        id: 'color',
+        label: 'Color',
+        currentValue: 'red',
+        submenu: (_current, done) => {
+          const submenu = new SelectList(
+            ['red', 'green', 'blue'].map(value => ({ value, label: `shade-${value}` })),
+            5,
+            getSelectListTheme(),
+          );
+          submenu.onSelect = item => done(item.value);
+          return submenu;
+        },
+      },
+    ];
+    const list = new SettingsList(
+      items,
+      10,
+      getSettingsListTheme(),
+      (id, value) => changes.push([id, value]),
+      () => {},
+      {
+        enableSearch: true,
+      },
+    );
+    modalWith(harness.ui, list);
+    await harness.render();
+
+    const mode = harness.find('Mode');
+    await harness.click(mode.row, mode.col);
+    expect(changes).toEqual([['mode', 'off']]);
+
+    const color = harness.find('Color');
+    await harness.click(color.row, color.col);
+    await harness.render();
+    const green = harness.find('shade-green');
+    await harness.click(green.row, green.col);
+    await harness.render();
+    expect(changes).toEqual([
+      ['mode', 'off'],
+      ['color', 'green'],
+    ]);
+    expect(harness.find('Color').row).toBe(color.row);
   });
 });

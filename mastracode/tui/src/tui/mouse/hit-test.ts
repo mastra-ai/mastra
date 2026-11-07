@@ -8,10 +8,10 @@
  * target's rows, so it shows exactly what a click at that spot would pick
  * without changing the selection.
  */
-import { Box, Container, SelectList, Text } from '@earendil-works/pi-tui';
+import { Box, Container, SelectList, SettingsList, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
 
-import { boxPadding, selectListInternals } from './pi-tui-internals.js';
+import { boxPadding, selectListInternals, settingsListInternals } from './pi-tui-internals.js';
 
 export interface MousePoint {
   row: number;
@@ -55,6 +55,7 @@ export function locate(component: Component, point: MousePoint): MouseTarget | u
   if (point.row < 0 || point.col < 0 || point.col >= point.width) return undefined;
   if (isMouseAware(component)) return component.mouseTarget(point);
   if (component instanceof SelectList) return selectListTarget(component, point.row);
+  if (component instanceof SettingsList) return settingsListTarget(component, point);
 
   if (component instanceof Box) {
     const { paddingX, paddingY } = boxPadding(component);
@@ -100,6 +101,37 @@ function selectListTarget(list: SelectList, row: number): MouseTarget | undefine
     activate: () => {
       list.setSelectedIndex(index);
       list.onSelect?.(item);
+    },
+  };
+}
+
+/**
+ * Mirrors SettingsList.render: an open submenu replaces the list; otherwise an optional search box
+ * and blank row, then one row per visible setting. Clicks act like Enter (open submenu or cycle value).
+ */
+function settingsListTarget(list: SettingsList, point: MousePoint): MouseTarget | undefined {
+  const internals = settingsListInternals(list);
+  if (internals.submenuComponent) return locate(internals.submenuComponent, point);
+
+  const searchRows =
+    internals.searchEnabled && internals.searchInput ? internals.searchInput.render(point.width).length + 1 : 0;
+  const displayItems = internals.searchEnabled ? internals.filteredItems : internals.items;
+  const { selectedIndex, maxVisible } = internals;
+  const startIndex = Math.max(
+    0,
+    Math.min(selectedIndex - Math.floor(maxVisible / 2), displayItems.length - maxVisible),
+  );
+  const endIndex = Math.min(startIndex + maxVisible, displayItems.length);
+  const row = point.row - searchRows;
+  const index = startIndex + row;
+  if (row < 0 || index >= endIndex || !displayItems[index]) return undefined;
+
+  return {
+    top: point.row,
+    height: 1,
+    activate: () => {
+      internals.selectedIndex = index;
+      internals.activateItem();
     },
   };
 }
