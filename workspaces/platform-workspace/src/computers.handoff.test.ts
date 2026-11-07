@@ -230,8 +230,9 @@ describe('control handoff through a real agent', () => {
     await click.entered;
     const id = await computerIdOf(computers);
     const taken = computers.control(id, scope, { action: 'take' });
-    click.open();
+    // The human's take answers while the agent's click is still in flight.
     await expect(taken).resolves.toEqual({ holder: 'human', notified: true });
+    click.open();
     await expect(sent[0]!.result.accepted).resolves.toMatchObject({ action: 'deliver' });
     await consumed;
 
