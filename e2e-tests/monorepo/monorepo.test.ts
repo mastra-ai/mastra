@@ -410,6 +410,18 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
       expect(body).toEqual({ hasSession: false, screencastAvailable: true });
     });
 
+    it('does not mount the experimental computer viewer without MASTRA_EXPERIMENTAL_COMPUTER', async () => {
+      const res = await fetch(`http://localhost:${port}/api/computers/c1/session`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ threadId: 't', resourceId: 'r', mode: 'watch' }),
+      });
+      expect(res.status).toBe(404);
+      const connect = await fetch(`http://localhost:${port}/computer/c1/connect?ticket=x`, { redirect: 'manual' });
+      expect(connect.headers.get('set-cookie')).toBeNull();
+      expect(await connect.text()).not.toContain('mastra-computer-status');
+    });
+
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();
