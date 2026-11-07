@@ -1,10 +1,14 @@
-import { resolveGenUILimits } from '@mastra/client-js/gen-ui';
+import { JSONUIProvider, Renderer } from '@json-render/react';
+import type { ComponentRegistry, ComponentRenderProps } from '@json-render/react';
+import { toSafeJSONValue } from '@mastra/client-js/gen-ui';
 import type { GenUISurface } from '@mastra/client-js/gen-ui';
-import { Component, createContext, memo, useContext, useSyncExternalStore } from 'react';
+import { Component, createContext, useMemo, useState, useSyncExternalStore } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { GenUINodeScope, useGenUIController, useGenUINode, useGenUISurface } from './context';
+import { SurfaceScopeContext, useGenUIController, useGenUISurface } from './context';
+import type { GenUIController } from './controller';
 import { isCatalogCompatible } from './registry';
-import type { GenUIFallbackProps, GenUIFallbacks, GenUISurfaceStatusProps } from './registry';
+import type { GenUIFallbackProps, GenUIFallbacks, GenUIRegistry, GenUISurfaceStatusProps } from './registry';
+import { createGenUISurfaceStore } from './surface-store';
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export function DefaultGenUIFallback({ reason }: GenUIFallbackProps) {
@@ -97,81 +101,72 @@ function useSurfaceError(surfaceId: string): string | undefined {
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
-interface NodeViewProps {
-  surfaceId: string;
-  nodeId: string;
-  depth: number;
-}
-
-/** A surface the model is still writing, rendered in place of the controller's (not yet existing) one. */
-const PreviewSurfaceContext = createContext<GenUISurface | undefined>(undefined);
-
-const NodeView = memo(function NodeView({ surfaceId, nodeId, depth }: NodeViewProps) {
+/**
+ * Adapts a registered component to json-render's component contract: validates the resolved props
+ * against the component schema and contains render errors, so one bad element never blanks the surface.
+ */
+function ElementView({ element, children, emit, bindings, loading }: ComponentRenderProps) {
   const controller = useGenUIController();
-  const preview = useContext(PreviewSurfaceContext);
-  const liveNode = useGenUINode(surfaceId, nodeId);
-  const liveStatus = useSurfaceStatus(surfaceId);
-  const node = preview ? preview.nodes[nodeId] : liveNode;
-  const status = preview ? preview.status : liveStatus;
   const { Fallback, Loading } = resolveFallbacks(controller.registry.fallbacks);
-  const streaming = status === 'streaming';
-
-  if (depth > resolveGenUILimits(controller.registry.limits).maxTreeDepth) {
-    return <Fallback kind="invalid-surface" reason="This interface is nested too deeply to display." />;
-  }
-  if (!node) {
-    // Children may reference nodes that have not streamed in yet; a preview simply grows into them.
-    return streaming && !preview ? <Loading /> : null;
-  }
-  const entry = controller.registry.components[node.component];
-  const validation = controller.validateNodeProps(node);
+  const entry = controller.registry.components[element.type];
+  const validation = controller.validateElementProps(element.type, element.props);
   if (!entry || !validation) {
     return (
       <Fallback
         kind="unknown-component"
-        component={node.component}
-        reason={`The component "${node.component}" is not available in this app.`}
+        component={element.type}
+        reason={`The component "${element.type}" is not available in this app.`}
       />
     );
   }
   if (!validation.ok) {
-    if (streaming) return <Loading component={node.component} />;
+    if (loading) return <Loading component={element.type} />;
     return (
       <Fallback
         kind="invalid-props"
-        component={node.component}
-        reason={`"${node.component}" received invalid data: ${validation.error}`}
+        component={element.type}
+        reason={`"${element.type}" received invalid data: ${validation.error}`}
       />
     );
   }
-
-  const seen = new Set<string>();
-  const children = node.children.length
-    ? node.children.map((childId, index) => {
-        const key = seen.has(childId) ? `${childId}#${index}` : childId;
-        seen.add(childId);
-        return <NodeView key={key} surfaceId={surfaceId} nodeId={childId} depth={depth + 1} />;
-      })
-    : undefined;
   const Rendered = entry.definition.component;
-
   return (
-    <GenUINodeScope surfaceId={surfaceId} nodeId={nodeId}>
-      <GenUIErrorBoundary
-        resetKey={node}
-        fallback={() => (
-          <Fallback
-            kind="render-error"
-            component={node.component}
-            reason={`"${node.component}" could not be displayed.`}
-          />
-        )}
-      >
-        <Rendered props={validation.value}>{children}</Rendered>
-      </GenUIErrorBoundary>
-    </GenUINodeScope>
+    <GenUIErrorBoundary
+      resetKey={element.props}
+      fallback={() => (
+        <Fallback kind="render-error" component={element.type} reason={`"${element.type}" could not be displayed.`} />
+      )}
+    >
+      <Rendered props={validation.value} emit={emit} bindings={bindings} loading={loading}>
+        {children}
+      </Rendered>
+    </GenUIErrorBoundary>
   );
-});
+}
+
+const jsonRenderRegistries = new WeakMap<GenUIRegistry, ComponentRegistry>();
+function toJsonRenderRegistry(registry: GenUIRegistry): ComponentRegistry {
+  let result = jsonRenderRegistries.get(registry);
+  if (!result) {
+    result = Object.fromEntries(
+      Object.entries(registry.components)
+        .filter(([, entry]) => entry.definition.declarative !== false)
+        .map(([name]) => [name, ElementView]),
+    );
+    jsonRenderRegistries.set(registry, result);
+  }
+  return result;
+}
+
+/** Spec actions that are not json-render built-ins go through the controller's action dispatcher. */
+function createActionHandlers(controller: GenUIController, surfaceId: string) {
+  const handler = (name: string) => async (params: Record<string, unknown>) =>
+    controller.actions.dispatch({ surfaceId, name, payload: toSafeJSONValue(params ?? {}, Infinity, 'params') });
+  // Handlers are read once when the surface mounts, while the app's actions can change later.
+  return new Proxy({} as Record<string, ReturnType<typeof handler>>, {
+    get: (_target, name) => (typeof name === 'string' ? handler(name) : undefined),
+  });
+}
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceViewProps {
@@ -201,6 +196,12 @@ export function SurfaceFrame({ surfaceId, preview, className }: GenUISurfaceView
   const status = preview ? preview.status : liveStatus;
   const error = preview ? preview.error : liveError;
   const { Fallback, Loading, SurfaceStatus } = resolveFallbacks(controller.registry.fallbacks);
+  // One store per surface id: the preview and the live surface share it, so the swap keeps bound state.
+  const [store] = useState(() => createGenUISurfaceStore(controller.state, surfaceId, controller.subscribe));
+  const [handlers] = useState(() => createActionHandlers(controller, surfaceId));
+  const scope = useMemo(() => ({ surfaceId, store }), [surfaceId, store]);
+  const registry = toJsonRenderRegistry(controller.registry);
+  store.setAgentState(surface?.spec.state);
   if (!surface) return <Loading />;
   if (!isCatalogCompatible(controller.registry, surface)) {
     return (
@@ -211,24 +212,26 @@ export function SurfaceFrame({ surfaceId, preview, className }: GenUISurfaceView
     );
   }
   return (
-    <PreviewSurfaceContext.Provider value={preview}>
-      <div
-        className={className}
-        data-genui-surface={surface.id}
-        data-genui-status={status}
-        aria-busy={status === 'streaming' || undefined}
-        aria-label={surface.title}
-        role={surface.title ? 'group' : undefined}
-      >
-        {surface.rootId ? (
-          <NodeView surfaceId={surface.id} nodeId={surface.rootId} depth={1} />
-        ) : status === 'streaming' ? (
-          <Loading />
-        ) : null}
-        {status === 'streaming' || status === 'failed' || status === 'aborted' ? (
-          <SurfaceStatus status={status} error={error} />
-        ) : null}
-      </div>
-    </PreviewSurfaceContext.Provider>
+    <div
+      className={className}
+      data-genui-surface={surface.id}
+      data-genui-status={status}
+      aria-busy={status === 'streaming' || undefined}
+      aria-label={surface.title}
+      role={surface.title ? 'group' : undefined}
+    >
+      {surface.spec.elements[surface.spec.root] ? (
+        <SurfaceScopeContext.Provider value={scope}>
+          <JSONUIProvider registry={registry} store={store} handlers={handlers}>
+            <Renderer spec={surface.spec} registry={registry} loading={status === 'streaming'} fallback={ElementView} />
+          </JSONUIProvider>
+        </SurfaceScopeContext.Provider>
+      ) : status === 'streaming' ? (
+        <Loading />
+      ) : null}
+      {status === 'streaming' || status === 'failed' || status === 'aborted' ? (
+        <SurfaceStatus status={status} error={error} />
+      ) : null}
+    </div>
   );
 }

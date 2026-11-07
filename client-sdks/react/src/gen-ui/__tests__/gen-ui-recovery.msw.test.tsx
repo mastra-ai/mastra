@@ -9,14 +9,7 @@ import { server } from '../../test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
 import type { GenUIChatActionHandler } from '../controller';
-import {
-  createGenUI,
-  defineGenUIChatAction,
-  defineGenUIComponent,
-  GenUISurfaceOutlet,
-  useGenUIAction,
-  useGenUIChat,
-} from '../index';
+import { createGenUI, defineGenUIChatAction, defineGenUIComponent, GenUISurfaceOutlet, useGenUIChat } from '../index';
 import type { GenUIRegistry } from '../index';
 import { AGENT_URL, chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
 
@@ -98,7 +91,7 @@ const create = (eventId: string, temp = 21, extra: object = {}) => ({
     {
       op: 'createSurface',
       ...extra,
-      nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Paris', temp } }],
+      spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Paris', temp } } } },
     },
   ],
 });
@@ -107,7 +100,7 @@ const setTemp = (eventId: string, temp: number, baseRevision?: number) => ({
   eventId,
   surfaceId: 'weather',
   ...(baseRevision !== undefined ? { baseRevision } : {}),
-  operations: [{ op: 'updateProps', nodeId: 'card', set: { temp } }],
+  operations: [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/card/props/temp', value: temp }] }],
 });
 const ready = (eventId: string) => ({
   version: 1,
@@ -294,16 +287,38 @@ describe('useGenUIChat — surfaces outside the chat', () => {
       http.post(STREAM_URL, async ({ request }) => {
         bodies.push((await request.json()) as Record<string, unknown>);
         return bodies.length === 1
-          ? sseResponse([chunk('start'), genUIChunk(create('e1', 21, { placement: 'panel' })), finish('stop')])
+          ? sseResponse([
+              chunk('start'),
+              genUIChunk({
+                version: 1,
+                eventId: 'e1',
+                surfaceId: 'weather',
+                operations: [
+                  {
+                    op: 'createSurface',
+                    placement: 'panel',
+                    spec: {
+                      root: 'card',
+                      elements: {
+                        card: {
+                          type: 'WeatherCard',
+                          props: { city: 'Paris', temp: 21 },
+                          on: { press: { action: 'refresh', params: { city: 'Paris' } } },
+                        },
+                      },
+                    },
+                  },
+                ],
+              }),
+              finish('stop'),
+            ])
           : sseResponse([chunk('start'), finish('stop')]);
       }),
     );
     const Refreshable = defineGenUIComponent({
       schema: z.object({ city: z.string(), temp: z.number() }),
-      component: ({ props }) => {
-        const refresh = useGenUIAction('refresh');
-        return <button onClick={() => void refresh.dispatch({ city: props.city })}>Refresh {props.city}</button>;
-      },
+      events: ['press'],
+      component: ({ props, emit }) => <button onClick={() => emit('press')}>Refresh {props.city}</button>,
     });
     const refresh = defineGenUIChatAction({
       schema: z.object({ city: z.string() }),
@@ -340,7 +355,7 @@ describe('useGenUIChat — surfaces outside the chat', () => {
           {
             op: 'createSurface',
             placement: 'panel',
-            nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Deploy', temp: 1 } }],
+            spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: 'Deploy', temp: 1 } } } },
           },
         ],
       }),
@@ -368,7 +383,7 @@ describe('useGenUIChat — capability mismatch', () => {
         op: 'createSurface',
         catalogId,
         catalogVersion,
-        nodes: [{ id: 'card', component: 'WeatherCard', props: { city: surfaceId, temp: 1 } }],
+        spec: { root: 'card', elements: { card: { type: 'WeatherCard', props: { city: surfaceId, temp: 1 } } } },
       },
     ],
   });
@@ -418,7 +433,7 @@ describe('useGenUIChat — multiple agents', () => {
         {
           op: 'createSurface',
           source: { agentId: 'agent-2' },
-          nodes: [{ id: 'root', component: 'TaskList', props: { items: ['ship'] } }],
+          spec: { root: 'root', elements: { root: { type: 'TaskList', props: { items: ['ship'] } } } },
         },
       ],
     };

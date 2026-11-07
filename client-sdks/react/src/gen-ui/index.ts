@@ -29,26 +29,15 @@ export type {
 } from './controller';
 export {
   GenUIProvider,
-  useGenUIAction,
   useGenUIController,
-  useGenUILocalState,
-  useGenUINode,
-  useGenUINodeScope,
   useGenUIPublishedContext,
-  useGenUISharedData,
   useGenUISurface,
-  useGenUISurfaceData,
   useGenUISurfaceIds,
+  useGenUISurfaceState,
   useGenUIToolApproval,
   useGenUIToolResponse,
 } from './context';
-export type {
-  GenUIActionStatus,
-  GenUILocalState,
-  GenUISharedData,
-  GenUIToolResponse,
-  UseGenUIActionResult,
-} from './context';
+export type { GenUISurfaceState, GenUIToolResponse } from './context';
 export {
   DefaultGenUIFallback,
   DefaultGenUILoading,

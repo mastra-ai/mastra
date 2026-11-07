@@ -1,3 +1,5 @@
+import { resolveElementProps } from '@json-render/core';
+import type { UIElement } from '@json-render/core';
 import {
   GENUI_DATA_PART_TYPE,
   GENUI_PROTOCOL_VERSION,
@@ -20,12 +22,10 @@ import type {
   GenUIActionHandler,
   GenUIContextStore,
   GenUIEnvelope,
-  GenUINode,
-  GenUIOperation,
   GenUIPlacement,
   GenUISession,
+  GenUISpec,
   GenUIState,
-  GenUIStateScope,
   GenUIStateStore,
   GenUISurface,
   GenUIValidationResult,
@@ -135,8 +135,11 @@ export interface GenUIController {
   subscribeTools(listener: () => void): () => void;
   /** Resolve an interactive frontend tool with the user's answer. */
   respond(toolCallId: string, value: unknown): Promise<GenUIValidationResult<unknown>>;
-  /** Validate a node's props against its component schema. `undefined` when the component is not registered. */
-  validateNodeProps(node: GenUINode): GenUIValidationResult<unknown> | undefined;
+  /**
+   * Validate resolved element props against the component schema. `undefined` when the type is not a
+   * registered declarative component. Results are cached per props object.
+   */
+  validateElementProps(type: string, props: Record<string, unknown>): GenUIValidationResult<unknown> | undefined;
   /**
    * Display-only surface built from a surface tool call the model is still writing. Never enters
    * controller state; `undefined` until the arguments contain a `createSurface`.
@@ -145,7 +148,6 @@ export interface GenUIController {
   setServices(services: GenUIChatServices): void;
   /** Replace the action handlers. Names missing from `actions` stop being handled. */
   setActions(actions?: Record<string, GenUIChatActionHandler<any>>): void;
-  threadScope(): GenUIStateScope;
   /** Keep the controller alive. Disposal happens after the last release, so StrictMode remounts are safe. */
   retain(): () => void;
   dispose(): void;
@@ -162,110 +164,197 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const CORE_TOOL_ABORT_NOTICE =
   'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';
 
-const operationHelp = (placements: readonly GenUIPlacement[]) =>
-  [
-    `createSurface {rootId?, placement?: ${placements.map(p => `"${p}"`).join('|')}, title?} — must be the first operation for a new surfaceId; placement defaults to "inline"`,
-    'upsertNodes {nodes: [{id, component, props, children?: [nodeId]}]} — insert or replace whole nodes',
-    'removeNodes {nodeIds} — removes nodes and their descendants',
-    'setChildren {nodeId, children: [nodeId]} — reorder, insert, or delete children',
-    'setRoot {rootId}',
-    'setStatus {status: "streaming"|"ready"|"suspended"|"failed"|"aborted", error?}',
-    'deleteSurface {}',
-  ].join('\n');
-
 const stringList = { type: 'array', items: { type: 'string' } };
 
-const operationSchema = (op: string, properties: Record<string, unknown> = {}, required: string[] = []) => ({
+const stateRef = (key: '$state' | '$bindState') => ({
   type: 'object',
-  properties: { op: { type: 'string', enum: [op] }, ...properties },
-  required: ['op', ...required],
+  properties: { [key]: { type: 'string', description: 'JSON pointer into surface state' } },
+  required: [key],
 });
 
+/** Let every top-level prop take a state binding instead of a literal, which closed (strict) schemas otherwise forbid. */
+function withStateBindings(props: Record<string, unknown>): Record<string, unknown> {
+  if (!isRecord(props.properties)) return props;
+  return {
+    ...props,
+    properties: Object.fromEntries(
+      Object.entries(props.properties).map(([name, schema]) => [
+        name,
+        { anyOf: [schema, stateRef('$state'), stateRef('$bindState')] },
+      ]),
+    ),
+  };
+}
+
 /**
- * Fully describe every operation and node so strict structured-output providers, which close every
- * object and drop undeclared keys, still let the model send node ids, components, and props.
- * Free-form operations (`updateProps`, data ops) can't be expressed that way and stay protocol-only.
+ * Model-facing input of the surface tool: one complete json-render spec per call. Strict structured-output
+ * providers close every object, so anything keyed by the model is reshaped: `elements` and `on` are lists,
+ * and the free-form `state` and action `params` are JSON-encoded strings. The parser also accepts the plain
+ * json-render forms that non-strict models send.
  */
 function surfaceToolInputSchema(manifest: GenUIManifestComponent[], placements: readonly GenUIPlacement[]) {
-  const node = {
-    anyOf: manifest.map(({ name, propsSchema }) => {
+  const element = {
+    anyOf: manifest.map(({ name, propsSchema, events }) => {
       const { $schema: _dialect, ...props } = propsSchema ?? { type: 'object' };
       return {
         type: 'object',
         properties: {
-          id: { type: 'string' },
-          component: { type: 'string', enum: [name] },
-          props,
-          children: { ...stringList, description: 'Ordered child node ids' },
+          id: { type: 'string', description: 'Unique id of the element within the surface' },
+          type: { type: 'string', enum: [name] },
+          props: withStateBindings(props),
+          children: { ...stringList, description: 'Ordered child element ids' },
+          ...(events?.length
+            ? {
+                on: {
+                  type: 'array',
+                  description: 'Actions to run when the component raises an event',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      event: { type: 'string', enum: [...events] },
+                      action: { type: 'string' },
+                      params: {
+                        type: 'string',
+                        description: 'Action params as a JSON object string, e.g. "{\\"prompt\\": \\"…\\"}"',
+                      },
+                    },
+                    required: ['event', 'action'],
+                  },
+                },
+              }
+            : {}),
         },
-        required: ['id', 'component', 'props'],
+        required: ['id', 'type', 'props'],
       };
     }),
   };
   return {
     type: 'object',
     properties: {
-      surfaceId: { type: 'string', description: 'Stable id of the surface to create or update' },
-      operations: {
-        type: 'array',
-        items: {
-          anyOf: [
-            operationSchema('createSurface', {
-              rootId: { type: 'string' },
-              placement: { type: 'string', enum: [...placements] },
-              title: { type: 'string' },
-            }),
-            operationSchema('upsertNodes', { nodes: { type: 'array', items: node } }, ['nodes']),
-            operationSchema('removeNodes', { nodeIds: stringList }, ['nodeIds']),
-            operationSchema('setChildren', { nodeId: { type: 'string' }, children: stringList }, [
-              'nodeId',
-              'children',
-            ]),
-            operationSchema('setRoot', { rootId: { type: 'string' } }, ['rootId']),
-            operationSchema(
-              'setStatus',
-              {
-                status: { type: 'string', enum: ['streaming', 'ready', 'suspended', 'failed', 'aborted'] },
-                error: { type: 'string' },
-              },
-              ['status'],
-            ),
-            operationSchema('deleteSurface'),
-          ],
-        },
+      surfaceId: {
+        type: 'string',
+        description: 'Id of a surface you rendered earlier, to replace it. Omit to render a new surface.',
+      },
+      title: { type: 'string' },
+      placement: { type: 'string', enum: [...placements] },
+      root: { type: 'string', description: 'Id of the top-level element' },
+      elements: { type: 'array', items: element },
+      state: {
+        type: 'string',
+        description:
+          'Initial surface state as a JSON object string, read by props with {"$state": "/path"} or {"$bindState": "/path"}',
       },
     },
-    required: ['surfaceId', 'operations'],
+    required: ['root', 'elements'],
   };
 }
 
 const withoutNulls = (value: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(value).filter(([, item]) => item !== null));
 
-/**
- * Strict-mode models send `null` for optional fields they leave out. Drop those on operations and
- * nodes (`setRoot {rootId: null}` keeps its meaning); props keep theirs for schema validation.
- */
-const dropOptionalNulls = (operations: unknown[]): unknown[] =>
-  operations.map(operation => {
-    if (!isRecord(operation) || operation.op === 'setRoot') return operation;
-    const cleaned = withoutNulls(operation);
-    if (Array.isArray(cleaned.nodes)) {
-      cleaned.nodes = cleaned.nodes.map(node => (isRecord(node) ? withoutNulls(node) : node));
+/** A JSON object given as-is or as a JSON string (strict-mode form); anything else reads as `undefined`. */
+function readObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return undefined;
     }
-    return cleaned;
-  });
+  }
+  return isRecord(value) && !Array.isArray(value) ? value : undefined;
+}
+
+type ActionBinding = { action: string; params?: Record<string, unknown> };
+
+/** Event bindings given as json-render's `{event: binding}` map or as the strict-mode `[{event, action, params}]` list. */
+function readOn(on: unknown): UIElement['on'] | undefined {
+  const bindings: Record<string, ActionBinding[]> = {};
+  const add = (event: unknown, binding: unknown) => {
+    if (typeof event !== 'string' || !isRecord(binding)) return;
+    const { action, params } = withoutNulls(binding);
+    if (typeof action !== 'string') return;
+    const parsed = readObject(params);
+    (bindings[event] ??= []).push(parsed ? { action, params: parsed } : { action });
+  };
+  if (Array.isArray(on)) {
+    for (const entry of on) if (isRecord(entry)) add(entry.event, entry);
+  } else if (isRecord(on)) {
+    for (const [event, value] of Object.entries(on)) {
+      for (const binding of Array.isArray(value) ? value : [value]) add(event, binding);
+    }
+  }
+  const events = Object.entries(bindings);
+  if (!events.length) return undefined;
+  return Object.fromEntries(
+    events.map(([event, list]) => [event, list.length === 1 ? list[0]! : list]),
+  ) as UIElement['on'];
+}
+
+interface SurfaceToolCall {
+  surfaceId: string;
+  title?: string;
+  placement?: string;
+  spec: GenUISpec;
+}
 
 /**
- * Streamed arguments stop anywhere, so the last operation (or the last node of its `nodes`) may be
- * cut mid-value: a half-written component name or id. Leave it out until the next one starts.
+ * Read surface tool arguments into a spec. Strict-mode models send `null` for optional fields they leave
+ * out, so those are dropped (props keep theirs for schema validation). Streamed arguments stop anywhere:
+ * while `complete` is false the last element may be cut mid-value, so it waits until the next one starts.
  */
-const withoutTrailingPartial = (operations: unknown[]): unknown[] => {
-  const rest = operations.slice(0, -1);
-  const last = operations.at(-1);
-  if (!isRecord(last) || !Array.isArray(last.nodes) || last.nodes.length < 2) return rest;
-  return [...rest, { ...last, nodes: last.nodes.slice(0, -1) }];
-};
+function readSurfaceToolCall(
+  toolCallId: string,
+  args: unknown,
+  complete: boolean,
+): { ok: true; value: SurfaceToolCall } | { ok: false; error: string } {
+  if (!isRecord(args)) return { ok: false, error: 'arguments must be an object' };
+  const input = withoutNulls(args);
+  if (input.surfaceId !== undefined && typeof input.surfaceId !== 'string') {
+    return { ok: false, error: 'surfaceId must be a string' };
+  }
+  if (!Array.isArray(input.elements)) return { ok: false, error: 'elements must be a list' };
+  const items = complete ? input.elements : input.elements.slice(0, -1);
+  const elements: Record<string, UIElement> = {};
+  for (const item of items) {
+    if (!isRecord(item)) return { ok: false, error: 'every element must be an object' };
+    const { id, type, props, children, on } = withoutNulls(item);
+    if (typeof id !== 'string' || typeof type !== 'string') {
+      return { ok: false, error: 'every element needs a string id and type' };
+    }
+    if (complete && elements[id]) return { ok: false, error: `element id "${id}" is used twice` };
+    const element: UIElement = { type, props: isRecord(props) ? props : {} };
+    if (Array.isArray(children)) element.children = children.filter(child => typeof child === 'string');
+    const bindings = readOn(on);
+    if (bindings) element.on = bindings;
+    elements[id] = element;
+  }
+  const root = typeof input.root === 'string' ? input.root : complete ? undefined : Object.keys(elements)[0];
+  if (root === undefined) return { ok: false, error: 'root is required' };
+  const spec: GenUISpec = { root, elements };
+  if (input.state !== undefined) {
+    const state = readObject(input.state);
+    if (state) spec.state = state;
+    else if (complete) return { ok: false, error: 'state must be a JSON object' };
+  }
+  const call: SurfaceToolCall = { surfaceId: input.surfaceId ?? `surface-${toolCallId}`, spec };
+  if (typeof input.title === 'string') call.title = input.title;
+  if (typeof input.placement === 'string') call.placement = input.placement;
+  return { ok: true, value: call };
+}
+
+/** Elements rendered once per repeated item; their props read `$item`, so they can't be checked up front. */
+function repeatedElements(spec: GenUISpec): Set<string> {
+  const repeated = new Set<string>();
+  const visit = (id: string) => {
+    for (const child of spec.elements[id]?.children ?? []) {
+      if (repeated.has(child)) continue;
+      repeated.add(child);
+      visit(child);
+    }
+  };
+  for (const [id, element] of Object.entries(spec.elements)) if (element.repeat) visit(id);
+  return repeated;
+}
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIController(options: GenUIControllerOptions): GenUIController {
@@ -495,18 +584,24 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   const surfaceToolEventId = (toolCallId: string) => `tool:${toolCallId}`;
 
   const toSurfaceToolEnvelope = (toolCallId: string, args: unknown): GenUIEnvelope | undefined => {
-    if (!isRecord(args) || typeof args.surfaceId !== 'string' || !Array.isArray(args.operations)) return undefined;
-    const parsed = parseGenUIOperations(dropOptionalNulls(args.operations), resolvedLimits);
+    const call = readSurfaceToolCall(toolCallId, args, true);
+    if (!call.ok) return undefined;
+    const { surfaceId, spec, title, placement } = call.value;
+    // Every call carries the whole spec: reusing a surface id rebuilds that surface in place, so
+    // replaying the calls in message order always lands on the same result.
+    const parsed = parseGenUIOperations(
+      [
+        { op: 'createSurface', replace: true, spec, ...(title ? { title } : {}), ...(placement ? { placement } : {}) },
+        { op: 'setStatus', status: 'ready' },
+      ],
+      resolvedLimits,
+    );
     if (!parsed.ok) return undefined;
-    const operations: GenUIOperation[] = parsed.value;
-    // A surface tool call is a complete batch: mark the surface ready unless the model set a status itself.
-    const setsStatus = operations.some(op => op.op === 'setStatus');
-    const deletes = operations.some(op => op.op === 'deleteSurface');
     return {
       version: GENUI_PROTOCOL_VERSION,
       eventId: surfaceToolEventId(toolCallId),
-      surfaceId: args.surfaceId,
-      operations: setsStatus || deletes ? operations : [...operations, { op: 'setStatus', status: 'ready' }],
+      surfaceId,
+      operations: parsed.value,
     };
   };
 
@@ -525,42 +620,41 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     } else if (!rejected) {
       input = { value: call.args, complete: true };
     }
-    if (!input || !isRecord(input.value)) return undefined;
-    const { surfaceId, operations } = input.value;
-    if (typeof surfaceId !== 'string' || !Array.isArray(operations)) return undefined;
+    if (!input) return undefined;
     if (input.complete && syncedSurfaceCalls.has(call.toolCallId)) return undefined;
+    const read = readSurfaceToolCall(call.toolCallId, input.value, input.complete);
+    if (!read.ok) return undefined;
+    const { surfaceId, spec, title, placement } = read.value;
     const parsed = parseGenUIOperations(
-      dropOptionalNulls(input.complete ? operations : withoutTrailingPartial(operations)),
+      [{ op: 'createSurface', spec, ...(title ? { title } : {}), ...(placement ? { placement } : {}) }],
       resolvedLimits,
     );
-    if (!parsed.ok || parsed.value[0]?.op !== 'createSurface') return undefined;
+    if (!parsed.ok) return undefined;
     const envelope: GenUIEnvelope = {
       version: GENUI_PROTOCOL_VERSION,
       eventId: surfaceToolEventId(call.toolCallId),
       surfaceId,
       operations: parsed.value,
     };
-    const surface = accumulateGenUI(createGenUIState(), envelope, { limits }).surfaces[surfaceId];
-    if (!surface) return undefined;
-    // `setRoot` usually comes last; show the first node as the root until it does.
-    const firstNode = parsed.value.flatMap(op =>
-      op.op === 'upsertNodes' || op.op === 'createSurface' ? (op.nodes ?? []) : [],
-    )[0];
-    return { ...surface, status: 'streaming', rootId: surface.rootId ?? firstNode?.id ?? null };
+    return accumulateGenUI(createGenUIState(), envelope, { limits }).surfaces[surfaceId];
   };
 
   const describeOutcome = (result: GenUIState, envelope: GenUIEnvelope): string | undefined => {
     const diagnostic = [...result.diagnostics].reverse().find(d => d.eventId === envelope.eventId);
     if (diagnostic) return diagnostic.message;
-    if (result.buffered[envelope.surfaceId]?.some(e => e.eventId === envelope.eventId)) {
-      return `surface "${envelope.surfaceId}" does not exist yet; start with a createSurface operation`;
-    }
     const surface = result.surfaces[envelope.surfaceId];
     if (!surface) return undefined;
-    for (const node of Object.values(surface.nodes)) {
-      const validation = validateNodeProps(node);
-      if (!validation) return `unknown component "${node.component}" on node "${node.id}"`;
-      if (!validation.ok) return `invalid props for node "${node.id}" (${node.component}): ${validation.error}`;
+    const { spec } = surface;
+    if (!spec.elements[spec.root]) return `root "${spec.root}" is not one of the elements`;
+    const repeated = repeatedElements(spec);
+    const stateModel = spec.state ?? {};
+    for (const [id, element] of Object.entries(spec.elements)) {
+      const missing = element.children?.find(child => !spec.elements[child]);
+      if (missing) return `element "${id}" lists child "${missing}", which is not one of the elements`;
+      if (repeated.has(id)) continue;
+      const validation = validateElementProps(element.type, resolveElementProps(element.props, { stateModel }));
+      if (!validation) return `unknown component "${element.type}" on element "${id}"`;
+      if (!validation.ok) return `invalid props for element "${id}" (${element.type}): ${validation.error}`;
     }
     return undefined;
   };
@@ -568,13 +662,23 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   if (registry.surfaceTool) {
     const { placements } = registry.surfaceTool;
     const manifest = registry.manifest();
+    const actionNames = Object.keys(options.actions ?? {});
     const description = [
-      'Render or update a user interface surface built only from the registered components below.',
-      'Each call applies a batch of operations atomically. Reuse the same surfaceId to update a surface later.',
-      `Operations:\n${operationHelp(placements)}`,
+      'Render a user interface built only from the registered components below, as a json-render spec:',
+      '`root` is the id of the top element and `elements` lists every element as {id, type, props, children?}.',
+      'Each call renders the whole surface. To change a surface later, call again with its surfaceId and the complete new spec.',
+      'Props can read surface state with {"$state": "/path"}; inputs bind two-way with {"$bindState": "/path"}. Put initial values in `state`, as a JSON object string.',
+      `Elements react to component events through \`on\`, a list like [{"event": "press", "action": "setState", "params": "{\\"statePath\\": \\"/open\\", \\"value\\": true}"}]. Built-in actions: setState, pushState, removeState${
+        actionNames.length ? `. App actions: ${actionNames.join(', ')}` : ''
+      }.`,
+      `Placements: ${placements.join(', ')} (default "inline").`,
       // Prop schemas are already in the input schema; repeating them here would double the tokens.
       `Components (props must match the component's schema in the input schema):\n${manifest
-        .map(({ name, description }) => (description ? `- ${name}: ${description}` : `- ${name}`))
+        .map(({ name, description, events }) =>
+          [`- ${name}`, description ? `: ${description}` : '', events ? ` (events: ${events.join(', ')})` : ''].join(
+            '',
+          ),
+        )
         .join('\n')}`,
       registry.surfaceTool.instructions,
     ]
@@ -586,25 +690,21 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       inputSchema: surfaceToolInputSchema(manifest, placements),
       execute: async (input: unknown, executeContext: unknown) => {
         const toolCallId = toolCallIdFrom(executeContext) ?? `call_${Date.now().toString(36)}`;
-        const operations =
-          isRecord(input) && Array.isArray(input.operations) ? dropOptionalNulls(input.operations) : undefined;
-        const parsed = parseGenUIOperations(operations, resolvedLimits);
-        if (!parsed.ok) return { ok: false, error: parsed.error };
+        const call = readSurfaceToolCall(toolCallId, input, true);
+        if (!call.ok) return { ok: false, error: call.error };
         // Anything outside the declared placements has no outlet and would be accepted but never shown.
-        const misplaced = parsed.value.find(
-          op => op.op === 'createSurface' && op.placement !== undefined && !placements.includes(op.placement),
-        );
-        if (misplaced?.op === 'createSurface') {
+        const { placement } = call.value;
+        if (placement !== undefined && !placements.includes(placement as GenUIPlacement)) {
           return {
             ok: false,
-            error: `placement "${misplaced.placement}" is not available in this app; use one of: ${placements.join(', ')}`,
+            error: `placement "${placement}" is not available in this app; use one of: ${placements.join(', ')}`,
           };
         }
-        const envelope = toSurfaceToolEnvelope(toolCallId, {
-          ...(isRecord(input) ? input : {}),
-          operations: parsed.value,
-        });
-        if (!envelope) return { ok: false, error: 'surfaceId and operations are required' };
+        const envelope = toSurfaceToolEnvelope(toolCallId, input);
+        if (!envelope) {
+          const parsed = parseGenUIOperations([{ op: 'createSurface', spec: call.value.spec }], resolvedLimits);
+          return { ok: false, error: parsed.ok ? `invalid surface id "${call.value.surfaceId}"` : parsed.error };
+        }
         const current = session.getState();
         // `sync` may already have applied this call from the streamed arguments; otherwise dry-run it.
         const result = current.seenEventIds[envelope.eventId]
@@ -655,15 +755,15 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     return result;
   };
 
-  // ---- node validation -------------------------------------------------------------------------
-  const nodeValidation = new WeakMap<GenUINode, GenUIValidationResult<unknown>>();
-  const validateNodeProps = (node: GenUINode) => {
-    const entry = registry.components[node.component];
+  // ---- element validation ----------------------------------------------------------------------
+  const propsValidation = new WeakMap<object, GenUIValidationResult<unknown>>();
+  const validateElementProps = (type: string, props: Record<string, unknown>) => {
+    const entry = registry.components[type];
     if (!entry || entry.definition.declarative === false) return undefined;
-    let result = nodeValidation.get(node);
+    let result = propsValidation.get(props);
     if (!result) {
-      result = validateModelInputSync(entry.definition.schema, node.props);
-      nodeValidation.set(node, result);
+      result = validateModelInputSync(entry.definition.schema, props);
+      propsValidation.set(props, result);
     }
     return result;
   };
@@ -775,13 +875,12 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       notifyTools();
       return { ok: true, value: result };
     },
-    validateNodeProps,
+    validateElementProps,
     previewSurface,
     setServices(next) {
       services = next;
     },
     setActions,
-    threadScope: () => ({ kind: 'thread', id: services?.threadId ?? 'default' }),
     retain() {
       retainers += 1;
       let released = false;

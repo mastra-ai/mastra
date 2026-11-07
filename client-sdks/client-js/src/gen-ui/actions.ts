@@ -5,7 +5,7 @@ import type { GenUILimits, GenUISurface, JSONValue } from './types';
 import { toSafeJSONValue } from './validate';
 
 /**
- * A user interaction raised by a rendered GenUI node.
+ * A user interaction raised by a rendered GenUI element.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
@@ -13,11 +13,15 @@ export interface GenUIAction {
   /** Idempotency key. Dispatching the same id twice never runs the handler twice. */
   actionId: string;
   surfaceId: string;
-  nodeId: string;
+  /**
+   * Element that raised the action. Omitted for surface-level actions, such as those bound through a
+   * spec element's `on` field; those are only checked against the surface's status.
+   */
+  elementId?: string;
   name: string;
   payload: JSONValue;
-  /** Revision of the node the user was looking at when they acted. */
-  sourceRevision: number;
+  /** Revision of the element the user was looking at when they acted. Required with `elementId`. */
+  sourceRevision?: number;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -29,11 +33,11 @@ export type GenUIActionResult =
   | { status: 'error'; error: string }
   /** Payload failed validation; the handler did not run. */
   | { status: 'invalid'; error: string }
-  /** The node changed or disappeared after it was rendered; the handler did not run. */
+  /** The element changed or disappeared after it was rendered; the handler did not run. */
   | { status: 'stale'; error: string }
   /** No handler is registered for this action name. */
   | { status: 'unhandled'; error: string }
-  /** Another dispatch of the same action on the same node is still running. */
+  /** Another dispatch of the same action on the same element is still running. */
   | { status: 'busy'; error: string }
   | { status: 'cancelled' };
 
@@ -50,9 +54,9 @@ export interface GenUIActionContext {
 export interface GenUIActionHandler<S extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined> {
   /** Validates `payload` before the handler runs. */
   schema?: S;
-  /** Run even if the node changed after it was rendered. Defaults to false. */
+  /** Run even if the element changed after it was rendered. Defaults to false. */
   allowStale?: boolean;
-  /** Allow concurrent runs for the same surface/node/action. Defaults to false (second dispatch is `busy`). */
+  /** Allow concurrent runs for the same surface/element/action. Defaults to false (second dispatch is `busy`). */
   allowConcurrent?: boolean;
   handle(
     payload: S extends StandardSchemaV1 ? InferSchemaOutput<S> : JSONValue,
@@ -88,7 +92,7 @@ export interface GenUIActionDispatcher {
   register(name: string, handler: GenUIActionHandler<any>): () => void;
   cancel(actionId: string): void;
   /** Whether any dispatch matching the filter is still running. */
-  isPending(filter: { surfaceId?: string; nodeId?: string; name?: string }): boolean;
+  isPending(filter: { surfaceId?: string; elementId?: string; name?: string }): boolean;
   /** Last result for an action id, if it completed. */
   getResult(actionId: string): GenUIActionResult | undefined;
   /** Fires whenever the set of pending actions changes. */
@@ -150,9 +154,10 @@ export function createGenUIActionDispatcher(options: GenUIActionDispatcherOption
     if (!surface) return `surface "${action.surfaceId}" no longer exists`;
     if (surface.status === 'aborted' || surface.status === 'failed')
       return `surface "${action.surfaceId}" is ${surface.status}`;
-    const node = surface.nodes[action.nodeId];
-    if (!node) return `node "${action.nodeId}" no longer exists`;
-    if (node.revision > action.sourceRevision) return `node "${action.nodeId}" changed after it was rendered`;
+    if (action.elementId === undefined) return undefined;
+    const revision = surface.elementRevisions[action.elementId];
+    if (revision === undefined) return `element "${action.elementId}" no longer exists`;
+    if (revision > (action.sourceRevision ?? 0)) return `element "${action.elementId}" changed after it was rendered`;
     return undefined;
   };
 
@@ -170,11 +175,13 @@ export function createGenUIActionDispatcher(options: GenUIActionDispatcherOption
         action = {
           actionId,
           surfaceId: String(input.surfaceId),
-          nodeId: String(input.nodeId),
           name: String(input.name),
-          sourceRevision: Number(input.sourceRevision) || 0,
           payload: toSafeJSONValue(input.payload ?? null, limits.maxValueDepth, 'payload'),
         };
+        if (input.elementId !== undefined) {
+          action.elementId = String(input.elementId);
+          action.sourceRevision = Number(input.sourceRevision) || 0;
+        }
       } catch (error) {
         return Promise.resolve(remember(actionId, { status: 'invalid', error: errorMessage(error) }));
       }
@@ -193,7 +200,7 @@ export function createGenUIActionDispatcher(options: GenUIActionDispatcherOption
         for (const other of inFlight.values()) {
           if (
             other.action.surfaceId === action.surfaceId &&
-            other.action.nodeId === action.nodeId &&
+            other.action.elementId === action.elementId &&
             other.action.name === action.name
           ) {
             // Busy results are not cached so the user can retry once the first run finishes.
@@ -227,7 +234,7 @@ export function createGenUIActionDispatcher(options: GenUIActionDispatcherOption
       for (const { action } of inFlight.values()) {
         if (
           (filter.surfaceId === undefined || action.surfaceId === filter.surfaceId) &&
-          (filter.nodeId === undefined || action.nodeId === filter.nodeId) &&
+          (filter.elementId === undefined || action.elementId === filter.elementId) &&
           (filter.name === undefined || action.name === filter.name)
         ) {
           return true;

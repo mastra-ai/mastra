@@ -6,6 +6,8 @@
  * `data-*` message part, and be replayed deterministically on reload.
  */
 
+import type { JsonPatch, Spec } from '@json-render/core';
+
 /**
  * Current GenUI wire protocol version. Envelopes with a different version are rejected.
  *
@@ -52,32 +54,19 @@ export interface GenUISurfaceSource {
 }
 
 /**
- * A node as sent on the wire.
+ * A surface body: a json-render spec (`root`, flat `elements`, optional `state`).
+ * `state` holds the agent-owned data that elements read with `$state` and bind with `$bindState`.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export interface GenUINodeInput {
-  id: string;
-  /** Registry key of the component that renders this node. */
-  component: string;
-  props?: JSONObject;
-  /** Ordered child node ids. */
-  children?: string[];
-}
+export type GenUISpec = Spec;
 
 /**
- * A node as held in normalized surface state.
+ * One RFC 6902 operation applied to a surface's spec, e.g. `{ op: 'add', path: '/elements/card', value: {...} }`.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export interface GenUINode {
-  id: string;
-  component: string;
-  props: JSONObject;
-  children: string[];
-  /** Surface revision at which this node was last changed. Used for stale-action detection. */
-  revision: number;
-}
+export type GenUIPatch = JsonPatch;
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurface {
@@ -86,10 +75,10 @@ export interface GenUISurface {
   /** Number of envelopes applied to this surface. Deterministic over replay. */
   revision: number;
   status: GenUISurfaceStatus;
-  rootId: string | null;
-  nodes: Readonly<Record<string, GenUINode>>;
-  /** Agent-owned surface data. Client-local edits live in the GenUI state store, not here. */
-  data: JSONObject;
+  /** Agent-owned spec. Client-local edits of `state` live in the GenUI state store, not here. */
+  spec: GenUISpec;
+  /** Surface revision at which each element last changed. Lets actions from an outdated element be rejected. */
+  elementRevisions: Record<string, number>;
   placement: GenUIPlacement;
   catalogId?: string;
   catalogVersion?: string;
@@ -104,27 +93,22 @@ export interface GenUISurface {
 export type GenUIOperation =
   | {
       op: 'createSurface';
-      rootId?: string;
+      /** Initial spec. Defaults to an empty spec that later `patch` operations fill in. */
+      spec?: GenUISpec;
+      /**
+       * When the surface already exists, rebuild it in place (new spec, title and placement, same
+       * surface, continuous revisions) instead of rejecting the envelope.
+       */
+      replace?: boolean;
       placement?: GenUIPlacement;
       catalogId?: string;
       catalogVersion?: string;
       title?: string;
       source?: GenUISurfaceSource;
-      data?: JSONObject;
-      nodes?: GenUINodeInput[];
     }
-  /** Insert or fully replace nodes. Omitted `props`/`children` default to empty. */
-  | { op: 'upsertNodes'; nodes: GenUINodeInput[] }
-  /** Shallow-merge `set` into a node's props and delete the `unset` keys. */
-  | { op: 'updateProps'; nodeId: string; set?: JSONObject; unset?: string[] }
-  /** Remove nodes and their descendants; references from parents are dropped. */
-  | { op: 'removeNodes'; nodeIds: string[] }
-  /** Replace a node's ordered children. Covers insert, delete and reorder. */
-  | { op: 'setChildren'; nodeId: string; children: string[] }
-  | { op: 'setRoot'; rootId: string | null }
-  | { op: 'replaceData'; data: JSONObject }
-  /** Shallow-merge `set` into surface data and delete the `unset` keys. */
-  | { op: 'patchData'; set?: JSONObject; unset?: string[] }
+  /** Apply RFC 6902 patches to the spec, in order. */
+  | { op: 'patch'; patches: GenUIPatch[] }
+  | { op: 'replaceSpec'; spec: GenUISpec }
   | { op: 'setStatus'; status: GenUISurfaceStatus; error?: string }
   | { op: 'deleteSurface' };
 
@@ -154,16 +138,15 @@ export interface GenUIEnvelope {
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUILimits {
   maxSurfaces: number;
-  maxNodesPerSurface: number;
+  maxElementsPerSurface: number;
   maxTreeDepth: number;
   maxOperationsPerEnvelope: number;
+  maxPatchesPerOperation: number;
   maxIdLength: number;
-  maxChildrenPerNode: number;
-  /** Max serialized size (UTF-16 code units) of a single node's props. */
-  maxPropsSize: number;
-  /** Max serialized size of a surface's data object. */
-  maxDataSize: number;
-  /** Max nesting depth of any JSON value (props, data, payloads). */
+  maxChildrenPerElement: number;
+  /** Max serialized size (UTF-16 code units) of a surface's spec, state included. */
+  maxSpecSize: number;
+  /** Max nesting depth of any JSON value (props, state, payloads). */
   maxValueDepth: number;
   /** Max out-of-order envelopes buffered per surface while waiting for a gap to fill. */
   maxBufferedEnvelopes: number;
@@ -174,13 +157,13 @@ export interface GenUILimits {
 /** @experimental Generative UI is in beta and may change without notice. */
 export const DEFAULT_GENUI_LIMITS: Readonly<GenUILimits> = Object.freeze({
   maxSurfaces: 100,
-  maxNodesPerSurface: 500,
+  maxElementsPerSurface: 500,
   maxTreeDepth: 32,
   maxOperationsPerEnvelope: 200,
+  maxPatchesPerOperation: 500,
   maxIdLength: 128,
-  maxChildrenPerNode: 200,
-  maxPropsSize: 32_768,
-  maxDataSize: 262_144,
+  maxChildrenPerElement: 200,
+  maxSpecSize: 262_144,
   maxValueDepth: 24,
   maxBufferedEnvelopes: 50,
   maxDiagnostics: 50,

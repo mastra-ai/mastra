@@ -14,7 +14,7 @@ import { createGenUIRenderers } from './renderers';
 export interface UseGenUIChatProps extends MastraChatProps {
   /** The registry created with `createGenUI`. Read once per mount; remount with a `key` to switch registries. */
   genUI: GenUIRegistry;
-  /** Action handlers that components dispatch with `useGenUIAction(name)`. Handlers from the latest render run. */
+  /** App actions that surface specs bind to component events through `on`. Handlers from the latest render run. */
   actions?: Record<string, GenUIChatActionHandler<any>>;
   /**
    * Your own `MessageFactory` renderers, for parts GenUI does not render. Define them outside the

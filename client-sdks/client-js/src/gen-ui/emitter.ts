@@ -4,11 +4,12 @@ import { GENUI_DATA_PART_TYPE, GENUI_PROTOCOL_VERSION } from './types';
 import type {
   GenUIEnvelope,
   GenUILimits,
-  GenUINodeInput,
   GenUIOperation,
+  GenUIPatch,
+  GenUISpec,
   GenUISurfaceSource,
   GenUISurfaceStatus,
-  JSONObject,
+  JSONValue,
 } from './types';
 import { parseGenUIOperations } from './validate';
 
@@ -75,13 +76,15 @@ export interface GenUISurfaceEmitter {
   /** Validate and write a batch of operations as one atomic envelope. */
   send(operations: GenUIOperation[]): Promise<GenUIEnvelope>;
   create(input?: GenUICreateSurfaceInput): Promise<GenUIEnvelope>;
-  upsertNodes(nodes: GenUINodeInput[]): Promise<GenUIEnvelope>;
-  updateProps(nodeId: string, set: JSONObject, unset?: string[]): Promise<GenUIEnvelope>;
-  removeNodes(nodeIds: string[]): Promise<GenUIEnvelope>;
-  setChildren(nodeId: string, children: string[]): Promise<GenUIEnvelope>;
-  setRoot(rootId: string | null): Promise<GenUIEnvelope>;
-  replaceData(data: JSONObject): Promise<GenUIEnvelope>;
-  patchData(set: JSONObject, unset?: string[]): Promise<GenUIEnvelope>;
+  /** Apply RFC 6902 patches to the spec, e.g. `{ op: 'add', path: '/elements/card', value: {...} }`. */
+  patch(patches: GenUIPatch[]): Promise<GenUIEnvelope>;
+  /** Replace the whole spec. */
+  replace(spec: GenUISpec): Promise<GenUIEnvelope>;
+  /**
+   * Write agent state that elements read with `$state`. `path` is a JSON Pointer inside `state`,
+   * e.g. `setState('/forecast', {...})`. Missing parents are created.
+   */
+  setState(path: string, value: JSONValue): Promise<GenUIEnvelope>;
   setStatus(status: GenUISurfaceStatus, error?: string): Promise<GenUIEnvelope>;
   delete(): Promise<GenUIEnvelope>;
 }
@@ -114,9 +117,13 @@ export interface GenUIEmitter {
  * ```ts
  * execute: async (input, context) => {
  *   const ui = createGenUIEmitter(context).surface();
- *   await ui.create({ nodes: [{ id: 'card', component: 'WeatherCard', props: { city: input.city } }] });
- *   const forecast = await getForecast(input.city);
- *   await ui.updateProps('card', { forecast });
+ *   await ui.create({
+ *     spec: {
+ *       root: 'card',
+ *       elements: { card: { type: 'WeatherCard', props: { city: input.city, forecast: { $state: '/forecast' } } } },
+ *     },
+ *   });
+ *   await ui.setState('/forecast', await getForecast(input.city));
  *   await ui.setStatus('ready');
  * }
  * ```
@@ -171,13 +178,10 @@ export function createGenUIEmitter(
         surfaceId,
         send,
         create: (input = {}) => send([{ op: 'createSurface', ...input }]),
-        upsertNodes: nodes => send([{ op: 'upsertNodes', nodes }]),
-        updateProps: (nodeId, set, unset) => send([{ op: 'updateProps', nodeId, set, ...(unset ? { unset } : {}) }]),
-        removeNodes: nodeIds => send([{ op: 'removeNodes', nodeIds }]),
-        setChildren: (nodeId, children) => send([{ op: 'setChildren', nodeId, children }]),
-        setRoot: rootId => send([{ op: 'setRoot', rootId }]),
-        replaceData: data => send([{ op: 'replaceData', data }]),
-        patchData: (set, unset) => send([{ op: 'patchData', set, ...(unset ? { unset } : {}) }]),
+        patch: patches => send([{ op: 'patch', patches }]),
+        replace: spec => send([{ op: 'replaceSpec', spec }]),
+        setState: (path, value) =>
+          send([{ op: 'patch', patches: [{ op: 'add', path: path ? `/state${path}` : path, value }] }]),
         setStatus: (status, error) => send([{ op: 'setStatus', status, ...(error !== undefined ? { error } : {}) }]),
         delete: () => send([{ op: 'deleteSurface' }]),
       };

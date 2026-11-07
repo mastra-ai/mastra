@@ -15,8 +15,20 @@ import type { ComponentType, ReactNode } from 'react';
  */
 export interface GenUIComponentProps<P> {
   props: P;
-  /** Rendered child nodes when the component is used inside a declarative surface. */
+  /** Rendered child elements when the component is used inside a declarative surface. */
   children?: ReactNode;
+  /**
+   * Raise one of the component's `events` (e.g. `"press"`). Inside a surface, the action the agent bound to
+   * that event in the element's `on` runs; elsewhere (component tools) this is a no-op.
+   */
+  emit: (event: string) => void;
+  /**
+   * Prop name → state path for props the agent bound two-way with `{"$bindState": "/path"}`. Pass both to
+   * `useBoundProp` from `@json-render/react` to write user input back into the surface state.
+   */
+  bindings?: Record<string, string>;
+  /** `true` while the model is still writing the surface, so some children may not have arrived yet. */
+  loading?: boolean;
 }
 
 /**
@@ -63,6 +75,8 @@ export interface GenUIComponentDefinition<S extends StandardSchemaV1 = StandardS
   tool?: boolean | GenUIComponentToolOptions;
   /** Allow the component in declarative surfaces. Defaults to `true`. */
   declarative?: boolean;
+  /** Events the component raises with `emit`, listed for the model so it can bind actions to them in `on`. */
+  events?: readonly string[];
 }
 
 /**
@@ -228,6 +242,7 @@ export interface GenUIManifestComponent {
   description?: string;
   /** Omitted for zod 3 schemas without an explicit `jsonSchema`. */
   propsSchema?: JSONObject;
+  events?: readonly string[];
 }
 
 /**
@@ -365,6 +380,7 @@ export function createGenUI(options: CreateGenUIOptions = {}): GenUIRegistry {
             name: entry.name,
             ...(entry.definition.description ? { description: entry.definition.description } : {}),
             ...(isStandardSchema(schema) ? {} : { propsSchema: schema }),
+            ...(entry.definition.events?.length ? { events: [...entry.definition.events] } : {}),
           };
         }),
   };

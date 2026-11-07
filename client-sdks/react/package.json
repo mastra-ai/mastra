@@ -94,6 +94,8 @@
     "tailwind-merge": "^3.7.0"
   },
   "peerDependencies": {
+    "@json-render/core": "^0.22.0",
+    "@json-render/react": "^0.22.0",
     "@mastra/core": ">=1.67.0-0 <2.0.0-0",
     "@tanstack/react-query": "^5.90.21",
     "react": ">=19.0.0",
@@ -103,6 +105,8 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@json-render/core": "^0.22.0",
+    "@json-render/react": "^0.22.0",
     "@mastra/core": "workspace:*",
     "@storybook/react-vite": "^9.1.21",
     "@tailwindcss/cli": "^4.3.3",
@@ -130,6 +134,12 @@
     "node": ">=22.13.0"
   },
   "peerDependenciesMeta": {
+    "@json-render/core": {
+      "optional": true
+    },
+    "@json-render/react": {
+      "optional": true
+    },
     "@tanstack/react-query": {
       "optional": true
     }
