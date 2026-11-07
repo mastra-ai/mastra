@@ -344,20 +344,31 @@ export class ComputerCards {
     if (!existing || existing.ended) return;
     if (status === 'released') {
       existing.ended = true;
+      this.#deletePreviewUrls(p.computerId, p.threadId);
       return this.#update(existing);
     }
     if (p.data.control === 'human' || p.data.control === 'agent') {
       existing.holder = p.data.control;
+      this.#deletePreviewUrls(p.computerId, p.threadId);
       this.#prewarmPreview(p.computerId, p.threadId, existing.holder);
       return this.#update(existing);
     }
   }
 
+  #deletePreviewUrls(computerId: string, threadId: string): void {
+    this.#previewUrls.delete(`${computerId}:${threadId}:agent`);
+    this.#previewUrls.delete(`${computerId}:${threadId}:human`);
+  }
+
   #prewarmPreview(computerId: string, threadId: string, mode: Holder): void {
     if (!this.#opts.embedUrl) return;
     void this.#loadThread(threadId)
-      .then(thread => {
+      .then(async thread => {
         if (!thread || thread.metadata?.channel_platform !== 'slack') return null;
+        const computers = this.#opts.getMastra()?.getComputers();
+        if (!computers?.controlState) return null;
+        const state = await computers.controlState(computerId, { threadId, resourceId: thread.resourceId });
+        if (!state || state.holder !== mode) return null;
         return this.#opts.embedUrl?.({ computerId, threadId, resourceId: thread.resourceId, mode: mode === 'human' ? 'control' : 'watch' });
       })
       .then(url => {
@@ -519,16 +530,14 @@ export class ComputerCards {
     const thread = await this.#loadThread(ref.threadId);
     if (!thread || !userId || thread.metadata?.channel_platform !== 'slack') return null;
     if (thread.resourceId !== `slack:${userId}`) return null;
-    const holder = this.#cards.get(`${ref.computerId}:${ref.threadId}`)?.holder;
-    if (holder) {
-      const cached = this.#previewUrls.get(`${ref.computerId}:${ref.threadId}:${holder}`);
-      if (cached) return cached;
-    }
     const computers = this.#opts.getMastra()?.getComputers();
     if (!computers?.controlState) return null;
     const scope = { threadId: ref.threadId, resourceId: thread.resourceId };
     const state = await computers.controlState(ref.computerId, scope);
     if (!state) return null;
+    const holder = state.holder;
+    const cached = this.#previewUrls.get(`${ref.computerId}:${ref.threadId}:${holder}`);
+    if (cached) return cached;
     return this.#opts.embedUrl({
       computerId: ref.computerId,
       threadId: ref.threadId,
