@@ -1,9 +1,15 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
+import { InMemoryBlobStore } from '../../storage/domains/blobs/inmemory';
+import type { SkillVersionTree } from '../../storage/types';
+import { DEFAULT_MAX_MEDIA_BYTES } from '../tools/media';
+import { CompositeVersionedSkillSource } from './composite-versioned-skill-source';
 import { LocalSkillSource } from './local-skill-source';
+import type { SkillSource } from './skill-source';
 import { createSkillTools } from './tools';
 import type { Skill, SkillMetadata, SkillSearchResult, WorkspaceSkills } from './types';
 import { WorkspaceSkillsImpl } from './workspace-skills';
@@ -566,22 +572,6 @@ describe('skill_read tool', () => {
     expect(result).not.toContain('Available files:');
   });
 
-  it('detects binary content and returns metadata', async () => {
-    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
-    const binaryBuffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]);
-    const skills = createMockWorkspaceSkills({
-      get: vi.fn(async () => skill),
-      getAsset: vi.fn(async () => binaryBuffer),
-    });
-    const { skill_read: tool } = createSkillTools(skills);
-
-    const result = await exec(tool, { skillName: 'design-system', path: 'assets/logo.png' });
-
-    expect(result).toContain('Binary file:');
-    expect(result).toContain('skills/design-system/assets/logo.png');
-    expect(result).toContain(`${binaryBuffer.length} bytes`);
-  });
-
   it('detects binary content outside assets/ (null bytes)', async () => {
     const skill = makeSkill({ name: 'my-skill', path: 'skills/my-skill' });
     const skills = createMockWorkspaceSkills({
@@ -594,28 +584,6 @@ describe('skill_read tool', () => {
 
     expect(result).toContain('Binary file:');
     expect(result).toContain('skills/my-skill/references/weird.bin');
-  });
-
-  it('treats a NUL-free binary asset (PDF) as binary via invalid UTF-8', async () => {
-    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
-    // Real PDFs carry binary stream bytes that are invalid UTF-8 but contain no NUL in the
-    // first bytes, so the old null-byte-only heuristic would have leaked mojibake.
-    const pdfBuffer = Buffer.concat([
-      Buffer.from('%PDF-1.4\nstream\n', 'latin1'),
-      Buffer.from([0xff, 0xfe, 0x89, 0xa0, 0xc3, 0x28]), // invalid UTF-8, no NUL
-      Buffer.from('\nendstream\n%%EOF', 'latin1'),
-    ]);
-    expect(pdfBuffer.subarray(0, 1000).includes(0)).toBe(false);
-    const skills = createMockWorkspaceSkills({
-      get: vi.fn(async () => skill),
-      getAsset: vi.fn(async () => pdfBuffer),
-    });
-    const { skill_read: tool } = createSkillTools(skills);
-
-    const result = await exec(tool, { skillName: 'design-system', path: 'assets/doc.pdf' });
-
-    expect(result).toBe(`Binary file: skills/design-system/assets/doc.pdf (${pdfBuffer.length} bytes)`);
-    expect(result).not.toContain('%PDF');
   });
 
   it('treats a valid-UTF-8 asset with a NUL byte after the first 1000 bytes as binary', async () => {
@@ -647,23 +615,6 @@ describe('skill_read tool', () => {
     const result = await exec(tool, { skillName: 'design-system', path: 'assets/template.csv' });
 
     expect(result).toBe('col1,col2\na,b');
-  });
-
-  it('never reads through the UTF-8-decoding accessors, so bytes are counted exactly', async () => {
-    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
-    // 2048 bytes of 0x89: decoding as UTF-8 would turn every byte into U+FFFD (3 bytes each).
-    const pngBuffer = Buffer.alloc(2048, 0x89);
-    const getReference = vi.fn(async () => pngBuffer.toString('utf-8'));
-    const getScript = vi.fn(async () => pngBuffer.toString('utf-8'));
-    const getAsset = vi.fn(async () => pngBuffer);
-    const skills = createMockWorkspaceSkills({ get: vi.fn(async () => skill), getReference, getScript, getAsset });
-    const { skill_read: tool } = createSkillTools(skills);
-
-    const result = await exec(tool, { skillName: 'design-system', path: 'assets/logo.png' });
-
-    expect(getReference).not.toHaveBeenCalled();
-    expect(getScript).not.toHaveBeenCalled();
-    expect(result).toBe(`Binary file: skills/design-system/assets/logo.png (2048 bytes)`);
   });
 
   it('extracts lines using startLine and endLine', async () => {
@@ -752,35 +703,89 @@ describe('skill_read tool', () => {
     expect(result).toBe('line 1\nline 2\nline 3');
   });
 
-  it('reads text, binary, and out-of-convention files from a real skill on disk', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-read-'));
-
-    try {
-      const skillDir = path.join(tempDir, 'skills', 'design-system');
-      await fs.mkdir(path.join(skillDir, 'assets'), { recursive: true });
-      await fs.mkdir(path.join(skillDir, 'docs'), { recursive: true });
-      await fs.writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: design-system\ndescription: d\n---\n\n# DS');
-      // 2048 bytes of 0x89 — a lossy UTF-8 decode would report 6144 bytes.
-      const png = Buffer.alloc(2048, 0x89);
-      await fs.writeFile(path.join(skillDir, 'assets', 'logo.png'), png);
-      await fs.writeFile(path.join(skillDir, 'assets', 'template.csv'), 'col1,col2\na,b');
-      await fs.writeFile(path.join(skillDir, 'docs', 'schema.md'), '# Schema');
-
-      const skills = new WorkspaceSkillsImpl({
-        source: new LocalSkillSource({ basePath: tempDir }),
-        skills: ['skills'],
-      });
-      const { skill_read: tool } = createSkillTools(skills);
-
-      expect(await exec(tool, { skillName: 'design-system', path: 'assets/logo.png' })).toBe(
-        'Binary file: skills/design-system/assets/logo.png (2048 bytes)',
-      );
-      expect(await exec(tool, { skillName: 'design-system', path: 'assets/template.csv' })).toBe('col1,col2\na,b');
-      expect(await exec(tool, { skillName: 'design-system', path: 'docs/schema.md' })).toBe('# Schema');
-      expect(await exec(tool, { skillName: 'design-system', path: 'SKILL.md' })).toContain('# DS');
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+  describe.each(['local', 'versioned'] as const)('%s skill assets', sourceType => {
+    it('surfaces PNG and PDF bytes to the model while preserving text and binary fallbacks (#25219)', async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-read-'));
+      try {
+        const png = Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=',
+          'base64',
+        );
+        const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF');
+        const files = new Map([
+          ['SKILL.md', Buffer.from('---\nname: design-system\ndescription: d\n---\n\n# DS')],
+          ['assets/logo.png', png],
+          // PDFs can be valid UTF-8: media detection must precede text classification.
+          ['assets/doc.PDF', pdf],
+          ['assets/binary.pdf', Buffer.concat([pdf, Buffer.from([0xff, 0xfe])])],
+          ['assets/template.csv', Buffer.from('col1,col2\na,b')],
+          ['docs/schema.md', Buffer.from('# Schema')],
+          ['assets/unknown.bin', Buffer.from([0, 0xff, 0xfe])],
+          ['assets/large.pdf', Buffer.alloc(DEFAULT_MAX_MEDIA_BYTES + 1, 0x61)],
+        ]);
+        let source: SkillSource;
+        if (sourceType === 'local') {
+          for (const [name, bytes] of files) {
+            const target = path.join(tempDir, 'skills/design-system', name);
+            await fs.mkdir(path.dirname(target), { recursive: true });
+            await fs.writeFile(target, bytes);
+          }
+          source = new LocalSkillSource({ basePath: tempDir });
+        } else {
+          const blobStore = new InMemoryBlobStore();
+          const tree: SkillVersionTree = { entries: {} };
+          const now = new Date();
+          for (const [name, bytes] of files) {
+            const hash = createHash('sha256').update(bytes).digest('hex');
+            await blobStore.put({ hash, content: bytes.toString('base64'), size: bytes.length, createdAt: now });
+            tree.entries[name] = { blobHash: hash, size: bytes.length, encoding: 'base64' };
+          }
+          source = new CompositeVersionedSkillSource(
+            [{ dirName: 'design-system', tree, versionCreatedAt: now }],
+            blobStore,
+          );
+        }
+        const skills = new WorkspaceSkillsImpl({ source, skills: sourceType === 'local' ? ['skills'] : [''] });
+        const { skill_read: tool } = createSkillTools(skills);
+        for (const [file, mediaType] of [
+          ['assets/logo.png', 'image/png'],
+          ['assets/doc.PDF', 'application/pdf'],
+          ['assets/binary.pdf', 'application/pdf'],
+        ]) {
+          const result = await exec(tool, { skillName: 'design-system', path: file, startLine: 1, endLine: 1 });
+          expect(result).toMatchObject({
+            __workspaceMedia: true,
+            mediaType,
+            data: files.get(file)?.toString('base64'),
+          });
+          expect(tool.toModelOutput?.(result)).toEqual({
+            type: 'content',
+            value: [
+              {
+                type: 'text',
+                text: expect.stringContaining(`${file} (${files.get(file)?.length} bytes, ${mediaType})`),
+              },
+              { type: 'media', mediaType, data: files.get(file)?.toString('base64') },
+            ],
+          });
+        }
+        const text = await exec(tool, { skillName: 'design-system', path: 'assets/template.csv' });
+        expect(text).toBe('col1,col2\na,b');
+        expect(tool.toModelOutput?.(text)).toBeUndefined();
+        expect(
+          await exec(tool, { skillName: 'design-system', path: 'assets/template.csv', startLine: 2, endLine: 2 }),
+        ).toBe('assets/template.csv (lines 2-2 of 2)\na,b');
+        expect(await exec(tool, { skillName: 'design-system', path: 'docs/schema.md' })).toBe('# Schema');
+        expect(await exec(tool, { skillName: 'design-system', path: 'assets/unknown.bin' })).toMatch(
+          /^Binary file: .*assets\/unknown.bin \(3 bytes\)$/,
+        );
+        const oversized = await exec(tool, { skillName: 'design-system', path: 'assets/large.pdf' });
+        expect(oversized).toMatch(/^Binary file: .*assets\/large.pdf \(10485761 bytes\)$/);
+        expect(tool.toModelOutput?.(oversized)).toBeUndefined();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+    });
   });
 
   it('uses path as fallback when skill lookup returns null for binary metadata', async () => {

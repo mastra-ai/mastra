@@ -13,7 +13,10 @@
 import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
+import { getMimeType } from '../filesystem/fs-utils';
 import { extractLines } from '../line-utils';
+import type { MediaToolResult } from '../tools/media';
+import { DEFAULT_MAX_MEDIA_BYTES, DEFAULT_MEDIA_TYPES, mediaToModelOutput } from '../tools/media';
 import { startSkillSpan } from '../tools/tracing';
 import type { Skill, SkillsContext, WorkspaceSkills } from './types';
 
@@ -181,8 +184,9 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
 function createSkillReadTool(skills: WorkspaceSkills) {
   const tool = createTool({
     id: 'skill_read',
+    toModelOutput: mediaToModelOutput,
     description:
-      'Read a file from a skill directory (references, scripts, or assets). The path is relative to the skill root.',
+      'Read a file from a skill directory (references, scripts, or assets). The path is relative to the skill root. PNG, JPEG, WebP, and PDF files up to 10 MiB are returned as native media parts; other binary files return metadata only.',
     inputSchema: z.object({
       skillName: z
         .string()
@@ -230,6 +234,23 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
           span.end({ success: false });
           return `File "${path}" not found in skill "${skillName}".${fileList}`;
+        }
+
+        // Detect supported media before decoding: PDFs can be entirely valid UTF-8.
+        // Use the same extension mapping, supported types, and size cap as read_file.
+        const mediaType = getMimeType(path);
+        if (DEFAULT_MEDIA_TYPES.includes(mediaType)) {
+          const fullPath = `${resolved.skill.path}/${path}`;
+          span.end({ success: true }, { bytesTransferred: bytes.length });
+          if (bytes.length > DEFAULT_MAX_MEDIA_BYTES) {
+            return `Binary file: ${fullPath} (${bytes.length} bytes)`;
+          }
+          return {
+            __workspaceMedia: true,
+            text: `${fullPath} (${bytes.length} bytes, ${mediaType})`,
+            mediaType,
+            data: bytes.toString('base64'),
+          } satisfies MediaToolResult;
         }
 
         // Binary if it contains NUL bytes or is not valid UTF-8 (e.g. PNGs, PDFs — which are
