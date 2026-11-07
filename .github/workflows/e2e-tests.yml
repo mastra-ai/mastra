@@ -151,15 +151,9 @@ jobs:
 
   e2e-monorepo:
     needs: publish-e2e-registry
-    name: E2E monorepo (shard ${{ matrix.shard }}/4)
+    name: E2E monorepo
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
-    # Split by describe block (e2e-tests/monorepo/shards.cjs); the last shard takes whatever the
-    # named groups don't, so no test is left out.
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     permissions:
       contents: read
       id-token: write
@@ -198,7 +192,7 @@ jobs:
 
       - name: Test
         working-directory: ./e2e-tests/monorepo
-        run: pnpm test -t "$(node shards.cjs ${{ matrix.shard }})"
+        run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
