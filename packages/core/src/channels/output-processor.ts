@@ -45,7 +45,12 @@ export interface ChatChannelRenderContext {
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
+  /** @experimental See {@link ChannelAdapterBaseConfig.onDataPart}. */
+  onDataPart?: ChannelAdapterBaseConfig['onDataPart'];
 }
+
+/** Longest the terminal chunk waits for pending `onDataPart` work before the run moves on. */
+export const DATA_PART_HOOK_BOUND_MS = 15_000;
 
 /** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */
 const TEXT_CHUNK_TYPES: ReadonlySet<string> = new Set(['text-start', 'text-delta', 'text-end']);
@@ -115,6 +120,8 @@ function createChunkQueue(): ChunkQueue {
 interface RenderSession {
   queue: ChunkQueue;
   driverPromise: Promise<void>;
+  /** Serial chain of `onDataPart` calls; always resolves. */
+  dataParts?: Promise<void>;
 }
 
 /**
@@ -182,6 +189,28 @@ export class ChatChannelOutputProcessor {
       state.session = session;
     }
 
+    if (render.onDataPart && typeof part.type === 'string' && part.type.startsWith('data-')) {
+      const hook = render.onDataPart;
+      const memory = parseMemoryRequestContext(requestContext);
+      const dataPart = part as unknown as { type: `data-${string}`; data?: unknown; id?: string };
+      const ctx = {
+        platform: render.platform,
+        adapter: render.adapter,
+        chatThread: render.chatThread,
+        threadId: memory?.thread?.id,
+        resourceId: memory?.resourceId,
+      };
+      const prev = session.dataParts ?? Promise.resolve();
+      session.dataParts = prev
+        .then(() => hook({ type: dataPart.type, data: dataPart.data, id: dataPart.id }, ctx))
+        .catch(err => {
+          render.logger?.warn?.(`[${render.platform}] onDataPart hook failed`, {
+            partType: dataPart.type,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    }
+
     // Skip the approval card when no human decision is pending (e.g. the
     // controller auto-resolves the tool's policy). The chunk still flows on so
     // the run itself can resolve the approval.
@@ -205,6 +234,17 @@ export class ChatChannelOutputProcessor {
         await session.driverPromise;
       } catch (err) {
         render.logger?.error?.(`[${render.platform}] channel render driver failed`, { error: err });
+      }
+      if (session.dataParts) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const bound = new Promise<'timeout'>(resolve => {
+          timer = setTimeout(() => resolve('timeout'), DATA_PART_HOOK_BOUND_MS);
+        });
+        const outcome = await Promise.race([session.dataParts.then(() => 'done' as const), bound]);
+        clearTimeout(timer);
+        if (outcome === 'timeout') {
+          render.logger?.warn?.(`[${render.platform}] onDataPart hook still pending after ${DATA_PART_HOOK_BOUND_MS}ms`);
+        }
       }
     }
 
