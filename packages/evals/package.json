@@ -122,7 +122,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^18.0.9",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.5",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

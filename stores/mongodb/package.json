@@ -46,11 +46,11 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^18.0.9",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.5",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
