@@ -49,6 +49,7 @@ class FakeBackend {
   nextSandboxId?: string;
   failStart?: Error;
   failDestroy = false;
+  failScreenshot = false;
   checkpoint: any = { status: 'captured', checkpointName: 'ck-internal' };
   viewerUrl: string | null = 'https://6080-vm.preview.test/vnc.html?autoconnect=1';
   cookie: { name: string; value: string } | null = { name: '__mastra_preview', value: 'secret-cookie' };
@@ -119,6 +120,7 @@ class FakeBackend {
       },
       computer: {
         screenshot: async () => {
+          if (backend.failScreenshot) throw new Error('scrot failed');
           await act('screenshot');
           return { data: PNG, mediaType: 'image/png' as const };
         },
@@ -970,6 +972,14 @@ describe('screenshot after action', () => {
       call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1')),
     ]);
     expect(backend.actions).toEqual(['click', 'screenshot', 'type', 'screenshot']);
+  });
+
+  it('reports the completed action when the follow-up screenshot fails', async () => {
+    const computers = make({ screenshotAfterAction: true });
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.failScreenshot = true;
+    expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe('typed (screenshot failed)');
+    expect(backend.actions).toEqual(['type']);
   });
 
   it('skips the screenshot when the user takes control during the action', async () => {

@@ -279,7 +279,9 @@ export class PlatformComputers implements MastraComputers {
     return this.#hands(context, async (_s, computer, entry) => {
       const text = await fn(computer);
       if (!this.#screenshotAfterAction || entry.control.holder === 'human') return text;
-      return media(`${text}. `, await computer.screenshot());
+      // The action already happened; a failed screenshot must not make the model retry it.
+      const shot = await computer.screenshot().catch(() => undefined);
+      return shot ? media(`${text}. `, shot) : `${text} (screenshot failed)`;
     });
   }
 
