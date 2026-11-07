@@ -72,6 +72,13 @@ type EventLogEntry = {
 
 type Repository = { id: number; fullName?: string; installationId: number };
 
+/**
+ * How long cached repository discovery is trusted without a change report.
+ * A safety net for a missed cross-replica message; kept above Neon's
+ * five-minute autosuspend so an idle database can sleep.
+ */
+const DISCOVERY_REFRESH_MS = 60 * 60_000;
+
 export type PlatformGithubEventDispatchIntegration = GithubWebhookDispatchIntegration;
 
 export interface PlatformGithubEventWorkerConfig {
@@ -84,9 +91,13 @@ export interface PlatformGithubEventWorkerConfig {
    * should poll. The worker restricts itself to `(installation, repository)`
    * pairs linked to a factory project — the same set the reconciler uses —
    * so polling scales with Factory usage, not with the size of the underlying
-   * GitHub org.
+   * GitHub org. With `onRepositoriesChanged` the worker caches that set
+   * until a link changes, so an idle server does not read it every tick.
    */
-  sourceControl: GithubReconcileRepositorySource;
+  sourceControl: GithubReconcileRepositorySource & {
+    /** Returns the unsubscribe, or `undefined` when changes cannot be reported. */
+    onRepositoriesChanged?(listener: () => void): (() => void) | undefined;
+  };
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
@@ -117,7 +128,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
-  readonly #sourceControl: GithubReconcileRepositorySource;
+  readonly #sourceControl: PlatformGithubEventWorkerConfig['sourceControl'];
+  #discovered: { repositories: Repository[]; at: number } | undefined;
+  #discoveryGeneration = 0;
+  #unsubscribeRepositoryChanges: (() => void) | undefined;
   readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
@@ -176,6 +190,11 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+    this.#discovered = undefined;
+    this.#unsubscribeRepositoryChanges = this.#sourceControl.onRepositoriesChanged?.(() => {
+      this.#discoveryGeneration += 1;
+      this.#discovered = undefined;
+    });
     this.#running = true;
     this.deps.logger.info('Platform GitHub event polling started', {
       intervalMs: this.#intervalMs,
@@ -187,6 +206,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
   async stop(): Promise<void> {
     if (!this.#running) return;
     this.#running = false;
+    this.#unsubscribeRepositoryChanges?.();
+    this.#unsubscribeRepositoryChanges = undefined;
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = undefined;
     this.#stopLeaseRenewal();
@@ -386,6 +407,19 @@ export class PlatformGithubEventWorker extends MastraWorker {
    * wasted `/events` bandwidth and platform load.
    */
   async #discoverRepositories(): Promise<Repository[]> {
+    const cached = this.#discovered;
+    if (cached && this.#now() - cached.at < DISCOVERY_REFRESH_MS) return cached.repositories;
+    const generation = this.#discoveryGeneration;
+    const at = this.#now();
+    const repositories = await this.#readRepositories();
+    // Cache only when changes are reported, and only if none landed mid-read.
+    if (this.#unsubscribeRepositoryChanges && generation === this.#discoveryGeneration) {
+      this.#discovered = { repositories, at };
+    }
+    return repositories;
+  }
+
+  async #readRepositories(): Promise<Repository[]> {
     const keys = await this.#sourceControl.projectRepositories.listConfiguredExternalKeys();
     const repositories = new Map<number, Repository>();
     for (const key of keys) {

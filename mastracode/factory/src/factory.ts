@@ -141,6 +141,7 @@ import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
+import { publishSourceControlChange, subscribeSourceControlChanges } from './source-control-changes.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -562,6 +563,7 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeSourceControlChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -831,6 +833,17 @@ export class MastraFactory {
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Pollers cache which repositories are linked so an idle server stops
+    // reading link tables every tick; the bus carries link writes to replicas.
+    sourceControlStorage.onRepositoryWrite(() => publishSourceControlChange(eventBus, this.#dispatchWakeOrigin));
+    this.#unsubscribeSourceControlChanges = subscribeSourceControlChanges(eventBus, this.#dispatchWakeOrigin, () =>
+      sourceControlStorage.repositoriesChanged(),
+    ).catch(error => {
+      console.warn(
+        `[factory] subscribing to source-control changes failed; repositories linked on other replicas are picked up on the hourly refresh: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -2435,6 +2448,15 @@ export class MastraFactory {
     const shutdownPromise = (async () => {
       const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
       this.#unsubscribeDispatchWakes = undefined;
+      const unsubscribeSourceControlChanges = this.#unsubscribeSourceControlChanges;
+      this.#unsubscribeSourceControlChanges = undefined;
+      await unsubscribeSourceControlChanges
+        ?.then(unsubscribe => unsubscribe?.())
+        .catch(error =>
+          console.warn(
+            `[factory] unsubscribing from source-control changes failed: ${error instanceof Error ? error.message : error}`,
+          ),
+        );
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

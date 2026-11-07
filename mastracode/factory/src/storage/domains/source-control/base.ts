@@ -460,6 +460,13 @@ export type TransferSourceControlSessionOwnerResult =
 
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
+  /**
+   * Calls `listener` after any write, on this replica or another, that can
+   * change which repositories are linked to a project. Lets pollers cache the
+   * linked set instead of re-reading it every tick. Returns the unsubscribe.
+   * Absent on handles that cannot report changes.
+   */
+  onRepositoriesChanged?(listener: () => void): () => void;
   readonly installations: {
     list(args: { orgId: string }): Promise<SourceControlInstallation[]>;
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
@@ -820,9 +827,57 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
   return patch;
 }
 
+/** Tables whose rows decide which repositories are linked to a project. */
+const LINK_TABLES = new Set([INSTALLATIONS, REPOSITORIES, CONNECTIONS, PROJECT_REPOSITORIES]);
+const WRITE_METHODS = new Set(['insertOne', 'upsertOne', 'updateMany', 'deleteMany', 'updateAtomic']);
+
 export class SourceControlStorage extends FactoryStorageDomain {
+  readonly #changeListeners = new Set<() => void>();
+  readonly #writeListeners = new Set<() => void>();
+
   constructor() {
     super('source-control');
+  }
+
+  /**
+   * Reports this domain's writes to link tables once they resolve. The domain
+   * writes outside transactions, so a resolved write is already committed and
+   * a listener that re-reads sees it.
+   */
+  protected override get ops(): FactoryStorageOps {
+    const ops = super.ops;
+    return new Proxy(ops, {
+      get: (target, property, receiver) => {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== 'function') return value;
+        if (typeof property !== 'string' || !WRITE_METHODS.has(property)) return value.bind(target);
+        return async (collection: string, ...args: unknown[]) => {
+          const result = await value.call(target, collection, ...args);
+          if (LINK_TABLES.has(collection)) {
+            for (const listener of this.#writeListeners) listener();
+            this.repositoriesChanged();
+          }
+          return result;
+        };
+      },
+    });
+  }
+
+  /** Calls `listener` after this replica's own link-table writes, so it can tell other replicas. */
+  onRepositoryWrite(listener: () => void): () => void {
+    this.#writeListeners.add(listener);
+    return () => this.#writeListeners.delete(listener);
+  }
+
+  /** Calls `listener` after any link change, local or reported by {@link repositoriesChanged}. */
+  onRepositoriesChanged(listener: () => void): () => void {
+    this.#changeListeners.add(listener);
+    return () => this.#changeListeners.delete(listener);
+  }
+
+  /** Records a link change, e.g. one another replica reported. */
+  repositoriesChanged(): void {
+    for (const listener of this.#changeListeners) listener();
   }
 
   /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
@@ -1132,6 +1187,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
     return {
       integrationId,
+      onRepositoriesChanged: listener => this.onRepositoriesChanged(listener),
       installations: {
         list: async ({ orgId }) =>
           (

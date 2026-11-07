@@ -876,6 +876,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         // storage is initialized, and the worker only reads these slices once
         // it is running.
         sourceControl: {
+          onRepositoriesChanged: listener => this.storage.onRepositoriesChanged?.(listener),
           projectRepositories: {
             listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
             listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
