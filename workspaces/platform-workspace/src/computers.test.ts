@@ -162,12 +162,27 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
   delete process.env.MASTRA_COMPUTERS_SECRET;
+  delete process.env.MASTRA_ENVIRONMENT_ID;
 });
 
 describe('PlatformComputers construction', () => {
-  it('throws with the flag off', () => {
+  it('throws with the flag off before resolving credentials', () => {
+    const saved = {
+      accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
+      secretKey: process.env.MASTRA_PLATFORM_SECRET_KEY,
+      computersSecret: process.env.MASTRA_COMPUTERS_SECRET,
+    };
     delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
-    expect(() => make()).toThrow('set MASTRA_EXPERIMENTAL_COMPUTER=true');
+    delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+    delete process.env.MASTRA_COMPUTERS_SECRET;
+    try {
+      expect(() => new PlatformComputers()).toThrow('set MASTRA_EXPERIMENTAL_COMPUTER=true');
+    } finally {
+      if (saved.accessToken !== undefined) process.env.MASTRA_PLATFORM_ACCESS_TOKEN = saved.accessToken;
+      if (saved.secretKey !== undefined) process.env.MASTRA_PLATFORM_SECRET_KEY = saved.secretKey;
+      if (saved.computersSecret !== undefined) process.env.MASTRA_COMPUTERS_SECRET = saved.computersSecret;
+    }
   });
 
   it('throws a distinct error with no secret or access token', () => {
@@ -207,7 +222,10 @@ describe('PlatformComputers construction', () => {
         'computer_request_human',
       ].sort(),
     );
-    for (const [id, tool] of Object.entries(computers.tools())) expect(tool.id).toBe(id);
+    for (const [id, tool] of Object.entries(computers.tools())) {
+      expect(tool.id).toBe(id);
+      expect((tool as typeof tool & { orderedToolGroup?: string }).orderedToolGroup).toBe('workspace-computer');
+    }
   });
 });
 
@@ -217,6 +235,9 @@ describe('computer ids', () => {
     expect(make().mintId(true, 'sbx-abc', resource)).toBe('cmp_p_sbx-abc_MY7PkUexKgeEUt9Pdrzq4Q');
     const hkdf = new PlatformComputers({ accessToken: 'tok', environmentId: 'env-1', createSandbox: backend.create });
     expect(hkdf.mintId(false, 'sbx-abc', resource)).toBe('cmp_e_sbx-abc_PoIfILmz5F9o8YtUKHBc8A');
+    process.env.MASTRA_ENVIRONMENT_ID = 'env-1';
+    const envContext = new PlatformComputers({ accessToken: 'tok', createSandbox: backend.create });
+    expect(envContext.mintId(false, 'sbx-abc', resource)).toBe('cmp_e_sbx-abc_PoIfILmz5F9o8YtUKHBc8A');
   });
 
   it('prefers options.secret over MASTRA_COMPUTERS_SECRET over the access token', () => {

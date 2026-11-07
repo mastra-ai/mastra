@@ -201,6 +201,16 @@
         "default": "./dist/datasets/index.cjs"
       }
     },
+    "./computers": {
+      "import": {
+        "types": "./dist/computers/index.d.ts",
+        "default": "./dist/computers/index.js"
+      },
+      "require": {
+        "types": "./dist/computers/index.d.ts",
+        "default": "./dist/computers/index.cjs"
+      }
+    },
     "./deployer": {
       "import": {
         "types": "./dist/deployer/index.d.ts",
