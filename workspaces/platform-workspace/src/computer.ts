@@ -43,7 +43,9 @@ const VNC_PORT = 5900;
 export const COMPUTER_VIEWER_PORT = 6080;
 const ENV = { DISPLAY };
 const ENSURE_TIMEOUT_MS = 300_000;
-const CANT_OPEN_DISPLAY = "Can't open display";
+const ACTION_TIMEOUT_MS = 30_000;
+/** Extra time per typed character or scroll click on top of `ACTION_TIMEOUT_MS`. */
+const PER_STEP_TIMEOUT_MS = 50;
 
 /**
  * Installs the desktop if any binary is missing, then starts each service whose
@@ -58,6 +60,7 @@ missing=0
 for b in Xvfb openbox x11vnc websockify xdotool scrot xdpyinfo xprop xterm; do
   command -v "$b" >/dev/null 2>&1 || missing=1
 done
+[ -f /usr/share/novnc/vnc.html ] || missing=1
 if [ "$missing" = 1 ]; then
   sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq >/tmp/.mastra-computer-install.log 2>&1 &&
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ${DESKTOP_PACKAGES.join(' ')} >>/tmp/.mastra-computer-install.log 2>&1 ||
@@ -67,7 +70,10 @@ export DISPLAY=${DISPLAY}
 n=0
 deadline=$((SECONDS + 15))
 x_ok() { xdpyinfo -display ${DISPLAY} >/dev/null 2>&1; }
-wm_ok() { xprop -display ${DISPLAY} -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id'; }
+wm_ok() {
+  wm=$(xprop -display ${DISPLAY} -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | sed -n 's/.*window id # //p')
+  [ -n "$wm" ] && xprop -display ${DISPLAY} -id "$wm" _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id # $wm"
+}
 vnc_ok() { bash -c '</dev/tcp/127.0.0.1/${VNC_PORT}' >/dev/null 2>&1; }
 web_ok() { curl -sf -o /dev/null http://127.0.0.1:${COMPUTER_VIEWER_PORT}/vnc.html; }
 term_ok() { xdotool search --class xterm >/dev/null 2>&1; }
@@ -79,7 +85,7 @@ wm_ok || launch openbox
 await_ok wm_ok
 vnc_ok || launch x11vnc -display ${DISPLAY} -forever -shared -nopw -rfbport ${VNC_PORT} -localhost
 await_ok vnc_ok
-web_ok || launch websockify --web /usr/share/novnc 0.0.0.0:${COMPUTER_VIEWER_PORT} localhost:${VNC_PORT}
+web_ok || launch websockify --web /usr/share/novnc 0.0.0.0:${COMPUTER_VIEWER_PORT} 127.0.0.1:${VNC_PORT}
 await_ok web_ok
 term_ok || launch xterm
 await_ok term_ok
@@ -157,7 +163,8 @@ export function createPlatformComputer({ exec, viewerUrl }: PlatformComputerDeps
 
   const check = (name: string, result: CommandResult): CommandResult => {
     if (result.exitCode !== 0 || result.timedOut) {
-      if (result.stderr.includes(CANT_OPEN_DISPLAY)) ready = undefined;
+      // Any failure may mean the desktop died; the next call re-runs the (idempotent) start script.
+      ready = undefined;
       const reason = result.timedOut ? 'timed out' : `exit ${result.exitCode}`;
       throw new Error(`computer ${name} failed (${reason}): ${tail(result.stderr)}`);
     }
@@ -182,21 +189,29 @@ export function createPlatformComputer({ exec, viewerUrl }: PlatformComputerDeps
   const run = <T>(fn: () => Promise<T>): Promise<T> => {
     const task = () => ensureDesktop().then(fn);
     const result = queue.then(task, task);
-    queue = result;
+    queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 
-  const input = (name: string, args: string[]) => async () => {
-    check(name, await exec('xdotool', args, { once: true, env: ENV }));
-  };
+  const input =
+    (name: string, args: string[], timeout = ACTION_TIMEOUT_MS) =>
+    async () => {
+      check(name, await exec('xdotool', args, { once: true, timeout, env: ENV }));
+    };
 
   const read = async (name: string, args: string[]) =>
-    check(name, await exec('xdotool', args, { once: false, env: ENV }));
+    check(name, await exec('xdotool', args, { once: false, timeout: ACTION_TIMEOUT_MS, env: ENV }));
 
   return {
     screenshot: () =>
       run(async (): Promise<ComputerScreenshot> => {
-        const { stdout } = check('screenshot', await exec(SCREENSHOT_SCRIPT, undefined, { once: false, env: ENV }));
+        const { stdout } = check(
+          'screenshot',
+          await exec(SCREENSHOT_SCRIPT, undefined, { once: false, timeout: ACTION_TIMEOUT_MS, env: ENV }),
+        );
         const newline = stdout.indexOf('\n');
         const expected = Number(stdout.slice(0, newline));
         const data = new Uint8Array(Buffer.from(stdout.slice(newline + 1).trim(), 'base64'));
@@ -253,14 +268,27 @@ export function createPlatformComputer({ exec, viewerUrl }: PlatformComputerDeps
       if (direction !== 'up' && direction !== 'down') {
         throw new TypeError(`scroll direction must be 'up' or 'down', got ${String(direction)}`);
       }
-      return run(input('scroll', ['click', '--repeat', String(amount), direction === 'up' ? '4' : '5']));
+      return run(
+        input(
+          'scroll',
+          ['click', '--repeat', String(amount), direction === 'up' ? '4' : '5'],
+          ACTION_TIMEOUT_MS + amount * PER_STEP_TIMEOUT_MS,
+        ),
+      );
     },
     type: async text => {
       if (typeof text !== 'string') throw new TypeError('type text must be a string');
-      return run(input('type', ['type', '--clearmodifiers', '--delay', '12', '--', text]));
+      return run(
+        input(
+          'type',
+          ['type', '--clearmodifiers', '--delay', '12', '--', text],
+          ACTION_TIMEOUT_MS + text.length * PER_STEP_TIMEOUT_MS,
+        ),
+      );
     },
     press: async key => {
-      const parts = Array.isArray(key) ? key : [key];
+      // 'ctrl+Enter' and ['ctrl', 'Enter'] are the same chord; a '+' with nothing after it is the plus key.
+      const parts = (Array.isArray(key) ? key : [key]).flatMap(k => (typeof k === 'string' ? k.split(/\+(?=.)/) : [k]));
       if (parts.length === 0 || parts.some(k => typeof k !== 'string' || k.length === 0)) {
         throw new TypeError('press key must be a non-empty string or array of non-empty strings');
       }

@@ -359,7 +359,7 @@ const agent = new Agent({
 })
 ```
 
-The first computer call installs the desktop (about 80 seconds) and starts it. Later calls, and other `PlatformSandbox` instances attached to the same sandbox, reuse the running desktop. Computer calls run one at a time, in order.
+The first computer call installs the desktop (about 80 seconds) and starts it. Later calls, and other `PlatformSandbox` instances attached to the same sandbox, reuse the running desktop. Calls through one `PlatformSandbox` instance run one at a time, in order. Two instances attached to the same sandbox (for example after `clone()` or a reattach) are not ordered against each other.
 
 To watch or take over, open the desktop's noVNC viewer in a browser tab. `streamUrl()` returns the viewer link, and `getPortAuthCookie(6080)` signs a browser you control in to it:
 

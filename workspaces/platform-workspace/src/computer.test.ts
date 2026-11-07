@@ -64,8 +64,8 @@ const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 describe('createPlatformComputer', () => {
   describe('command mapping', () => {
-    const input = { once: true, env: { DISPLAY: ':1' } };
-    const read = { once: false, env: { DISPLAY: ':1' } };
+    const input = { once: true, timeout: 30_000, env: { DISPLAY: ':1' } };
+    const read = { once: false, timeout: 30_000, env: { DISPLAY: ':1' } };
 
     it.each([
       ['leftClick', (c: any) => c.leftClick(10, 20), ['mousemove', '10', '20', 'click', '1']],
@@ -95,7 +95,25 @@ describe('createPlatformComputer', () => {
     ])('%s sends xdotool argv once-only with DISPLAY=:1', async (_name, act, args) => {
       const { computer, work } = setup();
       await act(computer);
-      expect(work()).toEqual([{ command: 'xdotool', args, opts: input }]);
+      expect(work()).toEqual([{ command: 'xdotool', args, opts: { ...input, timeout: expect.any(Number) } }]);
+    });
+
+    it('scales the timeout of long inputs', async () => {
+      const { computer, work } = setup();
+      await computer.type('x'.repeat(1000));
+      await computer.scroll('down', 10);
+      expect(work().map(c => c.opts.timeout)).toEqual([30_000 + 1000 * 50, 30_000 + 10 * 50]);
+    });
+
+    it.each([
+      ['ctrl+Enter', 'ctrl+Return'],
+      ['Control+Shift+ArrowUp', 'ctrl+shift+Up'],
+      ['ctrl++', 'ctrl+plus'],
+      ['+', 'plus'],
+    ])('splits combo string %s into %s', async (key, keysym) => {
+      const { computer, work } = setup();
+      await computer.press(key);
+      expect(work()[0]!.args).toEqual(['key', '--clearmodifiers', '--', keysym]);
     });
 
     it.each([
@@ -242,18 +260,19 @@ describe('createPlatformComputer', () => {
       expect(ensures()).toBe(2);
     });
 
-    it('keeps the desktop memo after an unrelated failure', async () => {
+    it('re-runs ensure after a failed screenshot (scrot words the display error differently)', async () => {
       let fail = true;
+      const bytes = png();
       const { computer, ensures } = setup(() => {
         if (fail) {
           fail = false;
-          return { exitCode: 1, stderr: 'other' };
+          return { exitCode: 1, stderr: "giblib error: Can't open X display. It *is* running, yeah?" };
         }
-        return ok();
+        return screenshotOut(bytes);
       });
-      await expect(computer.moveMouse(1, 1)).rejects.toThrow();
-      await computer.moveMouse(1, 1);
-      expect(ensures()).toBe(1);
+      await expect(computer.screenshot()).rejects.toThrow(/Can't open X display/);
+      await expect(computer.screenshot()).resolves.toMatchObject({ mediaType: 'image/png' });
+      expect(ensures()).toBe(2);
     });
   });
 
@@ -318,7 +337,10 @@ describe('createPlatformComputer', () => {
       for (const line of setsidLines) expect(line).toContain('9>&-');
       for (const guard of [
         'xdpyinfo -display :1',
-        "xprop -display :1 -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id'",
+        'xprop -display :1 -root _NET_SUPPORTING_WM_CHECK',
+        'xprop -display :1 -id "$wm" _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id # $wm"',
+        '[ -f /usr/share/novnc/vnc.html ] || missing=1',
+        '0.0.0.0:6080 127.0.0.1:5900',
         "bash -c '</dev/tcp/127.0.0.1/5900'",
         'curl -sf -o /dev/null http://127.0.0.1:6080/vnc.html',
         'xdotool search --class xterm',
