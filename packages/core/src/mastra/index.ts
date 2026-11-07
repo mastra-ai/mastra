@@ -111,6 +111,7 @@ import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
+import type { MastraComputers } from './computers';
 import {
   declaredSchedulesOf,
   findFsAgentScheduleHandler,
@@ -285,6 +286,8 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
  * });
  * ```
  */
+export type { MastraComputers, MastraComputerViewer } from './computers';
+
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
@@ -515,6 +518,13 @@ export interface Config<
    * Skills are accessed via workspace.skills when skills is configured.
    */
   workspace?: AnyWorkspace;
+
+  /**
+   * Agent computers, exposed to agents through `computers.tools()`.
+   *
+   * @experimental
+   */
+  computers?: MastraComputers;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -895,6 +905,7 @@ export class Mastra<
   #memory?: TMemory;
   #knowledge: TKnowledge;
   #workspace?: Workspace;
+  #computers?: MastraComputers;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
   #serverExplicit = false;
@@ -1922,6 +1933,8 @@ export class Mastra<
         }
       });
     }
+
+    this.#computers = config?.computers;
 
     if (config?.workspace) {
       this.#workspace = config.workspace;
@@ -3712,6 +3725,15 @@ export class Mastra<
    */
   public getWorkspace(): Workspace | undefined {
     return this.#workspace;
+  }
+
+  /**
+   * Gets the registered computers provider, if any.
+   *
+   * @experimental
+   */
+  public getComputers(): MastraComputers | undefined {
+    return this.#computers;
   }
 
   /**

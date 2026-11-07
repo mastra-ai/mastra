@@ -54,3 +54,4 @@ export {
   type PrivateNetFetch,
 } from './private-net-exec.js';
 export { InProcessSandboxAddressRegistry } from './address-registry.js';
+export { PlatformComputers, type PlatformComputersOptions } from './computers.js';
