@@ -158,7 +158,7 @@ export function ModelPicker({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground"
+                    className="shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground max-sm:h-11 max-sm:px-4"
                     aria-pressed={!providerFilter}
                     onClick={() => setProviderFilter(undefined)}
                   >
@@ -170,7 +170,7 @@ export function ModelPicker({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className="relative shrink-0 aria-pressed:bg-fill"
+                      className="relative shrink-0 aria-pressed:bg-fill max-sm:size-11"
                       aria-pressed={providerFilter === provider.id}
                       aria-label={provider.connected === false ? `${provider.name}, not connected` : provider.name}
                       tooltip={provider.connected === false ? `${provider.name} (not connected)` : provider.name}
@@ -191,7 +191,7 @@ export function ModelPicker({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="ml-auto shrink-0"
+                  className="ml-auto shrink-0 max-sm:size-11"
                   aria-label={addProvider.label}
                   tooltip={addProvider.label}
                   render={addProvider.render}

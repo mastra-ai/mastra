@@ -30,7 +30,7 @@ export function ThinkingLevelRamp<T extends string>({ options, value, label, onC
         </Txt>
       </div>
       <div className="flex flex-col gap-2">
-        <div className="relative flex h-10 items-end gap-1">
+        <div className="relative flex h-10 items-end gap-1 max-sm:h-11">
           {options.map((option, stop) => (
             <span
               key={option.value}
