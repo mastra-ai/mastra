@@ -374,6 +374,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                             },
                           }
                         : {}),
+                      ...(phase.tools ? { tools: [...phase.tools] } : {}),
                     }
                   : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),

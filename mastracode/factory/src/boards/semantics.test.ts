@@ -87,7 +87,7 @@ describe('workItemPhaseSemantics', () => {
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
         stages: ['pr-review'],
       }),
-    ).toEqual({ kind: 'working', role: 'work' });
+    ).toEqual({ kind: 'working', role: 'review' });
   });
 
   it('is undefined for multi-stage rows', () => {

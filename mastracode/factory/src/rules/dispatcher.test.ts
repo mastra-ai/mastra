@@ -7931,7 +7931,8 @@ describe('review status comment lifecycle', () => {
     });
     await bindReviewRun(storage, item.id);
     await new Promise(resolve => setTimeout(resolve, 5));
-    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    // Planning: a lane the reviewer does not work (Review and PR review both run in its context).
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
     const { reportReviewStatus, events, comments } = pullRequestConversation();
     const { controller } = createSession();
     await new FactoryDecisionDispatcher({

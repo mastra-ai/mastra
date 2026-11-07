@@ -3,10 +3,13 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { PULL_REQUEST_REVIEW_PHASE, reviewedPullRequest, sourceExternalId } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
+import { phaseGrantsTool } from './phase-tools.js';
 
 export interface ReviewSourceOutput {
   /**
@@ -85,7 +88,7 @@ export function resolveReviewSourceUiOrigin(raw: string | undefined): string | n
  *
  * The tool is intentionally omitted (returns `{}`) whenever it cannot produce
  * a complete, correct provenance shape: no resolvable session address, no
- * active binding, a non-review-role binding, no bound work item, or no
+ * active binding, a card whose phase does not grant the tool to this session, no bound work item, or no
  * configured browser-facing UI origin. Skills treat tool-absent identically to
  * tool-failed: stop-don't-publish.
  */
@@ -107,6 +110,7 @@ export async function createReviewSourceTool(options: {
    * skill's tool-not-available branch stops publication.
    */
   uiOrigin: string | null;
+  boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
   if (options.uiOrigin === null) return {};
   const resolution = await resolveFactorySessionAddress({
@@ -116,13 +120,12 @@ export async function createReviewSourceTool(options: {
   });
   if (!resolution) return {};
   const binding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
-  // The tool exists only for review-role sessions. Work/plan/triage runs never
-  // publish reviews on GitHub, so exposing them the tool would just clutter
-  // their prompt.
-  if (!binding || binding.role !== 'review') return {};
+  if (!binding) return {};
 
   const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
   if (!item) return {};
+  // Only the session reviewing the card in a phase that grants the tool publishes reviews.
+  if (!(await phaseGrantsTool(options.boards, binding, item, 'factory_review_source'))) return {};
 
   const sessionUrl = buildSessionUrl({
     uiOrigin: options.uiOrigin,

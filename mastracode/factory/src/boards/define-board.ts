@@ -140,6 +140,10 @@ export interface BoardPhaseExitTool {
   readonly next?: string;
 }
 
+/** Factory tools a working phase grants the session that works the card there. */
+export const FACTORY_PHASE_TOOLS = ['factory_record_review_verdict', 'factory_review_source'] as const;
+export type FactoryPhaseTool = (typeof FACTORY_PHASE_TOOLS)[number];
+
 type BoardPhaseBase<PhaseId extends string> = {
   readonly name?: string;
   /** @deprecated Use `name`. */
@@ -167,6 +171,12 @@ type WorkingPhaseFields = {
   readonly autoStartWhen?: RuleGroup;
   /** A bare tool name is shorthand for `{ id }`, with nothing approved on a person's behalf. */
   readonly exitTool?: string | BoardPhaseExitTool;
+  /**
+   * Factory tools the session working the card here gets, on top of the move tool. Only the
+   * session whose context is the phase's `runner.context` gets them, and only while the card
+   * is in this phase.
+   */
+  readonly tools?: readonly FactoryPhaseTool[];
 };
 
 type NonWorkingPhaseFields = {
@@ -175,6 +185,7 @@ type NonWorkingPhaseFields = {
   readonly autoStart?: never;
   readonly autoStartWhen?: never;
   readonly exitTool?: never;
+  readonly tools?: never;
 };
 
 /** A phase as a board declares it. */
@@ -212,6 +223,7 @@ export type BoardPhase<PhaseId extends string> =
       readonly autoStart?: boolean;
       readonly autoStartWhen?: RuleGroup;
       readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup; next?: PhaseId }>;
+      readonly tools?: readonly FactoryPhaseTool[];
     })
   | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'terminal' });
 
@@ -295,8 +307,20 @@ const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_INSTRUCTIONS_LENGTH = 1_000;
 const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions']);
 const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen', 'next']);
-const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool'] as const;
+const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool', 'tools'] as const;
 const MOVE_TOOL = 'factory_transition_work_item';
+
+function resolvePhaseTools(label: string, value: unknown): readonly FactoryPhaseTool[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new BoardDefinitionError(`${label} tools must be a list of Factory tool names.`);
+  for (const tool of value) {
+    if (!(FACTORY_PHASE_TOOLS as readonly unknown[]).includes(tool)) {
+      throw new BoardDefinitionError(`${label} tools: ${String(tool)} is not a Factory phase tool.`);
+    }
+  }
+  const tools = [...new Set(value as FactoryPhaseTool[])];
+  return tools.length ? Object.freeze(tools) : undefined;
+}
 
 /** `name`, falling back to the deprecated `title`; both may be set only to the same text. */
 function resolveName(name: unknown, title: unknown, label: string): string {
@@ -691,6 +715,7 @@ function buildBoard<
             `${label} is the initial phase; cards land there, so it cannot be people-only.`,
           );
         }
+        const tools = resolvePhaseTools(label, working?.tools);
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
@@ -712,6 +737,7 @@ function buildBoard<
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),
             ...(exitTool ? { exitTool } : {}),
+            ...(tools ? { tools } : {}),
             ...(onEnter ? { onEnter: Object.freeze({ ...onEnter }) } : {}),
             ...(phase.onExit ? { onExit: Object.freeze({ ...phase.onExit }) } : {}),
           }),

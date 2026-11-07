@@ -267,7 +267,9 @@ describe('defineBoard', () => {
     expect(workBoard.roleForPhase('triage')).toBe('triage');
     expect(workBoard.roleForPhase('planning')).toBe('work');
     expect(workBoard.roleForPhase('execute')).toBe('work');
-    expect(workBoard.roleForPhase('review')).toBe('work');
+    // The independent reviewer works the card in Review and PR review.
+    expect(workBoard.roleForPhase('review')).toBe('review');
+    expect(workBoard.roleForPhase('pr-review')).toBe('review');
     // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
     expect(workBoard.phaseForRole('work')).toBe('planning');
     expect(workBoard.isTerminal('done')).toBe(true);
@@ -289,7 +291,7 @@ describe('defineBoard', () => {
       'triage',
       'work',
       'work',
-      'work',
+      'review',
     ]);
   });
 
