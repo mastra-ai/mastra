@@ -26,6 +26,11 @@ export class JsonBodyMiddleware implements NestMiddleware {
       strict: false,
       // Only parse JSON content types
       type: ['application/json', 'application/*+json'],
+      // Keep the exact bytes read so route-level maxBodySize can reject padded
+      // chunked bodies that shrink after JSON.parse / JSON.stringify.
+      verify: (req, _res, buf) => {
+        (req as Request & { rawBody?: Buffer }).rawBody = buf;
+      },
     });
   }
 
