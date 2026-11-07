@@ -249,10 +249,8 @@ export class ComputerCards {
     const done = run.then(() => undefined);
     this.#chains.set(key, done);
     void done.then(() => {
-      if (this.#chains.get(key) === done && this.#cards.get(key)?.ended !== false) {
-        this.#chains.delete(key);
-        if (this.#cards.get(key)?.ended) this.#cards.delete(key);
-      }
+      // Ended cards stay as tombstones so stale buttons keep refusing.
+      if (this.#chains.get(key) === done) this.#chains.delete(key);
     });
     return run;
   }
