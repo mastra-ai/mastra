@@ -297,6 +297,12 @@ function stubIncidentioCandidate() {
   );
 }
 
+async function expectTooltipParts(parts: string[]) {
+  const tooltip = await screen.findByRole('tooltip');
+  for (const part of parts) expect(within(tooltip).getByText(part)).toBeVisible();
+  expect(tooltip.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(parts.length);
+}
+
 describe('Board card pending states', () => {
   it('shows GitHub and Linear candidates alongside persisted and manual issues in Work intake', async () => {
     const githubIssue: GithubIssue = {
@@ -485,7 +491,7 @@ describe('Board card pending states', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
 
     const relatedLink = within(card).getByRole('link', {
-      name: 'Open in GitHub: Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open in GitHub: Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveTextContent('PR #21565');
     expect(relatedLink).not.toHaveTextContent('Review:');
@@ -494,14 +500,12 @@ describe('Board card pending states', () => {
     expect(relatedLink).not.toHaveAttribute('title');
 
     await user.hover(relatedLink);
-    expect(await screen.findByText('Review: PR #21565 · Review login fix · Open pull request')).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
 
     await user.unhover(relatedLink);
     await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
     relatedLink.focus();
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Review: PR #21565 · Review login fix · Open pull request',
-    );
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
   });
 
   it('names an internal related item without repeating its title', async () => {
@@ -543,7 +547,7 @@ describe('Board card pending states', () => {
     renderWorkBoard();
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const relatedLink = await within(card).findByRole('link', {
-      name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open live session for Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveAttribute(
       'href',
@@ -553,9 +557,7 @@ describe('Board card pending states', () => {
     expect(relatedLink.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
 
     await user.hover(relatedLink);
-    expect(
-      await screen.findByText('Review: PR #21565 · Review login fix · Open pull request · Live session'),
-    ).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request', 'Live session']);
   });
 
   it('marks only the cards whose bound session still exists as live', async () => {
@@ -1507,7 +1509,8 @@ describe('Board card pending states', () => {
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     expect(planningColumn).toHaveAccessibleName('Planning');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
+    expect(within(composer).getByText('Manual')).toBeInTheDocument();
+    expect(within(composer).getByText('new')).toBeInTheDocument();
     expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
 
     await user.keyboard('{Escape}');

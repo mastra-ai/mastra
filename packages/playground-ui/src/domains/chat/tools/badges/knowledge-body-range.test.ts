@@ -22,7 +22,7 @@ describe('readExtent', () => {
     it('names the lines and how many the page has', () => {
       expect(readExtent({ page }, { from: at(60) })).toEqual({
         row: 'lines 60–95 of 133',
-        summary: 'Lines 60–95 of 133 · continues at line 96',
+        summary: 'Lines 60–95 of 133, continues at line 96',
       });
     });
 
@@ -30,7 +30,7 @@ describe('readExtent', () => {
       const last = { ...page, range: { start: at(120), end: at(133) } };
       expect(readExtent({ page: last }, { from: at(120) })).toEqual({
         row: 'lines 120–133 of 133',
-        summary: 'Lines 120–133 of 133 · end of page',
+        summary: 'Lines 120–133 of 133, end of page',
       });
     });
 
@@ -45,7 +45,7 @@ describe('readExtent', () => {
     });
 
     it('names the section the lines came from', () => {
-      expect(readExtent({ page }, { section: 'Setup' })?.row).toBe('section "Setup" · lines 60–95 of 133');
+      expect(readExtent({ page }, { section: 'Setup' })?.row).toBe('section "Setup", lines 60–95 of 133');
     });
   });
 

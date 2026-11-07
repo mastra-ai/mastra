@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -39,12 +40,14 @@ describe('AccountSettingsSection', () => {
       expect(screen.getByRole('button', { name: 'Copy organization ID' })).toBeInTheDocument();
     });
 
-    it('offers logout as an explicit session action', async () => {
+    it('logs out by clearing MastraCode storage', async () => {
       stubAuthenticatedAccount();
+      localStorage.setItem('mastracode.theme', 'dark');
 
       renderWithProviders(<AccountSettingsSection />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Log out of MastraCode' }));
 
-      expect(await screen.findByRole('button', { name: 'Log out of MastraCode' })).toBeInTheDocument();
+      expect(localStorage.getItem('mastracode.theme')).toBeNull();
     });
   });
 

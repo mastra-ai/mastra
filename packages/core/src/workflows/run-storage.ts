@@ -1,5 +1,6 @@
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { StateRef, StepResultSummary, WorkflowRunHeader } from '../storage/domains/workflows/journal';
+import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import { stubStepResult } from './run-journal';
 import type { WorkflowRunState } from './types';
@@ -227,6 +228,7 @@ class RunStorageV2 implements RunStorage {
       workflowName: this.#workflowName,
       runId: this.#runId,
       resourceId,
+      threadId: getSnapshotMemoryInfo(snapshot)?.threadId,
       header,
       steps: context,
       ...(stateBase ? { stateBase } : { state: value }),

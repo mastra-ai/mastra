@@ -1,4 +1,4 @@
-import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
+import { exitedWithFailure, isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ReasoningPart, ToolInvocationPart } from '@mastra/react/ui';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
 
@@ -120,18 +120,12 @@ export function toolFromInvocationPart(
     toolName: invocation.toolName,
     argsText: runtime?.argsText ?? '',
     args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
-    status: exitedWithFailure(invocation.toolName, runtime)
+    status: exitedWithFailure(invocation.toolName, runtime?.exit?.exitCode)
       ? 'error'
       : (terminalStatus ?? runtime?.status ?? 'running'),
     result,
     output: runtime?.output ?? '',
     createdAt: part.createdAt ?? runtime?.createdAt ?? fallbackCreatedAt,
+    exit: runtime?.exit,
   };
-}
-
-const COMMAND_TOOLS = new Set(['execute_command', 'mastra_workspace_execute_command']);
-
-/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
-function exitedWithFailure(toolName: string, runtime: ToolCall | undefined): boolean {
-  return COMMAND_TOOLS.has(toolName) && runtime?.exitCode !== undefined && runtime.exitCode !== 0;
 }

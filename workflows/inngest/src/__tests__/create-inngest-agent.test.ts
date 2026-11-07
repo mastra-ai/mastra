@@ -2543,6 +2543,34 @@ describe('InngestAgent observability tracing', () => {
     }
   });
 
+  it('ends the spans opened at prepare with the dispatch failure when the start event cannot be sent', async () => {
+    // Nothing else ends them: the run never reaches a worker, and cleanup only drops the registry entry.
+    const durableAgent = makeTracedAgent('tracing-dispatch-failure');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockRejectedValue(new Error('inngest unavailable'));
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const [agentRun] = recording.spansOfType('agent_run');
+      const [generation] = recording.spansOfType('model_generation');
+      await vi.waitFor(() => expect(agentRun.error).toHaveBeenCalled());
+      for (const span of [agentRun, generation]) {
+        expect(span.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.objectContaining({ message: 'inngest unavailable' }),
+            outcome: 'error',
+            stopReason: 'runtime_error',
+            endSpan: true,
+          }),
+        );
+      }
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('parents preparation-phase input processor spans to the AGENT_RUN root', async () => {
     const durableAgent = makeTracedAgent('tracing-input-proc', [
       { id: 'test-input-processor', processInput: async ({ messageList }: any) => messageList },

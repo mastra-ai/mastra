@@ -266,6 +266,8 @@ describe('executeCommandTool data chunks', () => {
       expect(exitChunks).toHaveLength(1);
       expect(exitChunks[0].data.exitCode).toBe(-1);
       expect(exitChunks[0].data.success).toBe(false);
+      // -1 is no real exit code, so the exit says why the command never finished.
+      expect(exitChunks[0].data.error).toBe('sandbox disconnected');
       expect(exitChunks[0].data.executionTimeMs).toBeGreaterThanOrEqual(0);
       expect(exitChunks[0].data.executionTimeMs).toBeLessThanOrEqual(after - before + 10);
     });

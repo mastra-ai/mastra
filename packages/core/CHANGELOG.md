@@ -1,5 +1,154 @@
 # @mastra/core
 
+## 1.83.0-alpha.0
+
+### Minor Changes
+
+- The experimental workflow `storageVersion: 2` option now works with `@mastra/pg` and `@mastra/libsql` as well as in-memory storage. ([#28299](https://github.com/mastra-ai/mastra/pull/28299))
+
+- Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, a run saves only what changed at each step instead of rewriting the whole run. This cuts storage writes for long workflows and loops, including loops whose state grows every iteration. ([#27144](https://github.com/mastra-ai/mastra/pull/27144))
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    options: { storageVersion: 2 },
+  });
+  ```
+
+  **Limitations**
+
+  - Version 2 requires the default engine and a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. Creating a run on another adapter throws.
+  - Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`.
+  - A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`.
+  - Workflow state is stored as JSON, so values such as `Date` are read back as strings, as with database storage.
+  - Runs keep the version they were created with, so resuming a run after changing this option throws.
+
+- Add optional context mode, timestamp, and response identity fields to HTTP feedback/score types. Preserve an explicit null feedback author in storage without substituting the span user; omitted legacy storage attribution remains supported. ([#29289](https://github.com/mastra-ai/mastra/pull/29289))
+
+  ```ts
+  await observability.createFeedback({
+    feedback: {
+      feedbackId: 'feedback-1',
+      timestamp: new Date(),
+      traceId: 'trace-123',
+      feedbackType: 'thumbs',
+      value: 1,
+      userId: 'span-user',
+      feedbackUserId: null, // Anonymous author; the span user stays separate.
+    },
+  });
+  ```
+
+- Required a nonblank `traceId` in the feedback and score HTTP body schemas. Missing, null, empty, and whitespace-only IDs are rejected. Storage creation, batch APIs, and historical nullable records are unchanged. ([#29287](https://github.com/mastra-ai/mastra/pull/29287))
+
+  Before, HTTP callers could omit the trace:
+
+  ```ts
+  await client.createFeedback({ feedback: { feedbackType: 'thumbs', value: 1 } });
+  ```
+
+  Now, supply its ID. `spanId` remains optional:
+
+  ```ts
+  await client.createFeedback({ feedback: { traceId: 'trace-123', feedbackType: 'thumbs', value: 1 } });
+  await client.createScore({ score: { traceId: 'trace-123', scorerId: 'accuracy', score: 0.9 } });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8))
+
+- The agent controller's `command_exit` event now says how a command ended, so clients can show more than a failure code: `killed` when the process was killed, `timedOut` when it ran past its timeout, and `error` when the sandbox could not run it (its `exitCode` is then -1). The `data-sandbox-exit` stream part carries the same `error`. `kill_process` no longer reports an exit code of -1 for a process it could not find. `kill_process` and `get_process_output` also send `command_exit`, for the process they stopped or waited on, so a non-zero exit only means the call itself failed when it comes from `execute_command`. ([#29314](https://github.com/mastra-ai/mastra/pull/29314))
+
+  ```ts
+  session.subscribe(event => {
+    if (event.type !== 'command_exit') return;
+    if (event.error) showError(event.toolCallId, event.error);
+    else if (event.timedOut) showTimedOut(event.toolCallId);
+    else if (event.killed) showKilled(event.toolCallId);
+    else if (!event.success) showExitCode(event.toolCallId, event.exitCode);
+  });
+  ```
+
+- Fixed evented agent runs staying in `running` forever when the lease backend restarted while a tool was finishing. The execution that still owns the run now takes back a thread lease that expired during the restart, and the run no longer aborts as if it lost its lease while the backend is refusing every client. ([#29430](https://github.com/mastra-ai/mastra/pull/29430))
+
+  Custom `LeaseProvider` implementations can add the optional `isUnavailableToAll(error)` method to report errors where the backend refuses every client, so no other owner can be granted the lease meanwhile. Return `false` for any other error, including connection failures that may affect only this caller.
+
+  ```ts
+  import type { LeaseProvider } from '@mastra/core/events';
+
+  const leaseProvider: LeaseProvider = {
+    // ...acquireLease, getLeaseOwner, releaseLease, renewLease, transferLease
+    isUnavailableToAll: error => error instanceof Error && error.message.startsWith('LOADING'),
+  };
+  ```
+
+- Fixed nested workflows losing their state changes after a crash. When the process stopped after a nested workflow had finished but before its parent saved that, restarting the parent used the nested workflow's output but dropped the changes it made to the workflow state. ([#29308](https://github.com/mastra-ai/mastra/pull/29308))
+
+- Fixed the `SOURCE_MAP.json` file shipped with the package docs. It previously listed minified names such as `t` and `n`, so tools that look up public exports could not find them. The map now lists public exports by name. Each entry points to the type definition file that declares the export and the line where it is implemented, when those can be resolved; otherwise it falls back to the module's main type definition file. Default exports and names the package re-exports from another package are left out. ([#29328](https://github.com/mastra-ai/mastra/pull/29328))
+
+- Fixed restarting a `.foreach()` over a nested workflow failing with "This workflow run was not active" when an item was running at the moment the process stopped. That item now starts over, and the restarted run finishes. ([#29308](https://github.com/mastra-ai/mastra/pull/29308))
+
+- Fixed `.foreach()` applying a finished item's state changes twice after a restart. If the process stopped at the wrong moment, the saved run could hold an item's state changes without marking the item as finished, so restarting the run ran that item again on top of its own changes. An item is now saved as finished together with its state changes. ([#29308](https://github.com/mastra-ai/mastra/pull/29308))
+
+- Fixed `writer` being undefined in `processOutputResult` for agents wrapped with `createDurableAgent` or `createEventedAgent`. Chunks written with `writer.custom()` now stream before `finish`, and non-transient chunks are saved with the reply, as with a regular `Agent`. Fixes [#29213](https://github.com/mastra-ai/mastra/issues/29213). ([#29286](https://github.com/mastra-ai/mastra/pull/29286))
+
+  Fixed output processor data being saved on the rejected answer when an `isTaskComplete` check failed and the agent answered again. The data is now saved with the answer the user sees.
+
+- Fixed a type error when calling a tool directly without a context. `tool.execute(input)` now compiles, so you no longer need casts like `tool.execute(input, {} as ToolExecutionContext)` in tests, scripts, or other tools. Without a context the tool still gets an empty request context but no Mastra instance, writer, memory, or thread IDs, so pass a context when the tool needs those. Fixes #28651. ([#29419](https://github.com/mastra-ai/mastra/pull/29419))
+
+  If your code assigns its own function to `tool.execute`, declare that function's context parameter as optional (`context?`). Helpers that infer from the function type, such as `vi.fn(tool.execute!)`, still see the signature that requires a context, as before.
+
+- Storage version 2 workflow results no longer load every step result into memory. With `storageVersion: 2`, `start()`, `resume()`, `restart()` and `timeTravel()` return `status`, `result`, `error`, `suspended` and the other result fields right away, and `steps` is an async function that reads the full step history from storage when you call it. Version 1 results are unchanged, and `steps` is still a record. ([#29362](https://github.com/mastra-ai/mastra/pull/29362))
+
+  ```ts
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData });
+
+  console.log(result.status, result.result); // available right away
+  const steps = await result.steps(); // reads the step results from storage
+  ```
+
+  Calling `steps()` more than once, or at the same time, reads storage only once. `onFinish` and `onError` callbacks receive the same function and can await it. If the run moved on after the result was returned, for example because it was resumed or deleted, `steps()` throws `WORKFLOW_STORAGE_V2_STEPS_STALE` instead of returning newer results. The workflow HTTP routes and MCP workflow tools still return `steps` as an object.
+
+- Fixed unbounded shell output retention in the controller display state and the Mastra Code terminal UI. Live shell output now keeps the latest 1 MB per command. ([#28808](https://github.com/mastra-ai/mastra/pull/28808))
+
+  `execute_command` no longer rewrites a trailing `| tail -N`; the pipeline runs as written. Pipelines that end in `tail` now run with `pipefail` where the shell supports it, so a failing upstream command reports its non-zero exit code instead of `tail`'s success. The `tail` option still limits output returned to the model.
+
+- Fixed `mastra.restartAllActiveWorkflowRuns()` and `workflow.restartAllActiveWorkflowRuns()` restarting a nested workflow run on its own. A nested run is collected by its parent's step, so a standalone restart either ran the same steps twice while the parent was driving it, or ran an item a second time after the parent had already finished. ([#29308](https://github.com/mastra-ai/mastra/pull/29308))
+
+  Both sweeps now read the parent's stored status before restarting a nested run:
+
+  - Parent suspended, or parent run missing: the nested run restarts on its own.
+  - Parent finished: the nested run is marked canceled.
+  - Parent running, waiting, pending, or paused: the nested run is left for its parent to drive.
+
+  A run left behind by a parent that restarted its item under a new run id stays as it was until a sweep sees the parent has finished, which then marks it canceled instead of restarting it.
+
+  Marking a nested run canceled is a compare-and-set taken behind the run's ownership lease. A run another process is driving, or one that finished or suspended since the sweep listed it, keeps its own status and is left as it is, so a lease that only expires later delays the cancellation to the next sweep rather than guaranteeing it in the current one.
+
+- Fixed a nested workflow run's stored snapshot dropping its parent workflow while the run executed a step inside `.parallel()` or `.branch()`. Reading the run at that point, or restarting it after a crash there, now keeps the link to its parent. ([#29308](https://github.com/mastra-ai/mastra/pull/29308))
+
+- Fixed state changes being lost when a nested workflow ran at the same time as other steps, in `.parallel()` or in `.foreach()` with a `concurrency` above 1. When the nested workflow finished or resumed, it replaced the workflow state with its own copy, dropping changes the other steps had made in the meantime. Now only the nested workflow's own changes are applied, so every step's changes are kept. ([#29308](https://github.com/mastra-ai/mastra/pull/29308))
+
+- The `submit_plan` tool no longer names `.mastracode/plans/` in its path example, so agents follow the plans directory their instructions give instead of a hardcoded one. ([#29132](https://github.com/mastra-ai/mastra/pull/29132))
+
+- The workspace `read_file` tool now reads NDJSON and JSONL files as paginated text when the filesystem reports an NDJSON MIME type (such as `application/x-ndjson`) or adds a UTF-8 `charset` parameter, instead of refusing them as binary. Files whose MIME type declares a non-UTF-8 charset still return file metadata rather than garbled text. ([#28796](https://github.com/mastra-ai/mastra/pull/28796))
+
+- Tool validation failures no longer write submitted values to logs. Logs now record the tool and the failing field paths, such as `issuePaths: ["email"]`. Errors returned to the model or MCP caller are unchanged, so it can still correct its call. Fixes #29318. ([#29331](https://github.com/mastra-ai/mastra/pull/29331))
+
+  `@mastra/core/tools` now exports `getValidationIssuePaths`, which returns the failing field paths of a validation error and masks dynamic keys such as record keys as `*`.
+
+  `@mastra/mcp` now requires `@mastra/core` 1.82.0 or later.
+
+- Fixed restarting a parent workflow reverting its state to a nested workflow run's copy. When a nested run finished before its parent saved the result, the restart merged the nested run's whole state snapshot over the parent's current state. The parent now records the state the nested run had handed back when it parks on it, and the re-drive merges only the nested run's own changes, so a key another step changed while the nested run was in flight keeps its newer value instead of reverting to the nested run's copy. ([#29332](https://github.com/mastra-ai/mastra/pull/29332))
+
+  The recorded state is internal: it is saved with the run but kept out of the step results that `start()`, `resume()`, and a run lookup return.
+
+  Cancelling a leftover nested run whose parent finished now reports what happened: a run another process is driving, or one whose status moved since the sweep listed it, is left as it is and logged as such instead of reporting a cancel that did not happen. The next sweep decides again.
+
 ## 1.82.0
 
 ### Minor Changes

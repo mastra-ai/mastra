@@ -94,7 +94,7 @@ export function useHandoffPrompt(): void {
   const navigate = useNavigate();
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
-  const { prefillComposer } = useChatCommands();
+  const { restoreComposerDraft } = useChatCommands();
   const { setImages } = useComposerImagesState();
   const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -141,7 +141,7 @@ export function useHandoffPrompt(): void {
       const interruptedFiles = takeHandoffFiles(sessionId);
       if (interruptedPrompt || interruptedFiles.length > 0) {
         void startOn(leftModel ?? {}).then(() => {
-          if (interruptedPrompt) prefillComposer(interruptedPrompt);
+          if (interruptedPrompt) restoreComposerDraft(interruptedPrompt);
           if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
           pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
         });
@@ -160,7 +160,7 @@ export function useHandoffPrompt(): void {
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
       clearPendingHandoff(sessionId);
     })().catch(error => {
-      prefillComposer(prompt);
+      restoreComposerDraft(prompt);
       setImages(current => [...files, ...current]);
       clearPending();
       const reason = error instanceof Error ? error.message : 'The message could not be sent.';
@@ -181,9 +181,9 @@ export function useHandoffPrompt(): void {
     location.search,
     modelId,
     navigate,
-    prefillComposer,
     prompt,
     pushNotice,
+    restoreComposerDraft,
     sessionId,
     sendMessage,
     sessionEnabled,

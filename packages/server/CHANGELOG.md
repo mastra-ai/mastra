@@ -1,5 +1,76 @@
 # @mastra/server
 
+## 1.83.0-alpha.0
+
+### Minor Changes
+
+- Added `invokeRoute` to `@mastra/server/server-adapter`. It runs a server route in-process as the calling user, with the same checks the HTTP route applies: server auth's `authorize`, `authorizeUser` and `rules` (matched against the route's HTTP path under `apiPrefix`), RBAC permission, fine-grained authorization and schema validation, and returns the route's status and body. Use it to expose a route through another channel, such as an MCP tool, without the two drifting apart. ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+  ```ts
+  import { invokeRoute } from '@mastra/server/server-adapter';
+  import { GET_METRIC_AGGREGATE } from '@mastra/server/handlers/observability';
+
+  const { status, body } = await invokeRoute(GET_METRIC_AGGREGATE, {
+    mastra,
+    requestContext, // already carries the authenticated caller
+    body: { name: ['mastra_agent_duration_ms'], aggregation: 'count' },
+  });
+  ```
+
+  `invokeRoute` only runs routes that answer with JSON and throws for streaming or MCP transport routes. The handler receives the parsed params, `mastra`, `requestContext` and `abortSignal`, but not the HTTP-only `request`, `registeredTools`, `taskStore` or `routePrefix`.
+
+  MCP tools served over HTTP now also see the caller that Mastra server auth resolved (user, permissions, roles, resource and organization), the same as Mastra routes do. This also applies when `mcpOptions.setRequestAuth` or your own middleware sets `req.auth`: the hook still decides `authInfo`, and tools additionally receive Mastra's resolved caller in `requestContext`.
+
+- Add explicit context modes to feedback and score POSTs. Omitted mode preserves OSS direct writes; `resolve` derives stored root/target context and reports structured missing-anchor errors. Accept supplied timestamps and return normalized identity data. ([#29289](https://github.com/mastra-ai/mastra/pull/29289))
+
+  ```http
+  POST /api/observability/feedback
+  Content-Type: application/json
+
+  { "contextMode": "resolve", "feedback": { "traceId": "trace-123", "feedbackType": "thumbs", "value": 1 } }
+  ```
+
+  Keep feedback authors separate from span users. Without an authenticated user, HTTP requests that omit `feedbackUserId` store a null author, even when `userId` is supplied. Previously those requests could use `userId` as the author. Send `feedbackUserId` explicitly to identify the author; authenticated OSS requests continue to use the authenticated user's ID. The deprecated omitted-author `userId` alias remains available only through the storage API.
+
+  Platform retains its resolve default. Older servers may ignore the selector; explicit modes require supporting server versions.
+
+- Required `feedback.traceId` and `score.traceId` on observability POST requests. Omitted, null, empty, or whitespace-only IDs now return 400 before storage is called, including span-only requests. This does not add a trace-existence lookup or change generated IDs, server timestamps, or success responses. ([#29287](https://github.com/mastra-ai/mastra/pull/29287))
+
+  Before:
+
+  ```json
+  { "feedback": { "feedbackType": "thumbs", "value": 1 } }
+  ```
+
+  After:
+
+  ```json
+  { "feedback": { "traceId": "trace-123", "feedbackType": "thumbs", "value": 1 } }
+  ```
+
+  Score requests likewise require `score.traceId`; `spanId` remains optional for both.
+
+### Patch Changes
+
+- Storage version 2 workflow results no longer load every step result into memory. With `storageVersion: 2`, `start()`, `resume()`, `restart()` and `timeTravel()` return `status`, `result`, `error`, `suspended` and the other result fields right away, and `steps` is an async function that reads the full step history from storage when you call it. Version 1 results are unchanged, and `steps` is still a record. ([#29362](https://github.com/mastra-ai/mastra/pull/29362))
+
+  ```ts
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData });
+
+  console.log(result.status, result.result); // available right away
+  const steps = await result.steps(); // reads the step results from storage
+  ```
+
+  Calling `steps()` more than once, or at the same time, reads storage only once. `onFinish` and `onError` callbacks receive the same function and can await it. If the run moved on after the result was returned, for example because it was resumed or deleted, `steps()` throws `WORKFLOW_STORAGE_V2_STEPS_STALE` instead of returning newer results. The workflow HTTP routes and MCP workflow tools still return `steps` as an object.
+
+- Fixed Studio threads failing with `Gateway API error 404` for agents using `mastra/` models with an organization (v2) Gateway key. Threads, messages, and observational memory now load from the agent's local storage, since v2 Gateway keys do not use hosted memory. ([#29369](https://github.com/mastra-ai/mastra/pull/29369))
+
+  Fixed the observational-memory routes reading records for any `resourceId` a caller supplied. They now use the server-resolved resource ID and check thread access, like the other memory routes.
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+
 ## 1.82.0
 
 ### Minor Changes

@@ -10,7 +10,7 @@ export function OnboardingWorkReviewRow({ disabled, onEdit }: { disabled: boolea
       icon={<ListTodo />}
       label="Work"
       value={connected.join(', ') || 'Set up later'}
-      detail={connected.length ? 'Connected · choose issues after setup' : undefined}
+      detail={connected.length ? 'Connected. Choose issues after setup.' : undefined}
       disabled={disabled}
       onEdit={onEdit}
     />

@@ -8,7 +8,7 @@ import {
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
-import type { SpanType, ExportedSpan } from '../../../../observability';
+import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
@@ -60,6 +60,8 @@ const durableLLMMappingOutputSchema = z.object({
   }),
   state: z.any(),
   delegationBailed: z.boolean().optional(),
+  tracingDelegationFailure: z.custom<SpanTermination>().optional(),
+  tracingTermination: z.custom<SpanTermination>().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   releasedToolResultIds: z.array(z.string()).optional(),
@@ -361,6 +363,8 @@ export function createDurableLLMMappingStep() {
         delegationBailed = true;
         requestContext.set('__mastra_delegationBailed', false);
       }
+      // Keep the first failure, so a later bail with no failure can't hide it.
+      const tracingDelegationFailure = toolResults.find(r => r?.tracingDelegationFailure)?.tracingDelegationFailure;
 
       // 4. Carry the deferred step-finish after tool-result chunks have been
       // emitted. The loop predicate adds step content and emits it after resolving
@@ -415,6 +419,8 @@ export function createDurableLLMMappingStep() {
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         releasedToolResultIds: llmOutput.releasedToolResultIds,
         delegationBailed,
+        tracingDelegationFailure,
+        tracingTermination: llmOutput.tracingTermination,
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,

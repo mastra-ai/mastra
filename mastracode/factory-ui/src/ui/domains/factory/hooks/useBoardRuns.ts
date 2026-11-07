@@ -66,12 +66,12 @@ export function useBoardRuns({
     const refreshedItems = await refetchItems();
     if (!refreshedItems.isSuccess) {
       const cause = refreshedItems.error;
-      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
+      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board. Try reloading the page.');
       return;
     }
     const item = refreshedItems.data.find(candidate => candidate.id === itemId);
     if (!item) {
-      toast.error('This card no longer exists — the board may be out of date');
+      toast.error('This card no longer exists. The board may be out of date.');
       return;
     }
     return item;

@@ -7,6 +7,7 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
@@ -29,7 +30,7 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectListRepository } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -38,10 +39,6 @@ const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
-
-function loose(context: unknown): Context {
-  return context as Context;
-}
 
 async function readJson(context: Context): Promise<unknown | undefined> {
   try {
@@ -202,6 +199,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   environmentBuilds?: EnvironmentBuildRunner;
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
+  /** The per-project boards; loading a new project stores its copies of the code boards. */
+  boards?: Pick<ProjectBoardCache, 'describe'>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -590,6 +589,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          // The project's first board load retries anything this misses.
+          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+            console.warn('[factory] could not store the boards of a new project:', error);
+          });
           return context.json({ project }, 201);
         },
       }),

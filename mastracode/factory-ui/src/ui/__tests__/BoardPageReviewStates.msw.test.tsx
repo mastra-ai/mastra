@@ -188,7 +188,7 @@ describe('Review card action lifecycle', () => {
     await waitForMutationsIdle(client);
     const card = await screen.findByTestId('work-item-card');
     expect(within(card).getByRole('button', { name: 'Retrying…' })).toBeDisabled();
-    expect(within(card).getByText('Automated run could not start — retrying…')).toBeVisible();
+    expect(within(card).getByText('Automated run could not start. Retrying…')).toBeVisible();
     expect(within(card).queryByRole('button', { name: 'Review' })).toBeNull();
 
     data.decisions = [{ ...reviewDecision, status: 'failed', canRetry: true, attempts: 5, lastError: 'Timeout' }];

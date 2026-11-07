@@ -122,6 +122,7 @@ import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
@@ -869,6 +870,8 @@ export class DurableAgent<
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
       notifications: agent.__getNotificationConfig(),
+      // Runs publish through this wrapper's own stream bus.
+      durable: false,
     });
 
     this.#wrappedAgent = agent;
@@ -947,6 +950,26 @@ export class DurableAgent<
    */
   get pubsub(): PubSub {
     return this.#streams.pubsub;
+  }
+
+  /** Durable runs always publish on their stream topic. */
+  override hasResumableStreams(): boolean {
+    return true;
+  }
+
+  /** @internal */
+  override __getStreamBus(): AgentStreamBus {
+    return this.#streams;
+  }
+
+  /**
+   * Owner of a run this process still tracks (until its auto-cleanup clears
+   * the replay history), or undefined.
+   * @internal
+   */
+  override __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    if (!this.#runRegistry.has(runId)) return undefined;
+    return { ...this.#runRegistry.getMemoryInfo(runId) };
   }
 
   /**
@@ -1162,10 +1185,11 @@ export class DurableAgent<
         : persisted.snapshot;
     const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
     if (llmStep?.status !== 'success') return { toolCalls: [] };
-    // The nested input holds completed iterations; the LLM output holds the
+    // The step records hold completed iterations (in workflow state, or in the
+    // nested input on runs that never seeded them); the LLM output holds the
     // current iteration, which has not reached the accumulator yet.
     const accumulatedSteps: Array<{ text?: string; toolCalls?: DurableToolCallInput[]; finishReason?: string }> =
-      snapshot.context.input?.accumulatedSteps ?? [];
+      readAccumulatedSteps(snapshot.value, snapshot.context.input);
     const toolCalls: DurableToolCallInput[] = [
       ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
       ...(llmStep.output.toolCalls ?? []),
@@ -2188,6 +2212,9 @@ export class DurableAgent<
     }
     fork.#streams.adoptInnerPubsub(this.#streams);
     fork.source = this.source;
+    // Share the untilIdle wrappers, so a task finishing under the fork's stream isn't
+    // also reported by the registered agent (mirrors `Agent.__fork()`).
+    fork.#activeStreamUntilIdle = this.#activeStreamUntilIdle;
     // `_agentNetworkAppend` is a private base-class flag; copy it via an indexed
     // cast (the same idiom the base uses in `toRawConfig()`) so the fork mirrors
     // `Agent.__fork()` without widening the field's visibility.
@@ -2220,6 +2247,19 @@ export class DurableAgent<
    */
   protected get workflowEngine(): 'default' | 'evented' {
     return 'default';
+  }
+
+  /**
+   * Whether new runs of this agent's loop are stored as workflow storage
+   * version 2 where the engine and store support it (see the workflow's
+   * `autoStorageVersion` option). A resumed run stays in its stored version.
+   * Off until crash recovery and resume claims are tested on version 2: the
+   * restart harness and resume-claim-loser.test.ts still store runs in v1.
+   * EventedAgent overrides this to `false`.
+   * @internal
+   */
+  protected get storesRunsInJournal(): boolean {
+    return false;
   }
 
   /**
@@ -2417,6 +2457,7 @@ export class DurableAgent<
       // in-process engine (see resolveWorkflowEngine).
       engine: this.resolveWorkflowEngine(),
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
+      autoStorageVersion: this.storesRunsInJournal,
     });
   }
 
@@ -2783,7 +2824,7 @@ export class DurableAgent<
    *
    * @internal Used by the server's run abort route.
    */
-  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+  override async __abortRunAcknowledged(runId: string): Promise<boolean> {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     if (wrapperClose) {
       wrapperClose();
@@ -2968,11 +3009,12 @@ export class DurableAgent<
   protected async deleteRunSnapshots(runId: string): Promise<void> {
     try {
       const workflow = this.getWorkflow();
-      await workflow.deleteWorkflowRunById(runId);
+      await workflow.deleteWorkflowRunById(runId, { storageVersion: 1 });
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.deleteWorkflowRunById({
         runId,
         workflowName: DurableStepIds.AGENTIC_EXECUTION,
+        storageVersion: 1,
       });
     } catch (error) {
       this.#mastra
@@ -3143,8 +3185,8 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     // Whether this caller's stream closes at the suspension boundary. Defaults
@@ -3867,8 +3909,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     const globalEntry = getRunRegistryEntry(runId, this.#mastra);
@@ -4395,8 +4437,8 @@ export class DurableAgent<
       cleanupOwnedRegistryState();
     };
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
@@ -4762,13 +4804,14 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          releaseRunState();
-          cleanedUp = true;
-        }
-      }, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer =
+        this.#streams.scheduleCleanup(() => {
+          if (!cleanedUp) {
+            releaseRunState();
+            cleanedUp = true;
+          }
+        }) ?? null;
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
@@ -5408,14 +5451,7 @@ export class DurableAgent<
     const deliver = (event: AgentStreamEvent) => {
       activityVersion++;
       if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
-      // `index` is log bookkeeping, not part of the client payload: the observe
-      // route forwards events verbatim, so keep the payload exactly what
-      // pre-#27352 clients already receive.
-      if (event.index !== undefined) {
-        const { index: _index, ...rest } = event;
-        onEvent(rest as AgentStreamEvent);
-        return;
-      }
+      // Keep `index`: the observe route forwards it on each frame so clients can resume at index + 1.
       onEvent(event);
     };
     // Acks every delivery, dropped ones included, so a durable backend doesn't
@@ -5494,7 +5530,8 @@ export class DurableAgent<
     options?: {
       /**
        * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See
@@ -5537,8 +5574,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     const completeTerminalLifecycle = () => {

@@ -310,7 +310,10 @@ describe('Board work-item activity', () => {
     renderBoard('work');
 
     await expectActivity('Ada Lovelace', 'Moved the item');
-    expect(screen.getByLabelText('Work item activity')).toHaveTextContent('build agent · anthropic/claude-sonnet-4-5');
+    const activity = within(screen.getByLabelText('Work item activity'));
+    expect(activity.getByText('build agent').closest('[data-slot="metadata"]')).toHaveTextContent(
+      'anthropic/claude-sonnet-4-5',
+    );
   });
 
   it('loads older audit pages so cards are not limited to the newest project events', async () => {

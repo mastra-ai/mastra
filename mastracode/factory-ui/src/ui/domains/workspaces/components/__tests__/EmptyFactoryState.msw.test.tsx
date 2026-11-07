@@ -201,7 +201,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
     expect(review.getByText('team/backend')).toBeInTheDocument();
-    expect(review.getByText('GitLab · develop')).toBeInTheDocument();
+    expect(review.getByText('GitLab').closest('[data-slot="metadata"]')).toHaveTextContent('develop');
     await user.click(screen.getByRole('button', { name: 'Edit model' }));
     expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     await user.click(screen.getByRole('button', { name: 'Change provider' }));
@@ -510,7 +510,7 @@ describe('Personal Factory model', () => {
     renderOnboarding();
     expect(await screen.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'Company work · personal sessions' })).toHaveAttribute(
+    expect(screen.getByRole('radio', { name: 'Company work and personal sessions' })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
@@ -519,7 +519,9 @@ describe('Personal Factory model', () => {
     await user.click(await screen.findByRole('button', { name: 'Review setup' }));
     expect(writes).toEqual([]);
     const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('API key · your default for work and sessions')).toBeInTheDocument();
+    expect(review.getByText('API key').closest('[data-slot="metadata"]')).toHaveTextContent(
+      'your default for work and sessions',
+    );
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });
@@ -583,7 +585,7 @@ describe('Account presets', () => {
       sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
       const user = userEvent.setup();
       renderOnboarding();
-      expect(await screen.findByRole('radio', { name: 'Company work · personal sessions' })).toBeChecked();
+      expect(await screen.findByRole('radio', { name: 'Company work and personal sessions' })).toBeChecked();
       if (scope === 'user') await user.click(await screen.findByRole('radio', { name: 'Personal accounts' }));
       if (scope === 'factory') await user.click(await screen.findByRole('radio', { name: 'Company account' }));
       await user.click(await screen.findByRole('button', { name: 'Continue' }));
@@ -782,7 +784,7 @@ describe('Account presets', () => {
     renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
     await user.click(await screen.findByRole('radio', { name: 'Company account' }));
-    await user.click(screen.getByRole('radio', { name: 'Company work · personal sessions' }));
+    await user.click(screen.getByRole('radio', { name: 'Company work and personal sessions' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
     expect(readOnboardingDraft()).toMatchObject({ modelScope: 'hybrid', model, personal: personalModel });

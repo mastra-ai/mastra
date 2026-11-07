@@ -36,6 +36,11 @@ export interface RouteDependencies {
   auth: RouteAuth;
 }
 
+/** A host's hono can differ from this package's, so a handler's `Context` only reaches route helpers through `unknown`. */
+export function loose(c: unknown): Context {
+  return c as Context;
+}
+
 /**
  * A route module: constructed once at boot with its dependencies, then asked
  * for the `ApiRoute[]` it serves.

@@ -25,8 +25,11 @@
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
+    "@mastra/mcp-apps-components": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "@mastra/playground-ui": "latest",
+    "@mastra/server": "latest",
     "@mastra/slack": "latest",
     "@mastra/voice-openai": "latest",
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -64,8 +67,11 @@
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
+      "@mastra/mcp-apps-components": "link:../../packages/mcp-apps-components",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/playground-ui": "link:../../packages/playground-ui",
+      "@mastra/server": "link:../../packages/server",
       "@mastra/slack": "link:../../channels/slack",
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/auth-studio": "link:../../auth/studio",
@@ -105,7 +111,9 @@
       "undici@<8.12.2": "8.12.2",
       "yargs@<18.1.0": "18.2.0",
       "raw-body@<4.0.0": "4.0.0",
-      "nanoid@<5.1.16": "5.1.16"
+      "nanoid@<5.1.16": "5.1.16",
+      "@modelcontextprotocol/sdk>@hono/node-server": "2.1.6",
+      "@modelcontextprotocol/node>@hono/node-server": "2.1.6"
     },
     "patchedDependencies": {
       "body-parser@2.4.0": "patches/body-parser@2.4.0.patch"

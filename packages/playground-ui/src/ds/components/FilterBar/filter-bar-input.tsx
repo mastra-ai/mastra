@@ -417,7 +417,7 @@ function FilterBarInputImpl({
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}
                   emptyText={
-                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                    valueStep.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'
                   }
                 />
               )}

@@ -243,13 +243,19 @@ export class Tool<
    * Tool execution function
    * @param inputData - The raw, validated input data
    * @param context - Optional execution context with metadata. `observe` may be omitted;
-   * the runtime provides one (a no-op when no tracing span is active).
+   * the runtime provides one (a no-op when no tracing span is active). When `context` is
+   * omitted (for example when calling a tool directly from a test or script), the tool
+   * receives an empty `requestContext` and the default `observe`, but no `mastra`, writer,
+   * memory, `threadId`, `resourceId`, or `runId`. Pass a context if the tool relies on any
+   * of those.
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: (
-    inputData: TSchemaIn,
-    context: ToolExecuteCallContext<TContext>,
-  ) => Promise<TSchemaOut | ValidationError | void>;
+  execute?: {
+    (inputData: TSchemaIn, context?: ToolExecuteCallContext<TContext>): Promise<TSchemaOut | ValidationError | void>;
+    // Calls always match the signature above. This one is last so that
+    // `Parameters<Tool['execute']>[1]` stays the context type without `undefined`.
+    (inputData: TSchemaIn, context: ToolExecuteCallContext<TContext>): Promise<TSchemaOut | ValidationError | void>;
+  };
 
   /** Whether this tool only displays its call and receives a server acknowledgement. */
   renderOnly?: boolean;

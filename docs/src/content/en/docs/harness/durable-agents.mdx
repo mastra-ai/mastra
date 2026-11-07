@@ -128,9 +128,9 @@ const agent = new Agent({
 export const eventedWriter = createEventedAgent({ agent })
 ```
 
-### Stored agents created through the API
+### Resumable streams for stored agents
 
-Agents created with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent) opt in with a `durable` field on the agent config. The server wraps the agent with `createDurableAgent()` when it hydrates it, so no code deployment is needed:
+Agents created with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent) use the `durable` field to configure resumable streams only. The server hydrates a plain `Agent` with stream publishing and replay enabled:
 
 ```typescript
 await mastraClient.createStoredAgent({
@@ -142,7 +142,7 @@ await mastraClient.createStoredAgent({
 })
 ```
 
-`durable` also accepts `{ maxSteps, cleanupTimeoutMs }`. Only serializable options are accepted here, so snapshot persistence for API-created agents follows the server's `recovery.durableAgents` setting. Cache and pubsub are inherited from the server's `Mastra` instance, so configure distributed backends there if you need durability across replicas. Automatic recovery is still configured in code through `recovery.durableAgents`.
+`durable` also accepts `{ cleanupTimeoutMs }`. Cache and pubsub are inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` now load with resumable streams but without durable execution or checkpoint recovery. To retain durable execution, define a code agent wrapped with `createDurableAgent({ agent })` and pass `maxSteps` and snapshot persistence options to the factory.
 
 ### Inngest-powered with `createInngestAgent()`
 
@@ -178,9 +178,9 @@ for await (const chunk of output.fullStream) {
 }
 ```
 
-Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. For a completed run, observation replays the retained events and closes. If the run is unknown or its history has been cleared and no live run remains, observation closes without events. The HTTP observe endpoint returns an empty, closed stream in this case rather than waiting for its idle timeout.
+Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. For a completed run, observation replays the retained events and closes. If the run is unknown or its history has been cleared and no live run remains, observation closes without events. The HTTP observe endpoint returns 404 in this case, because it can't check that the caller owns the run.
 
-The optional `offset` is an inclusive, zero-based PubSub event index, not a chunk number, and the public stream doesn't expose it. If an offset skips earlier text deltas, aggregated text is partial and structured output may be invalid. On transports with numeric offset support, an offset beyond the highest retained index also skips live events with lower indexes. A live run waits for the published index to reach the requested offset. A completed run with a retained terminal event closes even when the offset skips every event. Evented agents on a cross-process PubSub, such as Redis Streams, need a server cache shared by every process, such as `RedisServerCache`, for offsets to skip earlier events. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for the full offset and transport behavior.
+The optional `offset` is a run-log position, which chunks report as `chunk.index`. To resume after a dropped connection, pass `index + 1` of the last chunk that has an `index`, or omit `offset` if nothing arrived. This works the same with `stream()` and `observe()`, over HTTP, and in `@mastra/client-js`. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for which chunks carry no index, structured output, and transport limits.
 
 Replay isn't a permanent execution archive. Events remain available only until [cleanup](#cleanup) clears them or the cache removes them. A workflow snapshot can't reconstruct cleared stream events, and disabling caching prevents historical replay.
 
@@ -261,7 +261,7 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
 
-When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
+When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off. The cache's own TTL and eviction still apply.
 
 Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
 

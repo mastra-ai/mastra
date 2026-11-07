@@ -17,23 +17,19 @@ import type { Context } from 'hono';
 
 import { isTerminalWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { LinearIntegration } from './integration.js';
+import type { LinearIntegration, LinearProject, LinearTeam } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Linear feature gate, mirroring the
@@ -45,7 +41,23 @@ export interface LinearFeatureDiagnostics {
   appDbConfigured: boolean;
 }
 
+export interface LinearWorkspaceListingError {
+  workspaceId: string;
+  name: string;
+}
+
+/** Platform connection inventory entry, including disconnected workspaces. Never contains tokens. */
+export interface LinearConnectionWorkspace {
+  id: string;
+  name: string;
+  urlKey: string | null;
+  connected: boolean;
+}
+
 export interface MountLinearRoutesOptions {
+  listProjectsWithStatus?: () => Promise<{ projects: LinearProject[]; workspaceErrors: LinearWorkspaceListingError[] }>;
+  listTeamsWithStatus?: () => Promise<{ teams: LinearTeam[]; workspaceErrors: LinearWorkspaceListingError[] }>;
+  listConnectionWorkspaces?: () => Promise<LinearConnectionWorkspace[]>;
   /**
    * The integration instance providing OAuth + GraphQL access. Required for
    * everything beyond the disabled `status` route.
@@ -248,6 +260,19 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           });
         }
 
+        if (options.listConnectionWorkspaces) {
+          const workspaces = await options.listConnectionWorkspaces();
+          const active = workspaces.find(workspace => workspace.connected);
+          return c.json({
+            enabled: true,
+            connected: Boolean(active),
+            mode: 'platform',
+            workspace: active ? { name: active.name, urlKey: active.urlKey } : null,
+            workspaces,
+            reason: active ? 'ready' : 'not_connected',
+            diagnostics: diagnostics(),
+          });
+        }
         const connection = await linear.loadConnection(tenant.orgId);
         return c.json({
           enabled: true,
@@ -345,6 +370,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         try {
+          if (options.listProjectsWithStatus) return c.json(await options.listProjectsWithStatus());
           const accessToken = await linear.getFreshAccessToken(connection);
           const projects = await linear.listProjects(accessToken);
           return c.json({ projects });
@@ -370,6 +396,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         try {
+          if (options.listTeamsWithStatus) return c.json(await options.listTeamsWithStatus());
           const accessToken = await linear.getFreshAccessToken(connection);
           const teams = await linear.listTeams(accessToken);
           return c.json({ teams });

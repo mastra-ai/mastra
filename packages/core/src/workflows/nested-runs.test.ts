@@ -748,6 +748,61 @@ describe('a nested run hands back only its changes', () => {
     const appended = (result.state as { items: string[] }).items;
     expect(unordered ? [...appended].sort() : appended).toEqual(expected);
   });
+
+  // https://github.com/mastra-ai/mastra/issues/29347
+  let parses = 0;
+  it.each([
+    ['a default', z.string().default('plain')],
+    // Fails if the hand-back re-parses the start state instead of using the one the run started with.
+    ['a default computed on each parse', z.string().default(() => `plain-${++parses}`)],
+  ])("keeps a sibling's newer value for a key the nested run's schema filled with %s", async (_, tone) => {
+    let siblingWrote!: () => void;
+    const wrote = new Promise<void>(resolve => (siblingWrote = resolve));
+    const sibling = createStep({
+      id: 'sibling',
+      inputSchema: num,
+      outputSchema: num,
+      execute: async ({ inputData, state, setState }) => {
+        await setState({ ...state, tone: 'newer' });
+        siblingWrote();
+        return inputData;
+      },
+    });
+    const innerState = z.object({ items: z.array(z.string()), tone });
+    const append = createStep({
+      id: 'append',
+      inputSchema: num,
+      outputSchema: num,
+      stateSchema: innerState,
+      execute: async ({ inputData, state, setState }) => {
+        await wrote;
+        await setState({ ...state, items: [...state.items, 'inner:0'] });
+        return inputData;
+      },
+    });
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: innerState })
+      .then(append)
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: num,
+      outputSchema: z.any(),
+      stateSchema: z.object({ items: z.array(z.string()), tone: z.string().optional() }),
+    })
+      .parallel([sibling, inner])
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+
+    const run = await outer.createRun();
+    const result = await run.start({
+      inputData: { n: 0 },
+      initialState: { items: [] },
+      outputOptions: { includeState: true },
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.state).toEqual({ items: ['inner:0'], tone: 'newer' });
+  });
 });
 
 describe('what a parked nested run exposes to callers', () => {

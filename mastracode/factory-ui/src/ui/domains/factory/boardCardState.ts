@@ -124,7 +124,7 @@ function automationOnCard(
   // The server retries a failure on its own, so it offers no button.
   if (retriesAfterFailure(decision)) {
     return {
-      status: { kind: 'error', label: `${copy.failed} — retrying…`, detail },
+      status: { kind: 'error', label: `${copy.failed}. Retrying…`, detail },
       owner: { kind: 'automation', progressLabel: 'Retrying…' },
     };
   }
@@ -138,7 +138,7 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.held) {
-    return { kind: 'held', label: 'Triaged · waiting for you' };
+    return { kind: 'held', label: 'Triaged and waiting for you' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };

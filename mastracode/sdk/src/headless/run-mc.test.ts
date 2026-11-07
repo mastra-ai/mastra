@@ -63,7 +63,7 @@ interface HarnessOptions {
 }
 
 async function makeHarness(opts: HarnessOptions) {
-  const storage = new LibSQLStore({ id: 'test-store', url: 'file::memory:?cache=shared' });
+  const storage = new LibSQLStore({ id: 'test-store', url: ':memory:' });
 
   const tools: Record<string, ReturnType<typeof createTool>> = {};
   if (opts.withReadFileTool) {
@@ -120,6 +120,19 @@ async function makeHarness(opts: HarnessOptions) {
 }
 
 describe('runMC', () => {
+  it('keeps independent harnesses from seeing each other’s threads', async () => {
+    const first = await makeHarness({ doStream: async () => ({ stream: textStream('First answer.') }) });
+    const second = await makeHarness({ doStream: async () => ({ stream: textStream('Second answer.') }) });
+
+    const firstThreads = await first.session.thread.list({ allResources: true });
+    const secondThreads = await second.session.thread.list({ allResources: true });
+
+    expect(firstThreads.map(thread => thread.id)).toContain(first.session.thread.getId());
+    expect(firstThreads.map(thread => thread.id)).not.toContain(second.session.thread.getId());
+    expect(secondThreads.map(thread => thread.id)).toContain(second.session.thread.getId());
+    expect(secondThreads.map(thread => thread.id)).not.toContain(first.session.thread.getId());
+  });
+
   it('resolves the final result when awaited without iterating', async () => {
     const { controller, session } = await makeHarness({
       doStream: async () => ({ stream: textStream('The answer is 4.') }),

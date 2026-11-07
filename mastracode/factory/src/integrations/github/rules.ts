@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -12,12 +14,13 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
@@ -28,7 +31,7 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, ExternalWorkItemSource, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
@@ -119,6 +122,49 @@ function parseFactoryReviewCommand(
   return undefined;
 }
 
+/**
+ * Points the card's session at a new comment or an edit on its issue. Only
+ * pointers travel (who, where, a link); Factory's own comments are skipped so
+ * a session is not woken by what it wrote.
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGithubRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'>,
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommentCreated'
+      ? ('work_item.commented' as const)
+      : context.event === 'issueEdited'
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'github' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.issueComment?.url : undefined) ?? context.issue.url,
+    ...(context.actor.login ? { author: context.actor.login } : {}),
+    authorTrusted: context.actor.trusted,
+  };
+}
+
+/** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
+export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed': {
+      const stateReason = context.issue?.stateReason;
+      return { type: 'work_item.closed', reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate') };
+    }
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -127,6 +173,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     return object(changes?.title) || object(changes?.body) ? 'issueEdited' : undefined;
   }
   if (parsed.event === 'issues' && action === 'closed') return 'issueClosed';
+  if (parsed.event === 'issues' && action === 'reopened') return 'issueReopened';
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
     // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
@@ -193,6 +240,19 @@ function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number):
 
 function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
   return `github:${repositoryId}:${kind}:${itemNumber}`;
+}
+
+/** Every source a card for this issue or pull request may be filed under. */
+export function githubItemSources(
+  repositoryId: number,
+  kind: 'issue' | 'pull-request',
+  itemNumber: number,
+): ExternalWorkItemSource[] {
+  return [canonicalSourceKey(kind, itemNumber), legacySourceKey(repositoryId, kind, itemNumber)].map(externalId => ({
+    integrationId: 'github',
+    type: kind,
+    externalId,
+  }));
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -817,13 +877,20 @@ export class GithubRules {
             }
           : {}),
       };
+      const boardEvent = boardEventFor(context);
+      if (boardEvent) context.boardEvent = boardEvent;
 
+      const ownedByDeployment = deploymentOwnsEvent(
+        this.options.github.rules,
+        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        event,
+      );
       const rule = selectEventRule(
         this.options.github.rules,
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
         event,
       );
-      let decision: FactoryRuleDecision | void;
+      let decision: FactoryRuleDecision | void = undefined;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
       try {
@@ -847,6 +914,15 @@ export class GithubRules {
               ? error.message.slice(0, 2_000)
               : 'Factory GitHub rule failed.',
         };
+      }
+      if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+      if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+        const routed =
+          (await routeEventDecision(context, this.options.storage, {
+            orgId: project.orgId,
+            factoryProjectId: project.factoryProjectId,
+          })) ?? activitySignalFor(context);
+        if (routed) decisions = [{ ...routed }];
       }
 
       const committed = await this.options.storage.commitRuleEvaluation({
@@ -1054,12 +1130,17 @@ export class GithubRules {
     pullRequestNumber: number,
     resolved: Card,
   ): Promise<Card | undefined> {
+    await this.options.storage.copyLegacyCards({
+      orgId,
+      factoryProjectId: projectId,
+      sources: githubItemSources(repositoryId, 'pull-request', pullRequestNumber),
+    });
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const linked =
       resolved.externalSource?.type === 'pull-request'
         ? // Bound to the pull request's own Review card: follow the recorded
           // link back to the work item that authored it.
-          items.find(item => item.id === resolved.parentWorkItemId)
+          await this.#parentItem(orgId, projectId, items, resolved)
         : // Bound to the work item (provenance): find the Review card this pull
           // request opened, and only when it names this item as its parent — a
           // card for the same number in another repository is not this one's.
@@ -1084,6 +1165,16 @@ export class GithubRules {
     provenance: FactoryPullRequestProvenanceData | null,
     preferAuthoringItem = false,
   ): Promise<Card | undefined> {
+    // A finished card may still be only in the legacy table; copy it so the event finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId,
+      factoryProjectId: projectId,
+      sources: [
+        ...(issueNumber ? githubItemSources(repositoryId, 'issue', issueNumber) : []),
+        ...(pullRequestNumber ? githubItemSources(repositoryId, 'pull-request', pullRequestNumber) : []),
+      ],
+    });
+    if (provenance) await this.options.storage.getForProject(orgId, projectId, provenance.workItemId);
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const resolved = this.#resolveItem(
       items,
@@ -1102,9 +1193,19 @@ export class GithubRules {
     // `parentWorkItemId`, so follow that link back rather than relaxing the
     // guard, which would let a Review card react to its own posted review.
     if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
-      return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
+      return (await this.#parentItem(orgId, projectId, items, resolved)) ?? resolved;
     }
     return resolved;
+  }
+
+  /** The card `child` was filed from; read on its own when the board list lacks it (not copied yet). */
+  async #parentItem(orgId: string, projectId: string, items: Card[], child: Card): Promise<Card | undefined> {
+    if (!child.parentWorkItemId) return undefined;
+    return (
+      items.find(item => item.id === child.parentWorkItemId) ??
+      (await this.options.storage.getForProject(orgId, projectId, child.parentWorkItemId)) ??
+      undefined
+    );
   }
 
   #resolveItem(
