@@ -13,8 +13,8 @@ createStreamDisconnectTestSuite({
     }).compile();
     const app = moduleRef.createNestApplication({ logger: false });
     if (beforeContext) {
-      app.use((_req: unknown, _res: unknown, next: () => void) => {
-        void beforeContext().then(() => next());
+      app.use((_req: unknown, _res: unknown, next: (error?: unknown) => void) => {
+        beforeContext().then(() => next(), next);
       });
     }
     await app.listen(0, '127.0.0.1');

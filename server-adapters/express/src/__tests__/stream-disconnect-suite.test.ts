@@ -10,7 +10,7 @@ createStreamDisconnectTestSuite({
     const adapter = new MastraServer({ app, mastra: new Mastra({ logger: false }) });
     if (beforeContext) {
       app.use((_req, _res, next) => {
-        void beforeContext().then(() => next());
+        beforeContext().then(() => next(), next);
       });
     }
     app.use(adapter.createContextMiddleware());
