@@ -198,6 +198,7 @@
     "@lukeed/uuid": "^2.0.1",
     "@mcp-ui/client": "^7.1.1",
     "@nangohq/frontend": "0.71.9",
+    "@novnc/novnc": "^1.7.0",
     "@pierre/diffs": "1.5.1",
     "@radix-ui/react-visually-hidden": "^1.2.13",
     "@tailwindcss/typography": "^0.5.20",

@@ -1,10 +1,10 @@
-/** A desktop's first boot can take the platform's full ensure timeout (300 s) plus page load. */
-export const IFRAME_LOAD_TIMEOUT_MS = 315_000;
+/** A desktop's first boot can take the platform's full ensure timeout (300 s) plus the RFB handshake. */
+export const CONNECT_TIMEOUT_MS = 315_000;
 
 export type ComputerViewMode = 'watch' | 'control';
 
 export type ComputerSessionResult =
-  | { state: 'ready'; connectUrl: string }
+  | { state: 'ready'; socketUrl: string }
   | { state: 'not-running' | 'forbidden' | 'unavailable' | 'error' };
 
 export interface RequestComputerSessionOptions {
@@ -24,14 +24,17 @@ function normalizeApiPrefix(apiPrefix: string | undefined) {
   return prefix || '/api';
 }
 
-/** Absolute URL for a server-relative path, resolved against the Mastra server. */
-export function resolveServerUrl(path: string, baseUrl?: string) {
-  return new URL(path, baseUrl || window.location.href).href;
+/** Absolute `ws:`/`wss:` URL for a server-relative socket path, resolved against the Mastra server. */
+export function resolveSocketUrl(path: string, baseUrl?: string) {
+  const url = new URL(path, baseUrl || window.location.href);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.href;
 }
 
 /**
- * Mint a single-use viewer ticket for a computer attached to this thread. The
- * returned `connectUrl` is opened in an iframe; credentials never enter a URL.
+ * Mint a single-use, ~30 s ticket for this computer's desktop stream. The
+ * returned `socketUrl` is handed straight to the RFB client; the ticket is the
+ * only credential in it and the server consumes it on the first upgrade.
  */
 export async function requestComputerSession({
   computerId,
@@ -55,9 +58,9 @@ export async function requestComputerSession({
     if (response.status === 403) return { state: 'forbidden' };
     if (response.status === 404) return { state: 'unavailable' };
     if (!response.ok) return { state: 'error' };
-    const body = (await response.json()) as { state?: unknown; connectUrl?: unknown };
-    if (body.state === 'ready' && typeof body.connectUrl === 'string' && body.connectUrl.startsWith('/computer/')) {
-      return { state: 'ready', connectUrl: resolveServerUrl(body.connectUrl, baseUrl) };
+    const body = (await response.json()) as { state?: unknown; socketUrl?: unknown };
+    if (body.state === 'ready' && typeof body.socketUrl === 'string' && body.socketUrl.startsWith('/computer/')) {
+      return { state: 'ready', socketUrl: resolveSocketUrl(body.socketUrl, baseUrl) };
     }
     if (body.state === 'not-running') return { state: 'not-running' };
     if (body.state === 'unavailable') return { state: 'unavailable' };

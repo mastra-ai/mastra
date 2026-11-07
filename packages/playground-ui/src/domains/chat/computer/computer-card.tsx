@@ -1,25 +1,19 @@
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { IFRAME_LOAD_TIMEOUT_MS, requestComputerSession } from './computer-session';
+import { CONNECT_TIMEOUT_MS, requestComputerSession } from './computer-session';
 import type { ComputerSessionResult, ComputerViewMode } from './computer-session';
 import { computerPartKey } from './computer-state';
 import { useComputerThread } from './computer-thread-context';
+import { loadRfb } from './load-rfb';
+import type { RfbClient } from './load-rfb';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Notice } from '@/ds/components/Notice';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Txt } from '@/ds/components/Txt';
 
-const NOT_RUNNING_POLL_MS = 5_000;
-const STATUS_CODES = new Set([401, 429, 502]);
-
-const STATUS_MESSAGES: Record<number, string> = {
-  401: 'This viewer is no longer authorized. The computer may have been released.',
-  429: 'Too many viewers are open for this computer. Close one and reconnect.',
-  502: 'The desktop could not be reached.',
-};
+export const NOT_RUNNING_POLL_MS = 5_000;
 
 const SESSION_MESSAGES: Record<Exclude<ComputerSessionResult['state'], 'ready'>, string> = {
   'not-running': 'The computer is not running yet.',
@@ -40,7 +34,7 @@ export interface ComputerCardProps {
 }
 
 /**
- * A computer attached to the chat thread: live desktop, Watch / Take over, and Open in tab.
+ * A computer attached to the chat thread: live desktop, Watch / Take over, and Fullscreen.
  * Only the occurrence that owns the current attachment connects; others are references.
  *
  * @experimental
@@ -77,143 +71,140 @@ interface LiveComputerProps {
   resourceId: string;
 }
 
+type ConnectionState =
+  | { phase: 'connecting' }
+  | { phase: 'connected' }
+  | { phase: 'session'; state: Exclude<ComputerSessionResult['state'], 'ready'> }
+  | { phase: 'disconnected'; message: string };
+
+/**
+ * Renders the desktop with the bundled noVNC client over the server's
+ * websockify proxy. No sandbox-served page or script ever loads in Studio.
+ *
+ * Each connection mints its own single-use ticket inside the effect, so a
+ * remount (including React StrictMode's) never replays a consumed ticket.
+ * Watch → Take over mints a `control` ticket (write access) and reconnects;
+ * Take over → Watch just sets `viewOnly` on the live connection.
+ */
 function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const client = useMastraClient();
   const { baseUrl, apiPrefix, headers } = client.options;
   const [mode, setMode] = useState<ComputerViewMode>('watch');
+  const [grant, setGrant] = useState<ComputerViewMode>('watch');
   const [attempt, setAttempt] = useState(0);
-  const [frameError, setFrameError] = useState<string>();
-  const [tabError, setTabError] = useState<string>();
-  const [loaded, setLoaded] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [connection, setConnection] = useState<ConnectionState>({ phase: 'connecting' });
+  const screenRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const rfbRef = useRef<RfbClient | undefined>(undefined);
+  const viewOnlyRef = useRef(true);
+  viewOnlyRef.current = mode === 'watch';
+  const headersKey = JSON.stringify(headers ?? {});
 
-  const session = useQuery({
-    queryKey: ['computer-session', baseUrl, computerId, threadId, resourceId, mode, attempt],
-    queryFn: ({ signal }) =>
-      requestComputerSession({
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    let rfb: RfbClient | undefined;
+    setConnection({ phase: 'connecting' });
+
+    const connect = async () => {
+      const result = await requestComputerSession({
         computerId,
         threadId,
         resourceId,
-        mode,
+        mode: grant,
         baseUrl,
         apiPrefix,
-        headers: headers,
+        headers: JSON.parse(headersKey) as Record<string, string>,
         signal,
-      }),
-    gcTime: 0,
-    staleTime: Infinity,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchInterval: query => (query.state.data?.state === 'not-running' ? NOT_RUNNING_POLL_MS : false),
-  });
-
-  const connectUrl = session.data?.state === 'ready' ? session.data.connectUrl : undefined;
-
-  useEffect(() => {
-    setLoaded(false);
-    setFrameError(undefined);
-    if (!connectUrl) return;
-    const expectedOrigin = new URL(connectUrl).origin;
-    const onMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow || event.origin !== expectedOrigin) return;
-      const data = event.data as { type?: unknown; code?: unknown } | null;
-      if (data?.type !== 'mastra-computer-status' || typeof data.code !== 'number' || !STATUS_CODES.has(data.code)) {
+      }).catch(() => undefined);
+      if (signal.aborted || !result) return;
+      if (result.state !== 'ready') {
+        setConnection({ phase: 'session', state: result.state });
+        if (result.state === 'not-running') pollTimer = setTimeout(() => void connect(), NOT_RUNNING_POLL_MS);
         return;
       }
-      setFrameError(STATUS_MESSAGES[data.code]);
+      const RFB = await loadRfb();
+      const screen = screenRef.current;
+      if (signal.aborted || !screen) return;
+      rfb = new RFB(screen, result.socketUrl, { wsProtocols: [] });
+      rfb.viewOnly = viewOnlyRef.current;
+      rfb.scaleViewport = true;
+      rfb.resizeSession = false;
+      rfbRef.current = rfb;
+      connectTimer = setTimeout(
+        () => setConnection({ phase: 'disconnected', message: 'The desktop did not connect in time.' }),
+        CONNECT_TIMEOUT_MS,
+      );
+      rfb.addEventListener('connect', () => {
+        clearTimeout(connectTimer);
+        setConnection({ phase: 'connected' });
+      });
+      rfb.addEventListener('disconnect', () => {
+        clearTimeout(connectTimer);
+        if (signal.aborted) return;
+        setConnection({
+          phase: 'disconnected',
+          message: 'The live view disconnected. The computer may have been released or stopped.',
+        });
+      });
     };
-    window.addEventListener('message', onMessage);
-    const timer = setTimeout(() => setFrameError('The desktop did not load in time.'), IFRAME_LOAD_TIMEOUT_MS);
-    const clear = () => clearTimeout(timer);
-    const frame = iframeRef.current;
-    frame?.addEventListener('load', clear);
-    return () => {
-      clear();
-      frame?.removeEventListener('load', clear);
-      window.removeEventListener('message', onMessage);
-    };
-  }, [connectUrl]);
+    void connect();
 
-  const openInTab = async () => {
-    setTabError(undefined);
-    // Open synchronously inside the click so the popup keeps user activation.
-    const tab = window.open('about:blank', '_blank');
-    if (!tab) {
-      setTabError('Your browser blocked the new tab.');
-      return;
-    }
-    tab.opener = null;
-    const result = await requestComputerSession({
-      computerId,
-      threadId,
-      resourceId,
-      mode,
-      baseUrl,
-      apiPrefix,
-      headers: headers,
-    });
-    if (result.state !== 'ready') {
-      tab.close();
-      setTabError(SESSION_MESSAGES[result.state]);
-      return;
-    }
-    tab.location.replace(result.connectUrl);
+    return () => {
+      controller.abort();
+      clearTimeout(pollTimer);
+      clearTimeout(connectTimer);
+      rfbRef.current = undefined;
+      rfb?.disconnect();
+    };
+  }, [computerId, threadId, resourceId, grant, attempt, baseUrl, apiPrefix, headersKey]);
+
+  useEffect(() => {
+    if (rfbRef.current) rfbRef.current.viewOnly = mode === 'watch';
+  }, [mode]);
+
+  const changeMode = (next: ComputerViewMode) => {
+    setMode(next);
+    if (next === 'control' && grant !== 'control') setGrant('control');
   };
 
-  const sessionMessage =
-    session.data && session.data.state !== 'ready'
-      ? SESSION_MESSAGES[session.data.state]
-      : session.isError
-        ? SESSION_MESSAGES.error
-        : undefined;
+  const sessionMessage = connection.phase === 'session' ? SESSION_MESSAGES[connection.state] : undefined;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<ComputerViewMode> value={mode} onValueChange={setMode} aria-label="Computer view mode">
+        <SegmentedControl<ComputerViewMode> value={mode} onValueChange={changeMode} aria-label="Computer view mode">
           <SegmentedControlItem value="watch">Watch</SegmentedControlItem>
           <SegmentedControlItem value="control">Take over</SegmentedControlItem>
         </SegmentedControl>
-        <Button size="sm" variant="ghost" onClick={openInTab}>
-          Open in tab
+        <Button size="sm" variant="ghost" onClick={() => void frameRef.current?.requestFullscreen?.()}>
+          Fullscreen
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setAttempt(n => n + 1)}>
           Reconnect
         </Button>
         {mode === 'control' && <Badge variant="warning">You are controlling the desktop</Badge>}
       </div>
-      {tabError && (
-        <Notice variant="warning" title="Could not open the tab">
-          <Notice.Message>{tabError}</Notice.Message>
-        </Notice>
-      )}
       {sessionMessage && (
-        <Notice variant={session.data?.state === 'not-running' ? 'info' : 'warning'} title="Live view">
+        <Notice variant={connection.phase === 'session' && connection.state === 'not-running' ? 'info' : 'warning'} title="Live view">
           <Notice.Message>{sessionMessage}</Notice.Message>
         </Notice>
       )}
-      {frameError && (
+      {connection.phase === 'disconnected' && (
         <Notice variant="warning" title="Live view">
-          <Notice.Message>{frameError}</Notice.Message>
+          <Notice.Message>{connection.message}</Notice.Message>
         </Notice>
       )}
-      {connectUrl && (
-        <div className="relative aspect-video w-full overflow-hidden">
-          {!loaded && (
-            <Txt variant="body-sm" className="absolute inset-0 flex items-center justify-center">
-              Starting desktop…
-            </Txt>
-          )}
-          <iframe
-            key={connectUrl}
-            ref={iframeRef}
-            title="Computer desktop"
-            src={connectUrl}
-            onLoad={() => setLoaded(true)}
-            className="size-full border-0"
-          />
-        </div>
-      )}
+      <div ref={frameRef} className="relative aspect-video w-full overflow-hidden bg-black">
+        {connection.phase === 'connecting' && (
+          <Txt variant="body-sm" className="absolute inset-0 flex items-center justify-center">
+            Starting desktop…
+          </Txt>
+        )}
+        <div ref={screenRef} role="application" aria-label="Computer desktop" className="size-full" />
+      </div>
     </div>
   );
 }

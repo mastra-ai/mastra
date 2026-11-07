@@ -6,12 +6,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DataPartRenderer } from '../../messages/renderers/data-part-renderer';
 import { ComputerCard } from '../computer-card';
-import { IFRAME_LOAD_TIMEOUT_MS, requestComputerSession } from '../computer-session';
+import { CONNECT_TIMEOUT_MS, requestComputerSession } from '../computer-session';
 import { attachedComputerId, deriveComputers } from '../computer-state';
 import { ComputerThreadProvider } from '../computer-thread-context';
 import type { ComputerThreadScope } from '../computer-thread-context';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+
+// noVNC is the third-party boundary: a fake RFB records what the card asks of it.
+const rfb = vi.hoisted(() => {
+  class FakeRFB extends EventTarget {
+    static instances: FakeRFB[] = [];
+    viewOnly = false;
+    scaleViewport = false;
+    resizeSession = true;
+    disconnected = false;
+    constructor(
+      readonly target: HTMLElement,
+      readonly url: string,
+      readonly options: { wsProtocols?: string[] } = {},
+    ) {
+      super();
+      FakeRFB.instances.push(this);
+    }
+    disconnect() {
+      this.disconnected = true;
+    }
+  }
+  return { FakeRFB };
+});
+vi.mock('@novnc/novnc', () => ({ default: rfb.FakeRFB }));
+const live = () => rfb.FakeRFB.instances.filter(i => !i.disconnected);
 
 const SESSION_URL = `${TEST_BASE_URL}/api/computers/:computerId/session`;
 const scope: ComputerThreadScope = { threadId: 'thread-1', resourceId: 'agent-1' };
@@ -69,7 +94,8 @@ function serveSession(reply: (req: SessionRequest) => Response | Promise<Respons
 }
 
 const ready = (ticket = `t${requests.length}`) =>
-  HttpResponse.json({ state: 'ready', connectUrl: `/computer/c1/connect?ticket=${ticket}` });
+  HttpResponse.json({ state: 'ready', socketUrl: `/computer/c1/websockify?ticket=${ticket}` });
+const WS_BASE = TEST_BASE_URL.replace('http', 'ws');
 
 /** Renders a thread transcript the way MessageRow does: one DataPartRenderer per data part. */
 function renderThread(messages: MastraDBMessage[], threadScope: ComputerThreadScope | null = scope) {
@@ -96,6 +122,7 @@ function renderThread(messages: MastraDBMessage[], threadScope: ComputerThreadSc
 
 beforeEach(() => {
   requests = [];
+  rfb.FakeRFB.instances = [];
 });
 
 afterEach(() => {
@@ -178,7 +205,7 @@ describe('requestComputerSession', () => {
   it('posts the thread scope and mode with Studio headers, never in the URL', async () => {
     serveSession(() => ready('abc'));
     const result = await requestComputerSession({ ...base, headers: { authorization: 'Bearer secret' } });
-    expect(result).toEqual({ state: 'ready', connectUrl: `${TEST_BASE_URL}/computer/c1/connect?ticket=abc` });
+    expect(result).toEqual({ state: 'ready', socketUrl: `${WS_BASE}/computer/c1/websockify?ticket=abc` });
     expect(requests[0]).toMatchObject({ computerId: 'a b/c', body: { threadId: 't', resourceId: 'r', mode: 'control' } });
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer secret');
   });
@@ -189,7 +216,8 @@ describe('requestComputerSession', () => {
     [() => HttpResponse.json({ state: 'unavailable' }), 'unavailable'],
     [() => HttpResponse.json({ state: 'not-running' }), 'not-running'],
     [() => new HttpResponse(null, { status: 500 }), 'error'],
-    [() => HttpResponse.json({ state: 'ready', connectUrl: 'https://evil.test/x' }), 'error'],
+    [() => HttpResponse.json({ state: 'ready', socketUrl: 'wss://evil.test/x' }), 'error'],
+    [() => HttpResponse.json({ state: 'ready', connectUrl: '/computer/c1/connect?ticket=x' }), 'error'],
     [() => HttpResponse.error(), 'error'],
   ])('maps responses to states (%#)', async (reply, state) => {
     serveSession(reply);
@@ -198,17 +226,67 @@ describe('requestComputerSession', () => {
 });
 
 describe('ComputerCard', () => {
-  it('connects the owning card in Watch mode and reconnects in control on Take over', async () => {
+  it('renders the desktop with the bundled noVNC client over the ticketed socket, view-only in Watch', async () => {
+    serveSession();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    const [client] = live();
+    expect(client.url).toBe(`${WS_BASE}/computer/c1/websockify?ticket=t1`);
+    expect(client.options.wsProtocols).toEqual([]);
+    expect(client.viewOnly).toBe(true);
+    expect(client.scaleViewport).toBe(true);
+    expect(client.target).toBe(screen.getByRole('application', { name: 'Computer desktop' }));
+    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'watch' });
+    // Nothing served by the sandbox is ever loaded: no iframe, no vnc.html / rfb.js fetch.
+    expect(document.querySelector('iframe')).toBeNull();
+    const fetched = fetchSpy.mock.calls.map(([input]) => String(input instanceof Request ? input.url : input));
+    expect(fetched.filter(u => !u.endsWith('/api/computers/c1/session'))).toEqual([]);
+
+    act(() => client.dispatchEvent(new Event('connect')));
+    expect(screen.queryByText('Starting desktop…')).toBeNull();
+  });
+
+  it('mints a control ticket on first Take over, then toggles viewOnly live', async () => {
     serveSession();
     renderThread([message('m1', [computerPart('attached')])]);
-    const frame = await screen.findByTitle('Computer desktop');
-    expect(frame.getAttribute('src')).toBe(`${TEST_BASE_URL}/computer/c1/connect?ticket=t1`);
-    expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'watch' });
+    await waitFor(() => expect(live()).toHaveLength(1));
 
     fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
-    await waitFor(() => expect(screen.getByTitle('Computer desktop').getAttribute('src')).toContain('ticket=t2'));
+    await waitFor(() => expect(live()[0]?.url).toContain('ticket=t2'));
     expect(requests[1]?.body.mode).toBe('control');
+    expect(rfb.FakeRFB.instances[0]?.disconnected).toBe(true);
+    const control = live()[0];
+    expect(control.viewOnly).toBe(false);
     expect(screen.getByText('You are controlling the desktop')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Watch' }));
+    expect(control.viewOnly).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
+    expect(control.viewOnly).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(requests).toHaveLength(2);
+    expect(live()).toEqual([control]);
+  });
+
+  it('reconnects with a fresh ticket and reports a dropped connection', async () => {
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    act(() => live()[0].dispatchEvent(new Event('disconnect')));
+    expect(await screen.findByText(/live view disconnected/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+    await waitFor(() => expect(live()[0]?.url).toContain('ticket=t2'));
+    expect(live()).toHaveLength(1);
+  });
+
+  it('disconnects on unmount', async () => {
+    serveSession();
+    const { unmount } = renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    unmount();
+    expect(live()).toHaveLength(0);
   });
 
   it('gives only the latest attachment a live viewer', async () => {
@@ -218,7 +296,7 @@ describe('ComputerCard', () => {
       message('m2', [computerPart('released')]),
       message('m3', [computerPart('attached')]),
     ]);
-    expect(await screen.findAllByTitle('Computer desktop')).toHaveLength(1);
+    await waitFor(() => expect(live()).toHaveLength(1));
     expect(screen.getAllByText('Shown in a later message')).toHaveLength(2);
     expect(requests).toHaveLength(1);
   });
@@ -229,13 +307,13 @@ describe('ComputerCard', () => {
     expect(screen.getAllByText('Computer released')).toHaveLength(2);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(requests).toHaveLength(0);
-    expect(screen.queryByTitle('Computer desktop')).toBeNull();
+    expect(rfb.FakeRFB.instances).toHaveLength(0);
   });
 
   it('connects from the attach tool call when a reloaded thread has no data parts', async () => {
     serveSession();
     renderThread([message('m1', [attachResult()])]);
-    expect(await screen.findAllByTitle('Computer desktop')).toHaveLength(1);
+    await waitFor(() => expect(live()).toHaveLength(1));
     expect(requests).toHaveLength(1);
     expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'watch' });
   });
@@ -243,7 +321,7 @@ describe('ComputerCard', () => {
   it('shows one live card when both the tool call and its data part are present', async () => {
     serveSession();
     renderThread([message('m1', [attachResult(), computerPart('attached')])]);
-    expect(await screen.findAllByTitle('Computer desktop')).toHaveLength(1);
+    await waitFor(() => expect(live()).toHaveLength(1));
     expect(screen.queryByText('Shown in a later message')).toBeNull();
     expect(screen.getAllByRole('region', { name: 'Computer Desk' })).toHaveLength(1);
   });
@@ -253,7 +331,7 @@ describe('ComputerCard', () => {
     renderThread([message('m1', [attachResult()]), message('m2', [releaseResult()])]);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(requests).toHaveLength(0);
-    expect(screen.queryByTitle('Computer desktop')).toBeNull();
+    expect(rfb.FakeRFB.instances).toHaveLength(0);
   });
 
   it('never connects without a thread scope', async () => {
@@ -267,10 +345,11 @@ describe('ComputerCard', () => {
   it('requests again with the new thread when the thread changes', async () => {
     serveSession();
     const { rerenderThread } = renderThread([message('m1', [computerPart('attached')])]);
-    await screen.findByTitle('Computer desktop');
+    await waitFor(() => expect(live()).toHaveLength(1));
     rerenderThread([message('m1', [computerPart('attached')])], { threadId: 'thread-2', resourceId: 'agent-1' });
     await waitFor(() => expect(requests).toHaveLength(2));
     expect(requests[1]?.body.threadId).toBe('thread-2');
+    await waitFor(() => expect(live()).toHaveLength(1));
   });
 
   it.each([
@@ -281,79 +360,27 @@ describe('ComputerCard', () => {
     serveSession(reply);
     renderThread([message('m1', [computerPart('attached')])]);
     expect(await screen.findByText(text)).toBeTruthy();
-    expect(screen.queryByTitle('Computer desktop')).toBeNull();
+    expect(rfb.FakeRFB.instances).toHaveLength(0);
   });
 
-  it('accepts status messages only from its own frame and server origin', async () => {
-    serveSession();
+  it('polls a not-running computer until it is ready', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let calls = 0;
+    serveSession(() => (calls++ === 0 ? HttpResponse.json({ state: 'not-running' }) : ready()));
     renderThread([message('m1', [computerPart('attached')])]);
-    const frame = (await screen.findByTitle('Computer desktop')) as HTMLIFrameElement;
-    const post = (data: unknown, origin: string, source: MessageEventSource | null) =>
-      act(() => window.dispatchEvent(new MessageEvent('message', { data, origin, source })));
-
-    post({ type: 'mastra-computer-status', code: 429 }, 'http://evil.test', frame.contentWindow);
-    post({ type: 'mastra-computer-status', code: 429 }, TEST_BASE_URL, window);
-    post({ type: 'mastra-computer-status', code: 999 }, TEST_BASE_URL, frame.contentWindow);
-    expect(screen.queryByText(/Too many viewers/)).toBeNull();
-
-    post({ type: 'mastra-computer-status', code: 429 }, TEST_BASE_URL, frame.contentWindow);
-    expect(screen.getByText(/Too many viewers/)).toBeTruthy();
-    post({ type: 'mastra-computer-status', code: 401 }, TEST_BASE_URL, frame.contentWindow);
-    expect(screen.getByText(/no longer authorized/)).toBeTruthy();
+    await screen.findByText('The computer is not running yet.');
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    await waitFor(() => expect(live()).toHaveLength(1));
   });
 
-  it('times out a frame that never loads', async () => {
+  it('times out a desktop that never connects, and not one that does', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     serveSession();
-    renderThread([message('m1', [computerPart('attached')])]);
-    await screen.findByTitle('Computer desktop');
-    expect(screen.getByText('Starting desktop…')).toBeTruthy();
-    act(() => vi.advanceTimersByTime(IFRAME_LOAD_TIMEOUT_MS));
-    expect(screen.getByText('The desktop did not load in time.')).toBeTruthy();
-  });
-
-  it('clears the load timer once the frame loads', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    serveSession();
-    renderThread([message('m1', [computerPart('attached')])]);
-    const frame = await screen.findByTitle('Computer desktop');
-    fireEvent.load(frame);
-    expect(screen.queryByText('Starting desktop…')).toBeNull();
-    act(() => vi.advanceTimersByTime(IFRAME_LOAD_TIMEOUT_MS));
-    expect(screen.queryByText('The desktop did not load in time.')).toBeNull();
-  });
-
-  it('opens a tab synchronously and navigates it after the session is minted', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => (release = resolve));
-    serveSession(async () => {
-      if (requests.length > 1) await gate;
-      return ready();
-    });
-    const tab = { opener: {} as unknown, close: vi.fn(), location: { replace: vi.fn() } };
-    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
-    renderThread([message('m1', [computerPart('attached')])]);
-    await screen.findByTitle('Computer desktop');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open in tab' }));
-    expect(open).toHaveBeenCalledWith('about:blank', '_blank');
-    expect(tab.opener).toBeNull();
-    expect(tab.location.replace).not.toHaveBeenCalled();
-    release();
-    await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(`${TEST_BASE_URL}/computer/c1/connect?ticket=t2`));
-    expect(requests[1]?.body.mode).toBe('watch');
-  });
-
-  it('closes the tab when the session cannot be minted', async () => {
-    serveSession(() => (requests.length > 1 ? HttpResponse.json({}, { status: 403 }) : ready()));
-    const tab = { opener: {}, close: vi.fn(), location: { replace: vi.fn() } };
-    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
-    renderThread([message('m1', [computerPart('attached')])]);
-    await screen.findByTitle('Computer desktop');
-    fireEvent.click(screen.getByRole('button', { name: 'Open in tab' }));
-    await waitFor(() => expect(tab.close).toHaveBeenCalled());
-    expect(tab.location.replace).not.toHaveBeenCalled();
-    expect(screen.getByText('This computer is not attached to this thread.')).toBeTruthy();
+    renderThread([message('m1', [computerPart('attached')]), message('m2', [computerPart('attached', { computerId: 'c2', name: 'Other' })])]);
+    await waitFor(() => expect(live()).toHaveLength(2));
+    act(() => live()[0].dispatchEvent(new Event('connect')));
+    act(() => vi.advanceTimersByTime(CONNECT_TIMEOUT_MS));
+    expect(screen.getAllByText('The desktop did not connect in time.')).toHaveLength(1);
   });
 
   it('renders no card for threads without computers', () => {
