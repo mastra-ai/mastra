@@ -16,6 +16,7 @@ import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/sto
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
+import { computerCardsEnabled } from './computer-card';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
 import { buildManifest } from './manifest';
 import {
@@ -103,7 +104,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
 export function hashConfig(
-  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
+  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands']; computer?: boolean },
   baseUrl: string,
   resolvedAppName: string,
   resolvedDescription: string,
@@ -113,6 +114,8 @@ export function hashConfig(
     description: resolvedDescription,
     slashCommands: opts.slashCommands,
     baseUrl,
+    // Omitted entirely when off so existing installs keep their stored hash.
+    ...(opts.computer ? { computer: true } : {}),
   });
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
@@ -787,7 +790,7 @@ export class SlackProvider implements ChannelProvider {
     const resolvedAppName = installation.name ?? agent.name ?? installation.agentId;
     const resolvedDescription = installation.description || agent.getDescription() || 'AI assistant powered by Mastra';
     const currentHash = hashConfig(
-      { slashCommands: installation.slashCommands },
+      { slashCommands: installation.slashCommands, computer: computerCardsEnabled() },
       baseUrl,
       resolvedAppName,
       resolvedDescription,
@@ -809,6 +812,7 @@ export class SlackProvider implements ChannelProvider {
           description: cmd.description ?? `Run ${cmd.command}`,
           usageHint: cmd.usageHint,
         })),
+        computer: computerCardsEnabled(),
       });
 
       await this.#requireManifestClient().updateApp(installation.appId, manifest);
@@ -1167,6 +1171,7 @@ export class SlackProvider implements ChannelProvider {
         description: cmd.description ?? `Run ${cmd.command}`,
         usageHint: cmd.usageHint,
       })),
+      computer: computerCardsEnabled(),
     });
 
     // Apply user's manifest transform if provided
@@ -1212,7 +1217,7 @@ export class SlackProvider implements ChannelProvider {
     // Store pending installation (includes auth URL for UI to fetch later)
     // Hash the same normalized slash commands that are stored, so #checkConfigDrift compares like with like.
     const configHash = hashConfig(
-      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined },
+      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined, computer: computerCardsEnabled() },
       baseUrl,
       appName,
       appDescription,

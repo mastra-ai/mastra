@@ -558,6 +558,10 @@ export interface SlackAppManifest {
       url: string;
       usage_hint?: string;
     }>;
+    rich_previews?: {
+      is_active: boolean;
+      entity_types?: string[];
+    };
     assistant_view?: {
       assistant_description: string;
       suggested_prompts?: Array<{
