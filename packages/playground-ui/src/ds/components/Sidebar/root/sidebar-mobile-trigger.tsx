@@ -18,12 +18,7 @@ export function SidebarMobileTrigger({
   const { isMobile, mobileTriggerRef, setOpenMobile } = useSidebar();
   return (
     <Button
-      ref={node => {
-        mobileTriggerRef.current = node;
-        return () => {
-          if (mobileTriggerRef.current === node) mobileTriggerRef.current = null;
-        };
-      }}
+      ref={mobileTriggerRef}
       type="button"
       variant="ghost"
       size="icon-sm"
@@ -34,9 +29,7 @@ export function SidebarMobileTrigger({
       {...props}
       onClick={event => {
         onClick?.(event);
-        if (event.defaultPrevented) return;
-        mobileTriggerRef.current = event.currentTarget;
-        setOpenMobile(true);
+        if (!event.defaultPrevented) setOpenMobile(true);
       }}
       className={cn(
         'relative before:absolute before:-inset-2',

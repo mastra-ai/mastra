@@ -1,15 +1,9 @@
-import { Children, isValidElement } from 'react';
-import type { ReactElement, ReactNode } from 'react';
-import { Breadcrumb, Crumb } from '../Breadcrumb';
+import type { ReactNode } from 'react';
 import { Header } from '../Header';
 import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
 import type { ScrollAreaMask } from '../ScrollArea';
 import { SidebarMobileTrigger } from '../Sidebar/root/sidebar-mobile-trigger';
-import { useAppShellMobileBar } from '@/ds/new/layout/app-shell/app-shell-mobile-bar-context';
-import { PageHeaderRoot } from '@/ds/new/layout/page-header/page-header-root';
-import type { PageHeaderRootProps } from '@/ds/new/layout/page-header/page-header-root';
-import { PageHeaderTitle } from '@/ds/new/layout/page-header/page-header-title';
-import type { PageHeaderTitleProps } from '@/ds/new/layout/page-header/page-header-title';
+import { AppShellMobileBarContext, useAppShellMobileBar } from '@/ds/new/layout/app-shell/app-shell-mobile-bar-context';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
@@ -35,27 +29,6 @@ export interface PageLayoutProps {
   mask?: ScrollAreaMask;
 }
 
-function pageTitleOf(header: ReactNode) {
-  if (!isValidElement<PageHeaderRootProps>(header) || header.type !== PageHeaderRoot) return undefined;
-  return Children.toArray(header.props.children).find(
-    (child): child is ReactElement<PageHeaderTitleProps> => isValidElement(child) && child.type === PageHeaderTitle,
-  );
-}
-
-function MobileBarLead({ header, brand }: { header: ReactNode; brand: ReactNode }) {
-  const title = pageTitleOf(header);
-  if (!title) return brand;
-  return (
-    <div aria-hidden className="flex min-w-0 flex-1 overflow-hidden">
-      <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
-        <Crumb as="span" isCurrent isLoading={title.props.isLoading}>
-          {title.props.children}
-        </Crumb>
-      </Breadcrumb>
-    </div>
-  );
-}
-
 export function PageLayout({
   children,
   breadcrumbs,
@@ -74,11 +47,16 @@ export function PageLayout({
   ) : null;
 
   return (
-    <div ref={mobileBar?.registerPageLayout} data-slot="page-layout" className="flex h-full min-h-0 flex-col">
+    <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions || mobileBar) && (
-        <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
+        <Header
+          className={cn(
+            'min-h-header-default shrink-0 gap-2 overflow-hidden px-2',
+            mobileBar && '[&_ol>li:nth-last-child(n+4)]:hidden',
+          )}
+        >
           {mobileBar && <SidebarMobileTrigger className="shrink-0" />}
-          {breadcrumbs || (mobileBar && <MobileBarLead header={header} brand={mobileBar.brand} />)}
+          {breadcrumbs || mobileBar?.brand}
           {(headerActions || mobileActions) && (
             <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">
               {headerActions}
@@ -87,47 +65,49 @@ export function PageLayout({
           )}
         </Header>
       )}
-      {actionRow && (
-        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
-          {actionRow}
-        </div>
-      )}
-      <main className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea mask={mask} className="min-h-0 flex-1">
-          <ScrollAreaViewport
-            className={cn(variant === 'container' && 'p-4')}
-            contentClassName={cn(
-              variant === 'container' && 'h-full min-h-min',
-              variant === 'narrow' && 'grid min-h-full grid-cols-1',
-              // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
-              variant === 'fit' &&
-                (header
-                  ? 'grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]'
-                  : 'grid h-full grid-cols-1 grid-rows-1'),
-            )}
-          >
-            {variant === 'narrow' ? (
-              // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
-              // eslint-disable-next-line tailwindcss/enforces-shorthand
-              <div
-                data-slot="page-layout-container"
-                className={cn(
-                  'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
-                  header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
-                )}
-              >
-                {headerSlot}
-                {children}
-              </div>
-            ) : (
-              <>
-                {headerSlot}
-                {children}
-              </>
-            )}
-          </ScrollAreaViewport>
-        </ScrollArea>
-      </main>
+      <AppShellMobileBarContext value={undefined}>
+        {actionRow && (
+          <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
+            {actionRow}
+          </div>
+        )}
+        <main className="flex min-h-0 flex-1 flex-col">
+          <ScrollArea mask={mask} className="min-h-0 flex-1">
+            <ScrollAreaViewport
+              className={cn(variant === 'container' && 'p-4')}
+              contentClassName={cn(
+                variant === 'container' && 'h-full min-h-min',
+                variant === 'narrow' && 'grid min-h-full grid-cols-1',
+                // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
+                variant === 'fit' &&
+                  (header
+                    ? 'grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]'
+                    : 'grid h-full grid-cols-1 grid-rows-1'),
+              )}
+            >
+              {variant === 'narrow' ? (
+                // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
+                // eslint-disable-next-line tailwindcss/enforces-shorthand
+                <div
+                  data-slot="page-layout-container"
+                  className={cn(
+                    'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
+                    header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+                  )}
+                >
+                  {headerSlot}
+                  {children}
+                </div>
+              ) : (
+                <>
+                  {headerSlot}
+                  {children}
+                </>
+              )}
+            </ScrollAreaViewport>
+          </ScrollArea>
+        </main>
+      </AppShellMobileBarContext>
     </div>
   );
 }

@@ -6,11 +6,7 @@ export type AppShellMobileBar = {
   actions?: ReactNode;
 };
 
-export type AppShellMobileBarContextValue = AppShellMobileBar & {
-  registerPageLayout: () => () => void;
-};
-
-export const AppShellMobileBarContext = createContext<AppShellMobileBarContextValue | undefined>(undefined);
+export const AppShellMobileBarContext = createContext<AppShellMobileBar | undefined>(undefined);
 
 export function useAppShellMobileBar() {
   return useContext(AppShellMobileBarContext);

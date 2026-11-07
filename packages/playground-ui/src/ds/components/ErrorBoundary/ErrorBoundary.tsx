@@ -100,7 +100,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     if (fallback !== undefined) return fallback;
 
     return (
-      <DefaultErrorFallback
+      <ErrorBoundaryFallback
         error={error}
         errorInfo={errorInfo}
         reset={this.reset}
@@ -113,14 +113,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 }
 
-type DefaultErrorFallbackProps = ErrorBoundaryFallbackProps & {
+export type ErrorBoundaryFallbackViewProps = ErrorBoundaryFallbackProps & {
   title?: string;
   description?: string;
   variant: ErrorBoundaryVariant;
   className?: string;
 };
 
-function DefaultErrorFallback({
+export function ErrorBoundaryFallback({
   error,
   errorInfo,
   reset,
@@ -128,7 +128,7 @@ function DefaultErrorFallback({
   description,
   variant,
   className,
-}: DefaultErrorFallbackProps) {
+}: ErrorBoundaryFallbackViewProps) {
   const stack = errorInfo?.componentStack ?? error.stack ?? '';
   const isInline = variant === 'inline';
 

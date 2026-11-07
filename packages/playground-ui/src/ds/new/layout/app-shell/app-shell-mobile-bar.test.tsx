@@ -127,44 +127,7 @@ describe('AppShell mobile row', () => {
     });
   });
 
-  describe('when the page has a title and no trail', () => {
-    it('names the page on the row instead of the brand', () => {
-      render(
-        <Shell>
-          <PageLayout variant="narrow" header={pageHeader}>
-            <p>Body</p>
-          </PageLayout>
-        </Shell>,
-      );
-
-      const bar = within(pageBar());
-      expect(bar.getByText('Billing').closest('[aria-current="page"]')).not.toBeNull();
-      expect(bar.queryByText('Mastra Projects')).toBeNull();
-      expect(bar.queryByRole('navigation')).toBeNull();
-      expect(screen.getAllByRole('heading', { name: 'Billing' })).toHaveLength(1);
-    });
-
-    it('shows a loading crumb while the title loads', () => {
-      render(
-        <Shell>
-          <PageLayout
-            variant="narrow"
-            header={
-              <PageHeader>
-                <PageHeader.Title isLoading>Billing</PageHeader.Title>
-              </PageHeader>
-            }
-          >
-            <p>Body</p>
-          </PageLayout>
-        </Shell>,
-      );
-
-      expect(within(pageBar()).queryByText('Billing')).toBeNull();
-    });
-  });
-
-  describe('when the page has neither a trail nor a title', () => {
+  describe('when the page has no trail', () => {
     it('keeps the brand on the row', () => {
       render(
         <Shell>
@@ -183,42 +146,37 @@ describe('AppShell mobile row', () => {
     });
   });
 
-  describe('when the routed content has no PageLayout', () => {
-    it('draws the row from the shell with the menu, the brand and the app actions', () => {
+  describe('when a PageLayout sits inside another', () => {
+    it('gives only the outer page the menu and the app actions', () => {
       render(
         <Shell>
-          <p>Full screen content</p>
+          <PageLayout breadcrumbs={projectTrail}>
+            <PageLayout breadcrumbs={<span>Panel trail</span>}>
+              <p>Panel body</p>
+            </PageLayout>
+          </PageLayout>
         </Shell>,
       );
 
-      const row = shellRow();
-      if (!row) throw new Error('The shell renders no mobile row');
-      expect(within(row).getByText('Mastra Projects')).toBeDefined();
-      expect(
-        within(row)
-          .getAllByRole('button')
-          .map(button => button.getAttribute('aria-label') ?? button.textContent),
-      ).toEqual(['Open navigation menu', 'Search']);
+      expect(screen.getAllByRole('button', { name: 'Open navigation menu' })).toHaveLength(1);
+      expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
+      expect(screen.getByText('Panel trail')).toBeDefined();
     });
   });
 
-  it('hands the row back to the shell when the page leaves', () => {
-    const { rerender } = render(
-      <Shell>
-        <PageLayout breadcrumbs={projectTrail}>
-          <p>Body</p>
-        </PageLayout>
-      </Shell>,
-    );
+  describe('when the page has a title and no trail', () => {
+    it('shows the brand, since only breadcrumbs name the page on the row', () => {
+      render(
+        <Shell>
+          <PageLayout variant="narrow" header={pageHeader}>
+            <p>Body</p>
+          </PageLayout>
+        </Shell>,
+      );
 
-    rerender(
-      <Shell>
-        <p>Full screen content</p>
-      </Shell>,
-    );
-
-    expect(shellRow()).toBeDefined();
-    expect(screen.getAllByRole('button', { name: 'Open navigation menu' })).toHaveLength(1);
+      expect(within(pageBar()).getByText('Mastra Projects')).toBeDefined();
+      expect(screen.getAllByText('Billing')).toHaveLength(1);
+    });
   });
 
   it('opens the navigation drawer from the page row and returns focus to it on close', async () => {

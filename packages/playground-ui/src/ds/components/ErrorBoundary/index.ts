@@ -1,2 +1,2 @@
-export { ErrorBoundary } from './ErrorBoundary';
-export type { ErrorBoundaryProps, ErrorBoundaryFallbackProps } from './ErrorBoundary';
+export { ErrorBoundary, ErrorBoundaryFallback } from './ErrorBoundary';
+export type { ErrorBoundaryProps, ErrorBoundaryFallbackProps, ErrorBoundaryFallbackViewProps } from './ErrorBoundary';

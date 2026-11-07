@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
 import { AppShellMobileBarContext } from './app-shell-mobile-bar-context';
-import { AppShellMobileHeader } from './app-shell-mobile-header';
 import { useMaybeSidebarState } from '@/ds/components/Sidebar/root/sidebar-context';
 import { cn } from '@/lib/utils';
 
@@ -29,16 +27,9 @@ export function AppShell({
   ...props
 }: AppShellProps) {
   const animatesEdgeToEdge = edgeToEdge !== undefined;
-  const [pageLayoutCount, setPageLayoutCount] = useState(0);
-  const [registerPageLayout] = useState(() => () => {
-    setPageLayoutCount(count => count + 1);
-    return () => setPageLayoutCount(count => count - 1);
-  });
   const isMobile = useMaybeSidebarState()?.isMobile ?? false;
   const mobileBar =
-    sidebar && isMobile && mobileHeader === undefined
-      ? { brand: mobileBrand, actions: mobileActions, registerPageLayout }
-      : undefined;
+    sidebar && isMobile && mobileHeader === undefined ? { brand: mobileBrand, actions: mobileActions } : undefined;
 
   return (
     <div
@@ -54,7 +45,6 @@ export function AppShell({
       {sidebar}
       <div data-slot="app-shell-content" className="flex h-full min-h-0 min-w-0 flex-col">
         {mobileHeader}
-        {mobileBar && pageLayoutCount === 0 && <AppShellMobileHeader brand={mobileBrand} actions={mobileActions} />}
         <div
           data-slot="app-shell-body"
           className={cn(

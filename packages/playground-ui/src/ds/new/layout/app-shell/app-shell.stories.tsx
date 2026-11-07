@@ -301,28 +301,30 @@ function ProjectOverview() {
   );
 }
 
-function BillingPage() {
-  return (
-    <PageLayout
-      variant="narrow"
-      header={
-        <PageHeader>
-          <PageHeader.Title>Billing and usage for every project in this organization</PageHeader.Title>
-          <PageHeader.Description>Plan, credits and invoices for this organization.</PageHeader.Description>
-        </PageHeader>
-      }
-    >
-      <div className="mt-6 flex flex-col gap-6 pb-16">
-        <p className="text-column text-foreground">Plan details</p>
-      </div>
-    </PageLayout>
-  );
-}
+const longTrail = (
+  <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
+    <Crumb as="a" to="#project">
+      PLTFRM-1389 browser automation sandbox for the customer success team
+    </Crumb>
+    <Crumb as="a" to="#datasets">
+      Datasets
+    </Crumb>
+    <Crumb as="a" to="#dataset">
+      Support conversations sampled from the last ninety days of production traffic
+    </Crumb>
+    <Crumb as="a" to="#versions">
+      Versions
+    </Crumb>
+    <Crumb as="span" isCurrent>
+      Version 42 with relabelled escalation outcomes and deduplicated threads
+    </Crumb>
+  </Breadcrumb>
+);
 
 function UntitledPage() {
   return (
     <PageLayout>
-      <p className="text-column text-foreground">A page with neither a trail nor a title.</p>
+      <p className="text-column text-foreground">A page with no breadcrumb trail.</p>
     </PageLayout>
   );
 }
@@ -337,16 +339,6 @@ export const MobileRowWithTrail: Story = {
   ),
 };
 
-export const MobileRowWithTitle: Story = {
-  parameters: { viewport: { defaultViewport: 'mobile1' } },
-  play: verifyChromeRows({ desktopRows: 0 }),
-  render: () => (
-    <MobileFrame>
-      <BillingPage />
-    </MobileFrame>
-  ),
-};
-
 export const MobileRowWithBrand: Story = {
   parameters: { viewport: { defaultViewport: 'mobile1' } },
   play: verifyChromeRows({ desktopRows: 0 }),
@@ -357,12 +349,14 @@ export const MobileRowWithBrand: Story = {
   ),
 };
 
-export const MobileRowWithoutPageLayout: Story = {
+export const MobileRowWithLongTrail: Story = {
   parameters: { viewport: { defaultViewport: 'mobile1' } },
-  play: verifyChromeRows({ desktopRows: 0 }),
+  play: verifyChromeRows({ desktopRows: 1, mobileCrumbs: 2 }),
   render: () => (
     <MobileFrame>
-      <p className="p-4 text-column text-foreground">Routed content that renders no PageLayout.</p>
+      <PageLayout breadcrumbs={longTrail}>
+        <p className="text-column text-foreground">Dataset version</p>
+      </PageLayout>
     </MobileFrame>
   ),
 };

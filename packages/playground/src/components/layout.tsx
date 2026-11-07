@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
+import { ErrorBoundary, ErrorBoundaryFallback } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
@@ -130,7 +131,16 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <StudioFrame className="flex min-h-0 flex-1 flex-col">
           <MainCard>
             <AuthRequired>
-              <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+              <ErrorBoundary
+                resetKeys={[pathname]}
+                fallback={props => (
+                  <PageLayout variant="fit">
+                    <ErrorBoundaryFallback {...props} variant="section" />
+                  </PageLayout>
+                )}
+              >
+                {children}
+              </ErrorBoundary>
             </AuthRequired>
           </MainCard>
         </StudioFrame>

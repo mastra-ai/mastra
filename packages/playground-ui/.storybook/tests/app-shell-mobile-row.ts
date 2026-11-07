@@ -8,7 +8,7 @@ function visibleChromeRows(canvasElement: HTMLElement) {
   );
 }
 
-export function verifyChromeRows({ desktopRows }: { desktopRows: number }) {
+export function verifyChromeRows({ desktopRows, mobileCrumbs }: { desktopRows: number; mobileCrumbs?: number }) {
   return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const rows = visibleChromeRows(canvasElement);
     const page = canvasElement.ownerDocument.documentElement;
@@ -22,6 +22,10 @@ export function verifyChromeRows({ desktopRows }: { desktopRows: number }) {
     await expect(rows).toHaveLength(1);
     const [row] = rows;
     if (!row) return;
+    if (mobileCrumbs !== undefined) {
+      const crumbs = Array.from(row.querySelectorAll('ol > li:not([role="separator"])'));
+      await expect(crumbs.filter(crumb => crumb.getBoundingClientRect().width > 0)).toHaveLength(mobileCrumbs);
+    }
     const rowBox = row.getBoundingClientRect();
     const menu = row.querySelector('[aria-label="Open navigation menu"]');
     const edgeHit = canvasElement.ownerDocument.elementFromPoint(rowBox.left + 1, rowBox.top + rowBox.height / 2);
