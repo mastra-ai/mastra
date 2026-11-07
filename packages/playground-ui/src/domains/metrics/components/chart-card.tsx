@@ -1,20 +1,23 @@
 import { Maximize2Icon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
+import { Button } from '@/ds/components/Button/Button';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type {
   MetricsCardDragHandleProps,
   MetricsCardTitleMenuProps,
   MetricsCardTotalPart,
 } from '@/ds/components/MetricsCard';
+import { Skeleton } from '@/ds/components/Skeleton';
 import type { LinkComponentProps } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 /** What `LinkComponent` gets: anchor props, with `href` always set. */
 type ChartCardLinkProps = LinkComponentProps & { href: string };
-import { cn } from '@/lib/utils';
 
 export type ChartCardProps<V extends string = string> = {
   /**
-   * Card layout. `default` and `compact` share one header: the title, and `total` on the right.
+   * Card layout. `default` and `compact` share one header: the title over `total`, with the
+   * toolbar on the total's row, on the right.
    * - `default`: a 240px body.
    * - `compact`: one card height, so cards in a grid line up; the chart fills what the toolbar
    *   leaves. For small cards in a grid.
@@ -25,8 +28,9 @@ export type ChartCardProps<V extends string = string> = {
   variant?: 'default' | 'compact' | 'hero';
   title: string;
   /**
-   * Makes the title a link, marked by an expand icon, to a fuller view of the chart (e.g. the
-   * chart in an explorer). Ignored with `titleMenu` and on `hero` cards.
+   * A link to a fuller view of the chart (e.g. the chart in an explorer): an expand button in the
+   * card's top-right corner, or the title itself on a card with no `total`. Ignored on `hero` cards,
+   * and on the title when it has a `titleMenu`.
    */
   href?: string;
   /** Renders `href` links, e.g. the app's router link; it gets anchor props. Default `a`. */
@@ -39,7 +43,7 @@ export type ChartCardProps<V extends string = string> = {
   /** A grip left of the title that drags the card, e.g. while a dashboard is being arranged. Ignored on `hero` cards. */
   dragHandle?: MetricsCardDragHandleProps;
   /**
-   * The card's headline number: right of the title, or the large value on `hero` cards. A card
+   * The card's headline number: under the title, or the large value on `hero` cards. A card
    * charting a few different things can pass one total each, marked with its series' color.
    */
   total?: string | readonly MetricsCardTotalPart[];
@@ -94,8 +98,93 @@ export function ChartCard<V extends string = string>({
   const compact = variant === 'compact';
   const hero = variant === 'hero';
   const chart = !hero && bodyHeight === 'fixed';
+  const legend =
+    toolbar && !hero ? <div className="flex min-w-0 justify-end [&>*]:justify-end">{toolbar}</div> : toolbar;
+  // Legends a chart draws itself (Requests) align with the toolbar's.
+  // Chart cards sit 8px under the header; table cards (`fit`) keep 16px.
+  const legendClass =
+    !hero &&
+    cn(
+      bodyHeight !== 'fit' && 'gap-y-2',
+      '[&_[data-slot=chart-legend]]:justify-end',
+      // No legend over a chart that is loading or has nothing to show; it keeps its room.
+      '[&:has([data-slot=chart-skeleton])_[data-slot=chart-legend]]:invisible',
+      '[&:has([data-chart-empty])_[data-slot=chart-legend]]:invisible',
+    );
+  if (!hero && total !== undefined) {
+    const Anchor = LinkComponent ?? 'a';
+    return (
+      <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', legendClass, className)}>
+        {/* Title over the value on the left; the card's buttons in the top-right corner; with
+            the legend on the value's row, on the right (a long one wraps down there). */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-6 gap-y-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {dragHandle && <MetricsCard.DragHandle {...dragHandle} />}
+            {titleMenu ? (
+              // A card with views keeps its title dropdown, in the label's size and tone.
+              <MetricsCard.TitleMenu title={title} {...titleMenu} className="text-body-sm text-muted-foreground" />
+            ) : (
+              <h3 className="text-body-sm font-medium text-muted-foreground">{title}</h3>
+            )}
+          </div>
+          {/* Pulled up and right by the same 8px, so the expand icon sits as far from the card's
+              top as from its right edge. Actions show on hover, persistent actions and the expand
+              link always. */}
+          <div className="-my-1 -mr-2 flex items-center gap-1 justify-self-end">
+            {actions && (
+              <MetricsCard.Actions reveal="hover" className="my-0">
+                {actions}
+              </MetricsCard.Actions>
+            )}
+            {persistentActions}
+            {href ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                tooltip="Expand"
+                aria-label={`Expand ${title}`}
+                render={<Anchor href={href} />}
+              >
+                <Maximize2Icon />
+              </Button>
+            ) : null}
+          </div>
+          <span
+            className={cn(
+              'relative w-fit text-heading text-foreground tabular-nums [text-box:trim-both_cap_alphabetic]',
+              isLoading && 'min-w-20',
+              fade,
+            )}
+          >
+            {isLoading ? (
+              <>
+                <span className="invisible">0</span>
+                <Skeleton className="absolute inset-0" />
+              </>
+            ) : typeof total === 'string' ? (
+              total
+            ) : (
+              <MetricsCard.Total value={total} className="font-normal text-inherit" />
+            )}
+          </span>
+          {toolbar ? (
+            // A toolbar row's 24px minimum is for rows under the header; here it would push the legend down.
+            <div className="flex min-w-0 justify-end [&_[data-slot=chart-legend]]:justify-end [&>*]:min-h-0">
+              {toolbar}
+            </div>
+          ) : null}
+        </div>
+        <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
+          <div className={cn('relative flex min-h-0 min-w-0 flex-col', bodyClass(variant, bodyHeight), fade)}>
+            {children}
+          </div>
+        </MetricsCard.Content>
+      </MetricsCard>
+    );
+  }
   return (
-    <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', className)}>
+    <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', legendClass, className)}>
+      {/* `hero` cards, and cards with no total: the title, then the actions. */}
       <MetricsCard.TopBar>
         {hero ? (
           <MetricsCard.Headline
@@ -134,13 +223,12 @@ export function ChartCard<V extends string = string>({
             </MetricsCard.Actions>
           )
         )}
-        {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
         {/* A card with a toolbar keeps its row while the toolbar is empty (`false` or `null` while
             loading, empty or on error), so its plot starts where its neighbours' do. A card that
             passes no toolbar (a legend drawn by the chart itself) gets no row. */}
-        {toolbar || (chart && toolbar !== undefined && <div aria-hidden className="min-h-6" />)}
+        {legend || (chart && toolbar !== undefined && <div aria-hidden className="min-h-6" />)}
         <div
           className={cn(
             'relative flex min-h-0 min-w-0 flex-col',

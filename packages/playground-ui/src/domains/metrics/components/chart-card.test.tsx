@@ -13,7 +13,7 @@ describe('ChartCard', () => {
   afterEach(() => cleanup());
 
   describe('compact', () => {
-    it('shows the title and the total on one line', () => {
+    it('shows the title over the total', () => {
       render(
         <ChartCard variant="compact" title="Tokens" total="992K">
           <div />
@@ -52,7 +52,7 @@ describe('ChartCard', () => {
       await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     });
 
-    it("keeps the title as the top bar's first item, sized to its text, while the menu is open", async () => {
+    it("keeps the title as the header's first item, sized to its text, while the menu is open", async () => {
       render(
         <ChartCard
           variant="compact"
@@ -64,13 +64,15 @@ describe('ChartCard', () => {
         </ChartCard>,
       );
       const trigger = screen.getByRole('button', { name: 'Spend by model' });
-      const topBar = trigger.parentElement?.parentElement;
-      // The top bar stretches its first item; that's the wrapper, so the button keeps its width.
-      expect(topBar?.firstElementChild).toBe(trigger.parentElement);
+      // The menu's own wrapper, in the title's wrapper (with the drag handle's room), in the header.
+      const title = trigger.parentElement?.parentElement;
+      const header = title?.parentElement;
+      // The header stretches its first item; that's the wrapper, so the button keeps its width.
+      expect(header?.firstElementChild).toBe(title);
       fireEvent.click(trigger);
       await screen.findByRole('menuitemradio', { name: 'By provider' });
-      expect(topBar?.firstElementChild?.contains(trigger)).toBe(true);
-      expect(topBar?.lastElementChild?.textContent).toBe('$12');
+      expect(header?.firstElementChild?.contains(trigger)).toBe(true);
+      expect(header?.contains(screen.getByText('$12'))).toBe(true);
     });
   });
 
@@ -118,22 +120,27 @@ describe('ChartCard', () => {
     });
   });
 
-  it('makes the title a link to a fuller view, with the given link component', () => {
+  it('links to a fuller view from an expand button in the corner, with the given link component', () => {
     const Link = ({ href, ...props }: { href: string }) => <a href={`/app${href}`} data-router-link {...props} />;
-    const { rerender } = render(
-      <ChartCard variant="compact" title="Spend by model" href="/query?metric=spend" total="$12">
+    render(
+      <ChartCard variant="compact" title="Spend by model" href="/query?metric=spend" LinkComponent={Link} total="$12">
+        <div />
+      </ChartCard>,
+    );
+    const link = screen.getByRole('link', { name: 'Expand Spend by model' });
+    expect(link.getAttribute('href')).toBe('/app/query?metric=spend');
+    // The title stays plain text; the link is the button beside it.
+    expect(screen.getByRole('heading', { name: 'Spend by model' }).contains(link)).toBe(false);
+  });
+
+  it('makes the title the link on a card with no total', () => {
+    render(
+      <ChartCard title="Spend by model" href="/query">
         <div />
       </ChartCard>,
     );
     const link = screen.getByRole('link', { name: 'Spend by model' });
-    expect(link.getAttribute('href')).toBe('/query?metric=spend');
+    expect(link.getAttribute('href')).toBe('/query');
     expect(screen.getByRole('heading', { name: 'Spend by model' }).contains(link)).toBe(true);
-
-    rerender(
-      <ChartCard title="Spend by model" href="/query" LinkComponent={Link}>
-        <div />
-      </ChartCard>,
-    );
-    expect(screen.getByRole('link', { name: 'Spend by model' }).getAttribute('href')).toBe('/app/query');
   });
 });
