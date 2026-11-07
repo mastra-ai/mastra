@@ -114,6 +114,35 @@ async function buildController(id: string, input: string, withMemory = false) {
 }
 
 describe('AgentController: ask_user native suspension', () => {
+  it('does not claim a persisted approval-gated tool call as a user answer', async () => {
+    const { session, registeredAgent } = await buildController(
+      'approval-claim',
+      JSON.stringify({ question: 'Which?' }),
+    );
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    const list = vi.spyOn(registeredAgent, 'listSuspendedRuns').mockResolvedValue({
+      runs: [
+        {
+          runId: 'approval-run',
+          threadId,
+          resourceId,
+          status: 'suspended',
+          suspendedAt: new Date(0),
+          toolCalls: [{ toolCallId: 'approval-call', toolName: 'ask_user', requiresApproval: true }],
+        },
+      ],
+      total: 1,
+    });
+
+    expect(await session.claimPersistedToolSuspension('approval-call', 'approval-run')).toMatchObject({
+      accepted: false,
+      reason: 'no_pending_suspension',
+    });
+    expect(session.suspensions.has({ toolCallId: 'approval-call', runId: 'approval-run' })).toBe(false);
+    expect(list).toHaveBeenCalled();
+  });
+
   it.each([
     'warm',
     'warm-reattach',

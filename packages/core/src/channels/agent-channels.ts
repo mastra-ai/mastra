@@ -548,6 +548,24 @@ export class AgentChannels {
         return { defaultHandler, handlerContext };
       };
 
+      const prepareInteractiveReply = (handlerContext: ChannelHandlerContext, getPlatform: () => string) => {
+        handlerContext.prepareInteractiveReply = async (thread, messageId, actor, requesterId) => {
+          const platform = getPlatform();
+          const { channelContext } = await this.buildEventContext({
+            chatThread: thread,
+            platform,
+            eventType: 'action',
+            messageId,
+            actor,
+          });
+          handlerContext.requestContext.set('channel', channelContext);
+          handlerContext.requestContext.set(
+            CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+            this._buildRenderContext(thread, platform, { requesterId }),
+          );
+        };
+      };
+
       // The SDK batches by conversation, not sender. Split the batch into runs of
       // consecutive messages from one sender and give each run its own handler
       // call and context, so a custom handler can authorize or stamp context for
@@ -688,21 +706,7 @@ export class AgentChannels {
       if (onAction !== false) {
         chat.onAction(event => {
           const { handlerContext } = beginMessage();
-          handlerContext.prepareInteractiveReply = async (thread, messageId, actor, requesterId) => {
-            const platform = event.adapter.name;
-            const { channelContext } = await this.buildEventContext({
-              chatThread: thread,
-              platform,
-              eventType: 'action',
-              messageId,
-              actor,
-            });
-            handlerContext.requestContext.set('channel', channelContext);
-            handlerContext.requestContext.set(
-              CHAT_CHANNEL_RENDER_CONTEXT_KEY,
-              this._buildRenderContext(thread, platform, { requesterId }),
-            );
-          };
+          prepareInteractiveReply(handlerContext, () => event.adapter.name);
           // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
           const defaultHandler = async () => {
             const { actionId } = event;
@@ -1034,21 +1038,7 @@ export class AgentChannels {
       if (onModalSubmit) {
         chat.onModalSubmit(event => {
           const { handlerContext } = beginMessage();
-          handlerContext.prepareInteractiveReply = async (thread, messageId, actor, requesterId) => {
-            const platform = event.adapter.name;
-            const { channelContext } = await this.buildEventContext({
-              chatThread: thread,
-              platform,
-              eventType: 'action',
-              messageId,
-              actor,
-            });
-            handlerContext.requestContext.set('channel', channelContext);
-            handlerContext.requestContext.set(
-              CHAT_CHANNEL_RENDER_CONTEXT_KEY,
-              this._buildRenderContext(thread, platform, { requesterId }),
-            );
-          };
+          prepareInteractiveReply(handlerContext, () => event.adapter.name);
           return onModalSubmit(event, handlerContext);
         });
       }
