@@ -4,8 +4,8 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
-import { useVoiceDictation, voiceDictationSupported } from './useVoiceDictation';
-import type { VoiceDictationState } from './useVoiceDictation';
+import { voiceDictationSupported } from './useVoiceDictation';
+import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
 
 const TOOLTIPS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
@@ -17,8 +17,7 @@ const TOOLTIPS: Record<VoiceDictationState, string> = {
 interface ComposerVoiceButtonProps {
   factoryId: string;
   disabled: boolean;
-  onTranscript: (text: string) => void;
-  onError: (message: string) => void;
+  dictation: VoiceDictation;
 }
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
@@ -28,11 +27,11 @@ function VoiceIcon({ state }: { state: VoiceDictationState }) {
   return <Mic size={14} />;
 }
 
-function VoiceButton({ factoryId, disabled, onTranscript, onError }: ComposerVoiceButtonProps) {
+function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const settingsQuery = useVoiceSettings(factoryId);
-  const { state, start, stop } = useVoiceDictation({ factoryId, onTranscript, onError });
+  const { state, start, stop } = dictation;
   const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === null;
 
   if (needsSetup && state === 'idle') {

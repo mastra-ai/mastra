@@ -6,11 +6,12 @@ import { bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
 import { DrilldownAction } from '../../components/widget-controls';
 import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widget-views';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
 import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
-import { shapeTimeseries } from '../../lib/timeseries';
+import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
 import { answersById } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -37,11 +38,22 @@ export function TimeseriesWidget(props: Props) {
   );
   const { view } = menu;
   const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
-  if (gate.status === 'pending') return <PendingChartCard gate={gate.gate} heading={heading} />;
+  if (gate.status === 'pending')
+    return (
+      <PendingChartCard
+        gate={gate.gate}
+        heading={pendingHeading(heading, gate.gate, props.alert, props.widget, view)}
+      />
+    );
   return <TimeseriesView {...props} view={view} heading={heading} page={gate.page} />;
 }
 
-function TimeseriesView({ widget, view, heading, page, onDrilldown, results, onRetry }: ViewProps) {
+function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, results, onRetry }: ViewProps) {
+  // Drilldown, then the alert, then the pin.
+  const heading = withAction(
+    own,
+    alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),
+  );
   const { options } = view;
   const sent = results.filter(r => r !== undefined);
   const hasTraceQueries = view.queries.some(q => q.source === 'traceAggregate' || q.source === 'spanAggregate');

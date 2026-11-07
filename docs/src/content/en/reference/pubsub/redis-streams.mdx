@@ -162,6 +162,14 @@ const pubsub = new RedisStreamsPubSub({
     defaultValue: '0',
   },
   {
+    name: 'publishRetryBudgetMs',
+    type: 'number',
+    description:
+      'How long, in milliseconds, `publish` keeps retrying a write that failed with a transient connection error, such as a closed socket, `ECONNRESET`, or Redis answering `LOADING` after a restart. When the budget runs out, `publish` rejects with `PublishRetryBudgetExhaustedError` instead of hanging. `PublishRetryBudgetExhaustedError` is exported from `@mastra/redis-streams`.',
+    isOptional: true,
+    defaultValue: '120000',
+  },
+  {
     name: 'logger',
     type: '{ debug?: Function; warn?: Function }',
     description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',

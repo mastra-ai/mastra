@@ -2368,6 +2368,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.db.feedbackRecords.find(record => record.feedbackId === feedbackId) ?? null;
+  }
+
   async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
     const feedback = this.db.feedbackRecords.find(record => record.feedbackId === args.feedbackId);
     if (!feedback) {

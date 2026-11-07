@@ -5,6 +5,7 @@ import type { ChartCardProps } from '../metrics/components/chart-card';
 import type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
 import type { BlockedFields, WidgetGate } from './lib/gate';
 import type { DashboardPageContext, DashboardRequest, DashboardResult } from './lib/requests';
+import type { ValueRef } from './lib/values';
 import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 import type { MetricsTableSort } from '@/ds/components/MetricsTable';
 
@@ -23,6 +24,8 @@ export type WidgetKindProps<Options> = {
   dragHandle?: MetricsCardDragHandleProps;
   /** The widget's pin button, shown with its card's actions: the host can pin widgets. */
   pin?: WidgetPin;
+  /** The card's Create alert button, for the open view: the host can turn views into alerts. */
+  alert?: DashboardAlert;
   /** Whether the widget's queries can run on the page, and their page context once they can. */
   gate: ShownGate;
   /** What figures are compared against, e.g. `vs previous 24h`. */
@@ -39,6 +42,49 @@ export type WidgetKindProps<Options> = {
   results: (DashboardResult | undefined)[];
   /** Asks the host to send the failed requests again. */
   onRetry: () => void;
+};
+
+/** What a card's Create alert button watches: its open view, with the page's filters applied. */
+export type DashboardAlertTarget = {
+  widget: DashboardWidget;
+  view: DashboardWidgetView;
+  /**
+   * The view's queries with the page's filter bar ANDed in (`pageQuery`). They carry no time window:
+   * the alert picks its own. As authored, so a scores query may lack `scorerId` (the card reads
+   * every scorer); the host has to pick one or disable the button.
+   */
+  queries: DashboardQuery[];
+  /**
+   * Each distinct number the view shows, read straight from one query: a series, column or KPI, or,
+   * for one combining several (a ratio, a sum), each part. Same order as the view's options.
+   */
+  sources: DashboardAlertSource[];
+};
+
+/** One number a view reads from one query, as a single alert could watch it. */
+export type DashboardAlertSource = {
+  /** The series, column or KPI it belongs to; a part of a combined value adds its query and ref. */
+  label: string;
+  /** The query, with the page's filters applied, as in `queries`. */
+  query: DashboardQuery;
+  /** Which of the query's numbers: a measure, a field, a percentile, or only some groups. */
+  ref: DashboardAlertRef;
+};
+
+export type DashboardAlertRef = Omit<ValueRef, 'query'>;
+
+/** Where the button opens the host's alert editor, or why the view can't become an alert. */
+export type DashboardAlertAction = { href: string } | { disabled: string };
+
+/**
+ * How a host turns a card's open view into an alert. `action` returns one action for the whole card,
+ * `undefined` for no button, or an array aligned with `target.sources`: one action per source
+ * (`undefined` leaves it out). A card with several sources the host can alert on opens a menu of them.
+ * Links render through `LinkComponent`.
+ */
+export type DashboardAlert = {
+  action: (target: DashboardAlertTarget) => DashboardAlertAction | (DashboardAlertAction | undefined)[] | undefined;
+  LinkComponent: NonNullable<ChartCardProps['LinkComponent']>;
 };
 
 /** A widget's gate when it shows: waiting on, or ready to send, its requests. */

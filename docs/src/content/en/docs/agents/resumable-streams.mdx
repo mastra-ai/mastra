@@ -88,6 +88,8 @@ Use a shared cache such as Redis, sized for your traffic, when runs must stay ob
 
 ## Follow a run
 
+Run IDs must be unique across agents sharing a PubSub bus.
+
 Call `observe()` with the run's ID to follow it from any agent instance that shares the bus. Without an offset, `observe()` replays the cached events and then delivers live ones. Replay needs the same replay cache too. An instance with its own cache receives only live events, unless the PubSub keeps history. When a run waits on a tool approval, the observation receives the approval request and stays open until the approved run finishes, errors or is aborted. Call `detach()` to stop following a parked run:
 
 ```typescript title="src/server/reconnect.ts"
@@ -105,7 +107,7 @@ export async function followRun(runId: string, request: Request) {
 }
 ```
 
-The [`observe()` reference](/reference/agents/durable-agent#observerunid-options) covers offsets and replay limits.
+Each chunk from `observe()` carries its run-log position as `chunk.index`. To resume an observation after a dropped connection, pass `index + 1` of the last chunk that has an index as `offset`. Chunks from a plain agent's `stream()`, and chunks delivered without a replay cache, carry no `index`, so a client that lost one of those connections should observe without an `offset`. The [`observe()` reference](/reference/agents/durable-agent#observerunid-options) covers which chunks carry no index, structured output, and replay limits.
 
 Over HTTP, observing a run that can't be resumed fails instead of returning an empty stream. An unknown run, or one whose ownership record expired or was evicted, answers 404, and the client rejects with a `MastraClientError` carrying that status rather than resolving to an empty, closed stream.
 

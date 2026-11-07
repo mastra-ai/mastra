@@ -913,6 +913,16 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  /** Retrieves one feedback record by ID, or null when it does not exist. */
+  async getFeedbackById(_feedbackId: string): Promise<FeedbackRecord | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support retrieving feedback by ID',
+    });
+  }
+
   async updateFeedbackReviewStatus(_args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_IMPLEMENTED',

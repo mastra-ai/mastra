@@ -425,6 +425,13 @@ type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>
 
 type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
 
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
+
 const RESOLVED_TOOL_INVOCATION_STATES = new Set<string>(['result', 'output-error', 'output-denied']);
 
 /**
@@ -6672,7 +6679,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const streamResult = shouldResumeSubAgent
+                const subAgentStream = shouldResumeSubAgent
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -6697,22 +6704,31 @@ export class Agent<
                       context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
+                      // Durable sub-agents keep their stream open across a suspension by
+                      // default; end it so the supervisor can suspend with the worker.
+                      closeOnSuspend: true,
                       backgroundTaskPolicy: {
                         allowToolDispatch: true,
                         allowDelegationDispatch: false,
                       },
                     });
+                // Some sub-agents (e.g. durable stream()) return their MastraModelOutput nested
+                // under `output` next to fullStream/runId; others return the output itself.
+                const nestedStreamOutput = (subAgentStream as { output?: typeof subAgentStream }).output;
+                const streamResult = nestedStreamOutput ?? subAgentStream;
 
                 let requireToolApproval;
                 let suspendedPayload;
                 let resumeSchema;
                 let delegatedPause: DelegatedPauseIdentity = {};
-                for await (const chunk of streamResult.fullStream) {
+                for await (const chunk of subAgentStream.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -6749,7 +6765,9 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
-                const agentResponseMessages = streamResult.messageList.get.response.db();
+                // Every response message of the run, including ones the worker already saved to
+                // its own memory (e.g. a durable run flushes on finish), not just the unsaved ones.
+                const agentResponseMessages = streamResult.messageList.getPersisted.response.db();
                 // On resume the run continued on the thread persisted by the suspended run
                 // (backfilled from the snapshot), so target that thread for the transcript
                 // save and skip re-saving the prompt — it was already persisted (with its
@@ -6791,8 +6809,10 @@ export class Agent<
                       });
                     }
 
+                    // Apply tool transcript transforms, as the worker's own saves do, so this
+                    // same-id re-save can't overwrite redacted rows with raw tool payloads.
                     await streamMemory.saveMessages({
-                      messages: fullSubAgentMessages,
+                      messages: streamResult.messageList.transformMessagesForTranscript(fullSubAgentMessages),
                     });
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
@@ -6836,7 +6856,7 @@ export class Agent<
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
-                    runId: streamResult.runId,
+                    runId: subAgentStream.runId,
                     isAgentSuspend: true,
                     ...delegatedPause,
                   });
@@ -6857,8 +6877,10 @@ export class Agent<
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -12320,7 +12342,8 @@ export class Agent<
     options?: {
       /**
        * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See
@@ -12412,6 +12435,27 @@ export class Agent<
     } catch (error) {
       detach();
       throw error;
+    }
+
+    // Resuming past the run's last entry replays nothing; if that entry ended the
+    // run, nothing more will arrive, so close (matches the HTTP /observe route).
+    // Read only after subscribing so a terminal entry racing attachment is not lost.
+    // A failed read only means we can't close early.
+    // A client resuming at last index + 1 needs a one-entry read; only an offset
+    // further past the end falls back to the full log to find the true tail.
+    const offset = options?.offset;
+    if (offset !== undefined && offset > 0) {
+      const topic = AGENT_STREAM_TOPIC(runId);
+      const readTail = async () => {
+        const window = await bus.pubsub.getHistory(topic, offset - 1);
+        return window.length > 0 ? window.at(-1) : (await bus.pubsub.getHistory(topic, 0)).at(-1);
+      };
+      // Don't hold back the returned stream while the read waits on the cache.
+      void readTail()
+        .catch(() => undefined)
+        .then(last => {
+          if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) detach();
+        });
     }
 
     return {

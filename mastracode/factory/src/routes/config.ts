@@ -45,14 +45,9 @@ import {
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
-
-/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /**
  * Server-side configuration routes for the web app.

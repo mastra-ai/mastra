@@ -4,6 +4,8 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
@@ -13,11 +15,10 @@ import { IntakeSyncControl } from './common/IntakeSyncControl';
 
 export function GithubIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<GithubStatus> }) {
+  const selection = useIntakeSelection('github');
   const factoriesQuery = useFactoriesQuery();
   const status = statusQuery.data;
   const connected = status?.connected === true;
@@ -39,15 +40,15 @@ export function GithubIntakeSection({
       icon={<SettingsIntegrationIcon provider="github" />}
       account={status?.installations.map(installation => installation.accountLogin).join(', ')}
       listed={listed}
-      connectable={status?.enabled === true}
+      connection={listed ? connected && <GithubManageButton /> : status?.enabled === true && <GithubConnectButton />}
       description={githubDescription(status, unavailable)}
       syncControl={
         <IntakeSyncControl
           accessibleLabel="Sync GitHub issues"
           description="Import open issues from selected repositories."
           checked={config.github.enabled}
-          disabled={busy || !connected}
-          onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
+          disabled={!connected}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -72,15 +73,12 @@ export function GithubIntakeSection({
             itemIcon={<SettingsIntegrationIcon provider="github" />}
             groups={[{ id: 'repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
             selectedIds={config.github.sourceIds}
-            pending={busy}
+            saving={selection.saving}
             loading={factoriesQuery.isPending}
             error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
             onRetry={() => void factoriesQuery.refetch()}
             onToggleItem={slug =>
-              update({
-                ...config,
-                github: { ...config.github, sourceIds: toggleSourceId(config.github.sourceIds, slug) },
-              })
+              selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, slug) }))
             }
           />
           {factoriesQuery.isSuccess && slugs.length === 0 && (

@@ -188,7 +188,18 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b": [
+    "nvidia/nemotron-3-nano-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "stepfun/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "stepfun/step-3.7-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -199,7 +210,19 @@
         "type": "toggle"
       }
     ],
-    "apodex/apodex-1.1-mini": [
+    "tencent/hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "tencent/hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
       }
@@ -210,123 +233,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-vl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.1-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-fin": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-sante": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k3.1-pro-highspeed": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k3.1-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "tencent/hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "tencent/hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nvidia/nemotron-3-nano-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "baichuan/baichuan-m2-32b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-26b-a4b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomimimo/mimo-v2.5-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomimimo/mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomimimo/mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "xiaomimimo/mimo-v2.6-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek/deepseek-v4-pro-0813": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -344,7 +251,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-0731": [
+    "deepseek/deepseek-v4-pro-0813": [
       {
         "type": "toggle"
       },
@@ -353,7 +260,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
@@ -371,40 +278,105 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen/qwen3.7-max": [
+    "moonshotai/kimi-k2.5": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.8-flash": [
+    "moonshotai/kimi-k3.1-pro-highspeed": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens"
+        "values": ["low", "high", "max"]
       }
     ],
-    "qwen/qwen3.6-35b-a3b": [
+    "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/kimi-k3.1-pro": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "qwen/qwen3.5-122b-a10b": [
+    "mindai/macaron-v1-venti": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mindai/macaron-v1-tall": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "inclusionai/ling-3.0-flash-vl": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "inclusionai/ling-3.0-flash-sante": [
       {
-        "type": "budget_tokens"
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash-fin": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "xiaomimimo/mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "xiaomimimo/mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "xiaomimimo/mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "xiaomimimo/mimo-v2.5-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-26b-a4b-it": [
+      {
+        "type": "toggle"
       }
     ],
     "qwen/qwen3.8-27b": [
@@ -428,7 +400,16 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-27b": [
+    "qwen/qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.7-max": [
       {
         "type": "toggle"
       },
@@ -452,6 +433,34 @@
         "type": "budget_tokens"
       }
     ],
+    "qwen/qwen3.5-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-35b-a3b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
@@ -460,56 +469,15 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.8-max": [
+    "qwen/qwen3.5-122b-a10b": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "type": "budget_tokens"
       }
     ],
-    "mindai/macaron-v1-tall": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mindai/macaron-v1-venti": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "stepfun/step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "stepfun/step-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai-org/glm-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/glm-4.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/glm-4.5-air": [
+    "apodex/apodex-1.1-mini": [
       {
         "type": "toggle"
       }
@@ -519,18 +487,27 @@
         "type": "toggle"
       }
     ],
-    "zai-org/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "zai-org/glm-4.6v": [
       {
         "type": "toggle"
       }
     ],
+    "zai-org/glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
     "zai-org/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-4.7-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-4.5v": [
       {
         "type": "toggle"
       }
@@ -541,12 +518,35 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "zai-org/glm-4.5v": [
+    "zai-org/glm-4.6": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/glm-4.7-flash": [
+    "zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "zai-org/glm-4.5-air": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "baichuan/baichuan-m2-32b": [
       {
         "type": "toggle"
       }

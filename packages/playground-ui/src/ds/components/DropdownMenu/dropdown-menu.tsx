@@ -247,6 +247,14 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
 );
 DropdownMenuItem.displayName = 'DropdownMenuItem';
 
+/** A menu row that navigates. Pass `render` to route it through your framework's link. */
+const DropdownMenuLinkItem = React.forwardRef<HTMLAnchorElement, MenuPrimitive.LinkItem.Props>(
+  ({ className, ...props }, ref) => (
+    <MenuPrimitive.LinkItem ref={ref} className={cn(menuItemClass, className)} {...props} />
+  ),
+);
+DropdownMenuLinkItem.displayName = 'DropdownMenuLinkItem';
+
 const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
     <MenuPrimitive.CheckboxItem ref={ref} className={cn(menuItemClass, className)} checked={checked} {...props}>
@@ -385,6 +393,7 @@ DropdownMenu.Content = DropdownMenuContent;
 DropdownMenu.Group = DropdownMenuGroup;
 DropdownMenu.Portal = DropdownMenuPortal;
 DropdownMenu.Item = DropdownMenuItem;
+DropdownMenu.LinkItem = DropdownMenuLinkItem;
 DropdownMenu.CheckboxItem = DropdownMenuCheckboxItem;
 DropdownMenu.RadioItem = DropdownMenuRadioItem;
 DropdownMenu.Label = DropdownMenuLabel;

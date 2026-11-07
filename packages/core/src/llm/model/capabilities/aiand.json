@@ -27,6 +27,7 @@
     "deepseek-ai/deepseek-v4-pro",
     "deepseek-ai/deepseek-v4.1-flash-1017",
     "google/gemma-4-31b-it",
+    "meta/muse-spark-open",
     "moonshotai/kimi-k3",
     "moonshotai/kimi-k3.1-pro",
     "openai/gpt-oss-120b",
@@ -36,28 +37,10 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b": [
+    "meta/muse-spark-open": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "moonshotai/kimi-k3": [
@@ -66,10 +49,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "meta/muse-spark-open": [
+    "moonshotai/kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "motif-technologies/motif-3": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "google/gemma-4-31b-it": [
@@ -90,10 +79,16 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-org/glm-5.3-flash": [
+    "deepseek-ai/deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
     "zai-org/glm-5.3": [
@@ -102,10 +97,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "motif-technologies/motif-3": [
+    "zai-org/glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

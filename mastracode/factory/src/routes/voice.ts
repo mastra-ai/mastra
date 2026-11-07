@@ -10,6 +10,9 @@ import { z } from 'zod';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
+import { voiceRateLimiter } from '../voice/rate-limit.js';
+import { keyCannotTranscribe, mintRealtimeSession } from '../voice/realtime.js';
+import type { RealtimeSession } from '../voice/realtime.js';
 import {
   chooseSTTModel,
   localVoiceCaller,
@@ -17,16 +20,13 @@ import {
   savedSTTModel,
   tenantVoiceCaller,
   transcribeAudio,
+  transcriptionFailureReason,
   voicePolicy,
 } from '../voice/transcription.js';
-import type { VoiceCaller, VoiceFactory, VoicePolicy } from '../voice/transcription.js';
+import type { STTSelection, VoiceCaller, VoiceFactory, VoicePolicy } from '../voice/transcription.js';
 import { resolveCredentialContext } from './provider-credentials.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 const factoryIdSchema = z.string().min(1).optional();
 
@@ -78,6 +78,8 @@ export interface VoiceSettingsResponse {
 
 export type TranscribeResponse = ModelChoice & { text: string };
 
+export type LiveSessionResponse = { mode: 'batch' } | ({ mode: 'live' } & RealtimeSession);
+
 function settingsResponse(
   request: VoiceRequest,
   policy: VoicePolicy,
@@ -108,6 +110,8 @@ function settingsResponse(
 }
 
 export class VoiceRoutes extends Route<VoiceRoutesDeps> {
+  readonly #rateLimiter = voiceRateLimiter();
+
   async #request(c: Context, factoryId: string | undefined): Promise<VoiceRequest | { response: Response }> {
     const ctx = await resolveCredentialContext({ c, auth: this.deps.auth, credentials: this.deps.modelCredentials });
     if ('response' in ctx) return ctx;
@@ -147,6 +151,24 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
   async #canEdit(c: Context, request: VoiceRequest, policy: VoicePolicy): Promise<boolean> {
     if (policy.scope === 'user' || !request.orgId) return true;
     return this.deps.auth.isOrganizationAdmin(c, request.orgId);
+  }
+
+  #overLimit(c: Context, caller: VoiceCaller, use: 'check' | 'take'): Response | undefined {
+    const { orgId, userId } = caller.settingsKey;
+    const verdict = this.#rateLimiter[use](`${orgId}:${userId}`);
+    if (verdict.allowed) return undefined;
+    return c.json({ error: 'voice_rate_limited' }, 429, { 'Retry-After': String(verdict.retryAfterSeconds) });
+  }
+
+  async #selection(c: Context): Promise<{ chosen: STTSelection; caller: VoiceCaller } | { response: Response }> {
+    const request = await this.#request(c, c.req.query('factoryId') || undefined);
+    if ('response' in request) return request;
+    const storage = await this.#voiceSettings(c);
+    if ('response' in storage) return storage;
+    const policy = voicePolicy(request.caller, request.factory);
+    const chosen = chooseSTTModel(policy, await savedSTTModel(storage, policy.settingsKey));
+    if ('error' in chosen) return { response: c.json({ error: chosen.error }, 400) };
+    return { chosen, caller: request.caller };
   }
 
   routes() {
@@ -204,13 +226,11 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           if (!mimeType.trim().toLowerCase().startsWith('audio/')) {
             return c.json({ error: 'Expected an audio recording.' }, 415);
           }
-          const request = await this.#request(c, c.req.query('factoryId') || undefined);
-          if ('response' in request) return request.response;
-          const storage = await this.#voiceSettings(c);
-          if ('response' in storage) return storage.response;
-          const policy = voicePolicy(request.caller, request.factory);
-          const chosen = chooseSTTModel(policy, await savedSTTModel(storage, policy.settingsKey));
-          if ('error' in chosen) return c.json({ error: chosen.error }, 400);
+          const selection = await this.#selection(c);
+          if ('response' in selection) return selection.response;
+          const overLimit = this.#overLimit(c, selection.caller, 'take');
+          if (overLimit) return overLimit;
+          const { chosen } = selection;
 
           let audio: Buffer | undefined;
           const limited = await limitBody(c, async () => {
@@ -223,9 +243,37 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
             const body: TranscribeResponse = { text, provider: chosen.entry.provider, model: chosen.entry.model };
             return c.json(body);
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return c.json({ error: `Transcription failed: ${message}` }, 502);
+            console.warn('[voice] transcription failed', { provider: chosen.entry.provider, error });
+            return c.json({ error: `Transcription failed: ${transcriptionFailureReason(error)}.` }, 502);
           }
+        },
+      }),
+      registerApiRoute('/web/voice/live-session', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async context => {
+          const c = loose(context);
+          const selection = await this.#selection(c);
+          if ('response' in selection) return selection.response;
+          const { chosen } = selection;
+          const { realtimeModel } = chosen.entry;
+          const overLimit = this.#overLimit(c, selection.caller, 'check');
+          if (overLimit) return overLimit;
+          if (!realtimeModel) return c.json({ mode: 'batch' } satisfies LiveSessionResponse);
+          let session: RealtimeSession;
+          try {
+            session = await mintRealtimeSession(chosen.apiKey, realtimeModel);
+          } catch (error) {
+            console.warn('[voice] realtime session request failed', { provider: chosen.entry.provider, error });
+            if (keyCannotTranscribe(error)) {
+              return c.json({ error: `Transcription failed: ${transcriptionFailureReason(error)}.` }, 502);
+            }
+            return c.json({ mode: 'batch' } satisfies LiveSessionResponse);
+          }
+          const overLimitAfterMint = this.#overLimit(c, selection.caller, 'take');
+          if (overLimitAfterMint) return overLimitAfterMint;
+          const body: LiveSessionResponse = { mode: 'live', ...session };
+          return c.json(body, 200, { 'Cache-Control': 'no-store' });
         },
       }),
     ];

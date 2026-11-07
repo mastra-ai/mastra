@@ -25,7 +25,7 @@ import type {
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface IntakeIntegration {
   id: string;
@@ -375,10 +375,6 @@ type ParsedLabelRoute = z.output<typeof labelRouteBodySchema>;
 export function parseIntakeLabelRoute(body: unknown): ParsedLabelRoute | null {
   const parsed = labelRouteBodySchema.safeParse(body);
   return parsed.success ? parsed.data : null;
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 function sanitizeIdList(value: unknown): string[] | null | undefined {
@@ -844,11 +840,14 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
+          const requested = c.req.query('integrationId');
           const { pages, failures } = await settleByIntegration(
-            integrations.map(integration => ({
-              integrationId: integration.id,
-              read: () => integration.intake.listSources(tenant),
-            })),
+            (requested ? integrations.filter(integration => integration.id === requested) : integrations).map(
+              integration => ({
+                integrationId: integration.id,
+                read: () => integration.intake.listSources(tenant),
+              }),
+            ),
           );
           return c.json({
             sources: pages.flatMap(({ integrationId, value }) => value.map(source => ({ integrationId, ...source }))),

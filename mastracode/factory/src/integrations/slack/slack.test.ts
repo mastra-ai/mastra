@@ -2507,6 +2507,10 @@ describe('Slack voice clips', () => {
   afterAll(() => server.close());
   beforeEach(() => {
     events.length = 0;
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://mc.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   const SENDER = { orgId: 'org-1', userId: 'user-1' };
@@ -2535,8 +2539,8 @@ describe('Slack voice clips', () => {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
     thread.isSubscribed = vi.fn().mockResolvedValue(true);
-    thread.startTyping = vi.fn(async () => {
-      events.push('typing');
+    thread.startTyping = vi.fn(async (status: string) => {
+      events.push(status ? 'typing' : 'typing cleared');
     });
     thread.adapter.addReaction = vi.fn().mockResolvedValue(undefined);
     const defaultHandler = vi.fn().mockResolvedValue(undefined);
@@ -2554,11 +2558,15 @@ describe('Slack voice clips', () => {
 
   const CLIP_URL = 'https://files.slack.com/files-pri/T-1-F1/audio_message.m4a';
 
-  function voiceMessage({ isMention = false, rawText }: { isMention?: boolean; rawText?: string } = {}) {
+  function voiceMessage({
+    isMention = false,
+    rawText,
+    text = '',
+  }: { isMention?: boolean; rawText?: string; text?: string } = {}) {
     return {
       ...makeMessage('T-1'),
       id: '1700.43',
-      text: '',
+      text,
       isMention,
       raw: {
         team_id: 'T-1',
@@ -2718,18 +2726,80 @@ describe('Slack voice clips', () => {
     expect(events).toEqual([]);
   });
 
-  it('tells the agent why a clip that starts a session was not transcribed when the sender has no key', async () => {
+  it.each([
+    { mentions: 'the bot', text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' },
+    { mentions: 'the bot and @here', text: '@Mastra Factory(Caleb) @here', rawText: '<@U-BOT> <!here>' },
+  ])("cards the sender, and starts no session, when a clip sent with only a mention of $mentions can't be transcribed for lack of a key", async ({
+    text,
+    rawText,
+  }) => {
     const f = await fixture();
     const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
     await f.defaultFactory(project.id);
     f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
-    const message = voiceMessage({ isMention: true });
+    const message = voiceMessage({ isMention: true, text, rawText });
 
     await createHandlers(f.deps).onMention!(f.thread, message, f.defaultHandler, f.ctx);
 
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(events).toEqual(['typing', 'typing cleared']);
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
+    const [user, card, options] = f.thread.postEphemeral.mock.calls[0];
+    expect(user).toEqual(message.author);
+    expect(options).toEqual({ fallbackToDM: true });
+    expect(card.title).toBe('Voice clip not transcribed');
+    expect(JSON.stringify(card)).toContain('API key');
+    expect(card.children).toContainEqual(
+      expect.objectContaining({
+        type: 'actions',
+        children: [
+          expect.objectContaining({
+            label: 'Open voice settings',
+            url: `https://mc.example.com/factories/${project.id}/settings/models#voice-input`,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('answers the clip it could transcribe when another clip of the batch failed', async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const expired = { ...voiceMessage({ text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' }), id: '1700.41' };
+    expired.attachments = expired.attachments.map(clip => ({
+      ...clip,
+      fetchData: async () => {
+        throw new Error('file gone');
+      },
+    }));
+    const message = voiceMessage({ isMention: true, text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, {
+      ...f.ctx,
+      skipped: [expired],
+    });
+
     expect(f.defaultHandler).toHaveBeenCalledTimes(1);
-    expect(message.attachments.map(clip => clip.name)).toEqual(['audio_message.m4a']);
-    expect(message.text).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*API key/);
+    expect(message.text).toBe('@Mastra Factory(Caleb)\n\nship the fix');
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches a message's text without a clip that couldn't be transcribed", async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    const message = voiceMessage({ text: 'see the clip' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.text).toBe('see the clip');
+    expect(message.attachments).toEqual([]);
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
     expect(events).toEqual(['typing']);
   });
 });
