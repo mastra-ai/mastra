@@ -585,8 +585,48 @@ const isUserMessagePendingChunk = (chunk: ChunkType): chunk is UserMessagePendin
 const isUserMessageCancelledChunk = (chunk: ChunkType): chunk is UserMessageCancelledChunk =>
   chunk.type === 'data-user-message-cancelled';
 
+/** An optimistic user message the server has not delivered to a model step yet. */
+const isPendingUserBubble = (message: MastraDBMessage): boolean =>
+  message.role === 'user' && message.content.metadata?.status === 'pending';
+
+const countTrailing = (conversation: MastraDBMessage[], predicate: (message: MastraDBMessage) => boolean): number => {
+  let count = 0;
+  while (count < conversation.length && predicate(conversation[conversation.length - 1 - count]!)) count++;
+  return count;
+};
+
+/** Chunks that show, deliver or withdraw a user message rather than extend the run's answer. */
+const isUserMessagePresentationChunk = (chunk: ChunkType): boolean =>
+  chunk.type === 'data-user-message' ||
+  chunk.type === 'data-user-message-pending' ||
+  chunk.type === 'data-user-message-cancelled';
+
+/** The signal id and client message id carried by a `data-user-message` delivery echo. */
+const userMessageEchoIds = (chunk: ChunkType): { signalId?: string; clientMessageId?: string } => {
+  if (chunk.type !== 'data-user-message' || !('data' in chunk)) return {};
+  const data: unknown = chunk.data;
+  if (!data || typeof data !== 'object') return {};
+  const signalId = 'id' in data && typeof data.id === 'string' ? data.id : undefined;
+  const echoMetadata = 'metadata' in data ? data.metadata : undefined;
+  const clientMessageId =
+    echoMetadata && typeof echoMetadata === 'object'
+      ? (echoMetadata as Record<string, unknown>)[CLIENT_MESSAGE_ID_KEY]
+      : undefined;
+  return { signalId, clientMessageId: typeof clientMessageId === 'string' ? clientMessageId : undefined };
+};
+
+/** Whether `chunk` is the delivery echo of one of `bubbles` (matched by signal id or client message id). */
+const isUserMessageEchoFor = (chunk: ChunkType, bubbles: MastraDBMessage[]): boolean => {
+  const { signalId, clientMessageId } = userMessageEchoIds(chunk);
+  return bubbles.some(
+    bubble =>
+      (signalId !== undefined && bubble.id === signalId) ||
+      (clientMessageId !== undefined && bubble.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId),
+  );
+};
+
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
-  const result = [...conversation];
+  let result = [...conversation];
 
   // ----- Queued follow-ups: user messages waiting for their own run -----
   // A follow-up queued behind the active run is shown as a pending bubble the
@@ -597,19 +637,53 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     return result.filter(message => !(message.id === chunk.data.id && message.content.metadata?.status === 'pending'));
   }
   const isQueuedChunk = isUserMessagePendingChunk(chunk) && chunk.data.metadata.status === 'queued';
-  const queuedTailLength = (() => {
-    let count = 0;
-    while (count < result.length && isQueuedUserBubble(result[result.length - 1 - count]!)) count++;
-    return count;
-  })();
+  const queuedTailLength = countTrailing(result, isQueuedUserBubble);
   if (!isQueuedChunk && queuedTailLength > 0) {
     // The echo of a queued follow-up (its run started) settles it: it leaves the
     // queue and is appended as a delivered message below the finished run output.
-    const echoedId = isDataChunk(chunk) && chunk.type === 'data-user-message' ? (chunk as any).data?.id : undefined;
+    const echoedId = userMessageEchoIds(chunk).signalId;
     const tailStart = result.length - queuedTailLength;
     const queuedTail = result.slice(tailStart).filter(message => message.id !== echoedId);
     // Queued bubbles that are not at the tail (the user sent something after them) stay where they are.
     return [...accumulateChunk({ chunk, conversation: result.slice(0, tailStart), metadata }), ...queuedTail];
+  }
+
+  // ----- Follow-ups sent into the active run -----
+  // `sendMessage()` while a run streams admits the follow-up into that run, which
+  // delivers it at its next step boundary (the `data-user-message` echo). Until
+  // then the run keeps streaming the answer above the pending bubble, so chunks
+  // of the run that owns that answer are applied without the pending tail, which
+  // is put back afterwards (#29163). Output of any other run (a fresh run started
+  // by the follow-up) still opens its own row below it.
+  const pendingTailLength = countTrailing(result, isPendingUserBubble);
+  const pendingTailStart = result.length - pendingTailLength;
+  const pendingTailOwner = result[pendingTailStart - 1];
+  if (
+    pendingTailLength > 0 &&
+    pendingTailOwner?.role === 'assistant' &&
+    'runId' in chunk &&
+    typeof chunk.runId === 'string' &&
+    pendingTailOwner.content.metadata?.runId === chunk.runId
+  ) {
+    const pendingTail = result.slice(pendingTailStart);
+    if (!isUserMessagePresentationChunk(chunk)) {
+      return [...accumulateChunk({ chunk, conversation: result.slice(0, pendingTailStart), metadata }), ...pendingTail];
+    }
+    if (chunk.type === 'data-user-message') {
+      // A user-message echo from this run marks its step boundary, whether it
+      // delivers a follow-up from the tail or a message sent from elsewhere: the
+      // answer above is complete, so finish it before the echo is applied.
+      const delivered =
+        pendingTailOwner.content.parts.length > 0
+          ? finishStreamingAssistantMessage(result.slice(0, pendingTailStart))
+          : result.slice(0, pendingTailStart);
+      // A message this chat did not send was delivered first, so it goes above the
+      // follow-ups that are still pending, keeping the rows in delivery order.
+      if (!isUserMessageEchoFor(chunk, pendingTail)) {
+        return [...accumulateChunk({ chunk, conversation: delivered, metadata }), ...pendingTail];
+      }
+      result = [...delivered, ...pendingTail];
+    }
   }
 
   if (isUserMessagePendingChunk(chunk)) {
@@ -671,14 +745,13 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       'data' in chunk &&
       ((chunk as any).data?.type === 'user-message' || (chunk as any).data?.type === 'user')
     ) {
-      const signalId = (chunk as any).data.id;
+      const { signalId, clientMessageId: echoedClientMessageId } = userMessageEchoIds(chunk);
 
       // Preferred reconciliation: the optimistic pending bubble and the outgoing
       // message both carry a client-generated `clientMessageId`; the server
       // echoes it back here. Match on it (not the server-assigned signal id) so
       // the single optimistic bubble adopts the server id and clears its
       // transient pending state instead of being duplicated.
-      const echoedClientMessageId = (chunk as any).data?.metadata?.[CLIENT_MESSAGE_ID_KEY];
       if (
         typeof echoedClientMessageId === 'string' &&
         result.some(
@@ -692,7 +765,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             message.content.metadata?.status === 'pending' &&
             message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
               ? reconcilePendingUserEcho(message, (chunk as any).data.contents, metadata, {
-                  signalId: typeof signalId === 'string' ? signalId : undefined,
+                  signalId,
                   keepClientMessageId: true,
                 })
               : message,
