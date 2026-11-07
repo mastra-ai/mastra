@@ -1832,7 +1832,17 @@ export class AgentController<TState = {}> {
   async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
     const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
+    return this.getModelAuthStatus(modelId);
+  }
 
+  /**
+   * Check if a model's provider has authentication configured (API key, stored
+   * credential or OAuth), through the same {@link GatewayManager} auth chain the
+   * model router uses at run time. Does not need the model catalog, so it also
+   * answers when catalog discovery fails. Gateway-chain failures return
+   * `hasAuth: false`.
+   */
+  async getModelAuthStatus(modelId: string): Promise<ModelAuthStatus> {
     // hasAuth returns false for expected missing-auth/missing-gateway cases.
     // It rethrows unexpected gateway failures (token exchange errors, network
     // bugs) — catch those here so the UI auth-status endpoint stays stable

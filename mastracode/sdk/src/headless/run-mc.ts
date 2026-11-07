@@ -11,7 +11,8 @@
  * final result via `result`.
  */
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
-import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
+import type { AgentController, AgentControllerEvent, AvailableModel, Session } from '@mastra/core/agent-controller';
+import { getProviderConfig, parseModelString } from '@mastra/core/llm';
 
 import { MODEL_FALLBACK_STATE_KEY } from '../auth/account-rotation-processor.js';
 import { GoalManager } from '../goal-manager.js';
@@ -156,6 +157,61 @@ class EventQueue<T> {
       },
     };
   }
+}
+
+type ModelCheck = { ok: true } | { ok: false; reason: 'unknown' } | { ok: false; reason: 'no-key'; keyHint: string };
+
+function apiKeyHint(apiKeyEnvVar: string | string[] | undefined): string {
+  const envVar = Array.isArray(apiKeyEnvVar) ? apiKeyEnvVar[0] : apiKeyEnvVar;
+  return envVar ? ` Set ${envVar} to use this model.` : '';
+}
+
+/**
+ * Check a selected model against the model catalog before the run changes any session state.
+ *
+ * The catalog is built from live gateway fetches (models.dev and others), and a failed fetch only
+ * drops that gateway's providers. So when the catalog lists no models at all for the model's
+ * provider, the model is accepted without catalog validation if the provider is in the bundled
+ * provider registry and its credentials (API key, stored key or OAuth) resolve, with a warning.
+ * Malformed ids, unregistered providers, and models missing from a provider the catalog does list
+ * are still rejected.
+ */
+async function checkModel<TState extends Record<string, unknown>>(
+  controller: AgentController<TState>,
+  modelId: string,
+): Promise<ModelCheck> {
+  let available: AvailableModel[] = [];
+  let catalogError: unknown;
+  try {
+    available = await controller.listAvailableModels();
+  } catch (error) {
+    catalogError = error;
+  }
+
+  const match = available.find(model => model.id === modelId);
+  if (match) {
+    return match.hasApiKey ? { ok: true } : { ok: false, reason: 'no-key', keyHint: apiKeyHint(match.apiKeyEnvVar) };
+  }
+
+  const { provider, modelId: modelName } = parseModelString(modelId);
+  const providerConfig = provider ? getProviderConfig(provider) : undefined;
+  if (!provider || !providerConfig || /\s/.test(modelId) || available.some(model => model.provider === provider)) {
+    return { ok: false, reason: 'unknown' };
+  }
+
+  const auth = await controller.getModelAuthStatus(modelId);
+  if (!auth.hasAuth) {
+    return { ok: false, reason: 'no-key', keyHint: apiKeyHint(auth.apiKeyEnvVar ?? providerConfig.apiKeyEnvVar) };
+  }
+
+  const cause = catalogError
+    ? `the model catalog failed to load (${catalogError instanceof Error ? catalogError.message : String(catalogError)})`
+    : `the model catalog lists no "${provider}" models`;
+  const registry = providerConfig.models?.includes(modelName) ? 'listed' : 'not listed';
+  console.warn(
+    `Warning: ${cause}; using "${modelId}" without catalog validation (${registry} in the bundled provider registry).`,
+  );
+  return { ok: true };
 }
 
 /**
@@ -409,14 +465,13 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       }
 
       if (modelIdToApply) {
-        const available = await controller.listAvailableModels();
-        const match = available.find(model => model.id === modelIdToApply);
-        if (!match) {
+        const check = await checkModel(controller, modelIdToApply);
+        if (!check.ok && check.reason === 'unknown') {
           if (modelSource === 'flag') return fail(`Unknown model: "${modelIdToApply}"`);
           return fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
         }
-        if (!match.hasApiKey) {
-          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+        if (!check.ok && check.reason === 'no-key') {
+          const { keyHint } = check;
           if (modelSource === 'flag') return fail(`Model "${modelIdToApply}" has no API key configured.${keyHint}`);
           return fail(`Model "${modelIdToApply}" (mode: ${modeIdForModel}) has no API key configured.${keyHint}`);
         }
@@ -468,15 +523,13 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         if (!packSelection) {
           return fail(`Model pack "${options.pack.id}" has no model for ${packModeId} mode`);
         }
-        const available = await controller.listAvailableModels();
-        const match = available.find(model => model.id === packSelection.modelId);
-        if (!match) {
+        const check = await checkModel(controller, packSelection.modelId);
+        if (!check.ok && check.reason === 'unknown') {
           return fail(`Unknown model "${packSelection.modelId}" from pack "${options.pack.id}"`);
         }
-        if (!match.hasApiKey) {
-          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+        if (!check.ok && check.reason === 'no-key') {
           return fail(
-            `Model "${packSelection.modelId}" (pack: ${options.pack.id}) has no API key configured.${keyHint}`,
+            `Model "${packSelection.modelId}" (pack: ${options.pack.id}) has no API key configured.${check.keyHint}`,
           );
         }
         packModelId = packSelection.modelId;
