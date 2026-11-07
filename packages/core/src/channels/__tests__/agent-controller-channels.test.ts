@@ -753,6 +753,55 @@ describe('AgentControllerChannels', () => {
       expect(respondSpy).not.toHaveBeenCalled();
     }, 30_000);
 
+    it('does not switch a shared session away from a live run for a click from another thread', async () => {
+      const stale: any[] = [];
+      const storage = new InMemoryStore();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        storage,
+        model: createApprovalFlowModel(),
+        tools: { deployTool: createDeployTool().tool },
+        onStaleToolApproval: (ctx: any) => void stale.push(ctx),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-shared');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'deploy'),
+        mastra,
+        new RequestContext(),
+      );
+      const session = (await controller.getSession('channel:chan-1:t-shared'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+      const liveThreadId = session.thread.getId();
+      const resourceId = session.identity.getResourceId();
+
+      // A second thread owned by the same session, e.g. an older card in another thread.
+      const memoryStore = await storage.getStore('memory');
+      await memoryStore!.saveThread({
+        thread: {
+          id: 'other-thread',
+          resourceId,
+          title: 'other',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      const switchSpy = vi.spyOn(session.thread, 'switch');
+
+      await (channels as any).dispatchApproval({
+        runId: 'run-old',
+        toolCallId: session.approval.getToolCallIds()[0]!,
+        requestContext: new RequestContext(),
+        memory: { thread: 'other-thread', resource: resourceId },
+      });
+
+      expect(switchSpy).not.toHaveBeenCalled();
+      expect(session.thread.getId()).toBe(liveThreadId);
+      expect(session.approval.isArmed()).toBe(true);
+      expect(stale).toHaveLength(1);
+    }, 30_000);
+
     it('does not fire when the gate matches the action', async () => {
       const stale: any[] = [];
       const { adapter, controller, mastra, channels } = await createSetup({
