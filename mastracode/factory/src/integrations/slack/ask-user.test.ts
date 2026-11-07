@@ -39,6 +39,7 @@ function fixture(selectionMode: 'single_select' | 'multi_select' = 'single_selec
       }),
     },
     identity: { getResourceId: () => 'channel:slack' },
+    suspensions: { has: vi.fn().mockReturnValue(false) },
     claimPersistedToolSuspension: vi.fn().mockResolvedValue({
       accepted: true,
       address: { runId: 'run-1', toolCallId: 'call-1', threadId, resourceId: 'channel:slack' },
@@ -104,6 +105,36 @@ function fixture(selectionMode: 'single_select' | 'multi_select' = 'single_selec
 }
 
 describe('Slack suspended questions', () => {
+  it('posts only one card when duplicate suspension events arrive before delivery finishes', async () => {
+    const f = fixture();
+    let completePost!: (value: { id: string }) => void;
+    f.adapter.postMessage.mockImplementationOnce(() => new Promise(resolve => (completePost = resolve)));
+    watchSlackQuestions(f.session as any, f.adapter as any);
+    f.emit(f.suspended);
+    f.emit(f.suspended);
+    await vi.waitFor(() => expect(f.adapter.postMessage).toHaveBeenCalledOnce());
+    completePost({ id: 'card-1' });
+    await vi.waitFor(() => expect(f.settings.has('factory_slack_ask_user:card-1')).toBe(true));
+    f.emit(f.suspended);
+    await vi.waitFor(() => expect(f.adapter.postMessage).toHaveBeenCalledOnce());
+  });
+
+  it('acknowledges an answer before the run finishes and retains the card when the suspension remains', async () => {
+    const f = fixture();
+    await f.posted();
+    let finish!: () => void;
+    f.session.respondToToolSuspension.mockImplementationOnce(() => new Promise(resolve => (finish = resolve)));
+    f.session.suspensions.has.mockReturnValue(true);
+    await f.handlers.onAction!(f.event('factory_ask_user:option:0'), vi.fn(), f.ctx);
+    expect(f.session.respondToToolSuspension).toHaveBeenCalledOnce();
+    expect(f.adapter.editMessage).not.toHaveBeenCalled();
+    expect(f.session.releaseToolResponse).not.toHaveBeenCalled();
+    finish();
+    await vi.waitFor(() => expect(f.session.releaseToolResponse).toHaveBeenCalledWith('claim-1'));
+    expect(f.settings.has('factory_slack_ask_user:card-1')).toBe(true);
+    expect(f.adapter.editMessage).not.toHaveBeenCalled();
+  });
+
   it('posts the question in the originating thread and resumes the exact run on an authorized choice', async () => {
     const f = fixture();
     await f.posted();
@@ -121,8 +152,8 @@ describe('Slack suspended questions', () => {
     expect(f.session.respondToToolSuspension).toHaveBeenCalledWith(
       expect.objectContaining({ resumeData: 'Staging', address: expect.objectContaining({ runId: 'run-1' }) }),
     );
-    expect(f.adapter.editMessage).toHaveBeenCalledWith(externalId, 'card-1', expect.anything());
-    expect(f.settings.has('factory_slack_ask_user:card-1')).toBe(false);
+    await vi.waitFor(() => expect(f.adapter.editMessage).toHaveBeenCalledWith(externalId, 'card-1', expect.anything()));
+    await vi.waitFor(() => expect(f.settings.has('factory_slack_ask_user:card-1')).toBe(false));
     await f.handlers.onAction!(f.event('factory_ask_user:option:0'), defaultHandler, f.ctx);
     expect(f.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
     await f.handlers.onAction!(f.event('tool_approve:other'), defaultHandler, f.ctx);

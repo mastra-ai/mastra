@@ -6022,7 +6022,7 @@ export class Session<TState = unknown> {
         const { runs, total } = await agent.listSuspendedRuns({ threadId, resourceId, page, perPage });
         for (const run of runs) {
           if (run.threadId !== threadId || run.resourceId !== resourceId || (runId && run.runId !== runId)) continue;
-          if (run.toolCalls.some(call => call.toolCallId === toolCallId)) {
+          if (run.toolCalls.some(call => call.toolCallId === toolCallId && call.requiresApproval === false)) {
             const address = { runId: run.runId, threadId, resourceId, toolCallId };
             addresses.set(getSuspensionAddressKey(address), address);
           }

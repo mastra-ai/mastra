@@ -66,16 +66,19 @@ async function requester(session: Session, threadId: string): Promise<string | u
 
 /** Observe the channel session before its first signal starts. */
 export function watchSlackQuestions(session: Session, adapter: Adapter): void {
+  const posting = new Map<string, Promise<void>>();
   session.subscribe(event => {
     if (event.type !== 'tool_suspended' && event.type !== 'tool_suspension_cancelled') return;
-    void (async () => {
-      const threadId = event.threadId ?? session.thread.getId();
-      if (!threadId) return;
-      const thread = await session.thread.getById({ threadId });
-      const externalId = thread?.metadata?.channel_externalThreadId;
-      if (typeof externalId !== 'string' || thread?.metadata?.channel_platform !== 'slack') return;
-      const runKey = RUN_KEY + event.runId + ':' + event.toolCallId;
-      if (event.type === 'tool_suspension_cancelled') {
+    const threadId = event.threadId ?? session.thread.getId();
+    if (!threadId || !event.runId) return;
+    const runKey = RUN_KEY + event.runId + ':' + event.toolCallId;
+    const pendingKey = threadId + ':' + runKey;
+    if (event.type === 'tool_suspension_cancelled') {
+      void (async () => {
+        await posting.get(pendingKey)?.catch(() => {});
+        const thread = await session.thread.getById({ threadId });
+        const externalId = thread?.metadata?.channel_externalThreadId;
+        if (typeof externalId !== 'string' || thread?.metadata?.channel_platform !== 'slack') return;
         const messageId = (await session.thread.getSettingOn({ threadId, key: runKey })) as string | undefined;
         if (!messageId) return;
         const prompt = (await session.thread.getSettingOn({ threadId, key: CARD_KEY + messageId })) as
@@ -84,9 +87,15 @@ export function watchSlackQuestions(session: Session, adapter: Adapter): void {
         await adapter.editMessage(externalId, messageId, postable(prompt, 'Question cancelled.'));
         await session.thread.setSettingOn({ threadId, key: CARD_KEY + messageId, value: undefined });
         await session.thread.setSettingOn({ threadId, key: runKey, value: undefined });
-        return;
-      }
-      if (event.toolName !== 'ask_user' || !event.runId) return;
+      })().catch(error => console.warn('[slack] ask_user card cancellation failed', error));
+      return;
+    }
+    if (event.toolName !== 'ask_user' || posting.has(pendingKey)) return;
+    const delivery = (async () => {
+      const thread = await session.thread.getById({ threadId });
+      const externalId = thread?.metadata?.channel_externalThreadId;
+      if (typeof externalId !== 'string' || thread?.metadata?.channel_platform !== 'slack') return;
+      if (await session.thread.getSettingOn({ threadId, key: runKey })) return;
       const payload = event.suspendPayload as
         | {
             question?: string;
@@ -98,7 +107,7 @@ export function watchSlackQuestions(session: Session, adapter: Adapter): void {
       const authorId = await requester(session, threadId);
       if (!authorId) return;
       const prompt: Question = {
-        runId: event.runId,
+        runId: event.runId!,
         toolCallId: event.toolCallId,
         threadId,
         resourceId: event.resourceId ?? session.identity.getResourceId(),
@@ -111,7 +120,11 @@ export function watchSlackQuestions(session: Session, adapter: Adapter): void {
       const posted = await adapter.postMessage(externalId, postable(prompt));
       await session.thread.setSettingOn({ threadId, key: CARD_KEY + posted.id, value: prompt });
       await session.thread.setSettingOn({ threadId, key: runKey, value: posted.id });
-    })().catch(error => console.warn('[slack] ask_user card delivery failed', error));
+    })();
+    posting.set(pendingKey, delivery);
+    void delivery
+      .catch(error => console.warn('[slack] ask_user card delivery failed', error))
+      .finally(() => posting.delete(pendingKey));
   });
 }
 
@@ -174,21 +187,31 @@ export function slackQuestionHandlers(
           { userId: actorId },
           prompt.requesterId,
         );
-      await session.respondToToolSuspension({
-        address: claim.address,
-        resumeData: value,
-        requestContext: ctx.requestContext,
-      });
-      await adapter.editMessage(externalId, messageId, postable(prompt, 'Answered.'));
-      await session.thread.setSettingOn({ threadId: prompt.threadId, key: CARD_KEY + messageId, value: undefined });
-      await session.thread.setSettingOn({
-        threadId: prompt.threadId,
-        key: RUN_KEY + prompt.runId + ':' + prompt.toolCallId,
-        value: undefined,
-      });
-    } finally {
+    } catch (error) {
       session.releaseToolResponse(claim.claimKey);
+      throw error;
     }
+    void (async () => {
+      try {
+        await session.respondToToolSuspension({
+          address: claim.address,
+          resumeData: value,
+          requestContext: ctx.requestContext,
+        });
+        if (session.suspensions.has(claim.address)) return;
+        await adapter.editMessage(externalId, messageId, postable(prompt, 'Answered.'));
+        await session.thread.setSettingOn({ threadId: prompt.threadId, key: CARD_KEY + messageId, value: undefined });
+        await session.thread.setSettingOn({
+          threadId: prompt.threadId,
+          key: RUN_KEY + prompt.runId + ':' + prompt.toolCallId,
+          value: undefined,
+        });
+      } catch (error) {
+        console.warn('[slack] ask_user answer failed', error);
+      } finally {
+        session.releaseToolResponse(claim.claimKey);
+      }
+    })();
   }
 
   return {
