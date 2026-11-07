@@ -10,6 +10,8 @@ import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { useSidebarHeaderSlots } from '../../domains/chat/components/useSidebarHeaderSlots';
 import { AppLayout } from '../AppLayout';
+import { AppPageLoader } from '../AppPageLoader';
+import { lazyPage } from '../PageSuspense';
 
 const FACTORY_ID = 'fp-1';
 
@@ -106,6 +108,9 @@ function SlotsPage() {
   );
 }
 
+// Its code never arrives, so the route stays on its loader.
+const LoadingPage = lazyPage(() => new Promise(() => {}), <AppPageLoader />);
+
 function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
   const router = createMemoryRouter(
     [
@@ -116,6 +121,7 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
           { path: 'a', element: <PageA /> },
           { path: 'b', element: <PageB /> },
           { path: 'slots', element: <SlotsPage /> },
+          { path: 'loading', element: <LoadingPage /> },
           { path: 'user/new/:draftSessionId', element: <DraftPage /> },
         ],
       },
@@ -206,6 +212,17 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toMatch(`/factories/${FACTORY_ID}/user/new/`));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument());
+  });
+
+  it('keeps the mobile drawer trigger in the header while a page is still loading', async () => {
+    mockMobileViewport();
+    stubFactory();
+    renderApp(`/factories/${FACTORY_ID}/loading`);
+
+    expect(await screen.findByLabelText('Loading page')).toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    await userEvent.click(within(header).getByRole('button', { name: 'Open navigation menu' }));
+    expect(await screen.findByRole('dialog', { name: 'Navigation' })).toBeInTheDocument();
   });
 
   it('toggles the sidebar with [ but not on key repeat or while typing in a field', async () => {

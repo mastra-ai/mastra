@@ -22,6 +22,7 @@ import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
+import { AppPageLoader } from './layouts/AppPageLoader';
 import { lazyPage } from './layouts/PageSuspense';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
@@ -41,7 +42,10 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
+const ThreadPage = lazyPage(
+  () => import('./pages/ThreadPage').then(module => module.ThreadPage),
+  <AppPageLoader />,
+);
 // A new session opens its thread on the first prompt, so that page loads right after.
 const NewPage = lazyPage(() =>
   import('./pages/NewPage').then(module => {
@@ -49,14 +53,28 @@ const NewPage = lazyPage(() =>
     ThreadPage.preload().catch(() => undefined);
     return module.NewPage;
   }),
+  <AppPageLoader />,
 );
-const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
-const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
-const SlackConnectionPage = lazyPage(() =>
-  import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
+const KnowledgePage = lazyPage(
+  () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
+  <AppPageLoader />,
 );
-const CreateFactoryPage = lazyPage(() => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage));
-const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage));
+const SettingsPage = lazyPage(
+  () => import('./pages/SettingsPage').then(module => module.SettingsPage),
+  <AppPageLoader />,
+);
+const SlackConnectionPage = lazyPage(
+  () => import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
+  <AppPageLoader />,
+);
+const CreateFactoryPage = lazyPage(
+  () => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage),
+  <AppPageLoader />,
+);
+const RulesPage = lazyPage(
+  () => import('./pages/RulesPage').then(module => module.RulesPage),
+  <AppPageLoader />,
+);
 const OnboardingPage = lazyPage(
   () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
   <AuthPendingSkeleton label="Loading page" />,
