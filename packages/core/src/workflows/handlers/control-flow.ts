@@ -1346,6 +1346,9 @@ export async function executeForeach(
             endedAt: Date.now(),
           };
         }
+        // Items already running may wait on this one (e.g. ordered tool calls), so a
+        // remote cancel must reach them through the run's signal too.
+        if (remoteCanceled) abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
         killQueue();
         inFlight--;
         cb(null);

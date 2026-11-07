@@ -1375,6 +1375,7 @@ export class CoreToolBuilder extends MastraBase {
       // Preserve tool-level background config so the agentic loop can pick it up
       // from the converted CoreTool at dispatch time.
       backgroundConfig: this.options.backgroundConfig,
+      orderedToolGroup: 'orderedToolGroup' in this.originalTool ? this.originalTool.orderedToolGroup : undefined,
     } as unknown as CoreTool;
 
     registerToolOutputValidationSchema(builtTool, outputSchema);

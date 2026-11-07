@@ -1,5 +1,6 @@
 import { isToolBackgroundEligible } from '../../../background-tasks/resolve-config';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../../../background-tasks/types';
+import { getOrderedToolGroup } from '../../../tools/ordered-tools';
 import { TOOL_ABORT_GRACE_MS, TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 
 type EagerToolResult = unknown;
@@ -649,6 +650,10 @@ export function isEagerlyExecutableToolCall({
   if (toolCall.providerExecuted) return false;
   if (!tool || isProviderTool(tool)) return false;
   if (!('execute' in (tool as object)) || typeof (tool as { execute?: unknown }).execute !== 'function') return false;
+
+  // Ordered tools (computer tools) must start in emitted order after their predecessors
+  // finish; the foreach's ordered gate enforces that, so they never start early.
+  if (getOrderedToolGroup(tool)) return false;
 
   // Respect per-step tool filtering. Redundant today, since a filtered tool is absent
   // from the resolved set above and already fails the `!tool` check; kept because that
