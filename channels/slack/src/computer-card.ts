@@ -210,6 +210,7 @@ export class ComputerCards {
   readonly #key: Buffer;
   readonly #cards = new Map<string, CardState>();
   readonly #chains = new Map<string, Promise<void>>();
+  readonly #previewUrls = new Map<string, string>();
   #warnedScope = false;
 
   constructor(opts: ComputerCardsOptions) {
@@ -336,6 +337,7 @@ export class ComputerCards {
       if (!res.ts) throw new Error('chat.postMessage returned no ts');
       card.ts = res.ts;
       this.#cards.set(key, card);
+      this.#prewarmPreview(p.computerId, p.threadId, card.holder);
       return;
     }
 
@@ -346,8 +348,22 @@ export class ComputerCards {
     }
     if (p.data.control === 'human' || p.data.control === 'agent') {
       existing.holder = p.data.control;
+      this.#prewarmPreview(p.computerId, p.threadId, existing.holder);
       return this.#update(existing);
     }
+  }
+
+  #prewarmPreview(computerId: string, threadId: string, mode: Holder): void {
+    if (!this.#opts.embedUrl) return;
+    void this.#loadThread(threadId)
+      .then(thread => {
+        if (!thread || thread.metadata?.channel_platform !== 'slack') return null;
+        return this.#opts.embedUrl?.({ computerId, threadId, resourceId: thread.resourceId, mode: mode === 'human' ? 'control' : 'watch' });
+      })
+      .then(url => {
+        if (url) this.#previewUrls.set(`${computerId}:${threadId}:${mode}`, url);
+      })
+      .catch(err => this.#warn('Computer preview prewarm failed', err));
   }
 
   async #update(card: CardState): Promise<void> {
@@ -471,14 +487,12 @@ export class ComputerCards {
       ),
     ]);
 
+    this.#opts.logger?.info?.('[Slack] Presenting computer flexpane details', { elapsedMs: Date.now() - startedAt });
     await this.#opts.client
       .apiCall('entity.presentDetails', {
         trigger_id: triggerId,
         metadata: buildEntity({ ref: externalRef as string, url, name, previewUrl: timed.previewUrl }),
       })
-      .then(() =>
-        this.#opts.logger?.info?.('[Slack] Computer flexpane details presented', { elapsedMs: Date.now() - startedAt }),
-      )
       .catch(err => this.#warn('Computer flexpane details failed', err));
 
     if (timed.timedOut) {
@@ -505,6 +519,11 @@ export class ComputerCards {
     const thread = await this.#loadThread(ref.threadId);
     if (!thread || !userId || thread.metadata?.channel_platform !== 'slack') return null;
     if (thread.resourceId !== `slack:${userId}`) return null;
+    const holder = this.#cards.get(`${ref.computerId}:${ref.threadId}`)?.holder;
+    if (holder) {
+      const cached = this.#previewUrls.get(`${ref.computerId}:${ref.threadId}:${holder}`);
+      if (cached) return cached;
+    }
     const computers = this.#opts.getMastra()?.getComputers();
     if (!computers?.controlState) return null;
     const scope = { threadId: ref.threadId, resourceId: thread.resourceId };
