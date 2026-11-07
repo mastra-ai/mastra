@@ -1,3 +1,4 @@
+import type { Root } from 'mdast';
 import { memo, useMemo } from 'react';
 import type { MouseEvent, MouseEventHandler, ReactNode } from 'react';
 import Markdown from 'react-markdown';
@@ -6,7 +7,8 @@ import remarkGfm from 'remark-gfm';
 import remend from 'remend';
 
 import { rehypeArriving } from './arriving';
-import { splitBlocks } from './blocks';
+import { splitBlocks, splitList } from './blocks';
+import type { ListBlock } from './blocks';
 import { MarkdownTable } from './markdown-table';
 import { remarkTableMarkdown } from './table-markdown';
 import { useSettledWords } from './use-settled';
@@ -18,6 +20,9 @@ import './markdown-renderer.css';
 export type MarkdownExternalLinkTarget = 'tab' | 'window';
 
 type RemarkPlugins = NonNullable<Options['remarkPlugins']>;
+type RehypePlugins = NonNullable<Options['rehypePlugins']>;
+type ListItem = 'tight' | 'loose';
+type MarkdownChild = NonNullable<ExtraProps['node']>['children'][number];
 
 export interface MarkdownRendererProps {
   children: string;
@@ -40,9 +45,9 @@ export interface MarkdownRendererProps {
  *
  * react-markdown re-parses on every render, and a streaming reply re-renders
  * its whole transcript on every delta. Memoizing spares the settled messages;
- * rendering block by block — streaming or not — spares every block of the live
- * one but the last, and lets a reply settle without remounting what is already
- * on screen.
+ * rendering block by block, and a list item by item — streaming or not — spares
+ * every block of the live one but the last, and lets a reply settle without
+ * remounting what is already on screen.
  *
  * The text is drawn as given: pacing a stream is `useRevealedText`, and belongs to
  * whoever owns the whole of what is being laid down — a reply is prose, tool rows
@@ -62,15 +67,22 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   components: extraComponents,
 }: MarkdownRendererProps) {
   const shown = decodeEscapedNewlines(children);
-  const blocks = useMemo(() => splitBlocks(shown), [shown]);
-  const last = blocks.length - 1;
   const baseComponents = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
   const components = useMemo(
     () => (extraComponents ? { ...baseComponents, ...extraComponents } : baseComponents),
     [baseComponents, extraComponents],
   );
+  // A list cut into items draws its own `<ul>`/`<ol>`, which neither an override of either nor a host plugin
+  // rewriting the list would reach.
+  const listsWhole = Boolean(components.ul ?? components.ol ?? extraRemarkPlugins?.length);
+  const blocks = useMemo(
+    () => splitBlocks(shown).map(block => (listsWhole ? block : (splitList(block) ?? block))),
+    [shown, listsWhole],
+  );
+  const pieces = blocks.flatMap(block => (typeof block === 'string' ? block : block.items));
+  const last = pieces.length - 1;
 
-  const spans = wordSpans(blocks);
+  const spans = wordSpans(pieces);
   const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
 
   // A block whose words have all finished their entrance has nothing left to play,
@@ -78,31 +90,67 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const settledWords = (span: WordSpan | undefined): number | undefined =>
     !span || settled >= span.end ? undefined : Math.max(0, settled - span.start);
 
-  const tail = blocks[last] ?? '';
+  const tail = pieces[last] ?? '';
   const mended = useMemo(() => (streaming ? remend(tail, REMEND_OPTIONS) : tail), [streaming, tail]);
+
+  const piece = (content: string, at: number, key: number, listItem?: ListItem) => (
+    <MarkdownBlock
+      key={key}
+      content={at === last ? mended : content}
+      settledWords={settledWords(spans[at])}
+      listItem={listItem}
+      components={components}
+      streaming={streaming}
+      tableActions={tableActions}
+      extraRemarkPlugins={extraRemarkPlugins}
+    />
+  );
+  let next = 0;
 
   return (
     <div className={cn('mastra-markdown', className)}>
-      {blocks.map((block, index) => (
-        <MarkdownBlock
-          key={index}
-          content={index === last ? mended : block}
-          settledWords={settledWords(spans[index])}
-          components={components}
-          streaming={streaming}
-          tableActions={tableActions}
-          extraRemarkPlugins={extraRemarkPlugins}
-        />
-      ))}
+      {blocks.map((block, index) => {
+        const first = next;
+
+        if (typeof block === 'string') {
+          next += 1;
+          return piece(block, first, index);
+        }
+
+        next += block.items.length;
+        const listItem = block.loose ? 'loose' : 'tight';
+
+        return (
+          <MarkdownList key={index} list={block}>
+            {block.items.map((item, position) => piece(item, first + position, position, listItem))}
+          </MarkdownList>
+        );
+      })}
     </div>
   );
 });
+
+/** The list element itself, drawn once around items that were each parsed alone. */
+function MarkdownList({ list, children }: { list: ListBlock; children: ReactNode[] }) {
+  // react-markdown puts a line break on each side of every item; keeping them keeps the markup identical.
+  const items = ['\n', ...children.flatMap(child => [child, '\n'])];
+  const className = list.tasks ? 'contains-task-list' : undefined;
+
+  if (!list.ordered) return <ul className={className}>{items}</ul>;
+
+  return (
+    <ol start={list.start === 1 ? undefined : list.start} className={className}>
+      {items}
+    </ol>
+  );
+}
 
 /** Keyed by position at the call site: a content key remounts on every character. */
 const MarkdownBlock = memo(function MarkdownBlock({
   components,
   content,
   settledWords,
+  listItem,
   streaming,
   tableActions,
   extraRemarkPlugins,
@@ -110,18 +158,21 @@ const MarkdownBlock = memo(function MarkdownBlock({
   components: Components;
   content: string;
   settledWords?: number;
+  /** The content is one item of a list drawn by `MarkdownList`, which says whether that list is loose. */
+  listItem?: ListItem;
   streaming: boolean;
   tableActions: boolean;
   extraRemarkPlugins?: RemarkPlugins;
 }) {
   const remarkPlugins = useMemo(() => {
     const builtIn = tableActions && !streaming ? COPYABLE_REMARK_PLUGINS : REMARK_PLUGINS;
-    return extraRemarkPlugins ? [...builtIn, ...extraRemarkPlugins] : builtIn;
-  }, [tableActions, streaming, extraRemarkPlugins]);
-  const rehypePlugins = useMemo(
-    () => (settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)]),
-    [settledWords],
-  );
+    const plugins = extraRemarkPlugins ? [...builtIn, ...extraRemarkPlugins] : builtIn;
+    return listItem === 'loose' ? [...plugins, remarkLooseList] : plugins;
+  }, [tableActions, streaming, extraRemarkPlugins, listItem]);
+  const rehypePlugins = useMemo(() => {
+    const arriving = settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)];
+    return listItem ? [rehypeListItem, ...arriving] : arriving;
+  }, [settledWords, listItem]);
 
   return (
     <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
@@ -130,7 +181,25 @@ const MarkdownBlock = memo(function MarkdownBlock({
   );
 });
 
-const SETTLED: Options['rehypePlugins'] = [];
+/** An item parsed alone sits in a list of one; the list it belongs to is loose. */
+function remarkLooseList() {
+  return (tree: Root) => {
+    for (const node of tree.children) if (node.type === 'list') node.spread = true;
+  };
+}
+
+/** Keeps the item and drops the list of one around it: `MarkdownList` draws the real one. */
+function rehypeListItem() {
+  return (tree: { children: MarkdownChild[] }) => {
+    tree.children = tree.children.flatMap(node =>
+      node.type === 'element' && (node.tagName === 'ul' || node.tagName === 'ol')
+        ? node.children.filter(child => child.type === 'element')
+        : [node],
+    );
+  };
+}
+
+const SETTLED: RehypePlugins = [];
 
 interface WordSpan {
   start: number;
