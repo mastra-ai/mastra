@@ -793,7 +793,7 @@ Added when a sandbox is configured:
 | Tool | Description |
 | - | - |
 | `mastra_workspace_execute_command` | Execute a shell command. Returns stdout, stderr, and exit code. When the sandbox has a process manager, accepts `background: true` to spawn a long-running process and return a PID. |
-| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
+| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `waitSeconds` to wait up to that many seconds (max 300) for the process to exit, returning the output so far if it's still running. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
 With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/sandbox/overview#sandboxes-per-user-or-thread), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
@@ -837,9 +837,25 @@ The `execute_command` tool accepts these options:
               "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
             isOptional: true,
           },
+          {
+            name: 'notifyOnExit',
+            type: 'boolean',
+            description:
+              'Sends the agent that started a background process a notification when the process exits, with its exit code and the last lines of its output. An idle thread is woken by it. Needs the `notifications` storage domain. Processes that were killed send nothing.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
         ],
       },
     ],
+  },
+  {
+    name: 'foregroundDetachMs',
+    type: 'number | false',
+    description:
+      'How long, in milliseconds, a foreground command can run before it moves to the background. The tool returns the output so far and the PID, the command keeps running, and the agent is notified when it exits. Applies to sandboxes with a process manager. Set to `false` to wait for every foreground command to finish.',
+    isOptional: true,
+    defaultValue: '300000',
   },
   {
     name: 'requireDescription',

@@ -181,6 +181,12 @@ export interface BackgroundProcessConfig {
    *   Use this for cloud sandboxes (e.g. E2B) where processes should survive agent shutdown.
    */
   abortSignal?: AbortSignal | null | false;
+  /**
+   * Send the agent a notification when a background process exits on its own, with its
+   * exit code and the tail of its output. An idle thread is woken by it. Needs the
+   * `notifications` storage domain; skipped when the process was killed. Default: true.
+   */
+  notifyOnExit?: boolean;
 }
 
 // =============================================================================
@@ -194,6 +200,13 @@ export interface BackgroundProcessConfig {
 export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
   /** Configuration for background process callbacks and abort behavior. */
   backgroundProcesses?: BackgroundProcessConfig;
+  /**
+   * How long (ms) a foreground command may block the agent before it moves to the
+   * background: the tool returns the output so far and the PID, the command keeps
+   * running, and the agent is notified when it exits (see `notifyOnExit`). Only
+   * applies to sandboxes with a process manager. `false` disables it. Default: 300 000.
+   */
+  foregroundDetachMs?: number | false;
   /**
    * Require a short plain-language `description` of each command, listed before `command`
    * in the tool schema. UIs can show it in place of the raw command. When unset, the tool
