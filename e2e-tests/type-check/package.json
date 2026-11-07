@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "execa": "^9.6.1",
+    "execa": "^10.2.1",
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
     "tsx": "^4.23.15",
-    "verdaccio": "^6.10.5",
+    "verdaccio": "^7.0.2",
     "verdaccio-auth-memory": "^13.1.3"
   },
   "scripts": {
