@@ -3,7 +3,7 @@ services:
     # MinIO's community images were pulled from Docker Hub/Quay (source-only
     # since Oct 2025); Chainguard maintains free builds. Pinned by digest for
     # reproducible CI — bump deliberately. Free tier publishes no version tags.
-    image: cgr.dev/chainguard/minio@sha256:0a01100085e30fb08d2f39e39c9f5c9d83a95707f220b007d813b690cd41622d
+    image: cgr.dev/chainguard/minio@sha256:869ca3178831d9f521ea02258a0f0d4fbc1e9f84302e707514e1f861b860865d
     ports:
       - '9000:9000'
       - '9001:9001'
