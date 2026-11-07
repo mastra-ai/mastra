@@ -205,6 +205,7 @@ export class DaemonClient {
   #abortOpening?: () => void;
   #next = 1;
   #buffer = '';
+  readonly #abandoned = new Set<number>();
   readonly #pending = new Map<number, { resolve: (r: any) => void; reject: (e: Error) => void }>();
   #closed = false;
 
@@ -218,14 +219,24 @@ export class DaemonClient {
     return this.#socket !== undefined;
   }
 
-  async request(method: string, params: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<any> {
+  /**
+   * Sends one request. On timeout the connection is dropped (the daemon's state is unknown), unless
+   * `dropOnTimeout` is false: then only this request is abandoned and its late answer is ignored.
+   */
+  async request(
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    dropOnTimeout = true,
+  ): Promise<any> {
     const socket = await this.#open();
     const id = this.#next++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new DaemonError(`the accessibility daemon did not answer ${method} in time`));
-        this.#drop(socket);
+        if (dropOnTimeout) this.#drop(socket);
+        else if (this.#abandoned.size < 64) this.#abandoned.add(id);
       }, timeoutMs);
       this.#pending.set(id, {
         resolve: r => (clearTimeout(timer), resolve(r)),
@@ -291,8 +302,8 @@ export class DaemonClient {
           if (!hello) {
             if (this.#closed) return fail('computer destroyed');
             if (msg?.type !== 'hello' || msg.digest !== MCC_SCHEMA_DIGEST) {
-              const why = typeof msg?.refusal?.message === 'string' ? `: ${msg.refusal.message.slice(0, 200)}` : '';
-              return fail(`the accessibility daemon refused the handshake${why}`);
+              // Fixed text: before the handshake nothing the far end says is passed on.
+              return fail('the accessibility daemon refused the handshake (schema mismatch)');
             }
             hello = true;
             clearTimeout(timer);
@@ -329,7 +340,7 @@ export class DaemonClient {
   #route(msg: any): boolean {
     if (msg?.type === 'response') {
       const p = this.#pending.get(msg.id);
-      if (!p) return false;
+      if (!p) return this.#abandoned.delete(msg.id);
       this.#pending.delete(msg.id);
       p.resolve(msg.result && typeof msg.result === 'object' ? msg.result : {});
       return true;
@@ -347,6 +358,7 @@ export class DaemonClient {
     if (this.#socket !== socket) return;
     this.#socket = undefined;
     this.#buffer = '';
+    this.#abandoned.clear();
     socket.onclose = socket.onerror = socket.onmessage = null;
     try {
       socket.close();
@@ -393,6 +405,8 @@ export function slimElement(el: any) {
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 export const MAX_ELEMENT_IMAGE_BYTES = 4 * 1024 * 1024;
+/** An element crop is never larger than the desktop; this leaves room for a bigger screen, not a decode bomb. */
+export const MAX_ELEMENT_IMAGE_SIDE = 2048;
 
 /** Validates a daemon element crop: base64 PNG within size, with sane IHDR dimensions. */
 export function checkPng(data: unknown): { width: number; height: number } | undefined {
@@ -404,6 +418,6 @@ export function checkPng(data: unknown): { width: number; height: number } | und
   if (head.subarray(12, 16).toString('latin1') !== 'IHDR') return undefined;
   const width = head.readUInt32BE(16);
   const height = head.readUInt32BE(20);
-  if (width < 1 || height < 1 || width > 8192 || height > 8192) return undefined;
+  if (width < 1 || height < 1 || width > MAX_ELEMENT_IMAGE_SIDE || height > MAX_ELEMENT_IMAGE_SIDE) return undefined;
   return { width, height };
 }

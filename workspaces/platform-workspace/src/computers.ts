@@ -114,10 +114,11 @@ interface Entry {
   queue: Promise<unknown>;
   destroyed: boolean;
   control: Lease;
-  /** Semantic hands: memoized boot, daemon connection, watches by subscription id, time of the last agent input. */
+  /** Semantic hands: memoized boot, daemon connection, watches by subscription id, agent input in flight and its last end. */
   boot?: Promise<string>;
   daemon?: DaemonClient;
   watches?: Map<string, Watch>;
+  inputs?: number;
   lastInputAt?: number;
 }
 
@@ -126,13 +127,14 @@ interface Watch {
   elementId: string;
   target: { resourceId: string; threadId: string } & AgentRef;
   changes: number;
-  kinds: Set<string>;
+  kinds: Set<Exclude<DaemonEvent['kind'], 'watchEnded'>>;
   timer?: ReturnType<typeof setTimeout>;
   lastSentAt: number;
 }
 
 /** Changes within this long after the agent's own input are its echo, not news. */
 const SELF_ECHO_MS = 1500;
+const UNSUBSCRIBE_MS = 5000;
 const WATCH_COALESCE_MS = 1000;
 const WATCH_MIN_INTERVAL_MS = 10_000;
 
@@ -336,10 +338,21 @@ export class PlatformComputers implements MastraComputers {
     return run;
   }
 
+  /** Marks agent input in flight, so watch events it causes (during and just after) are not reported as news. */
+  async #input<T>(entry: Entry, fn: () => Promise<T>): Promise<T> {
+    entry.inputs = (entry.inputs ?? 0) + 1;
+    try {
+      return await fn();
+    } finally {
+      entry.inputs--;
+      entry.lastInputAt = Date.now();
+    }
+  }
+
   /** A hand action, plus a screenshot in the same slot when `screenshotAfterAction` is on and the agent still holds control. */
   #act(context: Context, fn: (computer: SandboxComputer) => Promise<string>) {
     return this.#hands(context, async (_s, computer, entry) => {
-      const text = await fn(computer).finally(() => (entry.lastInputAt = Date.now()));
+      const text = await this.#input(entry, () => fn(computer));
       if (!this.#screenshotAfterAction || entry.control.holder === 'human') return text;
       // The action already happened; a failed screenshot must not make the model retry it.
       const shot = await computer.screenshot().catch(() => undefined);
@@ -527,13 +540,13 @@ export class PlatformComputers implements MastraComputers {
       try {
         const client = await this.#client(entry, sandbox, computer);
         if (typeof client === 'string') return client;
-        const result = await client
-          .request(method, params, options.timeoutMs)
-          .finally(() => options.input && (entry.lastInputAt = Date.now()));
+        const send = () => client.request(method, params, options.timeoutMs);
+        const result = options.input ? await this.#input(entry, send) : await send();
         if (result?.refusal) return refusalText(result.refusal);
         return shape(result, entry, scope);
       } catch (error) {
-        // Only host-written messages reach the model; others may carry the preview url or cookie.
+        // Only host-written messages reach the model here (refusals pass through above, labelled as such);
+        // other errors may carry the preview url or cookie.
         return `semantic hands error: ${error instanceof DaemonError ? error.message.slice(0, 300) : 'the request failed'}`;
       }
     });
@@ -544,17 +557,17 @@ export class PlatformComputers implements MastraComputers {
     entry.boot ??= (async () => {
       await computer.getScreenSize();
       const r = await sandbox.executeCommand('bash', ['-c', BOOT_SEMANTIC_SCRIPT], { timeout: 120_000 });
-      const last = (text: string) => text.trim().split('\n').pop() ?? '';
-      return r.exitCode === 0
-        ? last(r.stdout)
-        : `failed: exit ${r.exitCode} ${last(r.stdout)} ${last(r.stderr)}`.trim();
+      const last = r.stdout.trim().split('\n').pop() ?? '';
+      // Only the boot script's own status words are trusted; the sandbox writes everything else.
+      if (r.exitCode === 0 && ['ready', 'missing', 'lowmem'].includes(last)) return last;
+      return `failed: boot exited ${r.exitCode}`;
     })();
     const state = await entry.boot.catch(() => 'failed: the boot command could not run');
     if (state !== 'ready') {
       entry.boot = undefined;
       if (state === 'missing') return SEMANTIC_UNAVAILABLE;
       if (state === 'lowmem') return SEMANTIC_LOW_MEMORY;
-      return `semantic hands unavailable: the accessibility daemon did not start (${state.slice(0, 200)}) — use the pixel tools`;
+      return `semantic hands unavailable: the accessibility daemon did not start (${state}) — use the pixel tools`;
     }
     entry.daemon ??= new DaemonClient(
       async () => {
@@ -572,8 +585,12 @@ export class PlatformComputers implements MastraComputers {
   #watch(input: { id: string }, context: Context) {
     return this.#daemon(context, 'subscribeElement', { id: input.id, priority: 'high' }, (result, entry, scope) => {
       const subscriptionId = result?.subscription?.subscriptionId;
-      if (typeof subscriptionId !== 'string') return 'semantic hands error: the daemon returned no subscription';
+      if (typeof subscriptionId !== 'string' || !subscriptionId || subscriptionId.length > 128) {
+        return 'semantic hands error: the daemon returned no subscription';
+      }
       entry.watches ??= new Map();
+      // A reused id would take over another watch (possibly another thread's): refuse, keep the original.
+      if (entry.watches.has(subscriptionId)) return 'semantic hands error: the daemon reused a subscription id';
       entry.watches.set(subscriptionId, {
         subscriptionId,
         elementId: input.id,
@@ -630,7 +647,7 @@ export class PlatformComputers implements MastraComputers {
 
   /** Changes the agent caused or that happen while the user drives are not news to report. */
   #quiet(entry: Entry) {
-    if (entry.control.holder === 'human') return true;
+    if (entry.control.holder === 'human' || (entry.inputs ?? 0) > 0) return true;
     return entry.lastInputAt !== undefined && Date.now() - entry.lastInputAt < SELF_ECHO_MS;
   }
 
@@ -659,7 +676,12 @@ export class PlatformComputers implements MastraComputers {
       if (w.target.threadId !== threadId) continue;
       entry.watches!.delete(w.subscriptionId);
       if (w.timer) clearTimeout(w.timer);
-      void entry.daemon?.request('unsubscribeElement', { subscriptionId: w.subscriptionId }).catch(() => {});
+      // In the computer's queue, and a slow answer abandons only this request, not the shared connection.
+      const daemon = entry.daemon;
+      if (!daemon?.connected) continue;
+      entry.queue = entry.queue
+        .then(() => daemon.request('unsubscribeElement', { subscriptionId: w.subscriptionId }, UNSUBSCRIBE_MS, false))
+        .catch(() => {});
     }
   }
 
@@ -974,10 +996,12 @@ export class PlatformComputers implements MastraComputers {
         description: 'Run a shell command on the attached computer.',
         inputSchema: z.object({ command: z.string().min(1), timeout: z.number().int().min(1).max(600_000).optional() }),
         execute: async (input, context) =>
-          this.#hands(context, async sandbox => {
-            const r = await sandbox.executeCommand(input.command, undefined, {
-              ...(input.timeout !== undefined && { timeout: input.timeout }),
-            });
+          this.#hands(context, async (sandbox, _c, entry) => {
+            const r = await this.#input(entry, () =>
+              sandbox.executeCommand(input.command, undefined, {
+                ...(input.timeout !== undefined && { timeout: input.timeout }),
+              }),
+            );
             return { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr };
           }),
       }),
