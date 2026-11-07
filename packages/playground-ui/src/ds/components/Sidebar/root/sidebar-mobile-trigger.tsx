@@ -18,7 +18,12 @@ export function SidebarMobileTrigger({
   const { isMobile, mobileTriggerRef, setOpenMobile } = useSidebar();
   return (
     <Button
-      ref={mobileTriggerRef}
+      ref={node => {
+        mobileTriggerRef.current = node;
+        return () => {
+          if (mobileTriggerRef.current === node) mobileTriggerRef.current = null;
+        };
+      }}
       type="button"
       variant="ghost"
       size="icon-sm"

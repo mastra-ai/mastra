@@ -8,7 +8,7 @@ import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { PageLayout } from '@/ds/components/PageLayout';
-import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
+import { Sidebar, SidebarProvider, useSidebar } from '@/ds/components/Sidebar';
 
 function mockMatchMedia(matches: boolean) {
   vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
@@ -39,6 +39,15 @@ function Shell({ children, mobileHeader }: { children: ReactNode; mobileHeader?:
         <MainCard>{children}</MainCard>
       </AppShell>
     </SidebarProvider>
+  );
+}
+
+function ShortcutProbe() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <button type="button" onClick={toggleSidebar}>
+      Shortcut
+    </button>
   );
 }
 
@@ -128,10 +137,11 @@ describe('AppShell mobile row', () => {
         </Shell>,
       );
 
-      const trail = within(pageBar()).getByRole('navigation', { name: 'Breadcrumb' });
-      expect(within(trail).getByText('Billing').closest('[aria-current="page"]')).not.toBeNull();
-      expect(within(pageBar()).queryByText('Mastra Projects')).toBeNull();
-      expect(screen.getByRole('heading', { level: 1, name: 'Billing' })).toBeDefined();
+      const bar = within(pageBar());
+      expect(bar.getByText('Billing').closest('[aria-current="page"]')).not.toBeNull();
+      expect(bar.queryByText('Mastra Projects')).toBeNull();
+      expect(bar.queryByRole('navigation')).toBeNull();
+      expect(screen.getAllByRole('heading', { name: 'Billing' })).toHaveLength(1);
     });
 
     it('shows a loading crumb while the title loads', () => {
@@ -150,8 +160,7 @@ describe('AppShell mobile row', () => {
         </Shell>,
       );
 
-      const trail = within(pageBar()).getByRole('navigation', { name: 'Breadcrumb' });
-      expect(within(trail).queryByText('Billing')).toBeNull();
+      expect(within(pageBar()).queryByText('Billing')).toBeNull();
     });
   });
 
@@ -226,6 +235,23 @@ describe('AppShell mobile row', () => {
     const drawer = screen.getByRole('dialog', { name: 'Navigation' });
     fireEvent.keyDown(drawer, { key: 'Escape' });
 
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it('returns focus to the page row menu when the drawer opened without a click on it', async () => {
+    render(
+      <Shell>
+        <PageLayout breadcrumbs={projectTrail}>
+          <ShortcutProbe />
+        </PageLayout>
+      </Shell>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shortcut' }));
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Navigation' }), { key: 'Escape' });
+
+    const trigger = within(pageBar()).getByRole('button', { name: 'Open navigation menu' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });

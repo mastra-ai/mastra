@@ -46,11 +46,13 @@ function MobileBarLead({ header, brand }: { header: ReactNode; brand: ReactNode 
   const title = pageTitleOf(header);
   if (!title) return brand;
   return (
-    <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
-      <Crumb as="span" isCurrent isLoading={title.props.isLoading}>
-        {title.props.children}
-      </Crumb>
-    </Breadcrumb>
+    <div aria-hidden className="flex min-w-0 flex-1 overflow-hidden">
+      <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
+        <Crumb as="span" isCurrent isLoading={title.props.isLoading}>
+          {title.props.children}
+        </Crumb>
+      </Breadcrumb>
+    </div>
   );
 }
 
