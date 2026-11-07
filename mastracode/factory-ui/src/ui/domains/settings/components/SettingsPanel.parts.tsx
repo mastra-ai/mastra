@@ -53,7 +53,7 @@ export function BehaviorSettings({
 }: BehaviorSettingsProps) {
   const notificationMode = settings?.notifications ?? 'off';
   return (
-    <div className="flex flex-col gap-8">
+    <>
       <SettingsSubsection
         scope="factory"
         title="General"
@@ -92,7 +92,7 @@ export function BehaviorSettings({
         </SettingsContainer>
       </SettingsSubsection>
       <PermissionsSection permissions={permissions} setPermissionForCategory={setPermissionForCategory} />
-    </div>
+    </>
   );
 }
 

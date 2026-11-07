@@ -38,7 +38,7 @@ export function RepositoriesSection() {
     githubConnected || activeFactory.repositories.some(repository => repository.provider !== 'gitlab');
 
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <SourceControlConnections />
 
       <SettingsSubsection
@@ -51,13 +51,13 @@ export function RepositoriesSection() {
 
       {githubRelevant && <GithubPatBlock />}
 
-      <Txt as="p" variant="meta" tone="muted">
+      <Txt as="p" variant="meta" tone="muted" className="ps-2.5">
         Configure sandbox resources and workspace setup in{' '}
         <Link to={settingsSectionPath(activeFactory.id, 'factory')} className="underline">
           Manage Factory
         </Link>
         .
       </Txt>
-    </div>
+    </>
   );
 }

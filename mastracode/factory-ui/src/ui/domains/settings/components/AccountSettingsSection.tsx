@@ -86,7 +86,7 @@ export function AccountSettingsSection() {
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
       <SettingsSubsection
         scope="personal"
         title="Profile"
@@ -124,6 +124,6 @@ export function AccountSettingsSection() {
           </SettingsRow>
         </SettingsContainer>
       </SettingsSubsection>
-    </div>
+    </>
   );
 }

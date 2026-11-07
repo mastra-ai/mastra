@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
+import { Fragment } from 'react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -40,11 +41,13 @@ export function IntakeSection() {
   if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
   if (!configQuery.data) {
     return (
-      <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-        <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
+      <SettingsContainer>
+        <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
+          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
+            Retry
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
     );
   }
 
@@ -140,25 +143,26 @@ export function IntakeSection() {
   ].filter(row => row !== null);
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
       {connectedSources.length > 0 && (
         <SettingsSubsection
           scope="org"
           title="Connected sources"
           description="Choose which services bring work into your organization's boards."
         >
-          <div className="flex flex-col gap-6">
+          {/* Each source is its own card: its summary row, then its sources and routing. */}
+          <div className="flex flex-col gap-3">
             {connectedSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
           </div>
         </SettingsSubsection>
       )}
       {unavailableSources.length > 0 && (
         <SettingsSubsection title="Unavailable sources">
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
             {unavailableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
           </div>
         </SettingsSubsection>
@@ -167,12 +171,12 @@ export function IntakeSection() {
         <SettingsSubsection title="Add a source">
           <SettingsContainer>
             {availableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
             {anotherAccountRows}
           </SettingsContainer>
         </SettingsSubsection>
       )}
-    </div>
+    </>
   );
 }

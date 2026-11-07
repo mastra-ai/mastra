@@ -1,8 +1,16 @@
 import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus } from 'lucide-react';
+import {
+  SettingsEmptyRow,
+  SettingsItem,
+  SettingsItemIcon,
+  SettingsListHeader,
+  SettingsNoticeRow,
+} from '@mastra/playground-ui/new/settings';
+import { Plus, Server } from 'lucide-react';
 import { useState } from 'react';
 
 import type { CustomProviderInfo } from '../../../../api/types';
@@ -12,7 +20,8 @@ import { CustomProviderForm } from './CustomProviderForm';
 
 /**
  * Organization-scoped OpenAI-compatible endpoint definitions. Keys are
- * write-only; the server reports only their presence.
+ * write-only; the server reports only their presence. Renders the rows of
+ * its section's `SettingsContainer`.
  */
 export function CustomProvidersSection() {
   const providersQuery = useCustomProvidersQuery();
@@ -34,23 +43,38 @@ export function CustomProvidersSection() {
     }
   };
 
+  const addProvider = draft ? undefined : (
+    <Button size="sm" icon={<Plus />} onClick={() => setDraft('new')} disabled={busy}>
+      Add provider
+    </Button>
+  );
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <Txt tone="muted" as="p" variant="caption">
-          OpenAI-compatible endpoints.
-        </Txt>
-        {!draft && (
-          <Button size="sm" onClick={() => setDraft('new')} disabled={busy}>
-            <Plus size={13} /> Add provider
-          </Button>
-        )}
-      </div>
+    <>
+      {loading ? (
+        <SkeletonRows label="Loading custom providers" rows={3} className="divide-border gap-0 divide-y">
+          <div aria-hidden className="flex items-center justify-between gap-3 py-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <SkeletonText line="text-body" className="w-40 max-w-full motion-reduce:before:animate-none" />
+              <SkeletonText line="text-meta" className="w-56 max-w-full motion-reduce:before:animate-none" />
+            </div>
+            <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+          </div>
+        </SkeletonRows>
+      ) : providers.length === 0 ? (
+        <SettingsEmptyRow action={addProvider}>No custom providers</SettingsEmptyRow>
+      ) : (
+        <SettingsListHeader action={addProvider}>
+          {providers.length === 1 ? '1 provider' : `${providers.length} providers`}
+        </SettingsListHeader>
+      )}
 
       {(error ?? queryError) && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {error ?? queryError}
-        </Txt>
+        <SettingsNoticeRow>
+          <Txt as="p" variant="caption" className="text-destructive-foreground">
+            {error ?? queryError}
+          </Txt>
+        </SettingsNoticeRow>
       )}
 
       {draft && (
@@ -62,52 +86,40 @@ export function CustomProvidersSection() {
         />
       )}
 
-      {loading ? (
-        <SkeletonRows label="Loading custom providers" rows={3} className="divide-border gap-0 divide-y">
-          <div aria-hidden className="flex items-center justify-between gap-3 py-2">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <SkeletonText line="text-body" className="w-40 max-w-full motion-reduce:before:animate-none" />
-              <SkeletonText line="text-meta" className="w-56 max-w-full motion-reduce:before:animate-none" />
-            </div>
-            <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
-          </div>
-        </SkeletonRows>
-      ) : providers.length === 0 ? null : (
-        <ul role="list" className="divide-border flex flex-col divide-y">
-          {providers.map(provider => (
-            <li key={provider.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <Txt tone="ink" as="span" variant="body" className="truncate">
-                    {provider.name}
-                  </Txt>
-                  {provider.hasApiKey && (
-                    <Badge size="sm" variant="success">
-                      Key saved
-                    </Badge>
-                  )}
-                </div>
-                <Txt tone="muted" as="span" variant="meta" className="truncate">
-                  {provider.url}
-                </Txt>
+      {!loading &&
+        providers.map(provider => (
+          <SettingsItem
+            key={provider.id}
+            media={
+              <SettingsItemIcon>
+                <Server />
+              </SettingsItemIcon>
+            }
+            title={provider.name}
+            description={
+              <Metadata singleLine>
+                <Metadata.Item>{provider.url}</Metadata.Item>
                 {provider.models.length > 0 && (
-                  <Txt tone="muted" as="span" variant="meta">
+                  <Metadata.Item className="shrink-0">
                     {provider.models.length} model{provider.models.length === 1 ? '' : 's'}
-                  </Txt>
+                  </Metadata.Item>
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" disabled={busy} onClick={() => setDraft(provider)}>
-                  Edit
-                </Button>
-                <Button size="sm" disabled={busy} onClick={() => void remove(provider.id)}>
-                  Remove
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+              </Metadata>
+            }
+          >
+            {provider.hasApiKey && (
+              <Badge size="sm" variant="success">
+                Key saved
+              </Badge>
+            )}
+            <Button size="sm" disabled={busy} onClick={() => setDraft(provider)}>
+              Edit
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void remove(provider.id)}>
+              Remove
+            </Button>
+          </SettingsItem>
+        ))}
+    </>
   );
 }
