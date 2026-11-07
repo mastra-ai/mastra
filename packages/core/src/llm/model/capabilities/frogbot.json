@@ -56,31 +56,13 @@
     "kimi-k2.5"
   ],
   "reasoning": {
-    "claude-haiku-4-5": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "grok-4-3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "gpt-5-4-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5-3-codex": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -93,28 +75,16 @@
         "max": 32768
       }
     ],
-    "gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "gpt-5-4-nano": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-3-flash-preview": [
+    "claude-haiku-4-5": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "budget_tokens",
+        "min": 1024
       }
     ],
     "claude-sonnet-4-6": [
@@ -125,6 +95,25 @@
       {
         "type": "budget_tokens",
         "min": 1024
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5-3-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-2.5-flash": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 24576
       }
     ],
     "claude-opus-4-7": [
@@ -143,17 +132,28 @@
         "min": 1024
       }
     ],
+    "grok-4-3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gemini-3-1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash": [
+    "gemini-3-flash-preview": [
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 24576
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }
