@@ -140,7 +140,7 @@ export class RequestContextService {
 
     // Use response 'close' event - fires when connection is actually closed
     // (unlike request 'close' which fires when body is consumed)
-    response.on('close', () => {
+    const onClose = () => {
       // Only abort if response wasn't successfully completed
       if (!response.writableFinished && !this.isAborted) {
         this.isAborted = true;
@@ -150,7 +150,10 @@ export class RequestContextService {
           // Ignore abort errors
         }
       }
-    });
+    };
+    response.on('close', onClose);
+    // This request-scoped service can be created after async guards ran, so the client may already be gone.
+    if (response.destroyed) onClose();
   }
 
   /**
