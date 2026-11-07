@@ -117,7 +117,13 @@ export const observabilityServer = new MCPServer({
 });
 ```
 
-A host can also build a dashboard itself: `toObservabilityDashboard({ dashboard: { rows: [{ widgets: [kpisWidget] }] }, datePreset: '7d' })` returns `{ dashboard, datePreset? }` and throws when the input is invalid.
+The input names each widget, read and column option by a key instead of a `kind`, `source` or `type` field, so a validation error points at the part that's wrong:
+
+```ts
+{ id: 'runs', timeseries: { queries: [{ id: 'runs', metricTimeSeries: { name: 'mastra_agent_duration_ms', aggregation: 'count' } }], options: { … } } }
+```
+
+A host can also build a dashboard itself: `toObservabilityDashboard({ dashboard: { rows: [{ widgets: [runsWidget] }] }, datePreset: '7d' })` returns `{ dashboard, datePreset? }` as a regular `dashboardDefinitionSchema` definition and throws when the input is invalid.
 
 `examples/agent` has a complete version with every read action and an agent that opens dashboards.
 

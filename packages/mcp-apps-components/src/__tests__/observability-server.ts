@@ -1,9 +1,10 @@
-import type { DashboardWidget } from '@mastra/core/storage/dashboards';
+import type { DashboardQuery, DashboardWidget } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import type { AppResources } from '@mastra/mcp';
 import { z } from 'zod';
 import { QUERY_OBSERVABILITY_TOOL } from '../apps/observability-widget/tool';
+import type { ObservabilityWidgetDraft } from '../observability-dashboard';
 import {
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
@@ -15,6 +16,32 @@ export const OBSERVABILITY_WIDGET_URI = 'ui://mastra/observability-widget';
 export type ObservabilityCall = { action: string; args: Record<string, unknown> };
 /** An action's data, or the error the tool fails with. */
 type Answer = { data: unknown } | { error: string };
+
+const readKey = ({ source, request }: { source: DashboardQuery['source']; request?: string }) =>
+  request === undefined
+    ? source
+    : `${source === 'metrics' ? 'metric' : 'score'}${request[0]!.toUpperCase()}${request.slice(1)}`;
+
+/** `widget` as the model writes it, which `toObservabilityDashboard` turns back into `widget`. */
+export function draftOf({ kind, views, ...widget }: DashboardWidget): ObservabilityWidgetDraft {
+  const [first, ...tabs] = views.map(({ queries, columns, ...view }) => ({
+    ...view,
+    queries: queries.map(({ source, request, id, compare, ...read }: DashboardQuery & { request?: string }) => ({
+      ...(id === undefined ? {} : { id }),
+      ...(compare === undefined ? {} : { compare }),
+      [readKey({ source, request })]: read,
+    })),
+    ...(columns
+      ? {
+          columns: columns.map(({ options: { type, ...options } = {}, ...column }) => ({
+            ...column,
+            options: { [type as string]: options },
+          })),
+        }
+      : {}),
+  }));
+  return { ...widget, [kind]: tabs.length ? { ...first, tabs } : first } as ObservabilityWidgetDraft;
+}
 
 /** One KPI counting agent runs, compared with the window before. */
 export const agentRunsKpi: DashboardWidget = {

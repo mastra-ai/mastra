@@ -11,7 +11,7 @@ import { OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY, observabilityWidgetPins } from
 import type { McpAppRef, ObservabilityWidgetPin } from '../host';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
-import { agentRunsChart, agentRunsKpi, observabilityServer } from './observability-server';
+import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
 
 const hosts: Awaited<ReturnType<typeof serveAndConnect>>[] = [];
 afterEach(async () => {
@@ -57,9 +57,9 @@ async function openWidget(
   return bridge;
 }
 
-/** A one-row dashboard holding `widgets`. */
+/** A one-row dashboard holding `widgets`, written as the model writes them. */
 const dashboardOf = (...widgets: DashboardWidget[]): ObservabilityDashboardInput['dashboard'] => ({
-  rows: [{ widgets: widgets as never }],
+  rows: [{ widgets: widgets.map(draftOf) }],
 });
 
 const windowOf = (call: { args: Record<string, unknown> } | undefined) => {
@@ -99,8 +99,8 @@ it("draws every row's widgets, and one failing read leaves the others drawn", as
   await openWidget(mcp, {
     dashboard: {
       rows: [
-        { widgets: [{ ...agentRunsChart, id: undefined, title: 'Runs by status' }, agentRunsChart] },
-        { widgets: [{ ...agentRunsKpi, id: undefined }] },
+        { widgets: [draftOf({ ...agentRunsChart, id: undefined!, title: 'Runs by status' }), draftOf(agentRunsChart)] },
+        { widgets: [draftOf({ ...agentRunsKpi, id: undefined! })] },
       ],
     },
   });
@@ -144,7 +144,9 @@ it('shows the widget as failed, without retrying, when the tool fails the read',
 });
 
 it('says so when the tool returns no dashboard, e.g. because it rejected the one it was given', async () => {
-  await openWidget(observabilityServer(), { dashboard: dashboardOf({ id: 'broken', kind: 'kpis' } as never) });
+  await openWidget(observabilityServer(), {
+    dashboard: { rows: [{ widgets: [{ id: 'broken', kpis: {} } as never] }] },
+  });
 
   // A loader shows until the host hands over the tool's result.
   expect(screen.getByRole('status', { name: 'Loading the dashboard' })).toBeTruthy();

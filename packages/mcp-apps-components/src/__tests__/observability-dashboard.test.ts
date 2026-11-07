@@ -1,5 +1,6 @@
 import { DASHBOARD_MAX_WIDGETS, dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
+import { METRICS_DASHBOARD } from '@mastra/playground-ui/domains/dashboards/metrics-dashboard';
 import { afterEach, expect, it } from 'vitest';
 import {
   OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
@@ -9,7 +10,7 @@ import {
 } from '../observability-dashboard';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
-import { agentRunsChart, agentRunsKpi, observabilityServer } from './observability-server';
+import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
 
 const hosts: Awaited<ReturnType<typeof serveAndConnect>>[] = [];
 afterEach(async () => {
@@ -38,7 +39,8 @@ const metricNamesIn = (inputSchema: unknown) => {
   return [...new Set(names)];
 };
 
-const { id: _id, ...kpiDraft } = agentRunsKpi;
+const { id: _id, ...kpiDraft } = draftOf(agentRunsKpi);
+const chartDraft = draftOf(agentRunsChart);
 
 const widgets = (opened: ReturnType<typeof toObservabilityDashboard>) =>
   opened.dashboard.rows.flatMap(row => row.widgets);
@@ -66,7 +68,7 @@ it('opens through the tool with missing ids assigned and given ids kept', async 
   const result = await client.callTool({
     name: 'showObservabilityDashboard',
     arguments: {
-      dashboard: { rows: [{ widgets: [kpiDraft, kpiDraft] }, { widgets: [agentRunsChart] }] },
+      dashboard: { rows: [{ widgets: [kpiDraft, kpiDraft] }, { widgets: [chartDraft] }] },
       datePreset: '14d',
     } satisfies ObservabilityDashboardInput,
   });
@@ -76,12 +78,54 @@ it('opens through the tool with missing ids assigned and given ids kept', async 
   expect(opened.datePreset).toBe('14d');
   expect(dashboardDefinitionSchema.safeParse(opened.dashboard).success).toBe(true);
   const [first, second, chart] = widgets(opened);
-  expect(first).toMatchObject(kpiDraft);
+  expect(first).toEqual({ ...agentRunsKpi, id: first!.id });
   // The same widget twice gets two ids, so each can be pinned on its own.
   expect(first!.id).toEqual(expect.any(String));
   expect(first!.id).not.toBe(second!.id);
-  expect(chart!.id).toBe(agentRunsChart.id);
+  expect(chart).toEqual(agentRunsChart);
 });
+
+it('names each case by a key holding its fields, and opens to the stored definition', () => {
+  const opened = toObservabilityDashboard({
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              id: 'agent-runs-chart',
+              span: 6,
+              title: 'Agent runs over time',
+              timeseries: {
+                queries: [
+                  {
+                    id: 'runs',
+                    metricTimeSeries: { name: ['mastra_agent_duration_ms'], aggregation: 'count', groupBy: ['status'] },
+                  },
+                ],
+                options: {
+                  chart: 'stackedBar',
+                  format: 'count',
+                  series: [{ dataKey: 'runs', label: 'Runs', color: 'green', value: { query: 'runs' } }],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  expect(widgets(opened)).toEqual([agentRunsChart]);
+});
+
+it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget.id, widget] as const))(
+  "opens Studio's %s widget, written as a draft, to the same widget",
+  (_, widget) => {
+    const opened = toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draftOf(widget)] }] } });
+
+    expect(widgets(opened)).toEqual([widget]);
+  },
+);
 
 it("gives a fresh id on every open, so a widget doesn't collide with the one pinned last time", () => {
   const input: ObservabilityDashboardInput = { dashboard: { rows: [{ widgets: [kpiDraft] }] } };
@@ -100,24 +144,21 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
         {
           widgets: [
             {
-              ...agentRunsKpi,
-              kind: 'kpis',
-              views: [
-                {
-                  ...agentRunsKpi.views[0]!,
-                  options: {
-                    items: [
-                      {
-                        label: 'Runs',
-                        icon: 'bot',
-                        format: 'count',
-                        value: { query: 'missing' },
-                        detail: 'in this range',
-                      },
-                    ],
-                  },
+              ...kpiDraft,
+              kpis: {
+                ...kpiDraft.kpis!,
+                options: {
+                  items: [
+                    {
+                      label: 'Runs',
+                      icon: 'bot',
+                      format: 'count',
+                      value: { query: 'missing' },
+                      detail: 'in this range',
+                    },
+                  ],
                 },
-              ],
+              },
             } as never,
           ],
         },
@@ -125,10 +166,43 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
     },
     "reads query 'missing', which the view doesn't have",
   ],
-  ['a kind no renderer draws', { rows: [{ widgets: [{ ...agentRunsKpi, kind: 'pie' } as never] }] }, 'kind'],
+  [
+    'a kind no renderer draws',
+    { rows: [{ widgets: [{ span: 12, pie: kpiDraft.kpis } as never] }] },
+    'A widget takes exactly one of `kpis`, `timeseries`, `table`, `scores`',
+  ],
+  [
+    'a widget of two kinds',
+    { rows: [{ widgets: [{ ...kpiDraft, scores: kpiDraft.kpis } as never] }] },
+    'not `kpis`, `scores`',
+  ],
+  [
+    'a chart query setting its own interval',
+    {
+      rows: [
+        {
+          widgets: [
+            {
+              ...chartDraft,
+              timeseries: {
+                ...chartDraft.timeseries!,
+                queries: [
+                  {
+                    id: 'runs',
+                    metricTimeSeries: { ...chartDraft.timeseries!.queries[0]!.metricTimeSeries!, interval: '1h' },
+                  } as never,
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+    'interval',
+  ],
   [
     'two widgets with one id',
-    { rows: [{ widgets: [agentRunsKpi as never, agentRunsKpi as never] }] },
+    { rows: [{ widgets: [draftOf(agentRunsKpi), draftOf(agentRunsKpi)] }] },
     "Duplicate widget id 'agent-runs'",
   ],
   [
@@ -167,13 +241,16 @@ it("lists the catalog's metric names, rejects any other, and lists new ones once
             {
               widgets: [
                 {
-                  ...agentRunsChart,
-                  views: [
-                    {
-                      ...agentRunsChart.views[0]!,
-                      queries: [{ ...agentRunsChart.views[0]!.queries[0]!, name: [name] } as never],
-                    },
-                  ],
+                  ...chartDraft,
+                  timeseries: {
+                    ...chartDraft.timeseries!,
+                    queries: [
+                      {
+                        id: 'runs',
+                        metricTimeSeries: { ...chartDraft.timeseries!.queries[0]!.metricTimeSeries!, name: [name] },
+                      } as never,
+                    ],
+                  },
                 },
               ],
             },
