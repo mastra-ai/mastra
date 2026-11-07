@@ -18,10 +18,10 @@ describe('streaming client disconnect', () => {
 
   async function setup({
     responseType,
-    handlerDelayMs = 0,
+    holdUntilDisconnect = false,
   }: {
     responseType: 'datastream-response' | 'stream';
-    handlerDelayMs?: number;
+    holdUntilDisconnect?: boolean;
   }) {
     const context = await createDefaultTestContext();
     const app = express();
@@ -29,15 +29,20 @@ describe('streaming client disconnect', () => {
 
     const state = { pulls: 0 };
     const canceled = vi.fn();
+    let handlerEntered!: () => void;
+    const handlerStarted = new Promise<void>(resolve => (handlerEntered = resolve));
     let handlerReturned!: () => void;
     const handlerDone = new Promise<void>(resolve => (handlerReturned = resolve));
+    let serverSawClose!: () => void;
+    const disconnected = new Promise<void>(resolve => (serverSawClose = resolve));
 
     const route: ServerRoute<any, any, any> = {
       method: 'POST',
       path: '/test/disconnect',
       responseType,
       handler: async () => {
-        await sleep(handlerDelayMs);
+        handlerEntered();
+        if (holdUntilDisconnect) await disconnected;
         handlerReturned();
         const body = new ReadableStream({
           async pull(controller) {
@@ -57,6 +62,10 @@ describe('streaming client disconnect', () => {
           : new Response(body, { status: 200, headers: { 'Content-Type': 'text/plain' } });
       },
     };
+    app.use((_req, res, next) => {
+      res.on('close', serverSawClose);
+      next();
+    });
     app.use(adapter.createContextMiddleware());
     await adapter.registerRoute(app, route, { prefix: '' });
 
@@ -66,7 +75,7 @@ describe('streaming client disconnect', () => {
     const address = server.address();
     const port = typeof address === 'object' && address ? address.port : 0;
 
-    return { url: `http://localhost:${port}/test/disconnect`, state, canceled, handlerDone };
+    return { url: `http://localhost:${port}/test/disconnect`, state, canceled, handlerStarted, handlerDone };
   }
 
   it('cancels a datastream-response body and stops pulling when the client aborts mid-body', async () => {
@@ -86,11 +95,14 @@ describe('streaming client disconnect', () => {
   it.each(['datastream-response', 'stream'] as const)(
     'cancels a %s body when the client aborts before the handler returns',
     async responseType => {
-      const { url, state, canceled, handlerDone } = await setup({ responseType, handlerDelayMs: 200 });
+      const { url, state, canceled, handlerStarted, handlerDone } = await setup({
+        responseType,
+        holdUntilDisconnect: true,
+      });
 
       const client = new AbortController();
       const request = fetch(url, { method: 'POST', signal: client.signal }).catch(() => undefined);
-      await sleep(50);
+      await handlerStarted;
       expect(state.pulls).toBe(0);
       client.abort();
       await request;
