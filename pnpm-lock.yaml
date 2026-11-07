@@ -7487,6 +7487,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
