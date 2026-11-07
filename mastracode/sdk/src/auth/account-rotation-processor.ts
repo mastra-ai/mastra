@@ -26,7 +26,7 @@ import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Process
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
+import { resolveModel, resolveRequestModelRoute, resolveRequestThinkingLevel } from '../agents/model.js';
 import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
@@ -105,6 +105,9 @@ const NETWORK_MESSAGE_PATTERN =
 
 const MAX_CAUSE_DEPTH = 4;
 
+/** Why a request moved to another model: accounts exhausted, provider down, or a safety refusal. */
+export type ModelFallbackReason = 'pool-exhausted' | 'persistent-outage' | 'refusal';
+
 /** Persisted data-part type for a model-route hop. */
 export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
 
@@ -112,7 +115,7 @@ export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as cons
 export interface ModelFallbackPartData {
   from: { entryId: string; label: string };
   to: { entryId: string; label: string };
-  reason: 'pool-exhausted' | 'persistent-outage';
+  reason: ModelFallbackReason;
   at: string;
 }
 
@@ -348,7 +351,7 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
 
 /** Transcript line for a model-route hop; shared by the live info event and the TUI's history render. */
 export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
-  const reason = REASON_TEXT[data.reason] ?? data.reason;
+  const reason = data.reason === 'refusal' ? 'model refused' : (REASON_TEXT[data.reason] ?? data.reason);
   return `Switched model route: ${data.from.label} → ${data.to.label} (${reason})`;
 }
 
@@ -359,8 +362,8 @@ export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
  * model-fallback reason; history parsed from another build's part must be
  * rejected instead.
  */
-export function isModelFallbackReason(value: unknown): value is ModelFallbackPartData['reason'] {
-  return value === 'pool-exhausted' || value === 'persistent-outage';
+export function isModelFallbackReason(value: unknown): value is ModelFallbackReason {
+  return value === 'pool-exhausted' || value === 'persistent-outage' || value === 'refusal';
 }
 
 async function emitAccountSwitchPart(
@@ -404,6 +407,8 @@ function providerFromSession(
  * spent, which is exactly the hop condition. Implements `processAPIError`
  * ONLY (see the file header for the runner-order rationale).
  */
+type RouteEntryState = { id?: unknown; label?: unknown; modelId?: unknown; accountId?: unknown };
+
 /** Cached per-request model route cascade. */
 interface ModelRouteCascade {
   entries: Array<{ id: string; label: string; modelId: string; accountId?: string }>;
@@ -726,23 +731,14 @@ export class AccountRotationProcessor implements Processor {
     }
     const controller = getRoutingController(args);
     const state = controller?.getState?.();
-    const route = (
-      state?.modelRoute as
-        | { entries?: Array<{ id?: unknown; label?: unknown; modelId?: unknown; accountId?: unknown }> }
-        | undefined
-    )?.entries;
-    const pending = state?.mastracodePendingModelFallback as
-      | { toEntryId?: unknown; threadId?: unknown }
-      | null
-      | undefined;
-    const pendingMatchesThread =
-      pending &&
-      typeof pending.toEntryId === 'string' &&
-      (pending.threadId === undefined || pending.threadId === controller?.threadId);
-    const startIndex = pendingMatchesThread
-      ? route?.findIndex(entry => entry.id === pending.toEntryId)
-      : route?.findIndex(entry => entry.modelId === controller?.session?.modelId);
-    if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
+    // Same resolver getDynamicModel uses: a hop is only announced when core
+    // was actually given a next model to move to.
+    const { route, startIndex } = resolveRequestModelRoute(
+      state as Parameters<typeof resolveRequestModelRoute<RouteEntryState>>[0],
+      controller?.threadId,
+      typeof controller?.session?.modelId === 'string' ? controller.session.modelId : undefined,
+    );
+    if (!route || startIndex === undefined) {
       args.state.modelRouteCascade = null;
       return null;
     }

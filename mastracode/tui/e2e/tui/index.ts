@@ -188,6 +188,7 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
+import { refusalFallbackScenario } from './refusal-fallback.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
@@ -473,6 +474,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'account-routing-targeted': accountRoutingTargetedScenario,
   'pack-fallback': packFallbackScenario,
   'pack-flag-startup': packFlagStartupScenario,
+  'refusal-fallback': refusalFallbackScenario,
   'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,

@@ -23,6 +23,8 @@ export interface ModelRouteEntry {
 
 export interface ModelRoute {
   entries: ModelRouteEntry[];
+  /** Where a cyber refusal goes instead of the next entry, from the pack's cyber fallback setting. */
+  cyberFallback?: ModelRouteEntry;
 }
 
 export interface PendingModelFallback {
@@ -174,6 +176,14 @@ export const stateSchema = z
             }),
           )
           .max(MODEL_ROUTE_MAX_ENTRIES),
+        cyberFallback: z
+          .object({
+            id: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
+            label: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
+            modelId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
+            accountId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH).optional(),
+          })
+          .optional(),
       })
       .optional(),
     subagentModelId: z.string().optional(),

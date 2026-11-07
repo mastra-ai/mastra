@@ -460,6 +460,50 @@ export function resolveRequestThinkingLevel(
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
+type RouteControllerState = {
+  modelRoute?: { entries?: Array<{ id?: unknown; modelId?: unknown }> };
+  mastracodePendingModelFallback?: { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
+};
+
+/**
+ * The model this request runs on and where it sits in the session's fallback
+ * route. `startIndex` is set only when core will get a model array for the
+ * route (the running model is the route entry at that index and another entry
+ * follows). `getDynamicModel` builds the array from it and the account-rotation
+ * cascade announces hops from it, so the two can never disagree about whether
+ * a next model exists.
+ */
+export function resolveRequestModelRoute<TEntry extends { id?: unknown; modelId?: unknown }>(
+  state: (Omit<RouteControllerState, 'modelRoute'> & { modelRoute?: { entries?: TEntry[] } }) | undefined,
+  threadId: unknown,
+  sessionModelId: string | undefined,
+): { modelId: string | undefined; route: TEntry[] | undefined; startIndex: number | undefined } {
+  const pendingState = state?.mastracodePendingModelFallback;
+  const pendingFallback =
+    pendingState &&
+    (pendingState.threadId === undefined ||
+      (typeof pendingState.threadId === 'string' && pendingState.threadId === threadId))
+      ? pendingState
+      : undefined;
+  const pendingModelId =
+    pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
+      ? pendingFallback.toModelId
+      : undefined;
+  const modelId = pendingModelId ?? sessionModelId;
+  const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
+  const pendingEntryId =
+    pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
+  const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
+  const onRoute =
+    modelId !== undefined &&
+    route !== undefined &&
+    startIndex !== undefined &&
+    startIndex >= 0 &&
+    route.length - startIndex >= 2 &&
+    route[startIndex]?.modelId === modelId;
+  return { modelId, route, startIndex: onRoute ? startIndex : undefined };
+}
+
 /**
  * Dynamic model function that reads the current model and optional ordered
  * fallback route from controller state. Route entry ids are opaque host-owned
@@ -472,26 +516,12 @@ export function getDynamicModel(
   { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-  const state = controller?.getState?.() as
-    | {
-        modelRoute?: {
-          entries?: Array<{ id?: unknown; modelId?: unknown }>;
-        };
-        mastracodePendingModelFallback?: { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
-      }
-    | undefined;
-  const pendingState = state?.mastracodePendingModelFallback;
-  const pendingFallback =
-    pendingState &&
-    (pendingState.threadId === undefined ||
-      (typeof pendingState.threadId === 'string' && pendingState.threadId === controller?.threadId))
-      ? pendingState
-      : undefined;
-  const pendingModelId =
-    pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
-      ? pendingFallback.toModelId
-      : undefined;
-  const modelId = pendingModelId ?? controller?.session?.modelId;
+  const state = controller?.getState?.() as RouteControllerState | undefined;
+  const { modelId, route, startIndex } = resolveRequestModelRoute(
+    state,
+    controller?.threadId,
+    controller?.session?.modelId,
+  );
   if (!modelId) {
     if (!controller) {
       throw new Error(
@@ -510,12 +540,8 @@ export function getDynamicModel(
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
   const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
-  const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
-  const pendingEntryId =
-    pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
-  const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
-  const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
-  if (!activeRoute || activeRoute.length < 2 || activeRoute[0]?.modelId !== modelId) return primary;
+  if (!route || startIndex === undefined) return primary;
+  const activeRoute = route.slice(startIndex);
 
   const firstId =
     typeof activeRoute[0]?.id === 'string' && activeRoute[0].id.length > 0 ? activeRoute[0].id : undefined;
