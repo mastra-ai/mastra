@@ -13,6 +13,7 @@ import type {
 
 import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { workStageCarries } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -83,11 +84,21 @@ function exitToolRule(
   boards: BoardRegistry,
   board: string,
   item: Card,
+  role: string,
   toolResult: CompletedToolResult,
 ): ((context: FactoryToolResultRuleContext) => FactoryRuleDecision | undefined) | undefined {
-  const phase = item.stages.length === 1 ? boards.get(board)?.phases[item.stages[0]!] : undefined;
-  const exitTool = phase?.kind === 'working' ? phase.exitTool : undefined;
+  const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
+  const definition = boards.get(board);
+  const phase = stage === undefined ? undefined : definition?.phases[stage];
+  if (phase?.kind !== 'working') return undefined;
+  const exitTool = phase.exitTool;
   if (!exitTool?.next || exitTool.id !== toolResult.toolName) return undefined;
+  // Only the session that works the card in this phase finishes it: one in another context that
+  // still holds the card (a triage session, say) calling the same tool leaves the card where it is.
+  // A Work card planned before Planning ran in the `work` context still holds its `plan` session.
+  if (role !== phase.runner.context && workStageCarries(definition, stage!, role, undefined) !== true) {
+    return undefined;
+  }
   const next = exitTool.next;
   return context => {
     if (toolResult.status !== 'success') return undefined;
@@ -620,7 +631,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const board = boardForWorkItem(item);
     const boards = await this.boards.load(binding);
     const rule =
-      exitToolRule(boards, board, item, toolResult) ?? resolveBoardToolRule(boards, board, toolResult.toolName);
+      exitToolRule(boards, board, item, binding.role, toolResult) ??
+      resolveBoardToolRule(boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
       binding.id,

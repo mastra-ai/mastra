@@ -267,8 +267,6 @@ export interface FactoryRulePhaseContext {
   role?: string;
   /** Phases the card may move to from here. */
   nextPhases: readonly string[];
-  /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
-  outcomes: readonly string[];
 }
 
 export interface FactoryRuleContextBase {
@@ -291,8 +289,6 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
-  /** Project switch: Work items get an independent self-review before the change request opens. Unset means off. */
-  selfReviewEnabled?: boolean;
 }
 
 export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {
@@ -581,11 +577,6 @@ export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
-
-export interface FactoryBoardRuleLeaf {
-  onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
-  onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-}
 
 export type FactoryRuleRejectionCode =
   | 'forbidden'

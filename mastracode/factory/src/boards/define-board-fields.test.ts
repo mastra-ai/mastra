@@ -5,6 +5,7 @@ import type { FactoryStageRuleContext } from '../rules/types.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
+import { phaseRunDecision } from './phase-runner.js';
 import { workBoard } from './work.js';
 
 const LOW_EFFORT: RuleGroup = {
@@ -344,7 +345,7 @@ describe('defineBoard phase fields', () => {
     expect(board.phases.build).toMatchObject({
       runner: { goal: { objective: 'Notes are published.', maxRuns: 5 } },
     });
-    expect(await board.rules.build!.issue!.onEnter!(stageContext('build'))).toMatchObject({
+    expect(phaseRunDecision(board, 'build', stageContext('build'))).toMatchObject({
       skillName: 'release-notes',
       goal: { objective: 'Notes are published.', maxRuns: 5 },
     });
@@ -363,37 +364,41 @@ describe('defineBoard phase fields', () => {
     expect(withGoal({ objective: 'Ship.', judge: 'x' })).toThrow('runner.goal may only set objective and maxRuns.');
   });
 
-  it('starts the runner skill for sources without a handler and adds instructions to every run', async () => {
+  it('starts the runner skill with its instructions for every source, ignoring a declared onEnter', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const onEnter = vi.fn(() => ({
+      type: 'invokeSkill',
+      idempotencyKey: 'manual',
+      role: 'release',
+      prompt: 'Ship it.',
+    }));
     const board = release({
       backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
       build: {
         name: 'Build',
         kind: 'working',
         runner: { context: 'release', skill: 'release-notes', instructions: 'Keep it short.' },
-        onEnter: {
-          manual: () => ({ type: 'invokeSkill', idempotencyKey: 'manual', role: 'release', prompt: 'Ship it.' }),
-        },
+        onEnter: { manual: onEnter },
       },
     });
 
-    expect(await board.rules.build!.issue!.onEnter!(stageContext('build'))).toEqual({
+    const expected = {
       type: 'invokeSkill',
-      idempotencyKey: 'ingress-1:release-notes',
+      idempotencyKey: 'ingress-1:build:release-notes',
       role: 'release',
       skillName: 'release-notes',
       arguments: 'Work item (https://github.test/acme/repo/issues/7)\n\nKeep it short.',
       // Entering from another phase, the skill starts even when that phase's agent made the move.
       startsAfterOwnMove: true,
-    });
-    expect(await board.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
-      prompt: 'Ship it.\n\nKeep it short.',
-    });
+    };
+    expect(phaseRunDecision(board, 'build', stageContext('build'))).toEqual(expected);
+    expect(phaseRunDecision(board, 'build', { ...stageContext('build'), source: 'manual' })).toEqual(expected);
+    expect(onEnter).not.toHaveBeenCalled();
 
-    // Declaring the defined phase again, as a board that extends this one does, keeps one copy.
+    // Declaring the defined phase again, as a board that extends this one does, starts the same run.
     const again = release({ backlog: board.phases.backlog, build: board.phases.build });
-    expect(await again.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
-      prompt: 'Ship it.\n\nKeep it short.',
-    });
+    expect(phaseRunDecision(again, 'build', stageContext('build'))).toEqual(expected);
     expect(() =>
       release({
         backlog: { name: 'Backlog', kind: 'resting' },
@@ -411,20 +416,33 @@ describe('defineBoard phase fields', () => {
       initialPhase: 'backlog',
       phases: {
         backlog: { title: 'Backlog', kind: 'resting', next: 'build' },
-        build: { title: 'Build', kind: 'working', role: 'publisher', outcomes: { done: 'done' } },
+        build: {
+          title: 'Build',
+          kind: 'working',
+          role: 'publisher',
+          outcomes: { done: 'done' },
+          onEnter: { issue: () => undefined },
+          onExit: { issue: () => undefined },
+        },
         done: { title: 'Done', kind: 'terminal' },
       },
     } as const;
 
-    defineBoard(legacy);
+    const board = defineBoard(legacy);
     defineBoard(legacy);
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]![0]).toBe(
       '[Mastra Factory] Board "legacy-release" uses deprecated fields: title → name, phases.backlog.title → name, ' +
         'phases.backlog.next → nextPhases, phases.build.title → name, phases.build.role → runner.context, ' +
-        'phases.done.title → name. They still work but will be removed in a future release.',
+        'phases.build.outcomes → nextPhases, phases.done.title → name. They still work but will be removed in a ' +
+        'future release. It also declares phases.build.onEnter, phases.build.onExit, which are ignored; use ' +
+        "runner.skill to start a phase's run.",
     );
+    // The outcome's target stays an allowed move; the handlers are not kept on the board.
+    expect(board.phases.build.nextPhases).toEqual(['done']);
+    expect(board.phases.build).not.toHaveProperty('onEnter');
+    expect(board.phases.build).not.toHaveProperty('onExit');
   });
 
   it('warns once per board that a transition policy is deprecated, and still keeps the policy', () => {
@@ -469,7 +487,7 @@ describe('defineBoard phase fields', () => {
           name: 'Build',
           kind: 'working',
           runner: { context: 'publisher' },
-          outcomes: { done: 'done' },
+          nextPhases: ['done'],
         },
         done: { name: 'Done', kind: 'terminal' },
       },

@@ -1726,7 +1726,7 @@ describe('GithubRules', () => {
     ]);
   });
 
-  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-rereview pass', async () => {
+  it('dispatches a re-review transition back into PR review and queues a fresh review run', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const card = await workItems.upsert({
       orgId: 'org-1',
@@ -1793,14 +1793,15 @@ describe('GithubRules', () => {
     await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'committed' });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    // The card is back in Reviewing and the review onEnter rule queued a fresh pass.
+    // The card is back in PR review and its runner queued a fresh pass; the work-item signal
+    // tells factory-review which procedure (first pass or re-review) fits.
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({ id: card.item.id, stages: ['pr-review'] });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' }),
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
         }),
       ]),
     );
@@ -1868,21 +1869,20 @@ describe('GithubRules', () => {
     expect(item).toMatchObject({ id: card.item.id, stages: ['pr-review'] });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
-    // A completed pass has no active run to supersede. Its re-entry dispatches
-    // factory-rereview without aborting the newly prepared session.
+    // Entering from Done has no active run to supersede, so the runner starts factory-review
+    // without aborting the newly prepared session.
     const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
     expect(invocations).toHaveLength(1);
     expect(invocations[0]!.decision).toMatchObject({
       type: 'invokeSkill',
-      skillName: 'factory-rereview',
+      skillName: 'factory-review',
       role: 'review',
     });
     expect(invocations[0]!.decision).not.toHaveProperty('cancelInFlight');
 
     // A follow-up push while the card is still Reviewing supersedes the pass it
-    // just started, which is now reading code the push replaced. Re-entering
-    // from `review` rather than `done` means there is no completed pass left to
-    // reconcile against, so the fresh run is a plain review.
+    // just started, which is now reading code the push replaced: same-phase re-entry cancels
+    // the run in flight and resumes the review skill on the new head.
     await expect(service.ingest(pullRequest('synchronize', 'delivery-push-2'))).resolves.toEqual({
       status: 'committed',
     });
@@ -1901,6 +1901,7 @@ describe('GithubRules', () => {
       skillName: 'factory-review',
       role: 'review',
       cancelInFlight: true,
+      resume: true,
     });
   });
 
@@ -1951,10 +1952,12 @@ describe('GithubRules', () => {
     // finished. Run it at exactly that point.
     const commitRuleEvaluation = workItems.commitRuleEvaluation.bind(workItems);
     const pushStatuses: string[] = [];
+    const headsAtDispatch: unknown[] = [];
     workItems.commitRuleEvaluation = async input => {
       const committed = await commitRuleEvaluation(input);
       if (input.ingress.identity.includes('delivery-push-b')) pushStatuses.push(committed.status);
       if (committed.status === 'committed' && input.ingress.identity.endsWith('delivery-push-b')) {
+        headsAtDispatch.push((await workItems.get({ orgId: 'org-1', id: card.item.id }))?.metadata.pullRequestHeadSha);
         await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
       }
       return committed;
@@ -1993,13 +1996,11 @@ describe('GithubRules', () => {
     const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
     expect(invocations).toHaveLength(1);
     const kickoff = invocations[0]!.decision;
-    expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' });
-    const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
-    // The new run names the pushed head as the one to review, and the head the
-    // recorded verdict covered as superseded.
-    expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
-    expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
-    expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+    expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' });
+    // The run's head line comes from the factory-work-item signal, which renders the card's
+    // recorded head: it must be the pushed head by the time the run starts, with the head the
+    // recorded verdict covered kept as superseded (see work-item-state-processor.test.ts).
+    expect(headsAtDispatch).toEqual([pushedHeadSha]);
     const stored = await workItems.get({ orgId: 'org-1', id: card.item.id });
     expect(stored?.metadata).toMatchObject({ pullRequestHeadSha: pushedHeadSha, reviewedHeadSha });
   });
@@ -2888,7 +2889,7 @@ describe('GithubRules', () => {
     });
   });
 
-  it('uses verified Factory provenance to link an opened Review card and carry Work through review to Done', async () => {
+  it('uses verified Factory provenance to link an opened pull request and carry Work through PR review to Done', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
       orgId: 'org-1',
@@ -2939,7 +2940,7 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: work.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'pr-review' }),
         }),
         expect.objectContaining({
           workItemId: work.item.id,
@@ -5406,14 +5407,20 @@ describe('pull request cards on the Work board', () => {
     const harness = await workBoardHarness('read', { withRoutes: true });
     const { workId } = await authoredPullRequest(harness);
 
-    // Attached by the authoring card's own evaluation, so no intake route runs: the card goes
-    // out for self-review, and the pull request is not reviewed twice.
+    // Attached by the authoring card's own evaluation, so no intake route runs. A pull request
+    // opened from Building skipped self-review, so the card goes to PR review, and the pull
+    // request is reviewed once: by that card's PR review runner, not on a card of its own.
     const cards = await harness.cards();
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toMatchObject({ id: workId, board: 'work', stages: ['review'] });
+    expect(cards[0]).toMatchObject({ id: workId, board: 'work', stages: ['pr-review'] });
     expect(cards[0]?.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
     expect(cards[0]?.metadata).not.toHaveProperty('intakeRouteId');
-    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
+      expect.objectContaining({
+        workItemId: workId,
+        decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }),
+      }),
+    ]);
   });
 
   it('files a Factory-authored pull request on the card that authored it, and moves that card to Done on merge', async () => {
@@ -5429,10 +5436,12 @@ describe('pull request cards on the Work board', () => {
     expect(opened.filter(entry => entry.decision.type === 'transition')).toEqual([
       expect.objectContaining({
         workItemId: workId,
-        decision: expect.objectContaining({ board: 'work', stage: 'review' }),
+        decision: expect.objectContaining({ board: 'work', stage: 'pr-review' }),
       }),
     ]);
-    expect(opened.filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+    expect(opened.filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
+      expect.objectContaining({ decision: expect.objectContaining({ skillName: 'factory-review' }) }),
+    ]);
 
     await harness.service.ingest(pullRequest('closed', 'delivery-merge', true));
     await harness.dispatch();
@@ -5508,10 +5517,12 @@ describe('pull request cards on the Work board', () => {
       stage: reviewPhase(board),
       reenter: true,
     });
+    // Same-phase re-entry supersedes the run in flight and resumes factory-review on the new head.
     expect(decisions.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
       role: 'review',
-      skillName: 'factory-rereview',
+      skillName: 'factory-review',
       cancelInFlight: true,
+      resume: true,
     });
   });
 
@@ -5567,7 +5578,7 @@ describe('pull request cards on the Work board', () => {
       });
       expect(
         (await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision,
-      ).toMatchObject({ role: 'review', skillName: 'factory-rereview' });
+      ).toMatchObject({ role: 'review', skillName: 'factory-review' });
     },
   );
 

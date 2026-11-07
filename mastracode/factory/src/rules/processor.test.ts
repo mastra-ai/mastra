@@ -774,21 +774,20 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(signal?.contents).toContain('Factory release phase: Release Queue (queued)');
   });
 
-  it('runs onEnter once when a tool rule re-enters the current stage', async () => {
+  it("starts the phase's runner once when a tool rule re-enters the current stage", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const onEnter = vi.fn(() => ({
-      type: 'invokeSkill' as const,
-      idempotencyKey: 'restart-build',
-      role: 'builder',
-      prompt: 'Start the build over.',
-    }));
     const board = defineBoard({
       id: 'custom',
       title: 'Custom',
       initialPhase: 'backlog',
       phases: {
         backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
-        building: { title: 'Building', kind: 'working', role: 'builder', next: 'done', onEnter: { issue: onEnter } },
+        building: {
+          title: 'Building',
+          kind: 'working',
+          runner: { skill: 'build-it', context: 'builder' },
+          next: 'done',
+        },
         done: { title: 'Done', kind: 'terminal' },
       },
       tools: {
@@ -835,12 +834,20 @@ describe('FactoryPhaseStateProcessor', () => {
       causalChain: [],
     });
 
-    expect(onEnter).toHaveBeenCalledOnce();
     const queued = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
       entry => entry.decision.type === 'invokeSkill',
     );
+    // Re-entering supersedes the run in flight and resumes the skill.
     expect(queued).toEqual([
-      expect.objectContaining({ decision: expect.objectContaining({ idempotencyKey: 'restart-build' }) }),
+      expect.objectContaining({
+        decision: expect.objectContaining({
+          role: 'builder',
+          skillName: 'build-it',
+          cancelInFlight: true,
+          resume: true,
+          idempotencyKey: expect.stringMatching(/:building:build-it$/),
+        }),
+      }),
     ]);
   });
 
@@ -1247,7 +1254,7 @@ describe('FactoryPhaseStateProcessor', () => {
       storage,
     }).computeStateSignal(stateArgs(requestContext()));
     expect(signal?.contents).toContain(
-      'This phase ends when submit_plan succeeds and is approved; that moves the card on.',
+      'This phase ends when submit_plan succeeds and is approved; that moves the card on to Building.',
     );
     expect(signal?.contents).toContain(
       'You can move it on to a working phase yourself with factory_transition_work_item only when submit_plan is auto-approved for this card; otherwise a person approves the handoff.',

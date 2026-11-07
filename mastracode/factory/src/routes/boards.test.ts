@@ -384,24 +384,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       editable: true,
       revision: 1,
     });
-    // What the code behaviour holds fixed, so an editor can show it read-only.
+    // What the code behaviour holds fixed, so an editor can show it read-only: only the moves Work's
+    // code makes. Runners and exit tools are plain stored fields, so nothing locks them.
     const read = await replicaA.send('GET', `${base}/work`);
     expect(read.body).toMatchObject({
       canEdit: true,
       board: {
         codeBehaviour: {
-          intake: {
-            handlers: false,
-            exitToolId: null,
-            requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
-          },
-          triage: { handlers: true, exitToolId: null },
-          planning: { handlers: true, exitToolId: 'submit_plan' },
-          'pr-review': { handlers: true, exitToolId: null },
-          canceled: { handlers: false, exitToolId: null },
+          intake: { requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'] },
+          triage: { requiredNextPhases: ['intake', 'planning', 'done', 'canceled'] },
+          planning: { requiredNextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'] },
+          'pr-review': { requiredNextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'] },
+          canceled: { requiredNextPhases: ['intake', 'pr-review'] },
         },
       },
     });
+    for (const locks of Object.values(read.body.board.codeBehaviour as Record<string, object>)) {
+      expect(Object.keys(locks)).toEqual(['requiredNextPhases']);
+    }
   });
 
   it("lets an admin edit the Work board's automation, which another replica serves after the recheck window", async () => {
@@ -478,25 +478,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
           nextPhases: phase.nextPhases?.filter(next => next !== 'planning'),
         })),
       },
-      editPhase(work, 'triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })),
-      editPhase(work, 'planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })),
       editPhase(work, 'planning', phase => ({
         ...phase,
+        // The exit tool's next phase must be one of nextPhases, so it goes too.
+        exitTool: { id: 'submit_plan', autoApprove: false },
         nextPhases: phase.nextPhases?.filter(next => next !== 'execute'),
       })),
-      editPhase(work, 'execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })),
+      editPhase(work, 'done', phase => ({ ...phase, kind: 'resting' })),
     ];
     const messages = [
       /"planning" has code behaviour on board "work"; it can't be removed\./,
-      /keep runner\.context/,
-      /waits for exit tool "submit_plan"; keep exitTool\.id\./,
       /moves cards from it to "execute"; keep it in nextPhases\./,
-      /move cards on without an exit tool; leave exitTool unset\./,
+      /Phase "done" must stay terminal; its code behaviour depends on it\./,
     ];
     for (const [index, body] of cases.entries()) {
       const response = await replicaA.send('PATCH', `${base}/work`, body);
       expect(response.status).toBe(422);
-      expect(response.body.error).toBe('code_behaviour');
+      expect(response.body.error, JSON.stringify(response.body)).toBe('code_behaviour');
       expect(response.body.message).toMatch(messages[index]!);
       expect(response.body.conflicts).toContainEqual(expect.stringMatching(messages[index]!));
     }
@@ -505,14 +503,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(removal.body.conflicts).toContainEqual(
       'Phase "triage": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
     );
-    const both = editPhase({ ...cases[1]!, revision: 1 }, 'planning', phase => ({
-      ...phase,
-      exitTool: { id: 'finish_plan', autoApprove: false },
-    }));
+    const both = editPhase({ ...cases[1]!, revision: 1 }, 'done', phase => ({ ...phase, kind: 'resting' }));
     expect((await replicaA.send('PATCH', `${base}/work`, both)).body.conflicts).toHaveLength(2);
 
     expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1 });
     expect(await a.boards.readVersion(scope)).toBe(version);
+  });
+
+  it("lets an admin change Work's runners and exit tools, which no code handler holds any more", async () => {
+    const { a, scope, base, replicaA } = await setup();
+    const work = await getBoard(replicaA.send, base, 'work');
+    const edits = [
+      editPhase(work, 'triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })),
+      editPhase(work, 'planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })),
+      editPhase(work, 'execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })),
+    ];
+    for (const [index, body] of edits.entries()) {
+      const saved = await replicaA.send('PATCH', `${base}/work`, { ...body, expectedRevision: index + 1 });
+      expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    }
+    const stored = (await a.boards.get(scope, 'work'))!;
+    expect(stored.revision).toBe(edits.length + 1);
+    expect(stored.phases.find(phase => phase.key === 'execute')!.exitTool).toMatchObject({ id: 'finish_build' });
   });
 
   it("serves an app board's row as the project's own board once the app stops defining it", async () => {

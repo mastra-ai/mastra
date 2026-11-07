@@ -8,7 +8,7 @@ import {
   reviewedChangeRequest,
   reviewsPullRequest,
 } from '../../boards/index.js';
-import { hasRecordedVerdict } from '../../boards/pull-request-review.js';
+import { hasRecordedVerdict } from '../../boards/semantics.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
@@ -187,9 +187,11 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // Opening a pull request is evaluated once per card it concerns. This rule
   // files the pull request's own card, which is the arrival — the
   // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
-  // evaluation only moves it out for review: Building means "no pull request
-  // yet", Review means one is open. The card rests there through every round of
-  // feedback — the builder is woken in place — until the merge closes it.
+  // evaluation only moves it out for review. Self-review (Review) runs before a
+  // pull request exists and opens it itself, so a pull request opened while the
+  // card is still in Building skipped self-review: the card goes to PR review.
+  // It rests there through every round of feedback — the builder is woken in
+  // place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
     if (!authoringCard(context) || context.pullRequest.state !== 'open') return;
     if (!context.item.stages.includes('execute')) return;
@@ -202,7 +204,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:out-for-review`,
       board: 'work',
-      stage: 'review',
+      stage: 'pr-review',
     } as const;
   }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
@@ -440,7 +442,7 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   // Intake has not started a review pass yet, so a push there is just more of
   // the code the first pass will read. A push to a card sitting in Reviewing is
   // different: it invalidates whatever that pass is reading, so re-enter the
-  // stage to supersede it. `reviewPullRequest` cancels the stale run and picks
+  // stage to supersede it. the phase runner cancels the stale run and the review skill picks
   // the right skill for the entry it sees.
   if (context.item.stages.some(stage => stage === 'intake')) return;
   // A fork's author controls its head branch, so an untrusted push must not be

@@ -3,7 +3,6 @@ import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
   FACTORY_GITHUB_EVENTS,
-  FACTORY_RULE_SOURCES,
   FACTORY_GITLAB_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
@@ -21,8 +20,6 @@ import type {
   FactoryLinearEventName,
   FactoryLinearRuleContext,
   FactoryRuleHandler,
-  FactoryRuleSource,
-  FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from '../rules/types.js';
 import {
@@ -33,11 +30,7 @@ import {
   MAX_TOOL_NAME_LENGTH,
   SKILL_NAME_RE,
 } from '../rules/validation.js';
-import { addInstructions, startSkill } from './phase-runner.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
-
-type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
-type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
 
 /** Runs when an agent seated on this board completes the named tool. */
 export type BoardToolResultRuleHandler = FactoryRuleHandler<FactoryToolResultRuleContext>;
@@ -74,23 +67,6 @@ const BOARD_EVENT_NAMES: Readonly<Record<BoardEventIntegration, readonly string[
   incidentio: FACTORY_INCIDENTIO_EVENTS,
 };
 
-type ReadonlyFactoryBoardRules = Readonly<
-  Record<
-    string,
-    Readonly<
-      Partial<
-        Record<
-          FactoryRuleSource,
-          Readonly<{
-            onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
-            onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-          }>
-        >
-      >
-    >
-  >
->;
-
 /**
  * What a phase means to the runtime.
  * - `resting`: nobody is seated; a card waits for a person or an event.
@@ -109,7 +85,7 @@ export const DEFAULT_PHASE_CONTEXT = 'work';
 export interface BoardPhaseRunner {
   /** Must be `code-agent`, the agent Factory runs; omitted means that agent. */
   readonly agentId?: string;
-  /** Skill started when a card enters the phase from a source with no `onEnter` handler. */
+  /** Skill started when a card enters the phase. Without one, entering the phase starts no run. */
   readonly skill?: string;
   /**
    * The session the phase runs in. Phases naming the same context share one session per card;
@@ -168,10 +144,12 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly next?: PhaseId;
   /** Only people (and provider event routes) move cards into this phase; agents and rules cannot. */
   readonly manualEntry?: boolean;
-  /** Named moves rules can choose by outcome; each target is also an allowed next phase. */
+  /** @deprecated Ignored apart from its targets, which are allowed next phases; list them in `nextPhases`. */
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
-  readonly onEnter?: ReadonlyBoardPhaseHandlers;
-  readonly onExit?: ReadonlyBoardPhaseHandlers;
+  /** @deprecated Ignored; a phase starts its run from `runner.skill`. */
+  readonly onEnter?: Readonly<Record<string, unknown>>;
+  /** @deprecated Ignored; a phase starts its run from `runner.skill`. */
+  readonly onExit?: Readonly<Record<string, unknown>>;
 };
 
 type WorkingPhaseFields = {
@@ -212,14 +190,11 @@ type ResolvedPhaseBase<PhaseId extends string> = {
   /** @deprecated Use `name`; kept equal to it for code written against older Factory versions. */
   readonly title: string;
   readonly description?: string;
-  /** Every phase a card may move to from here, including outcome targets. */
+  /** Every phase a card may move to from here. */
   readonly nextPhases: readonly PhaseId[];
   /** @deprecated Use `nextPhases`; set when the phase declared `next`. */
   readonly next?: PhaseId;
   readonly manualEntry?: true;
-  readonly outcomes?: Readonly<Record<string, PhaseId>>;
-  readonly onEnter?: ReadonlyBoardPhaseHandlers;
-  readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
 
 /**
@@ -244,7 +219,8 @@ type ResolvedRunner = Extract<BoardPhase<string>, { kind: 'working' }>['runner']
 type ResolvedExitTool = Extract<BoardPhase<string>, { kind: 'working' }>['exitTool'];
 
 export interface BoardTransition<PhaseId extends string> {
-  readonly outcome: string | null;
+  /** Always null: boards no longer name their moves. */
+  readonly outcome: null;
   readonly to: PhaseId;
 }
 
@@ -263,7 +239,6 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly initialPhase: PhaseId;
   readonly phases: Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
   readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
-  readonly rules: ReadonlyFactoryBoardRules;
   /** Tool-result rules keyed by tool name; empty when the board declares none. */
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
@@ -561,24 +536,6 @@ function validateEventRules(events: unknown): BoardEventRules {
   return Object.freeze(frozen) as BoardEventRules;
 }
 
-/** The phase's `onEnter` handlers, with its runner's skill for other sources and its instructions on every run. */
-function phaseEnterHandlers(
-  declared: ReadonlyBoardPhaseHandlers | undefined,
-  runner: ResolvedRunner,
-): ReadonlyBoardPhaseHandlers | undefined {
-  const handlers: BoardPhaseHandlers = { ...declared };
-  if (runner.skill) {
-    for (const source of FACTORY_RULE_SOURCES)
-      handlers[source] ??= startSkill(runner.skill, runner.context, runner.goal);
-  }
-  if (runner.instructions) {
-    for (const source of Object.keys(handlers) as FactoryRuleSource[]) {
-      handlers[source] = addInstructions(handlers[source]!, runner.instructions);
-    }
-  }
-  return Object.keys(handlers).length > 0 ? handlers : undefined;
-}
-
 const warnedBoards = new Set<string>();
 
 type DeclaredBoard = {
@@ -606,6 +563,18 @@ function deprecatedFields(config: DeclaredBoard): string[] {
     if (phase.role !== undefined && phase.runner?.context === undefined) {
       found.push(`phases.${phaseId}.role → runner.context`);
     }
+    if (phase.outcomes !== undefined) found.push(`phases.${phaseId}.outcomes → nextPhases`);
+  }
+  return found;
+}
+
+/** Fields a board declaration still passes that Factory no longer reads. */
+function ignoredFields(config: DeclaredBoard): string[] {
+  const found: string[] = [];
+  for (const [phaseId, phase] of Object.entries(config.phases)) {
+    for (const field of ['onEnter', 'onExit'] as const) {
+      if (phase[field] !== undefined) found.push(`phases.${phaseId}.${field}`);
+    }
   }
   return found;
 }
@@ -613,12 +582,19 @@ function deprecatedFields(config: DeclaredBoard): string[] {
 function warnDeprecatedFields(config: DeclaredBoard): void {
   if (warnedBoards.has(config.id)) return;
   const found = deprecatedFields(config);
-  if (found.length === 0) return;
+  const ignored = ignoredFields(config);
+  if (found.length === 0 && ignored.length === 0) return;
   warnedBoards.add(config.id);
-  console.warn(
-    `[Mastra Factory] Board "${config.id}" uses deprecated fields: ${found.join(', ')}. ` +
-      'They still work but will be removed in a future release.',
-  );
+  const warnings: string[] = [];
+  if (found.length > 0) {
+    warnings.push(
+      `uses deprecated fields: ${found.join(', ')}. They still work but will be removed in a future release.`,
+    );
+  }
+  if (ignored.length > 0) {
+    warnings.push(`declares ${ignored.join(', ')}, which are ignored; use runner.skill to start a phase's run.`);
+  }
+  console.warn(`[Mastra Factory] Board "${config.id}" ${warnings.join(' It also ')}`);
 }
 
 /** Marks a board an app declared with the deprecated `defineBoard()`; a copy does not carry it. */
@@ -648,10 +624,7 @@ export function isDefinedBoard(board: object): boolean {
 /** A board declaration as `defineBoard()` takes it, with any phase keys. */
 export type AnyBoardConfig = BoardConfig<string, Record<string, BoardPhaseDefinition<string>>>;
 
-/**
- * The declaration a board was built from. A resolved board's `onEnter` handlers already carry its
- * runner's skill and instructions, so a board with other runner fields is rebuilt from this.
- */
+/** The declaration a board was built from, so a stored definition can reuse its code behaviour. */
 const BOARD_DECLARATION = Symbol('BoardDeclaration');
 
 /** On a board built from a stored definition, the code board that gave it its behaviour. */
@@ -714,17 +687,16 @@ function buildBoard<
 
   const transitions = Object.fromEntries(
     Object.entries(config.phases).map(([phaseId, phase]) => {
-      if (phase.next !== undefined && phase.outcomes) {
-        throw new BoardDefinitionError(`Phase "${phaseId}" cannot define both next and outcomes.`);
-      }
       if (phase.nextPhases !== undefined && !Array.isArray(phase.nextPhases)) {
         throw new BoardDefinitionError(`Phase "${phaseId}" nextPhases must be a list of phases.`);
       }
-      const targets: BoardTransition<string>[] =
-        phase.next !== undefined
-          ? [Object.freeze({ outcome: null, to: phase.next })]
-          : Object.entries(phase.outcomes ?? {}).map(([outcome, to]) => Object.freeze({ outcome, to }));
-      for (const to of phase.nextPhases ?? []) {
+      const targets: BoardTransition<string>[] = [];
+      // A deprecated `outcomes` map still names moves the board allows.
+      for (const to of [
+        ...(phase.next !== undefined ? [phase.next] : []),
+        ...Object.values(phase.outcomes ?? {}),
+        ...(phase.nextPhases ?? []),
+      ]) {
         if (!targets.some(target => target.to === to)) targets.push(Object.freeze({ outcome: null, to }));
       }
       for (const { to } of targets) {
@@ -765,7 +737,6 @@ function buildBoard<
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
-        const onEnter = runner ? phaseEnterHandlers(phase.onEnter, runner) : phase.onEnter;
         const name = resolveName(phase.name, phase.title, label);
         const description = optionalText(phase.description, `${label} description`, MAX_DESCRIPTION_LENGTH);
         return [
@@ -778,47 +749,16 @@ function buildBoard<
             nextPhases,
             ...(phase.next !== undefined ? { next: phase.next } : {}),
             ...(phase.manualEntry ? { manualEntry: true } : {}),
-            ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
             ...(runner ? { runner, role: runner.context } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),
             ...(exitTool ? { exitTool } : {}),
             ...(tools ? { tools } : {}),
-            ...(onEnter ? { onEnter: Object.freeze({ ...onEnter }) } : {}),
-            ...(phase.onExit ? { onExit: Object.freeze({ ...phase.onExit }) } : {}),
           }),
         ];
       }),
     ),
   ) as Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
-  const rules = Object.freeze(
-    Object.fromEntries(
-      (Object.entries(phases) as [PhaseId, BoardPhase<PhaseId>][]).flatMap(([phaseId, phase]) => {
-        const sources = new Set([...Object.keys(phase.onEnter ?? {}), ...Object.keys(phase.onExit ?? {})]);
-        if (sources.size === 0) return [];
-        return [
-          [
-            phaseId,
-            Object.freeze(
-              Object.fromEntries(
-                [...sources].map(source => [
-                  source,
-                  Object.freeze({
-                    ...(phase.onEnter?.[source as FactoryRuleSource]
-                      ? { onEnter: phase.onEnter[source as FactoryRuleSource] }
-                      : {}),
-                    ...(phase.onExit?.[source as FactoryRuleSource]
-                      ? { onExit: phase.onExit[source as FactoryRuleSource] }
-                      : {}),
-                  }),
-                ]),
-              ),
-            ),
-          ],
-        ];
-      }),
-    ),
-  ) as ReadonlyFactoryBoardRules;
 
   const kinds = new Map<string, BoardPhaseKind>();
   const roles = new Map<string, string>();
@@ -838,7 +778,6 @@ function buildBoard<
     initialPhase: config.initialPhase,
     phases,
     transitions: Object.freeze(transitions),
-    rules: Object.freeze(rules),
     tools,
     events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
