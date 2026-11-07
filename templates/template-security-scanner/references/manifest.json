@@ -1,0 +1,371 @@
+{
+  "indexVersion": 1,
+  "sources": {
+    "WSTG": {
+      "revision": "v4.2",
+      "commit": "dd33419e10edb22b78d89325a6c2aad9f184e3a2",
+      "license": "CC-BY-SA-4.0",
+      "notice": "licenses/wstg-CC-BY-SA-4.0.txt",
+      "sourceUrl": "https://github.com/OWASP/wstg/releases/tag/v4.2"
+    },
+    "ASVS": {
+      "revision": "v5.0.0_release",
+      "commit": "5cf9b032440be53ce345ab3c130fda46ba1ce7a2",
+      "license": "CC-BY-SA-4.0",
+      "notice": "licenses/asvs-CC-BY-SA-4.0.txt",
+      "sourceUrl": "https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release",
+      "sourceArtifactSha256": "6124dba176dc563f66363a11ae0c47f9b86b8a4a84c66a793670bd196ed86cd5"
+    },
+    "CWE": {
+      "revision": "5.0",
+      "license": "MITRE-CWE-Terms",
+      "notice": "licenses/cwe-MITRE.txt",
+      "sourceUrl": "https://cwe.mitre.org/data/downloads.html",
+      "sourceArtifactSha256": "bcda44c9abf61ff977f50c3c6649eea5a97a7b0626b0396c2c3ec4bfb973a3dc"
+    },
+    "CAPEC": {
+      "revision": "3.9",
+      "license": "MITRE-CAPEC-Terms",
+      "notice": "licenses/capec-MITRE.txt",
+      "sourceUrl": "https://capec.mitre.org/data/downloads.html",
+      "sourceArtifactSha256": "c56527f3d64b7164fcdae73c1a7545ee6e83b1150546c07a93339b1543a3041d"
+    }
+  },
+  "files": [
+    {
+      "path": "wstg/WSTG-ATHZ-04.md",
+      "sha256": "c57ae867049144eebdbd1381f561158c2c131f5e0c2aa3877b5c41591e082f49",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-ATHZ-04"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-ATHN-04.md",
+      "sha256": "23b33b14f92d21d14dd355b6127c0c51a98216a62b9aac0e8bb7ec61b6d00918",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-ATHN-04"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-ATHZ-03.md",
+      "sha256": "6204bc854c991ac494ef40dc6dda5ee619f9af4f86d0f2febefda7d307554c5f",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-ATHZ-03"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-INPV-19.md",
+      "sha256": "9cb043be669f7e92d8ebda3b5066f8e92dcf9ffd35e6eeb5b786cf540eb7fdd3",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-INPV-19"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-CONF-07.md",
+      "sha256": "d27d40fcba3330f07ed5712ee3b5c52ed52604e93719b0ef23b0f053f68221bc",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-CONF-07"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-CLNT-07.md",
+      "sha256": "fd4d8b095b368287677b1d32812867557f0c174fe6aab1b4c17f43d852f3a47f",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-CLNT-07"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-CLNT-04.md",
+      "sha256": "f5038a3fee8c03d0c9f78241eb3455ed4f5794baee2fc0a9b14be45b9abda856",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-CLNT-04"
+      ]
+    },
+    {
+      "path": "wstg/WSTG-INFO-05.md",
+      "sha256": "026f73ce1ea476937d0e00a7633c342613e027570530dc835bd8cab732fa2d12",
+      "source": "WSTG",
+      "referenceIds": [
+        "WSTG-INFO-05"
+      ]
+    },
+    {
+      "path": "asvs/v5.0.0.csv",
+      "sha256": "6124dba176dc563f66363a11ae0c47f9b86b8a4a84c66a793670bd196ed86cd5",
+      "source": "ASVS",
+      "referenceIds": [
+        "v5.0.0-V8.2.2",
+        "v5.0.0-V6.3.4",
+        "v5.0.0-V8.1.1",
+        "v5.0.0-V1.3.6",
+        "v5.0.0-V3.4.1",
+        "v5.0.0-V3.4.2",
+        "v5.0.0-V3.7.2",
+        "v5.0.0-V3.4.4"
+      ]
+    },
+    {
+      "path": "cwe/v5.0.json",
+      "sha256": "c86b3f4b08d92b887e7c74b86ee0b3297a30dadf45455761dc1ba9557bd63124",
+      "source": "CWE",
+      "referenceIds": [
+        "CWE-200",
+        "CWE-287",
+        "CWE-601",
+        "CWE-639",
+        "CWE-693",
+        "CWE-862",
+        "CWE-918",
+        "CWE-942"
+      ]
+    },
+    {
+      "path": "capec/v3.9.json",
+      "sha256": "a45b2dcea0d52f75fe47e706bdd04bbb08b94a2a2e87deb492a9921c176c04cf",
+      "source": "CAPEC",
+      "referenceIds": [
+        "CAPEC-1",
+        "CAPEC-115",
+        "CAPEC-153",
+        "CAPEC-180",
+        "CAPEC-664",
+        "CAPEC-87"
+      ]
+    },
+    {
+      "path": "licenses/wstg-CC-BY-SA-4.0.txt",
+      "sha256": "1f95e059493e99410cac284c472d58a64e348231bcfe15b7b9d5f6d77d843924",
+      "source": "WSTG",
+      "referenceIds": []
+    },
+    {
+      "path": "licenses/asvs-CC-BY-SA-4.0.txt",
+      "sha256": "46e3f590a104049da95229fcec518c380235b82395a6677a3a90baa695416784",
+      "source": "ASVS",
+      "referenceIds": []
+    },
+    {
+      "path": "licenses/cwe-MITRE.txt",
+      "sha256": "60c9f20af5846f70b256b1a765a71b2cfcb5e8d59f47d71638985428c00f2006",
+      "source": "CWE",
+      "referenceIds": []
+    },
+    {
+      "path": "licenses/capec-MITRE.txt",
+      "sha256": "f96b4300faa19a9f91d3021eeac8031efa0e507da37457edae3d70f253182d9e",
+      "source": "CAPEC",
+      "referenceIds": []
+    }
+  ],
+  "references": [
+    {
+      "id": "WSTG-ATHZ-04",
+      "source": "WSTG",
+      "title": "Testing for Insecure Direct Object References",
+      "file": "wstg/WSTG-ATHZ-04.md"
+    },
+    {
+      "id": "WSTG-ATHN-04",
+      "source": "WSTG",
+      "title": "Testing for Bypassing Authentication Schema",
+      "file": "wstg/WSTG-ATHN-04.md"
+    },
+    {
+      "id": "WSTG-ATHZ-03",
+      "source": "WSTG",
+      "title": "Testing for Privilege Escalation",
+      "file": "wstg/WSTG-ATHZ-03.md"
+    },
+    {
+      "id": "WSTG-INPV-19",
+      "source": "WSTG",
+      "title": "Testing for Server-Side Request Forgery",
+      "file": "wstg/WSTG-INPV-19.md"
+    },
+    {
+      "id": "WSTG-CONF-07",
+      "source": "WSTG",
+      "title": "Test HTTP Strict Transport Security",
+      "file": "wstg/WSTG-CONF-07.md"
+    },
+    {
+      "id": "WSTG-CLNT-07",
+      "source": "WSTG",
+      "title": "Testing Cross Origin Resource Sharing",
+      "file": "wstg/WSTG-CLNT-07.md"
+    },
+    {
+      "id": "WSTG-CLNT-04",
+      "source": "WSTG",
+      "title": "Testing for Client-side URL Redirect",
+      "file": "wstg/WSTG-CLNT-04.md"
+    },
+    {
+      "id": "WSTG-INFO-05",
+      "source": "WSTG",
+      "title": "Review Webpage Content for Information Leakage",
+      "file": "wstg/WSTG-INFO-05.md"
+    },
+    {
+      "id": "v5.0.0-V8.2.2",
+      "source": "ASVS",
+      "title": "V8.2.2 General Authorization Design",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that the application ensures that data-specific access is restricted to consumers with explicit permissions to specific data items to mitigate insecure direct object reference (IDOR) and broken object level authorization (BOLA)."
+    },
+    {
+      "id": "v5.0.0-V6.3.4",
+      "source": "ASVS",
+      "title": "V6.3.4 General Authentication Security",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that, if the application includes multiple authentication pathways, there are no undocumented pathways and that security controls and authentication strength are enforced consistently."
+    },
+    {
+      "id": "v5.0.0-V8.1.1",
+      "source": "ASVS",
+      "title": "V8.1.1 Authorization Documentation",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that authorization documentation defines rules for restricting function-level and data-specific access based on consumer permissions and resource attributes."
+    },
+    {
+      "id": "v5.0.0-V1.3.6",
+      "source": "ASVS",
+      "title": "V1.3.6 Sanitization",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that the application protects against Server-side Request Forgery (SSRF) attacks, by validating untrusted data against an allowlist of protocols, domains, paths and ports and sanitizing potentially dangerous characters before using the data to call another service."
+    },
+    {
+      "id": "v5.0.0-V3.4.1",
+      "source": "ASVS",
+      "title": "V3.4.1 Browser Security Mechanism Headers",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that a Strict-Transport-Security header field is included on all responses to enforce an HTTP Strict Transport Security (HSTS) policy. A maximum age of at least 1 year must be defined, and for L2 and up, the policy must apply to all subdomains as well."
+    },
+    {
+      "id": "v5.0.0-V3.4.2",
+      "source": "ASVS",
+      "title": "V3.4.2 Browser Security Mechanism Headers",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that the Cross-Origin Resource Sharing (CORS) Access-Control-Allow-Origin header field is a fixed value by the application, or if the Origin HTTP request header field value is used, it is validated against an allowlist of trusted origins. When 'Access-Control-Allow-Origin: *' needs to be used, verify that the response does not include any sensitive information."
+    },
+    {
+      "id": "v5.0.0-V3.7.2",
+      "source": "ASVS",
+      "title": "V3.7.2 Other Browser Security Considerations",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that the application will only automatically redirect the user to a different hostname or domain (which is not controlled by the application) where the destination appears on an allowlist."
+    },
+    {
+      "id": "v5.0.0-V3.4.4",
+      "source": "ASVS",
+      "title": "V3.4.4 Browser Security Mechanism Headers",
+      "file": "asvs/v5.0.0.csv",
+      "text": "Verify that all HTTP responses contain an 'X-Content-Type-Options: nosniff' header field. This instructs browsers not to use content sniffing and MIME type guessing for the given response, and to require the response's Content-Type header field value to match the destination resource. For example, the response to a request for a style is only accepted if the response's Content-Type is 'text/css'. This also enables the use of the Cross-Origin Read Blocking (CORB) functionality by the browser."
+    },
+    {
+      "id": "CWE-200",
+      "source": "CWE",
+      "title": "Exposure of Sensitive Information to an Unauthorized Actor",
+      "file": "cwe/v5.0.json",
+      "text": "The product exposes sensitive information to an actor that is not explicitly authorized to have access to that information."
+    },
+    {
+      "id": "CWE-287",
+      "source": "CWE",
+      "title": "Improper Authentication",
+      "file": "cwe/v5.0.json",
+      "text": "When an actor claims to have a given identity, the product does not prove or insufficiently proves that the claim is correct."
+    },
+    {
+      "id": "CWE-601",
+      "source": "CWE",
+      "title": "URL Redirection to Untrusted Site",
+      "file": "cwe/v5.0.json",
+      "text": "The web application accepts a user-controlled input that specifies a link to an external site, and uses that link in a redirect."
+    },
+    {
+      "id": "CWE-639",
+      "source": "CWE",
+      "title": "Authorization Bypass Through User-Controlled Key",
+      "file": "cwe/v5.0.json",
+      "text": "The system's authorization functionality does not prevent one user from gaining access to another user's data or record by modifying the key value identifying the data."
+    },
+    {
+      "id": "CWE-693",
+      "source": "CWE",
+      "title": "Protection Mechanism Failure",
+      "file": "cwe/v5.0.json",
+      "text": "The product does not use or incorrectly uses a protection mechanism that provides sufficient defense against directed attacks against the product."
+    },
+    {
+      "id": "CWE-862",
+      "source": "CWE",
+      "title": "Missing Authorization",
+      "file": "cwe/v5.0.json",
+      "text": "The product does not perform an authorization check when an actor attempts to access a resource or perform an action."
+    },
+    {
+      "id": "CWE-918",
+      "source": "CWE",
+      "title": "Server-Side Request Forgery",
+      "file": "cwe/v5.0.json",
+      "text": "The web server receives a URL or similar request from an upstream component and retrieves the contents of this URL, but it does not sufficiently ensure that the request is being sent to the expected destination."
+    },
+    {
+      "id": "CWE-942",
+      "source": "CWE",
+      "title": "Permissive Cross-domain Security Policy with Untrusted Domains",
+      "file": "cwe/v5.0.json",
+      "text": "The product uses a web-client protection mechanism such as a Content Security Policy (CSP) or cross-domain policy file, but the policy includes untrusted domains with which the web client is allowed to communicate."
+    },
+    {
+      "id": "CAPEC-1",
+      "source": "CAPEC",
+      "title": "Accessing Functionality Not Properly Constrained by ACLs",
+      "file": "capec/v3.9.json",
+      "text": "In applications, particularly web applications, access to functionality is mitigated by an authorization framework. This framework maps Access Control Lists (ACLs) to elements of the application's functionality; particularly URL's for web apps. In the case that the administrator failed to specify an ACL for a particular element, an attacker may be able to access it with impunity. An attacker with the ability to access functionality not properly constrained by ACLs can obtain sensitive information and possibly compromise the entire application. Such an attacker can access resources that must be available only to users at a higher privilege level, can access management sections of the application, or can run queries for data that they otherwise not supposed to."
+    },
+    {
+      "id": "CAPEC-115",
+      "source": "CAPEC",
+      "title": "Authentication Bypass",
+      "file": "capec/v3.9.json",
+      "text": "An attacker gains access to application, service, or device with the privileges of an authorized or privileged user by evading or circumventing an authentication mechanism. The attacker is therefore able to access protected data without authentication ever having taken place."
+    },
+    {
+      "id": "CAPEC-153",
+      "source": "CAPEC",
+      "title": "Input Data Manipulation",
+      "file": "capec/v3.9.json",
+      "text": "An attacker exploits a weakness in input validation by controlling the format, structure, and composition of data to an input-processing interface. By supplying input of a non-standard or unexpected form an attacker can adversely impact the security of the target."
+    },
+    {
+      "id": "CAPEC-180",
+      "source": "CAPEC",
+      "title": "Exploiting Incorrectly Configured Access Control Security Levels",
+      "file": "capec/v3.9.json",
+      "text": "An attacker exploits a weakness in the configuration of access controls and is able to bypass the intended protection that these measures guard against and thereby obtain unauthorized access to the system or network. Sensitive functionality should always be protected with access controls. However configuring all but the most trivial access control systems can be very complicated and there are many opportunities for mistakes. If an attacker can learn of incorrectly configured access security settings, they may be able to exploit this in an attack."
+    },
+    {
+      "id": "CAPEC-664",
+      "source": "CAPEC",
+      "title": "Server Side Request Forgery",
+      "file": "capec/v3.9.json",
+      "text": "An adversary exploits improper input validation by submitting maliciously crafted input to a target application running on a server, with the goal of forcing the server to make a request either to itself, to web services running in the server’s internal network, or to external third parties. If successful, the adversary’s request will be made with the server’s privilege level, bypassing its authentication controls. This ultimately allows the adversary to access sensitive data, execute commands on the server’s network, and make external requests with the stolen identity of the server. Server Side Request Forgery attacks differ from Cross Site Request Forgery attacks in that they target the server itself, whereas CSRF attacks exploit an insecure user authentication mechanism to perform unauthorized actions on the user's behalf."
+    },
+    {
+      "id": "CAPEC-87",
+      "source": "CAPEC",
+      "title": "Forceful Browsing",
+      "file": "capec/v3.9.json",
+      "text": "An attacker employs forceful browsing (direct URL entry) to access portions of a website that are otherwise unreachable. Usually, a front controller or similar design pattern is employed to protect access to portions of a web application. Forceful browsing enables an attacker to access information, perform privileged operations and otherwise reach sections of the web application that have been improperly protected."
+    }
+  ]
+}

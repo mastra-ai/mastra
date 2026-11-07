@@ -1,0 +1,42 @@
+[
+  {
+    "id": "CWE-200",
+    "title": "Exposure of Sensitive Information to an Unauthorized Actor",
+    "description": "The product exposes sensitive information to an actor that is not explicitly authorized to have access to that information."
+  },
+  {
+    "id": "CWE-287",
+    "title": "Improper Authentication",
+    "description": "When an actor claims to have a given identity, the product does not prove or insufficiently proves that the claim is correct."
+  },
+  {
+    "id": "CWE-601",
+    "title": "URL Redirection to Untrusted Site",
+    "description": "The web application accepts a user-controlled input that specifies a link to an external site, and uses that link in a redirect."
+  },
+  {
+    "id": "CWE-639",
+    "title": "Authorization Bypass Through User-Controlled Key",
+    "description": "The system's authorization functionality does not prevent one user from gaining access to another user's data or record by modifying the key value identifying the data."
+  },
+  {
+    "id": "CWE-693",
+    "title": "Protection Mechanism Failure",
+    "description": "The product does not use or incorrectly uses a protection mechanism that provides sufficient defense against directed attacks against the product."
+  },
+  {
+    "id": "CWE-862",
+    "title": "Missing Authorization",
+    "description": "The product does not perform an authorization check when an actor attempts to access a resource or perform an action."
+  },
+  {
+    "id": "CWE-918",
+    "title": "Server-Side Request Forgery",
+    "description": "The web server receives a URL or similar request from an upstream component and retrieves the contents of this URL, but it does not sufficiently ensure that the request is being sent to the expected destination."
+  },
+  {
+    "id": "CWE-942",
+    "title": "Permissive Cross-domain Security Policy with Untrusted Domains",
+    "description": "The product uses a web-client protection mechanism such as a Content Security Policy (CSP) or cross-domain policy file, but the policy includes untrusted domains with which the web client is allowed to communicate."
+  }
+]
