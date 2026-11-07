@@ -6,10 +6,11 @@ import {
 } from '@mastra/playground-ui/components/ai/annotations';
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
   ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
   ComposerBox,
   ComposerHeader,
   ComposerInput,
@@ -22,7 +23,7 @@ import { useOptionalMessageScroller } from '@mastra/playground-ui/components/Mes
 import { useQueryClient } from '@tanstack/react-query';
 import { ImagePlus } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
@@ -50,13 +51,17 @@ import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
+import { ModelPicker } from './StatusLine/ModelPicker';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 import { useVoiceDictation } from './useVoiceDictation';
 
-type ComposerProps = Pick<ComposerInputProps, 'variant'>;
+type ComposerProps = Pick<ComposerInputProps, 'variant'> & {
+  /** Leads the status row above the composer, e.g. who is steering this session. */
+  statusLead?: ReactNode;
+};
 
-export function Composer({ variant = 'inline' }: ComposerProps) {
+export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
@@ -120,7 +125,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const shownText = preview?.text ?? draft;
   const hasSubmittableDraft =
     shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
-  const textareaDisabled = composerDisabled && !chatPreparing;
+  // Typing never waits on the connection: a reconnect only holds back sending.
+  const textareaDisabled = (startingDraft || planFeedback.isSubmitting || (onUserDraft && blocked)) && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
     ? 'Give feedback on this plan'
@@ -128,13 +134,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       ? 'Steer the agent'
       : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing
-    ? 'Initializing session…'
-    : startingDraft
-      ? 'Starting session…'
-      : dictating
-        ? 'Finish dictation to send'
-        : undefined;
+  const sendTitle = connectionLost
+    ? 'Sends once reconnected'
+    : chatPreparing
+      ? 'Initializing session…'
+      : startingDraft
+        ? 'Starting session…'
+        : dictating
+          ? 'Finish dictation to send'
+          : undefined;
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -293,66 +301,72 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   }
 
   return (
-    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader open={connectionNotice !== undefined}>
-        {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
-      </ComposerHeader>
-      <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
-        <ComposerBox>
-          <ComposerSuggestions {...commandMenu.suggestionsProps} />
-          <ComposerAnnotations />
-          <ComposerImageAttachments images={images} onRemove={removeImage} />
-          <ComposerInput
-            {...commandMenu.inputProps}
-            ref={inputRef}
-            onKeyDown={onComposerKeyDown}
-            onPaste={onPaste}
-            placeholder={placeholder}
-            disabled={textareaDisabled}
-            readOnly={preview !== undefined}
-            style={preview ? { height: preview.height } : undefined}
-            variant={variant}
-            aria-label="Message"
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={onFileInputChange}
-            className="hidden"
-            aria-label="Attach images"
-          />
-          <ComposerActions>
-            <StatusLine />
-            <ButtonsGroup size="sm" className="ml-auto" aria-label="Composer actions">
-              <Button
-                type="button"
-                size="icon-sm"
-                disabled={attachDisabled}
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach image"
-                tooltip="Images only"
-              >
-                <ImagePlus size={14} />
-              </Button>
-              {factoryId && (
-                <ComposerVoiceButton
-                  factoryId={factoryId}
-                  disabled={textareaDisabled || preview !== undefined}
-                  dictation={dictation}
+    <>
+      <StatusLine>{statusLead}</StatusLine>
+      <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
+        <ComposerHeader placement="overlay" open={connectionNotice !== undefined}>
+          {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
+        </ComposerHeader>
+        <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
+          <ComposerBox>
+            <ComposerSuggestions {...commandMenu.suggestionsProps} />
+            <ComposerAnnotations />
+            <ComposerImageAttachments images={images} onRemove={removeImage} />
+            <ComposerInput
+              {...commandMenu.inputProps}
+              ref={inputRef}
+              onKeyDown={onComposerKeyDown}
+              onPaste={onPaste}
+              placeholder={placeholder}
+              disabled={textareaDisabled}
+              readOnly={preview !== undefined}
+              style={preview ? { height: preview.height } : undefined}
+              variant={variant}
+              aria-label="Message"
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={onFileInputChange}
+              className="hidden"
+              aria-label="Attach images"
+            />
+            <ComposerActions>
+              <ComposerActionsStart>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={attachDisabled}
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Attach image"
+                  tooltip="Images only"
+                >
+                  <ImagePlus size={14} />
+                </Button>
+              </ComposerActionsStart>
+              <ComposerActionsEnd role="group" aria-label="Composer actions">
+                <ModelPicker />
+                {factoryId && (
+                  <ComposerVoiceButton
+                    factoryId={factoryId}
+                    disabled={textareaDisabled || preview !== undefined}
+                    dictation={dictation}
+                  />
+                )}
+                <ComposerPrimaryAction
+                  showAbort={liveRun && !hasSubmittableDraft}
+                  sendDisabled={sendDisabled || !hasSubmittableDraft}
+                  sendTitle={sendTitle}
+                  onAbort={() => void abortMutation.mutateAsync()}
                 />
-              )}
-              <ComposerPrimaryAction
-                showAbort={liveRun && !hasSubmittableDraft}
-                sendDisabled={sendDisabled || !hasSubmittableDraft}
-                sendTitle={sendTitle}
-                onAbort={() => void abortMutation.mutateAsync()}
-              />
-            </ButtonsGroup>
-          </ComposerActions>
-        </ComposerBox>
-      </ComposerRing>
-    </ComposerRoot>
+              </ComposerActionsEnd>
+            </ComposerActions>
+          </ComposerBox>
+        </ComposerRing>
+      </ComposerRoot>
+    </>
   );
 }

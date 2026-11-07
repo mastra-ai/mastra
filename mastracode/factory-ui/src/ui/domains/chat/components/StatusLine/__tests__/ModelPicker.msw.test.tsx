@@ -406,8 +406,8 @@ describe('ModelPicker', () => {
 
     await user.click(await screen.findByLabelText('Session model'));
 
-    expect(screen.getByText('anthropic')).toBeInTheDocument();
-    expect(screen.getByText('openai')).toBeInTheDocument();
+    expect(screen.getByText('Anthropic')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
     const defaultOption = screen.getByRole('option', { name: /claude-sonnet-4-6/i });
     expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
   });

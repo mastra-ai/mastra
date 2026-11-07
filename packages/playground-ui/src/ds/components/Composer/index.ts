@@ -1,10 +1,13 @@
 export {
   Composer,
   ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
+  ComposerStatus,
   ComposerToneLabel,
 } from './composer';
 export type {

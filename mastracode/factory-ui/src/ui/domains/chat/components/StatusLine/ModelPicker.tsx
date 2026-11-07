@@ -1,20 +1,13 @@
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from '@mastra/playground-ui/components/Command';
-import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { CommandGroup, CommandItem, CommandSeparator } from '@mastra/playground-ui/components/Command';
+import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
+import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
-import { Check, ChevronDown, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
+import { KeyRound, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -25,8 +18,11 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useModelCredential } from '../../hooks/useModelCredential';
+import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 import { LockedModelButton } from './LockedModelButton';
+import { HolderBadge, ModelCredential } from './ModelCredential';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 
@@ -97,83 +93,122 @@ interface ModelMenuProps {
   modelSwitch: ModelSwitch;
   triggerClassName?: string;
   triggerAriaLabel?: string;
+  side?: 'top' | 'bottom';
+  align?: 'start' | 'end';
   children: ReactNode;
 }
 
-function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }: ModelMenuProps) {
+const renderProviderIcon = (provider: string) => (
+  <ProviderBrandIcon provider={provider} fallback={<KeyRound className="size-3.5" />} />
+);
+
+function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, side, align, children }: ModelMenuProps) {
   const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
   const { factoryId } = useParams<{ factoryId: string }>();
   const organizationScoped = useOrganizationScopedFactory();
-  const [open, setOpen] = useState(false);
-
-  const choose = (modelId: string) => {
-    setOpen(false);
-    pickModel(modelId);
-  };
+  const providers: ModelPickerProvider[] = groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => ({
+    id: provider,
+    name: providerDisplayName(provider),
+    // The shared picker keys models within their provider, so drop the provider prefix here.
+    models: models.map(model => ({
+      id: model.id.startsWith(`${provider}/`) ? model.id.slice(provider.length + 1) : model.id,
+      name: model.modelName,
+      keywords: [formatModelName(model.id)],
+      badge:
+        model.id === defaultModelId ? (
+          <Badge variant="blue" size="xs">
+            Default
+          </Badge>
+        ) : undefined,
+    })),
+  }));
+  const toModelId = (provider: string, model: string) =>
+    modelsQuery.data?.find(
+      option => option.provider === provider && (option.id === `${provider}/${model}` || option.id === model),
+    )?.id;
+  const selected = modelsQuery.data?.find(option => option.id === selectedModelId);
+  const selectedProvider = selected?.provider ?? selectedModelId?.split('/')[0];
+  const selectedModel =
+    selectedModelId && selectedProvider && selectedModelId.startsWith(`${selectedProvider}/`)
+      ? selectedModelId.slice(selectedProvider.length + 1)
+      : selectedModelId;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        variant="ghost"
-        size="sm"
-        className={triggerClassName}
-        type="button"
-        disabled={locked}
-        aria-label={triggerAriaLabel}
-        aria-busy={locked}
-        title={selectedModelId}
-      >
-        {children}
-        <ChevronDown aria-hidden size={12} />
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
-        <Command loop>
-          <CommandInput placeholder="Search models" />
-          <CommandList className="max-h-80">
-            <CommandEmpty>No matching model.</CommandEmpty>
-            {groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => (
-              <CommandGroup
-                key={provider}
-                heading={provider}
-                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
+    <SharedModelPicker
+      providers={providers}
+      value={selectedModel && selectedProvider ? { provider: selectedProvider, model: selectedModel } : undefined}
+      onValueChange={({ provider, model }) => {
+        const modelId = toModelId(provider, model);
+        if (modelId) pickModel(modelId);
+      }}
+      renderProviderIcon={renderProviderIcon}
+      header={<ModelCredentialSummary modelId={selectedModelId} />}
+      footer={organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
+      actions={close =>
+        canReset && defaultModelId ? (
+          <>
+            <CommandSeparator />
+            <CommandGroup>
+              <CommandItem
+                value="action:reset"
+                keywords={['reset', 'default', 'model']}
+                onSelect={() => {
+                  close();
+                  pickModel(defaultModelId);
+                }}
               >
-                {models.map(model => (
-                  <CommandItem
-                    key={model.id}
-                    value={model.id}
-                    keywords={[model.provider, model.modelName, formatModelName(model.id)]}
-                    title={model.id}
-                    onSelect={() => choose(model.id)}
-                  >
-                    <span className="truncate">{model.modelName}</span>
-                    {model.id === defaultModelId ? (
-                      <Badge variant="blue" size="xs">
-                        Default
-                      </Badge>
-                    ) : null}
-                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-            {canReset ? <CommandSeparator /> : null}
-            {canReset && defaultModelId ? (
-              <CommandGroup>
-                <CommandItem
-                  value="action:reset"
-                  keywords={['reset', 'default', 'model']}
-                  onSelect={() => choose(defaultModelId)}
-                >
-                  <RotateCcw aria-hidden />
-                  <span>Reset to your default</span>
-                </CommandItem>
-              </CommandGroup>
-            ) : null}
-          </CommandList>
-          {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
-        </Command>
-      </PopoverContent>
-    </Popover>
+                <RotateCcw aria-hidden />
+                <span>Reset to your default</span>
+              </CommandItem>
+            </CommandGroup>
+          </>
+        ) : null
+      }
+      busy={locked}
+      side={side}
+      align={align}
+      triggerClassName={triggerClassName}
+      aria-label={triggerAriaLabel}
+      title={selectedModelId}
+    >
+      {children}
+    </SharedModelPicker>
+  );
+}
+
+/** The credential the selected model runs on, shown at the top of the picker. */
+function ModelCredentialSummary({ modelId }: { modelId: string | undefined }) {
+  const credential = useModelCredential(modelId);
+  if (!credential) return null;
+  return (
+    <div className="flex flex-col gap-1 border-b border-border px-3 py-2 text-caption">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <ProviderBrandIcon provider={credential.provider} fallback={<KeyRound className="size-3.5" />} />
+        <span className="truncate font-medium text-foreground">{credential.credential}</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+        <HolderBadge holder={credential.holder} />
+        <span className="truncate">{credential.holderDescription}</span>
+      </div>
+      {credential.warning ? <span className="text-warning-foreground">{credential.warning}</span> : null}
+    </div>
+  );
+}
+
+/** Provider icon for the trigger, with the credential holder badged on its corner. */
+function ModelProviderMark({ modelId, provider }: { modelId: string | undefined; provider: string | undefined }) {
+  const credential = useModelCredential(modelId);
+  const shownProvider = credential?.provider ?? provider;
+  if (!shownProvider) return null;
+  return (
+    <span className="relative flex shrink-0">
+      <ProviderBrandIcon provider={shownProvider} fallback={<KeyRound className="size-3.5" />} />
+      {credential ? (
+        <span className="absolute -right-1.5 -bottom-1.5 scale-75">
+          <HolderBadge holder={credential.holder} />
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -199,9 +234,12 @@ export function ModelPicker() {
 
   if (modelLockedReason && activeModelId) {
     return (
-      <ModelThinkingGroup modelId={activeModelId} switchingModel={false} lockedReason={modelLockedReason}>
-        <LockedModelButton modelId={activeModelId} reason={modelLockedReason} />
-      </ModelThinkingGroup>
+      <>
+        <ModelCredential />
+        <ModelThinkingGroup modelId={activeModelId} switchingModel={false} lockedReason={modelLockedReason}>
+          <LockedModelButton modelId={activeModelId} reason={modelLockedReason} />
+        </ModelThinkingGroup>
+      </>
     );
   }
 
@@ -240,16 +278,19 @@ export function ModelPicker() {
       );
     }
     return (
-      <span
-        className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
-        aria-label={notConfigured ? `${label} is not configured` : undefined}
-        title={selectedModelId}
-      >
-        <Metadata>
-          <Metadata.Item>{label}</Metadata.Item>
-          {notConfigured && <Metadata.Item>not configured</Metadata.Item>}
-        </Metadata>
-      </span>
+      <>
+        <ModelCredential />
+        <span
+          className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
+          aria-label={notConfigured ? `${label} is not configured` : undefined}
+          title={selectedModelId}
+        >
+          <Metadata>
+            <Metadata.Item>{label}</Metadata.Item>
+            {notConfigured && <Metadata.Item>not configured</Metadata.Item>}
+          </Metadata>
+        </span>
+      </>
     );
   }
 
@@ -260,7 +301,8 @@ export function ModelPicker() {
         triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
         triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
       >
-        <Metadata singleLine className="max-w-48">
+        <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
+        <Metadata singleLine className="max-w-48 max-sm:max-w-28">
           <Metadata.Item>{label}</Metadata.Item>
           {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
         </Metadata>
@@ -272,5 +314,9 @@ export function ModelPicker() {
 export function ChangeModelAction() {
   const modelSwitch = useModelSwitch();
   if (!modelSwitch.switchable || !modelSwitch.modelsQuery.data?.length) return null;
-  return <ModelMenu modelSwitch={modelSwitch}>Change model</ModelMenu>;
+  return (
+    <ModelMenu modelSwitch={modelSwitch} side="bottom" align="start">
+      Change model
+    </ModelMenu>
+  );
 }

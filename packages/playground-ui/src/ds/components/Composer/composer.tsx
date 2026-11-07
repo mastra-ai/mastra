@@ -19,8 +19,9 @@ export interface ComposerInputProps extends ComponentPropsWithoutRef<'textarea'>
   maxHeight?: string;
 }
 
-export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, ...props }, ref) => (
-  <form ref={ref} data-slot="composer" {...props}>
+/** Positioned so an overlay `ComposerHeader` can anchor to its top edge. */
+export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, className, ...props }, ref) => (
+  <form ref={ref} data-slot="composer" className={cn('relative', className)} {...props}>
     {children}
   </form>
 ));
@@ -136,6 +137,51 @@ export const ComposerActions = forwardRef<HTMLDivElement, ComponentPropsWithoutR
   ),
 );
 ComposerActions.displayName = 'ComposerActions';
+
+/** Leading actions, such as attaching files. */
+export const ComposerActionsStart = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-slot="composer-actions-start"
+      className={cn('flex min-w-0 shrink-0 items-center gap-1.5', className)}
+      {...props}
+    />
+  ),
+);
+ComposerActionsStart.displayName = 'ComposerActionsStart';
+
+/** Trailing actions: model, voice, and the primary Send action last. Stays right-aligned when alone. */
+export const ComposerActionsEnd = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-slot="composer-actions-end"
+      className={cn('ml-auto flex max-w-full min-w-0 items-center justify-end gap-1.5', className)}
+      {...props}
+    />
+  ),
+);
+ComposerActionsEnd.displayName = 'ComposerActionsEnd';
+
+/**
+ * Session status above the composer, outside the input box: right-aligned, wraps on narrow screens,
+ * and takes no space when nothing renders inside it.
+ */
+export const ComposerStatus = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-slot="composer-status"
+      className={cn(
+        'mx-auto flex w-full max-w-3xl min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 px-3 text-caption text-muted-foreground empty:hidden',
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+ComposerStatus.displayName = 'ComposerStatus';
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
