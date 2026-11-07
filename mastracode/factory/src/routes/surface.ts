@@ -671,7 +671,7 @@ const SECRET_DOMAINS = ['integrations', 'model-credentials', 'custom-providers']
 
 /**
  * `GET /web/status`: problems that stop the whole Factory from working, so the
- * UI shows one blocking error instead of every page failing on its own. Only a
+ * UI shows one alert banner instead of every page failing on its own. Only a
  * key problem counts, since only a redeploy with the right key clears it. Read
  * from the latest storage init result, so a key failure found by a later init
  * retry shows up too. Only client-safe copy goes out.
