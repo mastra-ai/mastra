@@ -19,8 +19,5 @@ export interface MastraComputerViewer {
  */
 export interface MastraComputers {
   tools(): Record<string, ToolAction<any, any, any, any>>;
-  viewer(
-    computerId: string,
-    scope: { threadId: string; resourceId: string },
-  ): Promise<MastraComputerViewer | null>;
+  viewer(computerId: string, scope: { threadId: string; resourceId: string }): Promise<MastraComputerViewer | null>;
 }

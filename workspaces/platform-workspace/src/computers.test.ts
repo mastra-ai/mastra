@@ -1,0 +1,547 @@
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
+import type { ComputerSandbox } from './computers.js';
+import {
+  DESTROY_FAILED,
+  MISSING_IDENTITY,
+  NOT_ATTACHED,
+  NOT_FOUND,
+  PlatformComputers,
+  UNAVAILABLE,
+} from './computers.js';
+import type { PlatformSandboxOptions } from './sandbox.js';
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+/** A shared fake platform: VMs outlive any one PlatformComputers instance, like the real proxy. */
+class FakeBackend {
+  vms = new Map<string, { alive: boolean }>();
+  createCalls: { kind: 'provision' | 'reattach'; sandboxId?: string }[] = [];
+  actions: string[] = [];
+  latency: Record<string, number> = {};
+  startDelayMs = 0;
+  nextSandboxId?: string;
+  failStart?: Error;
+  failDestroy = false;
+  viewerUrl: string | null = 'https://6080-vm.preview.test/vnc.html?autoconnect=1';
+  cookie: { name: string; value: string } | null = { name: '__mastra_preview', value: 'secret-cookie' };
+  #n = 0;
+
+  create = (options: PlatformSandboxOptions): ComputerSandbox => {
+    const backend = this;
+    let id: string | undefined;
+    const act = async (name: string) => {
+      await sleep(backend.latency[name] ?? 0);
+      backend.actions.push(name);
+    };
+    return {
+      get sandboxId() {
+        return id;
+      },
+      async start() {
+        await sleep(backend.startDelayMs);
+        if (backend.failStart) {
+          const e = backend.failStart;
+          backend.failStart = undefined;
+          throw e;
+        }
+        if (options.sandboxId) {
+          backend.createCalls.push({ kind: 'reattach', sandboxId: options.sandboxId });
+          if (!backend.vms.get(options.sandboxId)?.alive) {
+            throw Object.assign(new Error('gone'), { code: 'SANDBOX_REATTACH_FAILED', reason: '410' });
+          }
+          id = options.sandboxId;
+          return;
+        }
+        backend.createCalls.push({ kind: 'provision' });
+        id = backend.nextSandboxId ?? `sbx-${++backend.#n}`;
+        backend.vms.set(id, { alive: true });
+      },
+      async destroy() {
+        if (backend.failDestroy) throw new Error('proxy 500 sbx internal');
+        if (id) backend.vms.set(id, { alive: false });
+      },
+      async snapshot() {
+        await act('snapshot');
+      },
+      async executeCommand(command: string) {
+        await act(`exec:${command}`);
+        return { exitCode: 0, stdout: 'out', stderr: '' };
+      },
+      async getPortAuthCookie() {
+        return backend.cookie
+          ? {
+              ...backend.cookie,
+              domain: 'x',
+              path: '/',
+              expires: 0,
+              httpOnly: true,
+              secure: true,
+              sameSite: 'Lax' as const,
+            }
+          : null;
+      },
+      computer: {
+        screenshot: async () => {
+          await act('screenshot');
+          return { data: PNG, mediaType: 'image/png' as const };
+        },
+        leftClick: async () => act('click'),
+        rightClick: async () => act('rightClick'),
+        doubleClick: async () => act('doubleClick'),
+        moveMouse: async () => act('move'),
+        drag: async () => act('drag'),
+        scroll: async () => act('scroll'),
+        type: async () => act('type'),
+        press: async () => act('key'),
+        getScreenSize: async () => ({ width: 1280, height: 800 }),
+        getCursorPosition: async () => ({ x: 1, y: 2 }),
+        streamUrl: async () => backend.viewerUrl,
+      },
+    };
+  };
+}
+
+function ctx(resourceId: string | undefined, threadId: string | undefined, events: unknown[] = []) {
+  return {
+    agent: { resourceId, threadId, toolCallId: 'c', messages: [], suspend: async () => {} },
+    writer: { custom: async (chunk: unknown) => void events.push(chunk) },
+  } as any;
+}
+
+let backend: FakeBackend;
+const make = (extra: Record<string, unknown> = {}) =>
+  new PlatformComputers({ secret: 'test-secret', environmentId: 'env-1', createSandbox: backend.create, ...extra });
+
+async function call(computers: PlatformComputers, tool: string, input: unknown, context: unknown): Promise<any> {
+  return (computers.tools()[tool] as any).execute(input, context);
+}
+
+beforeEach(() => {
+  process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+  backend = new FakeBackend();
+});
+afterEach(() => {
+  delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+  delete process.env.MASTRA_COMPUTERS_SECRET;
+});
+
+describe('PlatformComputers construction', () => {
+  it('throws with the flag off', () => {
+    delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    expect(() => make()).toThrow('set MASTRA_EXPERIMENTAL_COMPUTER=true');
+  });
+
+  it('throws a distinct error with no secret or access token', () => {
+    const saved = { a: process.env.MASTRA_PLATFORM_ACCESS_TOKEN, b: process.env.MASTRA_PLATFORM_SECRET_KEY };
+    delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+    try {
+      expect(() => new PlatformComputers({ secret: '', accessToken: '' })).toThrow(
+        'PlatformComputers needs a secret (set MASTRA_COMPUTERS_SECRET or an access token)',
+      );
+    } finally {
+      if (saved.a !== undefined) process.env.MASTRA_PLATFORM_ACCESS_TOKEN = saved.a;
+      if (saved.b !== undefined) process.env.MASTRA_PLATFORM_SECRET_KEY = saved.b;
+    }
+  });
+
+  it('registers on Mastra and exposes exactly the contract tool ids', () => {
+    const computers = make();
+    expect(new Mastra({ logger: false, computers }).getComputers()).toBe(computers);
+    expect(Object.keys(computers.tools()).sort()).toEqual(
+      [
+        'computer_list',
+        'computer_create',
+        'computer_attach',
+        'computer_release',
+        'computer_snapshot',
+        'computer_destroy',
+        'computer_screenshot',
+        'computer_click',
+        'computer_move',
+        'computer_drag',
+        'computer_scroll',
+        'computer_type',
+        'computer_key',
+        'computer_screen_info',
+        'computer_exec',
+      ].sort(),
+    );
+    for (const [id, tool] of Object.entries(computers.tools())) expect(tool.id).toBe(id);
+  });
+});
+
+describe('computer ids', () => {
+  it('match fixed vectors for secret and HKDF keys', () => {
+    const resource = 'user|"ü"';
+    expect(make().mintId(true, 'sbx-abc', resource)).toBe('cmp_p_sbx-abc_MY7PkUexKgeEUt9Pdrzq4Q');
+    const hkdf = new PlatformComputers({ accessToken: 'tok', environmentId: 'env-1', createSandbox: backend.create });
+    expect(hkdf.mintId(false, 'sbx-abc', resource)).toBe('cmp_e_sbx-abc_PoIfILmz5F9o8YtUKHBc8A');
+  });
+
+  it('prefers options.secret over MASTRA_COMPUTERS_SECRET over the access token', () => {
+    process.env.MASTRA_COMPUTERS_SECRET = 'test-secret';
+    const fromEnv = new PlatformComputers({
+      accessToken: 'tok',
+      environmentId: 'env-1',
+      createSandbox: backend.create,
+    });
+    expect(fromEnv.mintId(true, 's', 'r')).toBe(make().mintId(true, 's', 'r'));
+    expect(make({ secret: 'other' }).mintId(true, 's', 'r')).not.toBe(make().mintId(true, 's', 'r'));
+  });
+
+  it.each([
+    ['malformed', 'not-an-id'],
+    ['bad mac', 'cmp_p_sbx-1_AAAAAAAAAAAAAAAAAAAAAA'],
+    ['flag swapped', () => make().mintId(true, 'sbx-1', 'r1').replace('cmp_p_', 'cmp_e_')],
+    ['other resource', () => make().mintId(true, 'sbx-1', 'r2')],
+    ['other environment', () => make({ environmentId: 'env-2' }).mintId(true, 'sbx-1', 'r1')],
+    ['shell metacharacters', 'cmp_p_$(rm -rf)_AAAAAAAAAAAAAAAAAAAAAA'],
+  ])('%s → not found with zero backend calls', async (_label, id) => {
+    backend.vms.set('sbx-1', { alive: true });
+    const computers = make();
+    const value = typeof id === 'function' ? id() : id;
+    expect(await call(computers, 'computer_attach', { id: value }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_destroy', { id: value }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(backend.createCalls).toEqual([]);
+  });
+});
+
+describe('attachment', () => {
+  it('refuses hands with no computer attached', async () => {
+    const computers = make();
+    for (const [tool, input] of [
+      ['computer_click', { x: 1, y: 1 }],
+      ['computer_screenshot', {}],
+      ['computer_exec', { command: 'ls' }],
+      ['computer_snapshot', {}],
+    ] as const) {
+      expect(await call(computers, tool, input, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+    }
+    expect(backend.actions).toEqual([]);
+  });
+
+  it('refuses without a thread or resource id', async () => {
+    const computers = make();
+    expect(await call(computers, 'computer_create', {}, ctx(undefined, 't1'))).toBe(MISSING_IDENTITY);
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', undefined))).toBe(MISSING_IDENTITY);
+    expect(backend.createCalls).toEqual([]);
+  });
+
+  it('keys attachment by resource and thread', async () => {
+    const computers = make();
+    const events: any[] = [];
+    const { computer } = await call(computers, 'computer_create', { name: 'box' }, ctx('r1', 't1', events));
+    expect(computer).toEqual({
+      id: computer.id,
+      name: 'box',
+      template: 'desktop',
+      status: 'attached',
+      persistent: false,
+    });
+    expect(events).toEqual([
+      {
+        type: 'data-computer',
+        data: { computerId: computer.id, threadId: 't1', name: 'box', status: 'attached', persistent: false },
+      },
+    ]);
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe('clicked at (1, 1)');
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't2'))).toBe(NOT_ATTACHED);
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r2', 't1'))).toBe(NOT_ATTACHED);
+  });
+
+  it('falls back to request context ids, preferring context.agent', async () => {
+    const computers = make();
+    const rc = new RequestContext();
+    rc.set(MASTRA_RESOURCE_ID_KEY, 'r-rc');
+    rc.set(MASTRA_THREAD_ID_KEY, 't-rc');
+    await call(computers, 'computer_create', {}, { requestContext: rc });
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r-rc', 't-rc'))).toBe('clicked at (1, 1)');
+    expect(
+      await call(computers, 'computer_click', { x: 1, y: 1 }, { ...ctx('r-agent', 't-agent'), requestContext: rc }),
+    ).toBe(NOT_ATTACHED);
+  });
+
+  it('replaces the thread attachment; the old computer stays listable and reattachable', async () => {
+    const computers = make();
+    const a = (await call(computers, 'computer_create', { name: 'a' }, ctx('r1', 't1'))).computer;
+    const b = (await call(computers, 'computer_create', { name: 'b' }, ctx('r1', 't1'))).computer;
+    expect(
+      (await call(computers, 'computer_list', {}, ctx('r1', 't1'))).computers.map((c: any) => [c.name, c.status]),
+    ).toEqual([
+      ['a', 'available'],
+      ['b', 'attached'],
+    ]);
+    expect((await call(computers, 'computer_list', {}, ctx('r2', 't1'))).computers).toEqual([]);
+    const released = await call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    expect(released.computer.id).toBe(b.id);
+    expect((await call(computers, 'computer_attach', { id: a.id }, ctx('r1', 't1'))).computer.id).toBe(a.id);
+  });
+
+  it('refuses another resource attaching or destroying a computer, without side effects', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', { persist: true }, ctx('r1', 't1'));
+    const events: unknown[] = [];
+    backend.createCalls = [];
+    expect(await call(computers, 'computer_attach', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_destroy', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
+    expect(events).toEqual([]);
+    expect(backend.createCalls).toEqual([]);
+    expect([...backend.vms.values()].every(v => v.alive)).toBe(true);
+  });
+});
+
+describe('lifecycle', () => {
+  it('maps create failures to a stable message and destroys the partial sandbox', async () => {
+    backend.nextSandboxId = 'bad id!';
+    expect(await call(make(), 'computer_create', {}, ctx('r1', 't1'))).toBe(UNAVAILABLE);
+    expect(backend.vms.get('bad id!')?.alive).toBe(false);
+  });
+
+  it('destroys: queued hands finish, later hands are refused, then unattached', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.latency.type = 20;
+    const typed = call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'));
+    const destroyed = call(computers, 'computer_destroy', { id: computer.id }, ctx('r1', 't1'));
+    expect(await call(computers, 'computer_key', { keys: 'a' }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+    expect(await typed).toBe('typed');
+    expect(await destroyed).toEqual({ destroyed: computer.id });
+    expect(backend.actions).toEqual(['type']);
+    expect(await call(computers, 'computer_attach', { id: computer.id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+  });
+
+  it('reports destroy failure without leaking internals', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.failDestroy = true;
+    expect(await call(computers, 'computer_destroy', { id: computer.id }, ctx('r1', 't1'))).toBe(DESTROY_FAILED);
+    expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
+  });
+
+  it('runs hands tools against the driver', async () => {
+    const computers = make();
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    const c = ctx('r1', 't1');
+    const shot = await call(computers, 'computer_screenshot', {}, c);
+    expect(shot).toMatchObject({ mediaType: 'image/png', data: Buffer.from(PNG).toString('base64') });
+    expect((computers.tools().computer_screenshot as any).toModelOutput(shot).value[1].type).toBe('media');
+    await call(computers, 'computer_click', { x: 1, y: 2, button: 'right' }, c);
+    await call(computers, 'computer_click', { x: 1, y: 2, double: true }, c);
+    await call(computers, 'computer_move', { x: 3, y: 4 }, c);
+    await call(computers, 'computer_drag', { from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }, c);
+    await call(computers, 'computer_scroll', { direction: 'down', amount: 2 }, c);
+    expect(await call(computers, 'computer_screen_info', {}, c)).toEqual({
+      screen: { width: 1280, height: 800 },
+      cursor: { x: 1, y: 2 },
+    });
+    expect(await call(computers, 'computer_exec', { command: 'echo hi' }, c)).toEqual({
+      exitCode: 0,
+      stdout: 'out',
+      stderr: '',
+    });
+    expect(await call(computers, 'computer_snapshot', {}, c)).toBe('snapshot saved');
+    expect(backend.actions).toEqual([
+      'screenshot',
+      'rightClick',
+      'doubleClick',
+      'move',
+      'drag',
+      'scroll',
+      'exec:echo hi',
+      'snapshot',
+    ]);
+  });
+
+  it('rejects out-of-range exec timeouts by schema', () => {
+    const schema = (make().tools().computer_exec as any).inputSchema;
+    expect(schema.safeParse({ command: 'ls', timeout: 600_001 }).success).toBe(false);
+    expect(schema.safeParse({ command: 'ls', timeout: 1000 }).success).toBe(true);
+  });
+});
+
+describe('persistence across processes', () => {
+  it('reattaches a persistent id in a fresh process, with name reset', async () => {
+    const id = (await call(make(), 'computer_create', { name: 'box', persist: true }, ctx('r1', 't1'))).computer.id;
+    const fresh = make();
+    const events: any[] = [];
+    const result = await call(fresh, 'computer_attach', { id }, ctx('r1', 't2', events));
+    expect(result.computer).toEqual({
+      id,
+      name: 'computer',
+      template: 'desktop',
+      status: 'attached',
+      persistent: true,
+    });
+    expect(backend.createCalls.at(-1)).toEqual({ kind: 'reattach', sandboxId: id.split('_')[2] });
+    expect(events[0].data.status).toBe('attached');
+    expect(await call(fresh, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't2'))).toBe('clicked at (1, 1)');
+  });
+
+  it('does not reattach an ephemeral id in a fresh process', async () => {
+    const id = (await call(make(), 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    backend.createCalls = [];
+    expect(await call(make(), 'computer_attach', { id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(backend.createCalls).toEqual([]);
+  });
+
+  it('reattaches a released ephemeral computer in the same process', async () => {
+    const computers = make();
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    await call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    expect((await call(computers, 'computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
+  });
+
+  it('destroys a persistent id from a fresh process, then reports not found', async () => {
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    expect(await call(make(), 'computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
+    expect([...backend.vms.values()].every(v => !v.alive)).toBe(true);
+    const out = await call(make(), 'computer_attach', { id }, ctx('r1', 't1'));
+    expect(out).toBe(NOT_FOUND);
+  });
+
+  it('shares one reconstruct between two threads attaching the same id', async () => {
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    backend.createCalls = [];
+    backend.startDelayMs = 10;
+    const fresh = make();
+    const [a, b] = await Promise.all([
+      call(fresh, 'computer_attach', { id }, ctx('r1', 'tA')),
+      call(fresh, 'computer_attach', { id }, ctx('r1', 'tB')),
+    ]);
+    expect([a.computer.id, b.computer.id]).toEqual([id, id]);
+    expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: id.split('_')[2] }]);
+  });
+
+  it('lets a destroy racing an attach win', async () => {
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    backend.startDelayMs = 10;
+    const fresh = make();
+    const attached = call(fresh, 'computer_attach', { id }, ctx('r1', 'tA'));
+    const destroyed = call(fresh, 'computer_destroy', { id }, ctx('r1', 'tB'));
+    expect(await destroyed).toEqual({ destroyed: id });
+    expect(await attached).toBe(NOT_FOUND);
+    expect(await call(fresh, 'computer_click', { x: 1, y: 1 }, ctx('r1', 'tA'))).toBe(NOT_ATTACHED);
+  });
+
+  it('retries after a transient reattach failure without leaking details', async () => {
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    backend.createCalls = [];
+    const fresh = make();
+    backend.failStart = new Error('proxy 503 sbx-1 body');
+    expect(await call(fresh, 'computer_attach', { id }, ctx('r1', 't1'))).toBe(UNAVAILABLE);
+    expect((await call(fresh, 'computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
+    expect(backend.createCalls).toHaveLength(1);
+  });
+});
+
+describe('viewer', () => {
+  it('returns url and cookie header for the attached thread only', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    const viewer = await computers.viewer(computer.id, { resourceId: 'r1', threadId: 't1' });
+    expect(viewer).toEqual({
+      url: 'https://6080-vm.preview.test/vnc.html?autoconnect=1',
+      headers: { cookie: '__mastra_preview=secret-cookie' },
+    });
+    expect(viewer!.url).not.toMatch(/token|grant|secret/);
+    await expect(computers.viewer(computer.id, { resourceId: 'r2', threadId: 't1' })).rejects.toThrow(
+      'computer not attached',
+    );
+    await expect(computers.viewer('cmp_nope', { resourceId: 'r1', threadId: 't1' })).rejects.toThrow(
+      'computer not attached',
+    );
+  });
+
+  it('returns null when the viewer url or cookie is unavailable', async () => {
+    const computers = make();
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.cookie = null;
+    expect(await computers.viewer(computer.id, { resourceId: 'r1', threadId: 't1' })).toBeNull();
+    backend.cookie = { name: 'a', value: 'b' };
+    backend.viewerUrl = null;
+    expect(await computers.viewer(computer.id, { resourceId: 'r1', threadId: 't1' })).toBeNull();
+  });
+});
+
+function parallelToolCallModel(calls: { toolName: string; input: unknown }[]) {
+  let step = 0;
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'test',
+    modelId: 'parallel-tool-calls',
+    supportedUrls: {},
+    doGenerate: async () =>
+      step++ === 0
+        ? {
+            content: calls.map((c, i) => ({
+              type: 'tool-call' as const,
+              toolCallId: `call_${i}`,
+              toolName: c.toolName,
+              input: JSON.stringify(c.input),
+            })),
+            finishReason: 'tool-calls' as const,
+            usage,
+            warnings: [],
+          }
+        : { content: [{ type: 'text' as const, text: 'done' }], finishReason: 'stop' as const, usage, warnings: [] },
+    doStream: async () => {
+      throw new Error('not used');
+    },
+  };
+}
+
+describe('ordering through a real agent at default tool concurrency', () => {
+  const steps = [
+    { toolName: 'computer_click', input: { x: 1, y: 2 } },
+    { toolName: 'computer_type', input: { text: 'echo hi' } },
+    { toolName: 'computer_key', input: { keys: 'Enter' } },
+  ];
+
+  async function run(tools: Record<string, any>) {
+    const agent = new Agent({
+      id: 'computer-order',
+      name: 'computer-order',
+      instructions: 'Use the computer.',
+      model: parallelToolCallModel(steps) as any,
+      tools,
+    });
+    const rc = new RequestContext();
+    rc.set(MASTRA_RESOURCE_ID_KEY, 'r1');
+    rc.set(MASTRA_THREAD_ID_KEY, 't1');
+    await agent.generate('go', { maxSteps: 3, requestContext: rc });
+  }
+
+  it('reaches the desktop in model order even when earlier actions are slower', async () => {
+    const computers = make();
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.latency = { click: 30, type: 10, key: 0 };
+    await run(computers.tools());
+    expect(backend.actions).toEqual(['click', 'type', 'key']);
+  });
+
+  it('red: a tool that awaits before taking its slot misorders in the same harness', async () => {
+    const latency: Record<string, number> = { click: 30, type: 10, key: 0 };
+    const seen: string[] = [];
+    const naive = (name: string) =>
+      createTool({
+        id: `computer_${name}`,
+        description: name,
+        inputSchema: z.object({}).passthrough(),
+        execute: async () => {
+          await sleep(latency[name]!);
+          seen.push(name);
+          return 'ok';
+        },
+      });
+    await run({ computer_click: naive('click'), computer_type: naive('type'), computer_key: naive('key') });
+    expect(seen).toEqual(['key', 'type', 'click']);
+  });
+});
