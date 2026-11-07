@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { serializeSandboxTemplate } from './template.js';
 import * as platformWorkspace from './index.js';
-import { Template } from './index.js';
+import { Template, withDesktop } from './index.js';
 import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './index.js';
 
 describe('Template', () => {
@@ -225,5 +225,33 @@ describe('Template', () => {
       Template().withFamily('repo:acme/widgets:/w').runCmd('pnpm install').setWorkdir('/w'),
     );
     expect(definition.family).toBe('repo:acme/widgets:/w');
+  });
+});
+
+describe('withDesktop', () => {
+  const packages = [
+    'xvfb',
+    'openbox',
+    'x11vnc',
+    'novnc',
+    'websockify',
+    'xdotool',
+    'scrot',
+    'xterm',
+    'dbus-x11',
+    'x11-utils',
+  ];
+
+  it('appends one aptInstall of the desktop packages', () => {
+    expect(serializeSandboxTemplate(withDesktop(Template())).operations).toEqual([
+      { method: 'aptInstall', args: [packages] },
+    ]);
+  });
+
+  it('leaves resources alone', () => {
+    expect(serializeSandboxTemplate(withDesktop(Template().memoryMB(4096))).operations).toEqual([
+      { method: 'memoryMB', args: [4096] },
+      { method: 'aptInstall', args: [packages] },
+    ]);
   });
 });

@@ -1,5 +1,6 @@
 import { PlatformClient } from './client.js';
 import type { PlatformClientOptions } from './client.js';
+import { DESKTOP_PACKAGES } from './computer.js';
 
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -256,6 +257,15 @@ function assertSerializedSize(operations: readonly SandboxTemplateOperation[], f
 
 export function Template(): SandboxTemplateBuilder {
   return new SerializableSandboxTemplateBuilder();
+}
+
+/**
+ * Pre-install the desktop used by `PlatformSandbox`'s `computer: true`, so
+ * sandboxes booted from the built template skip the runtime install. Leaves
+ * resources alone: set `memoryMB` yourself (2048 or more is recommended).
+ */
+export function withDesktop(template: SandboxTemplateBuilder): SandboxTemplateBuilder {
+  return template.aptInstall([...DESKTOP_PACKAGES]);
 }
 
 function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxTemplateBuilder {

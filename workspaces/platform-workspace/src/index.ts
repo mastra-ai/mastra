@@ -8,6 +8,7 @@ export {
 export { PlatformFilesystem, type PlatformFilesystemOptions } from './filesystem.js';
 export {
   Template,
+  withDesktop,
   type AptInstallOptions,
   type JsonPrimitive,
   type JsonValue,

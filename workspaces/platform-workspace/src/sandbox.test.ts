@@ -1,6 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { supportsNetworking } from '@mastra/core/workspace';
+import { createWorkspaceTools, supportsComputer, supportsNetworking, Workspace } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox } from './sandbox.js';
@@ -4118,5 +4122,211 @@ describe('PlatformSandbox networking', () => {
     await sandbox._start();
 
     await expect(sandbox.networking!.getPortUrl(3000)).rejects.toThrow();
+  });
+});
+
+describe('PlatformSandbox computer', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const COMPUTER_TOOLS = [
+    'mastra_workspace_computer_click',
+    'mastra_workspace_computer_double_click',
+    'mastra_workspace_computer_drag',
+    'mastra_workspace_computer_get_screen_info',
+    'mastra_workspace_computer_move_mouse',
+    'mastra_workspace_computer_press_key',
+    'mastra_workspace_computer_right_click',
+    'mastra_workspace_computer_screenshot',
+    'mastra_workspace_computer_scroll',
+    'mastra_workspace_computer_type',
+    'mastra_workspace_computer_wait',
+  ];
+
+  type RunnerResult = { exitCode: number | null; stdout?: string; stderr?: string; timedOut?: boolean };
+
+  /** An E2B sandbox whose exec runner answers the desktop start script, then `respond` for everything else. */
+  function makeComputerSandbox(respond: (command: string) => RunnerResult = () => ({ exitCode: 0 })) {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockImplementation(async () => e2bLeaseResponse());
+    const e2bExecRunner = vi.fn(async (_lease: unknown, { command }: { command: string }) => {
+      const r = command.includes('flock -w 120 9') ? { exitCode: 0, stdout: 'launched=5\nready\n' } : respond(command);
+      return { stdout: '', stderr: '', truncated: false, timedOut: false, opened: true, ...r };
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      e2bExecRunner,
+      computer: true,
+    });
+    const workCommands = () =>
+      e2bExecRunner.mock.calls.map(([, o]) => o.command).filter(c => !c.includes('flock -w 120 9'));
+    return { sandbox, fetchMock, e2bExecRunner, workCommands };
+  }
+
+  it('is absent, with no exec at construction, when not requested', async () => {
+    const e2bExecRunner = vi.fn();
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      e2bExecRunner,
+    });
+
+    expect(sandbox.computer).toBeUndefined();
+    expect(supportsComputer(sandbox)).toBe(false);
+    const tools = await createWorkspaceTools(new Workspace({ sandbox }));
+    expect(Object.keys(tools).filter(k => k.startsWith('mastra_workspace_computer_'))).toEqual([]);
+    expect(e2bExecRunner).not.toHaveBeenCalled();
+  });
+
+  it('adds exactly the 11 computer tools when requested, without exec at construction', async () => {
+    const { sandbox, e2bExecRunner, fetchMock } = makeComputerSandbox();
+
+    expect(supportsComputer(sandbox)).toBe(true);
+    const tools = await createWorkspaceTools(new Workspace({ sandbox }));
+    expect(
+      Object.keys(tools)
+        .filter(k => k.startsWith('mastra_workspace_computer_'))
+        .sort(),
+    ).toEqual(COMPUTER_TOOLS);
+    expect(e2bExecRunner).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('requires the e2b provider', () => {
+    const base = { accessToken: 'sk_test', projectId: 'proj_123', environmentId: 'env_123', computer: true };
+    expect(() => new PlatformSandbox({ ...base, sandboxProvider: 'railway' })).toThrow(
+      'PlatformSandbox computer requires the e2b sandbox provider',
+    );
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+    expect(() => new PlatformSandbox(base)).toThrow('PlatformSandbox computer requires the e2b sandbox provider');
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    expect(new PlatformSandbox(base).computer).toBeDefined();
+    vi.stubEnv('SANDBOX_PROVIDER', '');
+    expect(new PlatformSandbox(base).computer).toBeDefined();
+  });
+
+  it('keeps the option across clone()', () => {
+    const { sandbox } = makeComputerSandbox();
+    expect(supportsComputer(sandbox.clone())).toBe(true);
+    const plain = new PlatformSandbox({ accessToken: 'sk_test', projectId: 'proj_123', environmentId: 'env_123' });
+    expect(plain.clone().computer).toBeUndefined();
+  });
+
+  it('starts the desktop before the first action and drives it with xdotool argv', async () => {
+    const { sandbox, e2bExecRunner, workCommands } = makeComputerSandbox();
+    await sandbox._start();
+
+    await sandbox.computer!.leftClick(10, 20);
+    await sandbox.computer!.press(['ctrl', 's']);
+
+    const [first] = e2bExecRunner.mock.calls[0]!;
+    expect(first).toMatchObject({ provider: 'e2b' });
+    expect(e2bExecRunner.mock.calls[0]![1]).toMatchObject({
+      command: expect.stringMatching(/^bash -c '/),
+      env: { DISPLAY: ':1' },
+      timeoutMs: 300_000,
+    });
+    expect(workCommands()).toEqual(['xdotool mousemove 10 20 click 1', "xdotool key --clearmodifiers -- 'ctrl+s'"]);
+    expect(e2bExecRunner.mock.calls.at(-1)![1]).toMatchObject({ env: { DISPLAY: ':1' } });
+  });
+
+  it('builds the noVNC viewer URL from the preview grant', async () => {
+    const grantUrl = 'https://6080-sb.example/';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse())
+      .mockResolvedValueOnce(
+        json({
+          url: `${grantUrl}__mastra/grant?g=abc`,
+          expiresAt: '2026-06-26T00:01:00.000Z',
+          cookie: { name: '__mastra_preview', value: 'signed', domain: '6080-sb.example', path: '/' },
+        }),
+      );
+    const e2bExecRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: 'ready\n',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+      opened: true,
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      e2bExecRunner,
+      computer: true,
+    });
+    await sandbox._start();
+
+    await expect(sandbox.computer!.streamUrl!()).resolves.toBe(
+      'https://6080-sb.example/vnc.html?autoconnect=1&resize=scale&path=websockify',
+    );
+    const [url, init] = fetchMock.mock.calls[2]!;
+    expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/preview-grants');
+    expect(JSON.parse(init.body)).toEqual({ port: 6080 });
+  });
+
+  it('returns a null viewer URL when there is no preview grant', async () => {
+    const { sandbox, fetchMock } = makeComputerSandbox();
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse())
+      .mockResolvedValueOnce(json({ error: { message: 'nope', type: 'x' } }, { status: 404 }));
+    await sandbox._start();
+
+    await expect(sandbox.computer!.streamUrl!()).resolves.toBeNull();
+  });
+
+  it('sends input actions once, but retries reads, after a transport failure', async () => {
+    const { sandbox, workCommands } = makeComputerSandbox(() => ({ exitCode: null }));
+    await sandbox._start();
+
+    await expect(sandbox.computer!.leftClick(1, 2)).rejects.toThrow();
+    expect(workCommands()).toEqual(['xdotool mousemove 1 2 click 1']);
+
+    await expect(sandbox.computer!.getScreenSize()).rejects.toThrow();
+    expect(workCommands().filter(c => c === 'xdotool getdisplaygeometry')).toHaveLength(2);
+  });
+
+  it('keeps typed text a single argv element through the real shell', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'computer-quote-'));
+    try {
+      const stubDir = join(dir, 'bin');
+      execFileSync('mkdir', [stubDir]);
+      const stub = join(stubDir, 'xdotool');
+      writeFileSync(stub, '#!/bin/sh\nfor a in "$@"; do printf \'%s\\n\' "$a"; done\n');
+      chmodSync(stub, 0o755);
+      const mark = join(dir, 'pwned');
+      const text = "x'; touch $MARK; echo '";
+
+      const { sandbox, workCommands } = makeComputerSandbox(() => ({ exitCode: 0 }));
+      await sandbox._start();
+      await sandbox.computer!.type(text);
+      const [command] = workCommands();
+
+      const out = execFileSync('bash', ['-c', command!], {
+        env: { PATH: `${stubDir}:${process.env.PATH}`, MARK: mark },
+        encoding: 'utf8',
+      });
+      expect(out.split('\n').filter(Boolean)).toEqual(['type', '--clearmodifiers', '--delay', '12', '--', text]);
+      expect(existsSync(mark)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

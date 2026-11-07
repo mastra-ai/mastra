@@ -40,7 +40,7 @@ export const DESKTOP_PACKAGES: readonly string[] = [
 const DISPLAY = ':1';
 const SCREEN = '1280x800x24';
 const VNC_PORT = 5900;
-const VIEWER_PORT = 6080;
+export const COMPUTER_VIEWER_PORT = 6080;
 const ENV = { DISPLAY };
 const ENSURE_TIMEOUT_MS = 300_000;
 const CANT_OPEN_DISPLAY = "Can't open display";
@@ -69,7 +69,7 @@ deadline=$((SECONDS + 15))
 x_ok() { xdpyinfo -display ${DISPLAY} >/dev/null 2>&1; }
 wm_ok() { xprop -display ${DISPLAY} -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id'; }
 vnc_ok() { bash -c '</dev/tcp/127.0.0.1/${VNC_PORT}' >/dev/null 2>&1; }
-web_ok() { curl -sf -o /dev/null http://127.0.0.1:${VIEWER_PORT}/vnc.html; }
+web_ok() { curl -sf -o /dev/null http://127.0.0.1:${COMPUTER_VIEWER_PORT}/vnc.html; }
 term_ok() { xdotool search --class xterm >/dev/null 2>&1; }
 launch() { log="/tmp/.mastra-computer-$1.log"; setsid nohup "$@" >"$log" 2>&1 9>&- & n=$((n + 1)); }
 await_ok() { until "$1"; do [ "$SECONDS" -ge "$deadline" ] && { echo "desktop not ready: $1" >&2; exit 1; }; sleep 0.2; done; }
@@ -79,7 +79,7 @@ wm_ok || launch openbox
 await_ok wm_ok
 vnc_ok || launch x11vnc -display ${DISPLAY} -forever -shared -nopw -rfbport ${VNC_PORT} -localhost
 await_ok vnc_ok
-web_ok || launch websockify --web /usr/share/novnc 0.0.0.0:${VIEWER_PORT} localhost:${VNC_PORT}
+web_ok || launch websockify --web /usr/share/novnc 0.0.0.0:${COMPUTER_VIEWER_PORT} localhost:${VNC_PORT}
 await_ok web_ok
 term_ok || launch xterm
 await_ok term_ok
