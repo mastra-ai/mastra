@@ -101,6 +101,8 @@ type WithoutIndexSignatures<T> = {
   [K in keyof T as string extends K ? never : number extends K ? never : symbol extends K ? never : K]: T[K];
 };
 
+export type GetScoreResponse = GeneratedResponse<'GET /observability/scores/:scoreId'>;
+export type GetFeedbackResponse = GeneratedResponse<'GET /observability/feedback/:feedbackId'>;
 export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
 export type FeedbackItem = ListFeedbackResponse['feedback'][number];
 export type GetMetricTimeSeriesResponse = GeneratedResponse<'POST /observability/metrics/timeseries'>;

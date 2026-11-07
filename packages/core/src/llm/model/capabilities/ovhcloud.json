@@ -38,7 +38,7 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-oss-20b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -56,7 +56,7 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-oss-120b": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

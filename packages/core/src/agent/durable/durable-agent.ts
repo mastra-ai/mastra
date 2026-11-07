@@ -5451,14 +5451,7 @@ export class DurableAgent<
     const deliver = (event: AgentStreamEvent) => {
       activityVersion++;
       if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
-      // `index` is log bookkeeping, not part of the client payload: the observe
-      // route forwards events verbatim, so keep the payload exactly what
-      // pre-#27352 clients already receive.
-      if (event.index !== undefined) {
-        const { index: _index, ...rest } = event;
-        onEvent(rest as AgentStreamEvent);
-        return;
-      }
+      // Keep `index`: the observe route forwards it on each frame so clients can resume at index + 1.
       onEvent(event);
     };
     // Acks every delivery, dropped ones included, so a durable backend doesn't
@@ -5537,7 +5530,8 @@ export class DurableAgent<
     options?: {
       /**
        * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See

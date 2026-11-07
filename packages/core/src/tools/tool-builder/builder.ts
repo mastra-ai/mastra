@@ -9,6 +9,7 @@ import {
   MetaSchemaCompatLayer,
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  isZodType,
   jsonSchema,
 } from '@mastra/schema-compat';
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
@@ -1187,7 +1188,13 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    const originalSchema = this.getParameters();
+    const parameters = this.getParameters();
+    // JSON Schema (client tools, AI SDK `jsonSchema()`) must not round-trip through Zod: that
+    // conversion turns unions into intersections the compat layers collapse to `{}`.
+    const originalSchema =
+      parameters && !isZodType(parameters) && !isStandardSchemaWithJSON(parameters)
+        ? toStandardSchema(parameters)
+        : parameters;
     const inputValidationSchema = this.buildCompatValidationSchema(originalSchema, schemaCompatLayers);
     let processedInputSchema: Schema | undefined;
 

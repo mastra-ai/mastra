@@ -406,6 +406,17 @@ const scores = await mastraClient.listScoresBySpan({
 })
 ```
 
+## Get a score by ID
+
+Use `getScore()` to retrieve one observability score:
+
+```typescript
+const { score } = await mastraClient.getScore('score-id-123')
+```
+
+The response is `{ score: record | null }`. A missing score returns HTTP 200 with `{ score: null }`.
+The return type is `GetScoreResponse`, exported from `@mastra/client-js`.
+
 ## Creating scores
 
 Create a score for a trace, optionally identifying a span within it:
@@ -426,6 +437,19 @@ const response = await mastraClient.createScore({
 ## Feedback
 
 Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the configured API server. Create methods support OSS and Platform. Full replacement uses Platform's PUT endpoint. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+
+### Get feedback by ID
+
+Use `getFeedback()` to retrieve one feedback record:
+
+```typescript
+const { feedback } = await mastraClient.getFeedback('feedback-id-123')
+```
+
+The response is `{ feedback: record | null }`. A missing record returns HTTP 200 with `{ feedback: null }`.
+The return type is `GetFeedbackResponse`, exported from `@mastra/client-js`.
+
+Both getters accept an unencoded ID and encode it as a URL path segment. They use the client's configured API prefix, credentials, and headers. Record timestamps are ISO strings in the JSON response.
 
 ### Creating feedback
 

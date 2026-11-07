@@ -1,5 +1,11 @@
 # @mastra/auth-studio
 
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Fixed sign-outs and extra platform calls when a page sends several requests at once. Requests that arrive together with the same session cookie now share one check with the Mastra platform. Before, each request checked the cookie on its own. When the session had expired, each one also tried to renew it with the same refresh token. The platform accepts a refresh token only once, so the other requests failed and could sign the user out. ([#29434](https://github.com/mastra-ai/mastra/pull/29434))
+
 ## 1.3.11
 
 ### Patch Changes

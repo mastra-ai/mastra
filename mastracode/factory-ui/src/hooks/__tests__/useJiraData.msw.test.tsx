@@ -17,7 +17,7 @@ import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import { isJiraAuthError } from '../../ui/domains/factory/services/jira';
 import type { JiraIssue, JiraProject, JiraStatus } from '../../ui/domains/factory/services/jira';
-import { useIntakeConfigQuery, useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../useIntakeConfig';
+import { useIntakeConfigQuery, useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../useIntakeConfig';
 import { useJiraIssueDetail, useJiraIssuesQuery, useJiraProjectsQuery, useJiraStatusQuery } from '../useJiraData';
 
 const STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
@@ -262,7 +262,7 @@ describe('intake config and bindings drive the Jira issue cache', () => {
     server.use(
       http.get(CONFIG_URL, () => HttpResponse.json({ config })),
       http.put(CONFIG_URL, async ({ request }) =>
-        HttpResponse.json({ config: (await request.json()) as IntakeConfig }),
+        HttpResponse.json({ config: { ...config, ...((await request.json()) as Partial<IntakeConfig>) } }),
       ),
       http.get(ISSUES_URL, () => {
         issueHits += 1;
@@ -272,13 +272,13 @@ describe('intake config and bindings drive the Jira issue cache', () => {
 
     const { result } = renderHookWithProviders(() => ({
       issues: useJiraIssuesQuery(FACTORY_A),
-      save: useSaveIntakeConfigMutation(),
+      save: useSaveIntakeSelectionMutation('jira'),
     }));
 
     await waitFor(() => expect(result.current.issues.data).toBeDefined());
     expect(issueHits).toBe(1);
 
-    result.current.save.mutate(config);
+    result.current.save.mutate(config.jira);
 
     await waitFor(() => expect(issueHits).toBe(2));
   });
@@ -306,7 +306,7 @@ describe('intake config and bindings drive the Jira issue cache', () => {
     await waitFor(() => expect(result.current.issues.data).toBeDefined());
     expect(issueHits).toBe(1);
 
-    result.current.bind.mutate({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A });
+    result.current.bind.mutate({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A, board: null });
 
     await waitFor(() => expect(issueHits).toBe(2));
   });

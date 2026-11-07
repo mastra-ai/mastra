@@ -258,6 +258,13 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
+
 // Matches the snapshot wait of the durable resume path this check gates
 // (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
 const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
@@ -3029,7 +3036,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames. Frames whose replay-cache write failed, or all frames when caching is off, carry no index, so no offset can resume at them; omitting `offset` replays whatever the transport itself retains, which can repeat frames already received.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
@@ -3051,11 +3058,30 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         if (typeof durableAgent?.__subscribeToRunStream === 'function') {
           return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
-        const subscribed =
-          offset !== undefined
-            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
-            : pubsub.subscribeWithReplay(topic, onEvent);
-        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+        if (offset === undefined) {
+          return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));
+        }
+        return pubsub.subscribeFromOffset(topic, offset, onEvent).then(() => {
+          // Resuming past the run's last entry replays nothing; if that entry ended the
+          // run, nothing more will arrive, so close instead of waiting for the idle timeout.
+          // Read only after subscribing so a terminal entry racing attachment is not lost.
+          // A failed read only means we can't close early; the idle timer still bounds the stream.
+          // A client resuming at last index + 1 needs a one-entry read; only an offset
+          // further past the end falls back to the full log to find the true tail.
+          if (offset > 0) {
+            const readTail = async () => {
+              const window = await pubsub.getHistory(topic, offset - 1);
+              return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
+            };
+            // Don't hold back the unsubscribe handle while the read waits on the cache.
+            void readTail()
+              .catch(() => undefined)
+              .then(last => {
+                if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) onComplete();
+              });
+          }
+          return () => pubsub.unsubscribe(topic, onEvent);
+        });
       };
 
       let closed = false;
