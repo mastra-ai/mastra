@@ -35,6 +35,37 @@ describe('resolveBackgroundConfig', () => {
     expect(resolved.runInBackground).toBe(false);
   });
 
+  it('ignores model overrides for fixed-background tools and uses developer defaults', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { enabled: false, disposition: 'foreground', timeoutMs: 1, maxRetries: 99 },
+      toolName: 'research',
+      toolConfig: { enabled: true, allowModelOverride: false, timeoutMs: 5000, maxRetries: 2 },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: true, disposition: 'deferred', timeoutMs: 5000, maxRetries: 2 });
+  });
+
+  it('uses a fixed foreground default when overrides are disabled', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'awaited' },
+      toolName: 'research',
+      toolConfig: { enabled: true, allowModelOverride: false, defaultDisposition: 'foreground' },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
+  it('lets the agent override the tool-level model policy', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'foreground' },
+      toolName: 'research',
+      toolConfig: { enabled: true, allowModelOverride: false },
+      agentConfig: { tools: { research: { enabled: true, allowModelOverride: true } } },
+    });
+    expect(resolved.disposition).toBe('foreground');
+  });
+
   it('defers an eligible tool by default when the call has no override', () => {
     const resolved = resolveBackgroundConfig({
       llmBgOverrides: {},

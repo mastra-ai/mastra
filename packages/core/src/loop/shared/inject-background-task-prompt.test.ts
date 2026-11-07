@@ -71,6 +71,31 @@ describe('injectBackgroundTaskPrompt', () => {
     expect(systemContent).toContain('bar');
   });
 
+  it('does not advertise a fixed-background tool even with manager and agent opt-in', () => {
+    const inputMessages = makePrompt();
+    const result = injectBackgroundTaskPrompt({
+      inputMessages,
+      backgroundTaskManager: fakeManager,
+      tools: { fixed: { background: { enabled: true, allowModelOverride: false } } },
+      agentBackgroundConfig: { tools: 'all' },
+    });
+    expect(result).toBe(inputMessages);
+  });
+
+  it('advertises overrideable tools but not fixed-background tools', () => {
+    const result = injectBackgroundTaskPrompt({
+      inputMessages: makePrompt(),
+      backgroundTaskManager: fakeManager,
+      tools: {
+        fixed: { background: { enabled: true, allowModelOverride: false } },
+        configurable: { background: { enabled: true } },
+      },
+    });
+    const content = (result[0] as { content: string }).content;
+    expect(content).toContain('- configurable (default: background)');
+    expect(content).not.toContain('- fixed');
+  });
+
   it('returns inputMessages unchanged when no tool is background-eligible (issue #22724)', () => {
     const inputMessages = makePrompt();
     const result = injectBackgroundTaskPrompt({
