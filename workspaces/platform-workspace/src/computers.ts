@@ -15,7 +15,13 @@ import type { SandboxComputer } from '@mastra/core/workspace';
 import { z } from 'zod/v4';
 import { COMPUTER_VIEWER_PORT } from './computer.js';
 import { PlatformSandbox } from './sandbox.js';
-import type { CaptureCheckpointResult, PlatformSandboxOptions, SandboxPortAuthCookie } from './sandbox.js';
+import type {
+  CaptureCheckpointResult,
+  PlatformSandboxOptions,
+  PlatformSandboxTemplate,
+  SandboxPortAuthCookie,
+} from './sandbox.js';
+import { Template, withDesktop } from './template.js';
 
 export const NOT_ATTACHED = 'no computer attached — call computer_attach or computer_create';
 export const NOT_FOUND = 'computer not found';
@@ -58,6 +64,16 @@ export interface PlatformComputersOptions {
    * rotating the token orphans persistent ids.
    */
   secret?: string;
+  /**
+   * Attach a screenshot to every click, move, drag, scroll, type and key result.
+   * Off by default: the model asks for one with `computer_screenshot` when it needs to look.
+   */
+  screenshotAfterAction?: boolean;
+  /**
+   * Template new computers boot from. Defaults to `withDesktop(Template())`, so once that
+   * template is built the first action skips the desktop install. `false` boots the provider default.
+   */
+  template?: PlatformSandboxTemplate | false;
   /** @internal Test seam for the sandbox driver. */
   createSandbox?: (options: PlatformSandboxOptions) => ComputerSandbox;
 }
@@ -104,6 +120,27 @@ function isReattachFailure(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === 'SANDBOX_REATTACH_FAILED';
 }
 
+function media(prefix: string, shot: { data: Uint8Array; mediaType: string }) {
+  return {
+    __workspaceMedia: true as const,
+    text: `${prefix}Screenshot (${shot.data.byteLength} bytes)`,
+    mediaType: shot.mediaType,
+    data: Buffer.from(shot.data).toString('base64'),
+  };
+}
+
+function toModelOutput(output: unknown) {
+  const o = output as { __workspaceMedia?: boolean; text: string; data: string; mediaType: string };
+  if (!o || typeof o !== 'object' || !o.__workspaceMedia) return undefined;
+  return {
+    type: 'content' as const,
+    value: [
+      { type: 'text' as const, text: o.text },
+      { type: 'media' as const, data: o.data, mediaType: o.mediaType },
+    ],
+  };
+}
+
 /**
  * Agent computers on the Mastra platform, exposed as a toolset. Register with
  * `new Mastra({ computers })` and give agents `{ ...computers.tools() }`.
@@ -115,6 +152,7 @@ export class PlatformComputers implements MastraComputers {
   readonly #environmentId: string;
   readonly #sandboxOptions: PlatformSandboxOptions;
   readonly #createSandbox: (options: PlatformSandboxOptions) => ComputerSandbox;
+  readonly #screenshotAfterAction: boolean;
   readonly #computers = new Map<string, Entry>();
   readonly #attachments = new Map<string, string>();
   readonly #lifecycle = new Map<string, Promise<unknown>>();
@@ -146,7 +184,9 @@ export class PlatformComputers implements MastraComputers {
       ...(options.environmentId !== undefined && { environmentId: options.environmentId }),
       ...(options.accessToken !== undefined && { accessToken: options.accessToken }),
       ...(options.projectId !== undefined && { projectId: options.projectId }),
+      ...(options.template !== false && { template: options.template ?? (() => withDesktop(Template())) }),
     };
+    this.#screenshotAfterAction = options.screenshotAfterAction === true;
     this.#createSandbox = options.createSandbox ?? (opts => new PlatformSandbox(opts) as unknown as ComputerSandbox);
   }
 
@@ -219,7 +259,7 @@ export class PlatformComputers implements MastraComputers {
   }
 
   /** Runs `fn` on the computer attached to this thread, in call order. Takes the slot synchronously. */
-  #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer) => Promise<T>) {
+  #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>) {
     const scope = this.#scope(context);
     if (!scope) return Promise.resolve(MISSING_IDENTITY);
     const id = this.#attachments.get(scope.key);
@@ -228,10 +268,19 @@ export class PlatformComputers implements MastraComputers {
     if (entry.control.holder === 'human') return Promise.resolve(HUMAN_HAS_CONTROL);
     // Re-checked when the action runs: a take while earlier actions are in flight refuses the rest.
     const run = entry.queue.then((): T | string | Promise<T> =>
-      entry.control.holder === 'human' ? HUMAN_HAS_CONTROL : fn(entry.sandbox!, entry.sandbox!.computer!),
+      entry.control.holder === 'human' ? HUMAN_HAS_CONTROL : fn(entry.sandbox!, entry.sandbox!.computer!, entry),
     );
     entry.queue = run.catch(() => {});
     return run;
+  }
+
+  /** A hand action, plus a screenshot in the same slot when `screenshotAfterAction` is on and the agent still holds control. */
+  #act(context: Context, fn: (computer: SandboxComputer) => Promise<string>) {
+    return this.#hands(context, async (_s, computer, entry) => {
+      const text = await fn(computer);
+      if (!this.#screenshotAfterAction || entry.control.holder === 'human') return text;
+      return media(`${text}. `, await computer.screenshot());
+    });
   }
 
   /** Same-process entry, or a pending reattach of a persistent id stored before any await. */
@@ -459,88 +508,76 @@ export class PlatformComputers implements MastraComputers {
         description: 'Take a screenshot of the attached computer.',
         inputSchema: z.object({}),
         execute: async (_input, context) =>
-          this.#hands(context, async (_s, computer) => {
-            const shot = await computer.screenshot();
-            return {
-              __workspaceMedia: true as const,
-              text: `Screenshot (${shot.data.byteLength} bytes)`,
-              mediaType: shot.mediaType,
-              data: Buffer.from(shot.data).toString('base64'),
-            };
-          }),
-        toModelOutput: (output: unknown) => {
-          const o = output as { __workspaceMedia?: boolean; text: string; data: string; mediaType: string };
-          if (!o || typeof o !== 'object' || !o.__workspaceMedia) return undefined;
-          return {
-            type: 'content' as const,
-            value: [
-              { type: 'text' as const, text: o.text },
-              { type: 'media' as const, data: o.data, mediaType: o.mediaType },
-            ],
-          };
-        },
+          this.#hands(context, async (_s, computer) => media('', await computer.screenshot())),
+        toModelOutput,
       }),
       computer_click: createTool({
         id: 'computer_click',
         description: 'Click at screen coordinates.',
         inputSchema: point.extend({ button: z.enum(['left', 'right']).optional(), double: z.boolean().optional() }),
         execute: async (input, context) =>
-          this.#hands(context, async (_s, computer) => {
+          this.#act(context, async computer => {
             if (input.double) await computer.doubleClick(input.x, input.y);
             else if (input.button === 'right') await computer.rightClick(input.x, input.y);
             else await computer.leftClick(input.x, input.y);
             return `clicked at (${input.x}, ${input.y})`;
           }),
+        toModelOutput,
       }),
       computer_move: createTool({
         id: 'computer_move',
         description: 'Move the mouse to screen coordinates.',
         inputSchema: point,
         execute: async (input, context) =>
-          this.#hands(context, async (_s, computer) => {
+          this.#act(context, async computer => {
             await computer.moveMouse(input.x, input.y);
             return `moved to (${input.x}, ${input.y})`;
           }),
+        toModelOutput,
       }),
       computer_drag: createTool({
         id: 'computer_drag',
         description: 'Drag with the left button from one point to another.',
         inputSchema: z.object({ from: point, to: point }),
         execute: async (input, context) =>
-          this.#hands(context, async (_s, computer) => {
+          this.#act(context, async computer => {
             await computer.drag(input.from, input.to);
             return 'dragged';
           }),
+        toModelOutput,
       }),
       computer_scroll: createTool({
         id: 'computer_scroll',
         description: 'Scroll the mouse wheel.',
         inputSchema: z.object({ direction: z.enum(['up', 'down']), amount: z.number().int().min(1).max(50) }),
         execute: async (input, context) =>
-          this.#hands(context, async (_s, computer) => {
+          this.#act(context, async computer => {
             await computer.scroll(input.direction, input.amount);
             return `scrolled ${input.direction}`;
           }),
+        toModelOutput,
       }),
       computer_type: createTool({
         id: 'computer_type',
         description: 'Type text at the keyboard focus.',
         inputSchema: z.object({ text: z.string() }),
         execute: async (input, context) =>
-          this.#hands(context, async (_s, computer) => {
+          this.#act(context, async computer => {
             await computer.type(input.text);
             return 'typed';
           }),
+        toModelOutput,
       }),
       computer_key: createTool({
         id: 'computer_key',
         description: "Press a key or chord, e.g. 'Enter' or 'ctrl+l'.",
         inputSchema: z.object({ keys: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]) }),
         execute: async (input, context) =>
-          this.#hands(context, async (_s, computer) => {
+          this.#act(context, async computer => {
             await computer.press(input.keys);
             return 'pressed';
           }),
+        toModelOutput,
       }),
       computer_screen_info: createTool({
         id: 'computer_screen_info',
@@ -621,10 +658,7 @@ export class PlatformComputers implements MastraComputers {
       holder === 'human'
         ? { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(key) }
         : entry.control.target;
-    entry.control =
-      holder === 'human'
-        ? { holder, reason: 'user took control', target }
-        : { holder };
+    entry.control = holder === 'human' ? { holder, reason: 'user took control', target } : { holder };
     return { holder, ...(await this.#notify(entry, holder, target, note)) };
   }
 
