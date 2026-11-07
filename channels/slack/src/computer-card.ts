@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 
 import { createSlackAdapter } from '@chat-adapter/slack';
 import type { SlackAdapter } from '@chat-adapter/slack';
@@ -59,7 +60,8 @@ function mac(key: Buffer, payload: string): string {
  * readable by anyone holding the ref, so never log or echo a decoded ref.
  */
 export function signRef(key: Buffer, ref: ComputerRef): string {
-  const payload = b64url(Buffer.from(JSON.stringify({ t: ref.teamId, c: ref.computerId, h: ref.threadId })));
+  const json = Buffer.from(JSON.stringify({ t: ref.teamId, c: ref.computerId, h: ref.threadId }));
+  const payload = b64url(deflateRawSync(json));
   return `${REF_PREFIX}:${payload}:${mac(key, payload)}`;
 }
 
@@ -72,7 +74,10 @@ export function verifyRef(key: Buffer, value: unknown): ComputerRef | null {
   const given = Buffer.from(sig);
   if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>;
+    const parsed = JSON.parse(inflateRawSync(Buffer.from(payload, 'base64url')).toString('utf8')) as Record<
+      string,
+      unknown
+    >;
     if (typeof parsed.t !== 'string' || typeof parsed.c !== 'string' || typeof parsed.h !== 'string') return null;
     return { teamId: parsed.t, computerId: parsed.c, threadId: parsed.h };
   } catch {
@@ -202,11 +207,32 @@ export class ComputerCards {
   readonly #key: Buffer;
   readonly #cards = new Map<string, CardState>();
   readonly #chains = new Map<string, Promise<void>>();
+  readonly #refs = new Map<string, ComputerRef>();
   #warnedScope = false;
 
   constructor(opts: ComputerCardsOptions) {
     this.#opts = opts;
     this.#key = deriveRefKey(opts.installation.signingSecret);
+  }
+
+  #signCompactRef(ref: ComputerRef): string {
+    const payload = b64url(crypto.randomBytes(16));
+    const value = `c2:${payload}:${mac(this.#key, payload)}`;
+    this.#refs.set(value, ref);
+    return value;
+  }
+
+  #verifyCompactRef(value: unknown): ComputerRef | null {
+    if (typeof value !== 'string') return null;
+    if (value.startsWith('c1:')) return verifyRef(this.#key, value);
+    if (value.length > 128) return null;
+    const parts = value.split(':');
+    if (parts.length !== 3 || parts[0] !== 'c2') return null;
+    const [, payload, sig] = parts as [string, string, string];
+    const expected = Buffer.from(mac(this.#key, payload));
+    const given = Buffer.from(sig);
+    if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
+    return this.#refs.get(value) ?? null;
   }
 
   /** Entity URL used for Work Objects; a static page that never echoes the ref. */
@@ -270,7 +296,11 @@ export class ComputerCards {
       }
       const { channel, threadTs } = this.#opts.decodeThreadId(p.chatThreadId);
       const name = typeof p.data.name === 'string' && p.data.name ? p.data.name : p.computerId;
-      const ref = signRef(this.#key, { teamId: installation.teamId, computerId: p.computerId, threadId: p.threadId });
+      const ref = this.#signCompactRef({
+        teamId: installation.teamId,
+        computerId: p.computerId,
+        threadId: p.threadId,
+      });
       const card: CardState = { channel, name, holder: 'agent', ended: false, ref };
       const url = this.#opts.embedUrl ? this.#entityUrl(ref) : undefined;
       const res = await client.chat.postMessage({
@@ -337,7 +367,7 @@ export class ComputerCards {
             .catch(err => this.#warn('Computer card ephemeral failed', err))
         : undefined;
 
-    const ref = verifyRef(this.#key, event.value);
+    const ref = this.#verifyCompactRef(event.value);
     const raw = (event.raw ?? {}) as { team?: { id?: string }; user?: { team_id?: string } };
     const team = raw.team?.id ?? raw.user?.team_id;
     if (!ref || ref.teamId !== this.#opts.installation.teamId || team !== ref.teamId) {
@@ -398,7 +428,7 @@ export class ComputerCards {
   async handleDetails(body: { team_id?: string; event?: Record<string, unknown> }): Promise<void> {
     const event = body.event ?? {};
     const externalRef = (event.external_ref as { id?: unknown } | undefined)?.id;
-    const ref = verifyRef(this.#key, externalRef);
+    const ref = this.#verifyCompactRef(externalRef);
     const triggerId = event.trigger_id;
     if (!ref || typeof triggerId !== 'string') return;
     if (ref.teamId !== this.#opts.installation.teamId || body.team_id !== ref.teamId) return;
