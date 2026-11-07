@@ -1,9 +1,12 @@
 import { Box, SelectList, SettingsList, Text, TUI } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SettingItem, Terminal } from '@earendil-works/pi-tui';
+import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import xterm from '@xterm/headless';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CustomEditor } from '../components/custom-editor.js';
+import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
 import { getEditorTheme, getSelectListTheme, getSettingsListTheme } from '../theme.js';
@@ -336,5 +339,47 @@ describe('shared list components', () => {
       ['color', 'green'],
     ]);
     expect(harness.find('Color').row).toBe(color.row);
+  });
+});
+
+describe('thread selector on PickerList', () => {
+  function thread(index: number, title: string): AgentControllerThread {
+    const updatedAt = new Date(Date.now() - index * 60_000);
+    return {
+      id: `thread-${String(index).padStart(6, '0')}`,
+      resourceId: 'res',
+      title,
+      createdAt: updatedAt,
+      updatedAt,
+      metadata: {},
+      tokenUsage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
+    };
+  }
+
+  it('thread selector: clicking either row of a two-row thread picks it, like Enter', async () => {
+    harness = createHarness();
+    const threads = Array.from({ length: 20 }, (_, index) => thread(index, `title-${index}`));
+    const picked: string[] = [];
+    const selector = new ThreadSelectorComponent({
+      tui: harness.ui,
+      threads,
+      currentThreadId: null,
+      onSelect: t => picked.push(t.id),
+      onCancel: () => {},
+    });
+    showModalOverlay(harness.ui, selector);
+    await harness.render();
+
+    // Scroll so the window no longer starts at the first thread.
+    for (let i = 0; i < 10; i++) harness.send('\x1b[B');
+    await harness.render();
+
+    const title = harness.find('title-6');
+    await harness.hover(title.row, title.col);
+    await harness.render();
+    expect(harness.markedRows()).toEqual([title.row - 1, title.row]);
+
+    await harness.click(title.row, title.col);
+    expect(picked).toEqual(['thread-000006']);
   });
 });
