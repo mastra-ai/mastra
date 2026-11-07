@@ -452,6 +452,18 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
         body: { error: expect.stringContaining('calculatorTool') },
       });
     });
+
+    it('does not allow CORS credentials for cross-origin requests by default', async () => {
+      const res = await fetch(`http://localhost:${port}/api/tools`, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://evil.example.com',
+          'Access-Control-Request-Method': 'GET',
+        },
+      });
+      expect(res.headers.get('access-control-allow-origin')).toBe('*');
+      expect(res.headers.get('access-control-allow-credentials')).toBeNull();
+    });
   }
 
   describe('dev', { concurrent: false }, async () => {
