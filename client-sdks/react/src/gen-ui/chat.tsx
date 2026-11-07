@@ -1,3 +1,4 @@
+import type { Catalog } from '@json-render/core';
 import { formatGenUIContext } from '@mastra/client-js/gen-ui';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useEffect, useRef, useState } from 'react';
@@ -6,16 +7,16 @@ import type { MastraChatProps, SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
 import type { MessageRenderers } from '../ui/MessageFactory/types';
 import { createGenUIController } from './controller';
-import type { GenUIChatActionHandler, GenUIController } from './controller';
+import type { GenUIActionHandlers, GenUIController } from './controller';
 import type { GenUIRegistry } from './registry';
 import { createGenUIRenderers } from './renderers';
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface UseGenUIChatProps extends MastraChatProps {
+export interface UseGenUIChatProps<C extends Catalog = Catalog> extends MastraChatProps {
   /** The registry created with `createGenUI`. Read once per mount; remount with a `key` to switch registries. */
-  genUI: GenUIRegistry;
-  /** App actions that surface specs bind to component events through `on`. Handlers from the latest render run. */
-  actions?: Record<string, GenUIChatActionHandler<any>>;
+  genUI: GenUIRegistry<C>;
+  /** Handlers for the catalog's actions, which surface specs bind to component events through `on`. Handlers from the latest render run. */
+  actions?: GenUIActionHandlers<C>;
   /**
    * Your own `MessageFactory` renderers, for parts GenUI does not render. Define them outside the
    * component (or memoize them) so messages don't re-render on every streamed token.
@@ -63,7 +64,12 @@ function createController(
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function useGenUIChat({ genUI, actions, renderers, ...chatProps }: UseGenUIChatProps) {
+export function useGenUIChat<C extends Catalog = Catalog>({
+  genUI,
+  actions,
+  renderers,
+  ...chatProps
+}: UseGenUIChatProps<C>) {
   const [controller] = useState(() =>
     createController({ genUI, actions }, { messages: chatProps.initialMessages, threadId: chatProps.threadId }),
   );

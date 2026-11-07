@@ -1,12 +1,10 @@
 import { JSONUIProvider, Renderer } from '@json-render/react';
 import type { ComponentRegistry, ComponentRenderProps } from '@json-render/react';
-import { toSafeJSONValue } from '@mastra/client-js/gen-ui';
+import { resolveGenUILimits } from '@mastra/client-js/gen-ui';
 import type { GenUISurface } from '@mastra/client-js/gen-ui';
-import { Component, createContext, useMemo, useState, useSyncExternalStore } from 'react';
+import { Component, useMemo, useState, useSyncExternalStore } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { SurfaceScopeContext, useGenUIController, useGenUISurface } from './context';
-import type { GenUIController } from './controller';
-import { isCatalogCompatible } from './registry';
 import type { GenUIFallbackProps, GenUIFallbacks, GenUIRegistry, GenUISurfaceStatusProps } from './registry';
 import { createGenUISurfaceStore } from './surface-store';
 
@@ -102,15 +100,17 @@ function useSurfaceError(surfaceId: string): string | undefined {
 }
 
 /**
- * Adapts a registered component to json-render's component contract: validates the resolved props
- * against the component schema and contains render errors, so one bad element never blanks the surface.
+ * Validates an element's resolved props against its catalog schema before json-render renders the app's
+ * component, and contains render errors, so one bad element never blanks the surface. json-render itself
+ * does not validate props.
  */
-function ElementView({ element, children, emit, bindings, loading }: ComponentRenderProps) {
+export function ElementView(props: ComponentRenderProps) {
+  const { element, loading } = props;
   const controller = useGenUIController();
   const { Fallback, Loading } = resolveFallbacks(controller.registry.fallbacks);
-  const entry = controller.registry.components[element.type];
-  const validation = controller.validateElementProps(element.type, element.props);
-  if (!entry || !validation) {
+  const Rendered = controller.registry.registry[element.type];
+  const validation = controller.validateProps(element.type, element.props);
+  if (!Rendered || !validation) {
     return (
       <Fallback
         kind="unknown-component"
@@ -129,7 +129,6 @@ function ElementView({ element, children, emit, bindings, loading }: ComponentRe
       />
     );
   }
-  const Rendered = entry.definition.component;
   return (
     <GenUIErrorBoundary
       resetKey={element.props}
@@ -137,35 +136,24 @@ function ElementView({ element, children, emit, bindings, loading }: ComponentRe
         <Fallback kind="render-error" component={element.type} reason={`"${element.type}" could not be displayed.`} />
       )}
     >
-      <Rendered props={validation.value} emit={emit} bindings={bindings} loading={loading}>
-        {children}
-      </Rendered>
+      <Rendered {...props} element={{ ...element, props: validation.value as Record<string, unknown> }} />
     </GenUIErrorBoundary>
   );
 }
 
-const jsonRenderRegistries = new WeakMap<GenUIRegistry, ComponentRegistry>();
-function toJsonRenderRegistry(registry: GenUIRegistry): ComponentRegistry {
-  let result = jsonRenderRegistries.get(registry);
+/** Surfaces may only use declarative components; every one renders through `ElementView`. */
+const surfaceRegistries = new WeakMap<GenUIRegistry, ComponentRegistry>();
+function surfaceRegistry(registry: GenUIRegistry): ComponentRegistry {
+  let result = surfaceRegistries.get(registry);
   if (!result) {
     result = Object.fromEntries(
-      Object.entries(registry.components)
-        .filter(([, entry]) => entry.definition.declarative !== false)
-        .map(([name]) => [name, ElementView]),
+      Object.values(registry.components)
+        .filter(entry => entry.declarative)
+        .map(entry => [entry.name, ElementView]),
     );
-    jsonRenderRegistries.set(registry, result);
+    surfaceRegistries.set(registry, result);
   }
   return result;
-}
-
-/** Spec actions that are not json-render built-ins go through the controller's action dispatcher. */
-function createActionHandlers(controller: GenUIController, surfaceId: string) {
-  const handler = (name: string) => async (params: Record<string, unknown>) =>
-    controller.actions.dispatch({ surfaceId, name, payload: toSafeJSONValue(params ?? {}, Infinity, 'params') });
-  // Handlers are read once when the surface mounts, while the app's actions can change later.
-  return new Proxy({} as Record<string, ReturnType<typeof handler>>, {
-    get: (_target, name) => (typeof name === 'string' ? handler(name) : undefined),
-  });
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -195,22 +183,21 @@ export function SurfaceFrame({ surfaceId, preview, className }: GenUISurfaceView
   const surface = preview ?? liveSurface;
   const status = preview ? preview.status : liveStatus;
   const error = preview ? preview.error : liveError;
-  const { Fallback, Loading, SurfaceStatus } = resolveFallbacks(controller.registry.fallbacks);
+  const { Loading, SurfaceStatus } = resolveFallbacks(controller.registry.fallbacks);
   // One store per surface id: the preview and the live surface share it, so the swap keeps bound state.
-  const [store] = useState(() => createGenUISurfaceStore(controller.state, surfaceId, controller.subscribe));
-  const [handlers] = useState(() => createActionHandlers(controller, surfaceId));
+  const [store] = useState(() =>
+    createGenUISurfaceStore(
+      controller.edits,
+      surfaceId,
+      controller.subscribe,
+      resolveGenUILimits(controller.registry.limits),
+    ),
+  );
+  const handlers = useMemo(() => controller.actionHandlers(surfaceId, store), [controller, surfaceId, store]);
   const scope = useMemo(() => ({ surfaceId, store }), [surfaceId, store]);
-  const registry = toJsonRenderRegistry(controller.registry);
+  const registry = surfaceRegistry(controller.registry);
   store.setAgentState(surface?.spec.state);
   if (!surface) return <Loading />;
-  if (!isCatalogCompatible(controller.registry, surface)) {
-    return (
-      <Fallback
-        kind="incompatible-catalog"
-        reason={`This interface was made for a different version of the app (${surface.catalogId}@${surface.catalogVersion ?? '?'}).`}
-      />
-    );
-  }
   return (
     <div
       className={className}

@@ -1,44 +1,36 @@
 import { resolveElementProps } from '@json-render/core';
-import type { UIElement } from '@json-render/core';
+import type { Catalog, InferActionParams, InferCatalogActions, StateModel, UIElement } from '@json-render/core';
 import {
   GENUI_DATA_PART_TYPE,
   GENUI_PROTOCOL_VERSION,
   accumulateGenUI,
-  createGenUIActionDispatcher,
   createGenUIContextStore,
   createGenUISession,
   createGenUIState,
-  createGenUIStateStore,
   parseGenUIOperations,
   parsePartialJSON,
   resolveGenUILimits,
-  validateModelInput,
-  validateModelInputSync,
-  validateSchema,
 } from '@mastra/client-js/gen-ui';
 import type {
-  GenUIActionContext,
-  GenUIActionDispatcher,
-  GenUIActionHandler,
   GenUIContextStore,
   GenUIEnvelope,
   GenUIPlacement,
   GenUISession,
   GenUISpec,
   GenUIState,
-  GenUIStateStore,
   GenUISurface,
-  GenUIValidationResult,
-  InferSchemaOutput,
-  JSONValue,
-  StandardSchemaV1,
 } from '@mastra/client-js/gen-ui';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { z } from 'zod/v4';
 import type { SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
-import type { GenUIManifestComponent, GenUIRegistry, GenUIToolApproval } from './registry';
+import type { GenUIComponentEntry, GenUIRegistry, GenUIToolApproval } from './registry';
+import { createGenUIEditsStore } from './surface-store';
+import type { GenUIEditsStore, GenUISurfaceStore } from './surface-store';
 import { collectToolCallMeta, normalizeToolPart } from './tool-parts';
 import type { NormalizedToolCall, ToolCallMeta } from './tool-parts';
+import { validate, validateModelInput } from './validate';
+import type { GenUIValidationResult } from './validate';
 
 /**
  * Chat operations available to action handlers. Bound to the `useGenUIChat` instance that owns the controller.
@@ -61,53 +53,57 @@ export interface GenUIChatSyncState {
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUIChatActionContext extends GenUIActionContext {
+export interface GenUIActionContext {
+  /** Surface whose element raised the action. */
+  surfaceId: string;
   chat: GenUIChatServices;
-  state: GenUIStateStore;
+  /** Values published for the agent with the next message. */
   context: GenUIContextStore;
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUIChatActionHandler<
-  S extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
-> extends Omit<GenUIActionHandler<S>, 'handle'> {
-  handle(
-    payload: S extends StandardSchemaV1 ? InferSchemaOutput<S> : JSONValue,
-    context: GenUIChatActionContext,
-  ): unknown | Promise<unknown>;
+  /** Surface state as the user sees it: the agent's state with local edits on top. */
+  state: StateModel;
+  /** Write surface state at a JSON pointer, like a `setState` action. Recorded as a local edit. */
+  setState(path: string, value: unknown): void;
 }
 
 /**
- * Typed helper for action handlers registered on `useGenUIChat`.
+ * Handler for an app action declared in the catalog. Receives the params validated against the catalog's
+ * `params` schema. Throwing reports the failure to json-render (`onError` bindings).
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function defineGenUIChatAction<S extends StandardSchemaV1 | undefined = undefined>(
-  handler: GenUIChatActionHandler<S>,
-): GenUIChatActionHandler<S> {
-  return handler;
-}
+export type GenUIActionHandler<P = Record<string, unknown>> = (
+  params: P,
+  context: GenUIActionContext,
+) => unknown | Promise<unknown>;
+
+/**
+ * Handlers for the catalog's actions, typed from their `params` schemas.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
+export type GenUIActionHandlers<C extends Catalog = Catalog> = {
+  [K in keyof InferCatalogActions<C> & string]?: GenUIActionHandler<InferActionParams<C, K>>;
+};
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIControllerOptions {
   registry: GenUIRegistry;
-  actions?: Record<string, GenUIChatActionHandler<any>>;
+  actions?: GenUIActionHandlers;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIController {
   readonly registry: GenUIRegistry;
   readonly session: GenUISession;
-  /** Client-local state. Never sent anywhere unless you pass it explicitly. */
-  readonly state: GenUIStateStore;
+  /** The user's edits to each surface's state. Never sent anywhere unless you pass them explicitly. */
+  readonly edits: GenUIEditsStore;
   /** Values published for the agent. Sent with the next message as additional system context. */
   readonly context: GenUIContextStore;
-  readonly actions: GenUIActionDispatcher;
   /** Frontend tools derived from the registry. Merge into the chat's client tools. */
   readonly clientTools: ClientToolsInput;
   /**
    * Bring surface and tool state in line with the chat: its messages (incremental while streaming), whether
-   * it is running, and its thread. Switching threads drops the previous thread's surfaces, local state,
+   * it is running, and its thread. Switching threads drops the previous thread's surfaces, local edits,
    * published context and pending responses.
    */
   sync(messages: ReadonlyArray<MastraDBMessage>, chat?: GenUIChatSyncState): void;
@@ -134,20 +130,25 @@ export interface GenUIController {
   /** Fires when approvals, approval status, or pending interactive responses change. */
   subscribeTools(listener: () => void): () => void;
   /** Resolve an interactive frontend tool with the user's answer. */
-  respond(toolCallId: string, value: unknown): Promise<GenUIValidationResult<unknown>>;
+  respond(toolCallId: string, value: unknown): GenUIValidationResult<unknown>;
   /**
-   * Validate resolved element props against the component schema. `undefined` when the type is not a
-   * registered declarative component. Results are cached per props object.
+   * Validate resolved props against a catalog component's schema. `undefined` when the component is not in
+   * the catalog. Results are cached per props object.
    */
-  validateElementProps(type: string, props: Record<string, unknown>): GenUIValidationResult<unknown> | undefined;
+  validateProps(type: string, props: unknown): GenUIValidationResult<unknown> | undefined;
+  /** json-render action handlers for one surface: one per catalog action, run through `setActions` handlers. */
+  actionHandlers(
+    surfaceId: string,
+    store: GenUISurfaceStore,
+  ): Record<string, (params: Record<string, unknown>) => Promise<void>>;
   /**
    * Display-only surface built from a surface tool call the model is still writing. Never enters
    * controller state; `undefined` until the arguments contain a `createSurface`.
    */
   previewSurface(call: NormalizedToolCall): GenUISurface | undefined;
   setServices(services: GenUIChatServices): void;
-  /** Replace the action handlers. Names missing from `actions` stop being handled. */
-  setActions(actions?: Record<string, GenUIChatActionHandler<any>>): void;
+  /** Replace the action handlers. Catalog actions without a handler are ignored with a warning. */
+  setActions(actions?: GenUIActionHandlers): void;
   /** Keep the controller alive. Disposal happens after the last release, so StrictMode remounts are safe. */
   retain(): () => void;
   dispose(): void;
@@ -192,10 +193,10 @@ function withStateBindings(props: Record<string, unknown>): Record<string, unkno
  * and the free-form `state` and action `params` are JSON-encoded strings. The parser also accepts the plain
  * json-render forms that non-strict models send.
  */
-function surfaceToolInputSchema(manifest: GenUIManifestComponent[], placements: readonly GenUIPlacement[]) {
+function surfaceToolInputSchema(components: GenUIComponentEntry[], placements: readonly GenUIPlacement[]) {
   const element = {
-    anyOf: manifest.map(({ name, propsSchema, events }) => {
-      const { $schema: _dialect, ...props } = propsSchema ?? { type: 'object' };
+    anyOf: components.map(({ name, propsSchema, events }) => {
+      const props = propsSchema;
       return {
         type: 'object',
         properties: {
@@ -203,7 +204,7 @@ function surfaceToolInputSchema(manifest: GenUIManifestComponent[], placements: 
           type: { type: 'string', enum: [name] },
           props: withStateBindings(props),
           children: { ...stringList, description: 'Ordered child element ids' },
-          ...(events?.length
+          ...(events.length
             ? {
                 on: {
                   type: 'array',
@@ -362,7 +363,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   const limits = registry.limits;
   const resolvedLimits = resolveGenUILimits(limits);
   const session = createGenUISession({ limits });
-  const state = createGenUIStateStore({ limits });
+  const edits = createGenUIEditsStore(resolvedLimits);
   const context = createGenUIContextStore();
   let services: GenUIChatServices | undefined;
   let disposed = false;
@@ -449,28 +450,57 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     if (changed) notify();
   };
 
-  const actions = createGenUIActionDispatcher({
-    limits,
-    getSurface: surfaceId => {
-      const surface = session.getState().surfaces[surfaceId];
-      if (!surface) return undefined;
-      // Actions on a surface the user interrupted are stale, like any other aborted surface.
-      const status = effectiveStatus(surface);
-      return status === surface.status ? surface : { ...surface, status };
-    },
-  });
-  let releaseActions: Array<() => void> = [];
-  const setActions = (next: Record<string, GenUIChatActionHandler<any>> = {}) => {
-    releaseActions.forEach(release => release());
-    releaseActions = Object.entries(next).map(([name, handler]) =>
-      actions.register(name, {
-        ...handler,
-        handle: (payload, actionContext) =>
-          handler.handle(payload, { ...actionContext, chat: requireServices(), state, context }),
-      }),
-    );
+  // ---- actions ---------------------------------------------------------------------------------
+  let handlers: GenUIActionHandlers = options.actions ?? {};
+  const setActions = (next: GenUIActionHandlers = {}) => {
+    handlers = next;
   };
-  setActions(options.actions);
+  /** `surfaceId:action` pairs in flight, so a double click does not run an action twice. */
+  const runningActions = new Set<string>();
+
+  const actionHandlers = (surfaceId: string, store: GenUISurfaceStore) =>
+    Object.fromEntries(
+      Object.values(registry.actions).map(({ name, params: schema }) => [
+        name,
+        async (raw: Record<string, unknown>) => {
+          const surface = session.getState().surfaces[surfaceId];
+          const status = surface && effectiveStatus(surface);
+          // The model's view of an interrupted or failed surface is out of date; acting on it would mislead.
+          if (!surface || status === 'aborted' || status === 'failed') {
+            console.warn(`[GenUI] Ignored action "${name}": surface "${surfaceId}" is ${status ?? 'gone'}`);
+            return;
+          }
+          const handler = handlers[name];
+          if (!handler) {
+            console.warn(`[GenUI] No handler for action "${name}"`);
+            return;
+          }
+          const key = `${surfaceId}:${name}`;
+          if (runningActions.has(key)) return;
+          let params: unknown = raw ?? {};
+          if (schema) {
+            const validated = validate(schema, params);
+            if (!validated.ok) {
+              console.warn(`[GenUI] Ignored action "${name}": invalid params (${validated.error})`);
+              return;
+            }
+            params = validated.value;
+          }
+          runningActions.add(key);
+          try {
+            await handler(params, {
+              surfaceId,
+              chat: requireServices(),
+              context,
+              state: store.getSnapshot(),
+              setState: (path, value) => store.set(path, value),
+            });
+          } finally {
+            runningActions.delete(key);
+          }
+        },
+      ]),
+    );
 
   // ---- tool approvals, suspensions, interactive responses -------------------------------------
   const toolListeners = new Set<() => void>();
@@ -480,7 +510,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   const approvalCache = new Map<string, GenUIToolApproval>();
   const pending = new Map<
     string,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void; schema?: StandardSchemaV1 }
+    { resolve: (value: unknown) => void; reject: (error: Error) => void; schema?: z.ZodType }
   >();
 
   const runApproval = async (toolCallId: string, run: () => Promise<void>) => {
@@ -558,7 +588,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       clientTools[tool.name] = {
         id: tool.name,
         description: tool.description,
-        inputSchema: tool.inputSchema,
+        inputSchema: entry.propsSchema,
         renderOnly: true,
       };
       continue;
@@ -566,9 +596,9 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     clientTools[tool.name] = {
       id: tool.name,
       description: tool.description,
-      inputSchema: tool.inputSchema as never,
+      inputSchema: entry.propsSchema as never,
       execute: async (input: unknown, executeContext: unknown) => {
-        const validated = await validateModelInput(entry.definition.schema, input);
+        const validated = validateModelInput(entry.props, input);
         if (!validated.ok) throw new Error(`Invalid arguments for ${tool.name}: ${validated.error}`);
         const toolCallId = toolCallIdFrom(executeContext);
         if (!toolCallId) throw new Error(`${tool.name} was called without a tool call id`);
@@ -652,7 +682,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       const missing = element.children?.find(child => !spec.elements[child]);
       if (missing) return `element "${id}" lists child "${missing}", which is not one of the elements`;
       if (repeated.has(id)) continue;
-      const validation = validateElementProps(element.type, resolveElementProps(element.props, { stateModel }));
+      const validation = declarativeProps(element.type, resolveElementProps(element.props, { stateModel }));
       if (!validation) return `unknown component "${element.type}" on element "${id}"`;
       if (!validation.ok) return `invalid props for element "${id}" (${element.type}): ${validation.error}`;
     }
@@ -661,8 +691,8 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
 
   if (registry.surfaceTool) {
     const { placements } = registry.surfaceTool;
-    const manifest = registry.manifest();
-    const actionNames = Object.keys(options.actions ?? {});
+    const declarative = Object.values(registry.components).filter(entry => entry.declarative);
+    const actionNames = Object.keys(registry.actions);
     const description = [
       'Render a user interface built only from the registered components below, as a json-render spec:',
       '`root` is the id of the top element and `elements` lists every element as {id, type, props, children?}.',
@@ -673,11 +703,13 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       }.`,
       `Placements: ${placements.join(', ')} (default "inline").`,
       // Prop schemas are already in the input schema; repeating them here would double the tokens.
-      `Components (props must match the component's schema in the input schema):\n${manifest
+      `Components (props must match the component's schema in the input schema):\n${declarative
         .map(({ name, description, events }) =>
-          [`- ${name}`, description ? `: ${description}` : '', events ? ` (events: ${events.join(', ')})` : ''].join(
-            '',
-          ),
+          [
+            `- ${name}`,
+            description ? `: ${description}` : '',
+            events.length ? ` (events: ${events.join(', ')})` : '',
+          ].join(''),
         )
         .join('\n')}`,
       registry.surfaceTool.instructions,
@@ -687,7 +719,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     clientTools[registry.surfaceTool.name] = {
       id: registry.surfaceTool.name,
       description,
-      inputSchema: surfaceToolInputSchema(manifest, placements),
+      inputSchema: surfaceToolInputSchema(declarative, placements),
       execute: async (input: unknown, executeContext: unknown) => {
         const toolCallId = toolCallIdFrom(executeContext) ?? `call_${Date.now().toString(36)}`;
         const call = readSurfaceToolCall(toolCallId, input, true);
@@ -757,16 +789,19 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
 
   // ---- element validation ----------------------------------------------------------------------
   const propsValidation = new WeakMap<object, GenUIValidationResult<unknown>>();
-  const validateElementProps = (type: string, props: Record<string, unknown>) => {
+  const validateProps = (type: string, props: unknown) => {
     const entry = registry.components[type];
-    if (!entry || entry.definition.declarative === false) return undefined;
+    if (!entry) return undefined;
+    if (typeof props !== 'object' || props === null) return validateModelInput(entry.props, props);
     let result = propsValidation.get(props);
     if (!result) {
-      result = validateModelInputSync(entry.definition.schema, props);
+      result = validateModelInput(entry.props, props);
       propsValidation.set(props, result);
     }
     return result;
   };
+  const declarativeProps = (type: string, props: Record<string, unknown>) =>
+    registry.components[type]?.declarative ? validateProps(type, props) : undefined;
 
   function reset() {
     session.reset();
@@ -775,7 +810,8 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     anchors = new Map();
     failedToolCalls = new Map();
     cutOffToolCalls = new Set();
-    state.clear();
+    edits.clear();
+    runningActions.clear();
     rejectPending('The conversation changed before the user responded');
     approvalStatus.clear();
     approvalCache.clear();
@@ -786,9 +822,8 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   const controller: GenUIController = {
     registry,
     session,
-    state,
+    edits,
     context,
-    actions,
     clientTools,
     sync(messages, chat = {}) {
       if (disposed) return;
@@ -859,23 +894,22 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       toolListeners.add(listener);
       return () => toolListeners.delete(listener);
     },
-    async respond(toolCallId, value) {
+    respond(toolCallId, value) {
       const entry = pending.get(toolCallId);
       if (!entry) return { ok: false, error: 'This tool call is no longer waiting for a response' };
       let result: unknown = value;
       if (entry.schema) {
-        const validated = await validateSchema(entry.schema, value);
+        const validated = validate(entry.schema, value);
         if (!validated.ok) return validated;
         result = validated.value;
       }
-      // Re-check: another respond() may have won while validation was pending.
-      if (pending.get(toolCallId) !== entry) return { ok: false, error: 'This tool call was already answered' };
       pending.delete(toolCallId);
       entry.resolve(result);
       notifyTools();
       return { ok: true, value: result };
     },
-    validateElementProps,
+    validateProps,
+    actionHandlers,
     previewSurface,
     setServices(next) {
       services = next;
@@ -897,8 +931,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       if (disposed) return;
       disposed = true;
       rejectPending('The user interface was closed before the user responded');
-      actions.dispose();
-      state.clear();
+      edits.clear();
     },
   };
   return controller;

@@ -1,5 +1,11 @@
 export * from './types';
-export { parseGenUIEnvelope, parseGenUIOperations, toSafeJSONValue, toSafeJSONObject } from './validate';
+export {
+  checkGenUISpec,
+  parseGenUIEnvelope,
+  parseGenUIOperations,
+  toSafeJSONObject,
+  toSafeJSONValue,
+} from './validate';
 export type { GenUIParseResult } from './validate';
 export {
   accumulateGenUI,
@@ -22,49 +28,7 @@ export type {
   GenUISurfaceEmitter,
   GenUISurfaceEmitterOptions,
 } from './emitter';
-export {
-  createGenUIContextStore,
-  createGenUIStateStore,
-  editGenUIState,
-  formatGenUIContext,
-  genUIScopeKey,
-  mergeGenUIState,
-  rebaseGenUIEdit,
-} from './state';
-export type {
-  GenUIContextEntry,
-  GenUIContextStore,
-  GenUIEdit,
-  GenUIEdits,
-  GenUISetOptions,
-  GenUISetResult,
-  GenUIStateEntry,
-  GenUIStateScope,
-  GenUIStateStore,
-  GenUIStateUpdater,
-} from './state';
-export { createGenUIActionDispatcher, defineGenUIAction } from './actions';
-export type {
-  GenUIAction,
-  GenUIActionContext,
-  GenUIActionDispatcher,
-  GenUIActionDispatcherOptions,
-  GenUIActionHandler,
-  GenUIActionInput,
-  GenUIActionResult,
-} from './actions';
+export { createGenUIContextStore, editGenUIState, formatGenUIContext, mergeGenUIState, rebaseGenUIEdit } from './state';
+export type { GenUIContextEntry, GenUIContextStore, GenUIEdit, GenUIEdits } from './state';
 export { parsePartialJSON } from './partial-json';
 export type { PartialJSONResult } from './partial-json';
-export {
-  isStandardSchema,
-  validateModelInput,
-  validateModelInputSync,
-  validateSchema,
-  validateSchemaSync,
-} from './standard-schema';
-export type {
-  GenUIValidationResult,
-  InferSchemaOutput,
-  StandardSchemaV1,
-  StandardSchemaV1Result,
-} from './standard-schema';

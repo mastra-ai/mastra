@@ -1,40 +1,13 @@
-import { isStandardSchema, toSafeJSONObject } from '@mastra/client-js/gen-ui';
-import type {
-  GenUILimits,
-  GenUIPlacement,
-  InferSchemaOutput,
-  JSONObject,
-  StandardSchemaV1,
-} from '@mastra/client-js/gen-ui';
-import type { ComponentType, ReactNode } from 'react';
+import type { Catalog, InferCatalogComponents } from '@json-render/core';
+import { defineRegistry } from '@json-render/react';
+import type { ComponentRegistry, Components } from '@json-render/react';
+import type { GenUILimits, GenUIPlacement, JSONObject } from '@mastra/client-js/gen-ui';
+import type { ComponentType } from 'react';
+import { z } from 'zod/v4';
 
 /**
- * Props every registered GenUI component receives. `props` has passed the component's schema.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export interface GenUIComponentProps<P> {
-  props: P;
-  /** Rendered child elements when the component is used inside a declarative surface. */
-  children?: ReactNode;
-  /**
-   * Raise one of the component's `events` (e.g. `"press"`). Inside a surface, the action the agent bound to
-   * that event in the element's `on` runs; elsewhere (component tools) this is a no-op.
-   */
-  emit: (event: string) => void;
-  /**
-   * Prop name → state path for props the agent bound two-way with `{"$bindState": "/path"}`. Pass both to
-   * `useBoundProp` from `@json-render/react` to write user input back into the surface state.
-   */
-  bindings?: Record<string, string>;
-  /** `true` while the model is still writing the surface, so some children may not have arrived yet. */
-  loading?: boolean;
-}
-
-/**
- * Props for the optional preview rendered while a frontend tool's arguments are
- * still streaming. `partialProps` is a best-effort parse of incomplete JSON and
- * has NOT been validated, so treat every field as possibly missing.
+ * Props for the optional preview rendered while a component tool's arguments are still streaming.
+ * `partialProps` is a best-effort parse of incomplete JSON and has NOT been validated.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
@@ -43,10 +16,10 @@ export interface GenUIStreamingProps {
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUIComponentToolOptions<R extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined> {
+export interface GenUIComponentToolOptions {
   /** Tool name exposed to the model. Defaults to `ui_<componentName>`. */
   name?: string;
-  /** Tool description for the model. Defaults to the component description. */
+  /** Tool description for the model. Defaults to the catalog description. */
   description?: string;
   /**
    * `display` (default): the tool resolves as soon as the component renders.
@@ -54,48 +27,11 @@ export interface GenUIComponentToolOptions<R extends StandardSchemaV1 | undefine
    */
   mode?: 'display' | 'interactive';
   /** Validates the value passed to `respond()` in interactive mode before it reaches the agent. */
-  responseSchema?: R;
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUIComponentDefinition<S extends StandardSchemaV1 = StandardSchemaV1> {
-  /** Validates every props object coming from the model. Must support synchronous validation. */
-  schema: S;
-  component: ComponentType<GenUIComponentProps<InferSchemaOutput<S>>>;
-  /** Optional preview while a frontend tool call is still streaming its arguments. */
+  responseSchema?: z.ZodType;
+  /** Rendered instead of the component while the model is still writing the arguments. */
   streaming?: ComponentType<GenUIStreamingProps>;
-  /** Model-facing description, used for tool descriptions and the surface catalog. */
-  description?: string;
-  /**
-   * JSON Schema sent to the model. Zod schemas and schemas implementing Standard JSON Schema are
-   * converted automatically; provide this for any other validator.
-   */
-  jsonSchema?: JSONObject;
-  /** Expose the component as a frontend tool the model can call directly. Off by default. */
-  tool?: boolean | GenUIComponentToolOptions;
-  /** Allow the component in declarative surfaces. Defaults to `true`. */
+  /** Also offer the component in `ui_surface` specs. Defaults to `true`. */
   declarative?: boolean;
-  /** Events the component raises with `emit`, listed for the model so it can bind actions to them in `on`. */
-  events?: readonly string[];
-}
-
-/**
- * Type-erased definition for heterogeneous registries. `StandardSchemaV1<any, any>` (rather than `any`)
- * keeps props as `any`, so a definition can be spread and extended (`{ ...Card, tool: true }`).
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export type AnyGenUIComponentDefinition = GenUIComponentDefinition<StandardSchemaV1<any, any>>;
-
-/**
- * Typed helper: infers component props from the schema.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function defineGenUIComponent<S extends StandardSchemaV1>(
-  definition: GenUIComponentDefinition<S>,
-): GenUIComponentDefinition<S> {
-  return definition;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -139,14 +75,16 @@ export interface GenUIToolCallProps<A = unknown, O = unknown> {
   approval?: GenUIToolApproval;
 }
 
+type Output<S> = S extends z.ZodType ? z.output<S> : unknown;
+
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIToolRendererDefinition<
-  AS extends StandardSchemaV1 | undefined = undefined,
-  OS extends StandardSchemaV1 | undefined = undefined,
+  AS extends z.ZodType | undefined = undefined,
+  OS extends z.ZodType | undefined = undefined,
 > {
   argsSchema?: AS;
   outputSchema?: OS;
-  component: ComponentType<GenUIToolCallProps<InferSchemaOutput<AS>, InferSchemaOutput<OS>>>;
+  component: ComponentType<GenUIToolCallProps<Output<AS>, Output<OS>>>;
 }
 
 /**
@@ -155,8 +93,8 @@ export interface GenUIToolRendererDefinition<
  * @experimental Generative UI is in beta and may change without notice.
  */
 export function defineGenUIToolRenderer<
-  AS extends StandardSchemaV1 | undefined = undefined,
-  OS extends StandardSchemaV1 | undefined = undefined,
+  AS extends z.ZodType | undefined = undefined,
+  OS extends z.ZodType | undefined = undefined,
 >(definition: GenUIToolRendererDefinition<AS, OS>): GenUIToolRendererDefinition<AS, OS> {
   return definition;
 }
@@ -165,7 +103,7 @@ export function defineGenUIToolRenderer<
 export interface GenUIFallbackProps {
   /** Human-readable reason, safe to display. */
   reason: string;
-  kind: 'unknown-component' | 'invalid-props' | 'render-error' | 'incompatible-catalog' | 'invalid-surface';
+  kind: 'unknown-component' | 'invalid-props' | 'render-error' | 'invalid-surface';
   component?: string;
 }
 
@@ -177,19 +115,12 @@ export interface GenUISurfaceStatusProps {
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIFallbacks {
-  /** Rendered in place of a node or tool UI that cannot be shown. */
+  /** Rendered in place of an element or tool UI that cannot be shown. */
   Fallback?: ComponentType<GenUIFallbackProps>;
-  /** Rendered while a node's props are incomplete or a tool's arguments are streaming. */
+  /** Rendered while a tool's arguments are streaming. */
   Loading?: ComponentType<{ component?: string }>;
-  /** Rendered next to a surface tree while it streams, or after it failed or was aborted. */
+  /** Rendered next to a surface while it streams, or after it failed or was aborted. */
   SurfaceStatus?: ComponentType<GenUISurfaceStatusProps>;
-}
-
-/** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUICatalog {
-  id: string;
-  /** Semver-like version string. Surfaces declaring a different major version are treated as incompatible. */
-  version: string;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -198,25 +129,22 @@ export interface GenUISurfaceToolOptions {
   name?: string;
   /** Extra guidance appended to the generated tool description. */
   instructions?: string;
-  /**
-   * Placements the model may choose. List only those your app renders: `inline` renders in the
-   * message, every other placement needs a `GenUISurfaceOutlet`. Defaults to `['inline']`.
-   */
-  placements?: GenUIPlacement[];
+  /** Placements the model may choose. Defaults to `['inline']`. */
+  placements?: readonly GenUIPlacement[];
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface CreateGenUIOptions {
-  /** Components the model may use, keyed by the name the model refers to. */
-  components?: Record<string, AnyGenUIComponentDefinition>;
-  /** Custom renderers for existing backend tools, keyed by tool id. */
+export interface CreateGenUIOptions<C extends Catalog = Catalog> {
+  /** json-render catalog: component props schemas, descriptions and events, plus the actions surfaces may bind. */
+  catalog?: C;
+  /** One React implementation per catalog component, exactly as passed to json-render's `defineRegistry`. */
+  components?: Components<C>;
+  /** Catalog components the model may also call directly as frontend tools. */
+  componentTools?: { [K in keyof InferCatalogComponents<C>]?: true | GenUIComponentToolOptions };
+  /** Renderers for backend tools, by tool name. */
   tools?: Record<string, GenUIToolRendererDefinition<any, any>>;
   fallbacks?: GenUIFallbacks;
-  catalog?: GenUICatalog;
-  /**
-   * Expose a frontend tool that lets the model compose declarative surfaces from the
-   * registered components. Off by default.
-   */
+  /** Expose `ui_surface`, through which the model composes catalog components into a json-render spec. */
   surfaceTool?: boolean | GenUISurfaceToolOptions;
   limits?: Partial<GenUILimits>;
 }
@@ -224,181 +152,139 @@ export interface CreateGenUIOptions {
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIComponentEntry {
   name: string;
-  definition: AnyGenUIComponentDefinition;
-  /** Present when the component is exposed as a frontend tool. */
+  props: z.ZodType;
+  description?: string;
+  events: readonly string[];
+  /** Whether surfaces may use the component. */
+  declarative: boolean;
+  /** JSON Schema of the props, sent to the model. */
+  propsSchema: JSONObject;
   tool?: {
     name: string;
-    description: string;
+    description?: string;
     mode: 'display' | 'interactive';
-    /** JSON Schema, or a zod 3 schema that client-js converts when sending tools. */
-    inputSchema: JSONObject | StandardSchemaV1;
-    responseSchema?: StandardSchemaV1;
+    responseSchema?: z.ZodType;
+    streaming?: ComponentType<GenUIStreamingProps>;
   };
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
-export interface GenUIManifestComponent {
+export interface GenUIActionEntry {
   name: string;
+  params?: z.ZodType;
   description?: string;
-  /** Omitted for zod 3 schemas without an explicit `jsonSchema`. */
-  propsSchema?: JSONObject;
-  events?: readonly string[];
 }
 
-/**
- * Immutable, shareable GenUI configuration. Create it once at module scope.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export interface GenUIRegistry {
+/** @experimental Generative UI is in beta and may change without notice. */
+export interface GenUIRegistry<C extends Catalog = Catalog> {
+  readonly catalog?: C;
+  /** json-render component registry built from `components`. */
+  readonly registry: ComponentRegistry;
   readonly components: Readonly<Record<string, GenUIComponentEntry>>;
-  /** Frontend tool name → component name. */
+  readonly actions: Readonly<Record<string, GenUIActionEntry>>;
+  /** Tool name → component name. */
   readonly componentTools: Readonly<Record<string, string>>;
   readonly tools: Readonly<Record<string, GenUIToolRendererDefinition<any, any>>>;
   readonly fallbacks: GenUIFallbacks;
-  readonly catalog?: GenUICatalog;
   readonly surfaceTool?: { name: string; instructions?: string; placements: readonly GenUIPlacement[] };
   readonly limits?: Partial<GenUILimits>;
-  /** Serializable description of every declarative component. Safe to send to a server. */
-  manifest(): GenUIManifestComponent[];
 }
 
-const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 const COMPONENT_NAME = /^[A-Za-z0-9_\-.:]{1,128}$/;
+const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
-const defaultToolName = (componentName: string) => `ui_${componentName.replace(/[^A-Za-z0-9_-]/g, '_')}`.slice(0, 64);
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-
-const MAX_JSON_SCHEMA_DEPTH = 64;
-
-/**
- * Resolve the schema sent to the model. Prefers an explicit `jsonSchema`, then Standard JSON Schema
- * (zod 4, arktype, valibot adapters). Zod 3 schemas are handed to client-js as-is, which converts them.
- */
-function resolveModelSchema(name: string, definition: AnyGenUIComponentDefinition): JSONObject | StandardSchemaV1 {
-  if (definition.jsonSchema) return definition.jsonSchema;
-  const schema = definition.schema;
-  const standard = schema['~standard'];
-  const jsonSchema = 'jsonSchema' in standard && isRecord(standard.jsonSchema) ? standard.jsonSchema : undefined;
-  if (typeof jsonSchema?.input === 'function') {
-    const result: unknown = jsonSchema.input({ target: 'draft-07' });
-    // Copying drops the non-enumerable `~standard` zod puts on its output, so it isn't mistaken for a schema object.
-    if (isRecord(result)) return toSafeJSONObject(result, MAX_JSON_SCHEMA_DEPTH);
-  }
-  if (schema['~standard'].vendor === 'zod') return schema;
-  throw new Error(
-    `GenUI component "${name}": cannot derive a JSON Schema from a "${schema['~standard'].vendor}" schema. ` +
-      'Pass `jsonSchema` explicitly.',
-  );
+/** JSON Schema of what the model writes: the input side of the schema, without the dialect marker. */
+function modelSchema(schema: z.ZodType): JSONObject {
+  const { $schema: _dialect, ...json } = z.toJSONSchema(schema, { target: 'draft-07', io: 'input' });
+  return json as JSONObject;
 }
 
 /**
- * Create a GenUI registry. Only what you register here can ever be rendered, and only
- * components with `tool` set are exposed to the model as tools.
+ * Build a GenUI setup around a json-render catalog. The catalog declares what the model may render; the
+ * options decide how it reaches the model (component tools, `ui_surface`) and how backend tools render.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */
-export function createGenUI(options: CreateGenUIOptions = {}): GenUIRegistry {
+export function createGenUI<C extends Catalog = Catalog>(options: CreateGenUIOptions<C>): GenUIRegistry<C> {
+  const { catalog } = options;
+  const data = (catalog?.data ?? {}) as {
+    components?: Record<string, { props: z.ZodType; description?: string; events?: string[] }>;
+    actions?: Record<string, { params?: z.ZodType; description?: string }>;
+  };
+  const catalogComponents = data.components ?? {};
+  const catalogActions = data.actions ?? {};
+  const implementations = (options.components ?? {}) as Record<string, unknown>;
+  const toolOptions = (options.componentTools ?? {}) as Record<string, true | GenUIComponentToolOptions | undefined>;
+
+  for (const name of Object.keys(implementations)) {
+    if (!catalogComponents[name]) throw new Error(`GenUI component "${name}" is not in the catalog`);
+  }
+  for (const name of Object.keys(toolOptions)) {
+    if (!catalogComponents[name]) throw new Error(`GenUI component tool "${name}" is not in the catalog`);
+  }
+
   const components: Record<string, GenUIComponentEntry> = {};
   const componentTools: Record<string, string> = {};
-  const schemaCache = new Map<string, JSONObject | StandardSchemaV1>();
-  const modelSchemaFor = (name: string, definition: AnyGenUIComponentDefinition) => {
-    let cached = schemaCache.get(name);
-    if (!cached) {
-      cached = resolveModelSchema(name, definition);
-      schemaCache.set(name, cached);
-    }
-    return cached;
-  };
-
-  for (const [name, definition] of Object.entries(options.components ?? {})) {
-    if (!COMPONENT_NAME.test(name)) throw new Error(`GenUI component name "${name}" is invalid`);
-    if (!definition || typeof definition.component === 'undefined' || !isRecord(definition.schema)) {
-      throw new Error(`GenUI component "${name}" needs a component and a schema`);
-    }
-    const entry: GenUIComponentEntry = { name, definition };
-    if (definition.tool) {
-      const toolOptions: GenUIComponentToolOptions = definition.tool === true ? {} : definition.tool;
-      const toolName = toolOptions.name ?? defaultToolName(name);
-      if (!TOOL_NAME.test(toolName)) throw new Error(`GenUI tool name "${toolName}" is invalid`);
-      if (componentTools[toolName]) {
-        throw new Error(`GenUI tool name "${toolName}" is used by both "${componentTools[toolName]}" and "${name}"`);
+  for (const [name, definition] of Object.entries(catalogComponents)) {
+    if (!COMPONENT_NAME.test(name)) throw new Error(`Invalid GenUI component name "${name}"`);
+    if (!implementations[name]) throw new Error(`GenUI component "${name}" has no implementation`);
+    const raw = toolOptions[name];
+    const tool = raw === true ? {} : raw;
+    const entry: GenUIComponentEntry = {
+      name,
+      props: definition.props,
+      events: definition.events ?? [],
+      declarative: tool?.declarative ?? true,
+      propsSchema: modelSchema(definition.props),
+    };
+    if (definition.description) entry.description = definition.description;
+    if (tool) {
+      const toolName = tool.name ?? `ui_${name.replace(/[^A-Za-z0-9_-]/g, '_')}`.slice(0, 64);
+      if (!TOOL_NAME.test(toolName)) throw new Error(`Invalid GenUI tool name "${toolName}"`);
+      if (componentTools[toolName] || options.tools?.[toolName]) {
+        throw new Error(`GenUI tool name "${toolName}" is used twice`);
       }
       componentTools[toolName] = name;
-      entry.tool = {
-        name: toolName,
-        description: toolOptions.description ?? definition.description ?? `Render the ${name} component.`,
-        mode: toolOptions.mode ?? 'display',
-        inputSchema: modelSchemaFor(name, definition),
-        ...(toolOptions.responseSchema ? { responseSchema: toolOptions.responseSchema } : {}),
-      };
+      entry.tool = { name: toolName, mode: tool.mode ?? 'display' };
+      const description = tool.description ?? definition.description;
+      if (description) entry.tool.description = description;
+      if (tool.responseSchema) entry.tool.responseSchema = tool.responseSchema;
+      if (tool.streaming) entry.tool.streaming = tool.streaming;
     }
     components[name] = entry;
   }
 
-  const surfaceToolOptions = options.surfaceTool === true ? {} : options.surfaceTool || undefined;
-  const surfaceTool = surfaceToolOptions
-    ? {
-        name: surfaceToolOptions.name ?? 'ui_surface',
-        instructions: surfaceToolOptions.instructions,
-        placements: Object.freeze([...new Set<GenUIPlacement>(surfaceToolOptions.placements ?? ['inline'])]),
-      }
-    : undefined;
-  if (surfaceTool) {
-    if (!TOOL_NAME.test(surfaceTool.name)) throw new Error(`GenUI tool name "${surfaceTool.name}" is invalid`);
-    if (surfaceTool.placements.length === 0) throw new Error('GenUI surface tool needs at least one placement');
-    if (!Object.values(components).some(entry => entry.definition.declarative !== false)) {
-      throw new Error(
-        'GenUI surface tool needs at least one component the model can compose (not `declarative: false`)',
-      );
-    }
-    if (componentTools[surfaceTool.name]) {
-      throw new Error(`GenUI surface tool name "${surfaceTool.name}" collides with a component tool`);
-    }
-  }
-  for (const toolName of Object.keys(options.tools ?? {})) {
-    if (componentTools[toolName] || surfaceTool?.name === toolName) {
-      throw new Error(`GenUI tool renderer "${toolName}" collides with a GenUI frontend tool of the same name`);
-    }
+  const actions: Record<string, GenUIActionEntry> = {};
+  for (const [name, definition] of Object.entries(catalogActions)) {
+    actions[name] = { name, ...definition };
   }
 
-  const registry: GenUIRegistry = {
-    components,
-    componentTools,
-    tools: { ...options.tools },
-    fallbacks: { ...options.fallbacks },
-    catalog: options.catalog,
-    surfaceTool,
-    limits: options.limits,
-    manifest: () =>
-      Object.values(components)
-        .filter(entry => entry.definition.declarative !== false)
-        .map(entry => {
-          const schema = modelSchemaFor(entry.name, entry.definition);
-          return {
-            name: entry.name,
-            ...(entry.definition.description ? { description: entry.definition.description } : {}),
-            ...(isStandardSchema(schema) ? {} : { propsSchema: schema }),
-            ...(entry.definition.events?.length ? { events: [...entry.definition.events] } : {}),
-          };
-        }),
-  };
-  return Object.freeze(registry);
-}
+  let surfaceTool: GenUIRegistry['surfaceTool'];
+  if (options.surfaceTool) {
+    if (!Object.values(components).some(entry => entry.declarative)) {
+      throw new Error('The GenUI surface tool needs at least one catalog component surfaces may use');
+    }
+    const config = options.surfaceTool === true ? {} : options.surfaceTool;
+    const name = config.name ?? 'ui_surface';
+    if (!TOOL_NAME.test(name)) throw new Error(`Invalid GenUI tool name "${name}"`);
+    if (componentTools[name] || options.tools?.[name]) throw new Error(`GenUI tool name "${name}" is used twice`);
+    const placements = config.placements?.length ? [...config.placements] : (['inline'] as GenUIPlacement[]);
+    surfaceTool = { name, placements, ...(config.instructions ? { instructions: config.instructions } : {}) };
+  }
 
-/**
- * Is a surface's declared catalog compatible with the registry's? Surfaces without a catalog always are.
- *
- * @experimental Generative UI is in beta and may change without notice.
- */
-export function isCatalogCompatible(
-  registry: GenUIRegistry,
-  surface: { catalogId?: string; catalogVersion?: string },
-): boolean {
-  if (!surface.catalogId || !registry.catalog) return true;
-  if (surface.catalogId !== registry.catalog.id) return false;
-  if (!surface.catalogVersion) return true;
-  const major = (version: string) => version.split('.')[0];
-  return major(surface.catalogVersion) === major(registry.catalog.version);
+  const { registry } = catalog
+    ? defineRegistry(catalog, { components: implementations } as never)
+    : { registry: {} as ComponentRegistry };
+
+  return Object.freeze({
+    ...(catalog ? { catalog } : {}),
+    registry,
+    components: Object.freeze(components),
+    actions: Object.freeze(actions),
+    componentTools: Object.freeze(componentTools),
+    tools: Object.freeze({ ...options.tools }),
+    fallbacks: options.fallbacks ?? {},
+    ...(surfaceTool ? { surfaceTool } : {}),
+    ...(options.limits ? { limits: options.limits } : {}),
+  });
 }

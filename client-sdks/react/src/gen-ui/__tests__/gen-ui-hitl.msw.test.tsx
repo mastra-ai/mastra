@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { defineCatalog } from '@json-render/core';
 import { useBoundProp } from '@json-render/react';
+import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,16 +10,8 @@ import { z } from 'zod';
 import { server } from '../../test/msw-server';
 import { renderWithProviders } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
-import type { GenUIChatActionHandler } from '../controller';
-import {
-  createGenUI,
-  defineGenUIChatAction,
-  defineGenUIComponent,
-  defineGenUIToolRenderer,
-  useGenUIChat,
-  useGenUISurfaceState,
-} from '../index';
-import type { GenUIRegistry } from '../index';
+import { createGenUI, defineGenUIToolRenderer, useGenUIChat, useGenUISurfaceState } from '../index';
+import type { GenUIActionHandlers, GenUIRegistry } from '../index';
 import { AGENT_URL, chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
 
 type Chat = ReturnType<typeof useGenUIChat>;
@@ -29,8 +23,8 @@ function GenUIChat({
   initialMessages,
   threadId = 'thread-1',
 }: {
-  genUI: GenUIRegistry;
-  actions?: Record<string, GenUIChatActionHandler<any>>;
+  genUI: GenUIRegistry<any>;
+  actions?: GenUIActionHandlers<any>;
   initialMessages?: MastraDBMessage[];
   threadId?: string;
 }) {
@@ -330,34 +324,39 @@ describe('useGenUIChat — surface state', () => {
         return bodies.length === 1 ? stream.response() : sseResponse([chunk('start'), finish('stop')]);
       }),
     );
-    const ReportFilters = defineGenUIComponent({
-      schema: z.object({ region: z.string(), limit: z.number() }),
-      events: ['apply'],
-      component: ({ props, bindings, emit }) => {
-        const [region, setRegion] = useBoundProp(props.region, bindings?.region);
-        const surfaceState = useGenUISurfaceState();
-        return (
-          <div>
-            <label>
-              Region
-              <input value={region} onChange={event => setRegion(event.target.value)} />
-            </label>
-            <output data-testid="limit">{String(props.limit)}</output>
-            <output data-testid="conflicts">{surfaceState.conflicts.join(',')}</output>
-            <button onClick={() => surfaceState.keepLocal('/region')}>Keep mine</button>
-            <button onClick={() => surfaceState.discard('/region')}>Use agent value</button>
-            <button onClick={() => emit('apply')}>Apply</button>
-          </div>
-        );
+    const filters = z.object({ region: z.string(), limit: z.number() });
+    const catalog = defineCatalog(schema, {
+      components: { ReportFilters: { props: filters, events: ['apply'] } },
+      actions: { apply: { params: filters } },
+    });
+    const genUI = createGenUI({
+      catalog,
+      components: {
+        ReportFilters: ({ props, bindings, emit }) => {
+          const [region, setRegion] = useBoundProp(props.region, bindings?.region);
+          const surfaceState = useGenUISurfaceState();
+          return (
+            <div>
+              <label>
+                Region
+                <input value={region} onChange={event => setRegion(event.target.value)} />
+              </label>
+              <output data-testid="limit">{String(props.limit)}</output>
+              <output data-testid="conflicts">{surfaceState.conflicts.join(',')}</output>
+              <button onClick={() => surfaceState.keepLocal('/region')}>Keep mine</button>
+              <button onClick={() => surfaceState.discard('/region')}>Use agent value</button>
+              <button onClick={() => emit('apply')}>Apply</button>
+            </div>
+          );
+        },
       },
     });
-    const apply = defineGenUIChatAction({
-      schema: z.object({ region: z.string(), limit: z.number() }),
-      handle: async (filters, { chat }) => {
-        await chat.sendMessage(`Apply ${JSON.stringify(filters)}`);
+    const actions: GenUIActionHandlers<typeof catalog> = {
+      apply: async (params, { chat }) => {
+        await chat.sendMessage(`Apply ${JSON.stringify(params)}`);
       },
-    });
-    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { ReportFilters } })} actions={{ apply }} />);
+    };
+    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} />);
     await send('show report filters');
     act(() =>
       stream.push(
@@ -432,19 +431,24 @@ describe('useGenUIChat — surface state', () => {
         ]),
       ),
     );
-    const Counter = defineGenUIComponent({
-      schema: z.object({ count: z.number() }),
-      component: ({ props, bindings }) => {
-        const [count, setCount] = useBoundProp(props.count, bindings?.count);
-        return (
-          <div data-testid="counter">
-            <button onClick={() => setCount((count ?? 0) + 1)}>+1</button>
-            <span>count {count}</span>
-          </div>
-        );
+    const catalog = defineCatalog(schema, {
+      components: { Counter: { props: z.object({ count: z.number() }) } },
+      actions: {},
+    });
+    const registry = createGenUI({
+      catalog,
+      components: {
+        Counter: ({ props, bindings }) => {
+          const [count, setCount] = useBoundProp(props.count, bindings?.count);
+          return (
+            <div data-testid="counter">
+              <button onClick={() => setCount((count ?? 0) + 1)}>+1</button>
+              <span>count {count}</span>
+            </div>
+          );
+        },
       },
     });
-    const registry = createGenUI({ components: { Counter } });
     const view = renderWithProviders(<GenUIChat genUI={registry} />);
     await send('two counters');
 
@@ -458,7 +462,7 @@ describe('useGenUIChat — surface state', () => {
 
     // Same controller, new thread: no state from the previous conversation leaks in.
     view.rerender(<GenUIChat genUI={registry} threadId="thread-2" />);
-    await waitFor(() => expect(current.genUI.controller.state.get({ kind: 'surface', id: 'left' }).value).toEqual({}));
-    expect(current.genUI.controller.state.get({ kind: 'surface', id: 'right' }).value).toEqual({});
+    await waitFor(() => expect(current.genUI.controller.edits.get('left')).toEqual({}));
+    expect(current.genUI.controller.edits.get('right')).toEqual({});
   });
 });

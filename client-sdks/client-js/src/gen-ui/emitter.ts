@@ -179,7 +179,17 @@ export function createGenUIEmitter(
         send,
         create: (input = {}) => send([{ op: 'createSurface', ...input }]),
         patch: patches => send([{ op: 'patch', patches }]),
-        replace: spec => send([{ op: 'replaceSpec', spec }]),
+        replace: spec =>
+          send([
+            {
+              op: 'patch',
+              patches: [
+                { op: 'replace', path: '/root', value: spec.root },
+                { op: 'replace', path: '/elements', value: spec.elements },
+                spec.state ? { op: 'add', path: '/state', value: spec.state } : { op: 'remove', path: '/state' },
+              ],
+            },
+          ]),
         setState: (path, value) =>
           send([{ op: 'patch', patches: [{ op: 'add', path: path ? `/state${path}` : path, value }] }]),
         setStatus: (status, error) => send([{ op: 'setStatus', status, ...(error !== undefined ? { error } : {}) }]),

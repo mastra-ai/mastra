@@ -23,4 +23,4 @@ execute: async ({ city }, context) => {
 
 Requires `@mastra/core` 1.83.0 or later on the server, and `@json-render/core` 0.22 with zod 4 in your app.
 
-The subpath also exports the state reducer, session, action dispatcher, state and context stores, and a streaming JSON parser for building Generative UI bindings for other frameworks.
+The subpath also exports the surface reducer, session replay, envelope validation, the user-edit and published-context helpers, and a streaming JSON parser for building Generative UI bindings for other frameworks. Specs, patches, and state paths are json-render's own types and helpers.

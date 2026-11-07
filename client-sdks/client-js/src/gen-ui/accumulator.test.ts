@@ -72,7 +72,7 @@ describe('accumulateGenUI', () => {
     expect(accumulateGenUI(once, create)).toBe(once);
   });
 
-  it('never mutates the previous state and keeps untouched elements by identity', () => {
+  it('never mutates the previous state', () => {
     const before = applyAll([dashboard()]);
     const snapshot = structuredClone(before);
     const after = accumulateGenUI(
@@ -81,32 +81,7 @@ describe('accumulateGenUI', () => {
     );
     expect(before).toEqual(snapshot);
     expect(after.surfaces.dash!.spec.elements.title!.props.text).toBe('Q4');
-    expect(after.surfaces.dash!.spec.elements.kpi).toBe(before.surfaces.dash!.spec.elements.kpi);
-    expect(after.surfaces.dash!.spec.elements.root).toBe(before.surfaces.dash!.spec.elements.root);
-    expect(after.surfaces.dash!.spec.state).toBe(before.surfaces.dash!.spec.state);
     expect(after.surfaces.dash!.revision).toBe(2);
-  });
-
-  it('tracks the revision at which each element last changed, for stale-action checks', () => {
-    const created = applyAll([dashboard()]);
-    expect(created.surfaces.dash!.elementRevisions).toEqual({ root: 1, title: 1, kpi: 1 });
-    const patched = applyAll(
-      [
-        env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/elements/title/props/text', value: 'Q4' }] }]),
-        env('dash', [{ op: 'patch', patches: [{ op: 'replace', path: '/state/revenue', value: 1 }] }]),
-        env('dash', [
-          {
-            op: 'patch',
-            patches: [
-              { op: 'remove', path: '/elements/root/children/1' },
-              { op: 'remove', path: '/elements/kpi' },
-            ],
-          },
-        ]),
-      ],
-      created,
-    );
-    expect(patched.surfaces.dash!.elementRevisions).toEqual({ root: 4, title: 2 });
   });
 
   it('a copied value does not share containers with its source', () => {
@@ -173,12 +148,6 @@ describe('accumulateGenUI', () => {
     expect(after.diagnostics.at(-1)).toMatchObject({ code: 'invalid-operation', surfaceId: 'dash' });
   });
 
-  it('replaceSpec swaps the whole body', () => {
-    const next: GenUISpec = { root: 't', elements: { t: { type: 'Text', props: { text: 'new' } } } };
-    const state = applyAll([dashboard(), env('dash', [{ op: 'replaceSpec', spec: next }])]);
-    expect(state.surfaces.dash!.spec).toEqual(next);
-  });
-
   it('createSurface with replace rebuilds an existing surface in place instead of rejecting it', () => {
     const next: GenUISpec = { root: 'note', elements: { note: { type: 'Text', props: { text: 'Updated' } } } };
     const state = applyAll([
@@ -194,7 +163,6 @@ describe('accumulateGenUI', () => {
       placement: 'panel',
       revision: 3,
       status: 'streaming',
-      elementRevisions: { note: 3 },
     });
 
     const created = applyAll([env('fresh', [{ op: 'createSurface', replace: true, spec: next }])]);

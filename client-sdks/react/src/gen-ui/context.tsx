@@ -1,18 +1,11 @@
-import type {
-  GenUIContextEntry,
-  GenUIEdits,
-  GenUISurface,
-  GenUIValidationResult,
-  JSONObject,
-  JSONValue,
-} from '@mastra/client-js/gen-ui';
+import type { GenUIContextEntry, GenUISurface, JSONObject, JSONValue } from '@mastra/client-js/gen-ui';
 import { rebaseGenUIEdit } from '@mastra/client-js/gen-ui';
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { GenUIController } from './controller';
 import type { GenUIToolApproval } from './registry';
-import { readSurfaceEdits, surfaceEditsScope } from './surface-store';
 import type { GenUISurfaceStore } from './surface-store';
+import type { GenUIValidationResult } from './validate';
 
 const ControllerContext = createContext<GenUIController | undefined>(undefined);
 const ToolCallContext = createContext<string | undefined>(undefined);
@@ -95,7 +88,7 @@ export function useGenUISurfaceState(): GenUISurfaceState {
   if (!scope) throw new Error('useGenUISurfaceState must be used inside a component rendered by a GenUI surface');
   const { surfaceId, store } = scope;
   const merged = useSyncExternalStore(store.subscribe, store.getMerged, store.getMerged);
-  const writeEdits = (edits: GenUIEdits) => controller.state.set(surfaceEditsScope(surfaceId), edits as JSONObject);
+  const { edits } = controller;
   return {
     surfaceId,
     value: merged.value,
@@ -103,12 +96,11 @@ export function useGenUISurfaceState(): GenUISurfaceState {
     edited: Object.keys(merged.edits),
     conflicts: merged.conflicts,
     set: (path, value) => store.set(path, value),
-    keepLocal: path =>
-      writeEdits(rebaseGenUIEdit(readSurfaceEdits(controller.state, surfaceId), store.getAgentState(), path)),
+    keepLocal: path => edits.set(surfaceId, rebaseGenUIEdit(edits.get(surfaceId), store.getAgentState(), path)),
     discard(path) {
-      if (path === undefined) return controller.state.reset(surfaceEditsScope(surfaceId));
-      const { [path]: _dropped, ...rest } = readSurfaceEdits(controller.state, surfaceId);
-      writeEdits(rest);
+      if (path === undefined) return edits.set(surfaceId, {});
+      const { [path]: _dropped, ...rest } = edits.get(surfaceId);
+      edits.set(surfaceId, rest);
     },
   };
 }
@@ -156,7 +148,7 @@ export function useGenUIToolApproval(toolCallId: string): GenUIToolApproval | un
 export interface GenUIToolResponse {
   /** `false` when the call already resolved, or the run that waited for it is gone (e.g. after a reload). */
   canRespond: boolean;
-  respond(value: unknown): Promise<GenUIValidationResult<unknown>>;
+  respond(value: unknown): GenUIValidationResult<unknown>;
 }
 
 /**

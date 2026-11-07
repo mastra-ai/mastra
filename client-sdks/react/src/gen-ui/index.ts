@@ -1,15 +1,11 @@
-export { createGenUI, defineGenUIComponent, defineGenUIToolRenderer, isCatalogCompatible } from './registry';
+export { createGenUI, defineGenUIToolRenderer } from './registry';
 export type {
-  AnyGenUIComponentDefinition,
   CreateGenUIOptions,
-  GenUICatalog,
-  GenUIComponentDefinition,
+  GenUIActionEntry,
   GenUIComponentEntry,
-  GenUIComponentProps,
   GenUIComponentToolOptions,
   GenUIFallbackProps,
   GenUIFallbacks,
-  GenUIManifestComponent,
   GenUIRegistry,
   GenUIStreamingProps,
   GenUISurfaceStatusProps,
@@ -19,10 +15,11 @@ export type {
   GenUIToolPhase,
   GenUIToolRendererDefinition,
 } from './registry';
-export { createGenUIController, defineGenUIChatAction } from './controller';
+export { createGenUIController } from './controller';
 export type {
-  GenUIChatActionContext,
-  GenUIChatActionHandler,
+  GenUIActionContext,
+  GenUIActionHandler,
+  GenUIActionHandlers,
   GenUIChatServices,
   GenUIController,
   GenUIControllerOptions,
@@ -46,6 +43,8 @@ export {
   GenUISurfaceView,
 } from './surface';
 export type { GenUISurfaceViewProps } from './surface';
+export type { GenUIEditsStore, GenUISurfaceStateSnapshot } from './surface-store';
+export type { GenUIValidationResult } from './validate';
 export { createGenUIRenderers } from './renderers';
 export { useGenUIChat } from './chat';
 export type { GenUIChatHandle, UseGenUIChatProps } from './chat';
