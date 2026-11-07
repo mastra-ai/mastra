@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Agent } from '@mastra/core/agent';
 import { createWorkspaceTools, supportsComputer, supportsNetworking, Workspace } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
@@ -4328,5 +4329,114 @@ describe('PlatformSandbox computer', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+/** A minimal LanguageModelV2: the first call returns `calls` as one step of parallel tool calls, later calls finish. */
+function parallelToolCallModel(calls: { toolName: string; input: unknown }[]) {
+  let step = 0;
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'test',
+    modelId: 'parallel-tool-calls',
+    supportedUrls: {},
+    doGenerate: async () =>
+      step++ === 0
+        ? {
+            content: calls.map((c, i) => ({
+              type: 'tool-call' as const,
+              toolCallId: `call_${i}`,
+              toolName: c.toolName,
+              input: JSON.stringify(c.input),
+            })),
+            finishReason: 'tool-calls' as const,
+            usage,
+            warnings: [],
+          }
+        : { content: [{ type: 'text' as const, text: 'done' }], finishReason: 'stop' as const, usage, warnings: [] },
+    doStream: async () => {
+      throw new Error('not used');
+    },
+  };
+}
+
+describe('PlatformSandbox computer driven by an agent', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /**
+   * One model step that clicks, types and presses Enter. Every computer tool awaits
+   * `getInfo()` (a proxy round trip on a running sandbox) before acting, so the
+   * slowest round trip is given to the first call, as on staging.
+   */
+  async function runClickTypeEnter(generateOptions: { toolCallConcurrency?: number }) {
+    const infoDelaysMs = [60, 40, 20];
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/sandbox/sbx_1') && (init?.method ?? 'GET') === 'GET') {
+        await new Promise(resolve => setTimeout(resolve, infoDelaysMs.shift() ?? 0));
+        return json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' });
+      }
+      if (String(url).endsWith('/sandbox')) return json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' });
+      return e2bLeaseResponse();
+    });
+    const xdotool: string[] = [];
+    const e2bExecRunner = vi.fn(async (_lease: unknown, { command }: { command: string }) => {
+      const ensure = command.includes('flock -w 120 9');
+      if (command.startsWith('xdotool')) xdotool.push(command);
+      return {
+        exitCode: 0,
+        stdout: ensure ? 'ready\n' : '',
+        stderr: '',
+        truncated: false,
+        timedOut: false,
+        opened: true,
+      };
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      e2bExecRunner,
+      computer: true,
+    });
+    await sandbox._start();
+    const agent = new Agent({
+      id: 'computer-order',
+      name: 'computer-order',
+      instructions: 'Use the computer.',
+      model: parallelToolCallModel([
+        { toolName: 'mastra_workspace_computer_click', input: { x: 1, y: 2 } },
+        { toolName: 'mastra_workspace_computer_type', input: { text: 'echo hi' } },
+        { toolName: 'mastra_workspace_computer_press_key', input: { key: 'Enter' } },
+      ]),
+      workspace: new Workspace({ sandbox }),
+    });
+    await agent.generate('go', { maxSteps: 3, ...generateOptions });
+    return xdotool;
+  }
+
+  it('runs the actions of one step in the model order with toolCallConcurrency: 1', async () => {
+    expect(await runClickTypeEnter({ toolCallConcurrency: 1 })).toEqual([
+      'xdotool mousemove 1 2 click 1',
+      "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
+      'xdotool key --clearmodifiers -- Return',
+    ]);
+  });
+
+  // Documents why the docs require toolCallConcurrency: 1. If core starts running
+  // computer tools sequentially by itself, this test fails and the requirement can go.
+  it('reorders the actions of one step under the default tool-call concurrency', async () => {
+    expect(await runClickTypeEnter({})).toEqual([
+      'xdotool key --clearmodifiers -- Return',
+      "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
+      'xdotool mousemove 1 2 click 1',
+    ]);
   });
 });

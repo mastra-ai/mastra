@@ -42,8 +42,7 @@ import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './templat
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -147,6 +146,9 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * The first computer call installs the desktop (about 80 s) unless the
    * template was built with {@link withDesktop} and has finished building.
    * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
+   *
+   * Call the agent with `toolCallConcurrency: 1`: by default the tool calls of
+   * one model step run concurrently and can reach the desktop out of order.
    */
   computer?: boolean;
 }

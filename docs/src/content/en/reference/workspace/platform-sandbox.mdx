@@ -357,7 +357,13 @@ const agent = new Agent({
   instructions: 'You control a Linux desktop. Use the computer tools for everything on screen.',
   workspace: new Workspace({ sandbox }),
 })
+
+const result = await agent.generate('Open a terminal and run `uname -a`.', {
+  toolCallConcurrency: 1,
+})
 ```
+
+Set `toolCallConcurrency: 1` when you call the agent. A model often clicks, types and presses Enter in a single step, and by default those tool calls run concurrently, so they can reach the desktop out of order (for example, Enter before the text).
 
 The first computer call installs the desktop (about 80 seconds) and starts it. Later calls, and other `PlatformSandbox` instances attached to the same sandbox, reuse the running desktop. Calls through one `PlatformSandbox` instance run one at a time, in order. Two instances attached to the same sandbox (for example a second instance created with the same `sandboxId`) are not ordered against each other.
 
@@ -390,6 +396,7 @@ Limits:
 - E2B only. `computer: true` with another sandbox provider throws when the sandbox is constructed.
 - The viewer opens in its own browser tab. It can't be embedded in an iframe on another site yet.
 - The VNC server has no password. Access to the viewer is protected only by the port's sign-in or auth cookie.
+- Computer tool calls in one model step are only kept in order with `toolCallConcurrency: 1`.
 - A human in the viewer and the agent share one mouse and keyboard, so their input can interleave.
 
 ## Constructor parameters
