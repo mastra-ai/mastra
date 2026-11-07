@@ -1147,6 +1147,85 @@ describe('MastraModelOutput', () => {
       });
     });
 
+    it('keeps the reported counts of erased totals across a snapshot round trip', async () => {
+      const runId = 'test-run';
+      const original = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      // No buffered steps, so only the snapshot itself can carry the erased input count.
+      original.updateUsageCount({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      original.updateUsageCount({ outputTokens: 5 });
+
+      const restored = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { inputTokens: 7, outputTokens: 3, totalTokens: 10 }),
+          createFinishChunk(runId, undefined, {}),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        initialState: JSON.parse(JSON.stringify(original.serializeState())),
+      });
+
+      expect(await restored.observedUsage).toMatchObject({
+        inputTokens: 17,
+        outputTokens: 28,
+        totalTokens: 45,
+        incomplete: true,
+      });
+      await expect(restored.totalUsage).resolves.toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 28,
+        totalTokens: undefined,
+      });
+    });
+
+    it('rebuilds reported counts from steps when a legacy snapshot has none', async () => {
+      const runId = 'test-run';
+      const original = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await original.consumeStream();
+      const legacyState = JSON.parse(JSON.stringify(original.serializeState()));
+      delete legacyState.usageCountMissing;
+      delete legacyState.usageCountReported;
+
+      const restored = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { inputTokens: 1, outputTokens: 1, totalTokens: 2 }),
+          createFinishChunk(runId, undefined, {}),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        initialState: legacyState,
+      });
+
+      expect(await restored.observedUsage).toMatchObject({
+        inputTokens: 11,
+        outputTokens: 21,
+        totalTokens: 32,
+        incomplete: true,
+      });
+      await expect(restored.totalUsage).resolves.toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    });
+
     it('accumulates usage after restoring an empty legacy state', () => {
       const runId = 'test-run';
       const original = new MastraModelOutput({

@@ -1222,6 +1222,13 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   raw?: unknown;
 };
 
+/**
+ * The sum of the token counts that were reported for a run. `incomplete` is true when `totalUsage`
+ * has an unknown input, output, or total count, so the run may have cost more than these counts.
+ * A count nobody reported stays undefined.
+ */
+export type ObservedUsage = LanguageModelUsage & { incomplete: boolean };
+
 export type partialModel = {
   modelId?: string;
   provider?: string;
@@ -1247,6 +1254,8 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   usedFallbackValue?: boolean;
   steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
+  /** The sum of the token counts that were reported, readable when `totalUsage` has unknown counts. */
+  observedUsage: ObservedUsage;
   model?: partialModel;
   runId?: string;
   /** Model messages the run added to the conversation (the response messages). */

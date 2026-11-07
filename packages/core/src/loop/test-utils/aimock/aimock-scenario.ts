@@ -694,10 +694,11 @@ export async function runApprovalScenario({
   observability,
   tracingOptions,
   afterStream,
+  errorProcessors,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
-  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine, observability });
+  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine, observability, errorProcessors });
   const isDurable = isDurableEngineVariant(engine);
 
   const chunks: ChunkType[] = [];
@@ -714,6 +715,7 @@ export async function runApprovalScenario({
     ...(stopWhen ? { stopWhen } : {}),
     // Durable needs maxSteps as a fallback when stopWhen is the only bound.
     ...(stopWhen && isDurable ? { maxSteps: 10 } : {}),
+    ...(errorProcessors ? { errorProcessors } : {}),
   })) as unknown as RunHandle;
   const runId = run.runId;
 

@@ -6,6 +6,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Event, EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
+import { resolveObservedUsage } from '../../observability/usage';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue, safeError } from '../../stream/base';
@@ -830,6 +831,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 finishReason: finishReason ?? 'stop',
                 usage: normalizeUsage(data.output?.usage),
                 totalUsage: normalizeUsage(data.output?.usage),
+                observedUsage: resolveObservedUsage(normalizeUsage(data.output?.usage), steps),
                 warnings: data.stepResult?.warnings ?? [],
                 request: terminalRequest ?? { body: undefined },
                 response: steps.at(-1)?.response ?? {},
