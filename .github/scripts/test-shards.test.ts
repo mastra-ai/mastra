@@ -64,6 +64,23 @@ describe('planShards', () => {
     expect(plan.estimatedMs).toEqual([3_000 + FILE_OVERHEAD_MS]);
   });
 
+  test('keeps a group on one shard', () => {
+    const list = [
+      ...files(40),
+      'packages/memory/src/a.test.ts',
+      'packages/memory/src/b.test.ts',
+      'packages/memory/src/c.test.ts',
+    ];
+    const record = Object.fromEntries(list.map(file => [file, 20_000]));
+    const groupOf = (file: string) => (file.startsWith('packages/memory/') ? 'packages/memory' : undefined);
+    const plan = planShards({ files: list, timings: record, maxShards: 8, targetShardMs: 1, groupOf });
+
+    const withMemory = plan.shards.filter(shard => shard.some(file => file.startsWith('packages/memory/')));
+    expect(withMemory).toHaveLength(1);
+    expect(withMemory[0]!.filter(file => file.startsWith('packages/memory/'))).toHaveLength(3);
+    expect(plan.shards.flat()).toHaveLength(list.length);
+  });
+
   test('plans nothing for no files', () => {
     expect(planShards({ files: [] })).toEqual({ shards: [], estimatedMs: [] });
   });
