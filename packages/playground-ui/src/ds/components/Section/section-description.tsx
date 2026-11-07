@@ -10,7 +10,7 @@ export function SectionDescription({ className, ...props }: SectionDescriptionPr
       variant="caption"
       tone="muted"
       data-slot="section-description"
-      className={cn('max-w-[62ch] text-pretty', className)}
+      className={cn('max-w-[62ch]', className)}
       {...props}
     />
   );
