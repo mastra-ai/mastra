@@ -7,8 +7,7 @@ import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
-import { MASTRA_PLATFORM_URL } from '../../factory/services/platformConnect';
-import { isConnectToolsOffError } from '../../factory/services/platformConnect';
+import { isConnectToolsOffError, MASTRA_PLATFORM_URL } from '../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
