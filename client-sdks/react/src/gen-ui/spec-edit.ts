@@ -83,7 +83,7 @@ export function specEditDescription(modes: readonly EditMode[], specToolName: st
       ? 'mode "merge": `merge` is an RFC 7396 JSON merge patch of the spec: objects merge, other values replace, null removes.'
       : '',
     modes.includes('diff')
-      ? 'mode "diff": `diff` is a unified diff against the `spec` text the earlier tool result returned, with a few unchanged context lines around each change.'
+      ? 'mode "diff": `diff` is a unified diff against the `spec` text the earlier tool result returned. Hunks are placed by their lines, not their @@ line numbers, so include enough unchanged context lines (such as the element id line) that each hunk matches exactly one place.'
       : '',
     'The result returns the new interface `id` to edit it again.',
   ]
@@ -157,7 +157,6 @@ export function readSpecEditArgs(args: unknown, complete: boolean, modes: readon
 }
 
 interface Hunk {
-  from: number;
   old: string[];
   next: string[];
 }
@@ -166,9 +165,8 @@ function readHunks(diff: string): Hunk[] {
   const hunks: Hunk[] = [];
   const lines = diff.replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
   for (const line of lines) {
-    const header = /^@@ -(\d+)/.exec(line);
-    if (header) {
-      hunks.push({ from: Math.max(0, Number(header[1]) - 1), old: [], next: [] });
+    if (line.startsWith('@@')) {
+      hunks.push({ old: [], next: [] });
       continue;
     }
     const hunk = hunks.at(-1);
@@ -186,8 +184,9 @@ function readHunks(diff: string): Hunk[] {
 }
 
 /**
- * Apply a unified diff to `text`. The model never sees line numbers, so hunks are placed by their content
- * (ignoring indentation), at the match nearest the line the hunk header names.
+ * Apply a unified diff to `text`. The model never sees line numbers, so the `@@` line numbers are ignored and
+ * each hunk is placed by its content (ignoring indentation). Spec JSON repeats lines, so a hunk must match
+ * exactly one place; otherwise the edit fails and tells the model to add context rather than guess.
  */
 export function applyUnifiedDiff(
   text: string,
@@ -196,20 +195,23 @@ export function applyUnifiedDiff(
   const lines = text.split('\n');
   const hunks = readHunks(diff);
   if (!hunks.length) return { ok: false, error: 'the diff has no @@ hunks' };
-  let offset = 0;
   for (const [index, hunk] of hunks.entries()) {
-    const hint = hunk.from + offset;
-    let at = -1;
-    if (!hunk.old.length) at = Math.min(hint, lines.length);
-    else {
-      for (let start = 0; start + hunk.old.length <= lines.length; start++) {
-        const matches = hunk.old.every((line, i) => line.trim() === lines[start + i]!.trim());
-        if (matches && (at === -1 || Math.abs(start - hint) < Math.abs(at - hint))) at = start;
-      }
+    const name = `diff hunk ${index + 1}`;
+    if (!hunk.old.length) {
+      return { ok: false, error: `${name} has no unchanged or removed lines; include context lines around the change` };
     }
-    if (at === -1) return { ok: false, error: `diff hunk ${index + 1} does not match the spec` };
-    lines.splice(at, hunk.old.length, ...hunk.next);
-    offset += hunk.next.length - hunk.old.length;
+    const places: number[] = [];
+    for (let start = 0; start + hunk.old.length <= lines.length; start++) {
+      if (hunk.old.every((line, i) => line.trim() === lines[start + i]!.trim())) places.push(start);
+    }
+    if (!places.length) return { ok: false, error: `${name} does not match the spec` };
+    if (places.length > 1) {
+      return {
+        ok: false,
+        error: `${name} matches ${places.length} places in the spec; include the element id as context so it matches one`,
+      };
+    }
+    lines.splice(places[0]!, hunk.old.length, ...hunk.next);
   }
   return { ok: true, text: lines.join('\n') };
 }
