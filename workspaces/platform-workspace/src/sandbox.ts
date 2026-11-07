@@ -12,6 +12,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxComputer,
   SandboxNetworking,
   SandboxStartResult,
   SpawnProcessOptions,
@@ -27,6 +28,7 @@ import {
 import { AuthenticationError, TimeoutError } from 'e2b';
 import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient, resolveSandboxProvider } from './client.js';
+import { COMPUTER_VIEWER_PORT, createPlatformComputer } from './computer.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
 import type { E2BCommandsFactory, E2BExecRunner, E2BFiles, E2BFilesFactory } from './e2b-exec.js';
@@ -40,8 +42,7 @@ import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './templat
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -136,6 +137,23 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * {@link SandboxAddressRegistry}.
    */
   addressRegistry?: SandboxAddressRegistry;
+  /**
+   * @experimental Requires `MASTRA_EXPERIMENTAL_COMPUTER=true`; throws at
+   * construction otherwise.
+   *
+   * Give the agent a Linux desktop it fully controls: screenshots, mouse and
+   * keyboard, exposed as `sandbox.computer`, which adds the workspace
+   * `mastra_workspace_computer_*` tools. E2B only; throws at construction for
+   * other providers.
+   *
+   * The first computer call installs the desktop (about 80 s) unless the
+   * template was built with {@link withDesktop} and has finished building.
+   * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
+   *
+   * Give the agent `defaultOptions: { toolCallConcurrency: 1 }`: by default the tool calls of
+   * one model step run concurrently and can reach the desktop out of order.
+   */
+  computer?: boolean;
 }
 
 interface ExecLeaseResponse {
@@ -560,6 +578,12 @@ export class PlatformSandbox extends MastraSandbox {
    */
   declare readonly networking?: SandboxNetworking;
 
+  /**
+   * @experimental The agent's desktop, present when the sandbox was created
+   * with `computer: true`.
+   */
+  declare readonly computer?: SandboxComputer;
+
   private readonly _networking: SandboxNetworking = {
     getPortUrl: async (port: number): Promise<string | null> => (await this._previewGrant(port))?.url ?? null,
   };
@@ -618,6 +642,7 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
   private readonly _timeout?: number;
+  private readonly _computerEnabled: boolean;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
   private readonly _webSocketFactory?: DirectExecWebSocketFactory;
@@ -712,6 +737,28 @@ export class PlatformSandbox extends MastraSandbox {
     this._client = new PlatformClient(options);
     // Only E2B-backed sandboxes serve their ports.
     if (this._client.sandboxProvider === 'e2b') this.networking = this._networking;
+    this._computerEnabled = options.computer === true;
+    if (this._computerEnabled) {
+      if (process.env.MASTRA_EXPERIMENTAL_COMPUTER !== 'true') {
+        throw new Error('PlatformSandbox computer is experimental; set MASTRA_EXPERIMENTAL_COMPUTER=true to enable it');
+      }
+      if (this._client.sandboxProvider !== 'e2b') {
+        throw new Error('PlatformSandbox computer requires the e2b sandbox provider');
+      }
+      this.computer = createPlatformComputer({
+        exec: (command, args, opts) =>
+          this._executeCommand(command, args, { timeout: opts.timeout, env: opts.env }, { once: opts.once }),
+        viewerUrl: async () => {
+          const base = await this._networking.getPortUrl(COMPUTER_VIEWER_PORT);
+          if (!base) return null;
+          const url = new URL('vnc.html', base);
+          url.searchParams.set('autoconnect', '1');
+          url.searchParams.set('resize', 'scale');
+          url.searchParams.set('path', 'websockify');
+          return url.toString();
+        },
+      });
+    }
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
@@ -808,6 +855,7 @@ export class PlatformSandbox extends MastraSandbox {
       // of the shared registry, not the parent's. See
       // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
       ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
+      ...(this._computerEnabled && { computer: true }),
     });
     clone._templateDefinition = this._templateDefinition ? structuredClone(this._templateDefinition) : undefined;
     clone._templateBuildEnvs = this._templateBuildEnvs ? { ...this._templateBuildEnvs } : undefined;
@@ -1904,6 +1952,15 @@ export class PlatformSandbox extends MastraSandbox {
     }
   }
 
+  /**
+   * Shared proxy lookup for concurrent `getInfo()` calls on the same sandbox.
+   * Workspace tools await `getInfo()` before acting, so separate round trips
+   * made concurrent computer actions reach the desktop in latency order. A
+   * shared request removes that source of reordering; it is not an ordering
+   * guarantee (core awaits other work before the action).
+   */
+  private _infoRequest?: { sandboxId: string; promise: Promise<SandboxInfo> };
+
   async getInfo(): Promise<SandboxInfo> {
     // Before this process has started the sandbox, `_sandboxId` is at best a
     // caller-supplied hint for `start()` to reattach by. Asking the proxy
@@ -1943,7 +2000,20 @@ export class PlatformSandbox extends MastraSandbox {
         },
       };
     }
-    const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+    if (this._infoRequest?.sandboxId !== this._sandboxId) {
+      const request = {
+        sandboxId: this._sandboxId,
+        promise: this._fetchInfo(this._sandboxId).finally(() => {
+          if (this._infoRequest === request) this._infoRequest = undefined;
+        }),
+      };
+      this._infoRequest = request;
+    }
+    return this._infoRequest.promise;
+  }
+
+  private async _fetchInfo(sandboxId: string): Promise<SandboxInfo> {
+    const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
       id: json.id,
