@@ -9,6 +9,7 @@ import { CustomEditor } from '../components/custom-editor.js';
 import { GithubPRPickerDialog } from '../components/github-pr-picker.js';
 import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
 import { LoginModeSelectorComponent } from '../components/login-mode-selector.js';
+import { McpSelectorComponent } from '../components/mcp-selector.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
@@ -464,5 +465,59 @@ describe('hand-drawn pickers on PickerList', () => {
     const activate = harness.find('Set as active');
     await harness.click(activate.row, activate.col);
     expect(activated).toEqual(['b']);
+  });
+
+  it('mcp selector: clicking another server closes the open action menu and opens its own, like Esc + Enter', async () => {
+    harness = createHarness();
+    const reconnected: string[] = [];
+    const server = (name: string) =>
+      ({
+        name,
+        transport: 'http',
+        connected: true,
+        connecting: false,
+        needsAuth: false,
+        toolCount: 1,
+        toolNames: ['t'],
+      }) as never;
+    const noop = async () => ({ statuses: [], skipped: [] });
+    const selector = new McpSelectorComponent({
+      tui: harness.ui,
+      statuses: [server('alpha'), server('beta')],
+      skipped: [],
+      configPaths: { project: '', global: '', claude: '' },
+      getStatuses: () => ({ statuses: [], skipped: [] }),
+      onReloadAll: noop,
+      onReconnectServer: async name => {
+        reconnected.push(name);
+        return server(name);
+      },
+      onAuthenticateServer: async name => server(name),
+      onCancelAuthenticateServer: async () => false,
+      onSetServerDisabled: noop,
+      onInheritServer: noop,
+      getServerLogs: () => [],
+      showInfo: () => {},
+      onClose: () => {},
+    });
+    showModalOverlay(harness.ui, selector);
+    await harness.render();
+
+    const alpha = harness.find('alpha [http]');
+    await harness.click(alpha.row, alpha.col);
+    await harness.render();
+    expect(harness.find('View tools').row).toBe(harness.find('alpha [http]').row + 1);
+
+    const beta = harness.find('beta [http]');
+    await harness.click(beta.row, beta.col);
+    await harness.render();
+    expect(harness.find('View tools').row).toBe(harness.find('beta [http]').row + 1);
+
+    const reconnect = harness.find('Reconnect');
+    await harness.hover(reconnect.row, reconnect.col);
+    await harness.render();
+    expect(harness.markedRows()).toEqual([reconnect.row]);
+    await harness.click(reconnect.row, reconnect.col);
+    expect(reconnected).toEqual(['beta']);
   });
 });
