@@ -3,20 +3,25 @@ import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptio
 import type { LanguageModelV4, LanguageModelV4CallOptions, SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
+import type { z as z3 } from 'zod/v3';
 import type { z } from 'zod/v4';
 import type { TracingPolicy } from '../../observability';
 import type { StandardSchemaWithJSON, InferStandardSchemaOutput, ZodSchema } from '../../schema';
 import type { ScoringData } from './base.types';
 import type { ModelRouterModelId } from './provider-registry.js';
 
+// zod v4's `z.infer` reads `_zod.output`, which v3 schemas lack, so v3 needs its own branch.
+// See https://github.com/mastra-ai/mastra/issues/29574
 export type inferOutput<Output extends StandardSchemaWithJSON | ZodSchema | JSONSchema7 | undefined = undefined> =
   Output extends StandardSchemaWithJSON
     ? InferStandardSchemaOutput<Output>
-    : Output extends ZodSchema
+    : Output extends z.ZodType
       ? z.infer<Output>
-      : Output extends JSONSchema7
-        ? unknown
-        : undefined;
+      : Output extends z3.ZodTypeAny
+        ? z3.infer<Output>
+        : Output extends JSONSchema7
+          ? unknown
+          : undefined;
 
 // Tripwire result extensions
 export type TripwireProperties = {

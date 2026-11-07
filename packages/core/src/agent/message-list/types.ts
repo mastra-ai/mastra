@@ -30,6 +30,22 @@ export type {
 export type AIV5ResponseMessage = AIV5.AssistantModelMessage | AIV5.ToolModelMessage;
 export type AIV6ResponseMessage = AIV6.AssistantModelMessage | AIV6.ToolModelMessage;
 
+/**
+ * v7 UIMessage typed by a newer `ai` than core's vendored copy. `ai` adds part
+ * types in patch releases (e.g. `SteeringMessageUIPart` in 7.0.163), and any part
+ * missing from the vendored copy made the whole `UIMessage[]` unassignable.
+ *
+ * The loose `{ type: string }` part is deliberate: core cannot know the shape of
+ * a part that did not exist when it was built, and it does not act on such parts
+ * at runtime. Object literals are still checked strictly, because excess property
+ * checks reject a literal part against `{ type: string }` and leave only
+ * `AIV7.UIMessage`. Kept out of `MessageInput` so the converters keep narrowing
+ * on the known part types.
+ *
+ * See https://github.com/mastra-ai/mastra/issues/29575
+ */
+type AIV7ForwardCompatibleUIMessage = Omit<AIV7.UIMessage, 'parts'> & { parts: Array<{ type: string }> };
+
 export type MessageInput =
   | AIV7.UIMessage
   | AIV7.ModelMessage
@@ -43,7 +59,7 @@ export type MessageInput =
   | MastraMessageV1
   | MastraDBMessage;
 
-export type BaseMessageListItem = string | MessageInput;
-export type BaseMessageListInput = string | MessageInput | BaseMessageListItem[];
+export type BaseMessageListItem = string | MessageInput | AIV7ForwardCompatibleUIMessage;
+export type BaseMessageListInput = BaseMessageListItem | BaseMessageListItem[];
 export type MessageListItem = BaseMessageListItem | CreatedAgentSignal;
 export type MessageListInput = BaseMessageListInput | CreatedAgentSignal | MessageListItem[];
