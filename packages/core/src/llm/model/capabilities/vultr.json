@@ -39,31 +39,10 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -75,13 +54,14 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "qwen3.8-27b": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "laguna-s-2.1": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "type": "toggle"
       }
     ],
     "minimax-m3": [
@@ -89,7 +69,12 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.6-pro-rl": [
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
@@ -109,15 +94,14 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "nemotron-3.5-content-safety": [
+    "mimo-v2.6-flash-rl": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "mimo-v2.6-pro-rl": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "qwen3.8-flash-next": [
@@ -126,9 +110,25 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "laguna-s-2.1": [
+    "qwen3.8-27b": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

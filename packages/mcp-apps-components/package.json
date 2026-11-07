@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-apps-components",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Prebuilt MCP Apps, ready to register as MCP server app resources",
   "license": "Apache-2.0",
   "type": "module",

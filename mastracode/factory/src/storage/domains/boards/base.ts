@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
+import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
+import type { StatusEvent } from '../../../boards/board-events.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
@@ -102,6 +104,10 @@ export interface StoredIntakeRouteInput {
   /** Null matches every card. */
   when?: RuleGroup | null;
   target: IntakeRouteTarget;
+  /** The status events the route handles; unset handles new cards (`work_item.created`). */
+  on?: StatusEvent[];
+  /** Lets an event move an existing card into a working phase, such as Triage. Off by default. */
+  allowWorkingPhase?: boolean;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -113,6 +119,8 @@ export interface StoredIntakeRouteRecord {
   position: number;
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null };
+  on: StatusEvent[];
+  allowWorkingPhase: boolean;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -126,7 +134,8 @@ export type StoredBoardErrorCode =
   | 'revision_mismatch'
   | 'intake_route_not_found'
   | 'intake_route_set_mismatch'
-  | 'intake_route_limit';
+  | 'intake_route_limit'
+  | 'invalid_intake_route';
 
 /** A project's most intake routes; a reorder names every one of them. */
 export const MAX_INTAKE_ROUTES = 100;
@@ -158,6 +167,29 @@ export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
+/** A Work card whose issue was closed as done goes to Done. */
+export const CLOSED_COMPLETED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Closed issues go to Done',
+  on: ['work_item.closed'],
+  when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'completed' }] },
+  target: { boardKey: 'work', phaseKey: 'done' },
+};
+
+/** A Work card whose issue was closed as not planned, or as a duplicate, goes to Canceled. */
+export const CLOSED_CANCELED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Issues closed as not planned go to Canceled',
+  on: ['work_item.closed'],
+  when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }] },
+  target: { boardKey: 'work', phaseKey: 'canceled' },
+};
+
+/** A finished Work card whose issue was reopened goes back to Intake, where a person picks it up again. */
+export const REOPENED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Reopened issues go back to Intake',
+  on: ['work_item.reopened'],
+  target: { boardKey: 'work', phaseKey: 'intake' },
+};
+
 /**
  * The routes Factory adds to a project, in order, each under a key that never changes. A project
  * gets each one once: a new project gets them all, a project set up earlier gets a route added
@@ -166,6 +198,9 @@ export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
 export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput }[] = [
   { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
   { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
+  { key: 'closed-completed', route: CLOSED_COMPLETED_ROUTE },
+  { key: 'closed-canceled', route: CLOSED_CANCELED_ROUTE },
+  { key: 'reopened', route: REOPENED_ROUTE },
 ];
 
 /** The defaults a project whose lock row predates `seeded_defaults` was set up with. */
@@ -232,6 +267,9 @@ interface IntakeRouteRow extends Record<string, unknown> {
   when_condition: RuleGroup | null;
   board_key: string;
   phase_key: string | null;
+  /** Null on rows written before routes named events: they place new cards. */
+  on_events: StatusEvent[] | null;
+  allow_working_phase: boolean | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -497,6 +535,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     actor: string,
   ): Promise<StoredIntakeRouteRecord> {
     const id = randomUUID();
+    checkRouteEvents(input.on ?? DEFAULT_ROUTE_EVENTS, input.when ?? null);
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
@@ -526,7 +565,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.#transact(async ops => {
       const row = await findIntakeRoute(ops, scope, id);
       checkIntakeRouteRevision(row, options.expectedRevision);
+      checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
+        ...(patch.on !== undefined && { on_events: patch.on }),
+        ...(patch.allowWorkingPhase !== undefined && { allow_working_phase: patch.allowWorkingPhase }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
@@ -779,6 +821,15 @@ async function writeBoard(
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }
 
+function routeEvents(row: IntakeRouteRow): StatusEvent[] {
+  return row.on_events ?? [...DEFAULT_ROUTE_EVENTS];
+}
+
+function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
+  const problem = routeEventsProblem(on, when);
+  if (problem) throw new StoredBoardError('invalid_intake_route', problem);
+}
+
 function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
   return {
     id: row.id,
@@ -789,6 +840,8 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     position: row.position,
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key },
+    on: routeEvents(row),
+    allowWorkingPhase: row.allow_working_phase ?? false,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -852,6 +905,8 @@ async function insertIntakeRoute(
     when_condition: route.input.when ?? null,
     board_key: route.input.target.boardKey,
     phase_key: route.input.target.phaseKey ?? null,
+    on_events: route.input.on ?? null,
+    allow_working_phase: route.input.allowWorkingPhase ?? false,
     revision: 1,
     created_by: route.actor,
     created_at: now,
