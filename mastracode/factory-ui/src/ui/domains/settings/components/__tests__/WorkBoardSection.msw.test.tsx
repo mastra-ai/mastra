@@ -18,7 +18,10 @@ const EFFORT_LOW = {
   conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
 } as const;
 
-const skills: FactorySkillsResponse = { skills: [], canEdit: true };
+const skills: FactorySkillsResponse = {
+  skills: ['factory-triage', 'release-notes'].map(name => ({ name, description: name, content: '' })),
+  canEdit: true,
+};
 
 function serve(board: StoredBoardResponse | (() => StoredBoardResponse)) {
   const read = vi.fn<() => void>();
@@ -53,17 +56,16 @@ describe('WorkBoardSection', () => {
     renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
 
     await screen.findByRole('region', { name: 'Planning phase' });
-    // What the code behaviour depends on stays read-only.
+    // Runners and exit tools are the project's to edit; only the moves Factory's code makes stay checked.
     expect(phase('Planning').getByLabelText('Exit tool')).toHaveValue('submit_plan');
-    expect(phase('Planning').getByLabelText('Exit tool')).toBeDisabled();
-    expect(phase('Triage').getByLabelText('Runner context')).toBeDisabled();
-    // Building's code moves cards on without an exit tool, and an approved plan moves Planning to Building.
-    expect(phase('Building').getByLabelText('Exit tool')).toBeDisabled();
+    expect(phase('Planning').getByLabelText('Exit tool')).toBeEnabled();
+    expect(phase('Triage').getByLabelText('Runner context')).toBeEnabled();
+    expect(phase('Building').getByLabelText('Exit tool')).toBeEnabled();
     expect(phase('Planning').getByRole('checkbox', { name: 'Planning moves to Building' })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
-    expect(phase('Triage').getByText('Code behaviour')).toBeInTheDocument();
+    expect(screen.queryByText('Code behaviour')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
     await user.click(phase('Planning').getByRole('switch', { name: 'Planning: start on its own' }));
@@ -98,8 +100,8 @@ describe('WorkBoardSection', () => {
         HttpResponse.json(
           {
             error: 'code_behaviour',
-            message: 'Phase "planning" code handlers choose the skill; leave runner.skill unset.',
-            conflicts: ['Phase "planning" code handlers choose the skill; leave runner.skill unset.'],
+            message: 'Phase "done" must stay terminal; its code behaviour depends on it.',
+            conflicts: ['Phase "done" must stay terminal; its code behaviour depends on it.'],
           },
           { status: 422 },
         ),
@@ -122,7 +124,88 @@ describe('WorkBoardSection', () => {
     expect(phase('Planning').queryByText(/conditions\.0\.field/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save' }));
     const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText(/leave runner\.skill unset/)).toBeInTheDocument();
+    expect(within(alert).getByText(/must stay terminal/)).toBeInTheDocument();
+  });
+
+  it("saves each phase's runner skill, goal, exit-tool next phase, Factory tools and people-only entry, and shows the goal it stored", async () => {
+    let stored = storedWorkBoard();
+    serve(() => stored);
+    const saved = vi.fn<(body: ReplaceBoardBody) => void>();
+    server.use(
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
+        saved(body);
+        stored = storedWorkBoard({ name: body.name, phases: body.phases, revision: 2 });
+        return HttpResponse.json(stored);
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
+
+    await screen.findByRole('region', { name: 'Triage phase' });
+    // The seed's stored fields show as they are.
+    expect(phase('Building').getByLabelText('Goal')).toHaveValue(
+      storedWorkBoard().board.phases.find(p => p.key === 'execute')!.runner!.goal!.objective,
+    );
+    expect(phase('PR review').getByRole('checkbox', { name: 'PR review: Record a review verdict' })).toBeChecked();
+    expect(phase('Intake').queryByRole('switch', { name: /only people move cards here/ })).not.toBeInTheDocument();
+
+    await user.click(phase('Triage').getByRole('combobox', { name: 'Triage skill' }));
+    await user.click(await screen.findByRole('option', { name: 'release-notes' }));
+    await user.click(phase('Triage').getByLabelText('Goal'));
+    await user.paste('Done when the card is labelled.');
+    await user.type(phase('Triage').getByLabelText('Goal runs'), '3');
+    await user.click(phase('Planning').getByRole('combobox', { name: 'Planning: after submit_plan' }));
+    await user.click(await screen.findByRole('option', { name: 'Triage' }));
+    await user.click(
+      phase('PR review').getByRole('checkbox', { name: 'PR review: Review the source of a change request' }),
+    );
+    await user.click(phase('Planning').getByRole('switch', { name: 'Planning: only people move cards here' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    const phases = saved.mock.calls[0][0].phases;
+    expect(phases.find(p => p.key === 'triage')?.runner).toEqual({
+      skill: 'release-notes',
+      context: 'triage',
+      goal: { objective: 'Done when the card is labelled.', maxRuns: 3 },
+    });
+    expect(phases.find(p => p.key === 'planning')).toMatchObject({
+      exitTool: { id: 'submit_plan', autoApprove: false, next: 'triage' },
+      manualEntry: true,
+    });
+    expect(phases.find(p => p.key === 'pr-review')?.tools).toEqual(['factory_record_review_verdict']);
+    // What the server stored comes back into the form.
+    expect(await screen.findByText('Revision 2')).toBeInTheDocument();
+    expect(phase('Triage').getByLabelText('Goal')).toHaveValue('Done when the card is labelled.');
+    expect(phase('Triage').getByLabelText('Goal runs')).toHaveValue(3);
+  });
+
+  it("drops the exit tool's next phase when the phase stops moving cards there", async () => {
+    // A board whose code makes none of its moves, so each next phase can be unchecked.
+    serve(storedWorkBoard({ codeBehaviour: {} }));
+    const saved = vi.fn<(body: ReplaceBoardBody) => void>();
+    server.use(
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
+        saved(body);
+        return HttpResponse.json(storedWorkBoard({ phases: body.phases, revision: 2 }));
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
+
+    await screen.findByRole('region', { name: 'Building phase' });
+    await user.type(phase('Building').getByLabelText('Exit tool'), 'finish_build');
+    await user.click(phase('Building').getByRole('combobox', { name: 'Building: after finish_build' }));
+    await user.click(await screen.findByRole('option', { name: 'Planning' }));
+    await user.click(phase('Building').getByRole('checkbox', { name: 'Building moves to Planning' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    const building = saved.mock.calls[0][0].phases.find(p => p.key === 'execute')!;
+    expect(building.nextPhases).not.toContain('planning');
+    expect(building.exitTool).toEqual({ id: 'finish_build' });
   });
 
   it('lets a board be saved after JSON that never parsed is dropped for the rule builder', async () => {
