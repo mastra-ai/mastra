@@ -151,10 +151,13 @@ describe('ChatChannelProcessor', () => {
     });
   });
 
+  /** A live render context, as an inbound message stashes it. */
+  const liveHiddenRender = { textDisplay: 'hidden', wrapStream: <T>(stream: T) => stream };
+
   describe('with reply text hidden', () => {
     it('tells an inbound run that only what it posts with tools is seen, and to stay silent by posting nothing', async () => {
       const args = createArgs({ channel: { platform: 'slack', isDM: false } as ChannelContext });
-      args.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+      args.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveHiddenRender);
       await new ChatChannelProcessor().processInputStep(args);
       const prompt = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
 
@@ -180,7 +183,7 @@ describe('ChatChannelProcessor', () => {
 
     it('gets the same system message an inbound run on that thread gets', async () => {
       const inbound = createArgs({ channel });
-      inbound.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+      inbound.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveHiddenRender);
       await new ChatChannelProcessor().processInputStep(inbound);
 
       const linked = linkedArgs();
@@ -191,6 +194,37 @@ describe('ChatChannelProcessor', () => {
       const prompt = (args: ProcessInputStepArgs) =>
         String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
       expect(prompt(linked)).toBe(prompt(inbound));
+    });
+
+    it('keeps hidden text on a run restored without its render context', async () => {
+      const inbound = createArgs({ channel });
+      inbound.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveHiddenRender);
+      await new ChatChannelProcessor().processInputStep(inbound);
+
+      // Durable snapshots keep `channel` but drop the render context.
+      const restored = createArgs({ channel });
+      await new ChatChannelProcessor({
+        buildChannelContextForThread: async () => null,
+        _textDisplayFor: platform => (platform === 'slack' ? 'hidden' : undefined),
+      }).processInputStep(restored);
+
+      const prompt = (args: ProcessInputStepArgs) =>
+        String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      expect(prompt(restored)).toContain('Your text replies are not posted');
+      expect(prompt(restored)).toBe(prompt(inbound));
+    });
+
+    it('reads the adapter config over a JSON render context from an older snapshot', async () => {
+      // The output processor rebuilds from the adapter config too, so the prompt must match what it renders.
+      const restored = createArgs({ channel });
+      restored.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, JSON.parse(JSON.stringify(liveHiddenRender)));
+      await new ChatChannelProcessor({
+        buildChannelContextForThread: async () => null,
+        _textDisplayFor: () => undefined,
+      }).processInputStep(restored);
+
+      const prompt = String(restored.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      expect(prompt).not.toContain('Your text replies are not posted');
     });
 
     it('looks the thread up once per run, and adds nothing for a thread with no channel', async () => {

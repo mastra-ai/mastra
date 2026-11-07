@@ -10,6 +10,7 @@ import type { Author, FetchOptions, Message, Thread } from 'chat';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { AgentSignalInput } from '../../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -23,6 +24,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { ChatChannelProcessor } from '../processor';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -182,6 +184,40 @@ describe('AgentChannels', () => {
     it('skips when the user already provided a ChatChannelProcessor', () => {
       const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
       expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+
+    it("uses the running agent's channels for a ChatChannelProcessor the agent configured itself", async () => {
+      const configured = new ChatChannelProcessor();
+      const hidden = new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), textDisplay: 'hidden' } },
+      } as any);
+      const visible = new AgentChannels({ adapters: { slack: { adapter: createMockAdapter('slack') } } } as any);
+      expect(hidden.getInputProcessors([configured])).toEqual([]);
+
+      // A run restored from a snapshot keeps its JSON-safe `channel` entry but no render context.
+      const promptFor = async (agent: { getChannels(): AgentChannels | null }) => {
+        const requestContext = new RequestContext();
+        requestContext.set('channel', { platform: 'slack', eventType: 'message', userId: 'U1' });
+        const messageList = new MessageList({});
+        await configured.processInputStep({ messageList, requestContext, state: {}, tools: {}, agent } as any);
+        return messageList
+          .getSystemMessages('chat-channel-context')
+          .map(m => m.content)
+          .join('\n');
+      };
+
+      const agent = {
+        channels: hidden,
+        getChannels() {
+          return this.channels;
+        },
+      };
+      expect(await promptFor(agent)).toContain('Your text replies are not posted');
+
+      // Nothing sticks to the processor: swapped channels, or another agent sharing it, are read fresh.
+      agent.channels = visible;
+      expect(await promptFor(agent)).not.toContain('Your text replies are not posted');
+      expect(await promptFor({ getChannels: () => hidden })).toContain('Your text replies are not posted');
     });
   });
 

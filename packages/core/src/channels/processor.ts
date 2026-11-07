@@ -12,6 +12,7 @@ interface ChannelThreadResolver {
   buildChannelContextForThread(
     threadId: string,
   ): Promise<{ channel: ChannelContext; render: ChatChannelRenderContext } | null>;
+  _textDisplayFor?(platform: string): ChatChannelRenderContext['textDisplay'];
 }
 
 type ResolvedChannel = { channel: ChannelContext; textHidden: boolean };
@@ -44,8 +45,12 @@ export class ChatChannelProcessor {
     requestContext,
     tools,
     state,
+    agent,
   }: ProcessInputStepArgs): Promise<{ messageList: MessageList } | undefined> {
-    const resolved = await this.#resolve(requestContext, state);
+    // A processor the agent configured itself has no resolver of its own; use the running agent's
+    // channels, looked up per run so it follows `setChannels` and agents sharing the instance.
+    const channels = this.#channels ?? agent?.getChannels() ?? undefined;
+    const resolved = await this.#resolve(channels, requestContext, state);
     if (!resolved) return undefined;
 
     // Stable system message — same across all steps and runs of a thread, so it is prompt-cacheable.
@@ -56,19 +61,24 @@ export class ChatChannelProcessor {
   }
 
   async #resolve(
+    channels: ChannelThreadResolver | undefined,
     requestContext: ProcessInputStepArgs['requestContext'],
     state: Record<string, unknown> | undefined,
   ): Promise<ResolvedChannel | undefined> {
     const channel = requestContext?.get('channel') as ChannelContext | undefined;
     if (channel) {
       const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-      return { channel, textHidden: render?.textDisplay === 'hidden' };
+      // Only a live render context is trusted, as in the output processor. A restored run has none
+      // (or a JSON copy from an older snapshot), so read the adapter config the renderer will use.
+      const textDisplay =
+        typeof render?.wrapStream === 'function' ? render.textDisplay : channels?._textDisplayFor?.(channel.platform);
+      return { channel, textHidden: textDisplay === 'hidden' };
     }
 
     // Resolved once per run; `null` remembers a thread that isn't channel-backed.
     if (state && 'thread' in state) return (state.thread as ResolvedChannel | null) ?? undefined;
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
-    const found = threadId && this.#channels ? await this.#channels.buildChannelContextForThread(threadId) : null;
+    const found = threadId && channels ? await channels.buildChannelContextForThread(threadId) : null;
     const resolved = found ? { channel: found.channel, textHidden: found.render.textDisplay === 'hidden' } : null;
     if (state) state.thread = resolved;
     return resolved ?? undefined;

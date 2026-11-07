@@ -2061,6 +2061,11 @@ export class AgentChannels {
    *
    * @internal Used by `processChatMessage` and the approve/decline paths.
    */
+  /** @internal The configured text display for a platform. */
+  _textDisplayFor(platform: string): ChannelAdapterConfig['textDisplay'] {
+    return this.adapterConfigs[platform]?.textDisplay;
+  }
+
   _buildRenderContext(
     chatThread: Thread,
     platform: string,
@@ -2148,8 +2153,11 @@ export class AgentChannels {
    * `Thread` handle, which the Chat SDK materializes from the stored external id
    * via `chat.thread(externalThreadId)`.
    */
-  async buildRenderContextForThread(threadId: string): Promise<ChatChannelRenderContext | null> {
-    return (await this.loadChannelThread(threadId))?.render ?? null;
+  async buildRenderContextForThread(
+    threadId: string,
+    requester?: ChannelRequester,
+  ): Promise<ChatChannelRenderContext | null> {
+    return (await this.loadChannelThread(threadId, requester))?.render ?? null;
   }
 
   /**
@@ -2177,6 +2185,7 @@ export class AgentChannels {
 
   private async loadChannelThread(
     threadId: string,
+    requester?: ChannelRequester,
   ): Promise<{ render: ChatChannelRenderContext; sender: LastSender | undefined } | null> {
     const mastra = this.getMastra();
     const storage = mastra?.getStorage();
@@ -2199,9 +2208,28 @@ export class AgentChannels {
 
     const chatThread = chat.thread(externalThreadId);
     const sender = parseLastSender(thread.metadata?.[LAST_SENDER_KEY]);
+    // A run restored from a snapshot still knows who started it. Address the
+    // reply to them and keep their approval cards theirs, even if someone else
+    // has written in the thread since.
+    const recipient: LastSender | undefined =
+      requester && requester.userId !== sender?.author.userId
+        ? {
+            author: {
+              userId: requester.userId,
+              userName: requester.userName ?? requester.userId,
+              fullName: requester.userName ?? requester.userId,
+              isBot: false,
+              isMe: false,
+            },
+            raw: sender?.raw ?? {},
+          }
+        : sender;
+    const renderOptions = { requesterId: requester?.userId };
     const storedIsDM = thread.metadata?.[IS_DM_KEY];
     const isDM = typeof storedIsDM === 'boolean' ? storedIsDM : chatThread.isDM;
-    if (!sender && isDM === chatThread.isDM) return { render: this._buildRenderContext(chatThread, platform), sender };
+    if (!recipient && isDM === chatThread.isDM) {
+      return { render: this._buildRenderContext(chatThread, platform, renderOptions), sender };
+    }
 
     // Rebuild the thread the way an inbound message would: around the last
     // person who wrote in it, and with the DM flag the platform event carried
@@ -2210,14 +2238,14 @@ export class AgentChannels {
     // reply is for, and otherwise posts and then edits in coarse chunks.
     const { Message: ChatMessage, ThreadImpl } = await getChatModule();
     const currentMessage =
-      sender &&
+      recipient &&
       new ChatMessage({
         attachments: [],
-        author: sender.author,
+        author: recipient.author,
         formatted: { type: 'root', children: [] },
         id: '',
         metadata: { dateSent: new Date(), edited: false },
-        raw: sender.raw,
+        raw: recipient.raw,
         text: '',
         threadId: externalThreadId,
       });
@@ -2230,7 +2258,7 @@ export class AgentChannels {
       isDM,
       stateAdapter: this.stateAdapter,
     });
-    return { render: this._buildRenderContext(rebuilt, platform), sender };
+    return { render: this._buildRenderContext(rebuilt, platform, renderOptions), sender };
   }
 
   /**
@@ -2705,6 +2733,12 @@ export class AgentChannels {
 
 const LAST_SENDER_KEY = 'channel_lastSender';
 const IS_DM_KEY = 'channel_isDM';
+
+/** The person whose message started a run, as recorded on its channel context. */
+export interface ChannelRequester {
+  userId: string;
+  userName?: string;
+}
 
 interface LastSender {
   author: Message['author'];

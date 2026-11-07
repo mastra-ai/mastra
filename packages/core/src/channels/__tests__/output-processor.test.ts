@@ -152,6 +152,35 @@ describe('ChatChannelOutputProcessor', () => {
     await getChatModule();
   });
 
+  describe('render context restored from a persisted snapshot', () => {
+    it('rebuilds a live render context instead of using the JSON copy', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      const live = (channels as any)._buildRenderContext(chatThread, 'test');
+      const buildForThread = vi.spyOn(channels, 'buildRenderContextForThread').mockResolvedValue(live);
+      const processor = new ChatChannelOutputProcessor(channels);
+
+      // Durable/evented runs and workflow resumes restore requestContext from
+      // JSON, which drops `wrapStream` and the other render callbacks.
+      const restored = new Map<string, unknown>([
+        [CHAT_CHANNEL_RENDER_CONTEXT_KEY, JSON.parse(JSON.stringify({ ...live, chatThread: { id: chatThread.id } }))],
+        ['MastraMemory', { thread: { id: 'mastra-thread-1' } }],
+        ['channel', { platform: 'test', eventType: 'message', userId: 'U-requester', userName: 'ada' }],
+      ]);
+      const requestContext = { get: (key: string) => restored.get(key) } as any;
+      const state: Record<string, unknown> = {};
+
+      for (const part of [
+        { type: 'text-delta', payload: { text: 'Hello' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      ]) {
+        await processor.processOutputStream({ part, state, requestContext } as any);
+      }
+
+      expect(buildForThread).toHaveBeenCalledWith('mastra-thread-1', { userId: 'U-requester', userName: 'ada' });
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: 'Hello' } }]);
+    });
+  });
+
   describe('buffered text (streaming disabled)', () => {
     it('accumulates text-deltas and posts once on step-finish', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
