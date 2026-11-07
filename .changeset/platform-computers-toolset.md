@@ -1,6 +1,6 @@
 ---
-'@mastra/platform-workspace': minor
-'@mastra/core': minor
+'@mastra/platform-workspace': patch
+'@mastra/core': patch
 ---
 
-Experimental `PlatformComputers` toolset and `new Mastra({ computers })` registration, behind `MASTRA_EXPERIMENTAL_COMPUTER`.
+Internal: experimental groundwork, disabled by default.
