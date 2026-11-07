@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { getPackageInfo } from 'local-pkg';
 
 interface PackageJson {
@@ -13,9 +14,17 @@ export interface MastraPackageInfo {
   version: string;
 }
 
-async function getResolvedVersion(packageName: string, specifiedVersion: string): Promise<string> {
+/**
+ * `local-pkg` resolution options that resolve from inside `rootDir`. The trailing separator matters: without it the
+ * directory is treated as a file and resolution starts in its parent, skipping the project's own `node_modules`.
+ */
+export function resolveFrom(rootDir: string): { paths: string[] } {
+  return { paths: [pathToFileURL(`${rootDir}${sep}`).href] };
+}
+
+async function getResolvedVersion(packageName: string, specifiedVersion: string, rootDir: string): Promise<string> {
   try {
-    const packageInfo = await getPackageInfo(packageName);
+    const packageInfo = await getPackageInfo(packageName, resolveFrom(rootDir));
     return packageInfo?.version ?? specifiedVersion;
   } catch {
     // Fall back to the specified version if we can't resolve the installed version
@@ -42,7 +51,7 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
     const packages = await Promise.all(
       mastraDeps.map(async ([name, specifiedVersion]) => ({
         name,
-        version: await getResolvedVersion(name, specifiedVersion),
+        version: await getResolvedVersion(name, specifiedVersion, rootDir),
       })),
     );
 

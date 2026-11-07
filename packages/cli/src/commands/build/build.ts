@@ -39,7 +39,7 @@ export async function build({
 
   // Check for peer dependency version mismatches
   const mastraPackages = await getMastraPackages(rootDir);
-  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
+  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages, rootDir);
   logPeerDepWarnings(peerDepMismatches);
 
   try {
