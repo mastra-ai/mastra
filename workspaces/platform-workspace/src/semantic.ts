@@ -145,13 +145,11 @@ export interface DaemonRefusal {
   message?: string;
 }
 
+/** A change event reduced to host-known values; nothing the daemon wrote travels further. */
 export interface DaemonEvent {
   subscriptionId: string;
-  id: string;
-  role?: string;
-  kind: string;
-  attribution?: string;
-  at?: number;
+  kind: 'appeared' | 'disappeared' | 'changed' | 'watchEnded';
+  attribution: 'self' | 'other';
 }
 
 /** The slice of a WebSocket the client uses; Node's global `WebSocket` fits. */
@@ -170,15 +168,41 @@ export const defaultConnect: DaemonConnect = (url, headers) =>
   new (globalThis as any).WebSocket(url, { headers }) as DaemonSocket;
 
 const REQUEST_TIMEOUT_MS = 30_000;
+/** Largest unterminated input the client buffers; an element crop of the whole 1024x640 desktop is well under it. */
+export const MAX_FRAME_CHARS = 8 * 1024 * 1024;
+
+/**
+ * An error whose message the host wrote. Only these reach tool results: anything else (provider, URL,
+ * socket errors) may carry the preview url or cookie and is replaced with a fixed message.
+ */
+export class DaemonError extends Error {}
+
+export const DAEMON_UNREACHABLE = 'could not reach the accessibility daemon';
+export const DAEMON_PROTOCOL = 'the accessibility daemon broke the protocol; the connection was closed';
+
+/** The change kinds the daemon reports. Anything else is reported as `changed`. */
+export const EVENT_KINDS = ['appeared', 'disappeared', 'changed', 'watchEnded'] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+
+/** Reduces a wire event to host-known values, or undefined when it is not one. */
+export function parseEvent(raw: any): DaemonEvent | undefined {
+  if (typeof raw?.subscriptionId !== 'string' || raw.subscriptionId.length > 128) return undefined;
+  const kind: EventKind = (EVENT_KINDS as readonly string[]).includes(raw.kind) ? raw.kind : 'changed';
+  const attribution = raw.attribution === 'self' ? 'self' : 'other';
+  return { subscriptionId: raw.subscriptionId, kind, attribution };
+}
 
 /**
  * One connection to a computer's daemon. Connects lazily, reconnects on the next call after a drop
  * (fetching a fresh preview url and cookie each time), and closes the socket on a timed-out request so a
- * hung daemon cannot wedge the computer's queue. Watches live and die with the connection.
+ * hung daemon cannot wedge the computer's queue. Watches live and die with the connection. The daemon runs
+ * inside a sandbox the agent controls, so everything it sends is bounded and any protocol violation closes
+ * the connection.
  */
 export class DaemonClient {
   #socket?: DaemonSocket;
   #opening?: Promise<DaemonSocket>;
+  #abortOpening?: () => void;
   #next = 1;
   #buffer = '';
   readonly #pending = new Map<number, { resolve: (r: any) => void; reject: (e: Error) => void }>();
@@ -200,7 +224,7 @@ export class DaemonClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        reject(new Error(`the accessibility daemon did not answer ${method} in time`));
+        reject(new DaemonError(`the accessibility daemon did not answer ${method} in time`));
         this.#drop(socket);
       }, timeoutMs);
       this.#pending.set(id, {
@@ -213,94 +237,121 @@ export class DaemonClient {
 
   close() {
     this.#closed = true;
+    this.#abortOpening?.();
     if (this.#socket) this.#drop(this.#socket);
   }
 
   #open(): Promise<DaemonSocket> {
-    if (this.#closed) return Promise.reject(new Error('computer destroyed'));
+    if (this.#closed) return Promise.reject(new DaemonError('computer destroyed'));
     if (this.#socket) return Promise.resolve(this.#socket);
     this.#opening ??= this.#handshake().finally(() => (this.#opening = undefined));
     return this.#opening;
   }
 
   async #handshake(): Promise<DaemonSocket> {
-    const endpoint = await this.endpoint();
-    if (!endpoint) throw new Error(SEMANTIC_NO_NETWORK);
-    const url = new URL(endpoint.url);
-    url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
-    const socket = this.connect(url.toString(), endpoint.headers);
+    let socket: DaemonSocket;
+    try {
+      const endpoint = await this.endpoint();
+      if (!endpoint) throw new DaemonError(SEMANTIC_NO_NETWORK);
+      const url = new URL(endpoint.url);
+      url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+      if (this.#closed) throw new DaemonError('computer destroyed');
+      socket = this.connect(url.toString(), endpoint.headers);
+    } catch (error) {
+      throw error instanceof DaemonError ? error : new DaemonError(DAEMON_UNREACHABLE);
+    }
     this.#buffer = '';
     return new Promise((resolve, reject) => {
       let hello = false;
       const timer = setTimeout(() => fail('timed out connecting to the accessibility daemon'), REQUEST_TIMEOUT_MS);
       const fail = (message: string) => {
         clearTimeout(timer);
-        socket.onclose = socket.onerror = socket.onmessage = null;
+        this.#abortOpening = undefined;
+        socket.onopen = socket.onclose = socket.onerror = socket.onmessage = null;
         try {
           socket.close();
         } catch {}
-        reject(new Error(message));
+        reject(new DaemonError(message));
       };
-      socket.onerror = () => fail('could not connect to the accessibility daemon');
+      this.#abortOpening = () => fail('computer destroyed');
+      socket.onerror = () => fail(DAEMON_UNREACHABLE);
       socket.onclose = () => fail('the accessibility daemon closed the connection');
-      socket.onopen = () =>
+      socket.onopen = () => {
+        if (this.#closed) return fail('computer destroyed');
         socket.send(JSON.stringify({ type: 'hello', digest: MCC_SCHEMA_DIGEST, version: MCC_SCHEMA_VERSION }) + '\n');
+      };
       socket.onmessage = ev => {
-        for (const msg of this.#lines(ev.data)) {
+        let lines: any[];
+        try {
+          lines = this.#lines(ev.data);
+        } catch {
+          return hello ? this.#drop(socket) : fail(DAEMON_PROTOCOL);
+        }
+        for (const msg of lines) {
           if (!hello) {
-            if (msg.type !== 'hello' || msg.digest !== MCC_SCHEMA_DIGEST) {
-              fail(
-                `the accessibility daemon refused the handshake${msg.refusal?.message ? `: ${msg.refusal.message}` : ''}`,
-              );
-              return;
+            if (this.#closed) return fail('computer destroyed');
+            if (msg?.type !== 'hello' || msg.digest !== MCC_SCHEMA_DIGEST) {
+              const why = typeof msg?.refusal?.message === 'string' ? `: ${msg.refusal.message.slice(0, 200)}` : '';
+              return fail(`the accessibility daemon refused the handshake${why}`);
             }
             hello = true;
             clearTimeout(timer);
+            this.#abortOpening = undefined;
             this.#socket = socket;
             socket.onerror = () => this.#drop(socket);
             socket.onclose = () => this.#drop(socket);
             resolve(socket);
-          } else this.#route(msg);
+          } else if (!this.#route(msg)) {
+            return this.#drop(socket);
+          }
         }
       };
     });
   }
 
-  *#lines(data: unknown): Generator<any> {
-    this.#buffer += typeof data === 'string' ? data : Buffer.from(data as ArrayBuffer).toString('utf8');
+  /** Complete lines from the buffer. Throws on an oversized frame or a line that is not JSON. */
+  #lines(data: unknown): any[] {
+    const chunk = typeof data === 'string' ? data : Buffer.from(data as ArrayBuffer).toString('utf8');
+    this.#buffer += chunk;
+    const out: any[] = [];
     let i: number;
     while ((i = this.#buffer.indexOf('\n')) >= 0) {
       const line = this.#buffer.slice(0, i);
       this.#buffer = this.#buffer.slice(i + 1);
-      if (!line.trim()) continue;
-      try {
-        yield JSON.parse(line);
-      } catch {
-        // A malformed line from the daemon is dropped, not fatal.
-      }
+      if (line.length > MAX_FRAME_CHARS) throw new Error('oversized');
+      if (line.trim()) out.push(JSON.parse(line));
     }
+    if (this.#buffer.length > MAX_FRAME_CHARS) throw new Error('oversized');
+    return out;
   }
 
-  #route(msg: any) {
-    if (msg.type === 'response') {
+  /** Routes one message; false is a protocol violation. */
+  #route(msg: any): boolean {
+    if (msg?.type === 'response') {
       const p = this.#pending.get(msg.id);
-      if (p) {
-        this.#pending.delete(msg.id);
-        p.resolve(msg.result ?? {});
-      }
-    } else if (msg.type === 'event' && msg.event) {
-      this.handlers.onEvent(msg.event as DaemonEvent);
+      if (!p) return false;
+      this.#pending.delete(msg.id);
+      p.resolve(msg.result && typeof msg.result === 'object' ? msg.result : {});
+      return true;
     }
+    if (msg?.type === 'event') {
+      const event = parseEvent(msg.event);
+      if (!event) return false;
+      this.handlers.onEvent(event);
+      return true;
+    }
+    return false;
   }
 
   #drop(socket: DaemonSocket) {
     if (this.#socket !== socket) return;
     this.#socket = undefined;
+    this.#buffer = '';
     socket.onclose = socket.onerror = socket.onmessage = null;
     try {
       socket.close();
     } catch {}
-    for (const [, p] of this.#pending) p.reject(new Error('the accessibility daemon connection dropped'));
+    for (const [, p] of this.#pending) p.reject(new DaemonError('the accessibility daemon connection dropped'));
     this.#pending.clear();
     this.handlers.onClose();
   }
@@ -314,22 +365,45 @@ export function refusalText(refusal: DaemonRefusal): string {
 
 const CONTENT_MAX = 200;
 
-/** The parts of an element a model needs to pick and act on it. */
+const str = (v: unknown, max: number) => (typeof v === 'string' && v.length > 0 ? v.slice(0, max) : undefined);
+const strs = (v: unknown, max: number) =>
+  Array.isArray(v) ? v.slice(0, 16).flatMap(x => (typeof x === 'string' ? [x.slice(0, max)] : [])) : [];
+
+/** The parts of an element a model needs to pick and act on it, each bounded. */
 export function slimElement(el: any) {
   const content = el?.content?.kind === 'text' && typeof el.content.value === 'string' ? el.content.value : undefined;
-  const actions = (el?.actions ?? []).filter((a: any) => a.availability === 'available').map((a: any) => a.name);
-  const operations = (el?.operations ?? [])
-    .filter((o: any) => o.availability === 'available')
-    .map((o: any) => o.operation);
+  const avail = (v: unknown, key: string) =>
+    strs(Array.isArray(v) ? v.filter((a: any) => a?.availability === 'available').map((a: any) => a?.[key]) : [], 64);
+  const actions = avail(el?.actions, 'name');
+  const operations = avail(el?.operations, 'operation');
+  const name = str(el?.name, 256);
+  const states = strs(el?.states, 32);
   return {
-    id: el?.id,
-    role: el?.role,
-    ...(el?.name && { name: el.name }),
-    ...(el?.states?.length && { states: el.states }),
+    id: str(el?.id, 64),
+    role: str(el?.role, 64),
+    ...(name && { name }),
+    ...(states.length && { states }),
     ...(content !== undefined && {
       text: content.length > CONTENT_MAX ? `${content.slice(0, CONTENT_MAX)}… (${content.length} chars)` : content,
     }),
     ...(actions.length && { actions }),
     ...(operations.length && { operations }),
   };
+}
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+export const MAX_ELEMENT_IMAGE_BYTES = 4 * 1024 * 1024;
+
+/** Validates a daemon element crop: base64 PNG within size, with sane IHDR dimensions. */
+export function checkPng(data: unknown): { width: number; height: number } | undefined {
+  if (typeof data !== 'string' || data.length === 0 || data.length > Math.ceil(MAX_ELEMENT_IMAGE_BYTES / 3) * 4)
+    return undefined;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return undefined;
+  const head = Buffer.from(data.slice(0, 44), 'base64');
+  if (head.length < 24 || !head.subarray(0, 8).equals(PNG_SIGNATURE)) return undefined;
+  if (head.subarray(12, 16).toString('latin1') !== 'IHDR') return undefined;
+  const width = head.readUInt32BE(16);
+  const height = head.readUInt32BE(20);
+  if (width < 1 || height < 1 || width > 8192 || height > 8192) return undefined;
+  return { width, height };
 }

@@ -25,10 +25,12 @@ import {
   BOOT_SEMANTIC_SCRIPT,
   DAEMON_PORT,
   DaemonClient,
+  DaemonError,
   KEY_CHORDS,
   SEMANTIC_LOW_MEMORY,
   SEMANTIC_NO_NETWORK,
   SEMANTIC_UNAVAILABLE,
+  checkPng,
   refusalText,
   slimElement,
   withSemantic,
@@ -234,7 +236,7 @@ export class PlatformComputers implements MastraComputers {
       ? options.template
       : async () => {
           const resolved = typeof base === 'function' ? await base() : base;
-          return withSemantic(resolved ?? withDesktop(Template()));
+          return withSemantic(withDesktop(resolved ?? Template()));
         };
     this.#connectDaemon = options.connectDaemon;
     this.#sandboxOptions = {
@@ -312,6 +314,9 @@ export class PlatformComputers implements MastraComputers {
   }
 
   #attach(scope: Scope, entry: Entry) {
+    const previous = this.#attachments.get(scope.key);
+    const old = previous !== undefined && previous !== entry.id ? this.#computers.get(previous) : undefined;
+    if (old) this.#endWatches(old, scope.threadId);
     this.#attachments.set(scope.key, entry.id);
   }
 
@@ -528,7 +533,8 @@ export class PlatformComputers implements MastraComputers {
         if (result?.refusal) return refusalText(result.refusal);
         return shape(result, entry, scope);
       } catch (error) {
-        return `semantic hands error: ${String((error as Error)?.message ?? error).slice(0, 300)}`;
+        // Only host-written messages reach the model; others may carry the preview url or cookie.
+        return `semantic hands error: ${error instanceof DaemonError ? error.message.slice(0, 300) : 'the request failed'}`;
       }
     });
   }
@@ -543,7 +549,7 @@ export class PlatformComputers implements MastraComputers {
         ? last(r.stdout)
         : `failed: exit ${r.exitCode} ${last(r.stdout)} ${last(r.stderr)}`.trim();
     })();
-    const state = await entry.boot.catch(error => `failed: ${(error as Error)?.message}`);
+    const state = await entry.boot.catch(() => 'failed: the boot command could not run');
     if (state !== 'ready') {
       entry.boot = undefined;
       if (state === 'missing') return SEMANTIC_UNAVAILABLE;
@@ -598,19 +604,19 @@ export class PlatformComputers implements MastraComputers {
       return;
     }
     // The agent's own input and anything while the user drives are not news to report.
-    if (event.attribution === 'self' || entry.control.holder === 'human') return;
-    if (entry.lastInputAt !== undefined && Date.now() - entry.lastInputAt < SELF_ECHO_MS) return;
+    if (event.attribution === 'self' || this.#quiet(entry)) return;
     watch.changes++;
     watch.kinds.add(event.kind);
     if (watch.timer) return;
     const wait = Math.max(WATCH_COALESCE_MS, watch.lastSentAt + WATCH_MIN_INTERVAL_MS - Date.now());
     watch.timer = setTimeout(() => {
       watch.timer = undefined;
-      if (entry.destroyed || !entry.watches?.has(watch.subscriptionId)) return;
       const { changes } = watch;
       const kinds = [...watch.kinds].join(', ');
       watch.changes = 0;
       watch.kinds.clear();
+      // Re-checked at delivery: the user may have taken control, or the agent acted, while this waited.
+      if (entry.destroyed || entry.watches?.get(watch.subscriptionId) !== watch || this.#quiet(entry)) return;
       watch.lastSentAt = Date.now();
       void this.#signal(
         watch.target,
@@ -620,6 +626,12 @@ export class PlatformComputers implements MastraComputers {
         { elementId: watch.elementId },
       );
     }, wait);
+  }
+
+  /** Changes the agent caused or that happen while the user drives are not news to report. */
+  #quiet(entry: Entry) {
+    if (entry.control.holder === 'human') return true;
+    return entry.lastInputAt !== undefined && Date.now() - entry.lastInputAt < SELF_ECHO_MS;
   }
 
   #onDaemonClose(entry: Entry) {
@@ -713,7 +725,7 @@ export class PlatformComputers implements MastraComputers {
           }),
         execute: async (input, context) =>
           this.#daemon(context, 'queryElements', { ...input, limit: input.limit ?? 10 }, r => ({
-            elements: (r?.elements ?? []).map(slimElement),
+            elements: (Array.isArray(r?.elements) ? r.elements : []).slice(0, input.limit ?? 10).map(slimElement),
           })),
       }),
       computer_read: createTool({
@@ -729,7 +741,11 @@ export class PlatformComputers implements MastraComputers {
             context,
             'readElementContent',
             { id: input.id, offset: input.offset ?? 0, limit: input.limit ?? 2000 },
-            r => (r?.content?.kind === 'text' ? { text: r.content.value } : { content: r?.content }),
+            r => {
+              const limit = input.limit ?? 2000;
+              if (r?.content?.kind !== 'text' || typeof r.content.value !== 'string') return { text: null };
+              return { text: r.content.value.slice(0, limit) };
+            },
           ),
       }),
       computer_look: createTool({
@@ -738,13 +754,13 @@ export class PlatformComputers implements MastraComputers {
         inputSchema: z.object({ id: elementId }),
         execute: async (input, context) =>
           this.#daemon(context, 'captureElement', { id: input.id }, r => {
-            const image = r?.image;
-            if (!image?.data) return 'semantic hands error: the daemon returned no image';
+            const size = checkPng(r?.image?.data);
+            if (!size) return 'semantic hands error: the daemon returned no usable image';
             return {
               __workspaceMedia: true as const,
-              text: `Element ${input.id} (${image.width}x${image.height})`,
+              text: `Element ${input.id} (${size.width}x${size.height})`,
               mediaType: 'image/png',
-              data: image.data as string,
+              data: r.image.data as string,
             };
           }),
         toModelOutput,
@@ -753,7 +769,7 @@ export class PlatformComputers implements MastraComputers {
         id: 'computer_type',
         description:
           'Type text. With an element id, focuses that element and types into it (printable text only; use computer_key_chord for Enter); its window must be the active one. Without an id, types at the keyboard focus.',
-        inputSchema: z.object({ text: z.string(), id: elementId.optional() }),
+        inputSchema: z.object({ text: z.string().max(32_000), id: elementId.optional() }),
         execute: async (input, context) =>
           input.id === undefined
             ? this.#act(context, async computer => {
@@ -770,7 +786,7 @@ export class PlatformComputers implements MastraComputers {
                 }),
                 {
                   input: true,
-                  timeoutMs: 30_000 + input.text.length * 50,
+                  timeoutMs: Math.min(30_000 + input.text.length * 50, 600_000),
                 },
               ),
         toModelOutput,
