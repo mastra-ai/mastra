@@ -1,23 +1,29 @@
 import { useMastraClient } from '@mastra/react';
 import { useEffect, useRef, useState } from 'react';
 
-import { CONNECT_TIMEOUT_MS, requestComputerSession } from './computer-session';
-import type { ComputerSessionResult, ComputerViewMode } from './computer-session';
-import { computerPartKey } from './computer-state';
+import {
+  CONNECT_TIMEOUT_MS,
+  getComputerControl,
+  postComputerControl,
+  requestComputerSession,
+} from './computer-session';
+import type { ComputerSessionResult } from './computer-session';
+import { computerPartKey, effectiveHolder } from './computer-state';
 import { useComputerThread } from './computer-thread-context';
 import { loadRfb } from './load-rfb';
 import type { RfbClient } from './load-rfb';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Notice } from '@/ds/components/Notice';
-import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Txt } from '@/ds/components/Txt';
 
 export const NOT_RUNNING_POLL_MS = 5_000;
+export const CONTROL_POLL_MS = 2_000;
+const NOTE_MAX = 500;
 
 const SESSION_MESSAGES: Record<Exclude<ComputerSessionResult['state'], 'ready'>, string> = {
   'not-running': 'The computer is not running yet.',
-  forbidden: 'This computer is not attached to this thread.',
+  forbidden: 'You need write access to this thread to view its computer, or the computer is not attached here.',
   unavailable: 'Live view is not available on this server.',
   error: 'Could not open the live view.',
 };
@@ -34,7 +40,7 @@ export interface ComputerCardProps {
 }
 
 /**
- * A computer attached to the chat thread: live desktop, Watch / Take over, and Fullscreen.
+ * A computer attached to the chat thread: live desktop, Take control / Hand back, and Fullscreen.
  * Only the occurrence that owns the current attachment connects; others are references.
  *
  * @experimental
@@ -77,26 +83,87 @@ type ConnectionState =
   | { phase: 'session'; state: Exclude<ComputerSessionResult['state'], 'ready'> }
   | { phase: 'disconnected'; message: string };
 
+/** Studio's request options for one computer's control route. */
+function useControlRequest(computerId: string, threadId: string, resourceId: string) {
+  const client = useMastraClient();
+  const { baseUrl, apiPrefix, headers } = client.options;
+  return { computerId, threadId, resourceId, baseUrl, apiPrefix, headers };
+}
+
+/**
+ * Take control / Hand back for one computer. Changes post to the control route
+ * and report into the thread's shared control state, so every card and request
+ * prompt for the computer agrees.
+ */
+function useControlActions(computerId: string, threadId: string, resourceId: string) {
+  const { reportControl } = useComputerThread();
+  const request = useControlRequest(computerId, threadId, resourceId);
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const change = async (action: 'take' | 'release', note?: string) => {
+    setPending(true);
+    setFailed(false);
+    const result = await postComputerControl({ ...request, action, ...(note && { note }) });
+    setPending(false);
+    if (result.state === 'ok') reportControl(computerId, { holder: result.holder, notified: result.notified });
+    else setFailed(true);
+  };
+  return { change, pending, failed };
+}
+
+function HandBack({ computerId, threadId, resourceId }: LiveComputerProps) {
+  const { change, pending, failed } = useControlActions(computerId, threadId, resourceId);
+  const [note, setNote] = useState('');
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={event => {
+        event.preventDefault();
+        void change('release', note.trim() || undefined);
+      }}
+    >
+      <input
+        aria-label="Note for the agent"
+        placeholder="Note for the agent (optional)"
+        maxLength={NOTE_MAX}
+        value={note}
+        onChange={event => setNote(event.target.value)}
+        className="min-w-0 flex-1 rounded border border-border1 bg-transparent px-2 py-1 text-ui-sm"
+      />
+      <Button size="sm" type="submit" disabled={pending}>
+        Hand back
+      </Button>
+      {failed && <Txt variant="body-sm">Could not hand back control.</Txt>}
+    </form>
+  );
+}
+
 /**
  * Renders the desktop with the bundled noVNC client over the server's
  * websockify proxy. No sandbox-served page or script ever loads in Studio.
  *
  * Each connection mints its own single-use ticket inside the effect, so a
- * remount (including React StrictMode's) never replays a consumed ticket.
- * Watch / Take over only flips `viewOnly` on the live connection: the server
- * requires write access for any viewer, so Watch is a display choice.
+ * remount (including React StrictMode's) never replays a consumed ticket. Any
+ * viewer needs write access to the thread (the relay doesn't filter input), so
+ * the card always asks for a `control` ticket. Input reaches the desktop only
+ * while the user holds the computer's control lease; holder changes flip
+ * `viewOnly` on the live connection without reconnecting.
  */
 function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const client = useMastraClient();
   const { baseUrl, apiPrefix, headers } = client.options;
-  const [mode, setMode] = useState<ComputerViewMode>('watch');
+  const { computers, live, reportControl } = useComputerThread();
+  const entry = computers.get(computerId);
+  const control = effectiveHolder(entry, live.get(computerId));
   const [attempt, setAttempt] = useState(0);
   const [connection, setConnection] = useState<ConnectionState>({ phase: 'connecting' });
+  const { change, pending, failed } = useControlActions(computerId, threadId, resourceId);
   const screenRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RfbClient | undefined>(undefined);
+  const viewOnly = control.holder !== 'human';
   const viewOnlyRef = useRef(true);
-  viewOnlyRef.current = mode === 'watch';
+  viewOnlyRef.current = viewOnly;
   const headersKey = JSON.stringify(headers ?? {});
 
   useEffect(() => {
@@ -164,28 +231,74 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   }, [computerId, threadId, resourceId, attempt, baseUrl, apiPrefix, headersKey]);
 
   useEffect(() => {
-    if (rfbRef.current) rfbRef.current.viewOnly = mode === 'watch';
-  }, [mode]);
+    if (rfbRef.current) rfbRef.current.viewOnly = viewOnly;
+  }, [viewOnly]);
+
+  // The lease can change outside this card (the agent asks, another tab hands back): poll it.
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const result = await getComputerControl({
+        computerId,
+        threadId,
+        resourceId,
+        baseUrl,
+        apiPrefix,
+        headers: JSON.parse(headersKey) as Record<string, string>,
+        signal: controller.signal,
+      }).catch(() => undefined);
+      if (controller.signal.aborted) return;
+      if (result?.state === 'ok') reportControl(computerId, { holder: result.holder });
+      timer = setTimeout(() => void poll(), CONTROL_POLL_MS);
+    };
+    void poll();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [computerId, threadId, resourceId, baseUrl, apiPrefix, headersKey, reportControl]);
 
   const sessionMessage = connection.phase === 'session' ? SESSION_MESSAGES[connection.state] : undefined;
+  const human = control.holder === 'human';
+  // No session (forbidden, not attached, unavailable): nothing to control.
+  const controllable = connection.phase !== 'session';
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<ComputerViewMode> value={mode} onValueChange={setMode} aria-label="Computer view mode">
-          <SegmentedControlItem value="watch">Watch</SegmentedControlItem>
-          <SegmentedControlItem value="control">Take over</SegmentedControlItem>
-        </SegmentedControl>
+        {human ? <Badge variant="warning">You have control</Badge> : <Badge>Agent has control</Badge>}
+        {controllable && !human && (
+          <Button size="sm" disabled={pending} onClick={() => void change('take')}>
+            Take control
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={() => void frameRef.current?.requestFullscreen?.()}>
           Fullscreen
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setAttempt(n => n + 1)}>
           Reconnect
         </Button>
-        {mode === 'control' && <Badge variant="warning">You are controlling the desktop</Badge>}
       </div>
+      {controllable && human && <HandBack computerId={computerId} threadId={threadId} resourceId={resourceId} />}
+      {human && entry?.holder === 'human' && entry.reason && (
+        <Txt variant="body-sm">The agent asked: {entry.reason}</Txt>
+      )}
+      {control.notified === false && (
+        <Notice variant="warning" title="Agent not notified">
+          <Notice.Message>The agent was not notified. Send it a message to continue.</Notice.Message>
+        </Notice>
+      )}
+      {failed && (
+        <Notice variant="warning" title="Control">
+          <Notice.Message>Could not change control of the computer.</Notice.Message>
+        </Notice>
+      )}
       {sessionMessage && (
-        <Notice variant={connection.phase === 'session' && connection.state === 'not-running' ? 'info' : 'warning'} title="Live view">
+        <Notice
+          variant={connection.phase === 'session' && connection.state === 'not-running' ? 'info' : 'warning'}
+          title="Live view"
+        >
           <Notice.Message>{sessionMessage}</Notice.Message>
         </Notice>
       )}
@@ -203,5 +316,25 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
         <div ref={screenRef} role="application" aria-label="Computer desktop" className="size-full" />
       </div>
     </div>
+  );
+}
+
+/**
+ * The agent's request for the user (`computer_request_human`), rendered where it
+ * happened in the chat: the reason and, while the user still holds control, a
+ * Hand back button.
+ *
+ * @experimental
+ */
+export function ComputerControlRequest({ computerId, reason }: { computerId: string; reason?: string }) {
+  const { computers, live, scope } = useComputerThread();
+  const control = effectiveHolder(computers.get(computerId), live.get(computerId));
+  return (
+    <section aria-label="Computer control request" className="flex flex-col gap-2 py-2">
+      <Txt variant="body-sm">The agent asked you to take over the computer{reason ? `: ${reason}` : '.'}</Txt>
+      {scope && control.holder === 'human' && (
+        <HandBack computerId={computerId} threadId={scope.threadId} resourceId={scope.resourceId} />
+      )}
+    </section>
   );
 }

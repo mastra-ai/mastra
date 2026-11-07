@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DataPartRenderer } from '../../messages/renderers/data-part-renderer';
-import { ComputerCard } from '../computer-card';
+import { CONTROL_POLL_MS, ComputerCard } from '../computer-card';
 import { CONNECT_TIMEOUT_MS, requestComputerSession } from '../computer-session';
 import { attachedComputerId, deriveComputers } from '../computer-state';
 import { ComputerThreadProvider } from '../computer-thread-context';
@@ -39,6 +39,7 @@ vi.mock('@novnc/novnc', () => ({ default: rfb.FakeRFB }));
 const live = () => rfb.FakeRFB.instances.filter(i => !i.disconnected);
 
 const SESSION_URL = `${TEST_BASE_URL}/api/computers/:computerId/session`;
+const CONTROL_URL = `${TEST_BASE_URL}/api/computers/:computerId/control`;
 const scope: ComputerThreadScope = { threadId: 'thread-1', resourceId: 'agent-1' };
 
 type Part = Record<string, unknown>;
@@ -104,7 +105,9 @@ function renderThread(messages: MastraDBMessage[], threadScope: ComputerThreadSc
       {msgs.flatMap(m =>
         (m.content.parts as Part[]).map((part, index) => {
           if (String(part.type).startsWith('data-')) {
-            return <DataPartRenderer key={`${m.id}-${index}`} part={part as never} messageId={m.id} partIndex={index} />;
+            return (
+              <DataPartRenderer key={`${m.id}-${index}`} part={part as never} messageId={m.id} partIndex={index} />
+            );
           }
           // As MessageRow does for attach tool calls.
           const invocation = (part as { toolInvocation?: { toolName: string; result?: unknown } }).toolInvocation;
@@ -120,9 +123,62 @@ function renderThread(messages: MastraDBMessage[], threadScope: ComputerThreadSc
   return { ...utils, rerenderThread: (msgs: MastraDBMessage[], s = threadScope) => utils.rerender(tree(msgs, s)) };
 }
 
+interface ControlServer {
+  holder: 'agent' | 'human';
+  notified: boolean;
+  status?: number;
+  gets: number;
+  posts: { action: string; note?: string; threadId: string; resourceId: string }[];
+  headers: Headers[];
+}
+let lease: ControlServer;
+
+function serveControl() {
+  server.use(
+    http.get(CONTROL_URL, ({ request }) => {
+      lease.gets++;
+      lease.headers.push(request.headers);
+      if (lease.status) return new HttpResponse(null, { status: lease.status });
+      return HttpResponse.json({ holder: lease.holder });
+    }),
+    http.post(CONTROL_URL, async ({ request }) => {
+      const body = (await request.json()) as ControlServer['posts'][number];
+      lease.posts.push(body);
+      lease.headers.push(request.headers);
+      if (lease.status) return new HttpResponse(null, { status: lease.status });
+      const holder = body.action === 'take' ? 'human' : 'agent';
+      const changed = holder !== lease.holder;
+      lease.holder = holder;
+      return HttpResponse.json({
+        holder,
+        notified: changed && lease.notified,
+        ...(!changed && { reason: 'no-change' }),
+      });
+    }),
+  );
+}
+
+const controlPart = (overrides: Part = {}): Part => ({
+  type: 'data-computer',
+  data: { computerId: 'c1', threadId: scope.threadId, control: 'human', reason: 'log in please', ...overrides },
+});
+const controlSignal = (kind: 'control-taken' | 'control-returned', computerId = 'c1'): Part => ({
+  type: 'data-signal',
+  data: {
+    type: 'notification',
+    tagName: 'notification',
+    contents: kind === 'control-taken' ? 'The user took control of the computer' : 'The user handed control back',
+    attributes: { computerId, source: 'computer', kind, priority: 'urgent' },
+  },
+});
+const requestHumanResult = (reason = 'log in please'): Part =>
+  toolResult('computer_request_human', { computerId: 'c1', reason, control: 'human', message: 'Stop.' }, { reason });
+
 beforeEach(() => {
   requests = [];
   rfb.FakeRFB.instances = [];
+  lease = { holder: 'agent', notified: true, gets: 0, posts: [], headers: [] };
+  serveControl();
 });
 
 afterEach(() => {
@@ -136,7 +192,10 @@ describe('deriveComputers', () => {
       status: 'attached',
       ownerKey: 'm1:0',
     });
-    const released = deriveComputers([message('m1', [computerPart('attached')]), message('m2', [computerPart('released')])]);
+    const released = deriveComputers([
+      message('m1', [computerPart('attached')]),
+      message('m2', [computerPart('released')]),
+    ]);
     expect(released.get('c1')).toMatchObject({ status: 'released', ownerKey: undefined });
   });
 
@@ -154,8 +213,10 @@ describe('deriveComputers', () => {
     ).toMatchObject({ status: 'released', ownerKey: undefined });
     // A fresh attach after release takes ownership again.
     expect(
-      deriveComputers([message('m1', [attachResult(), releaseResult()]), message('m2', [attachResult('computer_attach')])]).get('c1')
-        ?.ownerKey,
+      deriveComputers([
+        message('m1', [attachResult(), releaseResult()]),
+        message('m2', [attachResult('computer_attach')]),
+      ]).get('c1')?.ownerKey,
     ).toBe('m2:0');
   });
 
@@ -169,21 +230,74 @@ describe('deriveComputers', () => {
       ownerKey: 'm1:0',
     });
     expect(
-      deriveComputers([message('m1', [stored(attachResult())]), message('m2', [stored(destroyResult())])]).get('c1')?.status,
+      deriveComputers([message('m1', [stored(attachResult())]), message('m2', [stored(destroyResult())])]).get('c1')
+        ?.status,
     ).toBe('released');
     expect(deriveComputers([message('m1', [toolResult('computer_create', '{not json')])]).size).toBe(0);
     expect(attachedComputerId('computer_create', JSON.stringify(describeComputer('attached')))).toBe('c1');
   });
 
   it('lets the data part own an attach that also has a result, in either order', () => {
-    expect(deriveComputers([message('m1', [attachResult(), computerPart('attached')])]).get('c1')?.ownerKey).toBe('m1:1');
+    expect(deriveComputers([message('m1', [attachResult(), computerPart('attached')])]).get('c1')?.ownerKey).toBe(
+      'm1:1',
+    );
     const afterRelease = deriveComputers([
       message('m1', [computerPart('attached'), attachResult()]),
       message('m2', [computerPart('released')]),
     ]);
     expect(afterRelease.get('c1')?.status).toBe('released');
     // The part keeps ownership when the same attach also produced a result.
-    expect(deriveComputers([message('m1', [computerPart('attached'), attachResult()])]).get('c1')?.ownerKey).toBe('m1:0');
+    expect(deriveComputers([message('m1', [computerPart('attached'), attachResult()])]).get('c1')?.ownerKey).toBe(
+      'm1:0',
+    );
+  });
+
+  it('tracks the holder from control parts, requests and control signals, last write wins', () => {
+    const attached = message('m1', [computerPart('attached')]);
+    expect(deriveComputers([attached]).get('c1')?.holder).toBeUndefined();
+    const requested = deriveComputers([attached, message('m2', [controlPart()])]).get('c1');
+    // A control part never takes ownership of the live viewer.
+    expect(requested).toMatchObject({ holder: 'human', reason: 'log in please', ownerKey: 'm1:0', status: 'attached' });
+    expect(
+      deriveComputers([
+        attached,
+        message('m2', [controlPart()]),
+        message('m3', [controlSignal('control-returned')]),
+      ]).get('c1'),
+    ).not.toHaveProperty('reason');
+    expect(
+      deriveComputers([
+        attached,
+        message('m2', [controlPart()]),
+        message('m3', [controlSignal('control-returned')]),
+      ]).get('c1'),
+    ).toMatchObject({ holder: 'agent', ownerKey: 'm1:0' });
+    const alternating = [
+      attached,
+      message('m2', [controlSignal('control-taken')]),
+      message('m3', [controlSignal('control-returned')]),
+      message('m4', [controlSignal('control-taken')]),
+    ];
+    expect(deriveComputers(alternating).get('c1')?.holder).toBe('human');
+    expect(
+      deriveComputers([...alternating, message('m5', [controlSignal('control-returned')])]).get('c1')?.holder,
+    ).toBe('agent');
+    // Reloaded history: the request's tool result stands in for its part.
+    expect(
+      deriveComputers([message('m1', [attachResult()]), message('m2', [requestHumanResult('captcha')])]).get('c1'),
+    ).toMatchObject({
+      holder: 'human',
+      reason: 'captcha',
+    });
+    // Signals from other sources or for unknown computers change nothing.
+    const other = {
+      ...controlSignal('control-taken'),
+      data: { type: 'notification', attributes: { computerId: 'c1', source: 'github', kind: 'control-taken' } },
+    };
+    expect(
+      deriveComputers([attached, message('m2', [other, controlSignal('control-taken', 'c2')])]).get('c1')?.holder,
+    ).toBeUndefined();
+    expect(deriveComputers([attached, message('m2', [controlSignal('control-taken', 'c2')])]).has('c2')).toBe(false);
   });
 
   it('ignores malformed parts and results', () => {
@@ -192,7 +306,10 @@ describe('deriveComputers', () => {
         { type: 'data-computer', data: { computerId: 'c1', status: 'gone' } },
         { type: 'data-computer', data: null },
         { type: 'tool-invocation', toolInvocation: { toolName: 'computer_create', state: 'call' } },
-        { type: 'tool-invocation', toolInvocation: { toolName: 'computer_type', state: 'result', result: { computer: { id: 'x' } } } },
+        {
+          type: 'tool-invocation',
+          toolInvocation: { toolName: 'computer_type', state: 'result', result: { computer: { id: 'x' } } },
+        },
       ]),
     ]);
     expect(computers.size).toBe(0);
@@ -200,13 +317,22 @@ describe('deriveComputers', () => {
 });
 
 describe('requestComputerSession', () => {
-  const base = { computerId: 'a b/c', threadId: 't', resourceId: 'r', mode: 'control' as const, baseUrl: TEST_BASE_URL };
+  const base = {
+    computerId: 'a b/c',
+    threadId: 't',
+    resourceId: 'r',
+    mode: 'control' as const,
+    baseUrl: TEST_BASE_URL,
+  };
 
   it('posts the thread scope and mode with Studio headers, never in the URL', async () => {
     serveSession(() => ready('abc'));
     const result = await requestComputerSession({ ...base, headers: { authorization: 'Bearer secret' } });
     expect(result).toEqual({ state: 'ready', socketUrl: `${WS_BASE}/computer/c1/websockify?ticket=abc` });
-    expect(requests[0]).toMatchObject({ computerId: 'a b/c', body: { threadId: 't', resourceId: 'r', mode: 'control' } });
+    expect(requests[0]).toMatchObject({
+      computerId: 'a b/c',
+      body: { threadId: 't', resourceId: 'r', mode: 'control' },
+    });
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer secret');
   });
 
@@ -226,7 +352,7 @@ describe('requestComputerSession', () => {
 });
 
 describe('ComputerCard', () => {
-  it('hands the ticketed socket to the noVNC client in our own element, with no iframe or extra requests', async () => {
+  it('renders the desktop with the bundled noVNC client over the ticketed socket, view-only while the agent holds it', async () => {
     serveSession();
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     renderThread([message('m1', [computerPart('attached')])]);
@@ -238,44 +364,128 @@ describe('ComputerCard', () => {
     expect(client.scaleViewport).toBe(true);
     expect(client.target).toBe(screen.getByRole('application', { name: 'Computer desktop' }));
     expect(requests[0]?.body).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', mode: 'control' });
-    // The card itself loads no page and fetches nothing else. (The server test and the live
-    // network audit prove the real noVNC client never requests sandbox HTTP content.)
+    expect(screen.getByText('Agent has control')).toBeTruthy();
+    // Nothing served by the sandbox is ever loaded: no iframe, no vnc.html / rfb.js fetch.
     expect(document.querySelector('iframe')).toBeNull();
+    await waitFor(() => expect(lease.gets).toBeGreaterThan(0));
     const fetched = fetchSpy.mock.calls.map(([input]) => String(input instanceof Request ? input.url : input));
-    expect(fetched.filter(u => !u.endsWith('/api/computers/c1/session'))).toEqual([]);
+    expect(
+      fetched.filter(u => !u.endsWith('/api/computers/c1/session') && !u.includes('/api/computers/c1/control?')),
+    ).toEqual([]);
 
     act(() => client.dispatchEvent(new Event('connect')));
     expect(screen.queryByText('Starting desktop…')).toBeNull();
   });
 
-  it('toggles viewOnly live on Take over and Watch, without reconnecting', async () => {
+  it('Take control and Hand back flip viewOnly on the same connection', async () => {
     serveSession();
     renderThread([message('m1', [computerPart('attached')])]);
     await waitFor(() => expect(live()).toHaveLength(1));
     const client = live()[0];
     expect(client.viewOnly).toBe(true);
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
-    expect(client.viewOnly).toBe(false);
-    expect(screen.getByText('You are controlling the desktop')).toBeTruthy();
-    fireEvent.click(screen.getByRole('radio', { name: 'Watch' }));
-    expect(client.viewOnly).toBe(true);
-    fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
-    expect(client.viewOnly).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    await waitFor(() => expect(client.viewOnly).toBe(false));
+    expect(lease.posts[0]).toEqual({ threadId: 'thread-1', resourceId: 'agent-1', action: 'take' });
+    expect(screen.getByText('You have control')).toBeTruthy();
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Note for the agent' }), { target: { value: 'logged in' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Hand back' }));
+    await waitFor(() => expect(client.viewOnly).toBe(true));
+    expect(lease.posts[1]).toEqual({
+      threadId: 'thread-1',
+      resourceId: 'agent-1',
+      action: 'release',
+      note: 'logged in',
+    });
+    expect(screen.getByText('Agent has control')).toBeTruthy();
+    // One session, one connection: holder flips never reconnect.
     expect(requests).toHaveLength(1);
     expect(live()).toEqual([client]);
+    expect(rfb.FakeRFB.instances).toHaveLength(1);
   });
 
-  it('starts a fresh connection in Take over when the user had already switched', async () => {
+  it('follows a lease change made elsewhere through the control poll, without reconnecting', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     serveSession();
     renderThread([message('m1', [computerPart('attached')])]);
     await waitFor(() => expect(live()).toHaveLength(1));
-    fireEvent.click(screen.getByRole('radio', { name: 'Take over' }));
+    const client = live()[0];
+    await waitFor(() => expect(lease.gets).toBe(1));
+
+    lease.holder = 'human';
+    await act(() => vi.advanceTimersByTimeAsync(CONTROL_POLL_MS));
+    await waitFor(() => expect(client.viewOnly).toBe(false));
+    expect(screen.getByRole('button', { name: 'Hand back' })).toBeTruthy();
+
+    lease.holder = 'agent';
+    await act(() => vi.advanceTimersByTimeAsync(CONTROL_POLL_MS));
+    await waitFor(() => expect(client.viewOnly).toBe(true));
+    expect(live()).toEqual([client]);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('refuses to show a desktop without thread write access, and never retries in watch', async () => {
+    serveSession(() => new HttpResponse(null, { status: 403 }));
+    renderThread([message('m1', [computerPart('attached')])]);
+    expect(await screen.findByText(/need write access to this thread/)).toBeTruthy();
+    expect(requests.map(r => r.body.mode)).toEqual(['control']);
+    expect(live()).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Take control' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hand back' })).toBeNull();
+  });
+
+  it('a reconnect while the user holds control starts the new connection interactive', async () => {
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Take control' }));
+    await waitFor(() => expect(live()[0]?.viewOnly).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
     await waitFor(() => expect(live()[0]?.url).toContain('ticket=t2'));
     expect(live()[0]?.viewOnly).toBe(false);
+  });
+
+  it('says when the agent was not notified of a hand back', async () => {
+    serveSession();
+    lease.holder = 'human';
+    lease.notified = false;
+    renderThread([message('m1', [computerPart('attached')])]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Hand back' }));
+    expect(await screen.findByText(/agent was not notified/)).toBeTruthy();
+  });
+
+  it('reports a failed control change', async () => {
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    lease.status = 404;
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    expect(await screen.findByText('Could not change control of the computer.')).toBeTruthy();
+    expect(live()[0].viewOnly).toBe(true);
+  });
+
+  it("shows the agent's request with Hand back, without moving or reconnecting the desktop", async () => {
+    serveSession();
+    const attached = message('m1', [computerPart('attached')]);
+    const { rerenderThread } = renderThread([attached]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    const client = live()[0];
+
+    lease.holder = 'human';
+    rerenderThread([attached, message('m2', [controlPart()])]);
+    const request = screen.getByRole('region', { name: 'Computer control request' });
+    expect(request.textContent).toContain('log in please');
+    await waitFor(() => expect(client.viewOnly).toBe(false));
+    expect(screen.getByText('The agent asked: log in please')).toBeTruthy();
+    expect(screen.queryByText('Shown in a later message')).toBeNull();
+    expect(live()).toEqual([client]);
+
+    // Hand back from the request prompt reaches the shared state.
+    fireEvent.click(within(request).getByRole('button', { name: 'Hand back' }));
+    await waitFor(() => expect(client.viewOnly).toBe(true));
+    expect(lease.posts).toEqual([{ threadId: 'thread-1', resourceId: 'agent-1', action: 'release' }]);
+    expect(within(request).queryByRole('button', { name: 'Hand back' })).toBeNull();
+    expect(requests).toHaveLength(1);
   });
 
   it('reconnects with a fresh ticket and reports a dropped connection', async () => {
@@ -362,7 +572,10 @@ describe('ComputerCard', () => {
   });
 
   it.each([
-    [() => HttpResponse.json({ state: 'forbidden' }, { status: 403 }), 'This computer is not attached to this thread.'],
+    [
+      () => HttpResponse.json({ state: 'forbidden' }, { status: 403 }),
+      'You need write access to this thread to view its computer, or the computer is not attached here.',
+    ],
     [() => new HttpResponse(null, { status: 404 }), 'Live view is not available on this server.'],
     [() => HttpResponse.json({ state: 'not-running' }), 'The computer is not running yet.'],
   ])('explains a session that cannot open (%#)', async (reply, text) => {
@@ -385,7 +598,10 @@ describe('ComputerCard', () => {
   it('times out a desktop that never connects, and not one that does', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     serveSession();
-    renderThread([message('m1', [computerPart('attached')]), message('m2', [computerPart('attached', { computerId: 'c2', name: 'Other' })])]);
+    renderThread([
+      message('m1', [computerPart('attached')]),
+      message('m2', [computerPart('attached', { computerId: 'c2', name: 'Other' })]),
+    ]);
     await waitFor(() => expect(live()).toHaveLength(2));
     act(() => live()[0].dispatchEvent(new Event('connect')));
     act(() => vi.advanceTimersByTime(CONNECT_TIMEOUT_MS));
@@ -399,4 +615,3 @@ describe('ComputerCard', () => {
     expect(requests).toHaveLength(0);
   });
 });
-
