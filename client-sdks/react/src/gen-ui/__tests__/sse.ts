@@ -10,12 +10,6 @@ const line = (chunk: object) => encoder.encode(`data: ${JSON.stringify(chunk)}\n
 export const chunk = (type: string, payload: object = {}) => ({ type, runId: 'run-1', from: 'AGENT', payload });
 export const finish = (reason: 'stop' | 'tool-calls' | 'suspended') =>
   chunk('finish', { stepResult: { reason }, usage: { totalTokens: 1 } });
-export const genUIChunk = (envelope: object) => ({
-  type: 'data-gen-ui',
-  runId: 'run-1',
-  from: 'AGENT',
-  data: envelope,
-});
 
 /** An SSE response the test pushes chunks into, so it can assert between chunks. */
 export function controllableStream() {

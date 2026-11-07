@@ -1,11 +1,11 @@
 import type { Catalog } from '@json-render/core';
-import { formatGenUIContext } from '@mastra/client-js/gen-ui';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useEffect, useRef, useState } from 'react';
 import { useChat } from '../agent/hooks';
 import type { MastraChatProps, SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
 import type { MessageRenderers } from '../ui/MessageFactory/types';
+import { formatGenUIContext } from './context-store';
 import { createGenUIController } from './controller';
 import type { GenUIActionHandlers, GenUIController } from './controller';
 import type { GenUIRegistry } from './registry';
@@ -15,7 +15,7 @@ import { createGenUIRenderers } from './renderers';
 export interface UseGenUIChatProps<C extends Catalog = Catalog> extends MastraChatProps {
   /** The registry created with `createGenUI`. Read once per mount; remount with a `key` to switch registries. */
   genUI: GenUIRegistry<C>;
-  /** Handlers for the catalog's actions, which surface specs bind to component events through `on`. Handlers from the latest render run. */
+  /** Handlers for the catalog's actions, which specs bind to component events through `on`. Handlers from the latest render run. */
   actions?: GenUIActionHandlers<C>;
   /**
    * Your own `MessageFactory` renderers, for parts GenUI does not render. Define them outside the
@@ -53,13 +53,13 @@ function createController(
   history: { messages?: MastraDBMessage[]; threadId?: string },
 ): GenUIController {
   const controller = createGenUIController({ registry: genUI, actions });
-  // Surfaces from history are ready on the first render.
+  // Approvals from history are ready on the first render.
   if (history.messages) controller.sync(history.messages, { threadId: history.threadId });
   return controller;
 }
 
 /**
- * `useChat` with Generative UI. Registers the registry's frontend tools, derives surfaces from the
+ * `useChat` with Generative UI. Registers the registry's frontend tools, renders their calls in the
  * chat's messages, and attaches published app context to outgoing messages. Plain `useChat` is untouched.
  *
  * @experimental Generative UI is in beta and may change without notice.
@@ -78,7 +78,6 @@ export function useGenUIChat<C extends Catalog = Catalog>({
   const baseRenderers = useRef(renderers);
   const [genUIRenderers] = useState(() =>
     createGenUIRenderers(controller, {
-      Data: part => baseRenderers.current?.Data?.(part),
       ToolInvocation: part => baseRenderers.current?.ToolInvocation?.(part),
       DynamicTool: part => baseRenderers.current?.DynamicTool?.(part),
     }),
@@ -118,14 +117,9 @@ export function useGenUIChat<C extends Catalog = Catalog>({
     baseRenderers.current = renderers;
   });
 
-  function cancelRun(...args: Parameters<typeof chat.cancelRun>) {
-    controller.markAborted();
-    return chat.cancelRun(...args);
-  }
-
   const handle: GenUIChatHandle = {
     controller,
     renderers: { ...renderers, ...genUIRenderers },
   };
-  return { ...chat, sendMessage, cancelRun, genUI: handle };
+  return { ...chat, sendMessage, genUI: handle };
 }

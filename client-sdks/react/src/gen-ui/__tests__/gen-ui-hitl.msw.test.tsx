@@ -1,7 +1,4 @@
 // @vitest-environment jsdom
-import { defineCatalog } from '@json-render/core';
-import { useBoundProp } from '@json-render/react';
-import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,9 +7,9 @@ import { z } from 'zod';
 import { server } from '../../test/msw-server';
 import { renderWithProviders } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
-import { createGenUI, defineGenUIToolRenderer, useGenUIChat, useGenUISurfaceState } from '../index';
+import { createGenUI, defineGenUIToolRenderer, useGenUIChat } from '../index';
 import type { GenUIActionHandlers, GenUIRegistry } from '../index';
-import { AGENT_URL, chunk, controllableStream, finish, genUIChunk, sseResponse, STREAM_URL } from './sse';
+import { AGENT_URL, chunk, controllableStream, finish, sseResponse, STREAM_URL } from './sse';
 
 type Chat = ReturnType<typeof useGenUIChat>;
 let current: Chat;
@@ -300,169 +297,5 @@ describe('useGenUIChat — human in the loop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Approve with backup' }));
     await waitFor(() => expect(screen.getByTestId('delete').textContent).toContain('Deleted 1'));
     expect(resumes[0]).toMatchObject({ runId: 'run-from-history', toolCallId: 'c1', resumeData: { keepBackup: true } });
-  });
-});
-
-describe('useGenUIChat — surface state', () => {
-  const counter = { type: 'Counter', props: { count: { $bindState: '/count' } } };
-  const surface = (eventId: string, surfaceId: string, element: object, state?: object) =>
-    genUIChunk({
-      version: 1,
-      eventId,
-      surfaceId,
-      operations: [
-        { op: 'createSurface', spec: { root: 'root', elements: { root: element }, ...(state ? { state } : {}) } },
-      ],
-    });
-
-  it('user edits of agent state stay local, win over agent updates, and conflicts are reported, not overwritten', async () => {
-    const stream = controllableStream();
-    const bodies: Record<string, unknown>[] = [];
-    server.use(
-      http.post(STREAM_URL, async ({ request }) => {
-        bodies.push(await json(request));
-        return bodies.length === 1 ? stream.response() : sseResponse([chunk('start'), finish('stop')]);
-      }),
-    );
-    const filters = z.object({ region: z.string(), limit: z.number() });
-    const catalog = defineCatalog(schema, {
-      components: { ReportFilters: { props: filters, events: ['apply'] } },
-      actions: { apply: { params: filters } },
-    });
-    const genUI = createGenUI({
-      catalog,
-      components: {
-        ReportFilters: ({ props, bindings, emit }) => {
-          const [region, setRegion] = useBoundProp(props.region, bindings?.region);
-          const surfaceState = useGenUISurfaceState();
-          return (
-            <div>
-              <label>
-                Region
-                <input value={region} onChange={event => setRegion(event.target.value)} />
-              </label>
-              <output data-testid="limit">{String(props.limit)}</output>
-              <output data-testid="conflicts">{surfaceState.conflicts.join(',')}</output>
-              <button onClick={() => surfaceState.keepLocal('/region')}>Keep mine</button>
-              <button onClick={() => surfaceState.discard('/region')}>Use agent value</button>
-              <button onClick={() => emit('apply')}>Apply</button>
-            </div>
-          );
-        },
-      },
-    });
-    const actions: GenUIActionHandlers<typeof catalog> = {
-      apply: async (params, { chat }) => {
-        await chat.sendMessage(`Apply ${JSON.stringify(params)}`);
-      },
-    };
-    renderWithProviders(<GenUIChat genUI={genUI} actions={actions} />);
-    await send('show report filters');
-    act(() =>
-      stream.push(
-        chunk('start'),
-        surface(
-          'e1',
-          'filters',
-          {
-            type: 'ReportFilters',
-            props: { region: { $bindState: '/region' }, limit: { $state: '/limit' } },
-            on: { apply: { action: 'apply', params: { region: { $state: '/region' }, limit: { $state: '/limit' } } } },
-          },
-          { region: 'EU', limit: 10 },
-        ),
-      ),
-    );
-
-    const input = (await screen.findByLabelText('Region')) as HTMLInputElement;
-    expect(input.value).toBe('EU');
-    fireEvent.change(input, { target: { value: 'US' } });
-    expect(input.value).toBe('US');
-
-    // The agent changes the edited path and an unedited one in the same update.
-    act(() =>
-      stream.push(
-        genUIChunk({
-          version: 1,
-          eventId: 'e2',
-          surfaceId: 'filters',
-          operations: [
-            {
-              op: 'patch',
-              patches: [
-                { op: 'replace', path: '/state/region', value: 'APAC' },
-                { op: 'replace', path: '/state/limit', value: 50 },
-              ],
-            },
-          ],
-        }),
-      ),
-    );
-    await waitFor(() => expect(screen.getByTestId('limit').textContent).toBe('50'));
-    expect(input.value).toBe('US');
-    expect(screen.getByTestId('conflicts').textContent).toBe('/region');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Keep mine' }));
-    expect(screen.getByTestId('conflicts').textContent).toBe('');
-    expect(input.value).toBe('US');
-    expect(bodies).toHaveLength(1);
-
-    act(() => {
-      stream.push(finish('stop'));
-      stream.close();
-    });
-    await waitFor(() => expect(current.isRunning).toBe(false));
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    await waitFor(() => expect(bodies).toHaveLength(2));
-    expect(JSON.stringify(bodies[1]!.messages)).toContain('Apply {\\"region\\":\\"US\\",\\"limit\\":50}');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Use agent value' }));
-    expect(input.value).toBe('APAC');
-  });
-
-  it('each surface keeps its own state, and edits reset when the thread changes', async () => {
-    server.use(
-      http.post(STREAM_URL, () =>
-        sseResponse([
-          chunk('start'),
-          surface('e1', 'left', counter, { count: 0 }),
-          surface('e2', 'right', counter, { count: 0 }),
-          finish('stop'),
-        ]),
-      ),
-    );
-    const catalog = defineCatalog(schema, {
-      components: { Counter: { props: z.object({ count: z.number() }) } },
-      actions: {},
-    });
-    const registry = createGenUI({
-      catalog,
-      components: {
-        Counter: ({ props, bindings }) => {
-          const [count, setCount] = useBoundProp(props.count, bindings?.count);
-          return (
-            <div data-testid="counter">
-              <button onClick={() => setCount((count ?? 0) + 1)}>+1</button>
-              <span>count {count}</span>
-            </div>
-          );
-        },
-      },
-    });
-    const view = renderWithProviders(<GenUIChat genUI={registry} />);
-    await send('two counters');
-
-    await waitFor(() => expect(screen.getAllByTestId('counter')).toHaveLength(2));
-    const [left, right] = screen.getAllByRole('button', { name: '+1' });
-    fireEvent.click(left!);
-    fireEvent.click(left!);
-    fireEvent.click(right!);
-    const texts = () => screen.getAllByTestId('counter').map(node => node.textContent);
-    expect(texts()).toEqual(['+1count 2', '+1count 1']);
-
-    // Same controller, new thread: no state from the previous conversation leaks in.
-    view.rerender(<GenUIChat genUI={registry} threadId="thread-2" />);
-    await waitFor(() => expect(current.genUI.controller.edits.get('left')).toEqual({}));
-    expect(current.genUI.controller.edits.get('right')).toEqual({});
   });
 });
