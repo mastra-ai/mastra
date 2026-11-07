@@ -9,6 +9,7 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { Chat } from 'chat';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { SlackIntegration } from './integration.js';
 import type { SlackToolSettings } from './tool-settings.js';
 
@@ -118,11 +119,13 @@ beforeEach(() => {
 type Tool = { execute: (input: Record<string, unknown>, options: Record<string, unknown>) => Promise<any> };
 
 /**
- * A session linked to the Slack thread C1/171.1 and woken without a Slack
- * message (as web prompts, GitHub events and schedules are), so the tools find
- * their thread through the session's stored channel coordinates.
+ * A session with deployment `settings` in a Factory with `saved` settings, linked to the Slack thread
+ * C1/171.1 and woken without a Slack message (as web prompts, GitHub events
+ * and schedules are), so the tools find their thread through the session's
+ * stored channel coordinates.
  */
-async function slackSession(settings?: Partial<SlackToolSettings>) {
+async function slackSession(settings?: Partial<SlackToolSettings>, saved?: Partial<SlackToolSettings>) {
+  const orgId = 'org-1';
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, logger: false });
   const memory = await storage.getStore('memory');
@@ -141,7 +144,50 @@ async function slackSession(settings?: Partial<SlackToolSettings>) {
   channels.__setController({ id: 'mastra-code', getMastra: () => mastra } as any);
   await channels.initialize(mastra);
 
+  const seed = await createFactoryStorageForTests();
+  const factory = await seed.projects.create({ orgId, userId: 'owner', input: { name: 'Mastra' } });
+  if (saved) await seed.projects.update({ orgId, id: factory.id, input: { slackToolSettings: saved } });
+  const sourceControl = seed.sourceControl.forIntegration('github');
+  const installation = await sourceControl.installations.upsert({ orgId, connectedByUserId: 'owner', externalId: '1' });
+  const repository = await sourceControl.repositories.upsert({
+    orgId,
+    input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+  });
+  const connection = await sourceControl.connections.create({
+    orgId,
+    factoryProjectId: factory.id,
+    installationId: installation.id,
+    createdByUserId: 'owner',
+  });
+  const projectRepository = await sourceControl.projectRepositories.link({
+    orgId,
+    connectionId: connection.id,
+    repositoryId: repository.id,
+    createdByUserId: 'owner',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/sandbox/mastra',
+  });
+  await sourceControl.sessions.create({
+    sessionId: 'session-1',
+    projectRepositoryId: projectRepository.id,
+    factoryProjectId: factory.id,
+    orgId,
+    userId: 'owner',
+    branch: 'slack/171.1',
+    baseBranch: 'main',
+    visibility: 'org',
+  });
+
   const slack = new SlackIntegration({ signingSecret: 'secret', tools: settings });
+  slack.channels({
+    storage: {
+      channelIdentity: seed.channelIdentity,
+      projects: seed.projects,
+      sourceControls: [sourceControl],
+      memorySettings: {},
+    },
+    runtime: { workItems: { findRunBindingByThread: async () => null } },
+  } as any);
   slack.initialize({ channels: () => channels });
 
   const requestContext = new RequestContext();
@@ -150,7 +196,7 @@ async function slackSession(settings?: Partial<SlackToolSettings>) {
   calls = [];
   const tool = (name: string) => tools[name] as unknown as Tool | undefined;
   const run = (name: string, input: Record<string, unknown>) => tool(name)!.execute(input, {});
-  return { run, tool, chat: channels.sdk! };
+  return { run, tool, accountLinks: seed.channelIdentity, chat: channels.sdk! };
 }
 
 /**
@@ -428,5 +474,70 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     expect(sent('chat.postMessage')).toEqual([
       expect.objectContaining({ channel: 'D-USAM', markdown_text: 'Your deploy is green.' }),
     ]);
+  });
+});
+
+describe('Slack tools on a Factory session, with settings saved on the Factory', () => {
+  it("narrows what the deployment grants: limited to its own channel, it refuses another before asking Slack", async () => {
+    const { run, tool } = await slackSession(wide, { channels: 'session', directMessages: 'none' });
+
+    await expect(
+      run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' }),
+    ).rejects.toThrow('"slack:C2" is outside the channels this session can use: slack:C1.');
+    await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'hi' })).rejects.toThrow(
+      'outside the channels',
+    );
+    expect(tool('sendDirectMessage')).toBeUndefined();
+    expect(calls).toEqual([]);
+  });
+
+  it('widens the default: reads and posts in a channel the Factory picked', async () => {
+    const { run } = await slackSession(undefined, { channels: 'selected', channelIds: ['C2'] });
+
+    const read = await run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' });
+    expect(read.messages.map((m: { text: string }) => m.text)).toContain('Deploy is green again');
+    await run('postChannelMessage', { channelId: 'slack:C2', message: 'Thanks, closing this out.' });
+    expect(sent('chat.postMessage')).toEqual([expect.objectContaining({ channel: 'C2' })]);
+  });
+
+  it("keeps the deployment's value for anything the Factory hasn't saved", async () => {
+    const { run } = await slackSession(wide, { channelAccess: 'read' });
+
+    const read = await run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' });
+    expect(read.messages).toHaveLength(2);
+    await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'hi' })).rejects.toThrow(
+      'is read only for this session',
+    );
+  });
+
+  it("with DMs limited to linked people, DMs only people linked to a Factory account in the session's org", async () => {
+    const { run, accountLinks } = await slackSession(undefined, { directMessages: 'linked' });
+    await accountLinks.saveAccountLink({
+      platform: 'slack',
+      externalTeamId: TEAM,
+      externalUserId: 'UALEX',
+      orgId: 'org-1',
+      userId: 'user-alex',
+    });
+    await accountLinks.saveAccountLink({
+      platform: 'slack',
+      externalTeamId: TEAM,
+      externalUserId: 'USAM',
+      orgId: 'org-2',
+      userId: 'user-sam',
+    });
+
+    await run('sendDirectMessage', { userId: 'UALEX', text: 'linked' });
+    expect(sent('conversations.open')).toEqual([expect.objectContaining({ users: 'UALEX' })]);
+
+    calls = [];
+    await expect(run('sendDirectMessage', { userId: 'USAM', text: 'other org' })).rejects.toThrow(
+      'Cannot message USAM: only people linked to this Factory can be messaged.',
+    );
+    await expect(run('sendDirectMessage', { userId: 'UOUTSIDE', text: 'unlinked' })).rejects.toThrow(
+      'Cannot message UOUTSIDE',
+    );
+    expect(sent('conversations.open')).toEqual([]);
+    expect(sent('chat.postMessage')).toEqual([]);
   });
 });

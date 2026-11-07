@@ -50,6 +50,8 @@ export interface FactoryProject {
   sandboxWorkingDirectory: string | null;
   /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
   sandboxSettings: Record<string, unknown> | null;
+  /** What sessions may do in Slack: channels and direct messages. Only keys the user set. */
+  slackToolSettings: Record<string, unknown> | null;
   /** Command run once in the workspace root after every repository's own setup. */
   workspaceSetupCommand: string | null;
   /** Template id of the environment's current build, written by the build path. */
@@ -99,6 +101,7 @@ export interface UpdateFactoryProjectInput {
   autoRunEnabled?: boolean;
   sandboxWorkingDirectory?: string | null;
   sandboxSettings?: Record<string, unknown> | null;
+  slackToolSettings?: Record<string, unknown> | null;
   workspaceSetupCommand?: string | null;
   activeTemplateId?: string | null;
   activeTemplateHeads?: Record<string, string> | null;
@@ -132,6 +135,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     auto_approve_plans: { type: 'boolean', default: false },
     sandbox_working_directory: { type: 'text', nullable: true },
     sandbox_settings: { type: 'json', nullable: true },
+    slack_tool_settings: { type: 'json', nullable: true },
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
@@ -168,6 +172,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
   sandbox_settings: Record<string, unknown> | null;
+  slack_tool_settings: Record<string, unknown> | null;
   workspace_setup_command: string | null;
   active_template_id: string | null;
   active_template_heads: Record<string, string> | null;
@@ -203,6 +208,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     autoRunEnabled: row.auto_run_enabled,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
     sandboxSettings: row.sandbox_settings ?? null,
+    slackToolSettings: row.slack_tool_settings ?? null,
     workspaceSetupCommand: row.workspace_setup_command ?? null,
     activeTemplateId: row.active_template_id ?? null,
     activeTemplateHeads: row.active_template_heads ?? null,
@@ -319,6 +325,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
             ? { sandbox_working_directory: changes.sandboxWorkingDirectory }
             : {}),
           ...(changes.sandboxSettings !== undefined ? { sandbox_settings: changes.sandboxSettings } : {}),
+          ...(changes.slackToolSettings !== undefined ? { slack_tool_settings: changes.slackToolSettings } : {}),
           ...(changes.workspaceSetupCommand !== undefined
             ? { workspace_setup_command: changes.workspaceSetupCommand }
             : {}),

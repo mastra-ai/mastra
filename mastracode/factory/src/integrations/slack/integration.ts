@@ -18,13 +18,19 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { AgentChannels, TypingStatusFn } from '@mastra/core/channels';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
+import type { SlackAdapter, SlackAdapterChannelConfig } from '@mastra/slack';
+
+import { createSourceControlSessionLookup } from '../../session/factory-session.js';
+import type { SourceControlSessionLookup } from '../../session/factory-session.js';
+import type { ChannelIdentityStorage } from '../../storage/domains/channel-identity/base.js';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { announcePullRequest } from '../channel-thread-announcements.js';
@@ -39,7 +45,8 @@ import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from '.
 import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
-import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
+import { createSlackToolSettingsRoutes } from './tool-settings-routes.js';
+import { DEFAULT_SLACK_TOOL_SETTINGS, readSlackToolSettings, slackToolSettingsSchema } from './tool-settings.js';
 import type { SlackToolSettings } from './tool-settings.js';
 
 /** Slack app credentials, read from env ONCE by the deploy entry. */
@@ -183,6 +190,11 @@ export class SlackIntegration implements FactoryIntegration {
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
   readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
+  /** Bound in `channels()`; used to check who a session may DM. */
+  #accountLinks: ChannelIdentityStorage | undefined;
+  /** Bound in `channels()`; find a session's Factory and its Slack settings. */
+  #sessions: SourceControlSessionLookup | undefined;
+  #projects: FactoryProjectsStorage | undefined;
   /**
    * With reply text hidden (the Factory default) the agent speaks through
    * `reply_in_thread`, so the prompt, reminder and live streaming for that
@@ -247,11 +259,43 @@ export class SlackIntegration implements FactoryIntegration {
     if (!slackThread) return {};
     const chat = this.#channels?.()?.sdk;
     const sessionThreadId = slackThread.threadId;
+    const factory = chat && sessionThreadId ? await this.#factoryOf(requestContext) : null;
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
-      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings }) : {}),
+      ...(chat && sessionThreadId
+        ? createSlackChatTools({
+            chat,
+            sessionThreadId,
+            settings: factory?.settings ?? this.#toolSettings,
+            isLinked: userId => this.#isLinked(chat, userId, factory?.orgId),
+          })
+        : {}),
     };
+  }
+
+  /** The org and Slack settings of the Factory the run's session belongs to. */
+  async #factoryOf(requestContext: RequestContext): Promise<{ orgId: string; settings: SlackToolSettings } | null> {
+    const sessionId = (requestContext.get('controller') as AgentControllerRequestContext<unknown> | undefined)
+      ?.sessionId;
+    const session = sessionId ? await this.#sessions?.getBySessionId(sessionId) : null;
+    if (!session?.factoryProjectId) return null;
+    const project = await this.#projects?.get({ orgId: session.orgId, id: session.factoryProjectId });
+    if (!project) return null;
+    return { orgId: session.orgId, settings: readSlackToolSettings(project.slackToolSettings, this.#toolSettings) };
+  }
+
+  /** Whether a Slack user has linked a Factory account in `orgId`. */
+  async #isLinked(chat: NonNullable<AgentChannels['sdk']>, userId: string, orgId: string | undefined) {
+    if (!this.#accountLinks || !orgId) return false;
+    const auth = await (chat.getAdapter('slack') as SlackAdapter).webClient.auth.test();
+    if (!auth.team_id) return false;
+    const link = await this.#accountLinks.getAccountLink({
+      platform: 'slack',
+      externalTeamId: auth.team_id,
+      externalUserId: userId,
+    });
+    return link?.orgId === orgId;
   }
 
   /**
@@ -277,6 +321,9 @@ export class SlackIntegration implements FactoryIntegration {
     const sourceControls =
       ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
     this.#repoBackedSessions = sourceControls.length > 0;
+    this.#accountLinks = ctx.storage.channelIdentity;
+    this.#sessions = createSourceControlSessionLookup(sourceControls);
+    this.#projects = ctx.storage.projects;
     const mode = this.#config.mode ?? 'webhook';
     return createSlackChannelsConfig({
       slack: {
@@ -306,16 +353,28 @@ export class SlackIntegration implements FactoryIntegration {
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     const { clientId, clientSecret, oidcRedirectBaseUrl, uiOrigin } = this.#config;
-    return createSlackConnectRoutes({
-      auth: ctx.auth,
-      accountLinks: ctx.storage.channelIdentity,
-      tenantStateSigner: ctx.stateSigner,
-      oidc:
-        clientId && clientSecret && oidcRedirectBaseUrl
-          ? { clientId, clientSecret, redirectBaseUrl: oidcRedirectBaseUrl, uiOrigin }
-          : undefined,
-      projects: ctx.storage.projects,
-    });
+    const toolSettings = ctx.storage.projects
+      ? createSlackToolSettingsRoutes({
+          auth: ctx.auth,
+          projects: ctx.storage.projects,
+          accountLinks: ctx.storage.channelIdentity,
+          chat: () => this.#channels?.()?.sdk,
+          defaults: this.#toolSettings,
+        })
+      : [];
+    return [
+      ...toolSettings,
+      ...createSlackConnectRoutes({
+        auth: ctx.auth,
+        accountLinks: ctx.storage.channelIdentity,
+        tenantStateSigner: ctx.stateSigner,
+        oidc:
+          clientId && clientSecret && oidcRedirectBaseUrl
+            ? { clientId, clientSecret, redirectBaseUrl: oidcRedirectBaseUrl, uiOrigin }
+            : undefined,
+        projects: ctx.storage.projects,
+      }),
+    ];
   }
 
   diagnostics(): Record<string, unknown> {

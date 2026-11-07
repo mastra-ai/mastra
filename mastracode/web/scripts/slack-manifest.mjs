@@ -73,6 +73,8 @@ const manifest = {
         'chat:write.public',
         'im:write',
         'channels:history',
+        // Settings › Slack adds the app to public channels a Factory picks.
+        'channels:join',
         'channels:read',
         'groups:history',
         'groups:read',

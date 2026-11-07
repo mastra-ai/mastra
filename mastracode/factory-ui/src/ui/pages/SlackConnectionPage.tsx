@@ -23,6 +23,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
+import { SlackToolAccessSection } from '../domains/settings/components/SlackToolAccessSection';
 import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
@@ -263,6 +264,9 @@ export function SlackConnectionSettings() {
             </SettingsContainer>
           </SettingsSubsection>
         </div>
+      )}
+      {factoryId && accountsQuery.data && !accountsQuery.data.reason && !accountsQuery.data.unavailable && (
+        <SlackToolAccessSection factoryId={factoryId} />
       )}
     </div>
   );
