@@ -11,6 +11,7 @@ import type {
   JSONValue,
 } from './types';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -36,6 +37,8 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
  * Rejects non-JSON types (functions, symbols, class instances, `undefined`,
  * non-finite numbers), prototype-polluting keys and excessive nesting. The
  * copy is built from scratch so callers never hold a reference to the input.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function toSafeJSONValue(value: unknown, maxDepth: number, path = '$', depth = 0): JSONValue {
   if (depth > maxDepth) fail(`${path} exceeds max nesting depth ${maxDepth}`);
@@ -60,6 +63,7 @@ export function toSafeJSONValue(value: unknown, maxDepth: number, path = '$', de
   return fail(`${path} is not a JSON value`);
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function toSafeJSONObject(value: unknown, maxDepth: number, path = '$'): JSONObject {
   if (!isPlainObject(value)) fail(`${path} must be a plain object`);
   return toSafeJSONValue(value, maxDepth, path) as JSONObject;
@@ -225,7 +229,11 @@ const wrap = <T>(read: () => T): GenUIParseResult<T> => {
   }
 };
 
-/** Validate and deep-copy a list of untrusted GenUI operations (e.g. LLM tool arguments). */
+/**
+ * Validate and deep-copy a list of untrusted GenUI operations (e.g. LLM tool arguments).
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function parseGenUIOperations(value: unknown, limits: GenUILimits): GenUIParseResult<GenUIOperation[]> {
   return wrap(() => {
     if (!Array.isArray(value)) return fail('operations must be an array');
@@ -237,7 +245,11 @@ export function parseGenUIOperations(value: unknown, limits: GenUILimits): GenUI
   });
 }
 
-/** Validate and deep-copy an untrusted GenUI envelope. */
+/**
+ * Validate and deep-copy an untrusted GenUI envelope.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function parseGenUIEnvelope(value: unknown, limits: GenUILimits): GenUIParseResult<GenUIEnvelope> {
   return wrap(() => {
     if (!isPlainObject(value)) return fail('envelope must be an object');

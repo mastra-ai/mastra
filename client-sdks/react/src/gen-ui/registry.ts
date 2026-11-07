@@ -8,7 +8,11 @@ import type {
 } from '@mastra/client-js/gen-ui';
 import type { ComponentType, ReactNode } from 'react';
 
-/** Props every registered GenUI component receives. `props` has passed the component's schema. */
+/**
+ * Props every registered GenUI component receives. `props` has passed the component's schema.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIComponentProps<P> {
   props: P;
   /** Rendered child nodes when the component is used inside a declarative surface. */
@@ -19,11 +23,14 @@ export interface GenUIComponentProps<P> {
  * Props for the optional preview rendered while a frontend tool's arguments are
  * still streaming. `partialProps` is a best-effort parse of incomplete JSON and
  * has NOT been validated, so treat every field as possibly missing.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface GenUIStreamingProps {
   partialProps: JSONObject;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIComponentToolOptions<R extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined> {
   /** Tool name exposed to the model. Defaults to `ui_<componentName>`. */
   name?: string;
@@ -38,6 +45,7 @@ export interface GenUIComponentToolOptions<R extends StandardSchemaV1 | undefine
   responseSchema?: R;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIComponentDefinition<S extends StandardSchemaV1 = StandardSchemaV1> {
   /** Validates every props object coming from the model. Must support synchronous validation. */
   schema: S;
@@ -60,16 +68,23 @@ export interface GenUIComponentDefinition<S extends StandardSchemaV1 = StandardS
 /**
  * Type-erased definition for heterogeneous registries. `StandardSchemaV1<any, any>` (rather than `any`)
  * keeps props as `any`, so a definition can be spread and extended (`{ ...Card, tool: true }`).
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export type AnyGenUIComponentDefinition = GenUIComponentDefinition<StandardSchemaV1<any, any>>;
 
-/** Typed helper: infers component props from the schema. */
+/**
+ * Typed helper: infers component props from the schema.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function defineGenUIComponent<S extends StandardSchemaV1>(
   definition: GenUIComponentDefinition<S>,
 ): GenUIComponentDefinition<S> {
   return definition;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIToolPhase =
   | 'input-streaming'
   | 'input-available'
@@ -79,6 +94,7 @@ export type GenUIToolPhase =
   | 'output-error'
   | 'output-denied';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIToolApproval {
   /** `approval`: the tool requires an approve/decline decision. `suspended`: the tool suspended and waits for resume data. */
   kind: 'approval' | 'suspended';
@@ -91,6 +107,7 @@ export interface GenUIToolApproval {
   decline(): Promise<void>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIToolCallProps<A = unknown, O = unknown> {
   toolCallId: string;
   toolName: string;
@@ -108,6 +125,7 @@ export interface GenUIToolCallProps<A = unknown, O = unknown> {
   approval?: GenUIToolApproval;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIToolRendererDefinition<
   AS extends StandardSchemaV1 | undefined = undefined,
   OS extends StandardSchemaV1 | undefined = undefined,
@@ -117,7 +135,11 @@ export interface GenUIToolRendererDefinition<
   component: ComponentType<GenUIToolCallProps<InferSchemaOutput<AS>, InferSchemaOutput<OS>>>;
 }
 
-/** Typed helper for rendering an existing backend tool by name. */
+/**
+ * Typed helper for rendering an existing backend tool by name.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function defineGenUIToolRenderer<
   AS extends StandardSchemaV1 | undefined = undefined,
   OS extends StandardSchemaV1 | undefined = undefined,
@@ -125,6 +147,7 @@ export function defineGenUIToolRenderer<
   return definition;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIFallbackProps {
   /** Human-readable reason, safe to display. */
   reason: string;
@@ -132,11 +155,13 @@ export interface GenUIFallbackProps {
   component?: string;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceStatusProps {
   status: 'streaming' | 'failed' | 'aborted';
   error?: string;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIFallbacks {
   /** Rendered in place of a node or tool UI that cannot be shown. */
   Fallback?: ComponentType<GenUIFallbackProps>;
@@ -146,12 +171,14 @@ export interface GenUIFallbacks {
   SurfaceStatus?: ComponentType<GenUISurfaceStatusProps>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUICatalog {
   id: string;
   /** Semver-like version string. Surfaces declaring a different major version are treated as incompatible. */
   version: string;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceToolOptions {
   /** Defaults to `ui_surface`. */
   name?: string;
@@ -164,6 +191,7 @@ export interface GenUISurfaceToolOptions {
   placements?: GenUIPlacement[];
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface CreateGenUIOptions {
   /** Components the model may use, keyed by the name the model refers to. */
   components?: Record<string, AnyGenUIComponentDefinition>;
@@ -179,6 +207,7 @@ export interface CreateGenUIOptions {
   limits?: Partial<GenUILimits>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIComponentEntry {
   name: string;
   definition: AnyGenUIComponentDefinition;
@@ -193,6 +222,7 @@ export interface GenUIComponentEntry {
   };
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIManifestComponent {
   name: string;
   description?: string;
@@ -200,7 +230,11 @@ export interface GenUIManifestComponent {
   propsSchema?: JSONObject;
 }
 
-/** Immutable, shareable GenUI configuration. Create it once at module scope. */
+/**
+ * Immutable, shareable GenUI configuration. Create it once at module scope.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIRegistry {
   readonly components: Readonly<Record<string, GenUIComponentEntry>>;
   /** Frontend tool name → component name. */
@@ -247,6 +281,8 @@ function resolveModelSchema(name: string, definition: AnyGenUIComponentDefinitio
 /**
  * Create a GenUI registry. Only what you register here can ever be rendered, and only
  * components with `tool` set are exposed to the model as tools.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function createGenUI(options: CreateGenUIOptions = {}): GenUIRegistry {
   const components: Record<string, GenUIComponentEntry> = {};
@@ -335,7 +371,11 @@ export function createGenUI(options: CreateGenUIOptions = {}): GenUIRegistry {
   return Object.freeze(registry);
 }
 
-/** Is a surface's declared catalog compatible with the registry's? Surfaces without a catalog always are. */
+/**
+ * Is a surface's declared catalog compatible with the registry's? Surfaces without a catalog always are.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function isCatalogCompatible(
   registry: GenUIRegistry,
   surface: { catalogId?: string; catalogVersion?: string },

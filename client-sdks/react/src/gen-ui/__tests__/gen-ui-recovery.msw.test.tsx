@@ -127,6 +127,10 @@ const assistant = (id: string, envelopes: object[], createdAt = 1): MastraDBMess
 
 const surfaceEl = (id = 'weather') => document.querySelector(`[data-genui-surface="${id}"]`) as HTMLElement | null;
 
+/** What @mastra/core saves as the result of a tool call cut off by a stopped run. */
+const CORE_TOOL_ABORT_NOTICE =
+  'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';
+
 beforeEach(() => {
   weatherMounts = 0;
 });
@@ -236,6 +240,50 @@ describe('useGenUIChat — persistence and recovery', () => {
     renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={[assistant('a1', [create('e1')])]} />);
     expect(screen.getByTestId('weather').textContent).toBe('Paris: 21°');
     expect(surfaceEl()!.getAttribute('aria-busy')).toBeNull();
+  });
+
+  const toolCall = (toolInvocation: object): MastraDBMessage['content']['parts'][number] =>
+    ({
+      type: 'tool-invocation',
+      toolInvocation: { toolCallId: 'c1', toolName: 'getWeather', args: {}, ...toolInvocation },
+    }) as never;
+  const linkedSurface = (call: object, metadata?: Record<string, unknown>): MastraDBMessage => {
+    const message = assistant('a1', [create('e1', 21, { source: { toolCallId: 'c1' } })]);
+    message.content.parts = [toolCall(call), ...message.content.parts];
+    if (metadata) message.content.metadata = metadata;
+    return message;
+  };
+
+  it.each([
+    ['the user stopped the run', { state: 'result', result: CORE_TOOL_ABORT_NOTICE }],
+    ['the stream ended before the tool returned', { state: 'call' }],
+  ])('after a reload, a surface whose tool was cut off shows as interrupted when %s', (_case, call) => {
+    renderWithProviders(<GenUIChat genUI={weatherOnly} initialMessages={[linkedSurface(call)]} />);
+
+    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('aborted');
+    expect(screen.getByTestId('weather').textContent).toBe('Paris: 21°');
+    expect(within(surfaceEl()!).getByRole('note').textContent).toMatch(/interrupted/);
+  });
+
+  it('after a reload, a surface whose tool finished or is waiting for approval is not shown as interrupted', () => {
+    const { unmount } = renderWithProviders(
+      <GenUIChat genUI={weatherOnly} initialMessages={[linkedSurface({ state: 'result', result: { ok: true } })]} />,
+    );
+    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('ready');
+    unmount();
+
+    renderWithProviders(
+      <GenUIChat
+        genUI={weatherOnly}
+        initialMessages={[
+          linkedSurface(
+            { state: 'call' },
+            { pendingToolApprovals: { getWeather: { toolCallId: 'c1', toolName: 'getWeather' } } },
+          ),
+        ]}
+      />,
+    );
+    expect(surfaceEl()!.getAttribute('data-genui-status')).toBe('ready');
   });
 });
 

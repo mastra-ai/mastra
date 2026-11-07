@@ -185,6 +185,8 @@ function renderToolCall(controller: GenUIController, call: NormalizedToolCall): 
 /**
  * MessageFactory renderers for GenUI parts. Parts GenUI does not own are passed to `base`, and when
  * `base` has no renderer for them they fall through to MessageFactory's own `fallback` as before.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function createGenUIRenderers(
   controller: GenUIController,

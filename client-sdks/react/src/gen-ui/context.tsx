@@ -28,6 +28,7 @@ const ControllerContext = createContext<GenUIController | undefined>(undefined);
 const NodeContext = createContext<GenUINodeScopeValue | undefined>(undefined);
 const ToolCallContext = createContext<string | undefined>(undefined);
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function GenUIProvider({ controller, children }: { controller: GenUIController; children?: ReactNode }) {
   return <ControllerContext.Provider value={controller}>{children}</ControllerContext.Provider>;
 }
@@ -48,32 +49,49 @@ export function GenUIToolCallScope({ toolCallId, children }: { toolCallId: strin
   return <ToolCallContext.Provider value={toolCallId}>{children}</ToolCallContext.Provider>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function useGenUIController(): GenUIController {
   const controller = useContext(ControllerContext);
   if (!controller) throw new Error('GenUI hooks must be used inside <GenUIProvider> or a GenUI renderer');
   return controller;
 }
 
-/** The surface and node the calling component was rendered for, or `undefined` outside a declarative surface. */
+/**
+ * The surface and node the calling component was rendered for, or `undefined` outside a declarative surface.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUINodeScope(): GenUINodeScopeValue | undefined {
   return useContext(NodeContext);
 }
 
-/** Subscribe to one surface. Only re-renders when that surface object changes. */
+/**
+ * Subscribe to one surface. Only re-renders when that surface object changes.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUISurface(surfaceId: string): GenUISurface | undefined {
   const controller = useGenUIController();
   const get = () => controller.getState().surfaces[surfaceId];
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
-/** Subscribe to one node. Unchanged nodes keep their identity, so this skips token-level re-renders. */
+/**
+ * Subscribe to one node. Unchanged nodes keep their identity, so this skips token-level re-renders.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUINode(surfaceId: string, nodeId: string): GenUINode | undefined {
   const controller = useGenUIController();
   const get = () => controller.getState().surfaces[surfaceId]?.nodes[nodeId];
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
-/** Ids of every surface with the given placement, in creation order. */
+/**
+ * Ids of every surface with the given placement, in creation order.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUISurfaceIds(placement?: GenUISurface['placement']): readonly string[] {
   const controller = useGenUIController();
   const get = () => controller.getSurfaceIds(placement);
@@ -86,7 +104,11 @@ function useCurrentNodeScope(hook: string) {
   return scope;
 }
 
-/** Agent-owned data of the surface the calling component belongs to. Read-only on the client. */
+/**
+ * Agent-owned data of the surface the calling component belongs to. Read-only on the client.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUISurfaceData(): JSONObject {
   const { surfaceId } = useCurrentNodeScope('useGenUISurfaceData');
   return useGenUISurface(surfaceId)?.data ?? EMPTY;
@@ -94,6 +116,7 @@ export function useGenUISurfaceData(): JSONObject {
 
 const EMPTY: JSONObject = {};
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUILocalState {
   value: JSONObject;
   revision: number;
@@ -105,6 +128,8 @@ export interface GenUILocalState {
 /**
  * Client-local state scoped to the current surface (default) or the chat thread. Updates re-render
  * subscribers immediately and are never sent to the agent unless you send them explicitly.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function useGenUILocalState(scope: 'surface' | 'thread' | GenUIStateScope = 'surface'): GenUILocalState {
   const controller = useGenUIController();
@@ -133,6 +158,7 @@ function useStateEntry(store: GenUIController['state'], scope: GenUIStateScope):
   return useSyncExternalStore(listener => store.subscribe(scope, listener), get, get);
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISharedData {
   /** Agent data with the user's edits on top. */
   value: JSONObject;
@@ -151,6 +177,8 @@ export interface GenUISharedData {
  * The current surface's agent-owned data, editable by the user. Edits stay local and win over agent
  * updates; when the agent changes a key the user already edited, it is reported in `conflicts`
  * instead of silently overwriting either side. Send `value` to the agent explicitly (e.g. in an action).
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function useGenUISharedData(): GenUISharedData {
   const controller = useGenUIController();
@@ -194,6 +222,8 @@ function readEdits(stored: JSONObject): GenUIEdits {
 /**
  * Publish a value for the agent while the calling component is mounted. Published values are sent
  * with the next message `useGenUIChat` sends, as additional system context. Nothing is sent eagerly.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function useGenUIPublishedContext(
   key: string,
@@ -213,8 +243,10 @@ export function useGenUIPublishedContext(
   }, [context, key, serialized, description, enabled]);
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIActionStatus = 'idle' | 'pending' | GenUIActionResult['status'];
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface UseGenUIActionResult {
   dispatch(payload?: unknown): Promise<GenUIActionResult>;
   status: GenUIActionStatus;
@@ -225,6 +257,8 @@ export interface UseGenUIActionResult {
 /**
  * Dispatch a named action for the current node. The surface id, node id and the node revision the
  * user saw are attached automatically so stale or duplicate submissions are rejected.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function useGenUIAction(name: string): UseGenUIActionResult {
   const controller = useGenUIController();
@@ -248,19 +282,28 @@ function useToolSubscription<T>(get: () => T): T {
   return useSyncExternalStore(controller.subscribeTools, get, get);
 }
 
-/** Approval or suspension state for a tool call, with approve/decline actions and their loading status. */
+/**
+ * Approval or suspension state for a tool call, with approve/decline actions and their loading status.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUIToolApproval(toolCallId: string): GenUIToolApproval | undefined {
   const controller = useGenUIController();
   return useToolSubscription(() => controller.getToolApproval(toolCallId));
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIToolResponse {
   /** `false` when the call already resolved, or the run that waited for it is gone (e.g. after a reload). */
   canRespond: boolean;
   respond(value: unknown): Promise<GenUIValidationResult<unknown>>;
 }
 
-/** Answer an interactive frontend tool call. Defaults to the tool call the component was rendered for. */
+/**
+ * Answer an interactive frontend tool call. Defaults to the tool call the component was rendered for.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function useGenUIToolResponse(toolCallId?: string): GenUIToolResponse {
   const controller = useGenUIController();
   const scoped = useContext(ToolCallContext);

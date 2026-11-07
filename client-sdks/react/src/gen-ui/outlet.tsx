@@ -4,6 +4,7 @@ import { GenUIProvider, useGenUISurfaceIds } from './context';
 import type { GenUIController } from './controller';
 import { GenUISurfaceView } from './surface';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceOutletProps {
   controller: GenUIController;
   /** Which placement to render. Defaults to `panel`. */
@@ -25,7 +26,11 @@ function OutletSurfaces({ placement, empty, className }: Omit<GenUISurfaceOutlet
   );
 }
 
-/** Render surfaces outside the message list (side panels, overlays, dashboards). */
+/**
+ * Render surfaces outside the message list (side panels, overlays, dashboards).
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function GenUISurfaceOutlet({ controller, placement = 'panel', empty, className }: GenUISurfaceOutletProps) {
   return (
     <GenUIProvider controller={controller}>

@@ -17,6 +17,7 @@ export type {
   GenUIChunkWriter,
   GenUICreateSurfaceInput,
   GenUIEmitter,
+  GenUIEmitterContext,
   GenUIEmitterOptions,
   GenUISurfaceEmitter,
   GenUISurfaceEmitterOptions,

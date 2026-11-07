@@ -10,6 +10,7 @@ import type { GenUIChatActionHandler, GenUIController } from './controller';
 import type { GenUIRegistry } from './registry';
 import { createGenUIRenderers } from './renderers';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface UseGenUIChatProps extends MastraChatProps {
   /** The registry created with `createGenUI`. Read once per mount; remount with a `key` to switch registries. */
   genUI: GenUIRegistry;
@@ -22,6 +23,7 @@ export interface UseGenUIChatProps extends MastraChatProps {
   renderers?: MessageRenderers;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIChatHandle {
   controller: GenUIController;
   /** Spread into `MessageFactory`. Includes the `renderers` you passed for parts GenUI does not render. */
@@ -58,6 +60,8 @@ function createController(
 /**
  * `useChat` with Generative UI. Registers the registry's frontend tools, derives surfaces from the
  * chat's messages, and attaches published app context to outgoing messages. Plain `useChat` is untouched.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function useGenUIChat({ genUI, actions, renderers, ...chatProps }: UseGenUIChatProps) {
   const [controller] = useState(() =>

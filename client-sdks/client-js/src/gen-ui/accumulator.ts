@@ -13,13 +13,16 @@ import type {
 } from './types';
 import { jsonSize, parseGenUIEnvelope } from './validate';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface AccumulateGenUIOptions {
   limits?: Partial<GenUILimits>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export const resolveGenUILimits = (limits?: Partial<GenUILimits>): GenUILimits =>
   limits ? { ...DEFAULT_GENUI_LIMITS, ...limits } : DEFAULT_GENUI_LIMITS;
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIState(): GenUIState {
   return { surfaces: {}, surfaceOrder: [], seenEventIds: {}, buffered: {}, diagnostics: [] };
 }
@@ -387,6 +390,8 @@ const flushBuffered = (state: GenUIState, surfaceId: string, limits: GenUILimits
  * reference, so replaying a stream or reloading history is idempotent.
  * Unchanged surfaces and nodes keep their object identity (structural sharing).
  * Invalid envelopes never throw — they are recorded in `state.diagnostics`.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function accumulateGenUI(state: GenUIState, rawEnvelope: unknown, options?: AccumulateGenUIOptions): GenUIState {
   const limits = resolveGenUILimits(options?.limits);
@@ -451,19 +456,28 @@ export function accumulateGenUI(state: GenUIState, rawEnvelope: unknown, options
   return flushBuffered(markSeen(result.state, envelope.eventId), envelope.surfaceId, limits);
 }
 
-/** Minimal structural message shape so the reducer works with any Mastra message representation. */
+/**
+ * Minimal structural message shape so the reducer works with any Mastra message representation.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIMessageLike {
   id: string;
   content?: { parts?: ReadonlyArray<unknown> } | unknown;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIEnvelopeRef {
   messageId: string;
   partIndex: number;
   envelope: unknown;
 }
 
-/** Collect `data-gen-ui` part payloads from messages in presentation order. */
+/**
+ * Collect `data-gen-ui` part payloads from messages in presentation order.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function extractGenUIEnvelopes(messages: ReadonlyArray<GenUIMessageLike>): GenUIEnvelopeRef[] {
   const refs: GenUIEnvelopeRef[] = [];
   for (const message of messages) {
@@ -478,7 +492,11 @@ export function extractGenUIEnvelopes(messages: ReadonlyArray<GenUIMessageLike>)
   return refs;
 }
 
-/** Rebuild GenUI state from persisted or live messages. Deterministic for a given message list. */
+/**
+ * Rebuild GenUI state from persisted or live messages. Deterministic for a given message list.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function reduceGenUIMessages(
   messages: ReadonlyArray<GenUIMessageLike>,
   options?: AccumulateGenUIOptions,

@@ -6,26 +6,33 @@ import { jsonSize, toSafeJSONObject, toSafeJSONValue } from './validate';
  * Explicit state scopes.
  * - `surface`: client-side state for one GenUI surface (form drafts, selections, filters).
  * - `thread`: client-side state shared by every surface in one conversation thread.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export type GenUIStateScope = { kind: 'surface'; id: string } | { kind: 'thread'; id: string };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export const genUIScopeKey = (scope: GenUIStateScope): string => `${scope.kind}:${scope.id}`;
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIStateEntry {
   value: JSONObject;
   /** Increments on every effective local write. Use it for compare-and-set. */
   revision: number;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUISetResult =
   | { ok: true; entry: GenUIStateEntry }
   | { ok: false; reason: 'conflict'; entry: GenUIStateEntry };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISetOptions {
   /** Only write when the scope is still at this revision (optimistic concurrency between writers). */
   expectedRevision?: number;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIStateUpdater = JSONObject | ((previous: JSONObject) => JSONObject);
 
 /**
@@ -34,6 +41,8 @@ export type GenUIStateUpdater = JSONObject | ((previous: JSONObject) => JSONObje
  * Writes never leave the browser on their own. Data reaches the agent only
  * when application code explicitly passes it in an action payload, a message,
  * or {@link GenUIContextStore.snapshot}.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface GenUIStateStore {
   get(scope: GenUIStateScope): GenUIStateEntry;
@@ -49,6 +58,7 @@ export interface GenUIStateStore {
 
 const EMPTY_ENTRY: GenUIStateEntry = Object.freeze({ value: Object.freeze({}) as JSONObject, revision: 0 });
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIStateStore(options: { limits?: Partial<GenUILimits> } = {}): GenUIStateStore {
   const limits = resolveGenUILimits(options.limits);
   const entries = new Map<string, GenUIStateEntry>();
@@ -104,8 +114,11 @@ export function createGenUIStateStore(options: { limits?: Partial<GenUILimits> }
 /**
  * A user edit of one key of agent-owned surface data. `base` is the agent's value when the user
  * edited it (absent when the agent had none), so a later agent change to the same key is detectable.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export type GenUIEdit = { value: JSONValue; base?: JSONValue };
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIEdits = Record<string, GenUIEdit>;
 
 function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): boolean {
@@ -120,7 +133,11 @@ function jsonEqual(a: JSONValue | undefined, b: JSONValue | undefined): boolean 
 
 const hasOwn = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key);
 
-/** Record a user edit on top of the agent's current data. Editing a key back to the agent's value drops the edit. */
+/**
+ * Record a user edit on top of the agent's current data. Editing a key back to the agent's value drops the edit.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function editGenUIData(edits: GenUIEdits, data: JSONObject, key: string, value: JSONValue): GenUIEdits {
   const agentValue = hasOwn(data, key) ? data[key] : undefined;
   const { [key]: previous, ...rest } = edits;
@@ -130,7 +147,11 @@ export function editGenUIData(edits: GenUIEdits, data: JSONObject, key: string, 
   return { ...rest, [key]: base === undefined ? { value } : { value, base } };
 }
 
-/** Keep the local value of `key` and accept the agent's current value as its new base, clearing the conflict. */
+/**
+ * Keep the local value of `key` and accept the agent's current value as its new base, clearing the conflict.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function rebaseGenUIEdit(edits: GenUIEdits, data: JSONObject, key: string): GenUIEdits {
   const edit = edits[key];
   if (!edit) return edits;
@@ -144,6 +165,8 @@ export function rebaseGenUIEdit(edits: GenUIEdits, data: JSONObject, key: string
 /**
  * Agent data with local edits on top. Local edits win; `conflicts` lists keys the agent changed after
  * the user edited them (unless the agent converged on the user's value), so the UI can surface them.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function mergeGenUIData(data: JSONObject, edits: GenUIEdits): { value: JSONObject; conflicts: string[] } {
   const value: JSONObject = { ...data };
@@ -157,6 +180,7 @@ export function mergeGenUIData(data: JSONObject, edits: GenUIEdits): { value: JS
   return { value, conflicts };
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIContextEntry {
   /** Short, model-readable description of what this value represents. */
   description?: string;
@@ -168,6 +192,8 @@ export interface GenUIContextEntry {
  *
  * Publishing only stores the value locally. It is transmitted when the
  * application sends the next message (see `useGenUIChat`), never on publish.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface GenUIContextStore {
   publish(key: string, entry: GenUIContextEntry): void;
@@ -177,6 +203,7 @@ export interface GenUIContextStore {
   subscribe(listener: () => void): () => void;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIContextStore(
   options: { maxSize?: number; limits?: Partial<GenUILimits> } = {},
 ): GenUIContextStore {
@@ -214,7 +241,11 @@ export function createGenUIContextStore(
   };
 }
 
-/** Format a context snapshot as a system-prompt block. Returns `undefined` when empty. */
+/**
+ * Format a context snapshot as a system-prompt block. Returns `undefined` when empty.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function formatGenUIContext(snapshot: Record<string, GenUIContextEntry>): string | undefined {
   const keys = Object.keys(snapshot);
   if (keys.length === 0) return undefined;

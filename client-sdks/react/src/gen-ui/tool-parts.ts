@@ -1,7 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { GenUIToolPhase } from './registry';
 
-/** Tool call fields shared by the `tool-invocation` and `dynamic-tool` / `tool-${name}` part shapes. */
+/**
+ * Tool call fields shared by the `tool-invocation` and `dynamic-tool` / `tool-${name}` part shapes.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface NormalizedToolCall {
   toolCallId: string;
   toolName: string;
@@ -27,6 +31,8 @@ const stringField = (source: object, key: string) => {
  * Read a tool part from a live or stored message. Parts are read field by field because hydrated
  * history and streaming runtimes carry fields (`argsText`, `errorText`, `dynamic-tool`) the static
  * part types do not declare.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function normalizeToolPart(part: { type: string }): NormalizedToolCall | undefined {
   if (part.type === 'tool-invocation') {

@@ -6,26 +6,44 @@
  * `data-*` message part, and be replayed deterministically on reload.
  */
 
-/** Current GenUI wire protocol version. Envelopes with a different version are rejected. */
+/**
+ * Current GenUI wire protocol version. Envelopes with a different version are rejected.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export const GENUI_PROTOCOL_VERSION = 1 as const;
 
-/** The `data-*` chunk/part type that carries GenUI envelopes on the Mastra stream. */
+/**
+ * The `data-*` chunk/part type that carries GenUI envelopes on the Mastra stream.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export const GENUI_DATA_PART_TYPE = 'data-gen-ui' as const;
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type JSONPrimitive = string | number | boolean | null;
+/** @experimental Generative UI is in beta and may change without notice. */
 export type JSONValue = JSONPrimitive | JSONValue[] | JSONObject;
+/** @experimental Generative UI is in beta and may change without notice. */
 export type JSONObject = { [key: string]: JSONValue };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUISurfaceStatus = 'streaming' | 'ready' | 'suspended' | 'failed' | 'aborted';
 
 /**
  * Where a surface is rendered. `inline` surfaces render inside the message that
  * created them; every other placement is rendered by an explicit outlet that the
  * application mounts (e.g. a side panel).
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export type GenUIPlacement = 'inline' | 'panel' | 'standalone' | 'overlay';
 
-/** Which agent/run/tool produced a surface. Informational only — never used for authorization. */
+/**
+ * Which agent/run/tool produced a surface. Informational only — never used for authorization.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUISurfaceSource {
   agentId?: string;
   runId?: string;
@@ -33,7 +51,11 @@ export interface GenUISurfaceSource {
   workflowId?: string;
 }
 
-/** A node as sent on the wire. */
+/**
+ * A node as sent on the wire.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUINodeInput {
   id: string;
   /** Registry key of the component that renders this node. */
@@ -43,7 +65,11 @@ export interface GenUINodeInput {
   children?: string[];
 }
 
-/** A node as held in normalized surface state. */
+/**
+ * A node as held in normalized surface state.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUINode {
   id: string;
   component: string;
@@ -53,6 +79,7 @@ export interface GenUINode {
   revision: number;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurface {
   id: string;
   protocolVersion: typeof GENUI_PROTOCOL_VERSION;
@@ -73,6 +100,7 @@ export interface GenUISurface {
   anchorEventId: string;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIOperation =
   | {
       op: 'createSurface';
@@ -100,11 +128,14 @@ export type GenUIOperation =
   | { op: 'setStatus'; status: GenUISurfaceStatus; error?: string }
   | { op: 'deleteSurface' };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIOperationName = GenUIOperation['op'];
 
 /**
  * The single versioned envelope carried as `data` of a `data-gen-ui` chunk.
  * Operations in one envelope are applied atomically: either all apply or none.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface GenUIEnvelope {
   version: typeof GENUI_PROTOCOL_VERSION;
@@ -120,6 +151,7 @@ export interface GenUIEnvelope {
   operations: GenUIOperation[];
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUILimits {
   maxSurfaces: number;
   maxNodesPerSurface: number;
@@ -139,6 +171,7 @@ export interface GenUILimits {
   maxDiagnostics: number;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export const DEFAULT_GENUI_LIMITS: Readonly<GenUILimits> = Object.freeze({
   maxSurfaces: 100,
   maxNodesPerSurface: 500,
@@ -153,6 +186,7 @@ export const DEFAULT_GENUI_LIMITS: Readonly<GenUILimits> = Object.freeze({
   maxDiagnostics: 50,
 });
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIDiagnosticCode =
   | 'invalid-envelope'
   | 'unsupported-version'
@@ -166,6 +200,7 @@ export type GenUIDiagnosticCode =
   | 'limit-exceeded'
   | 'invalid-graph';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIDiagnostic {
   code: GenUIDiagnosticCode;
   message: string;
@@ -173,7 +208,11 @@ export interface GenUIDiagnostic {
   surfaceId?: string;
 }
 
-/** Normalized, immutable GenUI state derived from a sequence of envelopes. */
+/**
+ * Normalized, immutable GenUI state derived from a sequence of envelopes.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIState {
   surfaces: Readonly<Record<string, GenUISurface>>;
   /** Surface ids in creation order. */

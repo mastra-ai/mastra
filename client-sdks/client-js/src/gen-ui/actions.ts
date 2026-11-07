@@ -4,7 +4,11 @@ import type { StandardSchemaV1, InferSchemaOutput } from './standard-schema';
 import type { GenUILimits, GenUISurface, JSONValue } from './types';
 import { toSafeJSONValue } from './validate';
 
-/** A user interaction raised by a rendered GenUI node. */
+/**
+ * A user interaction raised by a rendered GenUI node.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIAction {
   /** Idempotency key. Dispatching the same id twice never runs the handler twice. */
   actionId: string;
@@ -16,8 +20,10 @@ export interface GenUIAction {
   sourceRevision: number;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIActionInput = Omit<GenUIAction, 'actionId' | 'payload'> & { actionId?: string; payload?: unknown };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIActionResult =
   | { status: 'success'; value?: unknown }
   | { status: 'error'; error: string }
@@ -31,6 +37,7 @@ export type GenUIActionResult =
   | { status: 'busy'; error: string }
   | { status: 'cancelled' };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIActionContext {
   action: GenUIAction;
   /** Surface at dispatch time, if it still exists. */
@@ -39,6 +46,7 @@ export interface GenUIActionContext {
   signal: AbortSignal;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIActionHandler<S extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined> {
   /** Validates `payload` before the handler runs. */
   schema?: S;
@@ -52,13 +60,18 @@ export interface GenUIActionHandler<S extends StandardSchemaV1 | undefined = Sta
   ): unknown | Promise<unknown>;
 }
 
-/** Helper that preserves the payload type inferred from `schema`. */
+/**
+ * Helper that preserves the payload type inferred from `schema`.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function defineGenUIAction<S extends StandardSchemaV1 | undefined = undefined>(
   handler: GenUIActionHandler<S>,
 ): GenUIActionHandler<S> {
   return handler;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIActionDispatcherOptions {
   handlers?: Record<string, GenUIActionHandler<any>>;
   /** Used for stale-action detection. */
@@ -69,6 +82,7 @@ export interface GenUIActionDispatcherOptions {
   generateId?: () => string;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIActionDispatcher {
   dispatch(input: GenUIActionInput): Promise<GenUIActionResult>;
   register(name: string, handler: GenUIActionHandler<any>): () => void;
@@ -89,6 +103,7 @@ const defaultId = () =>
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIActionDispatcher(options: GenUIActionDispatcherOptions = {}): GenUIActionDispatcher {
   const limits = resolveGenUILimits(options.limits);
   const maxCompleted = options.maxCompletedResults ?? 200;
