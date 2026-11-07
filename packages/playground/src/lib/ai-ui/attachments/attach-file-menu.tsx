@@ -9,7 +9,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -42,13 +41,11 @@ export const AttachFileMenu = () => {
 
   return (
     <>
-      <ComposerAttachMenu onFiles={files => void addFiles(files)} size="icon-md">
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item onClick={() => setUrlOpen(true)}>
-          <Link />
-          From a URL…
-        </DropdownMenu.Item>
-      </ComposerAttachMenu>
+      <ComposerAttachMenu
+        onFiles={files => void addFiles(files)}
+        size="icon-md"
+        actions={[{ label: 'From a URL…', icon: <Link />, onSelect: () => setUrlOpen(true) }]}
+      />
       <Dialog open={urlOpen} onOpenChange={setUrlOpen}>
         <DialogContent
           size="sm"

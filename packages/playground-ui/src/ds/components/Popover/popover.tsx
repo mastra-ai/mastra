@@ -37,8 +37,6 @@ type PopoverContentProps = PopoverPopupProps &
   PopoverContentPositionerProps & {
     /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
-    /** Classes for the positioner, e.g. to pin the popup as a bottom sheet on small screens. */
-    positionerClassName?: string;
   };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
@@ -46,7 +44,6 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
     {
       className,
       container,
-      positionerClassName,
       align = 'center',
       alignOffset = 0,
       side = 'bottom',
@@ -84,7 +81,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
 
     return (
       <PopoverPrimitive.Portal container={resolvedContainer}>
-        <PopoverPrimitive.Positioner className={cn('z-50 outline-none', positionerClassName)} {...positionerProps}>
+        <PopoverPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <PopoverPrimitive.Popup
             ref={ref}
             data-slot="popover-content"

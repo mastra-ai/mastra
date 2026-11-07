@@ -1,35 +1,15 @@
-import { Check, ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ModelPickerPanel } from './model-picker-panel';
+import type { ModelPickerAddProvider, ModelPickerProvider, ModelPickerValue } from './model-picker-types';
 import { ProviderLogo } from './provider-logo';
 import { Button } from '@/ds/components/Button';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ds/components/Command';
+import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell';
+import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { mobileSheetPopupClass, mobileSheetPositionerClass } from '@/ds/primitives/mobile-sheet';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
-
-export interface ModelPickerModel {
-  /** Unique within its provider; reported back through `onValueChange` with the provider id. */
-  id: string;
-  name: string;
-  /** Extra search terms. */
-  keywords?: string[];
-  /** Shown after the name, e.g. a "Default" badge. */
-  badge?: ReactNode;
-}
-
-export interface ModelPickerProvider {
-  id: string;
-  name: string;
-  /** `false` marks the provider as missing credentials. */
-  connected?: boolean;
-  models: ModelPickerModel[];
-}
-
-export interface ModelPickerValue {
-  provider: string;
-  model: string;
-}
 
 export interface ModelPickerProps {
   /** Providers in display order, each with its models in display order. */
@@ -49,7 +29,7 @@ export interface ModelPickerProps {
   /** Below the list and settings. */
   footer?: ReactNode;
   /** A "+" at the end of the provider row, e.g. a link to connect another provider. */
-  addProvider?: { label: string; render: ReactElement };
+  addProvider?: ModelPickerAddProvider;
   /** Extra command groups after the models; call `close` after acting. */
   actions?: (close: () => void) => ReactNode;
   /** Open filtered to the selected model's provider instead of "All". Suits large catalogs. */
@@ -69,8 +49,8 @@ const defaultProviderIcon = (providerId: string) => <ProviderLogo providerId={pr
 
 /**
  * One trigger for provider and model: a ghost button with the provider's icon and the model's name. It
- * opens a searchable list filtered by provider, a popover beside the trigger on larger screens and a
- * bottom sheet on small ones. Searching looks across every provider.
+ * opens a searchable list filtered by provider: a popover beside the trigger, and the design system's
+ * bottom Drawer on phones so it swipes closed. Searching looks across every provider.
  */
 export function ModelPicker({
   providers,
@@ -94,152 +74,108 @@ export function ModelPicker({
   searchPlaceholder = 'Search models',
   emptyText = 'No matching model.',
 }: ModelPickerProps) {
+  const sheet = useIsMobile(DIALOG_DRAWER_BREAKPOINT_PX);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [providerFilter, setProviderFilter] = useState<string>();
 
   const selectedProvider = providers.find(provider => provider.id === value?.provider);
   const selectedModel = selectedProvider?.models.find(model => model.id === value?.model);
-  const filtering = providers.length > 1;
-  const shownProviders =
-    query || !providerFilter ? providers : providers.filter(provider => provider.id === providerFilter);
 
   const changeOpen = (next: boolean) => {
     setOpen(next);
     setQuery('');
     setProviderFilter(
-      next && openOnSelectedProvider && filtering && selectedProvider ? selectedProvider.id : undefined,
+      next && openOnSelectedProvider && providers.length > 1 && selectedProvider ? selectedProvider.id : undefined,
     );
   };
   const close = () => changeOpen(false);
+  const select = (next: ModelPickerValue) => {
+    close();
+    if (next.provider !== value?.provider || next.model !== value?.model) onValueChange(next);
+  };
+
+  const triggerProps = {
+    type: 'button' as const,
+    disabled: disabled || busy,
+    'aria-label': ariaLabel,
+    'aria-busy': busy,
+    title: title ?? (value ? `${value.provider}/${value.model}` : undefined),
+  };
+  const triggerClass = cn('max-w-full min-w-0 gap-1.5', triggerClassName);
+  const triggerContent = (
+    <>
+      {children ?? (
+        <>
+          <span className="sr-only">Model: </span>
+          {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
+          <span className="truncate max-sm:max-w-28">{selectedModel?.name ?? value?.model ?? 'Select model'}</span>
+        </>
+      )}
+      <ChevronDown aria-hidden className="shrink-0" size={12} />
+    </>
+  );
+  const panel = (
+    <ModelPickerPanel
+      providers={providers}
+      value={value}
+      onSelect={select}
+      query={query}
+      onQueryChange={setQuery}
+      providerFilter={providerFilter}
+      onProviderFilterChange={setProviderFilter}
+      renderProviderIcon={renderProviderIcon}
+      header={header}
+      settings={settings}
+      footer={footer}
+      addProvider={addProvider}
+      actions={actions?.(close)}
+      onAddProvider={close}
+      searchPlaceholder={searchPlaceholder}
+      emptyText={emptyText}
+      sheet={sheet}
+    />
+  );
+
+  if (sheet) {
+    return (
+      <Drawer open={open} onOpenChange={changeOpen}>
+        <DrawerTrigger
+          {...triggerProps}
+          render={
+            <Button variant="ghost" size="sm" className={triggerClass}>
+              {triggerContent}
+            </Button>
+          }
+        />
+        {/* Focusing search on open would raise the keyboard over the sheet; it stays one tap away. */}
+        <DrawerContent
+          showCloseButton={false}
+          initialFocus={false}
+          className="pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        >
+          <DrawerTitle className="sr-only">Choose a model</DrawerTitle>
+          {panel}
+          {/* Fills the drawer's 3rem swipe bleed below the screen edge, as Dialog does. */}
+          <div aria-hidden className="h-12 shrink-0" />
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={changeOpen}>
-      <PopoverTrigger
-        variant="ghost"
-        size="sm"
-        type="button"
-        className={cn('max-w-full min-w-0 gap-1.5', triggerClassName)}
-        disabled={disabled || busy}
-        aria-label={ariaLabel}
-        aria-busy={busy}
-        title={title ?? (value ? `${value.provider}/${value.model}` : undefined)}
-      >
-        {children ?? (
-          <>
-            <span className="sr-only">Model: </span>
-            {value?.provider ? <span className="flex shrink-0">{renderProviderIcon(value.provider)}</span> : null}
-            <span className="truncate max-sm:max-w-28">{selectedModel?.name ?? value?.model ?? 'Select model'}</span>
-          </>
-        )}
-        <ChevronDown aria-hidden className="shrink-0" size={12} />
+      <PopoverTrigger {...triggerProps} variant="ghost" size="sm" className={triggerClass}>
+        {triggerContent}
       </PopoverTrigger>
       <PopoverContent
         side={side}
         align={align}
-        positionerClassName={mobileSheetPositionerClass}
-        className={cn('w-80 p-0', mobileSheetPopupClass)}
-        // A touch open would raise the keyboard over the sheet; search stays one tap away.
+        className="w-80 p-0"
+        // A touch open (e.g. a tablet) would raise the keyboard over the list; search stays one tap away.
         initialFocus={openType => openType !== 'touch'}
       >
-        <div aria-hidden className="mx-auto mt-2 h-1 w-10 rounded-full bg-border sm:hidden" />
-        <Command loop shouldFilter>
-          {header}
-          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
-          {filtering || addProvider ? (
-            <div
-              role="group"
-              aria-label="Filter by provider"
-              className="flex [scrollbar-width:thin] items-center gap-1 overflow-x-auto border-b border-border px-2 py-1.5"
-            >
-              {filtering ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 aria-pressed:bg-fill aria-pressed:text-foreground max-sm:h-11 max-sm:px-4"
-                    aria-pressed={!providerFilter}
-                    onClick={() => setProviderFilter(undefined)}
-                  >
-                    All
-                  </Button>
-                  {providers.map(provider => (
-                    <Button
-                      key={provider.id}
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="relative shrink-0 aria-pressed:bg-fill max-sm:size-11"
-                      aria-pressed={providerFilter === provider.id}
-                      aria-label={provider.connected === false ? `${provider.name}, not connected` : provider.name}
-                      tooltip={provider.connected === false ? `${provider.name} (not connected)` : provider.name}
-                      onClick={() => setProviderFilter(current => (current === provider.id ? undefined : provider.id))}
-                    >
-                      {renderProviderIcon(provider.id)}
-                      {provider.connected === false ? (
-                        <span
-                          aria-hidden
-                          className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive-indicator"
-                        />
-                      ) : null}
-                    </Button>
-                  ))}
-                </>
-              ) : null}
-              {addProvider ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="ml-auto shrink-0 max-sm:size-11"
-                  aria-label={addProvider.label}
-                  tooltip={addProvider.label}
-                  render={addProvider.render}
-                  onClick={close}
-                >
-                  <Plus aria-hidden />
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          <CommandList className="max-h-80 max-sm:max-h-[50dvh]">
-            <CommandEmpty>{emptyText}</CommandEmpty>
-            {shownProviders.map(provider => (
-              <CommandGroup
-                key={provider.id}
-                heading={
-                  <span className="flex items-center gap-1.5 tracking-normal normal-case">
-                    {renderProviderIcon(provider.id)}
-                    {provider.name}
-                  </span>
-                }
-              >
-                {provider.models.map(model => {
-                  const selected = provider.id === value?.provider && model.id === value?.model;
-                  return (
-                    <CommandItem
-                      key={model.id}
-                      value={`${provider.id}/${model.id}`}
-                      keywords={[provider.name, model.name, ...(model.keywords ?? [])]}
-                      title={model.id}
-                      onSelect={() => {
-                        close();
-                        if (!selected) onValueChange({ provider: provider.id, model: model.id });
-                      }}
-                    >
-                      <span className="truncate">{model.name}</span>
-                      {model.badge}
-                      {selected ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            ))}
-            {actions?.(close)}
-          </CommandList>
-        </Command>
-        {settings ? <div className="border-t border-border p-3">{settings}</div> : null}
-        {footer}
+        {panel}
       </PopoverContent>
     </Popover>
   );

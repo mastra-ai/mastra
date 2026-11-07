@@ -3,7 +3,7 @@ import { ArrowUp, Mic } from 'lucide-react';
 import { useState } from 'react';
 
 import { ModelPicker } from '../../../domains/llm/model-picker';
-import type { ModelPickerProvider, ModelPickerValue } from '../../../domains/llm/model-picker';
+import type { ModelPickerProvider, ModelPickerValue } from '../../../domains/llm/model-picker-types';
 import { ProviderLogo } from '../../../domains/llm/provider-logo';
 import { Button } from '../Button';
 import { Spinner } from '../Spinner';
