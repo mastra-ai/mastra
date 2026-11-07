@@ -1,5 +1,5 @@
 import { DASHBOARD_MAX_WIDGETS, dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
-import type { DashboardWidget } from '@mastra/core/storage/dashboards';
+import type { DashboardColumn, DashboardWidget, DashboardWidgetView } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { METRICS_DASHBOARD } from '@mastra/playground-ui/domains/dashboards/metrics-dashboard';
 import { afterEach, expect, it } from 'vitest';
@@ -160,19 +160,30 @@ it('spans the full row when a widget leaves `span` out', () => {
   expect(widget!.span).toBe(12);
 });
 
-/** `widget` as the observability widget draws it: at project scope, with org-only views and columns left out. */
-function atProjectScope({ scope: _scope, ...widget }: DashboardWidget): DashboardWidget {
-  const inScope = (item: { scope?: string }) => item.scope !== 'org';
+/**
+ * `widget` as the observability widget draws it: at project scope, with org-only views and columns
+ * left out, and without drilldowns (the widget has no page to open). Columns looking a dimension up
+ * in another query are left out too: no model wrote one, so the draft has no way to.
+ */
+function asDrawn({ scope: _scope, drilldown: _d, ...widget }: DashboardWidget): DashboardWidget {
+  const kept = (item: DashboardColumn) =>
+    item.scope !== 'org' && !(item.options?.type === 'dimension' && item.options.query);
   return {
     ...widget,
-    views: widget.views.filter(inScope).map(({ scope: _s, columns, ...view }) => ({
-      ...view,
-      ...(columns ? { columns: columns.filter(inScope).map(({ scope: _c, ...column }) => column) } : {}),
-    })),
+    views: widget.views
+      .filter(view => view.scope !== 'org')
+      .map(({ scope: _s, drilldown: _vd, columns, options, ...view }) => {
+        const { rowDrilldown: _r, ...rest } = (options ?? {}) as { rowDrilldown?: unknown };
+        return {
+          ...view,
+          ...(options ? { options: rest } : {}),
+          ...(columns ? { columns: columns.filter(kept).map(({ scope: _c, ...column }) => column) } : {}),
+        } as DashboardWidgetView;
+      }),
   };
 }
 
-it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget.id, atProjectScope(widget)] as const))(
+it.each(METRICS_DASHBOARD.rows.flatMap(row => row.widgets).map(widget => [widget.id, asDrawn(widget)] as const))(
   "opens Studio's %s widget, written as a draft, to a widget making the same reads",
   (_, widget) => {
     const draft = draftOf(widget);
@@ -214,7 +225,7 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
       ...kpiDraft,
       kpis: { items: [{ label: 'Runs', icon: 'bot', format: 'count', detail: 'in range', value: runs }] },
     }),
-    'A value takes exactly one of `metricAggregate`, `scoreAggregate`, `sum`, not `metricTimeSeries`',
+    'A value takes exactly one of `metricAggregate`, `sum`, not `metricTimeSeries`',
   ],
   [
     'a kind no renderer draws',
@@ -226,7 +237,7 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
     'a value of two reads',
     dashboardOf({
       ...chartDraft,
-      timeseries: { ...chart, series: [{ ...chart.series[0], value: { ...runs, const: 1 } }] },
+      timeseries: { ...chart, series: [{ ...chart.series[0], value: { ...runs, sum: [runs] } }] },
     }),
     'A value takes exactly one of',
   ],
@@ -234,14 +245,14 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
   [
     'a value column nesting its number under a second `value`',
     dashboardOf(tableDraft([name, { value: { format: 'count', value: { traceAggregate: { measure: 'count' } } } }])),
-    'A value column takes exactly one of `traceAggregate`, `spanAggregate`, `metricBreakdown`, `scoreBreakdown`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `value`',
+    'A value column takes exactly one of `traceAggregate`, `spanAggregate`, `metricBreakdown`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `value`',
   ],
   [
     'a value column reading an ungrouped aggregate',
     dashboardOf(
       tableDraft([name, { value: { format: 'count', metricAggregate: { name: ['x'], aggregation: 'sum' } } }]),
     ),
-    'A value column takes exactly one of `traceAggregate`, `spanAggregate`, `metricBreakdown`, `scoreBreakdown`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `metricAggregate`',
+    'A value column takes exactly one of `traceAggregate`, `spanAggregate`, `metricBreakdown`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `metricAggregate`',
   ],
   [
     'a table sorted by two columns',

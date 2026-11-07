@@ -86,13 +86,6 @@ function viewDraftOf(kind: string, { queries: list, columns, options = {}, ...vi
           const { value, ...valueOptions } = body;
           body = { ...valueOptions, ...inline(value, queries, rest.groupBy) };
         }
-        if (type === 'dimension' && body.query) {
-          const { query, joinOn, ...dimension } = body;
-          body = {
-            ...dimension,
-            lookup: { joinOn, ...readOf(queries.get(query)!, {}, [joinOn, dimension.dimension]) },
-          };
-        }
         return {
           id,
           ...(label === undefined ? {} : { label }),

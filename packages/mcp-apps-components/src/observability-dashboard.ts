@@ -4,7 +4,6 @@ import {
   DASHBOARD_SCHEMA_VERSION,
   dashboardDefaultsSchema,
   dashboardDefinitionSchema,
-  dashboardDrilldownSchema,
   dashboardQuerySchema,
   dashboardWidgetSchema,
   dashboardWidgetViewSchema,
@@ -38,8 +37,7 @@ import type { ObservabilityDatePreset } from './apps/observability-widget/tool';
 /*
  * The model writes a dashboard in an authoring shape that `toObservabilityDashboard` turns into the
  * stored definition. The definition keeps a view's reads in a `queries` list that options point
- * into by id (values, a chart's `totals`, a total's `peak`, a table's `defaultSort`, a dimension's
- * lookup). The authoring shape has no such ids: each value holds the read it shows, and the
+ * into by id (values, a chart's `totals`, a total's `peak`, a table's `defaultSort`). The authoring shape has no such ids: each value holds the read it shows, and the
  * converter gathers identical reads into one query. What a value can read depends on where it
  * sits, so a read that can't work there (a breakdown in a chart, a time series in a table) can't
  * be written. Where the definition tells cases apart by a tag (`kind`, `source` + `request`, a
@@ -132,10 +130,6 @@ const READS = {
   metricBreakdown: { source: 'metrics', request: 'breakdown' },
   metricTimeSeries: { source: 'metrics', request: 'timeSeries' },
   metricPercentiles: { source: 'metrics', request: 'percentiles' },
-  scoreAggregate: { source: 'scores', request: 'aggregate' },
-  scoreBreakdown: { source: 'scores', request: 'breakdown' },
-  scoreTimeSeries: { source: 'scores', request: 'timeSeries' },
-  scorePercentiles: { source: 'scores', request: 'percentiles' },
 } as const satisfies Record<string, { source: DashboardQuery['source']; request?: string }>;
 type ReadKey = keyof typeof READS;
 
@@ -143,20 +137,12 @@ type ReadKey = keyof typeof READS;
 const CHART_READS = [
   'metricTimeSeries',
   'metricPercentiles',
-  'scoreTimeSeries',
-  'scorePercentiles',
   'traceAggregate',
   'spanAggregate',
 ] as const satisfies ReadKey[];
-const RANGE_READS = [...CHART_READS, 'metricAggregate', 'scoreAggregate'] as const satisfies ReadKey[];
-const TABLE_READS = [
-  'traceAggregate',
-  'spanAggregate',
-  'metricBreakdown',
-  'scoreBreakdown',
-] as const satisfies ReadKey[];
-const LOOKUP_READS = ['traceAggregate', 'spanAggregate'] as const satisfies ReadKey[];
-const KPI_READS = ['metricAggregate', 'scoreAggregate'] as const satisfies ReadKey[];
+const RANGE_READS = [...CHART_READS, 'metricAggregate'] as const satisfies ReadKey[];
+const TABLE_READS = ['traceAggregate', 'spanAggregate', 'metricBreakdown'] as const satisfies ReadKey[];
+const KPI_READS = ['metricAggregate'] as const satisfies ReadKey[];
 
 /** The fields of a read that pick a number out of its answer rather than change the request. */
 const PICKS = ['measure', 'percentile', 'field', 'groups', 'notGroups'] as const;
@@ -165,9 +151,8 @@ const isTraceRead = (key: ReadKey) => key === 'traceAggregate' || key === 'spanA
 
 /** Each read's arguments, with metric names limited to `metricNames` when given. */
 const readSchemas = (metricNames?: [string, ...string[]]) => {
-  const [traceAggregate, spanAggregate, metrics, scores] = dashboardQuerySchema.out.options;
+  const [traceAggregate, spanAggregate, metrics] = dashboardQuerySchema.out.options;
   const [metricAggregate, metricBreakdown, metricTimeSeries, metricPercentiles] = metrics.options;
-  const [scoreAggregate, scoreBreakdown, scoreTimeSeries, scorePercentiles] = scores.options;
   const metricName = (metricNames ? z.enum(metricNames) : z.string().min(1)).meta({
     id: 'MastraMetricName',
     description: METRIC_NAME_DESCRIPTION,
@@ -217,17 +202,6 @@ const readSchemas = (metricNames?: [string, ...string[]]) => {
     metricPercentiles: z.strictObject({
       ...fieldsOf(metricPercentiles, [...omit, 'percentiles']),
       name: metricName,
-      percentile: picks.percentile,
-    }),
-    scoreAggregate: z.strictObject(fieldsOf(scoreAggregate, omit)),
-    scoreBreakdown: z.strictObject({ ...fieldsOf(scoreBreakdown, omit), groupBy: grouped(scoreBreakdown) }),
-    scoreTimeSeries: z.strictObject({
-      ...fieldsOf(scoreTimeSeries, omit),
-      groups: picks.groups,
-      notGroups: picks.notGroups,
-    }),
-    scorePercentiles: z.strictObject({
-      ...fieldsOf(scorePercentiles, [...omit, 'percentiles']),
       percentile: picks.percentile,
     }),
   });
@@ -322,15 +296,15 @@ class Reads {
 
   /**
    * The ref reading `read` placed in `place`: `range` sends a trace or span aggregate over the whole
-   * range; `table` and `lookup` group it by `groupBy` unless it sets its own.
+   * range; `table` groups it by `groupBy` unless it sets its own.
    */
-  ref(read: ObservabilityRead, place: 'bucket' | 'range' | 'table' | 'lookup', groupBy?: string[]): ValueRef {
+  ref(read: ObservabilityRead, place: 'bucket' | 'range' | 'table', groupBy?: string[]): ValueRef {
     const [key] = keysIn(read, Object.keys(READS) as ReadKey[]) as [ReadKey];
     const { measure, percentile, field, groups, notGroups, ...args } = (
       read as unknown as Record<ReadKey, ValueRef & Record<string, unknown>>
     )[key];
     const trace = isTraceRead(key);
-    const fillsGroupBy = trace || key === 'metricBreakdown' || key === 'scoreBreakdown';
+    const fillsGroupBy = trace || key === 'metricBreakdown';
     if (groupBy && fillsGroupBy && args.groupBy === undefined) (args as { groupBy?: string[] }).groupBy = groupBy;
     const whole = trace && place === 'range';
     const identity = canonical([key, whole, args]);
@@ -348,7 +322,7 @@ class Reads {
       if (whole) this.wholeRange.push(query.id!);
     }
     const ref: ValueRef = { query: query.id! };
-    if (trace && place !== 'lookup') {
+    if (trace) {
       ref.measure = measure ?? 'count';
       if (!query.measures!.includes(ref.measure)) query.measures!.push(ref.measure);
     }
@@ -393,25 +367,16 @@ type Draft = Record<string, unknown>;
 type ViewBody = {
   label?: string;
   description?: string;
-  drilldown?: DashboardWidgetView['drilldown'];
   tabs?: unknown;
 } & Draft;
 
-const viewBase = ({ label, description, drilldown }: ViewBody) => ({
+const viewBase = ({ label, description }: ViewBody) => ({
   ...(label === undefined ? {} : { label }),
   ...(description === undefined ? {} : { description }),
-  ...(drilldown === undefined ? {} : { drilldown }),
 });
 
 const toKpisView = (draft: ObservabilityKpisDraft): DashboardWidgetView => {
-  const {
-    label: _l,
-    description: _d,
-    drilldown: _dd,
-    tabs: _t,
-    items,
-    ...options
-  } = draft as ViewBody & ObservabilityKpisDraft;
+  const { label: _l, description: _d, tabs: _t, items, ...options } = draft as ViewBody & ObservabilityKpisDraft;
   const reads = new Reads();
   const converted = items.map(({ value, ...item }) => ({ ...item, value: reads.expr(value, 'range') }));
   return { ...viewBase(draft), queries: reads.done(), options: { ...options, items: converted } };
@@ -421,7 +386,6 @@ const toTimeseriesView = (draft: ObservabilityTimeseriesDraft): DashboardWidgetV
   const {
     label: _l,
     description: _d,
-    drilldown: _dd,
     tabs: _t,
     series,
     total,
@@ -461,14 +425,7 @@ const columnIds = (columns: ObservabilityColumnDraft[]) => columns.map((column, 
 const columnType = (column: ObservabilityColumnDraft) => keysIn(column, COLUMN_TYPES)[0]!;
 
 const toTableView = (draft: ObservabilityTableDraft): DashboardWidgetView => {
-  const {
-    label: _l,
-    description: _d,
-    drilldown: _dd,
-    tabs: _t,
-    columns,
-    ...options
-  } = draft as ViewBody & ObservabilityTableDraft;
+  const { label: _l, description: _d, tabs: _t, columns, ...options } = draft as ViewBody & ObservabilityTableDraft;
   const reads = new Reads();
   const ids = columnIds(columns);
   const converted = columns.map((column, i): DashboardColumn => {
@@ -485,15 +442,6 @@ const toTableView = (draft: ObservabilityTableDraft): DashboardWidgetView => {
           'table',
           options.groupBy,
         ),
-      };
-    }
-    if (type === 'dimension' && body.lookup) {
-      const { lookup, ...dimension } = body as { lookup: ObservabilityLookupDraft; dimension: string };
-      const { joinOn, ...read } = lookup;
-      typed = {
-        ...dimension,
-        query: reads.ref(read as ObservabilityRead, 'lookup', [joinOn, dimension.dimension]).query,
-        joinOn,
       };
     }
     return {
@@ -518,7 +466,6 @@ const toScoresView = (draft: ObservabilityScoresDraft): DashboardWidgetView => {
   const {
     label: _l,
     description: _d,
-    drilldown: _dd,
     tabs: _t,
     scorerId,
     scoreSource,
@@ -590,19 +537,6 @@ const tableDraftIssues = (draft: ObservabilityTableDraft, context: z.core.$Refin
   return context.issues.length === before;
 };
 
-/** A KPI shows one figure, so a scores aggregate it reads names a scorer. */
-const kpisDraftIssues = (draft: ObservabilityKpisDraft, context: z.core.$RefinementCtx) => {
-  const before = context.issues.length;
-  const reads = (value: ObservabilityValue): ObservabilityRead[] =>
-    'sum' in value ? value.sum.flatMap(reads) : [value as ObservabilityRead];
-  draft.items.forEach((item, i) => {
-    if (reads(item.value).some(read => 'scoreAggregate' in read && read.scoreAggregate?.scorerId === undefined)) {
-      report(context, ['A KPI reading `scoreAggregate` names its `scorerId`'], ['items', i, 'value']);
-    }
-  });
-  return context.issues.length === before;
-};
-
 const FULL_WIDTH = 12;
 const SPAN_DESCRIPTION =
   'Columns of a 12-column row, one of 1, 2, 3, 4, 6 or 12: 12 is the full width, 6 half, 4 a third, 3 a quarter. Left out, the full width.';
@@ -631,15 +565,13 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
   );
 
   const { label, description } = dashboardWidgetViewSchema.shape;
-  // Named, so JSON Schema lists it once under `$defs` rather than once per widget kind.
-  const drilldown = dashboardDrilldownSchema.meta({ id: 'MastraDashboardDrilldown' }).optional();
   const viewOf = <T extends Draft>(
     kind: WidgetKind,
     shape: z.ZodRawShape,
     draftIssues: (draft: T, context: z.core.$RefinementCtx) => boolean,
     kindIssues: (view: DashboardWidgetView) => string[],
   ) =>
-    z.strictObject({ label, description, drilldown, ...shape }).superRefine((draft, context) => {
+    z.strictObject({ label, description, ...shape }).superRefine((draft, context) => {
       if (!draftIssues(draft as unknown as T, context)) return;
       const view = TO_VIEW[kind](draft as never);
       if (view.queries.length > DASHBOARD_MAX_QUERIES_PER_VIEW) {
@@ -666,7 +598,7 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
         .min(1)
         .describe('One figure each, compared with the window before when its reads set `compare`.'),
     },
-    kpisDraftIssues,
+    () => true,
     view => kpisIssues(view as never),
   );
 
@@ -708,16 +640,6 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
   const columnOptions = Object.fromEntries(
     tableColumnOptionsSchema.options.map(option => [option.shape.type.value, option as z.ZodObject]),
   ) as Record<ColumnType, z.ZodObject>;
-  const lookup = oneKeyOf<ObservabilityLookupDraft>(
-    LOOKUP_READS,
-    'A lookup',
-    z.strictObject({
-      joinOn: z.string().min(1).describe("The row's dimension the lookup's rows are matched on."),
-      ...Object.fromEntries(LOOKUP_READS.map(key => [key, reads[key].optional()])),
-    }),
-  ).describe(
-    "Shows `dimension` from another read's rows, grouped by `joinOn` and `dimension` unless it sets its own `groupBy`.",
-  );
   const column = oneKeyOf<ObservabilityColumnDraft>(
     COLUMN_TYPES,
     'A column',
@@ -729,9 +651,7 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
         .optional()
         .describe('Sorts the table by this column. Without one, it sorts by its emphasized value column, descending.'),
       name: z.strictObject(fieldsOf(columnOptions.name, ['type'])).optional(),
-      dimension: z
-        .strictObject({ ...fieldsOf(columnOptions.dimension, ['type', 'query', 'joinOn']), lookup: lookup.optional() })
-        .optional(),
+      dimension: z.strictObject(fieldsOf(columnOptions.dimension, ['type', 'query', 'joinOn'])).optional(),
       value: oneKeyOf<Draft>(
         tableCases.keys,
         'A value column',
@@ -755,12 +675,13 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
   ).describe(`Exactly one of ${keysList(COLUMN_TYPES)} names the column's type and holds its options.`);
   const table = viewOf<ObservabilityTableDraft>(
     'table',
-    { ...fieldsOf(tableOptionsSchema, ['defaultSort']), columns: z.array(column).min(1) },
+    { ...fieldsOf(tableOptionsSchema, ['defaultSort', 'rowDrilldown']), columns: z.array(column).min(1) },
     tableDraftIssues,
     view => tableIssues(view.columns as never, view.options as never, view.queries as never),
   );
 
-  const { scorerId, scoreSource } = reads.scoreAggregate.shape;
+  const [scoreAggregate, , scoreTimeSeries] = dashboardQuerySchema.out.options[3].options;
+  const { scorerId, scoreSource } = scoreAggregate.shape;
   const scores = viewOf<ObservabilityScoresDraft>(
     'scores',
     {
@@ -768,10 +689,10 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
       scorerId,
       scoreSource,
       average: z
-        .strictObject(fieldsOf(reads.scoreAggregate, ['scorerId', 'scoreSource']))
+        .strictObject(fieldsOf(scoreAggregate, ['source', 'request', 'id', 'interval', 'scorerId', 'scoreSource']))
         .describe("Each scorer's mean over the range."),
       series: z
-        .strictObject(fieldsOf(reads.scoreTimeSeries, ['scorerId', 'scoreSource', 'groups', 'notGroups']))
+        .strictObject(fieldsOf(scoreTimeSeries, ['source', 'request', 'id', 'interval', 'scorerId', 'scoreSource']))
         .describe("Each scorer's line over time."),
     },
     () => true,
@@ -788,7 +709,6 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
       span: (span as z.ZodType).optional().describe(SPAN_DESCRIPTION),
       title,
       description: widgetDescription,
-      drilldown,
       ...Object.fromEntries(
         WIDGET_KINDS.map(kind => [
           kind,
@@ -850,10 +770,6 @@ export type ObservabilityReads = {
   metricBreakdown: Args<MetricQuery<'breakdown'>, 'groupBy'> & { groupBy?: string[] } & Field;
   metricTimeSeries: Args<MetricQuery<'timeSeries'>> & Field & Groups;
   metricPercentiles: Args<MetricQuery<'percentiles'>, 'percentiles'> & { percentile: number };
-  scoreAggregate: Args<ScoreQuery<'aggregate'>>;
-  scoreBreakdown: Args<ScoreQuery<'breakdown'>, 'groupBy'> & { groupBy?: string[] };
-  scoreTimeSeries: Args<ScoreQuery<'timeSeries'>> & Groups;
-  scorePercentiles: Args<ScoreQuery<'percentiles'>, 'percentiles'> & { percentile: number };
 };
 
 /** One read, named by its key, e.g. `{ metricAggregate: { name: [...], aggregation: 'count' } }`. */
@@ -869,7 +785,7 @@ export type ObservabilityValue =
   | { max: ObservabilityValue[] }
   | { coalesce: ObservabilityValue[] };
 
-type ViewDraft = { label?: string; description?: string; drilldown?: DashboardWidgetView['drilldown'] } & Draft;
+type ViewDraft = { label?: string; description?: string } & Draft;
 
 export type ObservabilityKpisDraft = ViewDraft & { items: (Draft & { value: ObservabilityValue })[] };
 
@@ -879,18 +795,13 @@ export type ObservabilityTimeseriesDraft = ViewDraft & {
   emptyWhenZero?: ObservabilityValue;
 };
 
-/** A dimension column's lookup: one trace or span read, matched to the row on `joinOn`. */
-export type ObservabilityLookupDraft = { joinOn: string } & OneKeyOf<
-  Pick<ObservabilityReads, 'traceAggregate' | 'spanAggregate'>
->;
-
 /**
  * A table column, its type named by the key holding its options. A value column's options sit
  * beside its number, e.g. `{ value: { format: 'count', traceAggregate: { measure: 'count' } } }`.
  */
 export type ObservabilityColumnDraft = { id?: string; label?: string; sort?: 'asc' | 'desc' } & OneKeyOf<{
   name: Draft;
-  dimension: Draft & { dimension: string; lookup?: ObservabilityLookupDraft };
+  dimension: Draft & { dimension: string };
   value: Draft & ObservabilityValue & { unpricedWhen?: string };
   change: Draft;
 }>;
@@ -898,9 +809,9 @@ export type ObservabilityColumnDraft = { id?: string; label?: string; sort?: 'as
 export type ObservabilityTableDraft = ViewDraft & { groupBy: string[]; columns: ObservabilityColumnDraft[] };
 
 export type ObservabilityScoresDraft = ViewDraft &
-  Pick<ObservabilityReads['scoreAggregate'], 'scorerId' | 'scoreSource'> & {
-    average: Omit<ObservabilityReads['scoreAggregate'], 'scorerId' | 'scoreSource'>;
-    series: Omit<ObservabilityReads['scoreTimeSeries'], 'scorerId' | 'scoreSource' | 'groups' | 'notGroups'>;
+  Pick<ScoreQuery<'aggregate'>, 'scorerId' | 'scoreSource'> & {
+    average: Args<ScoreQuery<'aggregate'>, 'scorerId' | 'scoreSource'>;
+    series: Args<ScoreQuery<'timeSeries'>, 'scorerId' | 'scoreSource'>;
   };
 
 type WithTabs<V> = V & { tabs?: V[] };
@@ -910,7 +821,10 @@ type WithTabs<V> = V & { tabs?: V[] };
  * `{ span: 6, timeseries: { chart, format, series } }`. Left out, the server assigns the `id` and the
  * widget spans the full row.
  */
-export type ObservabilityWidgetDraft = Omit<DashboardWidget, 'id' | 'span' | 'kind' | 'views' | 'scope'> & {
+export type ObservabilityWidgetDraft = Omit<
+  DashboardWidget,
+  'id' | 'span' | 'kind' | 'views' | 'scope' | 'drilldown'
+> & {
   id?: string;
   span?: DashboardWidget['span'];
 } & OneKeyOf<{
