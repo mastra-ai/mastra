@@ -9,7 +9,11 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useIntakeLabelRoutesQuery, useSaveIntakeLabelRouteMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useAddIntakeLabelRouteMutation,
+  useIntakeLabelRoutesQuery,
+  useSaveIntakeLabelRouteMutation,
+} from '../../../../hooks/useIntakeConfig';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 const NO_BOARD = '__no_board__';
@@ -27,13 +31,17 @@ export function GithubLabelRouting({
 }) {
   const routesQuery = useIntakeLabelRoutesQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
-  const save = useSaveIntakeLabelRouteMutation();
+  const callbacks = {
+    onSaved: () => toast.success('GitHub routing updated', { id: 'github-routing-saved' }),
+    onFailed: (error: Error) => toast.error(error.message, { id: 'github-routing-failed' }),
+  };
+  const save = useSaveIntakeLabelRouteMutation(factoryProjectId, callbacks);
+  const add = useAddIntakeLabelRouteMutation(factoryProjectId, callbacks);
   const [draft, setDraft] = useState('');
   const [draftBoard, setDraftBoard] = useState<string | null>(null);
 
   const routes = (routesQuery.data ?? []).filter(route => route.integrationId === 'github');
   const boards = (catalog.data ?? []).filter(board => board.id !== 'work' && board.id !== 'review');
-  const busy = save.isPending;
 
   const scope = showScope ? `Applies to issues from ${repositories.join(', ')}` : undefined;
   const label = (
@@ -55,20 +63,7 @@ export function GithubLabelRouting({
     </Txt>
   );
 
-  const route = (label: string, board: string | null, onDone?: () => void) => {
-    save.mutate(
-      { factoryProjectId, integrationId: 'github', label, board },
-      {
-        onSuccess: () => {
-          toast.success('GitHub routing updated');
-          onDone?.();
-        },
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save GitHub routing'),
-      },
-    );
-  };
-
-  if (routesQuery.isError) {
+  if (routesQuery.isError && !routesQuery.data) {
     return (
       <SettingsRow
         label={label}
@@ -131,16 +126,15 @@ export function GithubLabelRouting({
                   current || catalog.isError ? (current?.title ?? existing.board) : `${existing.board} (not installed)`
                 }
                 boards={boards}
-                disabled={busy || !catalog.isSuccess}
-                onChange={next => route(existing.label, next)}
+                disabled={!catalog.isSuccess}
+                onChange={next => save.mutate({ integrationId: 'github', label: existing.label, board: next })}
               />
               <Button
                 size="sm"
                 variant="ghost"
                 icon={<Trash2 />}
                 aria-label={`Remove route for ${existing.label}`}
-                disabled={busy}
-                onClick={() => route(existing.label, null)}
+                onClick={() => save.mutate({ integrationId: 'github', label: existing.label, board: null })}
               >
                 Remove
               </Button>
@@ -158,7 +152,7 @@ export function GithubLabelRouting({
             aria-label={`Label for ${name}`}
             placeholder="label"
             value={draft}
-            disabled={busy}
+            disabled={add.isPending}
             onChange={event => setDraft(event.target.value)}
           />
           <BoardSelect
@@ -166,21 +160,26 @@ export function GithubLabelRouting({
             value={draftBoard}
             placeholder="Choose a board"
             boards={boards}
-            disabled={busy || !catalog.isSuccess}
+            disabled={add.isPending || !catalog.isSuccess}
             onChange={setDraftBoard}
           />
           <Button
             size="sm"
             icon={<Plus />}
-            disabled={busy || !trimmed || !draftBoard || duplicate}
+            disabled={add.isPending || !trimmed || !draftBoard || duplicate}
             onClick={() =>
-              route(trimmed, draftBoard, () => {
-                setDraft('');
-                setDraftBoard(null);
-              })
+              add.mutate(
+                { integrationId: 'github', label: trimmed, board: draftBoard },
+                {
+                  onSuccess: () => {
+                    setDraft('');
+                    setDraftBoard(null);
+                  },
+                },
+              )
             }
           >
-            Add
+            {add.isPending ? 'Adding…' : 'Add'}
           </Button>
         </div>
       </SettingsFieldsetRow>

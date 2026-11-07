@@ -897,6 +897,8 @@ Manages authentication for Mastra platform. Credentials are stored in `~/.mastra
 
 Opens a browser for login and stores the credentials locally.
 
+When browser sign-in is needed and there's no interactive terminal (in CI, when input or output is piped, or in an agent's shell), the command first prints how to authenticate headless shells, then still waits for browser sign-in. On the same machine, you can run `mastra auth login` once in your own terminal so later commands reuse the saved session. In CI or on another machine, set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` instead. Create the token from a signed-in terminal with [`mastra auth tokens create`](#mastra-auth-tokens-create) or in the dashboard. If the browser sign-in wait times out, the command exits with status 1. If `MASTRA_API_TOKEN` is already set in a non-interactive shell, the command skips browser sign-in: it verifies the token and checks that an organization is selected (from `MASTRA_ORG_ID` or saved credentials), then exits with status 0. If either check fails, it exits with status 1 and names what's missing.
+
 ### `mastra auth logout`
 
 Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
