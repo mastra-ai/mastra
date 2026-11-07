@@ -8,33 +8,33 @@ The tokens and components define what exists. These files define when to use wha
 
 Each kind of decision has one source. When a rule here disagrees with the code, the code wins: build from the code and report the rule that drifted.
 
-| Decision                                                    | Source                                                                               |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Token values: colors, text roles, surfaces, motion, spacing | `theme/*.css`, aliased in `theme.css`                                                |
-| Which components and variants exist                         | each component's `cva` block or variant map in `src/ds/`                             |
-| Which part to use for which job, and why                    | `design/rules/*.md`                                                                  |
-| How React code is written                                   | `design/rules/react.md`, and the full set in `.claude/skills/react-best-practices/`  |
-| Why a rule exists                                           | the rule's own why sentence, and the PR it links                                     |
-| What a machine enforces                                     | `oxlint/` (shipped as `@mastra/playground-ui/oxlint`) and `src/theme-export.test.ts` |
-| Who approves a change                                       | the frontend code owners for `packages/playground-ui/` in `.github/CODEOWNERS`       |
+| Decision                                                    | Source                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Token values: colors, text roles, surfaces, motion, spacing | `theme/*.css`, aliased in `theme.css`                                                 |
+| Which components and variants exist                         | each component's props type, imported from `@mastra/playground-ui/components/<Name>`  |
+| Which part to use for which job, and why                    | `design/rules/*.md`                                                                   |
+| How React code is written                                   | the `react-best-practices` skill (`.claude/skills/react-best-practices/` in `mastra`) |
+| Why a rule exists                                           | the rule's own why sentence, and the PR it links                                      |
+| What a machine enforces                                     | `@mastra/playground-ui/oxlint`, and the package's own tests in `mastra`               |
+| Who approves a change                                       | the frontend code owners for `packages/playground-ui/` in `.github/CODEOWNERS`        |
 
 Every other copy of this guidance points here. It does not restate it.
 
 ## What to read for the job
 
-Every UI change reads `rules/core.md` and `rules/react.md` first.
+Every UI change reads `rules/core.md` first, and follows the `react-best-practices` skill for its code.
 
-| Job                                                                     | Then read                                                                                                                       | Check with                                                                                              |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| A new page or route                                                     | the closest shipped page in the same product, `examples/README.md`, `rules/page-frame.md`, `rules/controls.md`, `rules/copy.md` | lint, then the page in a browser at desktop and mobile width, both themes, every state it can reach     |
-| A new or changed `src/ds/` component                                    | `build-component.md`, `rules/interface.md`                                                                                      | `pnpm --filter ./packages/playground-ui lint typecheck test`, its stories in both themes                |
-| Copy only                                                               | `rules/copy.md`                                                                                                                 | the copy lint rules and the mechanics table in `copy.md`                                                |
-| Color, a badge, or status                                               | `rules/color-and-status.md`, then `theme/status.css` for real role names                                                        | `node scripts/check-color-usage.mjs --report`, both themes                                              |
-| Text and type                                                           | `rules/text.md`, then `theme/typography.css`                                                                                    | the `text-role` and `txt-tone` lint rules                                                               |
-| Charts, or a page that is mostly charts (metrics, observability, usage) | `rules/charts.md`, `examples/pages/requests-dashboard.tsx`                                                                      | loading, updating, empty, and error each keep every card's size; the range and filters survive a reload |
-| A data table or list                                                    | "Tables and lists" in `rules/page-frame.md`, `examples/pages/usage-dashboard.tsx`                                               | keyboard path through rows; loading rows match the ready row count                                      |
-| Motion                                                                  | `src/ds/primitives/transitions.ts`, `theme/motion.css`, section 5 of `build-component.md`                                       | the same interaction with `prefers-reduced-motion: reduce`                                              |
-| A form                                                                  | "Forms" in `rules/controls.md`, `examples/pages/create-project.tsx`                                                             | submit empty, fix one field, submit again                                                               |
+| Job                                                                     | Then read                                                                                                                         | Check with                                                                                              |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| A new page or route                                                     | the closest shipped page in the same product, `examples/README.md`, `rules/page-frame.md`, `rules/controls.md`, `rules/copy.md`   | lint, then the page in a browser at desktop and mobile width, both themes, every state it can reach     |
+| A new or changed `src/ds/` component                                    | `build-component.md`, `rules/interface.md`                                                                                        | `pnpm --filter ./packages/playground-ui lint typecheck test`, its stories in both themes                |
+| Copy only                                                               | `rules/copy.md`                                                                                                                   | the copy lint rules and the mechanics table in `copy.md`                                                |
+| Color, a badge, or status                                               | `rules/color-and-status.md`, then `theme/status.css` for real role names                                                          | `node scripts/check-color-usage.mjs --report`, both themes                                              |
+| Text and type                                                           | `rules/text.md`, then `theme/typography.css`                                                                                      | the `text-role` and `txt-tone` lint rules                                                               |
+| Charts, or a page that is mostly charts (metrics, observability, usage) | `rules/charts.md`, `examples/pages/requests-dashboard.tsx`                                                                        | loading, updating, empty, and error each keep every card's size; the range and filters survive a reload |
+| A data table or list                                                    | "Tables and lists" in `rules/page-frame.md`, `examples/pages/usage-dashboard.tsx`                                                 | keyboard path through rows; loading rows match the ready row count                                      |
+| Motion                                                                  | `theme/motion.css`, the `transitions` presets (`@mastra/playground-ui/primitives/transitions`), section 5 of `build-component.md` | the same interaction with `prefers-reduced-motion: reduce`                                              |
+| A form                                                                  | "Forms" in `rules/controls.md`, `examples/pages/create-project.tsx`                                                               | submit empty, fix one field, submit again                                                               |
 
 ## When nothing here covers the case
 
@@ -85,7 +85,6 @@ To test the guidance itself, give a fresh agent only this repository and ask for
 ## Files
 
 - `rules/core.md`: no restyling, no arbitrary values, build from design-system parts
-- `rules/react.md`: how components, pages, and hooks are written
 - `rules/page-frame.md`: the app shell, page width and header, actions, page body, page states
 - `rules/controls.md`: text entry, choices, forms, buttons
 - `rules/color-and-status.md`: status, badges, the color tree, opacity
