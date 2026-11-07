@@ -66,7 +66,7 @@ function sessionContextCrumb(
   phases: readonly ContextPhase[] | undefined,
   sessionId: string,
   threadId: string,
-): string | undefined {
+): { label: string; cardPhase?: string } | undefined {
   const stage = item.stages[0];
   if (stage === undefined) return undefined;
   const entry = cardContextSessions(item, phases, stage).find(
@@ -77,8 +77,10 @@ function sessionContextCrumb(
   // A context no phase runs in (self-review's `review`, legacy `plan`) is not
   // one the card moves out of, so the card being elsewhere says nothing.
   const phaseRunsHere = phases?.some(phase => phaseContext(phase) === entry.context);
-  if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) return entry.label;
-  return `${entry.label} · card is now in ${currentPhase.name ?? currentPhase.title}`;
+  if (entry.current || !phaseRunsHere || !currentPhase || phaseContext(currentPhase) === undefined) {
+    return { label: entry.label };
+  }
+  return { label: entry.label, cardPhase: currentPhase.name ?? currentPhase.title };
 }
 
 /** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
@@ -121,7 +123,12 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
         </Crumb>
         {contextCrumb ? (
           <Crumb as="span" isCurrent>
-            {contextCrumb}
+            <span className="flex items-baseline gap-2">
+              <span>{contextCrumb.label}</span>
+              {contextCrumb.cardPhase ? (
+                <span className="text-muted-foreground">card is now in {contextCrumb.cardPhase}</span>
+              ) : null}
+            </span>
           </Crumb>
         ) : null}
       </>

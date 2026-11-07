@@ -110,5 +110,5 @@ export const workBoard: InstalledBoardInfo = {
 };
 
 export const workBoardCatalog: BoardCatalogResponse = {
-  boards: [workBoard, builtinBoardCatalog.boards[1]!],
+  boards: [workBoard, builtinBoardCatalog.boards[1]],
 };

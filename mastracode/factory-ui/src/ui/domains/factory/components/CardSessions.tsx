@@ -19,7 +19,6 @@ export function CardSessions({ factoryId, sessions }: { factoryId: string; sessi
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {sessions.map(session => {
           const live = running.has(session.ref.sessionId);
-          const caption = [session.current && 'current', live && 'running'].filter(Boolean).join(' · ');
           return (
             <li key={session.context}>
               <Link
@@ -33,9 +32,14 @@ export function CardSessions({ factoryId, sessions }: { factoryId: string; sessi
                 <Txt as="span" variant="meta" tone="ink" className="min-w-0 flex-1 truncate">
                   {session.label}
                 </Txt>
-                {caption && (
+                {session.current && (
                   <Txt as="span" variant="caption" tone="muted">
-                    {caption}
+                    current
+                  </Txt>
+                )}
+                {live && (
+                  <Txt as="span" variant="caption" tone="muted">
+                    running
                   </Txt>
                 )}
               </Link>
