@@ -395,6 +395,17 @@ describe('details + buttons', () => {
     expect(calls.map(x => x.method)).toEqual(['chat.postMessage', 'chat.update', 'chat.postEphemeral']);
   });
 
+  it('a click after released has fully settled still refuses', async () => {
+    const { cards, calls, control } = harness();
+    const c = ctx(chatThreadId);
+    await cards.onDataPart(part({ computerId: 'c1', status: 'attached' }), c);
+    await cards.onDataPart(part({ computerId: 'c1', status: 'released' }), c);
+    await new Promise(r => setTimeout(r, 0));
+    await cards.handleAction(click());
+    expect(control).not.toHaveBeenCalled();
+    expect(calls.at(-1)!.method).toBe('chat.postEphemeral');
+  });
+
   it('other action ids fall through', async () => {
     const { cards } = harness();
     expect(await cards.handleAction(click({ actionId: 'tool_approve:x' }))).toBe(false);
