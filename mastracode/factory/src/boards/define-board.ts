@@ -133,6 +133,11 @@ export interface BoardPhaseExitTool {
   readonly autoApprove?: boolean;
   /** With `autoApprove`, only cards this matches are approved without a person. */
   readonly autoApproveWhen?: RuleGroup;
+  /**
+   * Where Factory moves the card once the tool succeeds (for `submit_plan`: once the plan is
+   * approved). Must be one of the phase's `nextPhases`. Without it the agent moves the card.
+   */
+  readonly next?: string;
 }
 
 type BoardPhaseBase<PhaseId extends string> = {
@@ -144,6 +149,8 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly nextPhases?: readonly PhaseId[];
   /** @deprecated List the phase in `nextPhases`. */
   readonly next?: PhaseId;
+  /** Only people (and provider event routes) move cards into this phase; agents and rules cannot. */
+  readonly manualEntry?: boolean;
   /** Named moves rules can choose by outcome; each target is also an allowed next phase. */
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
@@ -185,6 +192,7 @@ type ResolvedPhaseBase<PhaseId extends string> = {
   readonly nextPhases: readonly PhaseId[];
   /** @deprecated Use `nextPhases`; set when the phase declared `next`. */
   readonly next?: PhaseId;
+  readonly manualEntry?: true;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
@@ -203,7 +211,7 @@ export type BoardPhase<PhaseId extends string> =
       readonly role: string;
       readonly autoStart?: boolean;
       readonly autoStartWhen?: RuleGroup;
-      readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup }>;
+      readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup; next?: PhaseId }>;
     })
   | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'terminal' });
 
@@ -286,7 +294,7 @@ const MAX_NAME_LENGTH = 128;
 const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_INSTRUCTIONS_LENGTH = 1_000;
 const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions']);
-const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen']);
+const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen', 'next']);
 const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool'] as const;
 const MOVE_TOOL = 'factory_transition_work_item';
 
@@ -360,12 +368,12 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
   });
 }
 
-function resolveExitTool(phaseId: string, value: unknown): ResolvedExitTool {
+function resolveExitTool(phaseId: string, value: unknown, nextPhases: readonly string[]): ResolvedExitTool {
   if (value === undefined) return undefined;
   const declared = typeof value === 'string' ? { id: value } : value;
   if (!isPlainObject(declared) || Object.keys(declared).some(key => !EXIT_TOOL_KEYS.has(key))) {
     throw new BoardDefinitionError(
-      `Phase "${phaseId}" exitTool must be a tool name or { id, autoApprove, autoApproveWhen }.`,
+      `Phase "${phaseId}" exitTool must be a tool name or { id, autoApprove, autoApproveWhen, next }.`,
     );
   }
   const { id, autoApprove = false } = declared;
@@ -384,7 +392,16 @@ function resolveExitTool(phaseId: string, value: unknown): ResolvedExitTool {
   if (autoApproveWhen && !autoApprove) {
     throw new BoardDefinitionError(`Phase "${phaseId}" exitTool.autoApproveWhen needs autoApprove.`);
   }
-  return Object.freeze({ id, autoApprove, ...(autoApproveWhen ? { autoApproveWhen } : {}) });
+  const next: unknown = declared.next;
+  if (next !== undefined && (typeof next !== 'string' || !nextPhases.includes(next))) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" exitTool.next must be one of the phase's nextPhases.`);
+  }
+  return Object.freeze({
+    id,
+    autoApprove,
+    ...(autoApproveWhen ? { autoApproveWhen } : {}),
+    ...(next !== undefined ? { next } : {}),
+  });
 }
 
 function validatePhaseSemantics(phaseId: string, phase: BoardPhaseDefinition<string>): void {
@@ -665,7 +682,15 @@ function buildBoard<
         if (autoStartWhen && working?.autoStart !== true) {
           throw new BoardDefinitionError(`${label} autoStartWhen needs autoStart.`);
         }
-        const exitTool = resolveExitTool(phaseId, working?.exitTool);
+        const exitTool = resolveExitTool(phaseId, working?.exitTool, nextPhases);
+        if (phase.manualEntry !== undefined && typeof phase.manualEntry !== 'boolean') {
+          throw new BoardDefinitionError(`${label} manualEntry must be a boolean.`);
+        }
+        if (phase.manualEntry && phaseId === config.initialPhase) {
+          throw new BoardDefinitionError(
+            `${label} is the initial phase; cards land there, so it cannot be people-only.`,
+          );
+        }
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
@@ -681,6 +706,7 @@ function buildBoard<
             kind: phase.kind,
             nextPhases,
             ...(phase.next !== undefined ? { next: phase.next } : {}),
+            ...(phase.manualEntry ? { manualEntry: true } : {}),
             ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
             ...(runner ? { runner, role: runner.context } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),

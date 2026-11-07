@@ -830,8 +830,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
                   autoApprove: z.boolean(),
                   /** Cards the exit tool is approved for; absent means every card. */
                   autoApproveWhen: cardRuleGroupSchema.optional(),
+                  /** Where Factory moves the card once the tool succeeds. */
+                  next: z.string().optional(),
                 })
                 .optional(),
+              /** Only people (and provider event routes) move cards into this phase. */
+              manualEntry: z.boolean().optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

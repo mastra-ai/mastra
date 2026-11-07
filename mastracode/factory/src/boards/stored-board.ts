@@ -19,6 +19,7 @@ const storedExitToolSchema = z
     id: z.string(),
     autoApprove: z.boolean().optional(),
     autoApproveWhen: cardRuleGroupSchema.optional(),
+    next: z.string().optional(),
   })
   .strict();
 
@@ -33,6 +34,7 @@ export const storedPhaseInputSchema = z
     autoStart: z.boolean().optional(),
     autoStartWhen: cardRuleGroupSchema.nullish(),
     exitTool: storedExitToolSchema.nullish(),
+    manualEntry: z.boolean().optional(),
   })
   .strict();
 
@@ -284,6 +286,7 @@ function storedBoardConfig(board: StoredBoardInput, behaviour?: BoardBehaviour):
       autoStart: phase.autoStart ? true : undefined,
       autoStartWhen: phase.autoStartWhen ?? undefined,
       exitTool,
+      manualEntry: phase.manualEntry ? true : undefined,
       outcomes: declared?.outcomes,
       onEnter: declared?.onEnter,
       onExit: declared?.onExit,
@@ -445,6 +448,7 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
     description: phase.description,
     kind: phase.kind,
     nextPhases: [...phase.nextPhases],
+    manualEntry: phase.manualEntry ? true : undefined,
     ...(phase.kind === 'working'
       ? {
           runner: withoutUndefined({
@@ -459,6 +463,7 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
                 id: phase.exitTool.id,
                 autoApprove: phase.exitTool.autoApprove,
                 autoApproveWhen: phase.exitTool.autoApproveWhen,
+                next: phase.exitTool.next,
               })
             : undefined,
         }

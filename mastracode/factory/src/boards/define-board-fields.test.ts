@@ -253,6 +253,49 @@ describe('defineBoard phase fields', () => {
     ).toThrow('Phase "one" exitTool.autoApproveWhen needs autoApprove.');
   });
 
+  it('names where an exit tool moves the card, only among the phase’s next phases', () => {
+    const board = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
+      planning: {
+        name: 'Planning',
+        kind: 'working',
+        exitTool: { id: 'submit_plan', next: 'building' },
+        nextPhases: ['building', 'backlog'],
+      },
+      building: { name: 'Building', kind: 'working', nextPhases: ['backlog'] },
+    });
+    expect(board.phases.planning!.exitTool).toEqual({ id: 'submit_plan', autoApprove: false, next: 'building' });
+
+    expect(() =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
+        planning: {
+          name: 'Planning',
+          kind: 'working',
+          exitTool: { id: 'submit_plan', next: 'done' },
+          nextPhases: ['backlog'],
+        },
+        done: { name: 'Done', kind: 'terminal' },
+      }),
+    ).toThrow('Phase "planning" exitTool.next must be one of the phase\'s nextPhases.');
+  });
+
+  it('lets any phase but the first be people-only', () => {
+    const board = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
+      planning: { name: 'Planning', kind: 'working', manualEntry: true, nextPhases: ['backlog'] },
+    });
+    expect(board.phases.planning).toMatchObject({ manualEntry: true });
+    expect(board.phases.backlog).not.toHaveProperty('manualEntry');
+
+    expect(() =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', manualEntry: true, nextPhases: ['planning'] },
+        planning: { name: 'Planning', kind: 'working', nextPhases: ['backlog'] },
+      }),
+    ).toThrow('cannot be people-only');
+  });
+
   it('starts the runner skill for sources without a handler and adds instructions to every run', async () => {
     const board = release({
       backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },

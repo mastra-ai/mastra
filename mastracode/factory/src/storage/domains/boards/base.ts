@@ -33,6 +33,8 @@ export interface StoredPhaseExitTool {
   id: string;
   autoApprove?: boolean;
   autoApproveWhen?: RuleGroup;
+  /** Where Factory moves the card once the tool succeeds; one of the phase's next phases. */
+  next?: string;
 }
 
 /** A phase as it is written. `key` is the stage id cards sit in. */
@@ -47,6 +49,8 @@ export interface StoredPhaseInput {
   autoStart?: boolean;
   autoStartWhen?: RuleGroup | null;
   exitTool?: StoredPhaseExitTool | null;
+  /** Only people (and provider event routes) move cards into the phase. */
+  manualEntry?: boolean;
 }
 
 /** A board as it is written. Phase order is significant: the first phase is where cards start. */
@@ -68,6 +72,7 @@ export interface StoredPhaseRecord {
   autoStart: boolean;
   autoStartWhen: RuleGroup | null;
   exitTool: StoredPhaseExitTool | null;
+  manualEntry: boolean;
 }
 
 export interface StoredBoardRecord {
@@ -286,6 +291,7 @@ interface PhaseRow extends Record<string, unknown> {
   auto_start: boolean;
   auto_start_when: RuleGroup | null;
   exit_tool: StoredPhaseExitTool | null;
+  manual_entry: boolean | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -346,6 +352,7 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
     autoStart: row.auto_start,
     autoStartWhen: row.auto_start_when,
     exitTool: row.exit_tool,
+    manualEntry: row.manual_entry === true,
   };
 }
 
@@ -827,6 +834,7 @@ async function insertPhases(ops: FactoryStorageOps, scope: StoredBoardScope, inp
       auto_start: phase.autoStart ?? false,
       auto_start_when: phase.autoStartWhen ?? null,
       exit_tool: phase.exitTool ?? null,
+      manual_entry: phase.manualEntry === true,
     });
   }
 }
