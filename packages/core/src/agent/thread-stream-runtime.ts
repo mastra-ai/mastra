@@ -618,6 +618,15 @@ type ClaimedQueuedMessage = {
 
 const CANCELLED_BEFORE_RUN = 'The accepted message was cancelled before it ran';
 
+/** An idle message forwarded to the run holding the thread lease, kept until that run admits it. */
+type ForwardedIdleSignal = {
+  pendingIdle: PendingIdleSignal<any>;
+  /** The run it was forwarded to, as the owner resolves the address (see `forwardedSignalRunId`). */
+  runId: string;
+  /** The last lease check found the lease no longer naming `runId`. */
+  leaseGone?: boolean;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -648,6 +657,15 @@ type AgentThreadRuntimeState = {
    */
   lostRunsByThread: Map<string, AgentThreadRunRecord<any>>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  /**
+   * Idle messages this runtime forwarded to another process's lease-owning run, keyed by thread key and then
+   * signal ID. A forward can reach the owner after its run has finished locally, and the owner then drops it, so
+   * each copy is kept until the owner presents the message as pending on that run (its admission) and is queued
+   * again here if the run ends first, or if the lease stops naming that run (see `forwardedIdleLeaseChecks`).
+   */
+  forwardedIdleSignalsByThread: Map<string, Map<string, ForwardedIdleSignal>>;
+  /** Per thread key, the timer that checks the lease while `forwardedIdleSignalsByThread` holds messages for it. */
+  forwardedIdleLeaseChecks: Map<string, ReturnType<typeof setInterval>>;
   /**
    * Runs the suspended-run TTL sweep evicted, mapped to when their lease was last
    * known to be extended. The sweep keeps their lease, so until it lapses an idle
@@ -923,6 +941,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     preRunSignalsByThread: new Map(),
     lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
+    forwardedIdleSignalsByThread: new Map(),
+    forwardedIdleLeaseChecks: new Map(),
     sweptLeasedRunIds: new Map(),
     pendingLeaseRenewals: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -1987,7 +2007,13 @@ export class AgentThreadStreamRuntime {
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
         this.#notifyPendingSignals(state, key, signal);
+      } else if (data?.type === 'user-message-presentation') {
+        const { chunk } = data;
+        if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
+          this.#settleForwardedIdleSignal(state, key, chunk.data.id, chunk.runId);
+        }
       } else if (data?.type === 'signals-cancelled') {
+        for (const id of data.signalIds) this.#settleForwardedIdleSignal(state, key, id);
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
         this.#cancelPendingSignals(state, key, new Set(data.signalIds), pubsub);
@@ -2044,10 +2070,33 @@ export class AgentThreadStreamRuntime {
         // A superseding run that parks and is then aborted, or whose
         // registration is rolled back, never publishes a completion.
         this.#releaseRunSupersededBy(state, resolvedPubSub, key, subscription, data.runId);
+        // A discarded run never starts, so it admits nothing. A stopped run still admits until its stream ends and
+        // then completes; one stopped while parked never completes, and the lease check covers it.
+        if (data.type === 'run-discarded' && this.#requeueUnadmittedForwards(state, key, data.runId)) {
+          await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
+        }
       } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
         this.#releaseRunSupersededBy(state, resolvedPubSub, key, subscription, data.runId);
         const lostStreamId = subscription.successorRunIds.get(data.runId);
-        if (lostStreamId === undefined || data.streamId === lostStreamId) return;
+        // The lost segment ended but the run goes on elsewhere: its forwards stay held so its admission settles them.
+        if (lostStreamId !== undefined && data.streamId === lostStreamId) return;
+        // A superseded end hands the run to another execution this runtime never registered, so it has no successor
+        // id for it. The lease check requeues the forwards if that execution never admits them; without a lease
+        // check (no lease provider) requeue now.
+        if (
+          lostStreamId === undefined &&
+          data.type === 'run-completed' &&
+          data.superseded &&
+          state.forwardedIdleLeaseChecks.has(key)
+        ) {
+          return;
+        }
+        const requeued = this.#requeueUnadmittedForwards(state, key, data.runId);
+        if (lostStreamId === undefined) {
+          // Like a remote completion drain, take the lease over from the ended run if it still holds it.
+          if (requeued) await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
+          return;
+        }
         subscription.successorRunIds.delete(data.runId);
         if (await this.#drainPendingContinuations(state, resolvedPubSub, key, data.runId)) return;
         await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
@@ -2055,19 +2104,23 @@ export class AgentThreadStreamRuntime {
     };
     const onEvent: EventCallback = (event, ack) => {
       const type = (event.data as AgentThreadStreamRuntimeEvent | undefined)?.type;
+      const awaitingForwards = state.forwardedIdleSignalsByThread.has(key);
       if (
         type !== 'signal-enqueued' &&
         type !== 'signals-cancelled' &&
         type !== 'run-abort-requested' &&
         type !== 'run-registered' &&
+        !(type === 'user-message-presentation' && awaitingForwards) &&
         !(
           (type === 'run-completed' || type === 'run-failed') &&
           // While a local run is active, its superseding runs are looked up in
           // handleEvent: their registration may still be queued behind `tail`.
-          (subscription.successorRunIds.has((event.data as { runId: string }).runId) ||
+          (awaitingForwards ||
+            subscription.successorRunIds.has((event.data as { runId: string }).runId) ||
             this.#localActiveRunId(state, key) !== undefined)
         ) &&
-        !((type === 'run-aborted' || type === 'run-discarded') && this.#localActiveRunId(state, key) !== undefined)
+        !((type === 'run-aborted' || type === 'run-discarded') && this.#localActiveRunId(state, key) !== undefined) &&
+        !(type === 'run-discarded' && awaitingForwards)
       )
         return ack?.();
       // Finish acknowledging the delivery before an empty queue can release its listener.
@@ -2112,6 +2165,7 @@ export class AgentThreadStreamRuntime {
       !subscription ||
       subscription.references > subscription.observers ||
       this.#hasPendingThreadWork(state, key) ||
+      state.forwardedIdleSignalsByThread.has(key) ||
       state.drainingPendingSignalsByThread.has(key) ||
       state.drainingIdleSignalsByThread.has(key) ||
       [...state.threadKeysByRunId.values()].includes(key) ||
@@ -2146,9 +2200,14 @@ export class AgentThreadStreamRuntime {
       !pending.cancelled &&
       (scope.queueOwnerId === undefined ||
         (pending.agent === scope.agent && pending.queueOwnerId === scope.queueOwnerId));
+    let forwarded = 0;
+    for (const entry of state.forwardedIdleSignalsByThread.get(key)?.values() ?? []) {
+      if (matches(entry.pendingIdle)) forwarded++;
+    }
     return (
       (state.pendingIdleSignalsByThread.get(key)?.filter(matches).length ?? 0) +
-      (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0)
+      (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0) +
+      forwarded
     );
   }
 
@@ -3195,6 +3254,79 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  /** Stop tracking a forwarded idle message: admitted (by `runId`, when given) or cancelled. */
+  #settleForwardedIdleSignal(state: AgentThreadRuntimeState, key: string, signalId: string, runId?: string) {
+    const forwarded = state.forwardedIdleSignalsByThread.get(key);
+    const entry = forwarded?.get(signalId);
+    if (!forwarded || !entry || (runId !== undefined && entry.runId !== runId)) return;
+    forwarded.delete(signalId);
+    if (forwarded.size === 0) this.#stopTrackingForwards(state, key);
+    this.#notifyThreadEvents(state);
+  }
+
+  #stopTrackingForwards(state: AgentThreadRuntimeState, key: string) {
+    state.forwardedIdleSignalsByThread.delete(key);
+    clearInterval(state.forwardedIdleLeaseChecks.get(key));
+    state.forwardedIdleLeaseChecks.delete(key);
+  }
+
+  /**
+   * Queues held forwards again once the lease stops naming the run they went to without this runtime seeing that
+   * run end: its process died, or it ended before the forward was recorded. The lease must be gone on two checks in
+   * a row, so an admission the owner published just before letting go still arrives first.
+   */
+  #watchForwardedIdleLease(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string) {
+    if (state.forwardedIdleLeaseChecks.has(key)) return;
+    const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
+    if (isFallback) return;
+    let checking = false;
+    const checkLease = async () => {
+      const forwarded = state.forwardedIdleSignalsByThread.get(key);
+      if (!forwarded) return;
+      // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
+      const owner = await this.#readLeaseOwnerInTime(provider, key);
+      const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
+      const ended = new Set<string>();
+      for (const entry of forwarded.values()) {
+        if (entry.runId === holder) entry.leaseGone = false;
+        else if (entry.leaseGone) ended.add(entry.runId);
+        else entry.leaseGone = true;
+      }
+      for (const runId of ended) {
+        if (this.#requeueUnadmittedForwards(state, key, runId)) {
+          await this.#drainPendingIdleSignals(state, pubsub, key, runId);
+        }
+      }
+    };
+    // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
+    const check = setInterval(() => {
+      if (checking) return;
+      checking = true;
+      void checkLease()
+        .catch(() => {})
+        .finally(() => {
+          checking = false;
+        });
+    }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+    check.unref?.();
+    state.forwardedIdleLeaseChecks.set(key, check);
+  }
+
+  /** Queue again the idle messages forwarded to `runId` that it ended without admitting. */
+  #requeueUnadmittedForwards(state: AgentThreadRuntimeState, key: string, runId: string): boolean {
+    const forwarded = state.forwardedIdleSignalsByThread.get(key);
+    if (!forwarded) return false;
+    const unadmitted = [...forwarded].filter(([, entry]) => entry.runId === runId);
+    if (unadmitted.length === 0) return false;
+    for (const [signalId] of unadmitted) forwarded.delete(signalId);
+    if (forwarded.size === 0) this.#stopTrackingForwards(state, key);
+    state.pendingIdleSignalsByThread.set(key, [
+      ...unadmitted.map(([, entry]) => entry.pendingIdle),
+      ...(state.pendingIdleSignalsByThread.get(key) ?? []),
+    ]);
+    return true;
+  }
+
   #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
     const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Map<string, string | undefined>();
     ids.delete(signalId);
@@ -4219,6 +4351,9 @@ export class AgentThreadStreamRuntime {
     state.preRunSignalsByThread.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
+    state.forwardedIdleSignalsByThread.clear();
+    for (const check of state.forwardedIdleLeaseChecks.values()) clearInterval(check);
+    state.forwardedIdleLeaseChecks.clear();
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
     state.leaseRetakes.clear();
@@ -5611,18 +5746,34 @@ export class AgentThreadStreamRuntime {
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
-      this.#notifyThreadEvents(state);
       if (isRetakeLeaseOwner(owns.owner)) {
         // Keep the accepted input for the next natural drain trigger, rather
         // than forwarding to a token that no run can consume.
         const queue = state.pendingIdleSignalsByThread.get(key) ?? [];
         state.pendingIdleSignalsByThread.set(key, [pendingIdle, ...queue]);
+        this.#notifyThreadEvents(state);
         return true;
       }
-      if (owns.owner) {
+      const ownerRunId = owns.owner ? threadLeaseRunId(owns.owner) : undefined;
+      // Only user messages have an admission the owner announces (their pending presentation), so only
+      // they can be held until admitted without risking a second delivery. Known limit: if the owner admits it
+      // but that presentation is lost before its run ends, the held copy is queued again and the message runs twice.
+      // A forward to a run this runtime registered and then lost to a takeover is kept by the lost-segment guard in
+      // the control subscription's terminal handler; that narrow window has no in-process test.
+      if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
+        const forwarded = state.forwardedIdleSignalsByThread.get(key) ?? new Map();
+        // The owner presents it under the run ID it resolves the address to, which drops a legacy retake marker.
+        forwarded.set(pendingIdle.signal.id, { pendingIdle, runId: forwardedSignalRunId(owns.owner) });
+        state.forwardedIdleSignalsByThread.set(key, forwarded);
+        this.#ensureThreadControlSubscription(state, pubsub, key);
+        this.#watchForwardedIdleLease(state, pubsub, key);
+      }
+      // Only now is a held forward tracked, so the count never dips while the message moves to it.
+      this.#notifyThreadEvents(state);
+      if (ownerRunId) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
-          runId: threadLeaseRunId(owns.owner),
+          runId: ownerRunId,
           signal: this.#serializeSignal(pendingIdle.signal),
           sourceId: this.#getSourceId(),
         }).catch(() => {});
@@ -6707,6 +6858,8 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-discarded') {
         discardStream(data.runId, data.streamId);
+        // The control-channel drain ran before discardStream released the run, so it found the thread busy.
+        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
@@ -7308,8 +7461,13 @@ export class AgentThreadStreamRuntime {
     }
     const matches = (pending: PendingIdleSignal<any>) =>
       pending.agent === agent && pending.queueOwnerId === target.queueOwnerId;
+    const forwardedIds = [...(state.forwardedIdleSignalsByThread.get(key) ?? [])]
+      .filter(([, entry]) => matches(entry.pendingIdle))
+      .map(([signalId]) => signalId);
     const cancelledSignalIds = this.#cancelIdleSignals(state, key, matches);
     this.#publishCancelledUserMessages(pubsub, key, cancelledSignalIds);
+    // The owner may hold a forwarded copy in its own queue.
+    if (forwardedIds.length) this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: forwardedIds });
     if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
     return { cancelledSignalIds };
   }
@@ -7337,6 +7495,14 @@ export class AgentThreadStreamRuntime {
       draining.cancelled = true;
       cancelledSignalIds.push(draining.signal.id);
       this.#markIdleMessageCancelled(state, key, draining);
+    }
+
+    for (const [signalId, entry] of state.forwardedIdleSignalsByThread.get(key) ?? []) {
+      if (!matches(entry.pendingIdle)) continue;
+      this.#settleForwardedIdleSignal(state, key, signalId);
+      entry.pendingIdle.cancelled = true;
+      cancelledSignalIds.push(signalId);
+      this.#markIdleMessageCancelled(state, key, entry.pendingIdle);
     }
     return cancelledSignalIds;
   }
