@@ -124,6 +124,9 @@ export const FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA: CollectionSchema = {
     // Keys of the boards Factory stored in the project (Work, app and seed boards); each is stored
     // once, so one the project deleted stays deleted. Null on projects stored before the list.
     seeded_boards: { type: 'json', nullable: true },
+    // Keys of the board migrations applied to the project, so each runs once: a field a user
+    // later sets back to an old default is never rewritten again. Null before the first one.
+    applied_migrations: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_board_definition_versions_project', columns: ['org_id', 'factory_project_id'] }],
 };
