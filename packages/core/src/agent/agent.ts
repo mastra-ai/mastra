@@ -5913,6 +5913,15 @@ export class Agent<
    *
    * This function removes those parts while preserving all other
    * conversation context (user messages, assistant text, etc.).
+   *
+   * Reasoning parts are removed from assistant messages too. The parent's
+   * reasoning is replayable only as part of the parent's own unmodified
+   * responses: once tool calls and tool messages are removed,
+   * `@ai-sdk/anthropic` merges the now-adjacent assistant steps into one
+   * message, and Anthropic rejects any signed thinking (`signature` /
+   * `redactedData`) in it as a modified thinking block (#29276). The forwarded
+   * context never ends in a tool-use continuation, so no provider requires
+   * thinking blocks in it.
    * @internal
    */
   private stripParentToolParts(messages: ModelMessage[]): ModelMessage[] {
@@ -5927,7 +5936,7 @@ export class Agent<
         }
 
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter(part => part.type !== 'tool-call');
+          const filtered = message.content.filter(part => part.type !== 'tool-call' && part.type !== 'reasoning');
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }
