@@ -161,8 +161,10 @@ describe('FactorySkillsSection', () => {
     expect(within(release).queryByText(/factory-/)).not.toBeInTheDocument();
 
     // Built-ins come first regardless of registry order.
-    const regions = screen.getAllByRole('region', { name: / board$/ }).map(region => region.getAttribute('aria-label'));
-    expect(regions).toEqual(['Work board', 'Review board', 'Release Preview board']);
+    const expected = ['Work board', 'Review board', 'Release Preview board'].map(name =>
+      screen.getByRole('region', { name }),
+    );
+    expect(screen.getAllByRole('region', { name: / board$/ })).toEqual(expected);
   });
 
   it('shows the app skill each custom phase runs, flags a missing one, and lists unused app skills', async () => {

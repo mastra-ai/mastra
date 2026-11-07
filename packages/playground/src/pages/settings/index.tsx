@@ -2,9 +2,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import {
   SettingsContainer,
-  SettingsDescription,
   SettingsGroup,
-  SettingsHeader,
   SettingsLayout,
   SettingsRow,
   SettingsTitle,
@@ -20,32 +18,19 @@ export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Settings</h1>
       <SettingsLayout>
-        <div className="mx-auto flex max-w-4xl flex-col gap-8">
-          <SettingsGroup>
-            <SettingsHeader>
-              <SettingsTitle>General</SettingsTitle>
-              <SettingsDescription>Stored in this browser.</SettingsDescription>
-            </SettingsHeader>
-            <SettingsContainer>
-              <SettingsRow label="Theme" description="Customize the appearance of the studio.">
-                <ThemeToggle />
-              </SettingsRow>
-            </SettingsContainer>
-          </SettingsGroup>
+        <SettingsGroup>
+          <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+          <SettingsContainer>
+            <SettingsRow label="Theme" description="Color scheme for the interface.">
+              <ThemeToggle />
+            </SettingsRow>
+          </SettingsContainer>
+        </SettingsGroup>
 
-          <SettingsGroup>
-            <SettingsHeader>
-              <SettingsTitle>Mastra Connection</SettingsTitle>
-              <SettingsDescription>
-                Configure the Mastra instance URL, API prefix, and request headers used by the studio.
-              </SettingsDescription>
-            </SettingsHeader>
-            <StudioConfigForm variant="factory" initialConfig={{ baseUrl, headers, apiPrefix }} />
-          </SettingsGroup>
-        </div>
+        <StudioConfigForm variant="factory" initialConfig={{ baseUrl, headers, apiPrefix }} />
       </SettingsLayout>
     </PageLayout>
   );

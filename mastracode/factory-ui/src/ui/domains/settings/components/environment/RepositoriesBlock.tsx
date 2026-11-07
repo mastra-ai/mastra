@@ -5,9 +5,10 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { InfoTooltip, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { SettingsItem, SettingsItemIcon, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, GripVertical, Trash2 } from 'lucide-react';
+import { ChevronDown, GripVertical, Trash2, Unlink } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import type {
@@ -15,8 +16,6 @@ import type {
   FactoryEnvironmentRepositoryPatch,
 } from '../../../workspaces/services/environment';
 import { SettingsIntegrationIcon } from '../brand-icons/SettingsIntegrationIcon';
-import { SettingsActionRow } from '../common/SettingsActionRow';
-import { settingsRowLayout } from '../common/settings-row-layout';
 import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
 
@@ -80,6 +79,7 @@ export function RepositoriesBlock({
                 <RepositoryRow
                   repository={repository}
                   position={index + 1}
+                  last={index === live.length - 1}
                   provider={providers[repository.projectRepositoryId] ?? 'github'}
                   disabled={disabled}
                   dragHandleProps={dragHandleProps}
@@ -129,11 +129,19 @@ function DeadRepositoryRow({
   removeError?: string;
 }) {
   return (
-    <div role="group" aria-label={UNAVAILABLE_LABEL}>
-      <div className={cn(settingsRowLayout, 'flex items-center')}>
-        <Txt as="span" variant="caption" tone="muted" className="min-w-0 flex-1 truncate pl-8">
-          {UNAVAILABLE_LABEL}
-        </Txt>
+    <div role="group" aria-label={UNAVAILABLE_LABEL} className="flex flex-col gap-2">
+      <SettingsItem
+        media={
+          <SettingsItemIcon>
+            <Unlink />
+          </SettingsItemIcon>
+        }
+        title={
+          <Txt as="span" variant="caption" tone="muted">
+            {UNAVAILABLE_LABEL}
+          </Txt>
+        }
+      >
         <Button
           variant="ghost"
           size="sm"
@@ -144,7 +152,7 @@ function DeadRepositoryRow({
         >
           {removing ? 'Removing…' : 'Remove'}
         </Button>
-      </div>
+      </SettingsItem>
       {removeError && <Notice variant="destructive">{removeError}</Notice>}
     </div>
   );
@@ -153,6 +161,7 @@ function DeadRepositoryRow({
 function RepositoryRow({
   repository,
   position,
+  last,
   provider,
   disabled,
   dragHandleProps,
@@ -164,6 +173,8 @@ function RepositoryRow({
 }: {
   repository: FactoryEnvironmentRepository;
   position: number;
+  /** The rows share one card cell (the drag list), so each takes the card's row spacing itself. */
+  last: boolean;
   provider: 'github' | 'gitlab';
   disabled: boolean;
   dragHandleProps: React.HTMLAttributes<HTMLElement> | null;
@@ -178,79 +189,88 @@ function RepositoryRow({
   const detailsId = useId();
 
   return (
-    <div role="group" aria-label={label} className={cn(position > 1 && 'border-border border-t')}>
-      <div className="relative">
-        <SettingsActionRow
-          aria-expanded={expanded}
-          aria-controls={detailsId}
-          aria-label={`${expanded ? 'Hide' : 'Show'} settings for ${label}`}
-          onClick={() => setExpanded(value => !value)}
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2 pr-28 pl-8">
-            <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-              <span className="flex min-w-0 items-center gap-2 sm:flex-1">
-                <SettingsIntegrationIcon provider={provider} />
-                <Txt
-                  as="span"
-                  variant="caption"
-                  tone={repository.inEnvironment ? undefined : 'muted'}
-                  className="min-w-0 flex-1 truncate"
-                  title={label}
-                >
-                  {label}
-                </Txt>
-              </span>
-              {!repository.inEnvironment && (
-                <Txt as="span" variant="caption" tone="muted">
-                  Skipped
-                </Txt>
-              )}
-              {repository.lastBuildStatus === 'failed' && (
-                <Badge size="sm" variant="destructive">
-                  Last build failed
-                </Badge>
-              )}
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(
+        'flex flex-col gap-2 py-3.25',
+        position === 1 && 'pt-0',
+        last && 'pb-0',
+        position > 1 && 'border-border border-t',
+      )}
+    >
+      <SettingsItem
+        media={
+          <>
+            {/* Native buttons block @hello-pangea/dnd drags. */}
+            <Tooltip disableHoverablePopup>
+              <TooltipTrigger
+                render={
+                  <span
+                    {...dragHandleProps}
+                    className={cn(
+                      buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
+                      'shrink-0',
+                      disabled && 'pointer-events-none',
+                    )}
+                    aria-label={`Drag ${label}`}
+                    aria-disabled={disabled}
+                    tabIndex={disabled ? -1 : dragHandleProps?.tabIndex}
+                  >
+                    <GripVertical className="size-4 shrink-0" aria-hidden />
+                  </span>
+                }
+              />
+              <TooltipContent>Clone order: {position}. Drag to reorder.</TooltipContent>
+            </Tooltip>
+            <SettingsItemIcon>
+              <SettingsIntegrationIcon provider={provider} />
+            </SettingsItemIcon>
+          </>
+        }
+        title={
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={detailsId}
+            aria-label={`${expanded ? 'Hide' : 'Show'} settings for ${label}`}
+            onClick={() => setExpanded(value => !value)}
+            className={cn(
+              'flex max-w-full items-center gap-1.5 rounded-sm text-left',
+              !repository.inEnvironment && 'text-muted-foreground',
+              focusRing,
+            )}
+          >
+            <span className="min-w-0 truncate" title={label}>
+              {label}
             </span>
             <ChevronDown aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
-          </span>
-        </SettingsActionRow>
-        {/* Native buttons block @hello-pangea/dnd drags. */}
-        <Tooltip disableHoverablePopup>
-          <TooltipTrigger
-            render={
-              <span
-                {...dragHandleProps}
-                className={cn(
-                  buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
-                  'absolute left-4 top-1/2 -translate-y-1/2',
-                  disabled && 'pointer-events-none',
-                )}
-                aria-label={`Drag ${label}`}
-                aria-disabled={disabled}
-                tabIndex={disabled ? -1 : dragHandleProps?.tabIndex}
-              >
-                <GripVertical className="size-4 shrink-0" aria-hidden />
-              </span>
-            }
-          />
-          <TooltipContent>Clone order: {position}. Drag to reorder.</TooltipContent>
-        </Tooltip>
-        <div className="absolute top-1/2 right-4 -translate-y-1/2">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<Trash2 />}
-            aria-label={`Remove ${label}`}
-            disabled={disabled}
-            onClick={onRemove}
-          >
-            {removing ? 'Removing…' : 'Remove'}
-          </Button>
-        </div>
-      </div>
+          </button>
+        }
+        description={repository.inEnvironment ? undefined : 'Skipped'}
+      >
+        {repository.lastBuildStatus === 'failed' && (
+          <Badge size="sm" variant="destructive">
+            Last build failed
+          </Badge>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<Trash2 />}
+          aria-label={`Remove ${label}`}
+          disabled={disabled}
+          onClick={onRemove}
+        >
+          {removing ? 'Removing…' : 'Remove'}
+        </Button>
+      </SettingsItem>
       {removeError && <Notice variant="destructive">{removeError}</Notice>}
       {expanded && (
-        <div id={detailsId}>
+        <div
+          id={detailsId}
+          className="border-border divide-border mt-1.25 flex flex-col divide-y border-t *:py-3.25 *:last:pb-0"
+        >
           <SettingsRow
             label={
               <span className="inline-flex items-center gap-1">
@@ -278,26 +298,22 @@ function RepositoryRow({
             </Notice>
           )}
           <SettingsRow label="Setup" description="Runs in this checkout after it is cloned, before the agent starts.">
-            <div className="w-full lg:max-w-96">
-              <CommittedInput
-                label={`Setup command for ${label}`}
-                value={repository.setupCommand ?? ''}
-                placeholder="e.g. pnpm i && pnpm build"
-                disabled={disabled}
-                onCommit={value => onCommands({ setupCommand: value || null })}
-              />
-            </div>
+            <CommittedInput
+              label={`Setup command for ${label}`}
+              value={repository.setupCommand ?? ''}
+              placeholder="e.g. pnpm i && pnpm build"
+              disabled={disabled}
+              onCommit={value => onCommands({ setupCommand: value || null })}
+            />
           </SettingsRow>
           <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
-            <div className="w-full lg:max-w-96">
-              <CommittedInput
-                label={`Teardown command for ${label}`}
-                value={repository.teardownCommand ?? ''}
-                placeholder="e.g. docker compose down"
-                disabled={disabled}
-                onCommit={value => onCommands({ teardownCommand: value || null })}
-              />
-            </div>
+            <CommittedInput
+              label={`Teardown command for ${label}`}
+              value={repository.teardownCommand ?? ''}
+              placeholder="e.g. docker compose down"
+              disabled={disabled}
+              onCommit={value => onCommands({ teardownCommand: value || null })}
+            />
           </SettingsRow>
         </div>
       )}

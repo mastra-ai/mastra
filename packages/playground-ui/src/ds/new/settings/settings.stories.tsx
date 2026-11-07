@@ -1,187 +1,145 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { GitBranchIcon, MonitorIcon } from 'lucide-react';
 import {
   SettingsContainer,
-  SettingsDescription,
+  SettingsEmptyRow,
   SettingsFieldsetRow,
   SettingsGroup,
-  SettingsHeader,
+  SettingsItem,
+  SettingsItemIcon,
   SettingsLayout,
+  SettingsListHeader,
   SettingsRow,
   SettingsTitle,
 } from './index';
+import { Avatar } from '@/ds/components/Avatar';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
 import { ThemeToggle } from '@/ds/components/ThemeToggle';
 
 const meta = {
   title: 'New/Settings',
-  component: SettingsGroup,
+  component: SettingsLayout,
   parameters: {
     layout: 'padded',
     docs: {
       description: {
         component:
-          'A settings page is `SettingsLayout` around `SettingsGroup`s, each a `SettingsHeader` over a `SettingsContainer` of `SettingsRow`s. The container divides its rows with hairlines on one surface, and that is the treatment to use for every settings page, form, and list of choices. `variant="inset"` is an exception, not a second style: see the Inset story before reaching for it.',
+          "Every settings page in Studio, Factory and Platform is built from these. `SettingsLayout` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.",
       },
     },
   },
   decorators: [
     Story => (
       <ThemeProvider defaultTheme="dark" storageKey="storybook-new-settings">
-        <div className="mx-auto max-w-4xl">
-          <Story />
-        </div>
+        <Story />
       </ThemeProvider>
     ),
   ],
-} satisfies Meta<typeof SettingsGroup>;
+} satisfies Meta<typeof SettingsLayout>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const General: Story = {
-  render: () => (
-    <SettingsGroup>
-      <SettingsHeader>
-        <SettingsTitle>General</SettingsTitle>
-        <SettingsDescription>Stored in this browser.</SettingsDescription>
-      </SettingsHeader>
-      <SettingsContainer>
-        <SettingsRow label="Theme" description="Color scheme for the interface">
-          <ThemeToggle />
-        </SettingsRow>
-        <SettingsRow label="Notifications" description="Notify when a run finishes">
-          <Switch aria-label="Notifications" defaultChecked />
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsGroup>
-  ),
-};
+function JoinPolicySelect() {
+  return (
+    <Select defaultValue="request">
+      <SelectTrigger aria-label="Email domain access">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        <SelectItem value="off">Invite only</SelectItem>
+        <SelectItem value="request">Require admin approval</SelectItem>
+        <SelectItem value="automatic">Join automatically</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
 
-export const Inset: Story = {
-  parameters: {
-    docs: {
-      description: {
-        story:
-          '`variant="inset"` nests each row as its own recessed strip inside the card, one pixel apart, with rounded outer corners. It is for a short stack of two to four rows that is the main content of a dialog, where the card frames a small decision such as adding credits. Do not use it on a settings page, in a drawer, beside a `DataList`, for a long list, or when the container shares a view with another card: the recessed rows read as nested surfaces and make the screen busier than the rest of the product. If a screen is not a dialog like that, use the default variant.',
-      },
-    },
-  },
-  render: () => (
-    <SettingsGroup>
-      <SettingsHeader>
-        <SettingsTitle>General</SettingsTitle>
-      </SettingsHeader>
-      <SettingsContainer variant="inset">
-        <SettingsRow label="Theme" description="Color scheme for the interface">
-          <ThemeToggle />
-        </SettingsRow>
-        <SettingsRow label="Notifications" description="Notify when a run finishes">
-          <Switch aria-label="Notifications" defaultChecked />
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsGroup>
-  ),
-};
-
-export const Connection: Story = {
-  render: () => (
-    <SettingsGroup>
-      <SettingsHeader action={<Button>Save configuration</Button>}>
-        <SettingsTitle>Connection</SettingsTitle>
-        <SettingsDescription>Configure the connection used by Studio.</SettingsDescription>
-      </SettingsHeader>
-      <SettingsContainer>
-        <SettingsRow label="Mastra instance URL">
-          <Input defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
-        </SettingsRow>
-        <SettingsRow label="API prefix">
-          <Input defaultValue="/api" className="w-full sm:max-w-96" />
-        </SettingsRow>
-        <SettingsFieldsetRow label="Header" description="Sent with every request.">
-          <div className="flex w-full gap-2 sm:max-w-96">
-            <Input aria-label="Header name" defaultValue="x-api-key" />
-            <Input aria-label="Header value" type="password" defaultValue="secret" />
-          </div>
-        </SettingsFieldsetRow>
-      </SettingsContainer>
-    </SettingsGroup>
-  ),
-};
-
-export const Permissions: Story = {
-  render: () => (
-    <SettingsGroup>
-      <SettingsHeader>
-        <SettingsTitle>Organization access</SettingsTitle>
-        <SettingsDescription>Review inherited permissions and organization actions.</SettingsDescription>
-      </SettingsHeader>
-      <SettingsContainer>
-        <SettingsRow label="Project access" description="Inherited from your organization role." viewOnly>
-          Viewer
-        </SettingsRow>
-        <SettingsRow
-          label="Leave organization"
-          description="Remove your access to this organization."
-          tone="destructive"
-        >
-          <Button variant="destructive-ghost">Leave</Button>
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsGroup>
-  ),
-};
-
-export const Validation: Story = {
-  render: () => (
-    <SettingsGroup>
-      <SettingsHeader>
-        <SettingsTitle>Agent</SettingsTitle>
-      </SettingsHeader>
-      <SettingsContainer>
-        <SettingsRow label="Model" required errorMsg="Choose the model this agent runs on.">
-          <Input className="w-56" placeholder="openai/gpt-5.2" />
-        </SettingsRow>
-        <SettingsRow label="Max steps" required>
-          <Input className="w-56" defaultValue="5" />
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsGroup>
-  ),
-};
-
+/** Settings rows, a list with a header, and an empty list, on one page. */
 export const Page: Story = {
-  parameters: { layout: 'fullscreen' },
-  render: () => (
-    <SettingsLayout
-      title="Preferences"
-      description="Manage your preferences and workspace defaults."
-      action={<Button size="sm">Save changes</Button>}
-    >
+  args: { title: 'General', children: null },
+  render: args => (
+    <SettingsLayout title={args.title}>
       <SettingsGroup>
-        <SettingsHeader>
-          <SettingsTitle>General</SettingsTitle>
-          <SettingsDescription>Stored in this browser.</SettingsDescription>
-        </SettingsHeader>
+        <SettingsTitle>Organization</SettingsTitle>
         <SettingsContainer>
-          <SettingsRow label="Theme" description="Color scheme for the interface">
+          <SettingsRow label="Organization name" description="Shown across Mastra and in invitations.">
+            <Input defaultValue="Mastra" />
+          </SettingsRow>
+          <SettingsRow
+            label="Email domain access"
+            description="What happens when someone with an @mastra.ai email signs up."
+          >
+            <JoinPolicySelect />
+          </SettingsRow>
+          <SettingsRow label="Theme" description="Color scheme for the interface.">
             <ThemeToggle />
           </SettingsRow>
-          <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
-            <Switch aria-label="Play completion sound" defaultChecked />
+          <SettingsRow label="Notifications" description="Notify when a run finishes.">
+            <Switch aria-label="Notifications" defaultChecked />
           </SettingsRow>
         </SettingsContainer>
       </SettingsGroup>
+
       <SettingsGroup>
-        <SettingsHeader>
-          <SettingsTitle>Connection</SettingsTitle>
-        </SettingsHeader>
+        <SettingsTitle>Accounts</SettingsTitle>
         <SettingsContainer>
-          <SettingsRow label="Mastra instance URL">
-            <Input defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
+          <SettingsListHeader action={<Button size="sm">Add account</Button>}>3 accounts</SettingsListHeader>
+          <SettingsItem
+            media={
+              <SettingsItemIcon>
+                <GitBranchIcon />
+              </SettingsItemIcon>
+            }
+            title="mastra-ai"
+            description="GitHub · Connected 3 weeks ago"
+          >
+            <Badge variant="green" size="sm">
+              Active
+            </Badge>
+          </SettingsItem>
+          <SettingsItem media={<Avatar name="Ana Lopez" size="md" />} title="Ana Lopez" description="ana@mastra.ai">
+            <Badge size="sm">Member</Badge>
+          </SettingsItem>
+          <SettingsItem
+            media={
+              <SettingsItemIcon>
+                <MonitorIcon />
+              </SettingsItemIcon>
+            }
+            title="Chrome on macOS"
+            description="Berlin · Signed in 2 weeks ago"
+          >
+            <Button size="sm" variant="ghost">
+              Revoke
+            </Button>
+          </SettingsItem>
+        </SettingsContainer>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsTitle>Join links</SettingsTitle>
+        <SettingsContainer>
+          <SettingsEmptyRow action={<Button size="sm">Create join link</Button>}>No join links</SettingsEmptyRow>
+        </SettingsContainer>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsTitle>Danger zone</SettingsTitle>
+        <SettingsContainer>
+          <SettingsRow
+            tone="destructive"
+            label="Delete this project"
+            description="You can restore it for up to 48 hours."
+          >
+            <Button size="sm" variant="destructive">
+              Delete project
+            </Button>
           </SettingsRow>
         </SettingsContainer>
       </SettingsGroup>
@@ -189,25 +147,32 @@ export const Page: Story = {
   ),
 };
 
-export const PageHeaderOnly: Story = {
-  parameters: { layout: 'fullscreen' },
+/** A view-only value, a row whose control takes the full width, and a fieldset of switches. */
+export const Controls: Story = {
+  args: { children: null },
   render: () => (
-    <SettingsLayout
-      title="Deployment"
-      titleAccessory={<Badge size="sm">Studio</Badge>}
-      description="Jan 1, 2025 07:00:00 · abcdef1"
-      variant="header"
-    >
-      <div className="mx-auto w-full max-w-5xl min-w-0 px-4 py-6">
-        <SettingsGroup>
-          <SettingsHeader>
-            <SettingsTitle>Build</SettingsTitle>
-          </SettingsHeader>
-          <SettingsContainer>
-            <SettingsRow label="Status">Ready</SettingsRow>
-          </SettingsContainer>
-        </SettingsGroup>
-      </div>
+    <SettingsLayout>
+      <SettingsGroup>
+        <SettingsTitle>Environment</SettingsTitle>
+        <SettingsContainer>
+          <SettingsRow label="Working directory" description="Where repositories are cloned." viewOnly>
+            /workspace
+          </SettingsRow>
+          <SettingsRow
+            label="Setup command"
+            description="Runs once every repository is cloned."
+            controlPlacement="below"
+          >
+            <Input placeholder="./scripts/bootstrap.sh" />
+          </SettingsRow>
+          <SettingsFieldsetRow label="Notify me" description="Where completion alerts go.">
+            <div className="flex items-center gap-3">
+              <Switch aria-label="Bell" defaultChecked />
+              <Switch aria-label="System" />
+            </div>
+          </SettingsFieldsetRow>
+        </SettingsContainer>
+      </SettingsGroup>
     </SettingsLayout>
   ),
 };

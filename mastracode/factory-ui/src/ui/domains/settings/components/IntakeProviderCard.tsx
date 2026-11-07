@@ -1,8 +1,7 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { ReactNode } from 'react';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { SettingsSectionHeader } from './common/SettingsSectionHeader';
 
 export interface IntakeSectionProps {
   config: IntakeConfig;
@@ -36,60 +35,36 @@ export function IntakeProviderCard({
   syncControl?: ReactNode;
   children?: ReactNode;
 }) {
-  const connectionAction = (
-    <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:w-auto">
-      {listed && syncControl}
-      {action}
-      {connection}
-    </div>
+  const connectionAction =
+    (listed && syncControl) || action || connection ? (
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+        {listed && syncControl}
+        {action}
+        {connection}
+      </div>
+    ) : undefined;
+  const summary = (
+    <SettingsItem
+      media={<SettingsItemIcon>{icon}</SettingsItemIcon>}
+      title={name}
+      description={
+        account || description ? (
+          // Metadata items wrap, so long status lines aren't cut off.
+          <Metadata>
+            {account && <Metadata.Item>{account}</Metadata.Item>}
+            {description && <Metadata.Item>{description}</Metadata.Item>}
+          </Metadata>
+        ) : undefined
+      }
+    >
+      {connectionAction}
+    </SettingsItem>
   );
-  if (!listed) {
-    return (
-      <SettingsRow
-        label={
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="size-4 shrink-0" aria-hidden>
-              {icon}
-            </span>
-            <span>{name}</span>
-            {account && (
-              <Txt as="span" variant="caption" tone="muted">
-                {account}
-              </Txt>
-            )}
-          </span>
-        }
-        description={description}
-      >
-        {connectionAction}
-      </SettingsRow>
-    );
-  }
+  if (!listed) return summary;
   return (
-    <section aria-label={name} className="flex min-w-0 flex-col gap-3">
-      <SettingsSectionHeader action={connectionAction}>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="size-4 shrink-0" aria-hidden>
-              {icon}
-            </span>
-            <Txt as="span" variant="label">
-              {name}
-            </Txt>
-          </span>
-          {account && (
-            <Txt variant="caption" tone="muted" className="wrap-anywhere">
-              {account}
-            </Txt>
-          )}
-          {description && (
-            <Txt variant="caption" tone="muted">
-              {description}
-            </Txt>
-          )}
-        </div>
-      </SettingsSectionHeader>
-      {children && <SettingsContainer>{children}</SettingsContainer>}
-    </section>
+    <SettingsContainer role="region" aria-label={name}>
+      {summary}
+      {children}
+    </SettingsContainer>
   );
 }

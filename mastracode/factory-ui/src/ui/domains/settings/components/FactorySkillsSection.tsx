@@ -13,9 +13,12 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsEmptyRow } from '@mastra/playground-ui/new/settings';
 import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
+
+const SKILLS_DESCRIPTION =
+  "The playbooks Factory agents follow when working your items: the built-in ones shipped with the server and your app's own skills. Expand a skill to read the exact instructions the agent receives. Organization admins can edit a skill for this Factory or revert it to the original.";
 
 /** Which Factory's copy of each skill the cards edit, and whether the viewer may. */
 const SkillEditingContext = createContext<{ factoryId?: string; canEdit: boolean }>({ canEdit: false });
@@ -48,7 +51,7 @@ function SkillContent({ content }: { content: string }) {
   return (
     <div className="group/content relative">
       <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
-        <ScrollAreaViewport className="px-4 pb-4">
+        <ScrollAreaViewport className="pt-3">
           {raw ? (
             <Code className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap" code={content} />
           ) : (
@@ -60,7 +63,7 @@ function SkillContent({ content }: { content: string }) {
         size="icon-sm"
         tooltip={raw ? 'Show formatted' : 'Show raw'}
         onClick={() => setRaw(shown => !shown)}
-        className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
+        className="absolute top-4 right-0 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
         {raw ? <FileText /> : <CodeIcon />}
       </Button>
@@ -74,10 +77,10 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
   const editable = factoryId !== undefined && canEdit;
 
   return (
-    <SettingsContainer>
+    <div>
       <Collapsible>
-        <div className="flex items-center gap-2 pr-4">
-          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 pl-4 text-left">
+        <div className="flex items-center gap-2">
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left">
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="flex items-center gap-2">
                 <Txt tone="ink" as="span" variant="body">
@@ -125,56 +128,51 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
           onClose={() => setEditing(false)}
         />
       )}
-    </SettingsContainer>
+    </div>
   );
 }
 
 function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills: FactorySkillInfo[] }) {
-  return (
-    <div className="flex flex-col gap-3">
-      {displayed.flatMap(({ name, title }) => {
-        const skill = skills.find(s => s.name === name);
-        return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
-      })}
-    </div>
-  );
+  const cards = displayed.flatMap(({ name, title }) => {
+    const skill = skills.find(s => s.name === name);
+    return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
+  });
+  // While skills load, or when none match, show no card rather than an empty one.
+  if (cards.length === 0) return null;
+  return <SettingsContainer>{cards}</SettingsContainer>;
 }
 
 /** A phase's skill while the skills catalog is loading or failed to load: we cannot tell whether it exists. */
 function UncheckedSkillCard({ title, name }: { title: string; name: string }) {
   return (
-    <SettingsContainer>
-      <div className="px-4 py-3">
+    <div>
+      <Txt tone="ink" as="span" variant="body">
+        {title}
+        <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
+          {name}
+        </Txt>
+      </Txt>
+    </div>
+  );
+}
+
+function MissingSkillCard({ title, name }: { title: string; name: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="flex items-center gap-2">
         <Txt tone="ink" as="span" variant="body">
           {title}
           <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
             {name}
           </Txt>
         </Txt>
-      </div>
-    </SettingsContainer>
-  );
-}
-
-function MissingSkillCard({ title, name }: { title: string; name: string }) {
-  return (
-    <SettingsContainer>
-      <div className="flex flex-col gap-0.5 px-4 py-3">
-        <span className="flex items-center gap-2">
-          <Txt tone="ink" as="span" variant="body">
-            {title}
-            <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
-              {name}
-            </Txt>
-          </Txt>
-          <Badge variant="destructive">Not found</Badge>
-        </span>
-        <Txt as="span" variant="caption" className="text-destructive-foreground">
-          This phase runs a skill the server does not have, so cards entering it fail to start. Add it with
-          MastraFactory(&#123; skills &#125;) or a factory-skills/{name}/SKILL.md file.
-        </Txt>
-      </div>
-    </SettingsContainer>
+        <Badge variant="destructive">Not found</Badge>
+      </span>
+      <Txt as="span" variant="caption" className="text-destructive-foreground">
+        This phase runs a skill the server does not have, so cards entering it fail to start. Add it with
+        MastraFactory(&#123; skills &#125;) or a factory-skills/{name}/SKILL.md file.
+      </Txt>
+    </div>
   );
 }
 
@@ -198,7 +196,7 @@ function CustomBoardPhases({
     ),
   ];
   return (
-    <div className="flex flex-col gap-3">
+    <>
       {withSkill.map(phase => {
         const title = phase.name ?? phase.title;
         const skill = skills.find(s => s.name === phase.skill);
@@ -207,33 +205,31 @@ function CustomBoardPhases({
         return <MissingSkillCard key={phase.id} title={title} name={phase.skill} />;
       })}
       {(withSkill.length === 0 || roles.length > 0) && (
-        <SettingsContainer>
-          <div className="flex flex-col gap-2 px-4 py-3">
-            {roles.length === 0 ? (
-              <Txt tone="muted" as="p" variant="caption">
-                This board declares no working roles.
-              </Txt>
-            ) : (
-              <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                {roles.map(role => (
-                  <li key={role}>
-                    <Txt font="mono" tone="muted" as="span" variant="caption">
-                      {role}
-                    </Txt>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {roles.length > 0 && (
-              <Txt tone="muted" as="p" variant="caption">
-                Phases in these roles run no skill; their kickoff instructions are defined in code by the board
-                definition.
-              </Txt>
-            )}
-          </div>
-        </SettingsContainer>
+        <div className="flex flex-col gap-2">
+          {roles.length === 0 ? (
+            <Txt tone="muted" as="p" variant="caption">
+              This board declares no working roles.
+            </Txt>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+              {roles.map(role => (
+                <li key={role}>
+                  <Txt font="mono" tone="muted" as="span" variant="caption">
+                    {role}
+                  </Txt>
+                </li>
+              ))}
+            </ul>
+          )}
+          {roles.length > 0 && (
+            <Txt tone="muted" as="p" variant="caption">
+              Phases in these roles run no skill; their kickoff instructions are defined in code by the board
+              definition.
+            </Txt>
+          )}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -247,16 +243,15 @@ function BoardGroup({
   skillsLoaded: boolean;
 }) {
   return (
-    <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
-      <Txt tone="ink" as="h4" variant="body" className="m-0">
-        {board.title}
-      </Txt>
+    <SettingsSubsection scope="factory" title={`${board.title} board`} description={SKILLS_DESCRIPTION}>
       {isBuiltInBoard(board.id) ? (
         <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />
       ) : (
-        <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />
+        <SettingsContainer>
+          <CustomBoardPhases board={board} skills={skills} skillsLoaded={skillsLoaded} />
+        </SettingsContainer>
       )}
-    </section>
+    </SettingsSubsection>
   );
 }
 
@@ -266,16 +261,17 @@ function OtherAppSkills({ skills, boards }: { skills: FactorySkillInfo[]; boards
   const other = skills.filter(skill => skill.builtIn === false && !used.has(skill.name));
   if (other.length === 0) return null;
   return (
-    <section aria-label="App skills" className="flex flex-col gap-2">
-      <Txt tone="ink" as="h4" variant="body" className="m-0">
-        App skills
-      </Txt>
-      <div className="flex flex-col gap-3">
+    <SettingsSubsection
+      scope="factory"
+      title="App skills"
+      description="Your app's skills that no board phase runs. Agents can still load them, and you can invoke them."
+    >
+      <SettingsContainer>
         {other.map(skill => (
           <SkillCard key={skill.name} title={skill.name} skill={skill} />
         ))}
-      </div>
-    </section>
+      </SettingsContainer>
+    </SettingsSubsection>
   );
 }
 
@@ -288,44 +284,46 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
 
   return (
     <SkillEditingContext.Provider value={{ factoryId, canEdit }}>
-      <SettingsSubsection
-        scope="factory"
-        title="Factory skills"
-        description="The playbooks Factory agents follow when working your items: the built-in ones shipped with the server and your app's own skills. Expand a skill to read the exact instructions the agent receives. Organization admins can edit a skill for this Factory or revert it to the original."
-      >
-        {skillsQuery.isPending && (
-          <Txt tone="muted" as="p" variant="caption" role="status">
-            Loading skills…
-          </Txt>
-        )}
-        {skillsQuery.error && (
-          <Txt as="p" variant="caption" className="text-destructive-foreground">
-            {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
-          </Txt>
-        )}
-        {catalog.error && (
-          <Txt as="p" variant="caption" className="text-destructive-foreground">
-            Installed boards could not be loaded; showing built-in skills ungrouped.
-          </Txt>
-        )}
-        {boards === undefined ? (
-          <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
-        ) : boards.length === 0 ? (
-          <div className="flex flex-col gap-5">
-            <Txt tone="muted" as="p" variant="caption">
-              No boards are installed, so no board skills apply.
+      {(skillsQuery.isPending || skillsQuery.error || catalog.error) && (
+        <div className="flex flex-col gap-1 ps-2.5">
+          {skillsQuery.isPending && (
+            <Txt tone="muted" as="p" variant="caption" role="status">
+              Loading skills…
             </Txt>
-            <OtherAppSkills skills={skills} boards={boards} />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-5">
-            {boards.map(board => (
-              <BoardGroup key={board.id} board={board} skills={skills} skillsLoaded={skillsQuery.isSuccess} />
-            ))}
-            <OtherAppSkills skills={skills} boards={boards} />
-          </div>
-        )}
-      </SettingsSubsection>
+          )}
+          {skillsQuery.error && (
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
+              {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
+            </Txt>
+          )}
+          {catalog.error && (
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
+              Installed boards could not be loaded; showing built-in skills ungrouped.
+            </Txt>
+          )}
+        </div>
+      )}
+      {boards === undefined ? (
+        <SettingsSubsection scope="factory" title="Factory skills" description={SKILLS_DESCRIPTION}>
+          <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
+        </SettingsSubsection>
+      ) : boards.length === 0 ? (
+        <>
+          <SettingsSubsection scope="factory" title="Factory skills" description={SKILLS_DESCRIPTION}>
+            <SettingsContainer>
+              <SettingsEmptyRow>No boards are installed, so no board skills apply.</SettingsEmptyRow>
+            </SettingsContainer>
+          </SettingsSubsection>
+          <OtherAppSkills skills={skills} boards={boards} />
+        </>
+      ) : (
+        <>
+          {boards.map(board => (
+            <BoardGroup key={board.id} board={board} skills={skills} skillsLoaded={skillsQuery.isSuccess} />
+          ))}
+          <OtherAppSkills skills={skills} boards={boards} />
+        </>
+      )}
     </SkillEditingContext.Provider>
   );
 }

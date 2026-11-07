@@ -527,7 +527,7 @@ function AddCreditsDialog() {
           <DialogTitle>Add credits</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <SettingsContainer variant="inset">
+          <SettingsContainer>
             <SettingsRow label="Credits to purchase" description="$1.20 went to vCPU beyond your allowance this month.">
               <InputGroup size="sm" className="w-30">
                 <InputGroupAddon>$</InputGroupAddon>

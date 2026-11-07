@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsEmptyRow,
+  SettingsItem,
+  SettingsListHeader,
+  SettingsNoticeRow,
   SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
@@ -67,28 +71,22 @@ describe('Settings', () => {
     });
   });
 
-  describe('SettingsContainer variants', () => {
-    it('defaults to the divided variant', () => {
+  describe('SettingsContainer', () => {
+    it('gives its rows their spacing, so rows carry none of their own', () => {
       render(
         <SettingsContainer>
-          <SettingsRow label="Theme" />
-        </SettingsContainer>,
-      );
-
-      expect(document.querySelector('[data-slot="settings-container"]')?.getAttribute('data-variant')).toBe('default');
-    });
-
-    it('renders every row inside the inset variant', () => {
-      render(
-        <SettingsContainer variant="inset">
           <SettingsRow label="Theme" />
           <SettingsRow label="Notifications" />
         </SettingsContainer>,
       );
 
       const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.getAttribute('data-variant')).toBe('inset');
+      expect(container?.className).toContain('*:py-3.25!');
+      expect(container?.className).toContain('*:empty:hidden');
       expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
+      for (const row of container?.querySelectorAll('[data-slot="settings-row"]') ?? []) {
+        expect(row.className).not.toMatch(/\bp[xy]?-/);
+      }
     });
   });
 
@@ -189,6 +187,120 @@ describe('Settings', () => {
       expect(screen.getByText('View only:')).toBeTruthy();
       expect(screen.getByText('Viewer')).toBeTruthy();
       expect(screen.queryByRole('textbox')).toBeNull();
+    });
+  });
+
+  describe('where a row places its control', () => {
+    function controlOf(label: string) {
+      return screen
+        .getByText(label)
+        .closest('[data-slot="settings-row"]')
+        ?.querySelector('[data-slot="settings-row-control"]');
+    }
+
+    it('puts it in the shared right-hand column by default', () => {
+      render(
+        <SettingsRow label="Name">
+          <Input aria-label="Name" />
+        </SettingsRow>,
+      );
+
+      expect(controlOf('Name')?.className).toContain('sm:min-w-55');
+      // Selects hug their value up to the text field width.
+      expect(controlOf('Name')?.className).toContain('[--field-width:auto]');
+      expect(controlOf('Name')?.className).toContain('[--field-max-width:13.75rem]');
+    });
+
+    it('puts it under the label at full width when placed below', () => {
+      render(
+        <>
+          <SettingsRow label="Name" controlPlacement="below">
+            <Input aria-label="Name" />
+          </SettingsRow>
+          <SettingsFieldsetRow label="Invite" controlPlacement="below">
+            <Input aria-label="Email" />
+          </SettingsFieldsetRow>
+        </>,
+      );
+
+      for (const label of ['Name', 'Invite']) {
+        expect(controlOf(label)?.className).not.toContain('sm:min-w-55');
+      }
+      expect(screen.getByRole('group', { name: 'Invite' }).className).not.toContain('sm:flex-row');
+    });
+  });
+
+  describe('when a title has info', () => {
+    it('describes the title with it', () => {
+      render(
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+          </SettingsHeader>
+        </SettingsGroup>,
+      );
+
+      screen.getByRole('heading', { name: 'General' });
+      expect(screen.getByText('General').closest('[aria-describedby]')).toBeTruthy();
+      expect(screen.getByText('Stored in this browser.')).toBeTruthy();
+    });
+  });
+
+  describe('when a list sits in a container', () => {
+    it('puts its count and action in a header row above its items', () => {
+      let added = 0;
+      render(
+        <SettingsContainer>
+          <SettingsListHeader
+            action={
+              <button type="button" onClick={() => (added += 1)}>
+                Add account
+              </button>
+            }
+          >
+            1 account
+          </SettingsListHeader>
+          <SettingsItem title="mastra-ai" description="GitHub" />
+        </SettingsContainer>,
+      );
+
+      const rows = document.querySelector('[data-slot="settings-container"]')?.children;
+      expect(rows?.[0]?.getAttribute('data-slot')).toBe('settings-list-header');
+      expect(rows?.[1]?.getAttribute('data-slot')).toBe('settings-item');
+      fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+      expect(added).toBe(1);
+      // A truncated string title can still be read in full on hover.
+      expect(screen.getByText('mastra-ai').getAttribute('title')).toBe('mastra-ai');
+    });
+
+    it('shows an empty list as one row with its empty text and action', () => {
+      render(
+        <SettingsContainer>
+          <SettingsEmptyRow action={<button type="button">Add header</button>}>No request headers</SettingsEmptyRow>
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.children).toHaveLength(1);
+      expect(container?.contains(screen.getByText('No request headers'))).toBe(true);
+      expect(container?.contains(screen.getByRole('button', { name: 'Add header' }))).toBe(true);
+    });
+  });
+
+  describe('when a list has notices and other controls', () => {
+    it('keeps them inside the container, and hides an empty notice row', () => {
+      render(
+        <SettingsContainer>
+          <SettingsListHeader action={<button type="button">Refresh</button>}>2 accounts</SettingsListHeader>
+          <SettingsNoticeRow>Couldn’t load accounts</SettingsNoticeRow>
+          <SettingsNoticeRow data-testid="empty-notices" />
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.contains(screen.getByText('Couldn’t load accounts'))).toBe(true);
+      expect(container?.contains(screen.getByRole('button', { name: 'Refresh' }))).toBe(true);
+      expect(screen.getByTestId('empty-notices').childNodes).toHaveLength(0);
     });
   });
 });

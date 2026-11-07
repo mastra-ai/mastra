@@ -222,7 +222,7 @@ function PhaseEditor({
 
   return (
     <SettingsContainer>
-      <section aria-label={`${phase.name} phase`} className="flex flex-col gap-4 px-4 py-3">
+      <section aria-label={`${phase.name} phase`} className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Txt tone="ink" as="h4" variant="body" className="m-0">
             {phase.name}

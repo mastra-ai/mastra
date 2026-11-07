@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { EnvironmentSection } from './EnvironmentSection';
@@ -26,7 +26,7 @@ export function FactoryManagementSection() {
   if (!factory) return <SkeletonRows label="Loading Factory settings" rows={2} />;
 
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <EnvironmentSection factoryId={factory.id} />
       <SettingsSubsection scope="factory" title="Danger zone">
         <SettingsContainer>
@@ -60,14 +60,14 @@ export function FactoryManagementSection() {
             </AlertDialog>
           </SettingsRow>
           {deleteMutation.isError && (
-            <div className="p-4">
+            <SettingsNoticeRow>
               <Notice variant="destructive">
                 {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
               </Notice>
-            </div>
+            </SettingsNoticeRow>
           )}
         </SettingsContainer>
       </SettingsSubsection>
-    </div>
+    </>
   );
 }

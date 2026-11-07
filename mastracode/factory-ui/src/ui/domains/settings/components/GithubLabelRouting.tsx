@@ -97,7 +97,7 @@ export function GithubLabelRouting({
   const duplicate = routes.some(existing => existing.label === trimmed.toLowerCase());
 
   return (
-    <div className="flex flex-col">
+    <>
       <SettingsRow
         label={label}
         description={
@@ -183,7 +183,7 @@ export function GithubLabelRouting({
           </Button>
         </div>
       </SettingsFieldsetRow>
-    </div>
+    </>
   );
 }
 
@@ -209,7 +209,7 @@ function BoardSelect({
       disabled={disabled}
       onValueChange={next => onChange(next === NO_BOARD ? null : next)}
     >
-      <SelectTrigger size="sm" aria-label={ariaLabel} className="w-auto">
+      <SelectTrigger size="sm" aria-label={ariaLabel}>
         <Txt as="span" variant="caption">
           {current?.title ?? placeholder}
         </Txt>
