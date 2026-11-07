@@ -5,12 +5,12 @@ import {
   useChatAnnotations,
 } from '@mastra/playground-ui/components/ai/annotations';
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Composer as ComposerRoot,
   ComposerActions,
   ComposerActionsEnd,
   ComposerActionsStart,
+  ComposerAttachMenu,
   ComposerBox,
   ComposerHeader,
   ComposerInput,
@@ -21,7 +21,6 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ImagePlus } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
@@ -105,7 +104,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const [heldDraftText, setHeldDraftText] = useState<string>();
   const startingDraft = heldDraftText !== undefined;
   const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
-  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
+  const { images, setImages, removeImage, onPaste, onDrop, addFiles } = useComposerImages({
     disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
   const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
@@ -325,28 +324,14 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
               variant={variant}
               aria-label="Message"
             />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={onFileInputChange}
-              className="hidden"
-              aria-label="Attach images"
-            />
             <ComposerActions>
               <ComposerActionsStart>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
+                <ComposerAttachMenu
+                  onFiles={addFiles}
+                  accept="image/*"
                   disabled={attachDisabled}
-                  onClick={() => fileInputRef.current?.click()}
-                  aria-label="Attach image"
-                  tooltip="Images only"
-                >
-                  <ImagePlus size={14} />
-                </Button>
+                  label="Attach images"
+                />
               </ComposerActionsStart>
               <ComposerActionsEnd role="group" aria-label="Composer actions">
                 <ModelPicker />

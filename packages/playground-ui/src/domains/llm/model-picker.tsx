@@ -5,6 +5,7 @@ import { ProviderLogo } from './provider-logo';
 import { Button } from '@/ds/components/Button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ds/components/Command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { mobileSheetPopupClass, mobileSheetPositionerClass } from '@/ds/primitives/mobile-sheet';
 import { cn } from '@/utils/cn';
 
 export interface ModelPickerModel {
@@ -58,13 +59,6 @@ export interface ModelPickerProps {
 }
 
 const defaultProviderIcon = (providerId: string) => <ProviderLogo providerId={providerId} size={14} />;
-
-// On small screens the popover pins to the bottom edge as a sheet; from `sm` up it stays anchored to the trigger.
-// Base UI positions the popup with inline styles, so the sheet overrides need `!`.
-const sheetPositionerClass =
-  'max-sm:fixed! max-sm:inset-x-0! max-sm:top-auto! max-sm:bottom-0! max-sm:left-0! max-sm:transform-none!';
-const sheetPopupClass =
-  'max-sm:w-full max-sm:rounded-b-none max-sm:pb-[env(safe-area-inset-bottom)] max-sm:data-[open]:zoom-in-100 max-sm:data-[open]:slide-in-from-bottom-8 max-sm:data-[closed]:zoom-out-100 max-sm:data-[closed]:slide-out-to-bottom-8';
 
 /**
  * One trigger for provider and model: a ghost button with the provider's icon and the model's name. It
@@ -134,8 +128,8 @@ export function ModelPicker({
       <PopoverContent
         side={side}
         align={align}
-        positionerClassName={sheetPositionerClass}
-        className={cn('w-80 p-0', sheetPopupClass)}
+        positionerClassName={mobileSheetPositionerClass}
+        className={cn('w-80 p-0', mobileSheetPopupClass)}
         // A touch open would raise the keyboard over the sheet; search stays one tap away.
         initialFocus={openType => openType !== 'touch'}
       >

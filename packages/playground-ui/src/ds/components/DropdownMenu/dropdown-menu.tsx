@@ -151,6 +151,8 @@ type DropdownMenuContentProps = MenuPopupProps &
   DropdownMenuContentPositionerProps & {
     container?: HTMLElement;
     size?: 'default' | 'sm';
+    /** Classes for the positioner, e.g. to pin the menu as a bottom sheet on small screens. */
+    positionerClassName?: string;
   };
 
 const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
@@ -171,6 +173,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       arrowPadding,
       disableAnchorTracking,
       collisionAvoidance,
+      positionerClassName,
       children,
       ...props
     },
@@ -196,7 +199,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
 
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
+        <MenuPrimitive.Positioner className={cn(menuPositionerClass, positionerClassName)} {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-content"

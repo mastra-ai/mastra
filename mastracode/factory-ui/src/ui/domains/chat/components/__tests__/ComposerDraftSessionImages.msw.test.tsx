@@ -11,6 +11,7 @@ import {
   PROJECT_REPOSITORY_ID,
   SESSION_ID,
   createdDraftSession,
+  pickImage,
   renderDraft,
   stubPreparingSession,
 } from './composer-session-test-fixture';
@@ -48,7 +49,7 @@ function deferred() {
 
 async function draftReadyForImages() {
   const message = await screen.findByRole('textbox', { name: 'Message' });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Attach images' })).toBeEnabled());
   return message;
 }
 
@@ -68,7 +69,7 @@ describe('Starting a user session with images attached', () => {
       renderDraft();
       await draftReadyForImages();
 
-      await user.upload(screen.getByLabelText('Attach images'), screenshot());
+      await pickImage(user, screenshot());
 
       expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
       expect(screen.queryByText('Images can be attached once the session is ready.')).not.toBeInTheDocument();
@@ -200,7 +201,7 @@ describe('Starting a user session with images attached', () => {
 
       expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
       expect(message).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Attach images' })).toBeDisabled();
       expect(createBodies).toEqual([]);
       expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
 

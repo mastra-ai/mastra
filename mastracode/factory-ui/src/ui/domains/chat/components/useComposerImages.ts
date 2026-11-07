@@ -1,5 +1,4 @@
-import { useRef } from 'react';
-import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
+import type { ClipboardEvent, DragEvent } from 'react';
 
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useComposerImagesState } from '../context/useComposerImagesState';
@@ -24,7 +23,6 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export function useComposerImages({ disabled }: { disabled: boolean }) {
   const { images, setImages } = useComposerImagesState();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addImageFiles = async (fileList: Iterable<File>) => {
     const imageFiles = Array.from(fileList).filter(
@@ -73,10 +71,9 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
     void addImageFiles(files);
   };
 
-  const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (!disabled) void addImageFiles(event.target.files ?? []);
-    event.target.value = '';
+  const addFiles = (files: File[]) => {
+    if (!disabled) void addImageFiles(files);
   };
 
-  return { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange };
+  return { images, setImages, removeImage, onPaste, onDrop, addFiles };
 }

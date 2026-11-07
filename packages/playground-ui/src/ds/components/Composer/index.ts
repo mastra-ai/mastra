@@ -18,6 +18,8 @@ export type {
   ComposerTone,
   ComposerToneLabelProps,
 } from './composer';
+export { ComposerAttachMenu } from './composer-attach-menu';
+export type { ComposerAttachMenuProps, ComposerAttachSource } from './composer-attach-menu';
 export { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
 export type {
   ComposerHeaderActionsProps,
