@@ -435,7 +435,7 @@ jobs:
           restore-keys: test-timings-v1-${{ runner.os }}-
 
       # Splits the affected unit tests into as many shards as their recorded durations call for
-      # (about 2.5 minutes each, at most 12) and balances them by duration. Each shard downloads
+      # (about 2.5 minutes each, at most 16) and balances them by duration. Each shard downloads
       # its own list from the artifact below.
       - name: Plan unit test shards
         id: plan

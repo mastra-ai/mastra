@@ -55,7 +55,7 @@ function shardWallMs(costs, workers) {
 function planShards({
   files,
   timings,
-  maxShards = 12,
+  maxShards = 16,
   targetShardMs = 150_000,
   workers = 4,
   groupOf = () => undefined,
