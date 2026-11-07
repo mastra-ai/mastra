@@ -680,7 +680,12 @@ export class PlatformComputers implements MastraComputers {
       const daemon = entry.daemon;
       if (!daemon?.connected) continue;
       entry.queue = entry.queue
-        .then(() => daemon.request('unsubscribeElement', { subscriptionId: w.subscriptionId }, UNSUBSCRIBE_MS, false))
+        .then(() =>
+          // A dropped connection already ended the watch; don't reconnect just to unsubscribe.
+          daemon.connected
+            ? daemon.request('unsubscribeElement', { subscriptionId: w.subscriptionId }, UNSUBSCRIBE_MS, false)
+            : undefined,
+        )
         .catch(() => {});
     }
   }

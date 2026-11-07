@@ -236,7 +236,7 @@ export class DaemonClient {
         this.#pending.delete(id);
         reject(new DaemonError(`the accessibility daemon did not answer ${method} in time`));
         if (dropOnTimeout) this.#drop(socket);
-        else if (this.#abandoned.size < 64) this.#abandoned.add(id);
+        else this.#abandoned.add(id); // per connection; cleared on drop
       }, timeoutMs);
       this.#pending.set(id, {
         resolve: r => (clearTimeout(timer), resolve(r)),

@@ -782,16 +782,28 @@ describe('computer_watch through a real agent', () => {
     daemon.handlers.subscribeElement = p => ({ subscription: { subscriptionId: `sub-${++n}`, id: p.id } });
     await call(computers, 'computer_watch', { id: 'el-1' }, actx());
     await call(computers, 'computer_watch', { id: 'el-2' }, actx('thread-2'));
-    let late!: () => void;
+    const late: (() => void)[] = [];
     daemon.onRequest = (msg, socket) => {
       if (msg.method !== 'unsubscribeElement') return false;
-      late = () => socket.onmessage?.({ data: `${JSON.stringify({ type: 'response', id: msg.id, result: {} })}\n` });
+      late.push(() =>
+        socket.onmessage?.({ data: `${JSON.stringify({ type: 'response', id: msg.id, result: {} })}\n` }),
+      );
       return true;
     };
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     await call(computers, 'computer_release', {}, actx('thread-2'));
-    await vi.advanceTimersByTimeAsync(31_000); // past any request timeout
-    late(); // the answer after the timeout is ignored, not a protocol violation
+    // Many more abandoned unsubscribes than any small cap, answered late.
+    const settle = async <V>(p: Promise<V>) => {
+      await vi.advanceTimersByTimeAsync(31_000); // past any request timeout
+      return p;
+    };
+    for (let i = 0; i < 70; i++) {
+      await call(computers, 'computer_attach', { id: created.computer.id }, actx('thread-2'));
+      await settle(call(computers, 'computer_watch', { id: `el-x${i}` }, actx('thread-2')));
+      await call(computers, 'computer_release', {}, actx('thread-2'));
+    }
+    await vi.advanceTimersByTimeAsync(31_000);
+    for (const answer of late) answer(); // answers after the timeout are ignored, not a protocol violation
     vi.useRealTimers();
     await sleep(5);
     expect(daemon.sockets[0]!.open).toBe(true);
