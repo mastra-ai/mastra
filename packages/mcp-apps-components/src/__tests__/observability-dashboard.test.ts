@@ -198,7 +198,7 @@ const tableDraft = (columns: unknown[]) =>
     table: { groupBy: ['entityName'], pageSize: 20, emptyMessage: 'No runs', columns },
   }) as never;
 const name = { name: {} };
-const count = { value: { value: { traceAggregate: { measure: 'count' } }, format: 'count' } };
+const count = { value: { traceAggregate: { measure: 'count' }, format: 'count' } };
 const dashboardOf = (...widgets: unknown[]) => ({ rows: [{ widgets }] }) as ObservabilityDashboardInput['dashboard'];
 
 it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
@@ -225,6 +225,18 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
     'A value takes exactly one of',
   ],
   ['a table with no value column', dashboardOf(tableDraft([name])), 'at least one `value` column'],
+  [
+    'a value column nesting its number under a second `value`',
+    dashboardOf(tableDraft([name, { value: { format: 'count', value: { traceAggregate: { measure: 'count' } } } }])),
+    'A value column takes exactly one of `traceAggregate`, `spanAggregate`, `metricBreakdown`, `scoreBreakdown`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `value`',
+  ],
+  [
+    'a value column reading an ungrouped aggregate',
+    dashboardOf(
+      tableDraft([name, { value: { format: 'count', metricAggregate: { name: ['x'], aggregation: 'sum' } } }]),
+    ),
+    'A value column takes exactly one of `traceAggregate`, `spanAggregate`, `metricBreakdown`, `scoreBreakdown`, `const`, `sum`, `minus`, `ratio`, `max`, `coalesce`, not `metricAggregate`',
+  ],
   [
     'a table sorted by two columns',
     dashboardOf(tableDraft([name, { sort: 'desc', ...count }, { sort: 'asc', ...count }])),

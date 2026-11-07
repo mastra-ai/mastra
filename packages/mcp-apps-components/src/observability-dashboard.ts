@@ -254,26 +254,26 @@ const guardPredicates = (source: 'traceAggregate' | 'spanAggregate', schema: z.Z
   }, schema) as unknown as z.ZodObject;
 
 const OPERATORS = ['const', 'sum', 'minus', 'ratio', 'max', 'coalesce'] as const;
+/** The keys of a value column that hold its number rather than its options. */
+const TABLE_VALUE_KEYS: readonly string[] = [...TABLE_READS, ...OPERATORS];
 
 /**
- * A value: exactly one key, either a read among `keys` holding its arguments, or an operator over
- * values. `sumOnly` leaves `sum` as the one operator.
+ * The keys a value takes, one of which it sets: each read among `reads` holding its arguments, and
+ * each operator over `self`, the value nested inside it. `sumOnly` leaves `sum` as the one operator.
  */
-const valueSchema = (
-  reads: ReadSchemas,
-  keys: readonly ReadKey[],
-  id: string,
-  description: string,
+const valueCases = (
+  schemas: ReadSchemas,
+  reads: readonly ReadKey[],
+  self: z.ZodType<ObservabilityValue>,
   sumOnly = false,
-): z.ZodType<ObservabilityValue> => {
+) => {
   const operators = sumOnly ? (['sum'] as const) : OPERATORS;
-  const self: z.ZodType<ObservabilityValue> = z.lazy(() => value);
   const parts = (description: string) => z.array(self).min(1).optional().describe(description);
-  const value: z.ZodType<ObservabilityValue> = oneKeyOf<ObservabilityValue>(
-    [...keys, ...operators],
-    'A value',
-    z.strictObject({
-      ...Object.fromEntries(keys.map(key => [key, reads[key].optional()])),
+  return {
+    keys: [...reads, ...operators],
+    summary: `a read (${keysList(reads)}) holding its arguments, or ${sumOnly ? '`sum`' : `an operator (${keysList(operators)})`} over values. Reads that differ only in ${keysList(PICKS)} share one request.`,
+    shape: {
+      ...Object.fromEntries(reads.map(key => [key, schemas[key].optional()])),
       sum: parts('The parts added up; a missing part counts as 0.'),
       ...(sumOnly
         ? {}
@@ -287,11 +287,29 @@ const valueSchema = (
             max: parts('The largest part that has a value.'),
             coalesce: parts('The first part that has a value.'),
           }),
-    }),
-  ).meta({
-    id,
-    description: `${description} Exactly one key: a read (${keysList(keys)}) holding its arguments, or ${sumOnly ? '`sum`' : `an operator (${keysList(operators)})`} over values. Reads that differ only in ${keysList(PICKS)} share one request.`,
-  });
+    },
+  };
+};
+
+/** A value: exactly one key, a read among `reads` or an operator over values. */
+const valueSchema = (
+  schemas: ReadSchemas,
+  reads: readonly ReadKey[],
+  id: string,
+  description: string,
+  sumOnly = false,
+): z.ZodType<ObservabilityValue> => {
+  const cases = valueCases(
+    schemas,
+    reads,
+    z.lazy(() => value),
+    sumOnly,
+  );
+  const value: z.ZodType<ObservabilityValue> = oneKeyOf<ObservabilityValue>(
+    cases.keys,
+    'A value',
+    z.strictObject(cases.shape),
+  ).meta({ id, description: `${description} Exactly one key: ${cases.summary}` });
   return value;
 };
 
@@ -457,8 +475,18 @@ const toTableView = (draft: ObservabilityTableDraft): DashboardWidgetView => {
     const type = columnType(column);
     const body = (column as Draft)[type] as Draft;
     let typed: Draft = body;
-    if (type === 'value')
-      typed = { ...body, value: reads.expr(body.value as ObservabilityValue, 'table', options.groupBy) };
+    if (type === 'value') {
+      const entries = Object.entries(body);
+      const isValueKey = ([key]: [string, unknown]) => TABLE_VALUE_KEYS.includes(key);
+      typed = {
+        ...Object.fromEntries(entries.filter(entry => !isValueKey(entry))),
+        value: reads.expr(
+          Object.fromEntries(entries.filter(isValueKey)) as ObservabilityValue,
+          'table',
+          options.groupBy,
+        ),
+      };
+    }
     if (type === 'dimension' && body.lookup) {
       const { lookup, ...dimension } = body as { lookup: ObservabilityLookupDraft; dimension: string };
       const { joinOn, ...read } = lookup;
@@ -590,6 +618,8 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
     'MastraTableValue',
     "A row's number: its reads are grouped by the table's `groupBy` unless they set their own.",
   );
+  // A value column's own key is its number; what's nested in an operator is a plain value.
+  const tableCases = valueCases(reads, TABLE_READS, tableValue);
   const kpiValue = valueSchema(
     reads,
     KPI_READS,
@@ -700,15 +730,21 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
       dimension: z
         .strictObject({ ...fieldsOf(columnOptions.dimension, ['type', 'query', 'joinOn']), lookup: lookup.optional() })
         .optional(),
-      value: z
-        .strictObject({
+      value: oneKeyOf<Draft>(
+        tableCases.keys,
+        'A value column',
+        z.strictObject({
           ...fieldsOf(columnOptions.value, ['type', 'value']),
-          value: tableValue,
           unpricedWhen: (columnOptions.value.shape.unpricedWhen as z.ZodType).describe(
             '`usd` only: the `id` of the column whose value above 0 makes a missing price read "Not priced".',
           ),
-        })
-        .optional(),
+          ...tableCases.shape,
+        }),
+      )
+        .optional()
+        .describe(
+          `The column's options beside the row's number, written as one key: ${tableCases.summary} Its reads are grouped by the table's \`groupBy\` unless they set their own.`,
+        ),
       change: z
         .strictObject(fieldsOf(columnOptions.change, ['type']))
         .optional()
@@ -846,11 +882,14 @@ export type ObservabilityLookupDraft = { joinOn: string } & OneKeyOf<
   Pick<ObservabilityReads, 'traceAggregate' | 'spanAggregate'>
 >;
 
-/** A table column, its type named by the key holding its options, e.g. `{ value: { value, format } }`. */
+/**
+ * A table column, its type named by the key holding its options. A value column's options sit
+ * beside its number, e.g. `{ value: { format: 'count', traceAggregate: { measure: 'count' } } }`.
+ */
 export type ObservabilityColumnDraft = { id?: string; label?: string; sort?: 'asc' | 'desc' } & OneKeyOf<{
   name: Draft;
   dimension: Draft & { dimension: string; lookup?: ObservabilityLookupDraft };
-  value: Draft & { value: ObservabilityValue; unpricedWhen?: string };
+  value: Draft & ObservabilityValue & { unpricedWhen?: string };
   change: Draft;
 }>;
 

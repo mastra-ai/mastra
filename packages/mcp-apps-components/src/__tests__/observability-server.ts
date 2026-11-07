@@ -82,7 +82,10 @@ function viewDraftOf(kind: string, { queries: list, columns, options = {}, ...vi
       ...view,
       ...rest,
       columns: columns.map(({ id, label, options: { type, ...body } }: Loose) => {
-        if (type === 'value') body.value = inline(body.value, queries, rest.groupBy);
+        if (type === 'value') {
+          const { value, ...valueOptions } = body;
+          body = { ...valueOptions, ...inline(value, queries, rest.groupBy) };
+        }
         if (type === 'dimension' && body.query) {
           const { query, joinOn, ...dimension } = body;
           body = {
