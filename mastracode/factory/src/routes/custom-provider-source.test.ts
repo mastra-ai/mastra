@@ -1,7 +1,7 @@
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
@@ -117,6 +117,32 @@ describe('primeCustomProvidersForRequestContext', () => {
     await primeCustomProvidersForRequestContext(new RequestContext());
 
     expect(resolveCustomProviders(tenantContext({ workosId: USER, organizationId: ORG }))).toEqual([]);
+  });
+});
+
+describe('unavailable custom provider storage', () => {
+  it('retries its init every 15 seconds, not on every request, model call, and wake', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+    const ensureReady = vi.spyOn(seed.customProviders, 'ensureReady').mockRejectedValue(new Error('db down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
+    const app = buildApp({ workosId: USER, organizationId: ORG }, true);
+    const ctx = tenantContext({ workosId: USER, organizationId: ORG });
+
+    for (let request = 0; request < 5; request++) {
+      expect((await app.request('/ok')).status).toBe(200);
+      expect(resolveCustomProviders(ctx)).toEqual([]);
+      await primeCustomProvidersForRequestContext(ctx);
+    }
+    expect(ensureReady).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 15_000);
+    await app.request('/ok');
+    expect(ensureReady).toHaveBeenCalledTimes(2);
   });
 });
 

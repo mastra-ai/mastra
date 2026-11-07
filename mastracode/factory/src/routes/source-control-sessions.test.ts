@@ -1,3 +1,4 @@
+import { setImmediate } from 'node:timers/promises';
 import { stateSchema } from '@mastra/code-sdk/schema';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
@@ -1346,6 +1347,7 @@ describe('session sandbox recreate', () => {
       abortSettleTimeoutMs?: number;
       caller?: { workosId: string; organizationId: string };
       filesystem?: RouteOptions['filesystem'];
+      workItems?: RouteOptions['workItems'];
     } = {},
   ) {
     const app = new Hono();
@@ -1365,6 +1367,7 @@ describe('session sandbox recreate', () => {
         sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
         ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
         ...(options.filesystem ? { filesystem: options.filesystem } : {}),
+        ...(options.workItems ? { workItems: options.workItems } : {}),
       }),
     );
     return app;
@@ -1744,6 +1747,45 @@ describe('session sandbox recreate', () => {
       });
     },
   );
+
+  it("checks a teammate's admin rights and the session's run bindings at the same time when they open it", async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'teammate-open',
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-2',
+      branch: 'user/session-teammate-open',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const events: string[] = [];
+    const app = buildRecreateApp(seed, sourceControl, {
+      sessionRetirement: fakeCoordinator(),
+      isOrganizationAdmin: async () => {
+        events.push('admin check started');
+        await setImmediate();
+        events.push('admin check finished');
+        return true;
+      },
+      workItems: {
+        clearSessionReferences: async () => 0,
+        hasRunBindingForSession: async () => {
+          if (events.includes('admin check started')) events.push('run binding lookup');
+          return false;
+        },
+      },
+    });
+
+    const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
+
+    expect(opened.status).toBe(200);
+    await expect(opened.json()).resolves.toMatchObject({
+      session: { capabilities: { recreateSandbox: true, takeOwnership: true, switchModel: false } },
+    });
+    expect(events).toEqual(['admin check started', 'run binding lookup', 'admin check finished']);
+  });
 
   it('reports the capability on fresh and repeated session creates', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();

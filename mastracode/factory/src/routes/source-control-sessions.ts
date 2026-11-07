@@ -569,12 +569,15 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const readable = await resolveReadableSession(options, c.req.param('sessionId'), resolved.tenant);
         if (!readable) return c.json({ error: 'Session not found' }, 404);
         const { session, resourceId } = readable;
-        const owners = await resolveOwnerProfiles([session.userId]);
-        const recreateSandbox =
+        const [owners, recreateSandbox, takeOwnership] = await Promise.all([
+          resolveOwnerProfiles([session.userId]),
           canRecreateSandbox(options) &&
-          (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        const takeOwnership =
-          session.userId !== resolved.tenant.userId && (await ownershipRefusal(session, options)) === null;
+            sessionManagePermission(loose(c), options.auth, resolved.tenant, session).then(
+              permission => permission === 'allowed',
+            ),
+          session.userId !== resolved.tenant.userId &&
+            ownershipRefusal(session, options).then(refusal => refusal === null),
+        ]);
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), {

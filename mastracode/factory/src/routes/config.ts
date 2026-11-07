@@ -37,6 +37,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
+import { customProvidersReady } from './custom-provider-source.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -282,15 +283,10 @@ async function resolveCustomProvidersContext({
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (customProviders) {
-    try {
-      await customProviders.ensureReady();
-      return tenant
-        ? { storage: customProviders, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: customProviders, orgId: 'local', userId: 'local' };
-    } catch {
-      // fall through to the unavailable response
-    }
+  if (customProviders && (await customProvidersReady(customProviders))) {
+    return tenant
+      ? { storage: customProviders, orgId: tenantOrgId(tenant), userId: tenant.userId }
+      : { storage: customProviders, orgId: 'local', userId: 'local' };
   }
   return {
     response: c.json(
