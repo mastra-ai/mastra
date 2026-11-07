@@ -14,8 +14,9 @@ const SHARED_ID = '00000000-0000-4000-8000-0000000000a2';
 const UNMOVED_SHARED_ID = '00000000-0000-4000-8000-0000000000a3';
 /** From before resources were shared: runs on its own id. */
 const LEGACY_PRIVATE_ID = '00000000-0000-4000-8000-0000000000a4';
-const FACTORY_ID = 'factory-1';
-const OTHER_FACTORY_ID = 'factory-2';
+const FACTORY_ID = '00000000-0000-4000-8000-0000000000f1';
+const OTHER_FACTORY_ID = '00000000-0000-4000-8000-0000000000f2';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function row(sessionId: string, visibility: SourceControlSession['visibility']): SourceControlSession {
   return { sessionId, orgId: 'org-1', userId: 'owner', visibility } as SourceControlSession;
@@ -64,7 +65,11 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
       auth: fakeRouteAuth({ enabled: options.authEnabled }),
       sessions: { getBySessionId: async id => rows.get(id) ?? null },
       projects: {
-        get: async ({ orgId, id }) => (projects.get(id) === orgId ? ({ id, orgId } as never) : null),
+        // Project ids are a uuid column: Postgres rejects anything else outright.
+        get: async ({ orgId, id }) => {
+          if (!UUID_RE.test(id)) throw new Error(`invalid input syntax for type uuid: "${id}"`);
+          return projects.get(id) === orgId ? ({ id, orgId } as never) : null;
+        },
       },
       controller: () => controller,
     }),
@@ -96,6 +101,9 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
         { runId: 'run-factory', resourceId: FACTORY_ID, threadId: SHARED_ID },
         { runId: 'run-legacy', resourceId: LEGACY_PRIVATE_ID, threadId: LEGACY_PRIVATE_ID },
         { runId: 'run-teammate', resourceId: 'teammate', threadId: 'thread-teammate' },
+        // Channel runs (e.g. Slack) sit on the sender's linked user id or a `channel:` id, not a project.
+        { runId: 'run-teammate-slack', resourceId: 'user_teammate', threadId: 'slack-thread' },
+        { runId: 'run-channel', resourceId: 'channel:slack:C1:1', threadId: 'channel-thread' },
       ],
     }),
   );
@@ -282,7 +290,7 @@ describe('createSessionAccessGuard', () => {
     await expect(same.json()).resolves.toEqual({ reached: true, bound: 'owner' });
   });
 
-  it('hides runs on resources the caller cannot reach from the active-runs list', async () => {
+  it('hides runs on resources the caller cannot reach from the active-runs list, including channel runs', async () => {
     const runIds = async (app: Hono) =>
       (
         (await (await app.request('/api/agent-controller/code/active-runs')).json()) as { runs: { runId: string }[] }
