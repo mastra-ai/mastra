@@ -41,6 +41,22 @@ export interface ChannelErrorContext {
 }
 
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
+/** @experimental A custom `data-*` stream part passed to {@link ChannelAdapterBaseConfig.onDataPart}. */
+export interface ChannelDataPart {
+  type: `data-${string}`;
+  data?: unknown;
+  id?: string;
+}
+
+/** @experimental Context passed to {@link ChannelAdapterBaseConfig.onDataPart}. */
+export interface ChannelDataPartContext {
+  platform: string;
+  adapter: Adapter<any, any>;
+  chatThread: Thread<any, any>;
+  threadId?: string;
+  resourceId?: string;
+}
+
 export interface ChannelAdapterBaseConfig {
   adapter: Adapter<any, any>;
   /**
@@ -66,6 +82,15 @@ export interface ChannelAdapterBaseConfig {
    * @default `"❌ Error: <error.message>"`
    */
   formatError?: (error: Error, context: ChannelErrorContext) => PostableMessage;
+
+  /**
+   * @experimental Observe custom `data-*` stream parts (written with
+   * `writer.custom`) for runs rendered to this adapter. Drivers ignore these
+   * parts; this hook lets an integration react to them (e.g. post a card).
+   * Calls run serially per run; the run's terminal chunk waits for pending
+   * calls for a bounded time. Errors are logged and swallowed.
+   */
+  onDataPart?: (part: ChannelDataPart, ctx: ChannelDataPartContext) => void | Promise<void>;
 
   /**
    * Dialect for the agent's final reply text.

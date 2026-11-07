@@ -1,3 +1,4 @@
+import type { SlackAdapterConfig } from '@chat-adapter/slack';
 import type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -9,7 +10,7 @@ import type {
   WaitUntilResolver,
 } from '@mastra/core/channels';
 import type { ChannelsStorage } from '@mastra/core/storage';
-import type { SlackAdapterConfig } from '@chat-adapter/slack';
+import type { ComputerEmbedUrlFn } from './computer-card';
 import type { SlackInstallation } from './schemas';
 
 /**
@@ -251,6 +252,13 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
    * ```
    */
   waitUntil?: WaitUntilFn;
+
+  /**
+   * @experimental Requires `MASTRA_EXPERIMENTAL_COMPUTER=true`. Returns a URL Slack can
+   * frame in the Computer card's flexpane, or `null`. Without it, cards show status
+   * and Take control / Hand back buttons only.
+   */
+  computerEmbedUrl?: ComputerEmbedUrlFn;
 
   /**
    * Resolve `waitUntil` from the request's Hono `Context`. Use this when the runtime
@@ -558,6 +566,10 @@ export interface SlackAppManifest {
       url: string;
       usage_hint?: string;
     }>;
+    rich_previews?: {
+      is_active: boolean;
+      entity_types?: string[];
+    };
     assistant_view?: {
       assistant_description: string;
       suggested_prompts?: Array<{

@@ -6,6 +6,7 @@ import {
   type ChannelInstallationInfo,
   type ChannelConnectResult,
   type ChannelAdapterConfig,
+  type ChannelHandlers,
   AgentChannels,
   AgentControllerChannels,
   resolveWaitUntil,
@@ -16,6 +17,7 @@ import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/sto
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
+import { ComputerCards, computerCardsEnabled, createCardClient } from './computer-card';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
 import { buildManifest } from './manifest';
 import {
@@ -103,7 +105,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
 export function hashConfig(
-  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
+  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands']; computer?: boolean },
   baseUrl: string,
   resolvedAppName: string,
   resolvedDescription: string,
@@ -113,6 +115,8 @@ export function hashConfig(
     description: resolvedDescription,
     slashCommands: opts.slashCommands,
     baseUrl,
+    // Omitted entirely when off so existing installs keep their stored hash.
+    ...(opts.computer ? { computer: true } : {}),
   });
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
@@ -154,6 +158,10 @@ export function hashConfig(
  * }
  * ```
  */
+/** Host handlers behind a computer-card wrapper, so re-creating channels never nests wrappers. */
+const hostHandlersOf = new WeakMap<ChannelHandlers, ChannelHandlers | undefined>();
+const unwrapHostHandlers = (h: ChannelHandlers | undefined) => (h && hostHandlersOf.has(h) ? hostHandlersOf.get(h) : h);
+
 export class SlackProvider implements ChannelProvider {
   readonly id = 'slack';
   readonly #channelConfig: SlackProviderConfig;
@@ -166,6 +174,7 @@ export class SlackProvider implements ChannelProvider {
 
   /** SlackAdapter instances keyed by installation ID */
   readonly #adapters = new Map<string, SlackAdapter>();
+  readonly #computerCards = new Map<string, ComputerCards>();
 
   #mastra?: Mastra;
   #baseUrl?: string;
@@ -767,7 +776,7 @@ export class SlackProvider implements ChannelProvider {
       const controllerChannels = this.#createAgentControllerChannels(controller, adapter);
       await controllerChannels.initialize(this.#mastra);
     } else if (agent && this.#mastra) {
-      const agentChannels = this.#createAgentChannels(agent, adapter);
+      const agentChannels = this.#createAgentChannels(agent, adapter, installation);
       await agentChannels.initialize(this.#mastra);
     }
   }
@@ -787,7 +796,7 @@ export class SlackProvider implements ChannelProvider {
     const resolvedAppName = installation.name ?? agent.name ?? installation.agentId;
     const resolvedDescription = installation.description || agent.getDescription() || 'AI assistant powered by Mastra';
     const currentHash = hashConfig(
-      { slashCommands: installation.slashCommands },
+      { slashCommands: installation.slashCommands, computer: computerCardsEnabled() },
       baseUrl,
       resolvedAppName,
       resolvedDescription,
@@ -809,6 +818,7 @@ export class SlackProvider implements ChannelProvider {
           description: cmd.description ?? `Run ${cmd.command}`,
           usageHint: cmd.usageHint,
         })),
+        computer: computerCardsEnabled(),
       });
 
       await this.#requireManifestClient().updateApp(installation.appId, manifest);
@@ -868,6 +878,58 @@ export class SlackProvider implements ChannelProvider {
     return Object.fromEntries(Object.entries(candidate).filter(([, value]) => value !== undefined));
   }
 
+  /**
+   * Computer cards for an installation (flag on only), built once per installation
+   * with a separate, bounded Slack client so card calls never change or stall the
+   * conversation adapter.
+   */
+  #computerCardsFor(
+    installation: SlackInstallation,
+    adapter: SlackAdapter,
+    hostHandlers: ChannelHandlers | undefined,
+  ): ComputerCards | undefined {
+    if (!computerCardsEnabled() || installation.ownerType === 'agentController') return undefined;
+    const existing = this.#computerCards.get(installation.id);
+    if (existing) return existing;
+    const { client } = createCardClient({
+      botToken: installation.botToken,
+      botUserId: installation.botUserId,
+      signingSecret: installation.signingSecret,
+    });
+    const cards = new ComputerCards({
+      installation: {
+        id: installation.id,
+        teamId: installation.teamId,
+        signingSecret: installation.signingSecret,
+        webhookId: installation.webhookId,
+      },
+      client,
+      decodeThreadId: id => adapter.decodeThreadId(id),
+      embedUrl: this.#channelConfig.computerEmbedUrl,
+      getBaseUrl: () => this.#getBaseUrl(),
+      getMastra: () => this.#mastra,
+      buttons: hostHandlers?.onAction !== false,
+      logger: this.#mastra?.getLogger?.() ?? console,
+    });
+    this.#computerCards.set(installation.id, cards);
+    return cards;
+  }
+
+  /** Route the card's buttons to {@link ComputerCards}, keeping the host's own `onAction`. */
+  #withComputerActions(cards: ComputerCards, handlers: ChannelHandlers | undefined): ChannelHandlers | undefined {
+    const userOnAction = handlers?.onAction;
+    if (userOnAction === false) return handlers;
+    const wrapped: ChannelHandlers = {
+      ...handlers,
+      onAction: async (event, defaultHandler, ctx) => {
+        if (await cards.handleAction(event)) return;
+        return userOnAction ? userOnAction(event, defaultHandler, ctx) : defaultHandler();
+      },
+    };
+    hostHandlersOf.set(wrapped, handlers);
+    return wrapped;
+  }
+
   /** See {@link resolveSlackAdapterConfig}. */
   #resolveSlackAdapterConfig(): SlackAdapterChannelConfig {
     return resolveSlackAdapterConfig(this.#channelConfig);
@@ -883,19 +945,27 @@ export class SlackProvider implements ChannelProvider {
    * existing instance first so any persistent thread subscriptions from the
    * previous instance are torn down before we replace it.
    */
-  #createAgentChannels(agent: any, adapter: SlackAdapter): AgentChannels {
+  #createAgentChannels(agent: any, adapter: SlackAdapter, installation?: SlackInstallation): AgentChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
+    const existing = agent.getChannels() as AgentChannels | undefined;
+    const existingConfig = existing?.channelConfig;
+    const hostHandlers = unwrapHostHandlers(this.#channelConfig.handlers ?? existingConfig?.handlers);
+    const cards = installation ? this.#computerCardsFor(installation, adapter, hostHandlers) : undefined;
     // The spread merges fields from a SlackAdapterChannelConfig union; TS can't
     // confirm which branch the runtime object satisfies, but the merge always
     // produces a valid ChannelAdapterConfig at runtime.
-    const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
-      | ChannelAdapterConfig
-      | SlackAdapter;
-    const existing = agent.getChannels() as AgentChannels | undefined;
-    const existingConfig = existing?.channelConfig;
+    const slackEntry = (
+      cards
+        ? { adapter, ...adapterConfig, onDataPart: cards.onDataPart }
+        : Object.keys(adapterConfig).length > 0
+          ? { adapter, ...adapterConfig }
+          : adapter
+    ) as ChannelAdapterConfig | SlackAdapter;
+    const forwarded = this.#forwardedChannelOptions();
     const agentChannels = new AgentChannels({
       ...existingConfig,
-      ...this.#forwardedChannelOptions(),
+      ...forwarded,
+      ...(cards ? { handlers: this.#withComputerActions(cards, hostHandlers) } : {}),
       adapters: { ...existingConfig?.adapters, slack: slackEntry },
       userName: agent.name,
     });
@@ -917,8 +987,7 @@ export class SlackProvider implements ChannelProvider {
   #createAgentControllerChannels(controller: AgentController<any>, adapter: SlackAdapter): AgentControllerChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
     const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
-      | ChannelAdapterConfig
-      | SlackAdapter;
+      ChannelAdapterConfig | SlackAdapter;
     const existing = controller.getChannels() as AgentControllerChannels | null;
     const existingConfig = existing?.channelConfig;
     const controllerChannels = new AgentControllerChannels({
@@ -968,7 +1037,7 @@ export class SlackProvider implements ChannelProvider {
     }
     let channels = agent.getChannels();
     if (!channels || channels.adapters.slack !== currentAdapter) {
-      channels = this.#createAgentChannels(agent, currentAdapter);
+      channels = this.#createAgentChannels(agent, currentAdapter, installation);
       await channels.initialize(this.#mastra);
     }
     return channels;
@@ -1039,6 +1108,21 @@ export class SlackProvider implements ChannelProvider {
         requiresAuth: true,
         createHandler: withInit(this.#handleListInstallations),
       },
+      ...(computerCardsEnabled()
+        ? [
+            {
+              // Work Objects need a URL; this page is static and never echoes the ref.
+              path: '/slack/computers/:webhookId',
+              method: 'GET' as const,
+              requiresAuth: false,
+              createHandler: async () => async () =>
+                new Response('Open this computer from its Slack card.', {
+                  status: 200,
+                  headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+                }),
+            },
+          ]
+        : []),
     ];
   }
 
@@ -1167,6 +1251,7 @@ export class SlackProvider implements ChannelProvider {
         description: cmd.description ?? `Run ${cmd.command}`,
         usageHint: cmd.usageHint,
       })),
+      computer: computerCardsEnabled(),
     });
 
     // Apply user's manifest transform if provided
@@ -1212,7 +1297,7 @@ export class SlackProvider implements ChannelProvider {
     // Store pending installation (includes auth URL for UI to fetch later)
     // Hash the same normalized slash commands that are stored, so #checkConfigDrift compares like with like.
     const configHash = hashConfig(
-      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined },
+      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined, computer: computerCardsEnabled() },
       baseUrl,
       appName,
       appDescription,
@@ -1612,6 +1697,21 @@ export class SlackProvider implements ChannelProvider {
       }
       if (event.type === 'url_verification') {
         return c.json({ challenge: event.challenge });
+      }
+      const inner = event.event as { type?: unknown } | undefined;
+      if (computerCardsEnabled() && event.type === 'event_callback' && inner?.type === 'entity_details_requested') {
+        // trigger_id is single-use, so a retried delivery is acked and ignored.
+        if (c.req.header('x-slack-retry-num')) return c.json({ ok: true });
+        const cards = this.#computerCards.get(installation.id);
+        if (cards) {
+          const work = cards
+            .handleDetails(event as { team_id?: string; event?: Record<string, unknown> })
+            .catch(() => undefined);
+          const waitUntil =
+            this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+          if (waitUntil) waitUntil(work);
+        }
+        return c.json({ ok: true });
       }
     }
 

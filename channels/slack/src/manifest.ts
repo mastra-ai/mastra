@@ -71,7 +71,15 @@ export interface BuildManifestOptions {
 
   /** Slash commands to register */
   slashCommands?: SlashCommand[];
+
+  /** @experimental Add the scopes, event, and Work Object features computer cards need. */
+  computer?: boolean;
 }
+
+/** @experimental Extra bot scopes for computer cards (Work Objects). */
+export const COMPUTER_BOT_SCOPES = ['links:read', 'links:write'] as const;
+/** @experimental Extra bot events for computer cards (flexpane details). */
+export const COMPUTER_BOT_EVENTS = ['entity_details_requested'] as const;
 
 /**
  * Build a Slack app manifest for an agent.
@@ -85,6 +93,11 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
   // Add commands scope if we have slash commands
   if (slashCommands.length > 0) {
     scopes.push('commands');
+  }
+
+  if (options.computer) {
+    scopes.push(...COMPUTER_BOT_SCOPES);
+    events.push(...COMPUTER_BOT_EVENTS);
   }
 
   // Slack docs say 140 but the API rejects at that length for short_desc.
@@ -143,6 +156,10 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
       ...(cmd.usageHint ? { usage_hint: cmd.usageHint } : {}),
       url: commandsUrl,
     }));
+  }
+
+  if (options.computer) {
+    manifest.features!.rich_previews = { is_active: true, entity_types: ['slack#/entities/file'] };
   }
 
   return manifest;

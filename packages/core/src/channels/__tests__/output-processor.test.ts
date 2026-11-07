@@ -78,6 +78,7 @@ function makeChannels(
     }) => string | Record<string, unknown> | null;
     logger?: any;
     formatError?: (error: Error, context: unknown) => string;
+    onDataPart?: (part: any, ctx: any) => void | Promise<void>;
   } = {},
 ) {
   const recording = createRecording();
@@ -93,6 +94,7 @@ function makeChannels(
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
   if (opts.formatToolCall !== undefined) adapterConfig.formatToolCall = opts.formatToolCall;
   if (opts.formatError !== undefined) adapterConfig.formatError = opts.formatError;
+  if (opts.onDataPart !== undefined) adapterConfig.onDataPart = opts.onDataPart;
   const channels = new AgentChannels({
     adapters: { test: adapterConfig as any },
   });
@@ -2878,5 +2880,102 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
 
     const posts = calls.filter(c => c.kind === 'post');
     expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'inbound message' } }]);
+  });
+});
+
+describe('onDataPart hook (experimental)', () => {
+  const memoryCtx = () =>
+    new Map<string, unknown>([['MastraMemory', { thread: { id: 'thread-1' }, resourceId: 'slack:U1' }]]);
+  const textChunks = [
+    { type: 'text-start', payload: { id: 't' } },
+    { type: 'data-computer', data: { computerId: 'c1', status: 'attached' }, id: 'p1' },
+    { type: 'text-delta', payload: { id: 't', text: 'hello' } },
+    { type: 'data-computer', data: { computerId: 'c1', status: 'released' } },
+    { type: 'text-end', payload: { id: 't' } },
+  ];
+
+  for (const streaming of [false, true]) {
+    describe(streaming ? 'streaming driver' : 'static driver', () => {
+      it('receives data-* parts in order with thread scope, and the reply still posts', async () => {
+        const seen: any[] = [];
+        const { channels, chatThread, calls } = makeChannels({
+          streaming,
+          onDataPart: async (part, ctx) => {
+            await new Promise(r => setTimeout(r, 5));
+            seen.push({ part, threadId: ctx.threadId, resourceId: ctx.resourceId, platform: ctx.platform, chat: ctx.chatThread });
+          },
+        });
+        await drive(channels, textChunks, chatThread, undefined, memoryCtx());
+        expect(seen.map(s => s.part)).toEqual([
+          { type: 'data-computer', data: { computerId: 'c1', status: 'attached' }, id: 'p1' },
+          { type: 'data-computer', data: { computerId: 'c1', status: 'released' }, id: undefined },
+        ]);
+        expect(seen[0]).toMatchObject({ threadId: 'thread-1', resourceId: 'slack:U1', platform: 'test' });
+        expect(seen[0].chat).toBe(chatThread);
+        expect(calls.some(c => c.kind === 'post' || c.kind === 'editMessage')).toBe(true);
+      });
+
+      it('a throwing hook is logged without payload, later parts still run, reply still posts', async () => {
+        const warn = vi.fn();
+        const logger = { warn, error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+        const seen: string[] = [];
+        let n = 0;
+        const { channels, chatThread, calls } = makeChannels({
+          streaming,
+          logger,
+          onDataPart: part => {
+            if (n++ === 0) throw new Error('boom');
+            seen.push((part.data as any).status);
+          },
+        });
+        await drive(channels, textChunks, chatThread, undefined, memoryCtx());
+        expect(seen).toEqual(['released']);
+        const call = warn.mock.calls.find(c => String(c[0]).includes('onDataPart hook failed'));
+        expect(call?.[1]).toEqual({ partType: 'data-computer', error: 'boom' });
+        expect(JSON.stringify(call)).not.toContain('c1');
+        expect(calls.some(c => c.kind === 'post' || c.kind === 'editMessage')).toBe(true);
+      });
+    });
+  }
+
+  it('terminal chunk waits for pending hook work', async () => {
+    let finished = false;
+    const { channels, chatThread } = makeChannels({
+      onDataPart: async () => {
+        await new Promise(r => setTimeout(r, 30));
+        finished = true;
+      },
+    });
+    await drive(channels, textChunks.slice(0, 2), chatThread, undefined, memoryCtx());
+    expect(finished).toBe(true);
+  });
+
+  it('a never-resolving hook does not stall the run past the bound', async () => {
+    vi.useFakeTimers();
+    try {
+      const warn = vi.fn();
+      const { channels, chatThread } = makeChannels({
+        logger: { warn, error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+        onDataPart: () => new Promise<void>(() => {}),
+      });
+      let done = false;
+      const run = drive(channels, textChunks.slice(0, 2), chatThread, undefined, memoryCtx()).then(() => {
+        done = true;
+      });
+      await vi.advanceTimersByTimeAsync(14_000);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await run;
+      expect(done).toBe(true);
+      expect(warn.mock.calls.some(c => String(c[0]).includes('still pending'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('without a hook, data-* parts are still dropped by the driver and nothing extra happens', async () => {
+    const { channels, chatThread, calls } = makeChannels();
+    await drive(channels, [{ type: 'data-computer', data: { x: 1 } }], chatThread, undefined, memoryCtx());
+    expect(JSON.stringify(calls)).not.toContain('data-computer');
   });
 });
