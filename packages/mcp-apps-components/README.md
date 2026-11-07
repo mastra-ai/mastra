@@ -63,6 +63,8 @@ export const greetingServer = new MCPServer({
 Use `observabilityDashboardInputSchema` as the opening tool's input and `toObservabilityDashboard` as its `execute`:
 
 - The schema advertises every widget kind's options to the model, so the model can write its own widgets, and a wrong one fails input validation with errors the model can act on.
+- The schema names the metrics Mastra records, but leaves metric names free: a name that doesn't exist reads as zero rather than failing. To make the model pick only metrics that have data, build the schema with `createObservabilityDashboardInputSchema({ metricNames })`, passing the names from `MastraClient#getMetricNames`. Unknown names are then rejected with the list of valid ones. Past `OBSERVABILITY_CATALOG_MAX_METRIC_NAMES` (200) names, or with none, they stay free. The schema is a snapshot, so rebuild the tool (`server.toolActions.add`) when the names change; `examples/agent` does this before each agent run.
+- Label keys and values aren't listed. Give the model a tool that looks them up (for example with `MastraClient#getMetricLabelKeys` and `getMetricLabelValues`).
 - Widgets without an `id` get a fresh UUID on every open, so the host can pin each one by an id that stays stable when the result is shown again.
 
 The tools run on your server, so you decide which Mastra server the dashboard reads from and how it authenticates. Only allow read actions:
@@ -115,7 +117,7 @@ export const observabilityServer = new MCPServer({
 });
 ```
 
-A host can also build a dashboard itself: `toObservabilityDashboard({ dashboard: { rows: [{ widgets: [{ kind: 'preset', preset: 'overview' }] }] } })` returns `{ dashboard, datePreset? }` and throws when the input is invalid.
+A host can also build a dashboard itself: `toObservabilityDashboard({ dashboard: { rows: [{ widgets: [kpisWidget] }] }, datePreset: '7d' })` returns `{ dashboard, datePreset? }` and throws when the input is invalid.
 
 `examples/agent` has a complete version with every read action and an agent that opens dashboards.
 

@@ -1,6 +1,12 @@
 import { DASHBOARD_MAX_WIDGETS, dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
+import { createTool } from '@mastra/core/tools';
 import { afterEach, expect, it } from 'vitest';
-import { toObservabilityDashboard } from '../observability-dashboard';
+import {
+  OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
+  createObservabilityDashboardInputSchema,
+  observabilityDashboardOutputSchema,
+  toObservabilityDashboard,
+} from '../observability-dashboard';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsChart, agentRunsKpi, observabilityServer } from './observability-server';
@@ -10,11 +16,27 @@ afterEach(async () => {
   await Promise.all(hosts.splice(0).map(host => host.close()));
 });
 
-async function connect() {
-  const host = await serveAndConnect(observabilityServer().server);
+async function connect(server = observabilityServer().server) {
+  const host = await serveAndConnect(server);
   hosts.push(host);
   return host.client;
 }
+
+/** The opening tool with its metric names limited to `metricNames`, as a server builds it from its catalog. */
+const dashboardToolFor = (metricNames: string[]) =>
+  createTool({
+    id: 'showObservabilityDashboard',
+    description: 'Shows an observability dashboard',
+    inputSchema: createObservabilityDashboardInputSchema({ metricNames }),
+    outputSchema: observabilityDashboardOutputSchema,
+    execute: async input => toObservabilityDashboard(input),
+  });
+
+const metricNamesIn = (inputSchema: unknown) => {
+  const query = (inputSchema as { $defs: Record<string, unknown> }).$defs.MastraDashboardQuery;
+  const names = JSON.stringify(query).match(/"enum":\["mastra_[^\]]*\]/g) ?? [];
+  return [...new Set(names)];
+};
 
 const { id: _id, ...kpiDraft } = agentRunsKpi;
 
@@ -31,6 +53,9 @@ it("advertises each kind's options to the model, with the shared query schema li
   expect(schema).toContain('"stackedBar"');
   expect(schema).toContain('"lowerIsBetter"');
   expect(schema.match(/"MastraDashboardQuery":/g)).toHaveLength(1);
+  // An unknown metric name reads as zero, so the model is told the ones Mastra emits.
+  expect(schema).toContain('mastra_agent_duration_ms');
+  expect(schema).toContain('mastra_model_total_input_tokens');
   // Small enough to sit in a model's tool list.
   expect(schema.length).toBeLessThan(100_000);
 });
@@ -125,4 +150,66 @@ it.each<[string, ObservabilityDashboardInput['dashboard'], string]>([
   expect(result.isError).toBe(true);
   expect(JSON.stringify(result.content)).toContain(message);
   expect(() => toObservabilityDashboard({ dashboard })).toThrow(message);
+});
+
+it("lists the catalog's metric names, rejects any other, and lists new ones once the tool is rebuilt", async () => {
+  const { server } = observabilityServer();
+  server.toolActions.add({ showObservabilityDashboard: dashboardToolFor(['mastra_agent_duration_ms']) });
+  const client = await connect(server);
+  const toolSchema = async () =>
+    (await client.listTools()).tools.find(t => t.name === 'showObservabilityDashboard')!.inputSchema;
+  const open = (name: string) =>
+    client.callTool({
+      name: 'showObservabilityDashboard',
+      arguments: {
+        dashboard: {
+          rows: [
+            {
+              widgets: [
+                {
+                  ...agentRunsChart,
+                  views: [
+                    {
+                      ...agentRunsChart.views[0]!,
+                      queries: [{ ...agentRunsChart.views[0]!.queries[0]!, name: [name] } as never],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+  expect(metricNamesIn(await toolSchema())).toEqual(['"enum":["mastra_agent_duration_ms"]']);
+  expect((await open('mastra_agent_duration_ms')).isError).toBeFalsy();
+  const unknown = await open('mastra_model_total_input_tokens');
+  expect(unknown.isError).toBe(true);
+  expect(JSON.stringify(unknown.content)).toContain('mastra_agent_duration_ms');
+
+  // A metric that starts recording after the tool was listed: rebuilding the tool lists it.
+  server.toolActions.add({
+    showObservabilityDashboard: dashboardToolFor(['mastra_model_total_input_tokens', 'mastra_agent_duration_ms']),
+  });
+  expect(metricNamesIn(await toolSchema())).toEqual([
+    '"enum":["mastra_agent_duration_ms","mastra_model_total_input_tokens"]',
+  ]);
+  expect((await open('mastra_model_total_input_tokens')).isError).toBeFalsy();
+});
+
+it.each([
+  ['no metric names', []],
+  [
+    'more metric names than are worth listing',
+    Array.from({ length: OBSERVABILITY_CATALOG_MAX_METRIC_NAMES + 1 }, (_, i) => `mastra_metric_${i}`),
+  ],
+])('leaves metric names free with %s', async (_, metricNames) => {
+  const { server } = observabilityServer();
+  server.toolActions.add({ showObservabilityDashboard: dashboardToolFor(metricNames) });
+  const client = await connect(server);
+
+  const { tools } = await client.listTools();
+
+  expect(metricNamesIn(tools.find(t => t.name === 'showObservabilityDashboard')!.inputSchema)).toEqual([]);
 });

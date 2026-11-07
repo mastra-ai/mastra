@@ -8,7 +8,8 @@ The observability app now draws a whole dashboard instead of a single widget. Pa
 
 **New helpers**
 
-- `observabilityDashboardInputSchema` lists every widget kind's options, so the model gets clear errors when a widget is wrong.
+- `observabilityDashboardInputSchema` lists every widget kind's options, so the model gets clear errors when a widget is wrong. It also names the metrics Mastra records, such as `mastra_agent_duration_ms` and `mastra_model_total_input_tokens`, so the model doesn't guess names that read as zero.
+- `createObservabilityDashboardInputSchema({ metricNames })` builds the same schema with the project's metric names as the only allowed values, so a dashboard can't name a metric without data. Rebuild the tool when the names change.
 - `toObservabilityDashboard(input)` gives each widget without an id a fresh UUID and checks the result.
 
 **Before**

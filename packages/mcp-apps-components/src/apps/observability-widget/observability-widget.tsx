@@ -1,4 +1,6 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   BUILT_IN_WIDGET_KINDS,
   DashboardGrid,
@@ -14,6 +16,7 @@ import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { InfoIcon, OctagonAlertIcon } from 'lucide-react';
 import { Component, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { readOpened } from './opened';
@@ -31,6 +34,38 @@ function applyTheme(theme: McpUiTheme | undefined) {
 }
 
 type ReadyOpened = Extract<Opened, { status: 'ready' }>;
+
+/**
+ * A whole-app state drawn straight on the host's frame: no surface or border of its own, and at
+ * least the 100px the host gives the frame, so the content sits centred instead of leaving a gap.
+ */
+function AppState({ children, ...props }: { children: ReactNode; role?: 'alert' | 'status'; 'aria-label'?: string }) {
+  return (
+    <div {...props} className="flex min-h-25 items-center px-4 py-3">
+      {children}
+    </div>
+  );
+}
+
+function AppMessage({ tone, title, children }: { tone: 'error' | 'info'; title: string; children: ReactNode }) {
+  const Icon = tone === 'error' ? OctagonAlertIcon : InfoIcon;
+  return (
+    <AppState role="alert">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon
+          aria-hidden
+          className={`mt-0.5 size-4 shrink-0 ${tone === 'error' ? 'text-destructive-indicator' : 'text-info-indicator'}`}
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Txt variant="subheading">{title}</Txt>
+          <Txt variant="body-sm" tone="muted" className="wrap-anywhere">
+            {children}
+          </Txt>
+        </div>
+      </div>
+    </AppState>
+  );
+}
 
 /** Keeps a widget that throws while rendering to its own card, so the rest of the dashboard still draws. */
 class WidgetBoundary extends Component<{ widget: DashboardWidget; children: ReactNode }, { error?: Error }> {
@@ -92,7 +127,13 @@ function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
     .map(row => row.widgets.map(widget => ({ widget, prepared: prepareWidget(widget, REGISTRY, 'project') })))
     .map(cells => cells.filter(cell => cell.prepared.ok !== 'hidden'))
     .filter(cells => cells.length > 0);
-  if (rows.length === 0) return <p role="alert">None of this dashboard's widgets are shown for a project.</p>;
+  if (rows.length === 0) {
+    return (
+      <AppMessage tone="info" title="Nothing to show">
+        None of this dashboard's widgets are shown for a project.
+      </AppMessage>
+    );
+  }
 
   return (
     <DashboardGrid>
@@ -136,9 +177,27 @@ export function ObservabilityWidget() {
   });
   useEffect(() => applyTheme(app?.getHostContext()?.theme), [app]);
 
-  if (error) return <p role="alert">Couldn't connect to the host: {error.message}</p>;
-  if (!app || !opened) return <p>Loading the dashboard…</p>;
-  if (opened.status === 'error') return <p role="alert">{opened.message}</p>;
+  if (error) {
+    return (
+      <AppMessage tone="error" title="Couldn't connect to the host">
+        {error.message}
+      </AppMessage>
+    );
+  }
+  if (!app || !opened) {
+    return (
+      <AppState>
+        <Spinner size="sm" aria-label="Loading the dashboard" className="mx-auto" />
+      </AppState>
+    );
+  }
+  if (opened.status === 'error') {
+    return (
+      <AppMessage tone="error" title="Couldn't draw the dashboard">
+        {opened.message}
+      </AppMessage>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

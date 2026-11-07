@@ -4,11 +4,14 @@ import observabilityWidgetHtml from '../apps-dist/observability-widget.html?raw'
 export { OBSERVABILITY_DATE_PRESETS, QUERY_OBSERVABILITY_TOOL } from './apps/observability-widget/tool';
 export type { ObservabilityDatePreset } from './apps/observability-widget/tool';
 export {
+  OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
+  createObservabilityDashboardInputSchema,
   observabilityDashboardInputSchema,
   observabilityDashboardOutputSchema,
   toObservabilityDashboard,
 } from './observability-dashboard';
 export type {
+  ObservabilityCatalog,
   ObservabilityDashboardDraft,
   ObservabilityDashboardInput,
   ObservabilityDashboardOpened,

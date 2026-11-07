@@ -146,7 +146,11 @@ it('shows the widget as failed, without retrying, when the tool fails the read',
 it('says so when the tool returns no dashboard, e.g. because it rejected the one it was given', async () => {
   await openWidget(observabilityServer(), { dashboard: dashboardOf({ id: 'broken', kind: 'kpis' } as never) });
 
-  expect((await screen.findByRole('alert')).textContent).toContain('The tool returned no dashboard to show');
+  // A loader shows until the host hands over the tool's result.
+  expect(screen.getByRole('status', { name: 'Loading the dashboard' })).toBeTruthy();
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain("Couldn't draw the dashboard");
+  expect(alert.textContent).toContain('The tool returned no dashboard to show');
 });
 
 it("follows the host's theme, so a light host doesn't get dark-theme text", async () => {
