@@ -204,7 +204,7 @@ describe('Sessions sidebar groups', () => {
     );
     renderSection();
 
-    expect(await screen.findByRole('status')).toHaveTextContent('All groups with sessions are hidden');
+    expect(await screen.findByText('All groups with sessions are hidden')).toHaveAttribute('role', 'status');
     expect(groupRegions()).toEqual([]);
   });
 
