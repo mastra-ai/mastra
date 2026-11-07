@@ -129,6 +129,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { buildConstraintName } from '../../db/constraint-utils';
 import { assertRunFence, DB_NOW_MS, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { toPgJson } from '../../db/sanitize-json';
@@ -342,6 +343,16 @@ export class MemoryPG extends MemoryStorage {
         columns: ['resourceId', 'createdAt DESC'],
       },
       {
+        name: buildConstraintName({
+          baseName: `${schemaPrefix}mastra_threads_metadata_gin_idx`,
+          hashWhenTruncated: true,
+        }),
+        table: TABLE_THREADS,
+        columns: ['metadata'],
+        method: 'gin',
+        opclass: 'jsonb_path_ops',
+      },
+      {
         name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
@@ -423,7 +434,10 @@ export class MemoryPG extends MemoryStorage {
       return;
     }
 
+    // Databases created before the JSONB column migration keep thread metadata as text, which jsonb_path_ops cannot index.
+    const metadataIsJsonb = (await this.#db.getColumnType(TABLE_THREADS, 'metadata')) === 'jsonb';
     for (const indexDef of this.getDefaultIndexDefinitions()) {
+      if (indexDef.opclass === 'jsonb_path_ops' && !metadataIsJsonb) continue;
       try {
         await this.#db.createIndex(indexDef);
       } catch (error) {
