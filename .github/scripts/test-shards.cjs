@@ -48,29 +48,47 @@ function shardWallMs(costs, workers) {
  * @param {number} [options.maxShards] Upper bound on the shard count.
  * @param {number} [options.targetShardMs] Aim for each shard to take about this long.
  * @param {number} [options.workers] Vitest workers per shard (the runner's vCPUs).
+ * @param {(file: string) => string | undefined} [options.groupOf] Files with the same group stay on
+ *   one shard (see isolationGroup).
  * @returns {{ shards: string[][], estimatedMs: number[] }}
  */
-function planShards({ files, timings, maxShards = 12, targetShardMs = 150_000, workers = 4 }) {
+function planShards({
+  files,
+  timings,
+  maxShards = 12,
+  targetShardMs = 150_000,
+  workers = 4,
+  groupOf = () => undefined,
+}) {
   const unique = [...new Set(files.filter(Boolean))].sort();
   if (unique.length === 0) return { shards: [], estimatedMs: [] };
 
   const recorded = durationsByFile(timings);
   const cost = file => (recorded.has(file) ? recorded.get(file) : UNKNOWN_FILE_MS) + FILE_OVERHEAD_MS;
-  // Slowest first; the path breaks ties so the plan is the same on every run.
-  const ordered = unique
-    .map(file => ({ file, cost: cost(file) }))
-    .sort((a, b) => b.cost - a.cost || (a.file < b.file ? -1 : 1));
+  // A unit is a single file, or every file of a group, placed on a shard together.
+  const units = new Map();
+  for (const file of unique) {
+    const group = groupOf(file);
+    const key = group === undefined ? `file:${file}` : `group:${group}`;
+    const unit = units.get(key) ?? { key, files: [], costs: [], cost: 0 };
+    unit.files.push(file);
+    unit.costs.push(cost(file));
+    unit.cost += cost(file);
+    units.set(key, unit);
+  }
+  // Slowest first; the key breaks ties so the plan is the same on every run.
+  const ordered = [...units.values()].sort((a, b) => b.cost - a.cost || (a.key < b.key ? -1 : 1));
 
-  const total = ordered.reduce((sum, item) => sum + item.cost, 0);
-  const count = Math.max(1, Math.min(maxShards, unique.length, Math.ceil(total / workers / targetShardMs)));
+  const total = ordered.reduce((sum, unit) => sum + unit.cost, 0);
+  const count = Math.max(1, Math.min(maxShards, ordered.length, Math.ceil(total / workers / targetShardMs)));
 
   const shards = Array.from({ length: count }, () => ({ load: 0, files: [], costs: [] }));
-  for (const item of ordered) {
+  for (const unit of ordered) {
     let target = shards[0];
     for (const shard of shards) if (shard.load < target.load) target = shard;
-    target.load += item.cost;
-    target.files.push(item.file);
-    target.costs.push(item.cost);
+    target.load += unit.cost;
+    target.files.push(...unit.files);
+    target.costs.push(...unit.costs);
   }
 
   return {
@@ -79,7 +97,31 @@ function planShards({ files, timings, maxShards = 12, targetShardMs = 150_000, w
   };
 }
 
-module.exports = { planShards, durationsByFile, shardWallMs, FILE_OVERHEAD_MS, UNKNOWN_FILE_MS };
+/**
+ * Packages whose Vitest config turns off isolation (`isolate: false`) share module state between the
+ * test files in a worker, so their tests can depend on which files run beside them. The unsharded
+ * job always ran all of a package's files together; keeping them on one shard preserves that.
+ * Returns the config's directory for files under such a config, undefined otherwise.
+ */
+function isolationGroup(root = process.cwd()) {
+  const { existsSync } = require('node:fs');
+  const { dirname, join } = require('node:path');
+  const byDir = new Map();
+  const configIn = dir =>
+    ['vitest.config.ts', 'vitest.config.mts', 'vitest.config.js'].map(name => join(root, dir, name)).find(existsSync);
+  const groupFor = dir => {
+    if (byDir.has(dir)) return byDir.get(dir);
+    let group;
+    const config = configIn(dir);
+    if (config) group = /isolate:\s*false/.test(readFileSync(config, 'utf8')) ? dir : undefined;
+    else if (dir !== '.' && dir !== '') group = groupFor(dirname(dir));
+    byDir.set(dir, group);
+    return group;
+  };
+  return file => groupFor(dirname(file));
+}
+
+module.exports = { planShards, isolationGroup, durationsByFile, shardWallMs, FILE_OVERHEAD_MS, UNKNOWN_FILE_MS };
 
 // CLI: node test-shards.cjs <file-list> <out-dir> [timings.json]
 // Writes <out-dir>/shard-<n>.txt per shard and prints the shard numbers as a JSON array.
@@ -107,6 +149,7 @@ if (require.main === module) {
     maxShards: env('TEST_SHARDS_MAX'),
     targetShardMs: env('TEST_SHARDS_TARGET_MS'),
     workers: env('TEST_SHARDS_WORKERS'),
+    groupOf: isolationGroup(),
   });
   mkdirSync(outDir, { recursive: true });
   plan.shards.forEach((shardFiles, i) =>
