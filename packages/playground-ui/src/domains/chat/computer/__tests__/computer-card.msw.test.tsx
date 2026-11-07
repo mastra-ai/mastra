@@ -469,6 +469,20 @@ describe('ComputerCard', () => {
     expect(client.viewOnly).toBe(false);
   });
 
+  it('a thread switch starts view-only: the old thread\'s control never carries over', async () => {
+    serveSession();
+    const { rerenderThread } = renderThread([message('m1', [computerPart('attached')])]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Take control' }));
+    await waitFor(() => expect(live()[0]?.viewOnly).toBe(false));
+
+    lease.hold = new Promise<void>(() => {});
+    rerenderThread([message('m1', [computerPart('attached')])], { threadId: 'thread-2', resourceId: scope.resourceId });
+    await waitFor(() => expect(requests.some(r => r.body.threadId === 'thread-2')).toBe(true));
+    await waitFor(() => expect(live()).toHaveLength(1));
+    expect(live()[0].viewOnly).toBe(true);
+    expect(screen.getByText('Agent has control')).toBeTruthy();
+  });
+
   it('a take that finds the lease already moved does not claim the agent missed it', async () => {
     serveSession();
     renderThread([message('m1', [computerPart('attached')])]);

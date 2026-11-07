@@ -46,32 +46,57 @@ export function ComputerThreadProvider({ messages, scope, children }: ComputerTh
   const computers = useMemo(() => deriveComputers(messages), [messages]);
   const threadId = scope?.threadId;
   const resourceId = scope?.resourceId;
-  const [live, setLive] = useState<Map<string, ComputerLiveControl>>(() => new Map());
-  // Read through a ref so streaming messages don't recreate the callback and restart polls.
+  // Live control belongs to one thread: switching threads starts empty, so a computer
+  // reused across threads never inherits the previous thread's holder.
+  const scopeKey = JSON.stringify([resourceId ?? null, threadId ?? null]);
+  const [state, setState] = useState(() => ({ scopeKey, live: new Map<string, ComputerLiveControl>() }));
+  const live = useMemo(
+    () => (state.scopeKey === scopeKey ? state.live : new Map<string, ComputerLiveControl>()),
+    [state, scopeKey],
+  );
+  // Read through refs so streaming messages don't recreate the callback and restart polls.
   const computersRef = useRef(computers);
   computersRef.current = computers;
+  const scopeRef = useRef(scopeKey);
   const epochs = useRef(new Map<string, number>());
+  if (scopeRef.current !== scopeKey) {
+    scopeRef.current = scopeKey;
+    epochs.current = new Map();
+  }
   const readEpoch = useCallback((computerId: string) => epochs.current.get(computerId) ?? 0, []);
   const reportControl = useCallback(
     (computerId: string, control: Omit<ComputerLiveControl, 'basis'>, epoch?: number) => {
       if (epoch === undefined) epochs.current.set(computerId, readEpoch(computerId) + 1);
       else if (epoch !== readEpoch(computerId)) return;
-      setLive(previous => {
+      setState(stored => {
+        const key = scopeRef.current;
+        const previous = stored.scopeKey === key ? stored.live : new Map<string, ComputerLiveControl>();
         const current = previous.get(computerId);
         const basis = computersRef.current.get(computerId)?.holder ?? 'agent';
         // A poll repeating the same holder keeps the last change's notified flag.
         const notified = control.notified ?? (current?.holder === control.holder ? current.notified : undefined);
-        if (current?.holder === control.holder && current.basis === basis && current.notified === notified)
-          return previous;
+        if (
+          stored.scopeKey === key &&
+          current?.holder === control.holder &&
+          current.basis === basis &&
+          current.notified === notified
+        )
+          return stored;
         const next = new Map(previous);
         next.set(computerId, { holder: control.holder, basis, ...(notified !== undefined && { notified }) });
-        return next;
+        return { scopeKey: key, live: next };
       });
     },
     [readEpoch],
   );
   const value = useMemo<ComputerThreadValue>(
-    () => ({ computers, scope: threadId && resourceId ? { threadId, resourceId } : undefined, live, reportControl, readEpoch }),
+    () => ({
+      computers,
+      scope: threadId && resourceId ? { threadId, resourceId } : undefined,
+      live,
+      reportControl,
+      readEpoch,
+    }),
     [computers, threadId, resourceId, live, reportControl, readEpoch],
   );
   return <ComputerThreadContext.Provider value={value}>{children}</ComputerThreadContext.Provider>;
