@@ -13,6 +13,8 @@ import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat'
 import {
   Client,
   LOG_LEVEL_META_KEY,
+  ProtocolError,
+  ProtocolErrorCode,
   StreamableHTTPClientTransport,
   DEFAULT_REQUEST_TIMEOUT_MSEC,
 } from '@modelcontextprotocol/client';
@@ -392,7 +394,7 @@ const LOGGABLE_ERROR_NAMES = new Set([
   'UnsupportedProtocolVersionError',
 ]);
 
-const LOGGABLE_ERROR_CODES = new Set([
+const LOGGABLE_ERROR_CODES = new Set<unknown>([
   'ECONNRESET',
   'ECONNREFUSED',
   'ECONNABORTED',
@@ -405,6 +407,7 @@ const LOGGABLE_ERROR_CODES = new Set([
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_HEADERS_TIMEOUT',
   'UND_ERR_BODY_TIMEOUT',
+  ...Object.values(ProtocolErrorCode).filter(code => typeof code === 'number'),
 ]);
 
 /**
@@ -412,16 +415,31 @@ const LOGGABLE_ERROR_CODES = new Set([
  * arguments back (Issue #29318). The full error still reaches the caller.
  */
 function errorKind(error: unknown): string {
-  if (error instanceof MastraError) return error.id;
+  // A custom `fetch` can throw a `MastraError` with any id.
+  if (error instanceof MastraError && /^MCP_CLIENT_[A-Z0-9_]+$/.test(error.id)) return error.id;
   if (error instanceof Error) {
-    // `name` and `code` can be set to anything, so only log known names and codes (plus numeric
-    // JSON-RPC codes).
+    // `name` and `code` can be set to anything, so only log known names and codes.
     const name = LOGGABLE_ERROR_NAMES.has(error.name) ? error.name : 'Error';
     const code = (error as { code?: unknown }).code;
-    const isKnownCode = typeof code === 'number' || (typeof code === 'string' && LOGGABLE_ERROR_CODES.has(code));
-    return isKnownCode ? `${name} (${code})` : name;
+    return LOGGABLE_ERROR_CODES.has(code) ? `${name} (${code})` : name;
   }
   return typeof error;
+}
+
+/**
+ * Core's tracked exception for a failed tool records only an `MCP_CLIENT_` id, also when another
+ * tool wraps this one. It is not enumerable: the caller and the model still get the same error.
+ */
+function markToolCallFailure(error: unknown): unknown {
+  if (error instanceof Error && !('id' in error)) {
+    const id = !(error instanceof ProtocolError)
+      ? 'MCP_CLIENT_TOOL_CALL_FAILED'
+      : LOGGABLE_ERROR_CODES.has(error.code)
+        ? `MCP_CLIENT_TOOL_PROTOCOL_ERROR_${Math.abs(error.code)}`
+        : 'MCP_CLIENT_TOOL_PROTOCOL_ERROR';
+    Reflect.defineProperty(error, 'id', { value: id, configurable: true });
+  }
+  return error;
 }
 
 /**
@@ -1878,10 +1896,14 @@ export class InternalMastraMCPClient extends MastraBase {
               );
 
               const { result: res, serverSpan } = takeServerTraceContext(
-                await this.client.callTool(
-                  { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
-                  { timeout: this.timeout, signal: context?.abortSignal },
-                ),
+                await this.client
+                  .callTool(
+                    { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                    { timeout: this.timeout, signal: context?.abortSignal },
+                  )
+                  .catch((error: unknown) => {
+                    throw markToolCallFailure(error);
+                  }),
               );
               // A Mastra server names the span that served the call. The tool call span ends
               // after this returns, and its end export carries the link.
@@ -2010,7 +2032,7 @@ export class InternalMastraMCPClient extends MastraBase {
                     originalError: errorKind(e),
                     reconnectError: errorKind(reconnectError),
                   });
-                  throw reconnectError;
+                  throw markToolCallFailure(reconnectError);
                 }
               }
 

@@ -26,7 +26,10 @@ import {
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
-import { eagerToolCallSuspensionIntent } from '../../loop/workflows/agentic-execution/eager-tool-execution';
+import {
+  eagerToolCallDidNotExecute,
+  eagerToolCallSuspensionIntent,
+} from '../../loop/workflows/agentic-execution/eager-tool-execution';
 import type { Mastra } from '../../mastra';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -277,17 +280,27 @@ function buildJsonOverrideSchema(
 
 /**
  * A remote MCP tool's error text is written by the server and can echo the submitted arguments
- * (Issue #29318). The model still receives it; the tracked exception records only its id.
- * Covers every MCPClient tool failure (execution, task failure, cancellation, polling).
+ * (Issue #29318). The model still receives it; the tracked exception records only a fixed id.
+ * Covers every failure of an MCP tool, and MCPClient failures that another tool rethrows.
  */
-function trackableToolError(mastraError: MastraError, err: unknown, model: string): MastraError {
-  const id = (err as { id?: unknown } | null)?.id;
-  if (typeof id !== 'string' || !id.startsWith('MCP_CLIENT_TOOL_')) return mastraError;
+function trackableToolError(
+  mastraError: MastraError,
+  err: unknown,
+  model: string,
+  isMcpTool: boolean,
+  aborted: boolean,
+): MastraError {
+  // An eager-execution handoff is control flow, not a remote failure, and holds no server text.
+  if (eagerToolCallDidNotExecute(err)) return mastraError;
+  const errorId = (err as { id?: unknown } | null)?.id;
+  const knownId = typeof errorId === 'string' && /^MCP_CLIENT_[A-Z0-9_]+$/.test(errorId) ? errorId : undefined;
+  if (!isMcpTool && !knownId) return mastraError;
+  const id = aborted ? 'MCP_CLIENT_TOOL_CALL_ABORTED' : (knownId ?? 'MCP_CLIENT_TOOL_CALL_FAILED');
   return new MastraError({
     id: mastraError.id,
     domain: mastraError.domain as ErrorDomain,
     category: mastraError.category as ErrorCategory,
-    text: `Remote tool failed (${id})`,
+    text: `Remote tool ${aborted ? 'call aborted' : 'failed'} (${id})`,
     details: { errorMessage: id, model },
   });
 }
@@ -679,15 +692,18 @@ export class CoreToolBuilder extends MastraBase {
     logType?: 'tool' | 'toolset' | 'client-tool',
     inputValidationSchema?: StandardSchemaWithJSON,
   ) {
-    // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
+    // don't add memory, mastra, or observability context to logging (its span holds the user's input and the exporter config)
     const {
       logger,
       mastra: _mastra,
       memory: _memory,
       requestContext,
       model,
+      tracing: _tracing,
       tracingContext: _tracingContext,
       tracingPolicy: _tracingPolicy,
+      loggerVNext: _loggerVNext,
+      metrics: _metrics,
       ...rest
     } = options;
     const logModelObject = {
@@ -1099,7 +1115,14 @@ export class CoreToolBuilder extends MastraBase {
           ...executionFailureTermination(mastraError),
           attributes: { success: false },
         });
-        logger.trackException(trackableToolError(mastraError, err, model?.modelId ?? ''), {
+        const tracked = trackableToolError(
+          mastraError,
+          err,
+          model?.modelId ?? '',
+          Boolean(mcpMeta),
+          Boolean(execOptions?.abortSignal?.aborted),
+        );
+        logger.trackException(tracked, {
           ...logData,
           ...rest,
           model: logModelObject,
