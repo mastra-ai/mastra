@@ -3,7 +3,6 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@m
 import { enforceThreadAccess } from '@mastra/server/handlers/utils';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { getCookie } from 'hono/cookie';
 import type { WebSocket as WsWebSocket } from 'ws';
 
 import { createAuthMiddleware } from '../auth-middleware';
@@ -48,37 +47,14 @@ export interface ComputerStreamResult {
   close: () => void;
 }
 
-export const SESSION_COOKIE = 'mastra_computer';
 export const REVALIDATE_INTERVAL_MS = 15_000;
-export const VIEWER_REFRESH_AFTER_MS = 50 * 60_000;
-export const UPSTREAM_TIMEOUT_MS = 15_000;
 export const MAX_PENDING_CLIENT_BYTES = 1024 * 1024;
 const SESSION_BODY_MAX_BYTES = 1024;
-const COOKIE_MAX_AGE_S = 3600;
-
-const FORWARDED_REQUEST_HEADERS = ['accept', 'if-none-match', 'if-modified-since', 'range'];
-const FORWARDED_RESPONSE_HEADERS = ['content-type', 'etag', 'last-modified', 'content-range', 'accept-ranges'];
-
-const STATUS_TEXT: Record<StatusCode, string> = {
-  401: 'This computer viewer link is no longer valid.',
-  429: 'Too many computer viewers are open. Close one and try again.',
-  502: 'The computer could not be reached.',
-};
-type StatusCode = 401 | 429 | 502;
-
-const STATUS_SCRIPT =
-  "(function(){var m=document.querySelector('meta[name=\"mastra-computer-status\"]');" +
-  "parent.postMessage({type:'mastra-computer-status',code:Number(m&&m.content)},'*')})()";
-
-async function sha256Base64(text: string): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return btoa(String.fromCharCode(...new Uint8Array(digest)));
-}
 
 class ViewerUnavailable extends Error {}
 
 /**
- * Normalize a viewer URL into the directory its assets resolve against.
+ * Normalize a viewer URL into the directory its websockify endpoint lives in.
  * Only `http:`/`https:` viewers are proxied.
  */
 export function viewerTarget(viewer: { url: string; headers: Record<string, string> }): ComputerViewerTarget {
@@ -104,46 +80,19 @@ export function upstreamSocketUrl(base: URL): URL {
   return target;
 }
 
-/** Path segments that could escape the viewer directory, raw or after decoding. */
-function isUnsafeRemainder(raw: string): boolean {
-  if (raw.length === 0) return true;
-  let decoded = raw;
-  for (let i = 0; i < 3; i++) {
-    if (/(^|\/)\.\.?(\/|$)/.test(decoded) || /[\\\0]/.test(decoded) || /%(2f|5c|00)/i.test(decoded)) return true;
-    let next: string;
-    try {
-      next = decodeURIComponent(decoded);
-    } catch {
-      return true;
-    }
-    if (next === decoded) return false;
-    decoded = next;
+function canonicalOrigin(origin: string): string | undefined {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return undefined;
   }
-  return true;
-}
-
-function isHttps(c: Context): boolean {
-  const forwarded = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
-  return forwarded === 'https' || new URL(c.req.url).protocol === 'https:';
 }
 
 function serverOrigin(c: Context): string {
+  const forwarded = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  const https = forwarded === 'https' || new URL(c.req.url).protocol === 'https:';
   const host = (requestHost(c)?.split(',')[0] ?? '').trim();
-  return `${isHttps(c) ? 'https' : 'http'}://${host}`;
-}
-
-function staticFrameAncestors(allowed: BrowserStreamOrigin | undefined): string {
-  if (allowed === '*') return "'self' *";
-  const list = Array.isArray(allowed) ? allowed : typeof allowed === 'string' ? [allowed] : [];
-  const valid = list.flatMap(origin => {
-    try {
-      const parsed = new URL(origin);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? [parsed.origin] : [];
-    } catch {
-      return [];
-    }
-  });
-  return ["'self'", ...valid].join(' ');
+  return `${https ? 'https' : 'http'}://${host}`;
 }
 
 function statusError(error: unknown): number | undefined {
@@ -152,28 +101,27 @@ function statusError(error: unknown): number | undefined {
 }
 
 /**
- * Same-origin proxy that embeds a computer's live desktop (noVNC) in Studio.
+ * WebSocket proxy that streams a computer's live desktop (RFB) to Studio's own
+ * noVNC viewer. No sandbox HTTP content is ever served on this origin: the
+ * desktop is agent-writable, so its viewer page and scripts are untrusted.
  *
  * - `POST {apiPrefix}/computers/:computerId/session` — authenticated; checks the
- *   caller may read (`watch`) or write (`control`) the thread and that the
- *   computer is attached to it, then mints a 30 s single-use ticket.
- * - `GET /computer/:computerId/connect?ticket=` — the iframe's first navigation:
- *   trades the ticket for an HttpOnly cookie scoped to `/computer/:computerId/`
- *   and redirects to the viewer page. Failures render a small status page that
- *   posts `{ type: 'mastra-computer-status', code }` to the embedding Studio.
- * - `GET /computer/:computerId/websockify` — WebSocket proxy to the desktop.
- * - `GET|HEAD /computer/:computerId/*` — viewer asset proxy.
+ *   caller may read (`watch`) or write (`control`) the thread in the memory store
+ *   (403 when no memory store is configured) and that the computer is attached
+ *   to it, then mints a 30 s single-use ticket.
+ * - `GET /computer/:computerId/websockify?ticket=` — WebSocket upgrade from the
+ *   same origin that minted the ticket; relays binary RFB frames to the desktop.
+ * - Every other `/computer/:computerId/*` request is 404.
  *
  * The upstream auth (the sandbox preview cookie) is added server-side and never
- * reaches the browser. Live sessions are revalidated every 15 s, so releasing a
- * computer from the thread cuts its viewers within that interval.
+ * reaches the browser. Live sockets are revalidated every 15 s, so releasing a
+ * computer from the thread cuts its viewers within that interval. `watch` is a
+ * viewer setting, not a security boundary: a `watch` ticket still needs read
+ * access, and control requires a `control` ticket (write access).
  *
  * Requires a long-running Node server that accepts WebSocket upgrades (not
- * serverless). Sessions are in-process, so multi-instance deployments need
- * sticky routing. Server middleware registered for every path must let
- * `/computer/*` through, because the iframe authenticates with the session
- * cookie only. The first desktop boot can take minutes; Node's default
- * `server.requestTimeout` (300 s) bounds `/connect`.
+ * serverless). Sockets are in-process, so multi-instance deployments need
+ * sticky routing.
  *
  * @experimental
  */
@@ -198,7 +146,6 @@ export async function setupComputerStream(
   const { mastra, allowedOrigins } = config;
   const authenticate = createAuthMiddleware({ mastra });
   const tickets = new ComputerTicketStore();
-  const scriptHash = await sha256Base64(STATUS_SCRIPT);
 
   interface LiveSocket {
     client: { close: (code?: number, reason?: string) => void };
@@ -259,6 +206,7 @@ export async function setupComputerStream(
   const startRevalidation = (session: ComputerSession) => {
     if (revalidators.has(session.id)) return;
     const timer = setInterval(() => {
+      if (!sessions.touch(session.id, session.computerId)) return;
       void refresh(session).then(result => {
         if (!result && !session.revoked) closeSessionSockets(session.id, 1011, 'computer unavailable');
       });
@@ -268,24 +216,10 @@ export async function setupComputerStream(
   };
 
   const computerIdOf = (c: Context) => c.req.param('computerId')!;
-  const cookiePath = (computerId: string) => `/computer/${encodeURIComponent(computerId)}/`;
 
   const requireComputers: MiddlewareHandler = async (c, next) => {
     if (!config.getViewer) return c.json({ error: 'No computers are registered' }, 404);
     return next();
-  };
-
-  const statusPage = (c: Context, code: StatusCode, frameAncestors: string) => {
-    const html =
-      `<!doctype html><html><head><meta charset="utf-8"><meta name="mastra-computer-status" content="${code}">` +
-      `<title>Computer viewer</title></head><body><p>${STATUS_TEXT[code]}</p><script>${STATUS_SCRIPT}</script></body></html>`;
-    return c.body(html, code, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': `default-src 'none'; script-src 'sha256-${scriptHash}'; frame-ancestors ${frameAncestors}`,
-    });
   };
 
   // ---- 1. Authenticated session mint -------------------------------------------------------
@@ -337,24 +271,24 @@ export async function setupComputerStream(
         if (!allowed) return c.json({ state: 'forbidden' }, 403);
       }
 
+      // No memory store means no thread-access check, which means no access.
       const memoryStore = await mastra.getStorage()?.getStore('memory');
-      if (memoryStore) {
-        const thread = await memoryStore.getThreadById({ threadId });
-        if (!thread) return c.json({ error: 'Thread not found' }, 404);
-        try {
-          await enforceThreadAccess({
-            mastra,
-            requestContext,
-            threadId,
-            thread,
-            effectiveResourceId: resourceId,
-            permission: mode === 'watch' ? 'memory:read' : 'memory:write',
-          });
-        } catch (error) {
-          const status = statusError(error);
-          if (status === 400) return c.json({ error: 'Invalid thread access request' }, 400);
-          return c.json({ state: 'forbidden' }, 403);
-        }
+      if (!memoryStore) return c.json({ state: 'forbidden' }, 403);
+      const thread = await memoryStore.getThreadById({ threadId });
+      if (!thread) return c.json({ error: 'Thread not found' }, 404);
+      try {
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId,
+          thread,
+          effectiveResourceId: resourceId,
+          permission: mode === 'watch' ? 'memory:read' : 'memory:write',
+        });
+      } catch (error) {
+        const status = statusError(error);
+        if (status === 400) return c.json({ error: 'Invalid thread access request' }, 400);
+        return c.json({ state: 'forbidden' }, 403);
       }
 
       let viewer: Awaited<ReturnType<ComputerViewerSource>>;
@@ -369,50 +303,10 @@ export async function setupComputerStream(
       if (!issued.ok) return c.json({ error: 'Too many computer viewer tickets' }, 429);
       return c.json({
         state: 'ready',
-        connectUrl: `${cookiePath(computerId)}connect?ticket=${encodeURIComponent(issued.ticket)}`,
+        socketUrl: `/computer/${encodeURIComponent(computerId)}/websockify?ticket=${encodeURIComponent(issued.ticket)}`,
       });
     },
   );
-
-  // ---- 2. Ticket → cookie --------------------------------------------------------------------
-  app.get('/computer/:computerId/connect', requireComputers, async (c: Context) => {
-    const computerId = computerIdOf(c);
-    const ticket = c.req.query('ticket');
-    const payload = ticket ? tickets.consume(ticket, computerId) : undefined;
-    if (!payload) return statusPage(c, 401, staticFrameAncestors(allowedOrigins));
-    const frameAncestors = `'self' ${payload.studioOrigin}`;
-
-    if (!sessions.hasCapacity(computerId)) return statusPage(c, 429, frameAncestors);
-
-    let viewer: ComputerViewerTarget;
-    try {
-      const resolved = await config.getViewer!(computerId, {
-        threadId: payload.threadId,
-        resourceId: payload.resourceId,
-      });
-      if (!resolved) return statusPage(c, 502, frameAncestors);
-      viewer = viewerTarget(resolved);
-    } catch (error) {
-      return statusPage(c, error instanceof ViewerUnavailable ? 502 : 401, frameAncestors);
-    }
-
-    const session = sessions.insert({ ...payload, viewer });
-    if (!session) return statusPage(c, 429, frameAncestors);
-
-    const encodedId = encodeURIComponent(computerId);
-    const secure = isHttps(c) ? '; Secure' : '';
-    c.header(
-      'Set-Cookie',
-      `${SESSION_COOKIE}=${session.id}; HttpOnly; SameSite=Lax; Path=${cookiePath(computerId)}; Max-Age=${COOKIE_MAX_AGE_S}${secure}`,
-    );
-    c.header('Referrer-Policy', 'no-referrer');
-    c.header('Cache-Control', 'no-store');
-    const viewOnly = session.mode === 'watch' ? '1' : '0';
-    return c.redirect(
-      `vnc.html?autoconnect=1&resize=scale&reconnect=1&view_only=${viewOnly}&path=computer/${encodedId}/websockify`,
-      302,
-    );
-  });
 
   // ---- 3. WebSocket proxy ----------------------------------------------------------------------
   const authorizeSocket: MiddlewareHandler = async (c, next) => {
@@ -423,17 +317,29 @@ export async function setupComputerStream(
       (isSameOrigin(origin, requestHost(c)) ||
         (allowedOrigins !== undefined && (await isOriginAllowed(allowedOrigins, origin, c))));
     if (!originAllowed) return c.text('Forbidden', 403);
-    const session = sessions.touch(getCookie(c, SESSION_COOKIE), computerIdOf(c));
-    if (!session) return c.text('Unauthorized', 401);
     // noVNC requests no subprotocol by default; older clients ask for `binary`. Anything else is refused.
     const protocols = (c.req.header('sec-websocket-protocol') ?? '')
       .split(',')
       .map(p => p.trim())
       .filter(Boolean);
     if (protocols.some(p => p !== 'binary')) return c.text('Bad Request', 400);
+    const computerId = computerIdOf(c);
+    const ticket = c.req.query('ticket');
+    const payload = ticket ? tickets.consume(ticket, computerId) : undefined;
+    // The ticket only works from the origin that minted it.
+    if (!payload || canonicalOrigin(origin) !== payload.studioOrigin) return c.text('Unauthorized', 401);
+    if (!sessions.hasCapacity(computerId)) return c.text('Too Many Requests', 429);
     // Every socket open re-checks the attachment.
-    const current = await refresh(session);
-    if (!current) return c.text(session.revoked ? 'Unauthorized' : 'Bad Gateway', session.revoked ? 401 : 502);
+    let viewer: ComputerViewerTarget;
+    try {
+      const resolved = await config.getViewer!(computerId, { threadId: payload.threadId, resourceId: payload.resourceId });
+      if (!resolved) return c.text('Bad Gateway', 502);
+      viewer = viewerTarget(resolved);
+    } catch (error) {
+      return error instanceof ViewerUnavailable ? c.text('Bad Gateway', 502) : c.text('Unauthorized', 401);
+    }
+    const session = sessions.insert({ ...payload, viewer });
+    if (!session) return c.text('Too Many Requests', 429);
     c.set('computerSession', session);
     return next();
   };
@@ -523,84 +429,14 @@ export async function setupComputerStream(
             if (timer) clearInterval(timer);
             revalidators.delete(session.id);
           }
+          sessions.end(session);
         },
       };
     }),
   );
 
-  // ---- 4. Asset proxy --------------------------------------------------------------------------
-  const proxyAsset = async (c: Context) => {
-    const computerId = computerIdOf(c);
-    const session = sessions.touch(getCookie(c, SESSION_COOKIE), computerId);
-    if (!session) return c.text('Unauthorized', 401);
-
-    const pathname = new URL(c.req.url).pathname;
-    const rawSegment = pathname.split('/')[2] ?? '';
-    const remainder = pathname.slice(`/computer/${rawSegment}/`.length);
-    if (isUnsafeRemainder(remainder)) return c.text('Bad Request', 400);
-
-    if (Date.now() - session.resolvedAt >= VIEWER_REFRESH_AFTER_MS && !(await refresh(session))) {
-      return c.text(session.revoked ? 'Unauthorized' : 'Bad Gateway', session.revoked ? 401 : 502);
-    }
-
-    const send = async (target: ComputerViewerTarget) => {
-      const url = new URL(remainder, target.base);
-      url.search = '';
-      if (url.origin !== target.base.origin || !url.pathname.startsWith(target.base.pathname)) return undefined;
-      const headers = new Headers(target.headers);
-      for (const name of FORWARDED_REQUEST_HEADERS) {
-        const value = c.req.header(name);
-        if (value) headers.set(name, value);
-      }
-      const controller = new AbortController();
-      const onAbort = () => controller.abort();
-      c.req.raw.signal.addEventListener('abort', onAbort, { once: true });
-      const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-      try {
-        return await fetch(url, { method: c.req.method, headers, redirect: 'manual', signal: controller.signal });
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-
-    let upstream: Response | undefined;
-    try {
-      const sentWith = session.viewer;
-      upstream = await send(sentWith);
-      if (upstream?.status === 401) {
-        await upstream.body?.cancel();
-        // Another request may already have refreshed the viewer while this one was in flight.
-        const refreshed = session.viewer !== sentWith ? session : await refresh(session);
-        if (!refreshed) {
-          return c.text(session.revoked ? 'Unauthorized' : 'Bad Gateway', session.revoked ? 401 : 502);
-        }
-        upstream = await send(refreshed.viewer);
-      }
-    } catch {
-      return c.text('Bad Gateway', 502);
-    }
-    if (!upstream) return c.text('Bad Request', 400);
-    if (upstream.status >= 300 && upstream.status < 400 && upstream.status !== 304) {
-      await upstream.body?.cancel();
-      return c.text('Bad Gateway', 502);
-    }
-
-    const headers = new Headers({
-      'Cache-Control': 'no-store',
-      'Referrer-Policy': 'no-referrer',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': `frame-ancestors 'self' ${session.studioOrigin}`,
-    });
-    for (const name of FORWARDED_RESPONSE_HEADERS) {
-      const value = upstream.headers.get(name);
-      if (value) headers.set(name, value);
-    }
-    const noBody = c.req.method === 'HEAD' || upstream.status === 204 || upstream.status === 304;
-    if (noBody) await upstream.body?.cancel();
-    return new Response(noBody ? null : upstream.body, { status: upstream.status, headers });
-  };
-
-  app.on(['GET', 'HEAD'], '/computer/:computerId/*', requireComputers, proxyAsset);
+  // ---- 3. Nothing else: sandbox HTTP content is never served on this origin -----------------
+  app.all('/computer/:computerId/*', c => c.text('Not Found', 404));
 
   return {
     injectWebSocket: webSocket.injectWebSocket,

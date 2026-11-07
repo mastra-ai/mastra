@@ -31,8 +31,7 @@ export interface ComputerSession {
 export type NewComputerSession = Omit<ComputerSession, 'id' | 'revoked' | 'createdAt' | 'lastSeen' | 'resolvedAt'>;
 
 /**
- * In-process viewer sessions, one per iframe. The id is the value of the
- * HttpOnly `mastra_computer` cookie scoped to the computer's iframe path.
+ * In-process registry of live viewer sockets, one session per redeemed ticket.
  *
  * Bounded: a computer keeps at most {@link MAX_SESSIONS_PER_COMPUTER} sessions
  * (a new one evicts that computer's oldest) and the process at most
@@ -90,6 +89,11 @@ export class ComputerSessionStore {
     if (!session || session.computerId !== computerId || session.revoked) return undefined;
     session.lastSeen = this.#now();
     return session;
+  }
+
+  /** End a session normally (its socket closed). */
+  end(session: ComputerSession): void {
+    this.#remove(session);
   }
 
   revoke(session: ComputerSession): void {

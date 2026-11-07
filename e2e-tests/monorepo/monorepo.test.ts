@@ -417,9 +417,9 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
         body: JSON.stringify({ threadId: 't', resourceId: 'r', mode: 'watch' }),
       });
       expect(res.status).toBe(404);
-      const connect = await fetch(`http://localhost:${port}/computer/c1/connect?ticket=x`, { redirect: 'manual' });
-      expect(connect.headers.get('set-cookie')).toBeNull();
-      expect(await connect.text()).not.toContain('mastra-computer-status');
+      // Mounted, the proxy 404s every non-websocket computer path; off, the catch-all page answers.
+      const page = await fetch(`http://localhost:${port}/computer/c1/vnc.html`);
+      expect(page.status).not.toBe(404);
     });
 
     it('should return tools from the api', async () => {

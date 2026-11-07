@@ -201,15 +201,12 @@ export async function mintSession(
   });
 }
 
-/** Mint + connect; returns the session cookie and the redirect location. */
-export async function openSession(origin: string, computerId: string, body: Record<string, unknown> = {}) {
+/** Mint a session and return the ticketed websocket URL (absolute ws:). */
+export async function mintSocketUrl(origin: string, computerId: string, body: Record<string, unknown> = {}) {
   const minted = await mintSession(origin, computerId, body);
-  const json = (await minted.json()) as { state: string; connectUrl: string };
+  const json = (await minted.json()) as { state: string; socketUrl: string };
   if (json.state !== 'ready') throw new Error(`expected ready, got ${JSON.stringify(json)}`);
-  const connect = await fetch(`${origin}${json.connectUrl}`, { redirect: 'manual' });
-  const setCookie = connect.headers.get('set-cookie') ?? '';
-  const cookie = setCookie.split(';')[0]!;
-  return { connect, setCookie, cookie, location: connect.headers.get('location'), connectUrl: json.connectUrl };
+  return { url: `${origin.replace('http', 'ws')}${json.socketUrl}`, socketUrl: json.socketUrl };
 }
 
 export interface SocketResult {

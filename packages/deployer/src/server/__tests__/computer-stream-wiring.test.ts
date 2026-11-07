@@ -36,13 +36,9 @@ describe('deployer computer stream wiring', () => {
     const app = await createServer(mastraWithComputers(viewer));
 
     expect((await sessionRequest(app)).status).toBe(404);
-    // GETs fall through to the server's existing catch-all page, never the proxy.
-    for (const path of ['/computer/c1/connect?ticket=x', '/computer/c1/vnc.html']) {
-      const res = await app.request(`http://localhost${path}`, { redirect: 'manual' });
-      expect(res.headers.get('set-cookie')).toBeNull();
-      expect(res.status).not.toBe(302);
-      expect(await res.text()).not.toContain('mastra-computer-status');
-    }
+    // GETs fall through to the server's existing catch-all page; mounted, the proxy would 404 them.
+    const page = await app.request('http://localhost/computer/c1/vnc.html');
+    expect(page.status).not.toBe(404);
     // With the proxy mounted this upgrade would be refused 403 (no Origin); off, it is just an unknown page.
     const upgrade = await app.request('http://localhost/computer/c1/websockify', { headers: { upgrade: 'websocket' } });
     expect(upgrade.status).not.toBe(403);
@@ -113,7 +109,7 @@ describe('deployer computer stream wiring', () => {
     await expect((await sessionRequest(app)).json()).resolves.toEqual({ state: 'unavailable' });
   });
 
-  it('keeps cookie-only iframe routes reachable past user middleware on the API prefix', async () => {
+  it('keeps the ticketed websocket reachable past user middleware on the API prefix', async () => {
     vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
     const viewer = vi.fn<Viewer>();
     const mastra = mastraWithComputers(viewer);
@@ -128,10 +124,22 @@ describe('deployer computer stream wiring', () => {
     ]);
     const app = await createServer(mastra);
 
-    // Reaches the proxy (which answers with its own unauthorized status page), not the user middleware.
-    const connect = await app.request('http://localhost/computer/c1/connect?ticket=bogus');
-    expect(connect.status).toBe(401);
-    expect(await connect.text()).toContain('mastra-computer-status');
+    // A ticketed upgrade reaches the proxy (which rejects the bogus ticket), not the user middleware.
+    const upgrade = await app.request('http://localhost/computer/c1/websockify?ticket=bogus', {
+      headers: { upgrade: 'websocket', connection: 'Upgrade', origin: 'http://localhost', host: 'localhost' },
+    });
+    expect(upgrade.status).toBe(401);
+    expect(await upgrade.text()).not.toContain('denied by user middleware');
     expect((await sessionRequest(app)).status).toBe(401);
+  });
+
+  it('never serves sandbox HTTP content: non-websocket computer paths are 404', async () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    const viewer = vi.fn<Viewer>();
+    const app = await createServer(mastraWithComputers(viewer));
+    for (const path of ['/computer/c1/vnc.html', '/computer/c1/core/rfb.js', '/computer/c1/anything']) {
+      expect((await app.request(`http://localhost${path}`)).status, path).toBe(404);
+    }
+    expect(viewer).not.toHaveBeenCalled();
   });
 });
