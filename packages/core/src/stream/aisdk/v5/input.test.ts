@@ -4,6 +4,63 @@ import { ChunkFrom } from '../../types';
 import { AISDKV5InputStream } from './input';
 import { createTestModel } from './test-utils';
 
+async function collectCitationStream(parts: any[]) {
+  const inputStream = new AISDKV5InputStream({ component: RegisteredLogger.LLM, name: 'test-stream' });
+  const stream = inputStream.initialize({
+    runId: 'run-1',
+    createStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          for (const part of parts) controller.enqueue(part);
+          controller.close();
+        },
+      }),
+      warnings: {},
+      request: {},
+      rawResponse: {},
+    }),
+    onResult: () => {},
+  });
+  const chunks: any[] = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
+}
+
+describe('AISDKV5InputStream citation markers', () => {
+  it('keeps provider metadata on a tool-input delta that was held back', async () => {
+    const providerMetadata = { test: { signature: 'abc' } };
+    const chunks = await collectCitationStream([
+      { type: 'tool-input-start', id: 'call-1', toolName: 'reply' },
+      { type: 'tool-input-delta', id: 'call-1', delta: '{"text":"Paris' },
+      { type: 'tool-input-delta', id: 'call-1', delta: '\uE200cite', providerMetadata },
+      { type: 'tool-input-delta', id: 'call-1', delta: '\uE202turn0search0\uE201"}' },
+      { type: 'tool-input-end', id: 'call-1' },
+    ]);
+    const deltas = chunks.filter(c => c.type === 'tool-call-delta');
+    expect(deltas.map(c => c.payload.argsTextDelta).join('')).toBe('{"text":"Paris"}');
+    expect(deltas.filter(c => c.payload.providerMetadata === providerMetadata)).toHaveLength(1);
+  });
+
+  it('keeps provider metadata on a held tool-input delta released at the end of the part', async () => {
+    const providerMetadata = { test: { signature: 'abc' } };
+    const chunks = await collectCitationStream([
+      { type: 'tool-input-start', id: 'call-1', toolName: 'reply' },
+      { type: 'tool-input-delta', id: 'call-1', delta: '{"text":"a' },
+      { type: 'tool-input-delta', id: 'call-1', delta: '\uE200cite', providerMetadata },
+      { type: 'tool-input-end', id: 'call-1' },
+    ]);
+    const deltas = chunks.filter(c => c.type === 'tool-call-delta');
+    expect(deltas.map(c => c.payload.argsTextDelta).join('')).toBe('{"text":"a\uE200cite');
+    expect(deltas.at(-1)?.payload.argsTextDelta).toBe('\uE200cite');
+    expect(deltas.at(-1)?.payload.providerMetadata).toBe(providerMetadata);
+  });
+});
+
 describe('AISDKV5InputStream', () => {
   it('should transform AI SDK v5 stream chunks to Mastra format', async () => {
     // Create the input stream instance
