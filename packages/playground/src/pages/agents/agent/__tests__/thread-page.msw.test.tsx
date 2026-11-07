@@ -356,7 +356,7 @@ describe('Standalone thread page', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`, queryClient);
       try {
-        await screen.findByText('OpenAI');
+        await screen.findByRole('button', { name: /gpt-5-mini/ });
         await waitFor(() => expect(push).toBeDefined());
         await act(async () => push?.());
         await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
@@ -699,9 +699,8 @@ describe('Standalone thread page', () => {
           renderAt(path);
           fireEvent.change(await composerInput(), { target: { value: 'Read my attachment' } });
           fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-          const picker = document.querySelector('input[type=file]');
-          if (!(picker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+          const picker = screen.getByLabelText('Files');
           const contents = 'name,note\r\nZoë,"hello\nworld"\r\n';
           fireEvent.change(picker, { target: { files: [new File([contents], 'leads.csv', { type: 'text/csv' })] } });
           await screen.findByRole('button', { name: 'Preview leads.csv' }, ATTACHMENT_TIMEOUT);
@@ -721,9 +720,8 @@ describe('Standalone thread page', () => {
           if (editWhilePreparing) {
             fireEvent.change(input, { target: { value: 'Keep the next question' } });
             fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-            fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-            const nextPicker = document.querySelector('input[type=file]');
-            if (!(nextPicker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+            fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+            const nextPicker = screen.getByLabelText('Files');
             fireEvent.change(nextPicker, {
               target: { files: [new File(['Next file'], 'next.txt', { type: 'text/plain' })] },
             });
@@ -915,7 +913,7 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     // Provider + model pill (needs PlaygroundModelProvider, which this page must supply itself).
-    expect(await screen.findByText('OpenAI')).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /^Model:.*gpt-5-mini$/ })).not.toBeNull();
     expect(await screen.findByText('gpt-5-mini')).not.toBeNull();
     expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
@@ -1358,7 +1356,7 @@ describe('Standalone thread page', () => {
       const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
       // The switcher lists only the agent's own model until the providers query resolves.
       await waitFor(() => expect(providersServed).toHaveBeenCalled());
-      fireEvent.click(await screen.findByText('gpt-5-mini'));
+      fireEvent.click(await screen.findByRole('button', { name: /^Model:.*gpt-5-mini$/ }));
       fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
       fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
       fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));

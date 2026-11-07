@@ -42,7 +42,7 @@ import { ArrowUp, Mic } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
-import { AttachFilePopover } from './attachments/attach-file-popover';
+import { AttachFileMenu } from './attachments/attach-file-menu';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { ComposerFileDrop } from './attachments/composer-file-drop';
@@ -558,7 +558,7 @@ const ComposerActionRow = ({
   return (
     <>
       <ComposerActionsStart>
-        {canExecute && <AttachFilePopover />}
+        {canExecute && <AttachFileMenu />}
         {runOptionsSlot}
       </ComposerActionsStart>
       <ComposerActionsEnd>
