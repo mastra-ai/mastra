@@ -1,13 +1,13 @@
 ---
 title: "Reference: AgentBrowser class | Browser"
-description: "The AgentBrowser class provides deterministic browser automation using the agent-browser library."
+description: "The AgentBrowser class provides deterministic browser automation using Playwright."
 packages:
   - "@mastra/agent-browser"
 ---
 
 # AgentBrowser class
 
-The `AgentBrowser` class provides deterministic browser automation using the [agent-browser](https://github.com/vercel-labs/agent-browser) library. It uses accessibility tree snapshots and element refs (e.g., `@e5`) for precise, reproducible interactions.
+The `AgentBrowser` class provides deterministic browser automation using [Playwright](https://playwright.dev). It uses accessibility tree snapshots and element refs (e.g., `@e5`) for precise, reproducible interactions.
 
 Use `AgentBrowser` when you need reliable, deterministic browser automation. For AI-powered interactions using natural language, see [`StagehandBrowser`](/reference/browser/stagehand-browser).
 
@@ -444,7 +444,7 @@ Close the browser and clean up resources.
 
 ## How refs work
 
-The `browser_snapshot` tool returns an accessibility tree with element refs like `@e1`, `@e2`, etc. These refs are stable identifiers you use with other tools:
+The `browser_snapshot` tool returns an accessibility tree with element refs like `@e1`, `@e2`, etc. A ref still targets an element after a re-render when its role and name stay the same. Take a new snapshot after a page load or URL change. The previous refs no longer apply.
 
 1. Call `browser_snapshot` to see the page structure
 1. Find the element you want to interact with
