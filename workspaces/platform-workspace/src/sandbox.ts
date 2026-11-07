@@ -138,6 +138,9 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    */
   addressRegistry?: SandboxAddressRegistry;
   /**
+   * @experimental Requires `MASTRA_EXPERIMENTAL_COMPUTER=true`; throws at
+   * construction otherwise.
+   *
    * Give the agent a Linux desktop it fully controls: screenshots, mouse and
    * keyboard, exposed as `sandbox.computer`, which adds the workspace
    * `mastra_workspace_computer_*` tools. E2B only; throws at construction for
@@ -575,7 +578,10 @@ export class PlatformSandbox extends MastraSandbox {
    */
   declare readonly networking?: SandboxNetworking;
 
-  /** The agent's desktop, present when the sandbox was created with `computer: true`. */
+  /**
+   * @experimental The agent's desktop, present when the sandbox was created
+   * with `computer: true`.
+   */
   declare readonly computer?: SandboxComputer;
 
   private readonly _networking: SandboxNetworking = {
@@ -733,6 +739,9 @@ export class PlatformSandbox extends MastraSandbox {
     if (this._client.sandboxProvider === 'e2b') this.networking = this._networking;
     this._computerEnabled = options.computer === true;
     if (this._computerEnabled) {
+      if (process.env.MASTRA_EXPERIMENTAL_COMPUTER !== 'true') {
+        throw new Error('PlatformSandbox computer is experimental; set MASTRA_EXPERIMENTAL_COMPUTER=true to enable it');
+      }
       if (this._client.sandboxProvider !== 'e2b') {
         throw new Error('PlatformSandbox computer requires the e2b sandbox provider');
       }

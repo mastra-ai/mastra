@@ -4130,9 +4130,43 @@ describe('PlatformSandbox computer', () => {
   beforeEach(() => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it.each([undefined, '', 'false', '1'])('throws when MASTRA_EXPERIMENTAL_COMPUTER is %s', flag => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', flag as string);
+    const options = { accessToken: 'sk_test', projectId: 'proj_123', environmentId: 'env_123' };
+    expect(() => new PlatformSandbox({ ...options, computer: true })).toThrow(
+      'PlatformSandbox computer is experimental; set MASTRA_EXPERIMENTAL_COMPUTER=true to enable it',
+    );
+    expect(new PlatformSandbox(options).computer).toBeUndefined();
+  });
+
+  it('reports the flag before the provider when both are wrong', () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', '');
+    expect(
+      () =>
+        new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sandboxProvider: 'railway',
+          computer: true,
+        }),
+    ).toThrow('set MASTRA_EXPERIMENTAL_COMPUTER=true');
+  });
+
+  it('enables the computer when MASTRA_EXPERIMENTAL_COMPUTER is true', () => {
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      computer: true,
+    });
+    expect(supportsComputer(sandbox)).toBe(true);
   });
 
   const COMPUTER_TOOLS = [
@@ -4365,6 +4399,7 @@ describe('PlatformSandbox computer driven by an agent', () => {
   beforeEach(() => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
   });
   afterEach(() => {
     vi.unstubAllEnvs();

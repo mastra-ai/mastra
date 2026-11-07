@@ -335,69 +335,6 @@ A process has no time limit unless you pass `timeout` to `spawn()` or the constr
 
 A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits while its stream reconnects reports exit code `1` from `wait()` instead of its real exit code.
 
-### Desktop computer
-
-Pass `computer: true` to give the agent a Linux desktop it fully controls. The sandbox gets a `computer` property, and a workspace using it adds the 11 `mastra_workspace_computer_*` tools: screenshot, click, double click, right click, move mouse, drag, type, press key, scroll, screen info, and wait.
-
-```typescript
-import { Agent } from '@mastra/core/agent'
-import { Workspace } from '@mastra/core/workspace'
-import { PlatformSandbox } from '@mastra/platform-workspace'
-
-const sandbox = new PlatformSandbox({
-  environmentId: 'env_abc',
-  sandboxProvider: 'e2b',
-  computer: true,
-})
-
-const agent = new Agent({
-  id: 'desktop-agent',
-  name: 'Desktop Agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  instructions: 'You control a Linux desktop. Use the computer tools for everything on screen.',
-  workspace: new Workspace({ sandbox }),
-  defaultOptions: { toolCallConcurrency: 1 },
-})
-
-const result = await agent.generate('Open a terminal and run `uname -a`.')
-```
-
-Set `toolCallConcurrency: 1` in the agent's `defaultOptions` so every call, including Studio chat, uses it. A model often clicks, types and presses Enter in a single step, and by default those tool calls run concurrently, so they can reach the desktop out of order (for example, Enter before the text).
-
-The first computer call installs the desktop (about 80 seconds) and starts it. Later calls, and other `PlatformSandbox` instances attached to the same sandbox, reuse the running desktop. Calls through one `PlatformSandbox` instance run one at a time, in order. Two instances attached to the same sandbox (for example a second instance created with the same `sandboxId`) are not ordered against each other.
-
-To watch or take over, open the desktop's noVNC viewer in a browser tab. `streamUrl()` returns the viewer link, and `getPortAuthCookie(6080)` signs a browser you control in to it:
-
-```typescript
-const url = await sandbox.computer?.streamUrl?.()
-const cookie = await sandbox.getPortAuthCookie(6080)
-if (url && cookie) {
-  await browserContext.addCookies([cookie])
-  await page.goto(url)
-}
-```
-
-For faster boots, pre-install the desktop in a [reusable template](#reusable-templates) with `withDesktop()`. It only adds the desktop packages, so set `memoryMB` yourself (2048 or more is recommended). While the template is still building, the sandbox boots on a fallback and the first computer call installs the desktop as usual.
-
-```typescript
-import { PlatformSandbox, Template, withDesktop } from '@mastra/platform-workspace'
-
-const sandbox = new PlatformSandbox({
-  environmentId: 'env_abc',
-  sandboxProvider: 'e2b',
-  template: withDesktop(Template()).memoryMB(2048),
-  computer: true,
-})
-```
-
-Limits:
-
-- E2B only. `computer: true` with another sandbox provider throws when the sandbox is constructed.
-- The viewer opens in its own browser tab. It can't be embedded in an iframe on another site yet.
-- Computer tool calls in one model step are only guaranteed to stay in order with `toolCallConcurrency: 1` (set in `defaultOptions`, not overridden per call). It serializes all of the agent's tool calls; otherwise Enter can arrive before the typed text.
-- The VNC server has no password. Access to the viewer is protected only by the port's sign-in or auth cookie.
-- A human in the viewer and the agent share one mouse and keyboard, so their input can interleave.
-
 ## Constructor parameters
 
 <PropertiesTable
@@ -506,14 +443,6 @@ Limits:
     defaultValue: 'Auto-generated',
   },
   {
-    name: 'computer',
-    type: 'boolean',
-    description:
-      'Give the agent a Linux desktop it fully controls, with screenshot, mouse, and keyboard tools. E2B only. See [Desktop computer](#desktop-computer).',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
     name: 'fetch',
     type: 'typeof fetch',
     description: 'Custom fetch implementation, mainly for testing.',
@@ -580,12 +509,6 @@ if (cookie) await browserContext.addCookies([cookie])
     type: 'SandboxNetworking | undefined',
     description:
       "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra, or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
-  },
-  {
-    name: 'computer',
-    type: 'SandboxComputer | undefined',
-    description:
-      "The agent's desktop: screenshots, mouse, keyboard, and `streamUrl()` for a noVNC viewer link. `undefined` unless the sandbox was created with `computer: true`. See [Desktop computer](#desktop-computer).",
   },
   {
     name: 'filesystem',

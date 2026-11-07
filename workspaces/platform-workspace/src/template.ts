@@ -260,6 +260,9 @@ export function Template(): SandboxTemplateBuilder {
 }
 
 /**
+ * @experimental Only useful with `PlatformSandbox`'s experimental `computer`
+ * option, which requires `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+ *
  * Pre-install the desktop used by `PlatformSandbox`'s `computer: true`, so
  * sandboxes booted from the built template skip the runtime install. Leaves
  * resources alone: set `memoryMB` yourself (2048 or more is recommended).
