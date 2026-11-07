@@ -734,6 +734,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
           reason: installations.length > 0 ? 'ready' : 'not_connected',
+          ...(installations.length === 0 && userConnection.reason
+            ? { userConnectionReason: userConnection.reason }
+            : {}),
           diagnostics: this.diagnostics(),
         });
       },
@@ -817,8 +820,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         });
       }
       return connection;
-    } catch {
-      return { connected: false, githubUsername: null };
+    } catch (error) {
+      logPlatformWarn('Platform GitHub user connection verification failed', {
+        userId,
+        reason: 'verification-unavailable',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { connected: false, githubUsername: null, reason: 'verification-unavailable' };
     }
   }
 
