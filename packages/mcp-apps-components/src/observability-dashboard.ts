@@ -553,7 +553,7 @@ const toWidget = (draft: ObservabilityWidgetDraft): DashboardWidget => {
   const kind = keysIn({ kpis, timeseries, table, scores }, WIDGET_KINDS)[0]!;
   const first = { kpis, timeseries, table, scores }[kind]!;
   const views = [first, ...(first.tabs ?? [])].map(view => TO_VIEW[kind](view as never));
-  return { ...widget, id: widget.id ?? crypto.randomUUID(), kind, views };
+  return { ...widget, id: widget.id ?? crypto.randomUUID(), span: widget.span ?? FULL_WIDTH, kind, views };
 };
 
 /** What the draft can say wrong that its schema can't: a table's sort and its `unpricedWhen` column. */
@@ -603,7 +603,9 @@ const kpisDraftIssues = (draft: ObservabilityKpisDraft, context: z.core.$Refinem
   return context.issues.length === before;
 };
 
-const SPAN_DESCRIPTION = 'Columns of a 12-column row: 12 is the full width, 6 half, 4 a third, 3 a quarter.';
+const FULL_WIDTH = 12;
+const SPAN_DESCRIPTION =
+  'Columns of a 12-column row, one of 1, 2, 3, 4, 6 or 12: 12 is the full width, 6 half, 4 a third, 3 a quarter. Left out, the full width.';
 
 const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
   const metricNames = [...new Set(catalog.metricNames)].sort();
@@ -783,7 +785,7 @@ const buildDashboardDraftSchema = (catalog: ObservabilityCatalog) => {
     'A widget',
     z.strictObject({
       id: dashboardWidgetSchema.shape.id.optional().describe('Left out, the server assigns one.'),
-      span: (span as z.ZodType).describe(SPAN_DESCRIPTION),
+      span: (span as z.ZodType).optional().describe(SPAN_DESCRIPTION),
       title,
       description: widgetDescription,
       drilldown,
@@ -905,10 +907,12 @@ type WithTabs<V> = V & { tabs?: V[] };
 
 /**
  * A dashboard widget as the model writes it: its kind is the key holding its view, e.g.
- * `{ span: 6, timeseries: { chart, format, series } }`. Left out, the server assigns the `id`.
+ * `{ span: 6, timeseries: { chart, format, series } }`. Left out, the server assigns the `id` and the
+ * widget spans the full row.
  */
-export type ObservabilityWidgetDraft = Omit<DashboardWidget, 'id' | 'kind' | 'views' | 'scope'> & {
+export type ObservabilityWidgetDraft = Omit<DashboardWidget, 'id' | 'span' | 'kind' | 'views' | 'scope'> & {
   id?: string;
+  span?: DashboardWidget['span'];
 } & OneKeyOf<{
     kpis: WithTabs<ObservabilityKpisDraft>;
     timeseries: WithTabs<ObservabilityTimeseriesDraft>;

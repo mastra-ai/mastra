@@ -154,6 +154,12 @@ it('gathers the reads a view makes into its queries, one per distinct read', () 
   });
 });
 
+it('spans the full row when a widget leaves `span` out', () => {
+  const { span: _span, ...draft } = kpiDraft;
+  const [widget] = widgets(toObservabilityDashboard({ dashboard: { rows: [{ widgets: [draft] }] } }));
+  expect(widget!.span).toBe(12);
+});
+
 /** `widget` as the observability widget draws it: at project scope, with org-only views and columns left out. */
 function atProjectScope({ scope: _scope, ...widget }: DashboardWidget): DashboardWidget {
   const inScope = (item: { scope?: string }) => item.scope !== 'org';
