@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
@@ -44,6 +44,17 @@ describe('MastraStateAdapter', () => {
           },
         },
       });
+    });
+
+    it('warns and does nothing when subscribing to an unmapped thread', async () => {
+      const warn = vi.fn();
+      const loggedAdapter = new MastraStateAdapter(memoryStore, undefined, { warn } as any);
+      await expect(loggedAdapter.subscribe('discord:guild1:channel1:unknown')).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('subscribeThread');
+
+      await loggedAdapter.subscribe(externalThreadId);
+      expect(warn).toHaveBeenCalledTimes(1);
     });
 
     it('subscribes to a thread and persists in metadata', async () => {
