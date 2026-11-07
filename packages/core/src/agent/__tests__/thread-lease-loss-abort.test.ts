@@ -38,6 +38,12 @@ import { assembleAgentFromFsEntry } from '../fs-routing';
 import { verifyRunLease } from '../run-lease-fence';
 import { isRetakeLeaseOwner } from '../thread-stream-runtime';
 
+// 'sends no retry when the lease is lost while a failed request waits to be retried'
+// takes the lease during the retry backoff, so it needs the real backoff rather
+// than the instant one from @internal/test-utils/setup.
+vi.unmock('../../utils/retry-after');
+vi.mock('../../../node_modules/p-retry', importOriginal => importOriginal());
+
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
 const LEASE_KEY = [RESOURCE, THREAD].join('\u0000');

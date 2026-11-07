@@ -16,7 +16,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import { DefaultExporter, Observability } from '@mastra/observability';
 import type { Client } from '@modelcontextprotocol/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { TaskRequester } from '../client/tasks/requester';
 import { taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
@@ -31,7 +31,15 @@ import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
 vi.setConfig({ testTimeout: 60_000 });
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const LEASE_MS = 3_000;
+// Below the manager's 3s minimum lease: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS (internal, test-only) lowers
+// the floor for this file and for the child servers it spawns, which inherit the env.
+const LEASE_MS = 600;
+beforeAll(() => {
+  vi.stubEnv('MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS', String(LEASE_MS));
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 const here = fileURLToPath(new URL('.', import.meta.url));
 
 class User {
@@ -339,6 +347,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         slots,
         mode,
         traced ? 'traced' : 'untraced',
+        String(LEASE_MS),
       ],
       { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
     );
