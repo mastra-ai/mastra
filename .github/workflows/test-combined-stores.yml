@@ -89,9 +89,10 @@ jobs:
             echo "Running the affected stores only: $SELECTED_STORES"
           fi
 
-          # The slowest stores run their (sequential) test files across several jobs, each with its
-          # own database containers: pg took about 11 minutes in one job, clickhouse about 7.
-          SHARDS='{"pg":3,"clickhouse":2}'
+          # pg runs its (sequential) test files across several jobs, each with its own database
+          # containers: it took about 11 minutes in one job. clickhouse stays whole: one file takes
+          # most of its time, so splitting it only added a job.
+          SHARDS='{"pg":3}'
           STORES=$(jq -c -n --argjson all "$STORES" --argjson shards "$SHARDS" \
             '[$all[] as $s | ($shards[$s] // 1) as $n | range(1; $n + 1) | {store: $s, shard: ., shards: $n}]')
 
