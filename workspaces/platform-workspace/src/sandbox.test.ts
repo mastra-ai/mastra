@@ -4376,7 +4376,7 @@ describe('PlatformSandbox computer driven by an agent', () => {
    * slowest round trip is given to the first call, as on staging.
    */
   async function runClickTypeEnter(generateOptions: { toolCallConcurrency?: number }) {
-    const infoDelaysMs = [60, 40, 20];
+    const infoDelaysMs = [150, 100, 50];
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
       if (String(url).endsWith('/sandbox/sbx_1') && (init?.method ?? 'GET') === 'GET') {
         await new Promise(resolve => setTimeout(resolve, infoDelaysMs.shift() ?? 0));
@@ -4430,9 +4430,9 @@ describe('PlatformSandbox computer driven by an agent', () => {
     ]);
   });
 
-  // Documents why the docs require toolCallConcurrency: 1. If core starts running
-  // computer tools sequentially by itself, this test fails and the requirement can go.
-  it('reorders the actions of one step under the default tool-call concurrency', async () => {
+  // Canary for a core limitation, not desired behaviour. It fails when core changes how it
+  // schedules a step's tool calls; if core then keeps model order, drop it and the docs requirement.
+  it("documents a known core limitation: default tool-call concurrency reorders one step's actions", async () => {
     expect(await runClickTypeEnter({})).toEqual([
       'xdotool key --clearmodifiers -- Return',
       "xdotool type --clearmodifiers --delay 12 -- 'echo hi'",
