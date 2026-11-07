@@ -15,13 +15,19 @@ interface ComputerThreadValue {
   scope?: ComputerThreadScope;
   /** Latest server-reported control per computer; shared by the card and request prompts. */
   live: Map<string, ComputerLiveControl>;
-  reportControl: (computerId: string, control: Omit<ComputerLiveControl, 'basis'>) => void;
+  /**
+   * Reports a control read or change. Pass the `readEpoch` taken when a read started:
+   * a read that started before the latest change lands is stale and is dropped.
+   */
+  reportControl: (computerId: string, control: Omit<ComputerLiveControl, 'basis'>, readEpoch?: number) => void;
+  readEpoch: (computerId: string) => number;
 }
 
 const ComputerThreadContext = createContext<ComputerThreadValue>({
   computers: new Map(),
   live: new Map(),
   reportControl: () => {},
+  readEpoch: () => 0,
 });
 
 export interface ComputerThreadProviderProps {
@@ -44,8 +50,12 @@ export function ComputerThreadProvider({ messages, scope, children }: ComputerTh
   // Read through a ref so streaming messages don't recreate the callback and restart polls.
   const computersRef = useRef(computers);
   computersRef.current = computers;
+  const epochs = useRef(new Map<string, number>());
+  const readEpoch = useCallback((computerId: string) => epochs.current.get(computerId) ?? 0, []);
   const reportControl = useCallback(
-    (computerId: string, control: Omit<ComputerLiveControl, 'basis'>) =>
+    (computerId: string, control: Omit<ComputerLiveControl, 'basis'>, epoch?: number) => {
+      if (epoch === undefined) epochs.current.set(computerId, readEpoch(computerId) + 1);
+      else if (epoch !== readEpoch(computerId)) return;
       setLive(previous => {
         const current = previous.get(computerId);
         const basis = computersRef.current.get(computerId)?.holder ?? 'agent';
@@ -56,12 +66,13 @@ export function ComputerThreadProvider({ messages, scope, children }: ComputerTh
         const next = new Map(previous);
         next.set(computerId, { holder: control.holder, basis, ...(notified !== undefined && { notified }) });
         return next;
-      }),
-    [],
+      });
+    },
+    [readEpoch],
   );
   const value = useMemo<ComputerThreadValue>(
-    () => ({ computers, scope: threadId && resourceId ? { threadId, resourceId } : undefined, live, reportControl }),
-    [computers, threadId, resourceId, live, reportControl],
+    () => ({ computers, scope: threadId && resourceId ? { threadId, resourceId } : undefined, live, reportControl, readEpoch }),
+    [computers, threadId, resourceId, live, reportControl, readEpoch],
   );
   return <ComputerThreadContext.Provider value={value}>{children}</ComputerThreadContext.Provider>;
 }

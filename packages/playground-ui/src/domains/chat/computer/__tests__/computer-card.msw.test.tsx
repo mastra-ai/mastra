@@ -130,16 +130,20 @@ interface ControlServer {
   gets: number;
   posts: { action: string; note?: string; threadId: string; resourceId: string }[];
   headers: Headers[];
+  /** When set, a GET answers with the holder it saw on arrival, but only once this resolves. */
+  hold?: Promise<void>;
 }
 let lease: ControlServer;
 
 function serveControl() {
   server.use(
-    http.get(CONTROL_URL, ({ request }) => {
+    http.get(CONTROL_URL, async ({ request }) => {
       lease.gets++;
       lease.headers.push(request.headers);
       if (lease.status) return new HttpResponse(null, { status: lease.status });
-      return HttpResponse.json({ holder: lease.holder });
+      const seen = lease.holder;
+      await lease.hold;
+      return HttpResponse.json({ holder: seen });
     }),
     http.post(CONTROL_URL, async ({ request }) => {
       const body = (await request.json()) as ControlServer['posts'][number];
@@ -443,6 +447,37 @@ describe('ComputerCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
     await waitFor(() => expect(live()[0]?.url).toContain('ticket=t2'));
     expect(live()[0]?.viewOnly).toBe(false);
+  });
+
+  it('drops a poll that started before a take and answered after it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(live()).toHaveLength(1));
+    const client = live()[0];
+    await waitFor(() => expect(lease.gets).toBe(1));
+
+    let answer!: () => void;
+    lease.hold = new Promise<void>(r => (answer = r));
+    await act(() => vi.advanceTimersByTimeAsync(CONTROL_POLL_MS));
+    await waitFor(() => expect(lease.gets).toBe(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    await waitFor(() => expect(client.viewOnly).toBe(false));
+    answer();
+    await act(() => vi.advanceTimersByTimeAsync(10));
+    expect(screen.getByText('You have control')).toBeTruthy();
+    expect(client.viewOnly).toBe(false);
+  });
+
+  it('a take that finds the lease already moved does not claim the agent missed it', async () => {
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    const take = await screen.findByRole('button', { name: 'Take control' });
+    lease.holder = 'human';
+    fireEvent.click(take);
+    expect(await screen.findByText('You have control')).toBeTruthy();
+    expect(lease.posts).toHaveLength(1);
+    expect(screen.queryByText(/agent was not notified/)).toBeNull();
   });
 
   it('says when the agent was not notified of a hand back', async () => {

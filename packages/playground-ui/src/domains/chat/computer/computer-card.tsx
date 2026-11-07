@@ -105,7 +105,12 @@ function useControlActions(computerId: string, threadId: string, resourceId: str
     setFailed(false);
     const result = await postComputerControl({ ...request, action, ...(note && { note }) });
     setPending(false);
-    if (result.state === 'ok') reportControl(computerId, { holder: result.holder, notified: result.notified });
+    // A no-change answer (a double submit, or the lease already moved) says nothing about notifying.
+    if (result.state === 'ok')
+      reportControl(computerId, {
+        holder: result.holder,
+        ...(result.reason !== 'no-change' && { notified: result.notified }),
+      });
     else setFailed(true);
   };
   return { change, pending, failed };
@@ -152,7 +157,7 @@ function HandBack({ computerId, threadId, resourceId }: LiveComputerProps) {
 function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const client = useMastraClient();
   const { baseUrl, apiPrefix, headers } = client.options;
-  const { computers, live, reportControl } = useComputerThread();
+  const { computers, live, reportControl, readEpoch } = useComputerThread();
   const entry = computers.get(computerId);
   const control = effectiveHolder(entry, live.get(computerId));
   const [attempt, setAttempt] = useState(0);
@@ -239,6 +244,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
+      const epoch = readEpoch(computerId);
       const result = await getComputerControl({
         computerId,
         threadId,
@@ -249,7 +255,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
         signal: controller.signal,
       }).catch(() => undefined);
       if (controller.signal.aborted) return;
-      if (result?.state === 'ok') reportControl(computerId, { holder: result.holder });
+      if (result?.state === 'ok') reportControl(computerId, { holder: result.holder }, epoch);
       timer = setTimeout(() => void poll(), CONTROL_POLL_MS);
     };
     void poll();
@@ -257,7 +263,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [computerId, threadId, resourceId, baseUrl, apiPrefix, headersKey, reportControl]);
+  }, [computerId, threadId, resourceId, baseUrl, apiPrefix, headersKey, reportControl, readEpoch]);
 
   const sessionMessage = connection.phase === 'session' ? SESSION_MESSAGES[connection.state] : undefined;
   const human = control.holder === 'human';
