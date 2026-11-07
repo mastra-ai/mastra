@@ -29,6 +29,8 @@ export const COMPUTER_RELEASE_ACTION = 'computer_release';
 export const EMBED_MIME_TYPE = 'application/vnd.slack-embed';
 const ENDED_TEXT = 'This computer is no longer attached to this conversation.';
 const FALLBACK_NAME = 'Computer';
+const PREVIEW_BUDGET_MS = 1_500;
+const PREVIEW_TIMEOUT_NOTICE = 'The desktop preview is still starting. Refresh this card in a moment.';
 
 export const OWNER_ONLY_TEXT = 'Only the person who started this conversation can control its computer.';
 
@@ -180,6 +182,7 @@ interface CardState {
 }
 
 interface Logger {
+  info?: (msg: string, meta?: Record<string, unknown>) => void;
   warn?: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
@@ -456,19 +459,44 @@ export class ComputerCards {
     if (!url) return;
     const name = this.#cards.get(`${ref.computerId}:${ref.threadId}`)?.name ?? FALLBACK_NAME;
 
-    let previewUrl: string | null = null;
-    try {
-      previewUrl = await this.#previewUrl(ref, event);
-    } catch (err) {
-      this.#warn('Computer flexpane check failed', err);
-    }
+    const startedAt = Date.now();
+    const preview = this.#previewUrl(ref, event);
+    const timed = await Promise.race([
+      preview.then(previewUrl => ({ previewUrl, timedOut: false as const })).catch(err => {
+        this.#warn('Computer flexpane check failed', err);
+        return { previewUrl: null, timedOut: false as const };
+      }),
+      new Promise<{ previewUrl: null; timedOut: true }>(resolve =>
+        setTimeout(() => resolve({ previewUrl: null, timedOut: true }), PREVIEW_BUDGET_MS),
+      ),
+    ]);
 
     await this.#opts.client
       .apiCall('entity.presentDetails', {
         trigger_id: triggerId,
-        metadata: buildEntity({ ref: externalRef as string, url, name, previewUrl }),
+        metadata: buildEntity({ ref: externalRef as string, url, name, previewUrl: timed.previewUrl }),
       })
+      .then(() =>
+        this.#opts.logger?.info?.('[Slack] Computer flexpane details presented', { elapsedMs: Date.now() - startedAt }),
+      )
       .catch(err => this.#warn('Computer flexpane details failed', err));
+
+    if (timed.timedOut) {
+      void preview.then(
+        () => this.#postPreviewTimeoutNotice(ref),
+        () => this.#postPreviewTimeoutNotice(ref),
+      );
+    }
+  }
+
+  async #postPreviewTimeoutNotice(ref: ComputerRef): Promise<void> {
+    const thread = await this.#loadThread(ref.threadId);
+    const externalThreadId = thread?.metadata?.channel_externalThreadId;
+    if (typeof externalThreadId !== 'string') return;
+    const { channel, threadTs } = this.#opts.decodeThreadId(externalThreadId);
+    await this.#opts.client.chat
+      .postMessage({ channel, ...(threadTs ? { thread_ts: threadTs } : {}), text: PREVIEW_TIMEOUT_NOTICE })
+      .catch(err => this.#warn('Computer preview timeout notice failed', err));
   }
 
   async #previewUrl(ref: ComputerRef, event: Record<string, unknown>): Promise<string | null> {
