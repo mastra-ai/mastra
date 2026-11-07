@@ -321,7 +321,9 @@ export class FactoryTransitionService {
     result: FactoryTransitionResult,
   ): Promise<void> {
     if (!this.#audit) return;
-    const from = item ? currentStage(item.stages) : undefined;
+    // Board-neutral, like the stage notification: `currentStage` only knows the
+    // built-in rule stages and would drop custom-board phases.
+    const from = item && item.stages.length === 1 ? item.stages[0] : undefined;
     if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
     const outcome =
       result.status === 'accepted'
