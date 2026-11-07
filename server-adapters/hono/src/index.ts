@@ -102,6 +102,44 @@ const MASTRA_PRISTINE_REQUEST_KEY = '__mastraPristineRequest';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/**
+ * Wraps a response body so it is cancelled when the request aborts. @hono/node-server never reads or cancels the
+ * body of a request that closed while the route handler ran, so the request signal is the only notice of that.
+ */
+function cancelBodyOnAbort(body: ReadableStream<Uint8Array>, signal: AbortSignal): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  let canceled = false;
+  const cancel = (reason?: unknown) => {
+    if (canceled) return;
+    canceled = true;
+    signal.removeEventListener('abort', onAbort);
+    void reader.cancel(reason).catch(() => {});
+  };
+  const onAbort = () => cancel('request aborted');
+  if (signal.aborted) onAbort();
+  else signal.addEventListener('abort', onAbort, { once: true });
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (canceled) return;
+        if (done) {
+          signal.removeEventListener('abort', onAbort);
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        if (canceled) return;
+        signal.removeEventListener('abort', onAbort);
+        controller.error(error);
+      }
+    },
+    cancel,
+  });
+}
+
 export type HonoBindings = {};
 
 /**
@@ -230,10 +268,6 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
-        if (streamFormat === 'sse' && route.sseFlushOnConnect) {
-          await stream.write(': connected\n\n');
-        }
-
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
@@ -241,7 +275,18 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           void reader.cancel('request aborted').catch(() => {});
         });
 
+        // Hono only aborts the stream when the runtime cancels the response body. @hono/node-server never reads or
+        // cancels the body of a request that closed while the route handler ran, so follow the request signal too.
+        const signal = res.req.raw.signal;
+        const abortStream = () => stream.abort();
+        if (signal.aborted) abortStream();
+        else signal.addEventListener('abort', abortStream, { once: true });
+
         try {
+          if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+            await stream.write(': connected\n\n');
+          }
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -281,6 +326,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
         } finally {
+          signal.removeEventListener('abort', abortStream);
           await stream.close();
         }
       },
@@ -390,7 +436,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return this.stream(route, response, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
       const fetchResponse = result as globalThis.Response;
-      return fetchResponse;
+      if (!fetchResponse.body) return fetchResponse;
+      return new Response(cancelBodyOnAbort(fetchResponse.body, response.req.raw.signal), {
+        status: fetchResponse.status,
+        statusText: fetchResponse.statusText,
+        headers: fetchResponse.headers,
+      });
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
