@@ -82,6 +82,7 @@ describe('Settings', () => {
 
       const container = document.querySelector('[data-slot="settings-container"]');
       expect(container?.className).toContain('*:py-3.25');
+      expect(container?.className).toContain('*:empty:hidden');
       expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
       for (const row of container?.querySelectorAll('[data-slot="settings-row"]') ?? []) {
         expect(row.className).not.toMatch(/\bp[xy]?-/);
@@ -284,23 +285,6 @@ describe('Settings', () => {
     });
   });
 
-  describe('when a fieldset row is not the last row', () => {
-    it('keeps the divider under it', () => {
-      render(
-        <SettingsContainer>
-          <SettingsFieldsetRow label="Invite">
-            <Input aria-label="Email" />
-          </SettingsFieldsetRow>
-          <SettingsEmptyRow>No pending invitations</SettingsEmptyRow>
-        </SettingsContainer>,
-      );
-
-      expect(screen.getByRole('group', { name: 'Invite' }).className).toContain(
-        '[.divide-y>&:not(:last-child)]:border-b',
-      );
-    });
-  });
-
   describe('when a list has notices and other controls', () => {
     it('keeps them inside the container, and hides an empty notice row', () => {
       render(
@@ -314,7 +298,7 @@ describe('Settings', () => {
       const container = document.querySelector('[data-slot="settings-container"]');
       expect(container?.contains(screen.getByText('Couldn’t load accounts'))).toBe(true);
       expect(container?.contains(screen.getByRole('button', { name: 'Refresh' }))).toBe(true);
-      expect(screen.getByTestId('empty-notices').className).toContain('empty:hidden');
+      expect(screen.getByTestId('empty-notices').childNodes).toHaveLength(0);
     });
   });
 });

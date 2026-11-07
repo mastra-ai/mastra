@@ -44,11 +44,9 @@ export function SettingsEmptyRow(props: SettingsEmptyRowProps) {
   return <SettingsListBar data-slot="settings-empty-row" tone="muted" {...props} />;
 }
 
-/** A list's notices and errors, as a row of its `SettingsContainer`. Hidden while empty. */
+/** A list's notices and errors, as a row of its `SettingsContainer`. Takes no space while it has nothing in it. */
 export function SettingsNoticeRow({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div data-slot="settings-notice-row" className={cn('flex flex-col gap-2 empty:hidden', className)} {...props} />
-  );
+  return <div data-slot="settings-notice-row" className={cn('flex flex-col gap-2', className)} {...props} />;
 }
 
 /** The square on the left of a `SettingsItem` holding an icon or logo. Avatars use `Avatar size="md"`, the
@@ -83,8 +81,8 @@ export function SettingsItem({ media, title, description, children, className, .
     <div data-slot="settings-item" className={cn('flex min-w-0 items-center gap-3', className)} {...props}>
       {media}
       <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <div className="text-label text-foreground truncate">{title}</div>
-        {description != null && <div className="text-caption text-muted-foreground truncate">{description}</div>}
+        <div className="truncate text-label text-foreground">{title}</div>
+        {description != null && <div className="truncate text-caption text-muted-foreground">{description}</div>}
       </div>
       {children != null && <div className="flex shrink-0 items-center gap-2">{children}</div>}
     </div>

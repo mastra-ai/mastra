@@ -125,20 +125,13 @@ export function SettingsFieldsetRow({
     <Fieldset
       data-slot="settings-row"
       aria-describedby={description == null ? undefined : descriptionId}
-      className={cn(
-        'flex flex-col',
-        rowClassName,
-        !controlBelow && 'sm:flex-row sm:items-center',
-        // Fieldset's `border-0` would otherwise drop the hairline the card draws between rows.
-        '[.divide-y>&:not(:last-child)]:border-b',
-        className,
-      )}
+      className={cn('flex flex-col', rowClassName, !controlBelow && 'sm:flex-row sm:items-center', className)}
       {...props}
     >
       <div className={headingClassName}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
-          <div id={descriptionId} className="text-caption text-muted-foreground flex flex-col gap-0.5 text-pretty">
+          <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
             {description}
           </div>
         )}
