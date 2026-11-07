@@ -12479,3 +12479,4 @@ export class Agent<
 }
 
 // CI benchmark (core-before-1), disposable, do not merge
+// CI benchmark control run 2
