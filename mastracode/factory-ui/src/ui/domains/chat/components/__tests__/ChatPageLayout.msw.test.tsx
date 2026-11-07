@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('puts the drawer trigger and the breadcrumbs on one mobile header row, without search', () => {
+  it('puts the drawer trigger and the breadcrumbs on one mobile header row, with search on the right', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
@@ -50,7 +50,11 @@ describe('ChatPageLayout', () => {
     expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
     expect(within(header).getByText('Page title')).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
+    const actions = within(header).getAllByRole('button').slice(-2);
+    expect(actions.map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
+      'Panel',
+      'Search and navigate',
+    ]);
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 

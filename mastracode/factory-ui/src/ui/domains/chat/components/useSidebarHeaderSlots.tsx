@@ -6,8 +6,8 @@ import { GlobalSearchButton } from '../../search/components/GlobalSearchButton';
 import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
 
 /**
- * Page header slots with the sidebar trigger in front of the breadcrumbs when the sidebar is out of view:
- * on mobile (where search lives in the drawer) and while the desktop sidebar is collapsed.
+ * Page header slots for when the sidebar is out of view (on mobile and while the desktop sidebar is collapsed):
+ * the sidebar trigger goes in front of the breadcrumbs and search goes last among the header actions.
  */
 export function useSidebarHeaderSlots({
   breadcrumbs,
@@ -29,10 +29,12 @@ export function useSidebarHeaderSlots({
         </>
       ) : undefined,
     headerActions:
-      collapsed || headerActions ? (
+      showTrigger || headerActions ? (
         <>
           {headerActions}
-          {collapsed && <GlobalSearchButton id="global-search-collapsed-trigger" />}
+          {showTrigger && (
+            <GlobalSearchButton id={isMobile ? 'global-search-mobile-trigger' : 'global-search-collapsed-trigger'} />
+          )}
         </>
       ) : undefined,
   };

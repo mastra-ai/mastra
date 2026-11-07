@@ -156,7 +156,8 @@ function KnowledgeRoute() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
 
-  if (features.isPending || !factoryId) return null;
+  if (!factoryId) return null;
+  if (features.isPending) return <AppPageLoader />;
   if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
   return <KnowledgePage />;
 }
