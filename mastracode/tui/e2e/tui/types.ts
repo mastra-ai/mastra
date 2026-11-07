@@ -249,6 +249,7 @@ export type McE2eTerminal = {
   /** Send an SGR left click at the first on-screen occurrence of `text`. */
   clickText?: (text: string) => void;
   /** Send SGR wheel events at the screen centre. */
+  hoverText?: (text: string) => void;
   wheel?: (direction: 'up' | 'down', count?: number) => void;
   /** xterm's current mouse tracking mode ('none' when the terminal owns the mouse). */
   mouseTracking?: () => string;

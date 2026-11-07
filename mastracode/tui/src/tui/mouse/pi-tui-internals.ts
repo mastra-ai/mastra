@@ -12,6 +12,10 @@ export interface OverlayEntry {
 
 interface TuiInternals {
   doRender(): void;
+  /** Lines of the last rendered frame, overlays composited (padded to at least the terminal height). */
+  previousLines: string[];
+  /** Frame line the hardware cursor is on. */
+  hardwareCursorRow: number;
   getTopmostVisibleOverlay(): OverlayEntry | undefined;
   resolveOverlayLayout(
     options: OverlayOptions | undefined,

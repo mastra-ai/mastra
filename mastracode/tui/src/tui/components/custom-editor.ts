@@ -10,6 +10,7 @@ import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/index';
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
+import { markHoveredRows } from '../mouse/hover-marker.js';
 import { displayModeColor, mastra, theme } from '../theme.js';
 import { fadePanel } from './surface.js';
 import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
@@ -131,6 +132,8 @@ export class CustomEditor extends Editor {
   // Row indexes are into the array returned by render().
   private lastCursorRow = -1;
   private lastAutocompleteStartRow = -1;
+  /** Autocomplete list row under the mouse pointer, so hover follows the pointer when the list scrolls. */
+  private hoveredAutocompleteRow: number | undefined;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
@@ -320,6 +323,14 @@ export class CustomEditor extends Editor {
     this.lastAutocompleteStartRow = autocompleteList ? 1 + contentLines.length - autocompleteList.renderedRowCount : -1;
     this.lastCursorRow = result.findIndex(line => line.includes(CURSOR_MARKER));
 
+    if (!autocompleteList) this.hoveredAutocompleteRow = undefined;
+    const hoveredIndex =
+      this.hoveredAutocompleteRow === undefined
+        ? undefined
+        : autocompleteList?.itemIndexAtRow(this.hoveredAutocompleteRow);
+    const hoveredRows = hoveredIndex === undefined ? undefined : autocompleteList?.rowsOfItem(hoveredIndex);
+    if (hoveredRows)
+      return markHoveredRows(result, this.lastAutocompleteStartRow + hoveredRows.first, hoveredRows.count);
     return result;
   }
 
@@ -329,17 +340,30 @@ export class CustomEditor extends Editor {
   }
 
   /**
-   * Applies the autocomplete item rendered `rowsFromCursor` rows below the
-   * hardware cursor (negative = above), exactly as Tab would. Returns false when
-   * that row is not an autocomplete item.
+   * Resolves the autocomplete row `rowsFromCursor` rows below the hardware
+   * cursor (negative = above). A click applies that suggestion exactly as Tab
+   * would; a hover only marks it. Returns true when something changed.
    */
-  clickAutocompleteRow(rowsFromCursor: number): boolean {
+  pointAutocompleteRow(rowsFromCursor: number, action: 'click' | 'hover'): boolean {
     const list = this.visibleAutocompleteList();
     if (!list || this.lastCursorRow < 0 || this.lastAutocompleteStartRow < 0) return false;
-    const index = list.itemIndexAtRow(this.lastCursorRow + rowsFromCursor - this.lastAutocompleteStartRow);
+    const listRow = this.lastCursorRow + rowsFromCursor - this.lastAutocompleteStartRow;
+    const index = list.itemIndexAtRow(listRow);
+    if (action === 'hover') {
+      const next = index === undefined ? undefined : listRow;
+      if (next === this.hoveredAutocompleteRow) return false;
+      this.hoveredAutocompleteRow = next;
+      return true;
+    }
     if (index === undefined) return false;
     list.setSelectedIndex(index);
     this.handleInput('\t');
+    return true;
+  }
+
+  clearAutocompleteHover(): boolean {
+    if (this.hoveredAutocompleteRow === undefined) return false;
+    this.hoveredAutocompleteRow = undefined;
     return true;
   }
 

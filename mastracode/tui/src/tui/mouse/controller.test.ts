@@ -12,7 +12,12 @@ const ROWS = 30;
 const COLS = 100;
 
 /** Real pi-tui renderer writing into a headless xterm, with input injected as raw terminal bytes. */
-function createHarness() {
+/**
+ * `rowOffset` simulates a terminal whose screen rows are offset from the rendered frame (as when the
+ * frame no longer reaches the bottom of the screen): mouse reports and cursor position replies both
+ * come back shifted by that many rows.
+ */
+function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
   const screen = new xterm.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
   let onInput: ((data: string) => void) | undefined;
   let output = Promise.resolve();
@@ -24,6 +29,13 @@ function createHarness() {
     async drainInput() {},
     write: (data: string) => {
       output = output.then(() => new Promise<void>(resolve => screen.write(data, resolve)));
+      // Headless xterm has no stdin, so answer cursor position requests like a real terminal.
+      if (data.includes('\x1b[6n')) {
+        output = output.then(() => {
+          const { cursorY, cursorX } = screen.buffer.active;
+          onInput?.(`\x1b[${cursorY + 1 + rowOffset};${cursorX + 1}R`);
+        });
+      }
     },
     columns: COLS,
     rows: ROWS,
@@ -61,9 +73,32 @@ function createHarness() {
     }
     throw new Error(`"${text}" not on screen`);
   };
-  const click = (row: number, col: number) => onInput?.(`\x1b[<0;${col};${row}M`);
+  // Pointer events wait for the cursor position round trip before they take effect.
+  const pointer = async (code: number, row: number, col: number) => {
+    onInput?.(`\x1b[<${code};${col};${row + rowOffset}M`);
+    await output;
+  };
+  const click = (row: number, col: number) => pointer(0, row, col);
+  // SGR motion with no button held: button code 35 (32 motion + 3 none).
+  const hover = (row: number, col: number) => pointer(35, row, col);
 
-  return { screen, ui, controller, render, find, click, send: (data: string) => onInput?.(data) };
+  const lineAt = (row: number) =>
+    screen.buffer.active.getLine(screen.buffer.active.viewportY + row - 1)?.translateToString(true) ?? '';
+  const markedRows = () =>
+    Array.from({ length: ROWS }, (_, index) => index + 1).filter(row => lineAt(row).includes('▌'));
+
+  return {
+    screen,
+    ui,
+    controller,
+    render,
+    find,
+    lineAt,
+    markedRows,
+    click,
+    hover,
+    send: (data: string) => onInput?.(data),
+  };
 }
 
 function modalWithList(ui: TUI, count: number) {
@@ -97,7 +132,7 @@ describe('MouseController on the real pi-tui renderer', () => {
 
     const { handle } = modalWithList(harness.ui, 3);
     await harness.render();
-    expect(harness.screen.modes.mouseTrackingMode).toBe('vt200');
+    expect(harness.screen.modes.mouseTrackingMode).toBe('any');
 
     handle.hide();
     await harness.render();
@@ -111,7 +146,49 @@ describe('MouseController on the real pi-tui renderer', () => {
     await harness.render();
 
     const target = harness.find('item-9');
-    harness.click(target.row, target.col);
+    await harness.click(target.row, target.col);
+    expect(selected).toEqual(['item-9']);
+  });
+
+  it('hover marks the row a click would pick, without changing the selection', async () => {
+    harness = createHarness();
+    const { list, selected } = modalWithList(harness.ui, 12);
+    const changes: string[] = [];
+    list.onSelectionChange = item => changes.push(item.value);
+    list.setSelectedIndex(8);
+    await harness.render();
+
+    const target = harness.find('item-9');
+    await harness.hover(target.row, target.col);
+    await harness.render();
+    expect(harness.lineAt(target.row)).toMatch(/^\s*▌\s+item-9/);
+    expect(harness.markedRows()).toEqual([target.row]);
+    expect(list.getSelectedItem()?.value).toBe('item-8');
+    expect(changes).toEqual([]);
+    expect(selected).toEqual([]);
+
+    // The list scrolls under a still pointer: the marker stays on that screen row and a click
+    // there picks whatever item is drawn there now.
+    harness.send('\x1b[B');
+    await harness.render();
+    expect(harness.markedRows()).toEqual([target.row]);
+    const drawn = /item-\d+/.exec(harness.lineAt(target.row))?.[0];
+    await harness.click(target.row, target.col);
+    expect(selected).toEqual([drawn]);
+  });
+
+  it('maps pointer rows through the cursor position when the screen is offset from the rendered frame', async () => {
+    harness = createHarness({ rowOffset: 3 });
+    const { list, selected } = modalWithList(harness.ui, 12);
+    list.setSelectedIndex(8);
+    await harness.render();
+
+    const target = harness.find('item-9');
+    await harness.hover(target.row, target.col);
+    await harness.render();
+    expect(harness.markedRows()).toEqual([target.row]);
+
+    await harness.click(target.row, target.col);
     expect(selected).toEqual(['item-9']);
   });
 
@@ -121,8 +198,8 @@ describe('MouseController on the real pi-tui renderer', () => {
     await harness.render();
 
     const target = harness.find('item-1');
-    harness.click(target.row, 1);
-    harness.click(1, target.col);
+    await harness.click(target.row, 1);
+    await harness.click(1, target.col);
     expect(selected).toEqual([]);
   });
 
@@ -140,7 +217,7 @@ describe('MouseController on the real pi-tui renderer', () => {
     harness = createHarness();
     modalWithList(harness.ui, 3);
     await harness.render();
-    expect(harness.screen.modes.mouseTrackingMode).toBe('vt200');
+    expect(harness.screen.modes.mouseTrackingMode).toBe('any');
 
     harness.ui.stop();
     await new Promise(resolve => setTimeout(resolve, 10));

@@ -1,8 +1,8 @@
 import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@earendil-works/pi-tui';
 import { visibleWidth } from '@earendil-works/pi-tui';
 
-import { dispatchClick } from './mouse/hit-test.js';
-import type { MouseAware, MouseClick } from './mouse/hit-test.js';
+import { locate } from './mouse/hit-test.js';
+import type { MouseAware, MousePoint, MouseTarget } from './mouse/hit-test.js';
 import { theme } from './theme.js';
 
 type ModalOverlayOptions = {
@@ -58,8 +58,9 @@ class MinHeightOverlay implements Component, MouseAware {
     this.component.invalidate?.();
   }
 
-  handleMouse(click: MouseClick): boolean {
-    return dispatchClick(this.component, { ...click, row: click.row - this.lastTopPadding });
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    const target = locate(this.component, { ...point, row: point.row - this.lastTopPadding });
+    return target && { ...target, top: target.top + this.lastTopPadding };
   }
 
   render(width: number): string[] {

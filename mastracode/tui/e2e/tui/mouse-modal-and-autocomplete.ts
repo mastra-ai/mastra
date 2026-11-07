@@ -62,7 +62,7 @@ export const mouseModalAndAutocompleteScenario = {
     terminal.write('mouse-e2e');
     await runtime.waitForScreenText(/mouse-e2e\/charlie-model/i, terminal, 8_000);
     await terminal.flushInput?.();
-    expectTracking(terminal, 'vt200', 'while the model selector is open');
+    expectTracking(terminal, 'any', 'while the model selector is open');
 
     const before = terminal.serialize().view.match(/→ (\S+)/)?.[1];
     terminal.wheel?.('down');
@@ -71,6 +71,15 @@ export const mouseModalAndAutocompleteScenario = {
     const after = terminal.serialize().view.match(/→ (\S+)/)?.[1];
     if (!before || !after || before === after) {
       throw new Error(`Expected wheel to move the highlight (before=${before}, after=${after})`);
+    }
+
+    // Hover marks the row under the pointer without moving the highlight.
+    terminal.hoverText?.('mouse-e2e/charlie-model');
+    await terminal.flushInput?.();
+    await runtime.sleep(200);
+    const hoveredView = terminal.serialize().view;
+    if (!/▌\s*\S*\s*mouse-e2e\/charlie-model/.test(hoveredView) || hoveredView.match(/→ (\S+)/)?.[1] !== after) {
+      throw new Error(`Expected hover marker on charlie-model with highlight still on ${after}\n\n${hoveredView}`);
     }
 
     terminal.clickText?.('mouse-e2e/charlie-model');
@@ -84,8 +93,15 @@ export const mouseModalAndAutocompleteScenario = {
     await runtime.waitForScreenText(/Mouse bravo command/i, terminal, 20_000);
     await terminal.flushInput?.();
     await runtime.sleep(200);
-    expectTracking(terminal, 'vt200', 'while slash autocomplete is open');
+    expectTracking(terminal, 'any', 'while slash autocomplete is open');
     runtime.printScreen('slash autocomplete before click', terminal);
+
+    terminal.hoverText?.('Mouse bravo command');
+    await terminal.flushInput?.();
+    await runtime.sleep(300);
+    if (!/▌.*mouse-bravo/.test(terminal.serialize().view)) {
+      throw new Error(`Expected hover marker on the bravo suggestion\n\n${terminal.serialize().view}`);
+    }
 
     terminal.clickText?.('Mouse bravo command');
     await runtime.waitForScreenTextAbsent(/Mouse alpha command/i, terminal, 8_000);

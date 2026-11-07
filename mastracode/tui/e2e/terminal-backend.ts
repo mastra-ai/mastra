@@ -245,6 +245,11 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
       terminal.sendInput(`\x1b[<0;${position.col};${position.row}M`);
       terminal.sendInput(`\x1b[<0;${position.col};${position.row}m`);
     },
+    hoverText(text: string) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`hoverText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      terminal.sendInput(`\x1b[<35;${position.col};${position.row}M`);
+    },
     wheel(direction: 'up' | 'down', count = 1) {
       const button = direction === 'up' ? 64 : 65;
       const row = Math.ceil(terminal.rows / 2);

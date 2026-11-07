@@ -109,6 +109,13 @@ export class WrappingAutocompleteList implements Component {
     return index === undefined || index < 0 ? undefined : index;
   }
 
+  /** First row and row count of `index` in the last render (the highlighted item can wrap). */
+  rowsOfItem(index: number): { first: number; count: number } | undefined {
+    const first = this.rowItems.indexOf(index);
+    if (first < 0) return undefined;
+    return { first, count: this.rowItems.lastIndexOf(index) - first + 1 };
+  }
+
   /** Number of rows produced by the last render. */
   get renderedRowCount(): number {
     return this.rowItems.length;
