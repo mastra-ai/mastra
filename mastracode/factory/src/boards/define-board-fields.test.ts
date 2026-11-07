@@ -79,8 +79,12 @@ describe('defineBoard phase fields', () => {
   it('accepts a defined board phase back as a declaration, as fixtures that extend a board do', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'intake', phases: workBoard.phases });
     expect(copy.transitions).toEqual(workBoard.transitions);
-    expect(copy.phases.review).toMatchObject({ kind: 'working', runner: { context: 'work' } });
-    expect(copy.phases.review).toMatchObject({ role: 'work' });
+    expect(copy.phases.review).toMatchObject({
+      kind: 'working',
+      runner: { context: 'review' },
+      tools: ['factory_record_review_verdict'],
+    });
+    expect(copy.phases.review).toMatchObject({ role: 'review' });
   });
 
   it('lists each next phase once when several outcomes lead to it', () => {
@@ -294,6 +298,38 @@ describe('defineBoard phase fields', () => {
         planning: { name: 'Planning', kind: 'working', nextPhases: ['backlog'] },
       }),
     ).toThrow('cannot be people-only');
+  });
+
+  it('lets a working phase grant Factory tools, and only Factory phase tools', () => {
+    const board = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['check'] },
+      check: {
+        name: 'Check',
+        kind: 'working',
+        runner: { context: 'review' },
+        tools: ['factory_record_review_verdict', 'factory_record_review_verdict'],
+        nextPhases: ['backlog'],
+      },
+    });
+    expect(board.phases.check).toMatchObject({ tools: ['factory_record_review_verdict'] });
+
+    expect(() =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['check'] },
+        check: { name: 'Check', kind: 'working', tools: ['shell' as never], nextPhases: ['backlog'] },
+      }),
+    ).toThrow('shell is not a Factory phase tool');
+    expect(() =>
+      release({
+        backlog: {
+          name: 'Backlog',
+          kind: 'resting',
+          tools: ['factory_review_source'] as never,
+          nextPhases: ['check'],
+        },
+        check: { name: 'Check', kind: 'working', nextPhases: ['backlog'] },
+      }),
+    ).toThrow('cannot declare tools');
   });
 
   it('starts the runner skill for sources without a handler and adds instructions to every run', async () => {

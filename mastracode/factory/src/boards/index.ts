@@ -9,6 +9,7 @@ export type {
   BoardPhaseExitTool,
   BoardPhaseKind,
   BoardPhaseRunner,
+  FactoryPhaseTool,
   BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,

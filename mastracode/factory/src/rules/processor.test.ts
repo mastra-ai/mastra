@@ -1307,14 +1307,34 @@ describe('FactoryPhaseStateProcessor', () => {
         tracking: { currentCacheKey: first?.cacheKey },
       }),
     );
+    // The retraction says where the card is now, still without repeating the card's details.
     expect(retraction).toMatchObject({
-      cacheKey: `factory:none:${prepared.binding.id}`,
+      cacheKey: `factory:none:${prepared.binding.id}:planning`,
       mode: 'snapshot',
-      contents: '\n',
+      contents: expect.stringContaining('the card is now in Planning. Your part is done'),
       attributes: { status: 'none' },
       metadata: { value: { phase: { status: 'none' } } },
     });
     expect(JSON.stringify(retraction)).not.toContain('Improve the settings UI');
+  });
+
+  it('tells a session whose card moved to a phase another context works that its part is done', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'work');
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+    });
+    const context = requestContext();
+    const building = await processor.computeStateSignal(stateArgs(context));
+    expect(building?.contents).not.toContain('Your part is done');
+
+    await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const moved = await processor.computeStateSignal(stateArgs(context));
+    expect(moved?.contents).toContain(
+      'This card is now in Review, which runs in the review context in another session. Your part is done',
+    );
   });
 
   it('preserves the cacheable phase history and appends an empty snapshot on revocation', async () => {

@@ -414,12 +414,21 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     if (!binding) return;
     if (binding.status !== 'active') {
       if (!hasBase || prior?.status !== 'active') return;
+      // Say where the card went, so the session stops its work instead of guessing why its phase vanished.
+      const moved = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+      const movedBoards = moved ? await this.boards.load(binding) : undefined;
+      const movedTo = moved && movedBoards ? ruleStage(movedBoards, moved) : undefined;
+      const movedName = movedTo
+        ? (movedBoards?.get(boardForWorkItem(moved!))?.phases[movedTo]?.name ?? movedTo)
+        : undefined;
       return {
         id: STATE_ID,
-        cacheKey: `factory:none:${prior.bindingId ?? 'revoked'}`,
+        cacheKey: `factory:none:${prior.bindingId ?? 'revoked'}${movedTo ? `:${movedTo}` : ''}`,
         mode: 'snapshot',
         tagName: 'factory-phase',
-        contents: '\n',
+        contents: movedName
+          ? `This session no longer works its Factory card; the card is now in ${escapeText(movedName)}. Your part is done: do not continue its work here. Answer questions only.\n`
+          : '\n',
         value: { phase: { status: 'none' } },
         attributes: { status: 'none' },
         metadata: { value: { phase: { status: 'none' } } },
@@ -489,6 +498,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
           ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on${phase.exitTool.next ? ` to ${escapeText(definition?.phases[phase.exitTool.next]?.name ?? phase.exitTool.next)}` : ''}. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
           : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
         : '';
+    // The card moved to a phase another context works; this session's tools for it are gone.
+    const handedOnText =
+      phase?.kind === 'working' && phase.runner.context !== binding.role
+        ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions, and move the card only if it must come back to you.\n`
+        : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
     const snapshotContents =
@@ -503,6 +517,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         : '') +
       nextText +
       exitText +
+      handedOnText +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {

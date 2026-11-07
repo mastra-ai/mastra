@@ -5,6 +5,7 @@ import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
 import type { StatusEvent } from '../../../boards/board-events.js';
+import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
@@ -51,6 +52,8 @@ export interface StoredPhaseInput {
   exitTool?: StoredPhaseExitTool | null;
   /** Only people (and provider event routes) move cards into the phase. */
   manualEntry?: boolean;
+  /** Factory tools the phase grants the session working the card there. */
+  tools?: FactoryPhaseTool[] | null;
 }
 
 /** A board as it is written. Phase order is significant: the first phase is where cards start. */
@@ -73,6 +76,7 @@ export interface StoredPhaseRecord {
   autoStartWhen: RuleGroup | null;
   exitTool: StoredPhaseExitTool | null;
   manualEntry: boolean;
+  tools: FactoryPhaseTool[] | null;
 }
 
 export interface StoredBoardRecord {
@@ -292,6 +296,7 @@ interface PhaseRow extends Record<string, unknown> {
   auto_start_when: RuleGroup | null;
   exit_tool: StoredPhaseExitTool | null;
   manual_entry: boolean | null;
+  tools: FactoryPhaseTool[] | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -353,6 +358,7 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
     autoStartWhen: row.auto_start_when,
     exitTool: row.exit_tool,
     manualEntry: row.manual_entry === true,
+    tools: row.tools ?? null,
   };
 }
 
@@ -835,6 +841,7 @@ async function insertPhases(ops: FactoryStorageOps, scope: StoredBoardScope, inp
       auto_start_when: phase.autoStartWhen ?? null,
       exit_tool: phase.exitTool ?? null,
       manual_entry: phase.manualEntry === true,
+      tools: phase.tools?.length ? phase.tools : null,
     });
   }
 }

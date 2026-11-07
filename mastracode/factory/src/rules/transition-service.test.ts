@@ -1328,16 +1328,17 @@ describe('FactoryTransitionService', () => {
     });
   });
 
-  it('opens the builder session when a person drags a card into Review with self-review off', async () => {
+  it('opens the reviewer session when a person drags a card into Review with self-review off', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['execute'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
 
+    // Review runs in the review context, so the person's move seats the reviewer.
     expect(result).toMatchObject({
       status: 'accepted',
-      decisions: [{ type: 'sendMessage', role: 'work', prepareBinding: true }],
+      decisions: [{ type: 'sendMessage', role: 'review', prepareBinding: true }],
     });
   });
 
@@ -1983,7 +1984,8 @@ describe('phase semantics', () => {
     ['triage', 'triage'],
     ['planning', 'work'],
     ['execute', 'work'],
-    ['review', 'work'],
+    // Review runs the independent reviewer, so a person's move seats the review role.
+    ['review', 'review'],
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     // Building is entered from Planning, its self-review from Building; every other lane from Intake.

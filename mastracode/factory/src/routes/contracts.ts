@@ -836,6 +836,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
                 .optional(),
               /** Only people (and provider event routes) move cards into this phase. */
               manualEntry: z.boolean().optional(),
+              /** Factory tools the phase grants the session working the card there. */
+              tools: z.array(z.string()).optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

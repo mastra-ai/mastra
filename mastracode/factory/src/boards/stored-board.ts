@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
-import { BoardDefinitionError, compileBoardDefinition, declarationOf, DEFAULT_PHASE_CONTEXT } from './define-board.js';
+import {
+  BoardDefinitionError,
+  compileBoardDefinition,
+  declarationOf,
+  DEFAULT_PHASE_CONTEXT,
+  FACTORY_PHASE_TOOLS,
+} from './define-board.js';
 import type { AnyBoardConfig, BoardPhase, BoardPhaseDefinition } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
 
@@ -35,6 +41,7 @@ export const storedPhaseInputSchema = z
     autoStartWhen: cardRuleGroupSchema.nullish(),
     exitTool: storedExitToolSchema.nullish(),
     manualEntry: z.boolean().optional(),
+    tools: z.array(z.enum(FACTORY_PHASE_TOOLS)).nullish(),
   })
   .strict();
 
@@ -286,6 +293,7 @@ function storedBoardConfig(board: StoredBoardInput, behaviour?: BoardBehaviour):
       autoStart: phase.autoStart ? true : undefined,
       autoStartWhen: phase.autoStartWhen ?? undefined,
       exitTool,
+      tools: phase.tools?.length ? phase.tools : undefined,
       manualEntry: phase.manualEntry ? true : undefined,
       outcomes: declared?.outcomes,
       onEnter: declared?.onEnter,
@@ -466,6 +474,7 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
                 next: phase.exitTool.next,
               })
             : undefined,
+          tools: phase.tools ? [...phase.tools] : undefined,
         }
       : {}),
   });

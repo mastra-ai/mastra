@@ -370,11 +370,11 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
     review: {
       name: 'Review',
-      // The builder's seat carries Review: it answers feedback on its own change request.
-      // With self-review on, entering Review first runs an independent reviewer in its own
-      // review seat on the pushed branch; on approve the builder opens the change request here.
+      // An independent reviewer tests the builder's pushed branch in its own review seat
+      // (self-review); on approve the builder opens the change request here.
       kind: 'working',
-      runner: { context: 'work' },
+      runner: { context: 'review' },
+      tools: ['factory_record_review_verdict'],
       // Self-review sends the card back to Building, or parks it in Intake at its round limit.
       // A maintainer's review request takes its open pull request to PR review.
       nextPhases: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
@@ -393,7 +393,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       // review seat on the pull request's branch. Kept apart from Review, the builder's
       // self-review of its own branch.
       kind: 'working',
-      runner: { context: 'work' },
+      runner: { context: 'review' },
+      tools: ['factory_record_review_verdict', 'factory_review_source'],
       // Merged, closed, or set aside in Intake. An issue card can go back to its builder for a
       // fix; a pull request's own card never reaches the builder's lanes (workPullRequestCardRejection).
       nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'],

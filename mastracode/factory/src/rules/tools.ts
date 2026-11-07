@@ -18,6 +18,7 @@ import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
+import { phaseGrantsTool } from './phase-tools.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { SELF_REVIEW_ROUND_LIMIT, workItemSource } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
@@ -78,20 +79,21 @@ export async function createFactoryTransitionTools(options: {
     }
     return {};
   }
-  let isTriage = false;
-  if (availableBinding.role === 'triage') {
-    const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
-    if (!item) return {};
-    isTriage = boardForWorkItem(item) === 'work';
-  }
+  // Tools are built for every turn, so a card that moves on takes its phase's tools with it.
+  // A failed lookup grants no phase tools but keeps the move tool.
+  const recordsVerdict = await options.storage
+    .get({ orgId: availableBinding.orgId, id: availableBinding.workItemId })
+    .then(item =>
+      item ? phaseGrantsTool(options.boards, availableBinding, item, 'factory_record_review_verdict') : false,
+    )
+    .catch(() => false);
 
   return {
-    ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
+    ...(recordsVerdict ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
-      description: isTriage
-        ? 'Request a governed stage transition for the Factory work item exactly bound to this thread, with your classification in the rationale. Move a confirmed bug to planning. Move feature requests and other open non-bugs to intake, where a maintainer decides whether to take them on. Move closures to done or canceled.'
-        : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
+      description:
+        'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: transitionInputSchema,
       requireApproval: true,
       execute: async ({ stage, expectedRevision, rationale }, execution) => {
@@ -172,6 +174,7 @@ function createReviewVerdictTool(
     storage: WorkItemsStorage;
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     sessions?: FactorySessionSourceLookup;
+    boards?: BoardRegistry | ProjectBoardSource;
   },
   boundWorkItemId: string,
 ): IntegrationTools {
@@ -189,11 +192,17 @@ function createReviewVerdictTool(
           sessions: options.sessions,
         });
         const binding = resolution ? await options.storage.findActiveRunBinding(resolution.address) : null;
-        if (!binding || binding.workItemId !== boundWorkItemId || binding.role !== 'review') {
+        if (!binding || binding.workItemId !== boundWorkItemId) {
           throw new Error('Factory review binding is unavailable, revoked, or no longer matches this session.');
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        // The card may have moved since the tools were built for this turn.
+        if (!(await phaseGrantsTool(options.boards, binding, item, 'factory_record_review_verdict'))) {
+          throw new Error(
+            `This session does not review the card in its current phase (${item.stages.join(', ')}); it cannot record a verdict.`,
+          );
+        }
         const board = boardForWorkItem(item);
         const source = workItemSource(item.externalSource);
         const pullRequestCard = isPullRequestCard({ source });
