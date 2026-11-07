@@ -145,6 +145,14 @@ describe('KnowledgePage', () => {
     fireEvent.click(await within(tree).findByText('Deploy runbook'));
     await waitFor(() => expect(router.state.location.search).toContain('page=runbook'));
     expect(router.state.location.search).toContain('view=graph');
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByTestId('knowledge-page-node')
+          .find(node => node.dataset.pageId === 'runbook')
+          ?.querySelector('.knowledge-circle'),
+      ).toHaveAttribute('data-selected'),
+    );
     expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
 
     fireEvent.click(within(tree).getByText('Deploy runbook'));
