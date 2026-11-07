@@ -143,6 +143,17 @@ const txtTone = selectorRule(() =>
   txtClassStrings(TXT_TONE_PATTERN).map(selector => ({ selector, message: TXT_TONE_MESSAGE })),
 );
 
+// --- no-transition-all ---------------------------------------------------------------------------------
+// `transition-all` animates every property that changes, including layout, so a theme switch or a state
+// change animates more than intended. Name the properties: transition-colors, transition-opacity,
+// transition-transform, transition-shadow or transition-[...].
+const TRANSITION_ALL_PATTERN = '(^|\\s|:)transition-all(?=\\s|$)';
+const TRANSITION_ALL_MESSAGE =
+  'Name the transitioned properties (transition-colors, transition-opacity, transition-transform, transition-[…]) instead of transition-all.';
+const noTransitionAll = selectorRule(() =>
+  classStrings(TRANSITION_ALL_PATTERN).map(selector => ({ selector, message: TRANSITION_ALL_MESSAGE })),
+);
+
 // --- font-mono -----------------------------------------------------------------------------------------
 // By default only `<Txt className>` is checked: native inputs and compound controls keep their className
 // escape hatch, and only Txt has a `font` prop. Options:
@@ -277,6 +288,7 @@ const plugin = {
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
+    'no-transition-all': { meta: { type: 'suggestion', schema: false }, create: noTransitionAll },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
     'no-text-separators': noTextSeparators,
