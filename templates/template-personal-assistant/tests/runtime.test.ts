@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { json } from './helpers';
+import { isolatedEnv, json } from './helpers';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -78,7 +78,7 @@ test(
     const directory = await mkdtemp(join(tmpdir(), 'personal-assistant-runtime-'));
     let runtime: Awaited<ReturnType<typeof run>> | undefined;
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...isolatedEnv(),
       MASTRA_TELEMETRY_DISABLED: '1',
       MASTRA_BUILD_SKIP_INSTALL: '1',
       npm_config_offline: 'true',

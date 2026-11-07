@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { modelToolSchemaError } from './helpers';
 
 export const connectedKeys = [
   'google_mail_get_message',
@@ -35,6 +36,26 @@ export async function connectedFixture(
     documentId: 'existing-document',
     messageId: 'source-message',
     message: undefined as unknown,
+    notion: {
+      object: 'list',
+      results: [
+        {
+          id: 'task-release',
+          type: 'to_do',
+          to_do: {
+            rich_text: [{ plain_text: 'Ship the recovery fix. Due tomorrow; blocks release.' }],
+            checked: false,
+          },
+        },
+        {
+          id: 'task-research',
+          type: 'to_do',
+          to_do: { rich_text: [{ plain_text: 'Research editor options. No due date supplied.' }], checked: false },
+        },
+      ],
+      has_more: true,
+      next_cursor: 'more-tasks',
+    },
   };
   const server = createServer(async (req, res) => {
     let raw = '';
@@ -51,11 +72,17 @@ export async function connectedFixture(
             id: `${integrationId}-connection`,
             integrationId,
             status: 'active',
+            connection_config: integrationId === 'jira' ? { cloudId: 'example-cloud' } : {},
           })),
         },
         state.discoveryStatus,
       );
     }
+    if (req.url === '/v2/connections/jira-connection/context')
+      return send({
+        connection_config: { cloudId: 'example-cloud' },
+        metadata: {},
+      });
     if (req.url === '/v2/integrations') return send({ integrations: [] });
     if (req.url?.includes('/proxy/')) {
       const body = raw ? JSON.parse(raw) : undefined;
@@ -65,6 +92,20 @@ export async function connectedFixture(
         body,
         resource: req.headers['x-mastra-resource-id'] as string | undefined,
       });
+      if (req.url.includes('/blocks/')) return send(state.notion);
+      if (req.url.includes('/search/jql'))
+        return send({
+          issues: [
+            {
+              id: 'jira-1',
+              key: 'OPS-42',
+              self: 'https://example.atlassian.net/rest/api/3/issue/jira-1',
+              fields: { summary: 'Recovery fix remains open', status: { name: 'Open' } },
+            },
+          ],
+          total: 1,
+          maxResults: 10,
+        });
       if (req.url.includes('/messages/'))
         return send(
           state.message || {
@@ -104,6 +145,8 @@ export async function connectedFixture(
     if (req.url === '/v1/chat/completions' || req.url === '/v1/judge/chat/completions') {
       const body = JSON.parse(raw);
       models.push(body);
+      const schemaError = modelToolSchemaError(body);
+      if (schemaError) return send({ error: { message: schemaError } }, 400);
       const scripted = await respond?.(body, req.url.includes('/judge/'));
       if (scripted?.status) return send({ error: { message: scripted.text } }, scripted.status);
       const messages = body.messages as { role: string; content: unknown; tool_call_id?: string }[];
@@ -224,4 +267,94 @@ export async function connectedFixture(
         server.close(() => resolve());
       }),
   };
+}
+
+export async function experienceFixture() {
+  let experienceSequence = 0;
+  const issuedCalls = new Map<string, string>();
+  // Paid-model fixture chooses calls from actual returned provider evidence. It cannot establish live model quality.
+  const fixture = await connectedFixture(body => {
+    const messages = body.messages as { role: string; content: unknown; tool_call_id?: string }[];
+    const latest = messages.findLastIndex(message => message.role === 'user');
+    const prompt = JSON.stringify(messages[latest]);
+    const results = messages.slice(latest + 1).filter(message => message.role === 'tool');
+    const parsed = results.map(result => {
+      try {
+        return JSON.parse(String(result.content));
+      } catch {
+        return undefined;
+      }
+    });
+    const call = (name: string, args: unknown) => {
+      const id = `experience-${++experienceSequence}`;
+      issuedCalls.set(id, name);
+      return { text: '', calls: [{ name, args, id }] };
+    };
+    if (prompt.includes('case:experience-mail')) {
+      if (!results.length) return call('google_mail_get_message', { id: 'source-message', format: 'full' });
+      const source = parsed[0];
+      if (source?.status !== 'complete')
+        return { text: `Source source-message is incomplete: ${JSON.stringify(source)}. No document was created.` };
+      if (results.length === 1) return call('google_docs_create_document', { title: 'Proposal review' });
+      const created = parsed[1];
+      if (!created?.documentId) return { text: 'Document creation is unconfirmed; work remains unfinished.' };
+      if (results.length === 2)
+        return call('google_docs_insert_text', {
+          documentId: created.documentId,
+          text: `Review of ${source.sourceMessageId}: ${String(source.text).split('\n')[0]}`,
+          location: { index: 1 },
+        });
+      const inserted = parsed[2];
+      return {
+        text: Array.isArray(inserted?.replies)
+          ? `Document ${created.documentId} contains the review of ${source.sourceMessageId}.`
+          : `Document ${created.documentId} exists, but content insertion failed. The review is incomplete; inspect the existing document before retrying.`,
+      };
+    }
+    if (prompt.includes('case:experience-notion')) {
+      if (!results.length) return call('notion_retrieve_block_children', { block_id: 'task-page', page_size: 2 });
+      const source = parsed[0];
+      const tasks = source?.results ?? [];
+      return {
+        text: `Source task-page: ${JSON.stringify(source)}. Prioritize ${tasks[0]?.id}: ${JSON.stringify(tasks[0]?.to_do)}. ${tasks[1]?.id}: ${JSON.stringify(tasks[1]?.to_do)}. ${source?.has_more ? 'The source is partial; more tasks remain after this page. I cannot claim a complete ranking.' : ''}`,
+      };
+    }
+    if (prompt.includes('case:experience-jira-create')) {
+      if (!results.length)
+        return call('schedule', {
+          action: 'create',
+          requestId: 'jira-monitor-request',
+          name: 'Jira issue monitor',
+          prompt:
+            'case:experience-jira-read Check project OPS for unresolved issues and cite issue keys. Do not change Jira. Keep monitoring until I cancel.',
+          timing: { kind: 'cron', cron: '0 0 9 * * 1-5', timezone: 'America/Sao_Paulo' },
+        });
+      return { text: `Monitor configuration: ${JSON.stringify(parsed)}. This is not a completed Jira check.` };
+    }
+    if (prompt.includes('case:experience-jira-read')) {
+      if (!results.some(value => issuedCalls.get(value.tool_call_id ?? '') === 'jira_search_issues'))
+        return call('jira_search_issues', { jql: 'project = OPS AND resolution = Unresolved', maxResults: 10 });
+      const issues = parsed.find(value => Array.isArray(value?.issues))?.issues;
+      if (!Array.isArray(issues))
+        return { text: `The Jira result is unconfirmed; work remains unfinished. ${JSON.stringify(results)}` };
+      return {
+        text: `Jira check results: ${JSON.stringify(issues)}. ${issues.map(issue => `${issue.key} remains ${issue.fields?.status?.name}`).join('; ')}; monitoring remains active. No Jira issue was changed.`,
+      };
+    }
+    return { text: 'Please supply the responsibility and source identifiers.' };
+  });
+  fixture.state.providers = ['google-mail', 'google-docs', 'notion', 'jira'];
+  fixture.state.documentId = 'proposal-review-document';
+  fixture.env = {
+    ...fixture.env,
+    ASSISTANT_CONNECT_PROVIDERS: JSON.stringify(fixture.state.providers),
+    ASSISTANT_CONNECT_TOOLS: JSON.stringify([
+      'google_mail_get_message',
+      'google_docs_create_document',
+      'google_docs_insert_text',
+      'notion_retrieve_block_children',
+      'jira_search_issues',
+    ]),
+  };
+  return fixture;
 }

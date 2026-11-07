@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig } from '@mastra/core/agent';
+import { SimpleAuth } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { createObjectiveTool, createProgressProtection, goalGuidance } from './objectives';
 import type { JudgeModel } from './objectives';
@@ -9,7 +10,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
+import { createObservability } from './observability';
 import { z } from 'zod';
 import type { AssistantConfig } from './config';
 import { createConnections, connectedContentProcessor } from './connect';
@@ -31,13 +32,15 @@ export function createAssistant(
   ]);
   let storage: LibSQLStore;
   try {
-    mkdirSync(dirname(config.databasePath), { recursive: true });
+    if (config.runtime.mode === 'local') mkdirSync(dirname(config.runtime.databasePath), { recursive: true });
     storage = new LibSQLStore({
       id: 'personal-assistant-storage',
-      url: `file:${config.databasePath}`,
+      ...(config.runtime.mode === 'local'
+        ? { url: `file:${config.runtime.databasePath}` }
+        : { url: config.runtime.databaseUrl, authToken: config.runtime.databaseToken }),
     });
   } catch {
-    throw new Error('Could not prepare assistant storage. Check ASSISTANT_DATA_DIR and directory permissions.');
+    throw new Error('Could not prepare assistant storage. Check ASSISTANT_DATA_DIR or hosted Turso configuration.');
   }
   const memory = new Memory({
     storage,
@@ -75,6 +78,8 @@ Use schedule for explicit scheduled responsibilities. Ask for an explicit IANA t
 Keep the same requestId when retrying an identified creation request. Inspect existing schedules before changing them.
 Native schedules discard checks during an active conversation and skip approval-blocked work. Run-now inside a tool call can be discarded; publication is not a completed check.
 Schedules are best effort: missed checks may not replay, duplicated occurrences are possible, and completed cadence is not business success.
+When a native schedule notification arrives, perform the check in that notification now. It is the current continuation of the owner's scheduled request; do not merely repeat an earlier schedule-creation confirmation.
+An earlier instruction not to run during setup does not cancel the later scheduled check. Preserve all read/write approval requirements and report incomplete work explicitly.
 Keep schedule, occurrence and run IDs with provider result references. Inspect existing results before repeating work; never automatically replay uncertain external writes.
 Stop monitoring only after verified responsibility completion or an explicit owner request, using schedule cancel. A done objective alone does not cancel monitoring.
 Use objective only when the owner explicitly requests an ongoing objective; never create one for ordinary chat.
@@ -86,6 +91,8 @@ Missing information, pending/declined approval and partial external results leav
 Ask for missing information and distinguish a proposed action from a completed action.
 ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No scheduling timezone has been configured.'}`,
     model,
+    maxRetries: config.modelMaxRetries,
+    maxProcessorRetries: config.modelMaxRetries,
     scopes: [`resource:${config.ownerId}`],
     memory,
     tools: async context => ({
@@ -100,6 +107,7 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
     outputProcessors: [connectedContentProcessor],
     defaultOptions: {
       maxSteps: config.maxSteps,
+      modelSettings: config.modelSettings,
       toolCallConcurrency: { limit: 1, strategy: 'called' },
       eagerToolExecution: false,
     },
@@ -109,7 +117,12 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
     storage,
     schedules: schedules.hooks,
     server: {
-      host: '127.0.0.1',
+      host: config.runtime.mode === 'local' ? '127.0.0.1' : '0.0.0.0',
+      ...(config.runtime.mode === 'hosted'
+        ? {
+            auth: new SimpleAuth({ tokens: { [config.runtime.ownerToken]: { id: config.ownerId } } }),
+          }
+        : {}),
       middleware: [
         async (c, next) => {
           // Native handlers honor this server-owned value over request bodies and headers.
@@ -238,14 +251,6 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
         },
       ],
     },
-    observability: new Observability({
-      configs: {
-        default: {
-          serviceName: 'personal-assistant',
-          exporters: [new MastraStorageExporter()],
-          spanOutputProcessors: [new SensitiveDataFilter()],
-        },
-      },
-    }),
+    observability: createObservability(config),
   });
 }

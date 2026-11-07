@@ -4,13 +4,53 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 
-export async function modelFixture() {
+export function isolatedEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  // Inherit OS basics only, never developer credentials, provider URLs, or telemetry exporters.
+  for (const key of [
+    'PATH',
+    'HOME',
+    'TMPDIR',
+    'TEMP',
+    'TMP',
+    'USER',
+    'LOGNAME',
+    'SHELL',
+    'SystemRoot',
+    'WINDIR',
+    'LANG',
+    'LC_ALL',
+    'LC_CTYPE',
+    'TZ',
+  ]) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  return { ...env, MASTRA_TELEMETRY_DISABLED: '1', ...extra };
+}
+
+export function modelToolSchemaError(body: Record<string, unknown>) {
+  const tools = body.tools as
+    | { type?: string; function?: { name?: string; parameters?: { type?: string } } }[]
+    | undefined;
+  const invalid = tools?.find(tool => tool.type === 'function' && tool.function?.parameters?.type !== 'object');
+  return invalid
+    ? `Invalid schema for function '${invalid.function?.name}': parameters must have type object.`
+    : undefined;
+}
+
+export async function modelFixture(defaultText = 'Preference missing.') {
   const requests: Record<string, unknown>[] = [];
   const server = createServer(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
     requests.push(body);
+    const schemaError = modelToolSchemaError(body);
+    if (schemaError) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: schemaError } }));
+      return;
+    }
     const messages = body.messages as { role: string; content: unknown }[];
     const latest = messages.findLast(message => message.role === 'user');
     const remember = JSON.stringify(latest).includes('private-turn-marker');
@@ -20,7 +60,7 @@ export async function modelFixture() {
       ? 'Saved your preference for concise bullet points.'
       : JSON.stringify(messages).includes('Prefer concise bullet points')
         ? '- Choose one priority.\n- Plan a short work session.'
-        : 'Preference missing.';
+        : defaultText;
     const message = toolCall
       ? {
           role: 'assistant',
@@ -78,7 +118,7 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
   const child = fork(fileURLToPath(new URL('./server.ts', import.meta.url)), [], {
     execArgv: ['--import', 'tsx'],
     env: {
-      ...process.env,
+      ...isolatedEnv(),
       OPENAI_API_KEY: 'example-key',
       ASSISTANT_DATA_DIR: dataDir,
       TEST_MODEL_URL: modelUrl,
@@ -120,10 +160,10 @@ export async function startAssistant(dataDir: string, modelUrl: string, extraEnv
   return {
     child,
     url: `http://127.0.0.1:${port}`,
-    async request(path: string, method = 'GET', body?: unknown) {
+    async request(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = {}) {
       const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
         method,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       if (response.status >= 500)

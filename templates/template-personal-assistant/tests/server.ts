@@ -8,6 +8,10 @@ import { loadConfig } from '../src/mastra/config';
 
 // Only the paid model endpoint is replaced. The Agent, server, tools, and storage remain native.
 const config = loadConfig();
+// Local auth composition regression only: never a remote Turso/Platform persistence proof.
+if (config.runtime.mode === 'hosted' && process.env.TEST_AUTH_DATABASE_URL) {
+  config.runtime.databaseUrl = process.env.TEST_AUTH_DATABASE_URL;
+}
 const mastra = createAssistant(
   config,
   { id: config.model, url: process.env.TEST_MODEL_URL, apiKey: 'example-key' },

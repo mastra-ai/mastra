@@ -26,24 +26,36 @@ async function ownedThread(agent: Agent, ownerId: string, threadId?: string, res
 
 export function createObjectiveTool(config: AssistantConfig, getAgent: () => Agent) {
   const allowance = z.number().int().min(1).max(config.maxGoalEvaluations);
+  const actions = z.discriminatedUnion('action', [
+    z.object({ action: z.literal('inspect') }).strict(),
+    z
+      .object({
+        action: z.literal('set'),
+        objective: z.string().trim().min(1).max(4000),
+        maxEvaluations: allowance.optional(),
+        replaceExisting: z.literal(true).optional(),
+      })
+      .strict(),
+    z.object({ action: z.literal('pause') }).strict(),
+    z.object({ action: z.literal('resume'), additionalEvaluations: allowance.optional() }).strict(),
+    z.object({ action: z.literal('clear'), confirmClear: z.literal(true) }).strict(),
+  ]);
   return createTool({
     id: 'objective',
     description:
       "Inspect, set, pause, resume, or explicitly clear this conversation objective. Inspect conflicts; request explicit replacement intent or use a separate conversation. Repeating the same objective never resets its usage. Resume an exhausted objective with an additional bounded evaluation allowance. Clear only on the owner's explicit request; clearing is not completion.",
-    inputSchema: z.discriminatedUnion('action', [
-      z.object({ action: z.literal('inspect') }).strict(),
-      z
-        .object({
-          action: z.literal('set'),
-          objective: z.string().trim().min(1).max(4000),
-          maxEvaluations: allowance.optional(),
-          replaceExisting: z.literal(true).optional(),
-        })
-        .strict(),
-      z.object({ action: z.literal('pause') }).strict(),
-      z.object({ action: z.literal('resume'), additionalEvaluations: allowance.optional() }).strict(),
-      z.object({ action: z.literal('clear'), confirmClear: z.literal(true) }).strict(),
-    ]),
+    // The model receives an object schema; native validation retains action-specific requirements.
+    inputSchema: z
+      .object({
+        action: z.enum(['inspect', 'set', 'pause', 'resume', 'clear']),
+        objective: z.string().trim().min(1).max(4000).optional(),
+        maxEvaluations: allowance.optional(),
+        replaceExisting: z.literal(true).optional(),
+        additionalEvaluations: allowance.optional(),
+        confirmClear: z.literal(true).optional(),
+      })
+      .strict()
+      .pipe(actions),
     execute: async (input, context) => {
       const agent = getAgent();
       const target = await ownedThread(agent, config.ownerId, context?.agent?.threadId, context?.agent?.resourceId);

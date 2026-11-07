@@ -22,69 +22,69 @@ const timezone = z
     }
   }, 'Provide an explicit IANA timezone.');
 
-export const scheduleTiming = z
-  .discriminatedUnion('kind', [
-    z.object({ kind: z.literal('cron'), cron: z.string().trim().min(1).max(200), timezone }).strict(),
-    z
-      .object({
-        kind: z.literal('once'),
-        date: z
-          .string()
-          .regex(
-            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/,
-            'Use a complete date with seconds and an explicit UTC offset.',
-          ),
-        timezone,
-      })
-      .strict(),
-  ])
-  .transform((input, context) => {
-    try {
-      if (input.kind === 'cron') {
-        validateCron(input.cron, input.timezone);
-        computeNextFireAt(input.cron, { timezone: input.timezone });
-        return { cron: input.cron, timezone: input.timezone };
-      }
-      const instant = Date.parse(input.date);
-      if (!Number.isFinite(instant) || instant <= Date.now()) throw new Error('Choose a valid future date.');
-      const local = input.date.slice(0, 19);
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: input.timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hourCycle: 'h23',
-      }).formatToParts(instant);
-      const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(value => value.type === type)!.value;
-      const actual = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`;
-      if (actual !== local)
-        throw new Error(
-          'The calendar date or UTC offset does not match this timezone. Choose an explicit valid date and offset.',
-        );
-      const cron = `${part('second')} ${part('minute')} ${part('hour')} ${part('day')} ${part('month')} * ${part('year')}`;
-      validateCron(cron, input.timezone);
-      if (computeNextFireAt(cron, { timezone: input.timezone }) !== instant)
-        throw new Error(
-          'The native scheduler cannot represent this offset choice. Choose a different explicit date and offset.',
-        );
-      return { cron, timezone: input.timezone, date: input.date };
-    } catch (error) {
-      context.addIssue({
-        code: 'custom',
-        message: error instanceof Error ? error.message : 'Invalid schedule timing.',
-      });
-      return z.NEVER;
+const timingInput = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('cron'), cron: z.string().trim().min(1).max(200), timezone }).strict(),
+  z
+    .object({
+      kind: z.literal('once'),
+      date: z
+        .string()
+        .regex(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/,
+          'Use a complete date with seconds and an explicit UTC offset.',
+        ),
+      timezone,
+    })
+    .strict(),
+]);
+
+export const scheduleTiming = timingInput.transform((input, context) => {
+  try {
+    if (input.kind === 'cron') {
+      validateCron(input.cron, input.timezone);
+      computeNextFireAt(input.cron, { timezone: input.timezone });
+      return { cron: input.cron, timezone: input.timezone };
     }
-  });
+    const instant = Date.parse(input.date);
+    if (!Number.isFinite(instant) || instant <= Date.now()) throw new Error('Choose a valid future date.');
+    const local = input.date.slice(0, 19);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: input.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(instant);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(value => value.type === type)!.value;
+    const actual = `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}`;
+    if (actual !== local)
+      throw new Error(
+        'The calendar date or UTC offset does not match this timezone. Choose an explicit valid date and offset.',
+      );
+    const cron = `${part('second')} ${part('minute')} ${part('hour')} ${part('day')} ${part('month')} * ${part('year')}`;
+    validateCron(cron, input.timezone);
+    if (computeNextFireAt(cron, { timezone: input.timezone }) !== instant)
+      throw new Error(
+        'The native scheduler cannot represent this offset choice. Choose a different explicit date and offset.',
+      );
+    return { cron, timezone: input.timezone, date: input.date };
+  } catch (error) {
+    context.addIssue({
+      code: 'custom',
+      message: error instanceof Error ? error.message : 'Invalid schedule timing.',
+    });
+    return z.NEVER;
+  }
+});
 
 const detail =
   'Dispatch is best effort, not proof of completed work. Active or approval-blocked conversations can skip checks. Missed checks may not replay. A completed cadence does not mean the responsibility succeeded. Inspect conversation results and provider references before repeating an uncertain action.';
 const text = z.string().trim().min(1).max(4000);
 const id = z.string().min(1).max(200);
-const schema = z.discriminatedUnion('action', [
+const actions = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('create'),
@@ -116,6 +116,31 @@ const schema = z.discriminatedUnion('action', [
     .strict(),
   z.object({ action: z.literal('run-now'), scheduleId: id }).strict(),
 ]);
+
+// Keep the provider-facing root an object while preserving strict per-action validation.
+const schema = z
+  .object({
+    action: z.enum(['create', 'list', 'inspect', 'update', 'pause', 'resume', 'cancel', 'run-now']),
+    requestId: id.optional().describe('Required only for create; omit for other actions.'),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe('Required for create, optional for update; otherwise omit.'),
+    prompt: text.optional().describe('Required for create, optional for update; otherwise omit.'),
+    timing: timingInput.optional().describe('Required for create and update; otherwise omit.'),
+    scheduleId: id
+      .optional()
+      .describe('Required for actions targeting an existing schedule; omit for create and list.'),
+    reason: z
+      .enum(['owner-request', 'confirmed-completion'])
+      .optional()
+      .describe('Required only for cancel; omit for all other actions, including create.'),
+  })
+  .strict()
+  .pipe(actions);
 
 export function createScheduleOperations(config: AssistantConfig, getAgent: () => Agent) {
   const mastra = () => {
@@ -159,7 +184,7 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
     };
   }
   const hooks: ScheduleHooks<Mastra> = {
-    async prepare({ schedule, agentId }) {
+    async prepare({ schedule, agentId, trigger }) {
       if (agentId !== getAgent().id) return null;
       try {
         const value = await owned(await mastra().schedules.get(schedule.id));
@@ -176,7 +201,14 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
           ifActive: { behavior: 'discard' },
           ifIdle: {
             behavior: 'wake',
-            streamOptions: { requestContext: { [MASTRA_RESOURCE_ID_KEY]: config.ownerId } },
+            streamOptions: {
+              requestContext: {
+                [MASTRA_RESOURCE_ID_KEY]: config.ownerId,
+                scheduleId: value.id,
+                actualFireAt: trigger.firedAt.toISOString(),
+                triggerKind: trigger.kind,
+              },
+            },
           },
         };
       } catch {

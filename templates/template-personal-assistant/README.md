@@ -10,7 +10,7 @@ Repeating the same preferences in every conversation adds friction. This assista
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for the default `openai/gpt-6-luna` model. Your account needs access to that model; `ASSISTANT_MODEL` can select another OpenAI model available to your account.
 - **[Mastra Connect credentials](https://mastra.ai/docs/mastra-platform/connect)** (optional): set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` together after creating a Platform project and app access token. `MASTRA_PLATFORM_SECRET_KEY` is the native fallback. Connect accounts in that project separately; the OpenAI key does not authorize access to them.
-- This local version supports one owner per installation and listens on `127.0.0.1`. Each conversation can hold one explicit objective and its task list. Schedules use explicit timezones and stay attached to their original conversations.
+- The assistant supports one owner per installation. Local mode listens on `127.0.0.1`. Each conversation can hold one explicit objective and its task list. Schedules use explicit timezones and stay attached to their original conversations.
 - Conversations, preferences, objectives, tasks, schedules, and native traces persist in `.data/assistant.db` without automatic expiration. `ASSISTANT_DATA_DIR` changes the directory, relative to the template root or an absolute path. Keep your database private; deleting it removes the installation's stored context.
 
 ## Quickstart 🚀
@@ -26,18 +26,20 @@ Repeating the same preferences in every conversation adds friction. This assista
 
 ## Try it out
 
-- Say “Remember that I prefer concise bullet points.” Ask a follow-up question and look for the saved response style.
-- Stop and restart the server, open a new conversation, and ask for a morning plan. The assistant can use the same saved preference in the new thread.
-- Say “Set an objective to prepare my meeting agenda. Track research, drafting and review as tasks; wait for my meeting topic before proceeding.” Supply the topic when asked, then restart and inspect progress in that conversation. Unfinished objectives need explicit replacement; ask to pause, resume with an additional evaluation allowance, or clear one when needed.
-- With Connect configured, ask “Check my connected services and summarize this Gmail message: `<message ID>`.” Supported full plain-text bodies are decoded; unsupported or incomplete content is identified.
-- Ask to create a document containing your reviewed draft. Review each pending tool call and its arguments, then approve or decline it in Studio. A blank document is incomplete; failed insertion should retain its document ID.
+- Say “Remember that I prefer concise bullet points.” Restart the server, open a new conversation, and ask for a morning plan. Look for the saved response style.
+- With Gmail and Google Docs connected, ask “Read Gmail message `<message ID>` in full, review the proposal, cite the message ID, and create a Google document with the review.” Review the separate document-creation and content-insertion approvals. A created blank document is unfinished; if insertion fails, keep the document ID and inspect it before deciding to retry.
+- With Notion connected, ask “Read the tasks on page `<page ID>` and rank them by deadlines and blockers. Cite source IDs and identify missing dates or unread pages. Do not change Notion.” Unreviewed reads also need approval. A partial page is not a complete task inventory.
+- Add another responsibility in a separate conversation: “Monitor unresolved Jira issues in project `<project key>` every weekday at 09:00 America/Sao_Paulo. Cite issue keys, do not change Jira, and keep monitoring until I cancel.” Review the schedule ID and next occurrence; pause, resume, or cancel it through the conversation. Unknown Jira reads require approval too.
+- Say “Set an objective to prepare my meeting agenda. Track research, drafting and review as tasks; wait for my meeting topic before proceeding.” Supply the topic when asked, then restart and inspect the unfinished objective and tasks in that conversation. Ask to pause, resume with an additional evaluation allowance, or clear one when needed.
 
-- Ask “Check for my meeting confirmation every weekday at 09:00 America/Sao_Paulo; stop after the confirmed document update.” Review the explicit cadence, schedule ID and next occurrence, then ask to pause, resume or cancel it. Connected changes still require Studio approval. Keep the server running for scheduled checks; busy or approval-blocked conversations can skip checks, and missed checks may not replay. Run-now during an active conversation can be discarded. A completed cadence is not proof of completed work.
+Keep the server running for scheduled checks. Busy or approval-blocked conversations can skip checks, and missed checks may not replay. Run-now during an active conversation can be discarded. A completed cadence is not proof of completed work; inspect the provider results in the original conversation.
 
 ## Customization
 
 - Open the project in your coding agent and describe a change, such as “Adapt the assistant to help me prepare weekly learning plans. Explore the code and propose a plan before making changes.”
 - Edit instructions and the working-memory template in `src/mastra/assistant.ts`. Set `ASSISTANT_JUDGE_MODEL` to choose an OpenAI judge and `ASSISTANT_MAX_GOAL_EVALUATIONS` (1–20, default 5) to bound each requested allowance. The judge uses at most three steps per evaluation. These execution limits are not a monetary cap. An exhausted objective pauses; resuming extends its budget without resetting prior usage. No objective starts on boot. Optional `.env` settings include `ASSISTANT_OWNER_ID` (default `local-owner`), `ASSISTANT_MAX_STEPS` (1–20, default 20), and `ASSISTANT_TIMEZONE` (an IANA timezone). Keep the owner ID stable to retain access to existing context.
+
+Optional `ASSISTANT_MAX_OUTPUT_TOKENS` (1–32768) sets the default output limit for assistant responses, including scheduled checks. `ASSISTANT_MODEL_MAX_RETRIES` (0–5) sets each native provider and processor retry limit; zero disables both, while positive limits can compound. For bounded validation, use `512` and `0` respectively. When unset, native defaults remain in effect. These settings do not bound the separate goal judge or total spending; explicit request options can override defaults.
 
 To enable connected tools, follow the linked Connect setup, add the optional credentials to `.env`, and authorize the services you need. `ASSISTANT_CONNECT_PROVIDERS` accepts a JSON array of provider IDs and defaults to `["google-mail","google-docs","notion","jira"]`. `ASSISTANT_CONNECT_TOOLS` optionally restricts the available exact tool keys; it does not change provider OAuth permissions. Optional `MASTRA_ORG_ID` and `MASTRA_PLATFORM_REGION` follow the native Connect configuration.
 
@@ -45,7 +47,20 @@ The developer-owned read registry in `src/mastra/connect.ts` currently permits o
 
 Approval decisions apply to the pending run and stored arguments. Return to the same conversation after restarting to recover pending calls. Retrieved content cannot grant permissions. Full plain-text email decoding is limited to 64 KiB, 64 MIME parts and eight nested levels; attachments and HTML-only content are unsupported. External mutations can fail partially or have uncertain results. Inspect existing provider references before deciding to retry; the template adds no automatic mutation retry.
 
-For a built local server, run `npm run build` and then `npm start`. Both use the same configured database as development. This version provides local operation; hosted authentication and remote storage are not configured.
+For a built local server, run `npm run build` and then `npm start`. Both use the same configured local database as development.
+
+## Mastra Platform operation
+
+Hosted configuration is available for an authorized Platform project; deployment, remote persistence, hosted Studio recovery, and live connected examples still require validation on your target. A local build or fixture test does not establish hosted readiness.
+
+- Configure a remote **[Turso database](https://mastra.ai/docs/mastra-platform/system-environment-variables)** with `TURSO_DATABASE_URL` (`libsql://<database>.turso.io` or HTTPS, without URL credentials or query options) and `TURSO_AUTH_TOKEN`. Set `ASSISTANT_RUNTIME=hosted` and a private `ASSISTANT_API_TOKEN` of at least 32 characters. Keep `ASSISTANT_OWNER_ID` stable. Hosted mode listens on `0.0.0.0` and refuses missing remote storage or owner authentication.
+- Set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` as documented in [Platform Studio authentication](https://mastra.ai/docs/mastra-platform/studio). This preserves this assistant's native SimpleAuth instead of replacing it with organization-wide access. Authenticate API requests with `Authorization: Bearer <ASSISTANT_API_TOKEN>`. In Studio, select **Sign in**, enter your email, and use `ASSISTANT_API_TOKEN` in the password field. SimpleAuth identifies the owner by the token; the email field does not select an account. Confirm this flow on your deployed target before using personal data.
+- Actual Platform runtime indicators require explicit hosted mode. `NODE_ENV=production` alone still permits a built local server. Project credentials used for local Connect do not turn on hosted mode.
+- Local and hosted installations have separate state. The template never copies the local database to Turso. Retain or remove each database deliberately; there is no automatic data migration or retention policy. Run one active scheduler instance and validate runtime availability and restart behavior on the selected topology.
+
+The template configures a native storage exporter for traces. They retain execution identities, native outcomes and provider references while omitting message bodies, full tool payloads and raw errors; inspect provider references and exact approval arguments in the original conversation. A dispatch trace is not confirmation of a provider effect. Optional `ASSISTANT_PLATFORM_TRACING=true` adds the application's native Platform exporter in hosted mode and requires `MASTRA_PROJECT_ID` plus `MASTRA_PLATFORM_ACCESS_TOKEN`. This flag does not disable observability configured by the hosting platform. Verify the active hosted backend and use the Platform observability API with Platform authentication when applicable; the assistant's owner token is a separate credential.
+
+Before using a hosted installation, verify unauthenticated requests are rejected, the owner can use Studio, and conversations, preferences, objectives, tasks, schedules, pending approvals and traces survive a service restart. Recover separate approval and decline cases in the same conversation and inspect the actual provider effects. Validate scheduled checks while the runtime is available and run connected examples using dedicated authorized records.
 
 ## About Mastra templates
 

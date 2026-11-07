@@ -17,6 +17,8 @@ const configuration = z.object({
     .default('openai/gpt-6-luna'),
   ASSISTANT_MAX_GOAL_EVALUATIONS: z.coerce.number().int().min(1).max(20).default(5),
   ASSISTANT_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(20),
+  ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(32768).optional(),
+  ASSISTANT_MODEL_MAX_RETRIES: z.coerce.number().int().min(0).max(5).optional(),
   ASSISTANT_TIMEZONE: z
     .string()
     .refine(value => {
@@ -29,7 +31,12 @@ const configuration = z.object({
     })
     .optional(),
   ASSISTANT_DATA_DIR: z.string().trim().min(1).optional(),
-  ASSISTANT_RUNTIME: z.literal('local').default('local'),
+  ASSISTANT_RUNTIME: z.enum(['local', 'hosted']).default('local'),
+  TURSO_DATABASE_URL: z.string().optional(),
+  TURSO_AUTH_TOKEN: z.string().trim().min(1).optional(),
+  ASSISTANT_API_TOKEN: z.string().trim().min(32).optional(),
+  MASTRA_PLATFORM_STUDIO_AUTH: z.string().optional(),
+  ASSISTANT_PLATFORM_TRACING: z.enum(['true', 'false']).default('false'),
   MASTRA_PROJECT_ID: z.string().trim().min(1).optional(),
   MASTRA_PLATFORM_ACCESS_TOKEN: z.string().trim().min(1).optional(),
   MASTRA_PLATFORM_SECRET_KEY: z.string().trim().min(1).optional(),
@@ -68,6 +75,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   for (const name of ['MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY']) {
     if (settings[name] === '') delete settings[name];
   }
+  const platform = ['MASTRA_DEPLOYMENT_ID', 'MASTRA_CLOUD_API_ENDPOINT', 'MASTRA_PLATFORM_PROJECT_ID'].some(name =>
+    Boolean(settings[name]),
+  );
+  if (platform && settings.ASSISTANT_RUNTIME !== 'hosted') {
+    throw new Error('Invalid assistant configuration: Platform requires ASSISTANT_RUNTIME=hosted.');
+  }
   const result = configuration.safeParse(settings);
   if (!result.success) {
     const settings = [...new Set(result.error.issues.map(issue => issue.path[0]))].join(', ');
@@ -80,7 +93,70 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       'Invalid assistant configuration: set MASTRA_PROJECT_ID and MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY) together.',
     );
   }
+  const runtimeSettings = z
+    .discriminatedUnion('ASSISTANT_RUNTIME', [
+      z.object({
+        ASSISTANT_RUNTIME: z.literal('local'),
+        TURSO_DATABASE_URL: z.never().optional(),
+        TURSO_AUTH_TOKEN: z.never().optional(),
+        ASSISTANT_API_TOKEN: z.never().optional(),
+        ASSISTANT_PLATFORM_TRACING: z.literal('false'),
+      }),
+      z.object({
+        ASSISTANT_RUNTIME: z.literal('hosted'),
+        TURSO_DATABASE_URL: z.string().transform((input, context) => {
+          try {
+            const url = new URL(input);
+            if (
+              !['libsql:', 'https:'].includes(url.protocol) ||
+              !url.hostname.endsWith('.turso.io') ||
+              url.username ||
+              url.password ||
+              url.port ||
+              !['', '/'].includes(url.pathname) ||
+              url.search ||
+              url.hash
+            )
+              throw new Error();
+            return url.toString();
+          } catch {
+            context.addIssue({ code: 'custom', message: 'Use a secure remote Turso database URL.' });
+            return z.NEVER;
+          }
+        }),
+        TURSO_AUTH_TOKEN: z.string().trim().min(1),
+        ASSISTANT_API_TOKEN: z.string().trim().min(32),
+        MASTRA_PLATFORM_STUDIO_AUTH: z.literal('disabled'),
+      }),
+    ])
+    .safeParse(value);
+  if (!runtimeSettings.success) {
+    const names = [...new Set(runtimeSettings.error.issues.map(issue => issue.path[0]))].join(', ');
+    throw new Error(
+      `Invalid assistant configuration: check ASSISTANT_RUNTIME and ${names}. Hosted operation requires secure Turso storage, an owner token of at least 32 characters, and MASTRA_PLATFORM_STUDIO_AUTH=disabled.`,
+    );
+  }
+  const runtimeValue = runtimeSettings.data;
+  const runtime =
+    runtimeValue.ASSISTANT_RUNTIME === 'local'
+      ? { mode: 'local' as const, databasePath: resolve(value.ASSISTANT_DATA_DIR || '.data', 'assistant.db') }
+      : {
+          mode: 'hosted' as const,
+          databaseUrl: runtimeValue.TURSO_DATABASE_URL,
+          databaseToken: runtimeValue.TURSO_AUTH_TOKEN,
+          ownerToken: runtimeValue.ASSISTANT_API_TOKEN,
+        };
+  if (
+    value.ASSISTANT_PLATFORM_TRACING === 'true' &&
+    (!value.MASTRA_PROJECT_ID || !value.MASTRA_PLATFORM_ACCESS_TOKEN)
+  ) {
+    throw new Error(
+      'Invalid assistant configuration: ASSISTANT_PLATFORM_TRACING requires MASTRA_PROJECT_ID and MASTRA_PLATFORM_ACCESS_TOKEN.',
+    );
+  }
   return {
+    runtime,
+    platformTracing: value.ASSISTANT_PLATFORM_TRACING === 'true',
     ownerId: value.ASSISTANT_OWNER_ID,
     connect: value.MASTRA_PROJECT_ID
       ? {
@@ -91,10 +167,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       : undefined,
     model: value.ASSISTANT_MODEL as `openai/${string}`,
     maxSteps: value.ASSISTANT_MAX_STEPS,
+    modelSettings:
+      value.ASSISTANT_MAX_OUTPUT_TOKENS === undefined
+        ? undefined
+        : { maxOutputTokens: value.ASSISTANT_MAX_OUTPUT_TOKENS },
+    modelMaxRetries: value.ASSISTANT_MODEL_MAX_RETRIES,
     judgeModel: value.ASSISTANT_JUDGE_MODEL as `openai/${string}`,
     maxGoalEvaluations: value.ASSISTANT_MAX_GOAL_EVALUATIONS,
     timezone: value.ASSISTANT_TIMEZONE,
-    databasePath: resolve(value.ASSISTANT_DATA_DIR || '.data', 'assistant.db'),
   };
 }
 

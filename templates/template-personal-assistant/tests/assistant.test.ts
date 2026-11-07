@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { parseEnv } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { createAssistant } from '../src/mastra/assistant';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { loadConfig } from '../src/mastra/config';
-import { json, modelFixture, startAssistant } from './helpers';
+import { isolatedEnv, json, modelFixture, startAssistant } from './helpers';
 
 const agent = 'personalAssistant';
 const query = `?agentId=${agent}`;
@@ -1493,6 +1497,71 @@ test('invalid timing and foreign schedule targets leave storage unchanged', { ti
   }
 });
 
+test('scheduled model defaults bound output and disable provider retries', { timeout: 120000 }, async () => {
+  const { connectedFixture } = await import('./connections');
+  let fail = false;
+  const fixture = await connectedFixture(() =>
+    fail ? { text: 'Synthetic rate limit', status: 429 } : { text: 'Bounded scheduled response.' },
+  );
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-model-defaults-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, {
+      ASSISTANT_MAX_STEPS: '1',
+      ASSISTANT_MAX_OUTPUT_TOKENS: '512',
+      ASSISTANT_MODEL_MAX_RETRIES: '0',
+    });
+    await json(
+      await app.request(`/memory/threads${query}`, 'POST', {
+        threadId: 'bounded-schedule',
+        resourceId: 'local-owner',
+        title: 'Bounded scheduled response',
+      }),
+    );
+    const schedule = await nativeSchedule<AgentSchedule>(app, 'create', {
+      agentId: 'personal-assistant',
+      cron: recurring.cron,
+      timezone: recurring.timezone,
+      resourceId: 'local-owner',
+      threadId: 'bounded-schedule',
+      prompt: 'Reply with a short synthetic confirmation. Do not call tools.',
+      metadata: { personalAssistant: true },
+    });
+    await dueNow(app, schedule.id);
+    await eventually(
+      () => history(app!, 'bounded-schedule'),
+      value => value.includes('Bounded scheduled response.'),
+    );
+    assert.equal(fixture.models.length, 1, 'A fresh scheduled wake uses the agent defaults without a prior model run.');
+    assert.ok(
+      JSON.stringify(fixture.models[0]!.messages).includes(
+        'Reply with a short synthetic confirmation. Do not call tools.',
+      ),
+      'The scheduled instruction must reach the model, not only persistent conversation history.',
+    );
+    assert.equal(fixture.models[0]!.max_completion_tokens ?? fixture.models[0]!.max_tokens, 512);
+
+    fail = true;
+    const beforeFailure = fixture.models.length;
+    await json(
+      await fetch(`${app.url}/api/agents/${agent}/generate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'Exercise a synthetic transient provider failure.' }],
+          memory: { thread: 'bounded-provider-failure' },
+        }),
+      }),
+      500,
+    );
+    assert.equal(fixture.models.length, beforeFailure + 1, 'Configured zero retries makes one provider attempt.');
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('scheduled responsibilities preserve approvals results and stop conditions', { timeout: 240000 }, async () => {
   const fixture = await progressFixture();
   const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-schedule-approval-'));
@@ -1779,5 +1848,258 @@ test('schedule failures and duplicates preserve truthful outcomes', { timeout: 1
     await app?.stop();
     await fixture.close();
     await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('documented setup starts a functional assistant', { timeout: 90000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'personal-assistant-setup-'));
+  const fixture = await modelFixture('Choose one priority, reserve a focused work session, and take a short break.');
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    const root = fileURLToPath(new URL('..', import.meta.url));
+    await mkdir(join(directory, 'scripts'));
+    await cp(join(root, 'scripts/setup.mjs'), join(directory, 'scripts/setup.mjs'));
+    await cp(join(root, '.env.example'), join(directory, '.env.example'));
+    const setup = spawn(process.execPath, ['scripts/setup.mjs'], { cwd: directory, env: isolatedEnv() });
+    assert.equal((await once(setup, 'exit'))[0], 0);
+    const initial = await readFile(join(directory, '.env'), 'utf8');
+    await writeFile(join(directory, '.env'), initial.replace('OPENAI_API_KEY=', 'OPENAI_API_KEY=example-key'));
+    app = await startAssistant(directory, fixture.url, parseEnv(await readFile(join(directory, '.env'), 'utf8')));
+    const answer = await json(
+      await app.request(`/agents/${agent}/generate`, 'POST', {
+        messages: [{ role: 'user', content: 'Help me plan a focused morning.' }],
+        memory: { thread: 'setup-thread' },
+      }),
+    );
+    assert.match(answer.text, /Choose one priority.*focused work session/);
+    assert.match(JSON.stringify(fixture.requests[0]!.messages), /Help me plan a focused morning/);
+    const history = await json(await app.request(`/memory/threads/setup-thread/messages${query}`));
+    assert.match(JSON.stringify(history), /Choose one priority.*focused work session/);
+    const remembered = await json(
+      await app.request(`/agents/${agent}/generate`, 'POST', {
+        messages: [{ role: 'user', content: preferencePrompt }],
+        memory: { thread: 'setup-thread' },
+      }),
+    );
+    assert.match(remembered.text, /Saved your preference/);
+    const working = await json(await app.request(`/memory/threads/setup-thread/working-memory${query}`));
+    assert.match(working.workingMemory, /Prefer concise bullet points/);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test(
+  'native owner authentication rejects unauthorized local composition requests before data access',
+  { timeout: 90000 },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'personal-assistant-auth-'));
+    const fixture = await modelFixture();
+    const token = 'example-owner-token-at-least-32-characters';
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    try {
+      app = await startAssistant(directory, fixture.url, {
+        ASSISTANT_RUNTIME: 'hosted',
+        TURSO_DATABASE_URL: 'libsql://assistant-example.turso.io',
+        TURSO_AUTH_TOKEN: 'example-database-token',
+        ASSISTANT_API_TOKEN: token,
+        MASTRA_PLATFORM_STUDIO_AUTH: 'disabled',
+        TEST_AUTH_DATABASE_URL: `file:${join(directory, 'assistant.db')}`,
+      });
+      for (const headers of [{}, { authorization: 'Bearer invalid-owner-token' }] as Record<string, string>[]) {
+        for (const path of ['/agents', `/memory/threads${query}`, '/schedules']) {
+          const response = await app.request(path, 'GET', undefined, headers);
+          assert.equal(response.status, 401, await response.text());
+        }
+        const response = await app.request(
+          `/agents/${agent}/generate`,
+          'POST',
+          {
+            messages: [{ role: 'user', content: 'Do not run without authentication.' }],
+            memory: { thread: 'unauthorized-thread' },
+          },
+          headers,
+        );
+        assert.equal(response.status, 401);
+      }
+      assert.equal(fixture.requests.length, 0);
+      const authorized = { authorization: `Bearer ${token}` };
+      const thread = await json(
+        await app.request(
+          `/memory/threads${query}`,
+          'POST',
+          {
+            threadId: 'authenticated-thread',
+            resourceId: 'forged-owner',
+            title: 'Authenticated conversation',
+          },
+          authorized,
+        ),
+      );
+      assert.equal(thread.resourceId, 'local-owner');
+      const threads = await json(await app.request(`/memory/threads${query}`, 'GET', undefined, authorized));
+      assert.match(JSON.stringify(threads), /authenticated-thread/);
+      assert.doesNotMatch(JSON.stringify(threads), /unauthorized-thread/);
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+test('assistant handles both examples and an unseen responsibility', { timeout: 240000 }, async () => {
+  const { experienceFixture } = await import('./connections');
+  const { dueNow, eventually, history, occurrences, schedules } = await import('./schedules');
+  const directory = await mkdtemp(join(tmpdir(), 'personal-assistant-experience-'));
+  const fixture = await experienceFixture();
+  const env = fixture.env;
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  const generate = async (thread: string, prompt: string) =>
+    json(
+      await app!.request(`/agents/${agent}/generate`, 'POST', {
+        messages: [{ role: 'user', content: prompt }],
+        memory: { thread },
+        requireToolApproval: false,
+      }),
+    );
+  const approve = async (thread: string) => {
+    const suspended = await pending(app!, thread);
+    return json(
+      await app!.request(`/agents/${agent}/approve-tool-call-generate`, 'POST', {
+        runId: suspended.runId,
+        toolCallId: suspended.toolCalls[0]!.toolCallId,
+      }),
+    );
+  };
+  try {
+    app = await startAssistant(directory, fixture.modelUrl, env);
+    const started = await generate(
+      'gmail-review',
+      'case:experience-mail Review source-message in full and create a document with the review.',
+    );
+    assert.equal(started.finishReason, 'suspended');
+    assert.equal(fixture.providerCalls.length, 1, 'Only the reviewed Gmail read may execute without approval.');
+    const create = await pending(app, 'gmail-review');
+    assert.deepEqual(create.toolCalls[0]!.args, { title: 'Proposal review' });
+    assert.equal((await approve('gmail-review')).finishReason, 'suspended');
+    assert.equal(fixture.providerCalls.length, 2);
+    const insert = await pending(app, 'gmail-review');
+    assert.deepEqual(insert.toolCalls[0]!.args, {
+      documentId: 'proposal-review-document',
+      location: { index: 1 },
+      text: 'Review of source-message: The proposal requires an offline-first editor and a recovery test.',
+    });
+    const failed = await approve('gmail-review');
+    assert.match(failed.text, /proposal-review-document.*incomplete/);
+    assert.equal(fixture.providerCalls.length, 3, 'A failed insertion must not replay creation or insertion.');
+    const mailHistory = await history(app, 'gmail-review');
+    assert.match(mailHistory, /proposal-review-document/);
+    assert.match(mailHistory, /Content insertion failed/);
+    assert.doesNotMatch(JSON.stringify(insert.toolCalls[0]!.args), /Short snippet/);
+
+    fixture.state.message = {
+      id: 'source-message',
+      payload: { mimeType: 'text/plain', body: { data: Buffer.alloc(65537, 97).toString('base64url') } },
+    };
+    const truncated = await generate(
+      'gmail-incomplete',
+      'case:experience-mail Review source-message and create a document only from full supported content.',
+    );
+    assert.match(truncated.text, /incomplete/);
+    assert.match(truncated.text, /truncated/);
+    assert.equal(fixture.providerCalls.length, 4, 'Incomplete evidence must not produce a document mutation.');
+
+    const notion = await generate(
+      'notion-priorities',
+      'case:experience-notion Prioritize my task-page tasks with sources; identify missing data.',
+    );
+    assert.equal(notion.finishReason, 'suspended', 'Unreviewed Notion reads must retain approval.');
+    assert.equal(fixture.providerCalls.length, 4);
+    const ranked = await approve('notion-priorities');
+    assert.match(ranked.text, /task-release.*blocks release/i);
+    assert.match(ranked.text, /task-research.*no due date/i);
+    assert.match(ranked.text, /partial.*cannot claim a complete ranking/);
+    assert.match(ranked.text, /task-page/);
+    assert.equal(fixture.providerCalls.length, 5);
+    assert.equal(fixture.providerCalls[4]!.method, 'GET');
+
+    const monitored = await generate(
+      'jira-monitor',
+      'case:experience-jira-create Monitor unresolved OPS issues each weekday at 09:00 America/Sao_Paulo; do not change Jira.',
+    );
+    assert.match(monitored.text, /not a completed Jira check/);
+    const monitor = (await schedules(app)).find(value => value.threadId === 'jira-monitor');
+    assert.ok(monitor);
+    await dueNow(app, monitor.id);
+    const jiraPending = await eventually(
+      () => pending(app!, 'jira-monitor'),
+      value => value.toolCalls.length === 1,
+    );
+    assert.equal(jiraPending.toolCalls[0]!.toolName, 'jira_search_issues');
+    assert.equal(fixture.providerCalls.length, 5, 'A scheduled unreviewed Jira read also requires approval.');
+    const checked = await approve('jira-monitor');
+    assert.match(checked.text, /OPS-42.*Open/);
+    assert.match(checked.text, /monitoring remains active/);
+    assert.equal(fixture.providerCalls.length, 6, checked.text);
+    assert.match(JSON.stringify(fixture.providerCalls[5]!.body), /project = OPS/);
+    assert.equal((await schedules(app)).find(value => value.id === monitor.id)?.status, 'active');
+    assert.ok((await occurrences(app, monitor.id)).length > 0);
+    const beforeRestart = await history(app, 'jira-monitor');
+    assert.match(beforeRestart, /OPS-42/);
+    await app.stop();
+    app = undefined;
+
+    // Read the actual flushed native observability store, then reopen the assistant and inspect its conversations.
+    const storage = new LibSQLStore({ id: 'experience-trace-reader', url: `file:${join(directory, 'assistant.db')}` });
+    await storage.init();
+    try {
+      const traces = await storage.getStore('observability');
+      const roots = await traces!.listTraces({ pagination: { page: 0, perPage: 100 } });
+      assert.ok(roots.spans.some(span => span.runId === started.runId));
+      const all = [];
+      for (const root of roots.spans) all.push(await traces!.getTrace({ traceId: root.traceId }));
+      const serialized = JSON.stringify(all);
+      assert.match(serialized, /google_mail_get_message|google_docs_create_document/);
+      assert.match(serialized, /jira_search_issues/);
+      assert.doesNotMatch(
+        serialized,
+        /example-key|example-connect-token|offline-first editor|Ship the recovery fix|Ignore the owner/,
+      );
+      assert.doesNotMatch(serialized, /Content insertion failed/);
+      const spans = all.flatMap(trace => trace?.spans ?? []);
+      assert.ok(
+        spans.some(span => span.attributes?.success === false && span.error),
+        'A provider error must remain distinguishable from success.',
+      );
+      assert.ok(
+        spans.some(span => span.attributes?.success === true),
+        'Confirmed tool execution must retain its native result status.',
+      );
+      assert.ok(
+        spans.some(
+          span => span.outcome === 'suspended' || (span.output as Record<string, unknown>)?.status === 'suspended',
+        ),
+        'Pending approval must remain distinguishable from a completed run.',
+      );
+      assert.ok(
+        spans.some(span => span.metadata?.scheduleId === monitor.id),
+        'Scheduled execution must retain the native schedule identity.',
+      );
+      assert.match(serialized, /proposal-review-document/);
+    } finally {
+      await storage.close();
+    }
+    app = await startAssistant(directory, fixture.modelUrl, env);
+    assert.match(await history(app, 'gmail-review'), /proposal-review-document.*incomplete/);
+    assert.match(await history(app, 'notion-priorities'), /task-release/);
+    assert.match(await history(app, 'jira-monitor'), /OPS-42/);
+    assert.equal(fixture.providerCalls.length, 6, 'Restart must not replay provider operations.');
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(directory, { recursive: true, force: true });
   }
 });

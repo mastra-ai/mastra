@@ -11,6 +11,17 @@ test('local configuration requires only an OpenAI key and applies bounded defaul
   assert.equal(config.ownerId, 'local-owner');
   assert.equal(config.model, 'openai/gpt-6-luna');
   assert.equal(config.maxSteps, 20);
+  assert.equal(config.modelSettings, undefined);
+  assert.equal(config.modelMaxRetries, undefined);
+  assert.deepEqual(
+    loadConfig({
+      OPENAI_API_KEY: 'example-key',
+      ASSISTANT_MAX_OUTPUT_TOKENS: '512',
+      ASSISTANT_MODEL_MAX_RETRIES: '0',
+    }).modelSettings,
+    { maxOutputTokens: 512 },
+  );
+  assert.equal(loadConfig({ OPENAI_API_KEY: 'example-key', ASSISTANT_MODEL_MAX_RETRIES: '0' }).modelMaxRetries, 0);
   assert.equal(config.judgeModel, 'openai/gpt-6-luna');
   assert.equal(config.maxGoalEvaluations, 5);
   assert.equal(config.timezone, undefined);
@@ -49,8 +60,14 @@ test('invalid settings identify their names without echoing credentials or suppl
     { ASSISTANT_MAX_STEPS: '21' },
     { ASSISTANT_MAX_STEPS: '1.5' },
     { ASSISTANT_MAX_STEPS: '0' },
+    { ASSISTANT_MAX_OUTPUT_TOKENS: '0' },
+    { ASSISTANT_MAX_OUTPUT_TOKENS: '32769' },
+    { ASSISTANT_MAX_OUTPUT_TOKENS: '1.5' },
+    { ASSISTANT_MODEL_MAX_RETRIES: '-1' },
+    { ASSISTANT_MODEL_MAX_RETRIES: '6' },
+    { ASSISTANT_MODEL_MAX_RETRIES: '1.5' },
     { ASSISTANT_TIMEZONE: 'secret/invalid-zone' },
-    { ASSISTANT_RUNTIME: 'hosted' },
+    { ASSISTANT_RUNTIME: 'unknown' },
   ];
   for (const settings of invalid) {
     const name = Object.keys(settings)[0]!;
@@ -221,4 +238,51 @@ test('schedule timing preserves explicit timezone dates and rejects calendar or 
     } else assert.match(JSON.stringify(chosen.error.issues), /offset choice/);
   }
   assert.ok(representableChoices >= 1, 'Native scheduling must support at least one explicit repeated-hour choice.');
+});
+
+test('hosted configuration refuses local fallback insecure storage and ambiguous Studio identity', () => {
+  const hosted = {
+    OPENAI_API_KEY: 'example-key',
+    ASSISTANT_RUNTIME: 'hosted',
+    TURSO_DATABASE_URL: 'libsql://assistant-example.turso.io',
+    TURSO_AUTH_TOKEN: 'example-private-database-token',
+    ASSISTANT_API_TOKEN: 'example-private-owner-token-at-least-32-characters',
+    MASTRA_PLATFORM_STUDIO_AUTH: 'disabled',
+  };
+  assert.equal(loadConfig(hosted).runtime.mode, 'hosted');
+  assert.equal(loadConfig({ OPENAI_API_KEY: 'example-key', NODE_ENV: 'production' }).runtime.mode, 'local');
+  for (const name of ['MASTRA_DEPLOYMENT_ID', 'MASTRA_CLOUD_API_ENDPOINT', 'MASTRA_PLATFORM_PROJECT_ID']) {
+    assert.throws(() => loadConfig({ OPENAI_API_KEY: 'example-key', [name]: 'example' }), /ASSISTANT_RUNTIME/);
+    assert.equal(loadConfig({ ...hosted, [name]: 'example' }).runtime.mode, 'hosted');
+  }
+  for (const override of [
+    { TURSO_DATABASE_URL: '' },
+    { TURSO_DATABASE_URL: 'file:assistant.db' },
+    { TURSO_DATABASE_URL: 'http://assistant-example.turso.io' },
+    { TURSO_DATABASE_URL: 'libsql://127.0.0.1' },
+    { TURSO_DATABASE_URL: 'libsql://assistant-example.turso.io?tls=0' },
+    { TURSO_DATABASE_URL: 'libsql://private-user:private-password@assistant-example.turso.io' },
+    { TURSO_DATABASE_URL: 'libsql://assistant-example.turso.io.attacker.example' },
+    { TURSO_AUTH_TOKEN: '' },
+    { ASSISTANT_API_TOKEN: '' },
+    { ASSISTANT_API_TOKEN: 'short' },
+    { MASTRA_PLATFORM_STUDIO_AUTH: '' },
+    { MASTRA_PLATFORM_STUDIO_AUTH: 'enabled' },
+    { ASSISTANT_PLATFORM_TRACING: 'true' },
+  ])
+    assert.throws(
+      () => loadConfig({ ...hosted, ...override }),
+      error => {
+        assert.ok(error instanceof Error);
+        assert.doesNotMatch(error.message, /private-database-token|private-owner-token|private-password/);
+        return true;
+      },
+    );
+  for (const override of [
+    { TURSO_DATABASE_URL: hosted.TURSO_DATABASE_URL },
+    { TURSO_AUTH_TOKEN: hosted.TURSO_AUTH_TOKEN },
+    { ASSISTANT_API_TOKEN: hosted.ASSISTANT_API_TOKEN },
+    { ASSISTANT_PLATFORM_TRACING: 'true' },
+  ])
+    assert.throws(() => loadConfig({ OPENAI_API_KEY: 'example-key', ...override }), /ASSISTANT_RUNTIME/);
 });
