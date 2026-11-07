@@ -36,18 +36,18 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-latest": [
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-k2.6": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k2.6": [
+    "kimi-latest": [
       {
         "type": "toggle"
       }
@@ -58,16 +58,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-flash-latest": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "glm-flash-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

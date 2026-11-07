@@ -4,6 +4,7 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
+import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardForWorkItem,
   cardRuleFacts,
@@ -19,7 +20,9 @@ import {
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
   placedByIntakeRoute,
+  resolveEventRoute,
   resolveIntakePlacement,
+  routesHandleEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -54,6 +57,7 @@ import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import { isStatusEventDecision } from './event-rules.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from './types.js';
@@ -93,12 +97,13 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
 /**
- * Decisions that may start or wake an agent run and so hold a run slot. A
- * transition's message is queued as a separate sendMessage, so the transition
- * itself stays bookkeeping.
+ * Decisions that may start or wake an agent run, or wait for one to end, and so
+ * hold a run slot. A transition's message is queued as a separate sendMessage,
+ * so a transition stays bookkeeping, and so does a status event's route move:
+ * it never waits for a run inline, it hands itself back until the run ends.
  */
 const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'invokeSkill' || decision.type === 'sendMessage';
+  decision.type === 'invokeSkill' || decision.type === 'sendMessage' || decision.type === 'signalActivity';
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
@@ -113,6 +118,12 @@ const RECONCILE_INTERVAL_MS = 30_000;
 
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
 class FactoryDecisionSuperseded extends Error {}
+
+/** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
+class FactoryDecisionPostponed extends Error {}
+
+// How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
+const POSTPONE_MS = 10_000;
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
@@ -1045,6 +1056,14 @@ export class FactoryDecisionDispatcher {
         await this.#reviewStatus(record, record.decision, { phase: 'cancelled', endedAt: new Date() });
         return;
       }
+      if (error instanceof FactoryDecisionPostponed) {
+        await this.#storage.postponeDeferredDecision(
+          leaseIdentity(record, this.#ownerId),
+          new Date(now.getTime() + POSTPONE_MS),
+          new Date(),
+        );
+        return;
+      }
       const failureCode = factoryDispatchFailureCode(error);
       const terminal = isTerminalFailure(record.attempts, failureCode);
       const failed = await this.#storage.failDeferredDecision({
@@ -1238,70 +1257,12 @@ export class FactoryDecisionDispatcher {
 
     switch (decision.type) {
       case 'transition': {
-        const item = await this.#requireItem(record);
-        const replay = await this.#storage.getTransitionResultByIngress(
-          record.orgId,
-          record.factoryProjectId,
-          `decision:${record.idempotencyKey}`,
-        );
-        if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
-        const result = await this.#transitionService.transition({
-          orgId: record.orgId,
-          factoryProjectId: record.factoryProjectId,
-          workItemId: item.id,
-          board: decision.board,
-          stage: decision.stage,
-          expectedRevision: item.revision,
-          actor: record.approvedBy
-            ? { type: 'human', id: record.approvedBy }
-            : { type: 'system', id: 'factory-rule-dispatcher' },
-          ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
-          cause: 'rule_decision',
-          causalChain: nextChain,
-          ...(decision.reenter ? { reenter: true } : {}),
-        });
-        if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
-        const transitionMessage = decision.message;
-        if (!transitionMessage) return;
-        // The message may wake an idle session and hold it for a whole agent
-        // run, so it is queued as its own sendMessage decision for the run
-        // pool; the stage change above never waits on run capacity. Keyed by
-        // this decision, so a retry replays rather than queueing it twice.
-        const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
-        if (!moved) return;
-        const messageKey = `${record.idempotencyKey}:message`;
-        // Keyed by revision so a retry after a concurrent write commits under a
-        // fresh identity at the item's new revision.
-        const queued = await this.#storage.commitRuleEvaluation({
-          orgId: record.orgId,
-          factoryProjectId: record.factoryProjectId,
-          workItemId: item.id,
-          ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
-          configVersion: this.#transitionService.configVersion,
-          expectedRevision: moved.revision,
-          actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
-          outcome: { status: 'accepted' },
-          decisions: [
-            {
-              type: 'sendMessage',
-              idempotencyKey: messageKey,
-              message: transitionMessage.text,
-              priority: 'high',
-              idleBehavior: 'wake',
-              ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
-            },
-          ],
-          causalChain: nextChain,
-          now: new Date(),
-        });
-        if (queued.status === 'missing') return;
-        if (queued.status === 'stale') {
-          throw new Error('Factory transition message was not queued: the work item changed concurrently.');
-        }
-        const queuedStatus = (queued.result as { status?: string }).status;
-        if (queuedStatus !== 'accepted') {
-          throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
-        }
+        if (decision.event) await this.#routeEvent(record, decision.event, nextChain, decision);
+        else await this.#applyTransition(record, decision, nextChain);
+        return;
+      }
+      case 'routeEvent': {
+        await this.#routeEvent(record, decision.event, nextChain);
         return;
       }
       case 'upsertLinkedWorkItem': {
@@ -1361,39 +1322,7 @@ export class FactoryDecisionDispatcher {
             (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
-          // Only a *live* run on this binding can be duplicated by a second
-          // kickoff, so that is the only thing worth waiting on. The open-run
-          // ledger is shared by every replica, but the run registry is local, so
-          // an entry with nothing live here is one of two things:
-          //  - live on another replica (fresh heartbeat from another owner):
-          //    hand the decision back to retry, since that owner will clear the
-          //    entry and only it can observe the run end;
-          //  - an orphan (stale or missing heartbeat): the run died with its
-          //    process and no `agent_end` will ever clear it. Waiting would
-          //    wedge the binding for good; the next observed run end sweeps it.
-          while (true) {
-            const openRun = watchRun(session, {
-              timeoutMs: this.#skillCompletionObservationTimeoutMs,
-              approvePlans: false,
-              label: 'Factory skill run',
-              runStillActive,
-            });
-            try {
-              const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
-              if (open.length === 0) break;
-              if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
-                throw new FactoryDispatchError(
-                  'session_unavailable',
-                  `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
-                );
-              }
-              if (!runStillActive()) break;
-              if (!(await openRun.wait())) break;
-            } finally {
-              openRun.close();
-            }
-            await waitForSessionRunAudit(session);
-          }
+          await this.#waitForOpenRun(session, binding, 'Factory skill run');
           if (await this.#roleSuperseded(record, decision.role)) throw new FactoryDecisionSuperseded();
           const activeBinding = await this.#requireBinding(record, decision.role);
           if (activeBinding.id !== binding.id) {
@@ -1603,6 +1532,10 @@ export class FactoryDecisionDispatcher {
             ),
           true,
         );
+        return;
+      }
+      case 'signalActivity': {
+        await this.#signalActivity(record, decision);
         return;
       }
       case 'dismissStaleReviews': {
@@ -1919,6 +1852,166 @@ export class FactoryDecisionDispatcher {
     if (!board || board.id === decision.board) return decision;
     return { ...decision, board: board.id, stage: board.initialPhase };
   }
+  /** Moves the card as a rule decided, then queues the decision's message for the card's session. */
+  async #applyTransition(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'transition' }>,
+    nextChain: FactoryRuleCausalEntry[],
+  ): Promise<void> {
+    const item = await this.#requireItem(record);
+    const replay = await this.#storage.getTransitionResultByIngress(
+      record.orgId,
+      record.factoryProjectId,
+      `decision:${record.idempotencyKey}`,
+    );
+    if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
+    const result = await this.#transitionService.transition({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: item.id,
+      board: decision.board,
+      stage: decision.stage,
+      expectedRevision: item.revision,
+      actor: record.approvedBy
+        ? { type: 'human', id: record.approvedBy }
+        : { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
+      cause: 'rule_decision',
+      causalChain: nextChain,
+      ...(decision.reenter ? { reenter: true } : {}),
+    });
+    if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
+    const transitionMessage = decision.message;
+    if (!transitionMessage) return;
+    // The message may wake an idle session and hold it for a whole agent
+    // run, so it is queued as its own sendMessage decision for the run
+    // pool; the stage change above never waits on run capacity. Keyed by
+    // this decision, so a retry replays rather than queueing it twice.
+    const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
+    if (!moved) return;
+    const messageKey = `${record.idempotencyKey}:message`;
+    // Keyed by revision so a retry after a concurrent write commits under a
+    // fresh identity at the item's new revision.
+    const queued = await this.#storage.commitRuleEvaluation({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: item.id,
+      ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
+      configVersion: this.#transitionService.configVersion,
+      expectedRevision: moved.revision,
+      actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          idempotencyKey: messageKey,
+          message: transitionMessage.text,
+          priority: 'high',
+          idleBehavior: 'wake',
+          ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
+        },
+      ],
+      causalChain: nextChain,
+      now: new Date(),
+    });
+    if (queued.status === 'missing') return;
+    if (queued.status === 'stale') {
+      throw new Error('Factory transition message was not queued: the work item changed concurrently.');
+    }
+    const queuedStatus = (queued.result as { status?: string }).status;
+    if (queuedStatus !== 'accepted') {
+      throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
+    }
+  }
+
+  /**
+   * Moves a card where the project's intake routes send it on a status event. A move into a
+   * working or resting phase waits for the run in flight on the card to end, going back to the
+   * queue without holding a dispatch slot until it has; a move into a
+   * terminal phase does not, so terminal cleanup stops that run at once, as a close always has.
+   * A close moves only an unfinished card and a reopen only a finished one. When no route on the
+   * card's board handles the event at all, the rule's own move (a board's `sourceClosed` phase)
+   * applies instead; when one does but none matches, the card stays. A route's move is a system
+   * move by the route: recorded in the card's history and audit, keyed so a replayed delivery
+   * moves nothing twice.
+   */
+  async #routeEvent(
+    record: FactoryDeferredDecisionRecord,
+    event: BoardEventFacts,
+    causalChain: FactoryRuleCausalEntry[],
+    fallback?: Extract<FactoryCommitDecision, { type: 'transition' }>,
+  ): Promise<void> {
+    const identity = `event-route:${record.idempotencyKey}`;
+    if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) return;
+    if (await this.#statusEventOvertaken(record)) throw new FactoryDecisionSuperseded();
+    const resolve = async () => {
+      const item = await this.#requireItem(record);
+      const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
+      if (!board) return undefined;
+      const stage = item.stages.length === 1 ? item.stages[0] : undefined;
+      const finished = stage !== undefined && board.isTerminal(stage);
+      if (event.type === 'work_item.closed' ? finished : !finished) return undefined;
+      const routes = this.#intakeRoutes
+        ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
+        : [];
+      if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
+      const route = resolveEventRoute(routes, event, cardRuleFacts(item), board);
+      if (!route || stage === route.phase) return undefined;
+      return { item, board, route };
+    };
+    const first = await resolve();
+    if (!first) return;
+    if ('fallback' in first) {
+      if (fallback) await this.#applyTransition(record, fallback, causalChain);
+      return;
+    }
+    if (!first.board.isTerminal(first.route.phase)) {
+      const binding = await this.#findBinding(record);
+      const session = binding ? await this.#findSession(binding) : undefined;
+      // Checked again on the next claim: the card may have moved, or the routes changed, by then.
+      if (binding && session && (await this.#hasRunInFlight(session, binding))) {
+        throw new FactoryDecisionPostponed();
+      }
+    }
+    const { item, board, route } = first;
+    const result = await this.#transitionService.transition({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: item.id,
+      board: board.id,
+      stage: route.phase,
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: `intake-route:${route.routeId}` },
+      ingress: { type: 'rule', identity },
+      cause: 'event_route',
+      causalChain,
+      eventRoute: { routeId: route.routeId, allowWorkingPhase: route.allowWorkingPhase },
+    });
+    // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
+    if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+  }
+
+  /**
+   * Whether a later status event was queued for the same card: the source's last word wins, so a
+   * close still queued when the issue is reopened moves nothing. Of events queued in the same
+   * millisecond, the one with the greatest id is the last; one already settled had its turn.
+   */
+  async #statusEventOvertaken(record: FactoryDeferredDecisionRecord): Promise<boolean> {
+    if (!record.workItemId) return false;
+    const decisions = await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId, {
+      workItemId: record.workItemId,
+    });
+    return decisions.some(
+      other =>
+        other.id !== record.id &&
+        isStatusEventDecision(other.decision) &&
+        (other.createdAt.getTime() > record.createdAt.getTime() ||
+          (other.createdAt.getTime() === record.createdAt.getTime() &&
+            other.completedAt === null &&
+            other.id > record.id)),
+    );
+  }
+
   async #requireItem(record: FactoryDeferredDecisionRecord) {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
@@ -1950,6 +2043,59 @@ export class FactoryDecisionDispatcher {
       );
     }
     return binding;
+  }
+
+  /**
+   * Points the card's live session at new activity on its source. The message
+   * is written here from the decision's pointers, never from provider text.
+   * Activity while the session is busy waits as one pending notification per
+   * card and kind of activity, counting how many arrived; an idle session is
+   * woken unless the decision asks to only persist. A card nobody is working
+   * has nobody to tell, so it is dropped.
+   */
+  async #signalActivity(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'signalActivity' }>,
+  ): Promise<void> {
+    if (!record.workItemId) return;
+    const binding = await this.#findBinding(record);
+    if (!binding) return;
+    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+    const startedBy = item?.sessions[binding.role]?.startedBy;
+    if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+    await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+    const session = await this.#requireSession(binding);
+    const author = decision.author
+      ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
+      : decision.authorTrusted
+        ? undefined
+        : 'an untrusted author';
+    const message =
+      decision.event === 'work_item.commented'
+        ? `New comment${author ? ` by ${author}` : ''} on ${decision.reference}: ${decision.url}`
+        : `${decision.reference} was edited${author ? ` by ${author}` : ''}: ${decision.url}`;
+    // An untrusted author never starts a run, nor does a source that can't tell Factory's own
+    // comments apart. Core never wakes a thread for a low-priority notification on any path;
+    // a medium one can still wake it through a summary if the busy run ends mid-delivery.
+    const wakes = decision.authorTrusted && decision.idleBehavior !== 'persist';
+    await awaitNotification(() =>
+      session.sendNotificationSignal(
+        {
+          source: 'factory',
+          kind: 'source-activity',
+          summary: message,
+          priority: wakes ? 'medium' : 'low',
+          sourceId: record.id,
+          dedupeKey: record.idempotencyKey,
+          coalesceKey: `${record.workItemId}:${decision.event}`,
+        },
+        {
+          ifActive: { behavior: 'persist' },
+          ifIdle: { behavior: wakes ? 'wake' : 'persist' },
+          requestContext: factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId }),
+        },
+      ),
+    );
   }
 
   async #messageBinding(
@@ -2057,6 +2203,56 @@ export class FactoryDecisionDispatcher {
       item !== null &&
       autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
     );
+  }
+
+  /**
+   * Whether a run is in flight on `binding`: live here, or live on another dispatcher. An open-run
+   * entry with nothing live behind it is an orphan of a dead process and does not count.
+   */
+  async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
+    const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+    if (open.length === 0) return false;
+    if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
+    return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+  }
+
+  /** Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. */
+  async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
+    const runStillActive = () =>
+      this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+    // Only a *live* run on this binding can be duplicated by a second
+    // kickoff, so that is the only thing worth waiting on. The open-run
+    // ledger is shared by every replica, but the run registry is local, so
+    // an entry with nothing live here is one of two things:
+    //  - live on another replica (fresh heartbeat from another owner):
+    //    hand the decision back to retry, since that owner will clear the
+    //    entry and only it can observe the run end;
+    //  - an orphan (stale or missing heartbeat): the run died with its
+    //    process and no `agent_end` will ever clear it. Waiting would
+    //    wedge the binding for good; the next observed run end sweeps it.
+    while (true) {
+      const openRun = watchRun(session, {
+        timeoutMs: this.#skillCompletionObservationTimeoutMs,
+        approvePlans: false,
+        label,
+        runStillActive,
+      });
+      try {
+        const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+        if (open.length === 0) break;
+        if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+          throw new FactoryDispatchError(
+            'session_unavailable',
+            `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
+          );
+        }
+        if (!runStillActive()) break;
+        if (!(await openRun.wait())) break;
+      } finally {
+        openRun.close();
+      }
+      await waitForSessionRunAudit(session);
+    }
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {

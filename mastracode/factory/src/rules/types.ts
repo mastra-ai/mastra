@@ -1,3 +1,4 @@
+import type { ActivityEvent, BoardEventFacts } from '../boards/board-events.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/work-item-schema.js';
 
@@ -171,6 +172,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
   'issueEdited',
   'issueClosed',
+  'issueReopened',
   'issueCommentCreated',
   'issueCommentEdited',
   'issueCommentDeleted',
@@ -188,6 +190,7 @@ export const FACTORY_GITLAB_EVENTS = [
   'issueOpened',
   'issueUpdated',
   'issueClosed',
+  'issueReopened',
   'issueCommented',
   'mergeRequestOpened',
   'mergeRequestUpdated',
@@ -299,6 +302,8 @@ export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {
 }
 
 export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -406,6 +411,8 @@ export interface FactoryRuleBoardClosurePhase {
 }
 
 export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -462,6 +469,8 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -492,6 +501,8 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
 }
 
 export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -522,6 +533,8 @@ export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
 }
 
 export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -599,6 +612,48 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
    * it has to start over.
    */
   reenter?: boolean;
+  /**
+   * The status event this move answers. The project's intake routes on the card's board then
+   * decide where the card goes instead, and this move applies only when no route on the board
+   * handles the event; a route that does, even a disabled one, owns it. Factory drops the tag
+   * from a decision returned by an explicit override on the integration's `rules`, so that
+   * override's move always applies; a board handler's tagged move still goes to the routes.
+   */
+  event?: BoardEventFacts;
+}
+
+/**
+ * Hands a status event on an existing card to the project's intake routes: the first enabled
+ * route on the card's board whose `on` names the event and whose `when` matches moves the card.
+ * Integrations add it when no rule decided anything for the delivery; nothing moves when no
+ * route matches.
+ */
+export interface FactoryRouteEventDecision extends FactoryCommitDecisionBase {
+  type: 'routeEvent';
+  event: BoardEventFacts;
+}
+
+/**
+ * Tells the card's live session that its source saw activity, such as a new
+ * comment or an edit. It carries pointers only: the dispatcher writes the
+ * message from these fields, so no provider text (a comment body, a title)
+ * ever reaches the session through it. Without a live session it is dropped.
+ */
+export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase {
+  type: 'signalActivity';
+  event: ActivityEvent;
+  /** The source's own reference, such as `acme/app#12`. */
+  reference: string;
+  url: string;
+  author?: string;
+  authorTrusted: boolean;
+  /**
+   * What an idle session does with it. Defaults to `wake`; `persist` leaves it
+   * in the session's notifications without starting a run, for sources whose
+   * own comments Factory cannot tell apart from other people's. Activity from an
+   * untrusted author always persists.
+   */
+  idleBehavior?: 'wake' | 'persist';
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
@@ -695,6 +750,8 @@ export interface FactoryDismissStaleReviewsDecision extends FactoryCommitDecisio
 
 export type FactoryCommitDecision =
   | FactoryTransitionDecision
+  | FactoryRouteEventDecision
+  | FactorySignalActivityDecision
   | FactoryDismissStaleReviewsDecision
   | FactoryUpsertLinkedWorkItemDecision
   | FactoryInvokeSkillDecision
