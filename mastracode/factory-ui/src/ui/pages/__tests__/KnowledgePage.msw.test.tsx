@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type {
   KnowledgeExplorerGraph,
   KnowledgeExplorerPageDetail,
@@ -6,7 +7,7 @@ import type {
 import type { KnowledgePagePayload } from '@mastra/playground-ui/domains/knowledge/pageTypes';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -123,6 +124,31 @@ function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
 }
 
 describe('KnowledgePage', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the mobile drawer trigger in the header while feature flags load', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    stubFactory();
+    server.use(http.get(`${TEST_BASE_URL}/web/config/features`, () => new Promise<Response>(() => {})));
+    renderRoute();
+
+    expect(await screen.findByLabelText('Loading page')).toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    await userEvent.click(within(header).getByRole('button', { name: 'Open navigation menu' }));
+    expect(await screen.findByRole('dialog', { name: 'Navigation' })).toBeInTheDocument();
+  });
+
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
     stubFactory({ knowledge: false });
     const { router } = renderRoute();

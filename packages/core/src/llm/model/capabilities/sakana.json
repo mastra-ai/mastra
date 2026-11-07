@@ -9,13 +9,13 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "fugu-ultra": [
+    "fugu": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]
       }
     ],
-    "fugu": [
+    "fugu-ultra": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]

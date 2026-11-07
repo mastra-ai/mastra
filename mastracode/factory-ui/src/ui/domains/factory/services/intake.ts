@@ -29,11 +29,9 @@ export type IntakeConfig = Record<string, IntakeSelection> & {
  * is absent whenever that integration isn't connected. Fill the fixed shape the
  * UI relies on so reads like `config.github.enabled` never touch `undefined`.
  * An absent key means the integration is not registered in this deployment,
- * so every synthetic placeholder stays disabled. Registered integrations are
- * returned by the server with their effective defaults, and saving the fixed
- * shape back is safe because the server ignores disabled/unselected keys for
- * unregistered integrations. Other keys (custom integrations) pass through so
- * every save sends them back unchanged.
+ * so every synthetic placeholder stays disabled. Saves send one integration
+ * at a time, so placeholders only reach the server when that integration is
+ * edited. Custom integration keys pass through.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
   return {
@@ -79,9 +77,13 @@ export async function fetchIntakeConfig(baseUrl: string): Promise<IntakeConfig> 
   return requestIntakeConfig(baseUrl);
 }
 
-/** Save the org's intake config; resolves to the persisted config. */
-export async function saveIntakeConfig(baseUrl: string, config: IntakeConfig): Promise<IntakeConfig> {
-  return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify(config) });
+/** Save one integration's selection; the server keeps the others. Resolves to the persisted config. */
+export async function saveIntakeSelection(
+  baseUrl: string,
+  integrationId: string,
+  selection: IntakeSelection,
+): Promise<IntakeConfig> {
+  return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify({ [integrationId]: selection }) });
 }
 
 /** Routing of one intake source to the Factory project its items land in. */
@@ -99,6 +101,22 @@ export interface IntakeSourceBinding {
   /** ISO timestamp; when two label filters match one issue, the older binding takes it. */
   createdAt?: string;
 }
+
+/** Route one source to a Factory project; `factoryProjectId: null` clears it, omitted `labels` keep the filter. */
+export interface IntakeBindingWrite {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string | null;
+  board: string | null;
+  labels?: string[] | null;
+}
+
+/** One factory's binding of a source; a type alias so it doubles as query parameters. */
+export type IntakeBindingTarget = {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string;
+};
 
 /** Another factory's binding that already takes some of the requested issues. */
 export interface IntakeBindingConflict {
@@ -155,6 +173,13 @@ export interface IntakeLabelRoute {
   board: string;
 }
 
+/** Route a label to a board, or clear it with `board: null`. */
+export interface IntakeLabelRouteWrite {
+  integrationId: string;
+  label: string;
+  board: string | null;
+}
+
 async function requestIntakeLabelRoutes(
   baseUrl: string,
   query: string,
@@ -188,7 +213,7 @@ export async function fetchIntakeLabelRoutes(baseUrl: string, factoryProjectId: 
 /** Route a label to a board, or clear it with `board: null`. Resolves to the project's routes. */
 export async function saveIntakeLabelRoute(
   baseUrl: string,
-  route: { factoryProjectId: string; integrationId: string; label: string; board: string | null },
+  route: IntakeLabelRouteWrite & { factoryProjectId: string },
 ): Promise<IntakeLabelRoute[]> {
   return requestIntakeLabelRoutes(baseUrl, '', { method: 'PUT', body: JSON.stringify(route) });
 }
@@ -199,23 +224,65 @@ export async function saveIntakeLabelRoute(
  * remove a Jira binding with {@link deleteIntakeBinding}. Rejects with
  * {@link IntakeBindingConflictError} when another factory already takes the same issues.
  */
-export async function saveIntakeBinding(
-  baseUrl: string,
-  binding: {
-    integrationId: string;
-    sourceId: string;
-    factoryProjectId: string | null;
-    board?: string | null;
-    labels?: string[] | null;
-  },
-): Promise<IntakeSourceBinding[]> {
+export async function saveIntakeBinding(baseUrl: string, binding: IntakeBindingWrite): Promise<IntakeSourceBinding[]> {
   return requestIntakeBindings(baseUrl, { method: 'PUT', body: JSON.stringify(binding) });
 }
 
 /** Remove one factory's binding of a source, leaving other factories' bindings of it in place. */
 export async function deleteIntakeBinding(
   baseUrl: string,
-  binding: { integrationId: string; sourceId: string; factoryProjectId: string },
+  binding: IntakeBindingTarget,
 ): Promise<IntakeSourceBinding[]> {
   return requestIntakeBindings(baseUrl, { method: 'DELETE' }, `?${new URLSearchParams(binding)}`);
+}
+
+/** `bindings` as they read once `write` is saved; an edited binding keeps its place. */
+export function withIntakeBinding(bindings: IntakeSourceBinding[], write: IntakeBindingWrite): IntakeSourceBinding[] {
+  const current = bindings.find(
+    binding =>
+      binding.integrationId === write.integrationId &&
+      binding.sourceId === write.sourceId &&
+      // Jira sources feed several factories, so a Jira binding is also told apart by factory.
+      (write.integrationId !== 'jira' || binding.factoryProjectId === write.factoryProjectId),
+  );
+  if (write.factoryProjectId === null) return bindings.filter(binding => binding !== current);
+  const next: IntakeSourceBinding = {
+    ...current,
+    integrationId: write.integrationId,
+    sourceId: write.sourceId,
+    factoryProjectId: write.factoryProjectId,
+    board: write.board,
+    labels: write.labels === undefined ? (current?.labels ?? null) : write.labels,
+  };
+  return current ? bindings.map(binding => (binding === current ? next : binding)) : [...bindings, next];
+}
+
+/** `bindings` as they read once `target` is deleted. */
+export function withoutIntakeBinding(
+  bindings: IntakeSourceBinding[],
+  target: IntakeBindingTarget,
+): IntakeSourceBinding[] {
+  return bindings.filter(
+    binding =>
+      binding.integrationId !== target.integrationId ||
+      binding.sourceId !== target.sourceId ||
+      binding.factoryProjectId !== target.factoryProjectId,
+  );
+}
+
+/** `routes` as they read once `write` is saved; an edited route keeps its place. */
+export function withIntakeLabelRoute(
+  routes: IntakeLabelRoute[],
+  write: IntakeLabelRouteWrite & { factoryProjectId: string },
+): IntakeLabelRoute[] {
+  const label = write.label.trim().toLowerCase();
+  const isRoute = (route: IntakeLabelRoute) => route.integrationId === write.integrationId && route.label === label;
+  if (write.board === null) return routes.filter(route => !isRoute(route));
+  const next = {
+    factoryProjectId: write.factoryProjectId,
+    integrationId: write.integrationId,
+    label,
+    board: write.board,
+  };
+  return routes.some(isRoute) ? routes.map(route => (isRoute(route) ? next : route)) : [...routes, next];
 }
