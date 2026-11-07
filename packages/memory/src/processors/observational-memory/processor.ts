@@ -9,6 +9,8 @@ import type {
   ProcessAPIErrorArgs,
   ProcessAPIErrorResult,
   ProcessInputStepArgs,
+  ProcessLLMRequestArgs,
+  ProcessOutputStepArgs,
   ProcessOutputResultArgs,
   ProcessorSpanPhase,
 } from '@mastra/core/processors';
@@ -16,6 +18,8 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
+import { contextPressure, nextOverhead, snapshotContextRequest } from './context-pressure';
+import type { ContextRequest, ContextUsageAnchor, OverheadBasis } from './context-pressure';
 import { omDebug } from './debug';
 import { getOmFailureMetadata } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
@@ -417,7 +421,22 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const step = this.turn.step(stepNumber);
         let ctx;
         try {
-          ctx = await step.prepare();
+          const counter = this.engine.getTokenCounter();
+          const current = snapshotContextRequest(
+            messageList,
+            stepNumber,
+            `${model.provider}/${model.modelId}`,
+            counter,
+          );
+          const pressure = contextPressure(
+            state.__omContextAnchor as ContextUsageAnchor | undefined,
+            current,
+            await counter.countMessagesAsync(messageList.get.all.db()),
+          );
+          // Consume the measurement once. In particular, an overflow retry or an activation
+          // cannot resurrect the pre-compaction anchor from the completed steps array.
+          delete state.__omContextAnchor;
+          ctx = await step.prepare(pressure === undefined ? undefined : Math.max(0, pressure));
         } catch (error) {
           // Map observation errors through abort (processor-specific concern)
           const err = error instanceof Error ? error : new Error(String(error));
@@ -500,6 +519,53 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
       return messageList;
     });
+  }
+
+  processLLMRequest(args: ProcessLLMRequestArgs): void {
+    delete args.state.__omContextRequest;
+    if (
+      !args.messageList ||
+      args.state[GATEWAY_STATE_KEY] ||
+      parseMemoryRequestContext(args.requestContext)?.memoryConfig?.readOnly
+    )
+      return;
+    args.state.__omContextRequest = snapshotContextRequest(
+      args.messageList,
+      args.stepNumber,
+      `${args.model.provider}/${args.model.modelId}`,
+      this.engine.getTokenCounter(),
+    );
+  }
+
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList> {
+    const request = args.state.__omContextRequest as ContextRequest | undefined;
+    delete args.state.__omContextRequest;
+    delete args.state.__omContextAnchor;
+    const inputTokens = args.usage?.inputTokens;
+    const outputTokens = args.usage?.outputTokens;
+    if (
+      !request ||
+      request.step !== args.stepNumber ||
+      inputTokens === undefined ||
+      !Number.isFinite(inputTokens) ||
+      inputTokens < 0 ||
+      outputTokens === undefined ||
+      !Number.isFinite(outputTokens) ||
+      outputTokens < 0
+    )
+      return args.messageList;
+    const overhead = nextOverhead(args.state.__omOverhead as OverheadBasis | undefined, request, inputTokens);
+    args.state.__omOverhead = overhead;
+    const overheadTokens = overhead.tokens;
+    const anchor: ContextUsageAnchor = {
+      request,
+      overheadTokens,
+      inputTokens,
+      outputTokens,
+      outputEstimate: await this.engine.getTokenCounter().countMessagesAsync(args.messageList.get.all.db()),
+    };
+    args.state.__omContextAnchor = anchor;
+    return args.messageList;
   }
 
   async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList | MastraDBMessage[]> {
