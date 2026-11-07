@@ -12,7 +12,11 @@ import type {
 } from './types';
 import { parseGenUIOperations } from './validate';
 
-/** The `data-gen-ui` chunk written to the Mastra stream. */
+/**
+ * The `data-gen-ui` chunk written to the Mastra stream.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIChunk {
   type: typeof GENUI_DATA_PART_TYPE;
   data: GenUIEnvelope;
@@ -21,17 +25,24 @@ export interface GenUIChunk {
 /**
  * Anything that can write a custom `data-*` chunk to the Mastra stream —
  * typically the `writer` passed to a tool's or workflow step's `execute`.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface GenUIChunkWriter {
   custom(chunk: GenUIChunk): unknown;
 }
 
-/** The parts of a tool's `execute` context the emitter uses. Pass the whole context. */
+/**
+ * The parts of a tool's `execute` context the emitter uses. Pass the whole context.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIEmitterContext {
   writer?: GenUIChunkWriter;
   agent?: { toolCallId?: string };
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIEmitterOptions {
   /**
    * Attached to `createSurface` operations that do not set their own `source`. When the emitter is
@@ -44,6 +55,7 @@ export interface GenUIEmitterOptions {
   generateEventId?: () => string;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceEmitterOptions {
   /**
    * Revision the surface is known to be at. Set this when continuing a surface
@@ -54,8 +66,10 @@ export interface GenUISurfaceEmitterOptions {
   baseRevision?: number;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUICreateSurfaceInput = Omit<Extract<GenUIOperation, { op: 'createSurface' }>, 'op'>;
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceEmitter {
   readonly surfaceId: string;
   /** Validate and write a batch of operations as one atomic envelope. */
@@ -72,6 +86,7 @@ export interface GenUISurfaceEmitter {
   delete(): Promise<GenUIEnvelope>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIEmitter {
   /**
    * Emit updates for one surface. Omit `surfaceId` to get a unique one, which is what a tool that
@@ -105,6 +120,8 @@ export interface GenUIEmitter {
  *   await ui.setStatus('ready');
  * }
  * ```
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function createGenUIEmitter(
   target: GenUIChunkWriter | GenUIEmitterContext | undefined,

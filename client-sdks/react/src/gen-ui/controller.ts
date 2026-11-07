@@ -40,7 +40,11 @@ import type { GenUIManifestComponent, GenUIRegistry, GenUIToolApproval } from '.
 import { collectToolCallMeta, normalizeToolPart } from './tool-parts';
 import type { NormalizedToolCall, ToolCallMeta } from './tool-parts';
 
-/** Chat operations available to action handlers. Bound to the `useGenUIChat` instance that owns the controller. */
+/**
+ * Chat operations available to action handlers. Bound to the `useGenUIChat` instance that owns the controller.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export interface GenUIChatServices {
   /** Send a user message through the owning chat (GenUI tools and published context are attached). */
   sendMessage(args: string | SendMessageArgs): Promise<void>;
@@ -56,12 +60,14 @@ export interface GenUIChatSyncState {
   running?: boolean;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIChatActionContext extends GenUIActionContext {
   chat: GenUIChatServices;
   state: GenUIStateStore;
   context: GenUIContextStore;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIChatActionHandler<
   S extends StandardSchemaV1 | undefined = StandardSchemaV1 | undefined,
 > extends Omit<GenUIActionHandler<S>, 'handle'> {
@@ -71,18 +77,24 @@ export interface GenUIChatActionHandler<
   ): unknown | Promise<unknown>;
 }
 
-/** Typed helper for action handlers registered on `useGenUIChat`. */
+/**
+ * Typed helper for action handlers registered on `useGenUIChat`.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function defineGenUIChatAction<S extends StandardSchemaV1 | undefined = undefined>(
   handler: GenUIChatActionHandler<S>,
 ): GenUIChatActionHandler<S> {
   return handler;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIControllerOptions {
   registry: GenUIRegistry;
   actions?: Record<string, GenUIChatActionHandler<any>>;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUIController {
   readonly registry: GenUIRegistry;
   readonly session: GenUISession;
@@ -142,6 +154,13 @@ export interface GenUIController {
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+/**
+ * The result @mastra/core saves for a tool call cut off by a stopped run (`TOOL_ABORT_NOTICE`, not exported).
+ * If core rewords it, stopped surfaces fall back to showing as ready after a reload.
+ */
+const CORE_TOOL_ABORT_NOTICE =
+  'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';
 
 const operationHelp = (placements: readonly GenUIPlacement[]) =>
   [
@@ -248,6 +267,7 @@ const withoutTrailingPartial = (operations: unknown[]): unknown[] => {
   return [...rest, { ...last, nodes: last.nodes.slice(0, -1) }];
 };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUIController(options: GenUIControllerOptions): GenUIController {
   const { registry } = options;
   const limits = registry.limits;
@@ -283,13 +303,19 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
 
   /** Tool call ids whose tool threw, with the error. A surface such a tool was still building did not finish. */
   let failedToolCalls = new Map<string, string | undefined>();
+  /**
+   * Tool call ids whose tool never returned: the run was stopped, or the stream ended first. Calls waiting
+   * for an approval or a resume are not cut off.
+   */
+  let cutOffToolCalls = new Set<string>();
 
   const effectiveStatus = (surface: GenUISurface): GenUISurface['status'] => {
     if (surface.status !== 'streaming' || isExternal(surface)) return surface.status;
     const toolCallId = surface.source?.toolCallId;
     if (toolCallId && failedToolCalls.has(toolCallId)) return 'failed';
     if (aborted.get(surface.id) === surface.revision) return 'aborted';
-    return live ? 'streaming' : 'ready';
+    if (live) return 'streaming';
+    return toolCallId && cutOffToolCalls.has(toolCallId) ? 'aborted' : 'ready';
   };
 
   const updateAnchors = (messages: ReadonlyArray<MastraDBMessage>) => {
@@ -309,18 +335,28 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     if (changed) notify();
   };
 
-  const updateFailedToolCalls = (messages: ReadonlyArray<MastraDBMessage>) => {
-    const next = new Map<string, string | undefined>();
+  const updateToolOutcomes = (messages: ReadonlyArray<MastraDBMessage>) => {
+    const failed = new Map<string, string | undefined>();
+    const cutOff = new Set<string>();
     for (const message of messages) {
       for (const part of message.content.parts) {
         const call = normalizeToolPart(part);
-        if (call?.phase === 'output-error') next.set(call.toolCallId, call.errorText);
+        if (!call) continue;
+        if (call.phase === 'output-error') failed.set(call.toolCallId, call.errorText);
+        const unanswered =
+          (call.phase === 'input-streaming' || call.phase === 'input-available') && !toolMeta.has(call.toolCallId);
+        if (unanswered || (call.phase === 'output-available' && call.output === CORE_TOOL_ABORT_NOTICE)) {
+          cutOff.add(call.toolCallId);
+        }
       }
     }
     const changed =
-      next.size !== failedToolCalls.size ||
-      [...next].some(([id, error]) => !failedToolCalls.has(id) || failedToolCalls.get(id) !== error);
-    failedToolCalls = next;
+      failed.size !== failedToolCalls.size ||
+      [...failed].some(([id, error]) => !failedToolCalls.has(id) || failedToolCalls.get(id) !== error) ||
+      cutOff.size !== cutOffToolCalls.size ||
+      [...cutOff].some(id => !cutOffToolCalls.has(id));
+    failedToolCalls = failed;
+    cutOffToolCalls = cutOff;
     if (changed) notify();
   };
 
@@ -638,6 +674,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     externalEvents.clear();
     anchors = new Map();
     failedToolCalls = new Map();
+    cutOffToolCalls = new Set();
     state.clear();
     rejectPending('The conversation changed before the user responded');
     approvalStatus.clear();
@@ -659,8 +696,8 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       syncedThread = { id: chat.threadId };
       session.sync(surfaceToolName ? messages.map(project) : messages);
       updateAnchors(messages);
-      updateFailedToolCalls(messages);
       updateToolMeta(messages);
+      updateToolOutcomes(messages);
       const running = chat.running ?? false;
       if (live !== running) {
         live = running;

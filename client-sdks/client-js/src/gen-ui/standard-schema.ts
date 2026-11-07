@@ -3,6 +3,8 @@
  *
  * Copied structurally (as the spec intends) so GenUI can validate with zod
  * (>=3.24), valibot, arktype, etc. without depending on any of them.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface StandardSchemaV1<Input = unknown, Output = Input> {
   readonly '~standard': {
@@ -13,12 +15,15 @@ export interface StandardSchemaV1<Input = unknown, Output = Input> {
   };
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type StandardSchemaV1Result<Output> =
   | { readonly value: Output; readonly issues?: undefined }
   | { readonly issues: ReadonlyArray<{ readonly message: string; readonly path?: ReadonlyArray<unknown> }> };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type InferSchemaOutput<S> = S extends StandardSchemaV1<any, infer O> ? O : unknown;
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const formatPath = (path: ReadonlyArray<unknown> | undefined) =>
@@ -33,10 +38,15 @@ const toResult = <T>(result: StandardSchemaV1Result<T>): GenUIValidationResult<T
     ? { ok: false, error: result.issues.map(issue => `${formatPath(issue.path)}${issue.message}`).join('; ') }
     : { ok: true, value: result.value };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export const isStandardSchema = (value: unknown): value is StandardSchemaV1 =>
   typeof value === 'object' && value !== null && '~standard' in value;
 
-/** Validate synchronously; returns an error if the schema only supports async validation. */
+/**
+ * Validate synchronously; returns an error if the schema only supports async validation.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function validateSchemaSync<S extends StandardSchemaV1>(
   schema: S,
   value: unknown,
@@ -46,6 +56,7 @@ export function validateSchemaSync<S extends StandardSchemaV1>(
   return toResult(result as StandardSchemaV1Result<InferSchemaOutput<S>>);
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export async function validateSchema<S extends StandardSchemaV1>(
   schema: S,
   value: unknown,
@@ -87,7 +98,11 @@ function dropRejectedNulls(value: unknown, issues: Issues): unknown {
   return changed ? copy : undefined;
 }
 
-/** Validate model-generated input, treating rejected `null`s as omitted optional fields. */
+/**
+ * Validate model-generated input, treating rejected `null`s as omitted optional fields.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function validateModelInputSync<S extends StandardSchemaV1>(
   schema: S,
   value: unknown,
@@ -100,6 +115,7 @@ export function validateModelInputSync<S extends StandardSchemaV1>(
   return second?.ok ? second : toResult(result as StandardSchemaV1Result<InferSchemaOutput<S>>);
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export async function validateModelInput<S extends StandardSchemaV1>(
   schema: S,
   value: unknown,

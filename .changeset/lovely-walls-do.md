@@ -15,4 +15,6 @@ execute: async ({ city }, context) => {
 };
 ```
 
+Requires `@mastra/core` 1.83.0 or later on the server.
+
 The subpath also exports the state reducer, session, action dispatcher, state and context stores, and a streaming JSON parser for building Generative UI bindings for other frameworks.

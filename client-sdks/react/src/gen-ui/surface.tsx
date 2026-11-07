@@ -6,6 +6,7 @@ import { GenUINodeScope, useGenUIController, useGenUINode, useGenUISurface } fro
 import { isCatalogCompatible } from './registry';
 import type { GenUIFallbackProps, GenUIFallbacks, GenUISurfaceStatusProps } from './registry';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function DefaultGenUIFallback({ reason }: GenUIFallbackProps) {
   return (
     <div role="note" data-genui-fallback="">
@@ -14,6 +15,7 @@ export function DefaultGenUIFallback({ reason }: GenUIFallbackProps) {
   );
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function DefaultGenUILoading() {
   return (
     <div role="status" data-genui-loading="">
@@ -22,6 +24,7 @@ export function DefaultGenUILoading() {
   );
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function DefaultGenUISurfaceStatus({ status, error }: GenUISurfaceStatusProps) {
   if (status === 'streaming') return null;
   if (status === 'failed') {
@@ -59,6 +62,7 @@ interface BoundaryState {
   resetKey: unknown;
 }
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export class GenUIErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   state: BoundaryState = { resetKey: this.props.resetKey };
 
@@ -169,12 +173,17 @@ const NodeView = memo(function NodeView({ surfaceId, nodeId, depth }: NodeViewPr
   );
 });
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface GenUISurfaceViewProps {
   surfaceId: string;
   className?: string;
 }
 
-/** Render one declarative surface from the controller in context. */
+/**
+ * Render one declarative surface from the controller in context.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
 export function GenUISurfaceView({ surfaceId, className }: GenUISurfaceViewProps) {
   return <SurfaceFrame surfaceId={surfaceId} className={className} />;
 }

@@ -11,6 +11,8 @@ import type { GenUIState } from './types';
  * events, only the new events are applied, so unchanged surfaces keep their
  * identity while text tokens stream. Any other change (history reload, edit,
  * regenerate) triggers a deterministic rebuild.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export interface GenUISession {
   getState(): GenUIState;
@@ -26,6 +28,7 @@ const refKey = (ref: { messageId: string; partIndex: number; envelope: unknown }
   return typeof eventId === 'string' ? `e:${eventId}` : `p:${ref.messageId}:${ref.partIndex}`;
 };
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export function createGenUISession(options: AccumulateGenUIOptions = {}): GenUISession {
   let state = createGenUIState();
   let appliedKeys: string[] = [];

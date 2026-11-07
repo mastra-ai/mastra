@@ -1,5 +1,6 @@
 import type { JSONValue } from './types';
 
+/** @experimental Generative UI is in beta and may change without notice. */
 export interface PartialJSONResult {
   /** Best-effort value. `undefined` when nothing usable has arrived yet. */
   value: JSONValue | undefined;
@@ -18,6 +19,8 @@ type Parsed = JSONValue | typeof DROP;
  * Unterminated strings are closed, open containers are closed, and trailing
  * incomplete tokens (half a key, `tru`, `-`, `1e`) are dropped. Never evaluates
  * code; produces plain objects with no prototype-polluting keys.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
  */
 export function parsePartialJSON(text: string): PartialJSONResult {
   if (!text.trim()) return { value: undefined, complete: false };
