@@ -215,13 +215,19 @@ export class ComputerCards {
   }
 
   #signCompactRef(ref: ComputerRef): string {
-    const computer = /^cmp_e_([0-9a-f-]{36})_([0-9A-Za-z_-]+)$/.exec(ref.computerId);
-    const thread = /^[0-9a-f-]{36}$/.test(ref.threadId) ? ref.threadId : undefined;
+    const computer = /^cmp_([ep])_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_([0-9A-Za-z_-]{22})$/.exec(
+      ref.computerId,
+    );
+    const thread = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref.threadId)
+      ? ref.threadId
+      : undefined;
     if (!computer || !thread) return signRef(this.#key, ref);
     const uuidBytes = (uuid: string) => Buffer.from(uuid.replaceAll('-', ''), 'hex');
-    const suffix = Buffer.from(computer[2]!, 'base64url');
-    const payload = b64url(Buffer.concat([uuidBytes(computer[1]!), Buffer.from([suffix.length]), suffix, uuidBytes(thread)]));
-    return `c2:${payload}:${mac(this.#key, payload).slice(0, 11)}`;
+    const suffix = Buffer.from(computer[3]!, 'base64url');
+    const payload = b64url(
+      Buffer.concat([Buffer.from([computer[1] === 'p' ? 1 : 0]), uuidBytes(computer[2]!), suffix, uuidBytes(thread)]),
+    );
+    return `c2:${payload}:${mac(this.#key, payload)}`;
   }
 
   #verifyCompactRef(value: unknown): ComputerRef | null {
@@ -231,18 +237,17 @@ export class ComputerCards {
     const parts = value.split(':');
     if (parts.length !== 3 || parts[0] !== 'c2') return null;
     const [, payload, sig] = parts as [string, string, string];
-    const expected = Buffer.from(mac(this.#key, payload).slice(0, 11));
+    const expected = Buffer.from(mac(this.#key, payload));
     const given = Buffer.from(sig);
     if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return null;
     try {
       const bytes = Buffer.from(payload, 'base64url');
-      const suffixLength = bytes[16]!;
-      if (bytes.length !== 33 + suffixLength) return null;
+      if (bytes.length !== 49 || bytes[0]! > 1) return null;
       const uuid = (value: Buffer) => value.toString('hex').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
       return {
         teamId: this.#opts.installation.teamId,
-        computerId: `cmp_e_${uuid(bytes.subarray(0, 16))}_${bytes.subarray(17, 17 + suffixLength).toString('base64url')}`,
-        threadId: uuid(bytes.subarray(17 + suffixLength)),
+        computerId: `cmp_${bytes[0] === 1 ? 'p' : 'e'}_${uuid(bytes.subarray(1, 17))}_${bytes.subarray(17, 33).toString('base64url')}`,
+        threadId: uuid(bytes.subarray(33)),
       };
     } catch {
       return null;
@@ -316,7 +321,7 @@ export class ComputerCards {
         threadId: p.threadId,
       });
       const card: CardState = { channel, name, holder: 'agent', ended: false, ref };
-      const url = this.#opts.embedUrl ? this.#entityUrl(ref) : undefined;
+      const url = this.#opts.embedUrl && ref.length <= 128 ? this.#entityUrl(ref) : undefined;
       const res = await client.chat.postMessage({
         channel,
         ...(threadTs ? { thread_ts: threadTs } : {}),
