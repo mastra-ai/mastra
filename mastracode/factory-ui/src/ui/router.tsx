@@ -42,17 +42,15 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(
-  () => import('./pages/ThreadPage').then(module => module.ThreadPage),
-  <AppPageLoader />,
-);
+const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage), <AppPageLoader />);
 // A new session opens its thread on the first prompt, so that page loads right after.
-const NewPage = lazyPage(() =>
-  import('./pages/NewPage').then(module => {
-    // A failed preload retries on the visit.
-    ThreadPage.preload().catch(() => undefined);
-    return module.NewPage;
-  }),
+const NewPage = lazyPage(
+  () =>
+    import('./pages/NewPage').then(module => {
+      // A failed preload retries on the visit.
+      ThreadPage.preload().catch(() => undefined);
+      return module.NewPage;
+    }),
   <AppPageLoader />,
 );
 const KnowledgePage = lazyPage(
@@ -71,10 +69,7 @@ const CreateFactoryPage = lazyPage(
   () => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage),
   <AppPageLoader />,
 );
-const RulesPage = lazyPage(
-  () => import('./pages/RulesPage').then(module => module.RulesPage),
-  <AppPageLoader />,
-);
+const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage), <AppPageLoader />);
 const OnboardingPage = lazyPage(
   () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
   <AuthPendingSkeleton label="Loading page" />,
