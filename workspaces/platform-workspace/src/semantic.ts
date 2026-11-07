@@ -90,6 +90,10 @@ for c in /usr/libexec/at-spi-bus-launcher /usr/libexec/at-spi2-core/at-spi-bus-l
 pgrep -x at-spi-bus-laun >/dev/null || { setsid nohup "$L" --launch-immediately --a11y=1 >launcher.log 2>&1 </dev/null 9>&- & }
 for _ in $(seq 1 40); do dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus org.a11y.Bus.GetAddress >/dev/null 2>&1 && break; sleep 0.25; done
 for p in IsEnabled ScreenReaderEnabled; do dbus-send --session --dest=org.a11y.Bus /org/a11y/bus org.freedesktop.DBus.Properties.Set string:org.a11y.Status string:$p variant:boolean:true >/dev/null 2>&1 || true; done
+A11Y=$(dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus org.a11y.Bus.GetAddress 2>/dev/null | sed -n 's/.*string "\\(.*\\)"/\\1/p')
+registry=0
+for _ in $(seq 1 40); do DBUS_SESSION_BUS_ADDRESS="$A11Y" dbus-send --print-reply --dest=org.a11y.atspi.Registry /org/a11y/atspi/accessible/root org.a11y.atspi.Accessible.GetChildren >/dev/null 2>&1 && { registry=1; break; }; sleep 0.25; done
+[ "$registry" = 1 ] || { echo "no at-spi registry"; exit 1; }
 [ -f "$HOME/notes.txt" ] || : > "$HOME/notes.txt"
 launched=0
 start() { name=$1; shift; pgrep -x "$name" >/dev/null || { setsid nohup "$@" >"app-$name.log" 2>&1 </dev/null 9>&- & launched=1; }; }

@@ -250,6 +250,11 @@ describe('hands option', () => {
     expect(INSTALL_SEMANTIC_SCRIPT).toContain('sha256sum -c -');
     expect(INSTALL_SEMANTIC_SCRIPT).toContain('checksum mismatch" >&2; exit 1');
     expect(INSTALL_SEMANTIC_SCRIPT).toContain(`grep -q '"${MCC_SCHEMA_DIGEST}"'`);
+    expect(BOOT_SEMANTIC_SCRIPT).toContain('org.a11y.atspi.Accessible.GetChildren');
+    expect(BOOT_SEMANTIC_SCRIPT.indexOf('org.a11y.atspi.Accessible.GetChildren')).toBeLessThan(
+      BOOT_SEMANTIC_SCRIPT.indexOf('start kate'),
+    );
+    expect(BOOT_SEMANTIC_SCRIPT).toContain('[ "$registry" = 1 ] || { echo "no at-spi registry"; exit 1; }');
     expect(BOOT_SEMANTIC_SCRIPT).not.toContain('--allow launch');
   });
 });
