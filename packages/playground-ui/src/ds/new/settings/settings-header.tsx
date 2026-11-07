@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 
 const SettingsTitleIdContext = createContext<string | undefined>(undefined);
 
+/** One section of a settings page: a `SettingsTitle` (or `SettingsHeader`) above its `SettingsContainer`. */
 export function SettingsGroup({ className, ...props }: ComponentProps<'section'>) {
   const titleId = useId();
 
@@ -20,6 +21,7 @@ export function SettingsGroup({ className, ...props }: ComponentProps<'section'>
   );
 }
 
+/** A section title with something beside it. A list's actions go in its card (`SettingsListHeader`), not here. */
 export function SettingsHeader({
   action,
   children,
@@ -52,8 +54,9 @@ export function SettingsTitle({
   const infoId = useId();
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt as="h2" id={titleId} variant="subheading" tone="ink" className={className} {...props}>
+    // Inset by 10px, so the title sits a little inside the card's edge below it.
+    <div className="flex min-w-0 flex-wrap items-center gap-2 ps-2.5">
+      <Txt as="h2" id={titleId} variant="subheading" tone="muted" className={className} {...props}>
         {info == null ? (
           children
         ) : (
@@ -81,5 +84,5 @@ export function SettingsTitle({
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="caption" tone="muted" className={className} {...props} />;
+  return <Txt as="p" variant="caption" tone="muted" className={cn('ps-2.5', className)} {...props} />;
 }

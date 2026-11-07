@@ -3,7 +3,7 @@ import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import {
   SettingsContainer,
   SettingsGroup,
-  SettingsHeader,
+  SettingsLayout,
   SettingsRow,
   SettingsTitle,
 } from '@mastra/playground-ui/new/settings';
@@ -18,13 +18,11 @@ export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
 
   return (
-    <PageLayout variant="form" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Settings</h1>
-      <div className="flex flex-col gap-8">
+      <SettingsLayout>
         <SettingsGroup>
-          <SettingsHeader>
-            <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
-          </SettingsHeader>
+          <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
           <SettingsContainer>
             <SettingsRow label="Theme" description="Color scheme for the interface.">
               <ThemeToggle />
@@ -33,7 +31,7 @@ export const StudioSettingsPage = () => {
         </SettingsGroup>
 
         <StudioConfigForm variant="factory" initialConfig={{ baseUrl, headers, apiPrefix }} />
-      </div>
+      </SettingsLayout>
     </PageLayout>
   );
 };

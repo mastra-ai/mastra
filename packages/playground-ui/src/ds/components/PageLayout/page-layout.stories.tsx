@@ -214,26 +214,6 @@ export const Narrow: Story = {
   ),
 };
 
-export const Form: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageLayout variant="form" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
-        <div className="mt-6">{resourceList}</div>
-      </PageLayout>
-    </StoryFrame>
-  ),
-  play: async ({ canvasElement }) => {
-    const container = canvasElement.querySelector('[data-slot="page-layout-container"]');
-    const viewport = container?.parentElement;
-    if (!container || !viewport) throw new Error('PageLayout container not found');
-    const column = container.getBoundingClientRect();
-    const frame = viewport.getBoundingClientRect();
-
-    await expect(column.width).toBeLessThanOrEqual(768);
-    await expect(Math.abs(column.left - frame.left - (frame.right - column.right))).toBeLessThan(1);
-  },
-};
-
 export const Fit: Story = {
   render: () => (
     <StoryFrame>

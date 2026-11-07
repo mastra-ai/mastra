@@ -1,46 +1,20 @@
 import type { ComponentProps } from 'react';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { fieldsOnSurface } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
-export function SettingsContainerLayout({
-  layout,
-  className,
-  ...props
-}: ComponentProps<'div'> & { layout: 'factory' | 'section' }) {
-  return (
-    <div
-      data-slot={layout === 'section' ? 'section-content' : 'settings-container'}
-      className={cn(
-        layout === 'factory'
-          ? cn(raisedSurfaceStyle, 'rounded-xl')
-          : cn(
-              'group-data-[variant=factory]/section:overflow-hidden group-data-[variant=factory]/section:rounded-xl',
-              'group-data-[variant=factory]/section:bg-card group-data-[variant=factory]/section:shadow-raised',
-            ),
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+/**
+ * A settings card: the card fill with no rim, 14px padding on every side, and hairlines between rows that stop
+ * at that padding. The card owns its rows' spacing (13px above and below each one, none at its edges), so rows
+ * and custom row content carry no padding of their own.
+ */
+const settingsCardStyle = cn(
+  'flex min-w-0 flex-col divide-y divide-border rounded-xl bg-card p-3.5 *:py-3.25 *:first:pt-0 *:last:pb-0',
+  fieldsOnSurface,
+);
 
-export type SettingsContainerVariant = 'default' | 'inset';
+export type SettingsContainerProps = ComponentProps<'div'>;
 
-export type SettingsContainerProps = ComponentProps<'div'> & { variant?: SettingsContainerVariant };
-
-const rowsClassNames = {
-  default: 'divide-y divide-border',
-  inset:
-    'flex flex-col gap-px p-1 [&>*]:min-h-14 [&>*]:bg-background [&>*]:px-3.5 [&>*]:py-2.5 [&>:first-child]:rounded-t-lg [&>:last-child]:rounded-b-lg',
-} satisfies Record<SettingsContainerVariant, string>;
-
-export function SettingsContainer({ variant = 'default', className, ...props }: SettingsContainerProps) {
-  return (
-    <SettingsContainerLayout
-      {...props}
-      layout="factory"
-      data-variant={variant}
-      className={cn(rowsClassNames[variant], className)}
-    />
-  );
+/** One settings card. Holds `SettingsRow`s, `SettingsItem`s, a `SettingsListHeader` or a `SettingsEmptyRow`. */
+export function SettingsContainer({ className, ...props }: SettingsContainerProps) {
+  return <div data-slot="settings-container" className={cn(settingsCardStyle, className)} {...props} />;
 }

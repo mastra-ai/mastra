@@ -16,10 +16,9 @@ export interface PageLayoutProps {
   header?: ReactNode;
   /**
    * `container` pads the body (default); `narrow` centers the body in a max-width column;
-   * `form` is `narrow` at 768px, for settings and other form pages;
    * `fit` lets the body fill the page edge to edge.
    */
-  variant?: 'container' | 'fit' | 'narrow' | 'form';
+  variant?: 'container' | 'fit' | 'narrow';
   /**
    * Fade the body's scrolled edges, using the same values as `ScrollArea`'s `mask`. Off by default.
    * `{ y: true }` fades the top and bottom; `{ bottom: '3rem' }` sets one side's depth.
@@ -37,7 +36,6 @@ export function PageLayout({
   variant = 'container',
   mask = false,
 }: PageLayoutProps) {
-  const centered = variant === 'narrow' || variant === 'form';
   const headerSlot = header ? (
     <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
       {header}
@@ -65,7 +63,7 @@ export function PageLayout({
             className={cn(variant === 'container' && 'p-4')}
             contentClassName={cn(
               variant === 'container' && 'h-full min-h-min',
-              centered && 'grid min-h-full grid-cols-1',
+              variant === 'narrow' && 'grid min-h-full grid-cols-1',
               // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
               variant === 'fit' &&
                 (header
@@ -73,14 +71,13 @@ export function PageLayout({
                   : 'grid h-full grid-cols-1 grid-rows-1'),
             )}
           >
-            {centered ? (
+            {variant === 'narrow' ? (
               // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
               // eslint-disable-next-line tailwindcss/enforces-shorthand
               <div
                 data-slot="page-layout-container"
                 className={cn(
-                  'mx-auto grid min-h-full w-full grid-cols-1 p-4',
-                  variant === 'form' ? 'max-w-3xl' : 'max-w-5xl',
+                  'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
                   header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
                 )}
               >

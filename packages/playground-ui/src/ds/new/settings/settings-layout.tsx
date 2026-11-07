@@ -1,71 +1,39 @@
 import type { ReactNode } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { PageHeader } from '@/ds/new/layout/page-header';
 
 export interface SettingsLayoutProps {
+  /** The page title. Leave it out when the app's own header already names the page. */
   title?: ReactNode;
   titleAccessory?: ReactNode;
-  description?: ReactNode;
   action?: ReactNode;
-  inset?: boolean;
-  variant?: 'default' | 'header';
+  /** A header of the app's own in place of `title` (a `PageHeader` whose title takes focus), with the same inset. */
+  header?: ReactNode;
+  /** `SettingsGroup`s, 28px apart. */
   children: ReactNode;
 }
 
-export function SettingsLayout({
-  title,
-  titleAccessory,
-  description,
-  action,
-  inset = false,
-  variant,
-  children,
-}: SettingsLayoutProps) {
-  if (title === undefined || title === null) {
-    return variant === 'header' ? (
-      children
-    ) : (
-      <div data-slot="settings-layout-content" className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-5">
-        <div className="min-w-0 space-y-8">{children}</div>
-      </div>
-    );
-  }
-
+/**
+ * A settings page: a centered 640px column with the title, inset like the section titles, above its sections.
+ * The app's page around it gives the side gutter (`PageLayout`, Factory's settings panel, Platform's page).
+ */
+export function SettingsLayout({ title, titleAccessory, action, header, children }: SettingsLayoutProps) {
   return (
-    <>
-      <div
-        data-slot="settings-page-header"
-        className="mx-auto w-full max-w-5xl min-w-0 overflow-x-clip px-4 pt-5 pb-0 sm:pt-6"
-      >
-        <div className={cn('flex min-w-0 flex-wrap items-start justify-between gap-4', inset && 'pl-4')}>
-          <div className="grid min-w-0 gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Txt as="h1" variant="heading" tone="muted" className="min-w-0 truncate font-body tracking-normal">
-                {title}
-              </Txt>
-              {titleAccessory !== undefined && titleAccessory !== null ? (
-                <div className="shrink-0">{titleAccessory}</div>
-              ) : null}
-            </div>
-            {description !== undefined && description !== null ? (
-              <Txt as="p" variant="body" tone="muted" className="m-0 wrap-break-word">
-                {description}
-              </Txt>
-            ) : null}
-          </div>
-          {action ? <div className="shrink-0">{action}</div> : null}
-        </div>
-      </div>
-      {variant === 'header' ? (
-        children
-      ) : (
-        <div
-          data-slot="settings-layout-content"
-          className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-5"
-        >
-          <div className="min-w-0 space-y-6">{children}</div>
+    <div data-slot="settings-layout" className="mx-auto grid w-full max-w-160 min-w-0 content-start gap-8 py-6">
+      {header != null && (
+        <div data-slot="settings-page-header" className="ps-2.5">
+          {header}
         </div>
       )}
-    </>
+      {header == null && title != null && (
+        <PageHeader data-slot="settings-page-header" className="ps-2.5">
+          <PageHeader.Title>{title}</PageHeader.Title>
+          {titleAccessory != null && <PageHeader.Meta beside>{titleAccessory}</PageHeader.Meta>}
+          {action != null && <PageHeader.Action>{action}</PageHeader.Action>}
+        </PageHeader>
+      )}
+      <div data-slot="settings-layout-content" className="grid min-w-0 gap-7">
+        {children}
+      </div>
+    </div>
   );
 }

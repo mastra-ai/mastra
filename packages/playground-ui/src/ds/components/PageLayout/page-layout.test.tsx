@@ -46,7 +46,7 @@ describe('PageLayout', () => {
   });
 
   describe('scroll area', () => {
-    it.each(['container', 'fit', 'narrow', 'form'] as const)(
+    it.each(['container', 'fit', 'narrow'] as const)(
       'scrolls the "%s" variant in an overlay scroll area with no reserved gutter',
       variant => {
         render(
@@ -115,7 +115,7 @@ describe('PageLayout', () => {
   });
 
   describe('when a header is provided', () => {
-    it.each(['container', 'narrow', 'form', 'fit'] as const)('renders it inside main before the body (%s)', variant => {
+    it.each(['container', 'narrow', 'fit'] as const)('renders it inside main before the body (%s)', variant => {
       render(
         <PageLayout variant={variant} header={<h1>Title</h1>}>
           <p>Body</p>
@@ -158,21 +158,6 @@ describe('PageLayout', () => {
 
       const container = screen.getByText('Body').closest('[data-slot="page-layout-container"]');
       expect(container?.className).not.toMatch(/\b(flex|gap-6)\b/);
-    });
-  });
-
-  describe('form variant', () => {
-    it('centers the body in a narrower column than narrow', () => {
-      render(
-        <PageLayout variant="form" header={<h1>Title</h1>}>
-          <p>Body</p>
-        </PageLayout>,
-      );
-
-      const container = screen.getByText('Body').closest('[data-slot="page-layout-container"]');
-      expect(container?.className).toContain('max-w-3xl');
-      expect(container?.className).not.toContain('max-w-5xl');
-      expect(container?.contains(screen.getByRole('heading', { name: 'Title' }))).toBe(true);
     });
   });
 

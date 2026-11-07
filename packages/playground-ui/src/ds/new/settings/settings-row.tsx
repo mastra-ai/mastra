@@ -16,30 +16,41 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   required?: boolean;
   errorMsg?: ReactNode;
   /**
-   * `side` (default): the control sits on the right. Text inputs and selects fill a shared
-   * 16rem column, so their left edges line up row to row; switches and buttons end at the right edge.
+   * `side` (default): the control sits on the right. Text fields take one shared width (13.75rem), selects hug
+   * their value up to that width, and switches and buttons keep their own size; all end at the right edge.
    * `below`: the control goes under the label at full width, for forms with several controls.
    */
   controlPlacement?: 'side' | 'below';
 };
 
-type SettingsRowLayoutProps = SettingsRowProps & {
-  layout: 'factory' | 'section';
-};
+/** Label left, control right; stacked below `sm`. The card around the row gives it its spacing. */
+const rowClassName = 'min-w-0 gap-3 sm:justify-between sm:gap-6';
+const headingClassName = 'flex min-w-0 flex-col gap-px';
+/**
+ * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
+ * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
+ */
+const sideControlClassName =
+  'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
 
-const factoryRowClassName = 'gap-2 px-4 py-3 sm:justify-between sm:gap-8';
-const factoryRowHeadingClassName = 'flex min-w-0 flex-col gap-0.5';
-/** The right-hand control column: at least 16rem, and inputs inside fill it. */
-const factoryRowSideControlClassName =
-  'flex min-w-0 items-center gap-2 [--field-width:100%] sm:min-w-64 sm:shrink-0 sm:justify-end';
+export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
+  if (!viewOnly) return children;
+  return (
+    <>
+      <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
+      <span className="sr-only">View only: </span>
+      {children}
+    </>
+  );
+}
 
-export function SettingsRowLayout({
+/** One setting: a label, an optional one-line description, and its control. Goes in a `SettingsContainer`. */
+export function SettingsRow({
   label,
   description,
   htmlFor,
   children,
   className,
-  layout,
   tone = 'default',
   viewOnly = false,
   required = false,
@@ -47,36 +58,19 @@ export function SettingsRowLayout({
   disabled,
   controlPlacement = 'side',
   ...props
-}: SettingsRowLayoutProps) {
-  const isSectionLayout = layout === 'section';
-  const controlBelow = !isSectionLayout && controlPlacement === 'below';
-  const control = viewOnly ? (
-    <>
-      <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
-      <span className="sr-only">View only: </span>
-      {children}
-    </>
-  ) : (
-    children
-  );
+}: SettingsRowProps) {
+  const controlBelow = controlPlacement === 'below';
 
   return (
     <Field
       orientation={controlBelow ? 'vertical' : 'responsive'}
       invalid={Boolean(errorMsg)}
       disabled={disabled || viewOnly}
-      data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
-      className={cn(
-        isSectionLayout
-          ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
-          : 'min-w-0',
-        layout === 'factory' && factoryRowClassName,
-        controlBelow && 'gap-3',
-        className,
-      )}
+      data-slot="settings-row"
+      className={cn(rowClassName, className)}
       {...props}
     >
-      <div className={isSectionLayout ? 'min-w-0' : factoryRowHeadingClassName}>
+      <div className={headingClassName}>
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
@@ -85,34 +79,26 @@ export function SettingsRowLayout({
           {label}
         </FieldLabel>
         {description != null && (
-          <FieldDescription
-            render={isSectionLayout ? undefined : <div />}
-            className={cn('mt-0', isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5')}
-          >
+          <FieldDescription render={<div />} className="mt-0 flex flex-col gap-0.5 text-pretty">
             {description}
           </FieldDescription>
         )}
-        <FieldError className={cn('mt-0', isSectionLayout && 'mt-1')}>{errorMsg}</FieldError>
+        <FieldError className="mt-0">{errorMsg}</FieldError>
       </div>
       {children != null && (
         <div
-          data-slot={isSectionLayout ? 'section-control' : 'settings-row-control'}
+          data-slot="settings-row-control"
           className={cn(
             'min-w-0',
-            isSectionLayout && 'sm:justify-self-end',
-            !isSectionLayout && !controlBelow && factoryRowSideControlClassName,
+            !controlBelow && sideControlClassName,
             viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
           )}
         >
-          {control}
+          <SettingsRowControl viewOnly={viewOnly}>{children}</SettingsRowControl>
         </div>
       )}
     </Field>
   );
-}
-
-export function SettingsRow(props: SettingsRowProps) {
-  return <SettingsRowLayout {...props} layout="factory" />;
 }
 
 export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
@@ -123,6 +109,7 @@ export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
   controlPlacement?: 'side' | 'below';
 };
 
+/** A `SettingsRow` for a group of controls (radios, several switches), labelled by a legend. */
 export function SettingsFieldsetRow({
   label,
   description,
@@ -140,28 +127,24 @@ export function SettingsFieldsetRow({
       aria-describedby={description == null ? undefined : descriptionId}
       className={cn(
         'flex flex-col',
+        rowClassName,
         !controlBelow && 'sm:flex-row sm:items-center',
-        factoryRowClassName,
-        // Fieldset's `border-0` would otherwise drop the divider a divided container draws under each row.
+        // Fieldset's `border-0` would otherwise drop the hairline the card draws between rows.
         '[.divide-y>&:not(:last-child)]:border-b',
-        controlBelow && 'gap-3',
         className,
       )}
       {...props}
     >
-      <div className={factoryRowHeadingClassName}>
+      <div className={headingClassName}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
-          <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-muted-foreground">
+          <div id={descriptionId} className="text-caption text-muted-foreground flex flex-col gap-0.5 text-pretty">
             {description}
           </div>
         )}
       </div>
       {children != null && (
-        <div
-          data-slot="settings-row-control"
-          className={cn('min-w-0', !controlBelow && factoryRowSideControlClassName)}
-        >
+        <div data-slot="settings-row-control" className={cn('min-w-0', !controlBelow && sideControlClassName)}>
           {children}
         </div>
       )}

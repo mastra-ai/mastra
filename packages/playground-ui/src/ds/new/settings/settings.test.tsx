@@ -3,10 +3,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  SettingsAddRow,
   SettingsContainer,
   SettingsDescription,
   SettingsEmptyRow,
+  SettingsItem,
+  SettingsListHeader,
   SettingsNoticeRow,
   SettingsFieldsetRow,
   SettingsGroup,
@@ -70,28 +71,21 @@ describe('Settings', () => {
     });
   });
 
-  describe('SettingsContainer variants', () => {
-    it('defaults to the divided variant', () => {
+  describe('SettingsContainer', () => {
+    it('gives its rows their spacing, so rows carry none of their own', () => {
       render(
         <SettingsContainer>
-          <SettingsRow label="Theme" />
-        </SettingsContainer>,
-      );
-
-      expect(document.querySelector('[data-slot="settings-container"]')?.getAttribute('data-variant')).toBe('default');
-    });
-
-    it('renders every row inside the inset variant', () => {
-      render(
-        <SettingsContainer variant="inset">
           <SettingsRow label="Theme" />
           <SettingsRow label="Notifications" />
         </SettingsContainer>,
       );
 
       const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.getAttribute('data-variant')).toBe('inset');
+      expect(container?.className).toContain('*:py-3.25');
       expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
+      for (const row of container?.querySelectorAll('[data-slot="settings-row"]') ?? []) {
+        expect(row.className).not.toMatch(/\bp[xy]?-/);
+      }
     });
   });
 
@@ -210,8 +204,10 @@ describe('Settings', () => {
         </SettingsRow>,
       );
 
-      expect(controlOf('Name')?.className).toContain('sm:min-w-64');
-      expect(controlOf('Name')?.className).toContain('[--field-width:100%]');
+      expect(controlOf('Name')?.className).toContain('sm:min-w-55');
+      // Selects hug their value up to the text field width.
+      expect(controlOf('Name')?.className).toContain('[--field-width:auto]');
+      expect(controlOf('Name')?.className).toContain('[--field-max-width:13.75rem]');
     });
 
     it('puts it under the label at full width when placed below', () => {
@@ -227,7 +223,7 @@ describe('Settings', () => {
       );
 
       for (const label of ['Name', 'Invite']) {
-        expect(controlOf(label)?.className).not.toContain('sm:min-w-64');
+        expect(controlOf(label)?.className).not.toContain('sm:min-w-55');
       }
       expect(screen.getByRole('group', { name: 'Invite' }).className).not.toContain('sm:flex-row');
     });
@@ -250,19 +246,41 @@ describe('Settings', () => {
   });
 
   describe('when a list sits in a container', () => {
-    it('keeps its empty state and add action inside the container', () => {
+    it('puts its count and action in a header row above its items', () => {
       let added = 0;
       render(
         <SettingsContainer>
-          <SettingsEmptyRow>No request headers</SettingsEmptyRow>
-          <SettingsAddRow onClick={() => (added += 1)}>Add header</SettingsAddRow>
+          <SettingsListHeader
+            action={
+              <button type="button" onClick={() => (added += 1)}>
+                Add account
+              </button>
+            }
+          >
+            1 account
+          </SettingsListHeader>
+          <SettingsItem title="mastra-ai" description="GitHub" />
+        </SettingsContainer>,
+      );
+
+      const rows = document.querySelector('[data-slot="settings-container"]')?.children;
+      expect(rows?.[0]?.getAttribute('data-slot')).toBe('settings-list-header');
+      expect(rows?.[1]?.getAttribute('data-slot')).toBe('settings-item');
+      fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+      expect(added).toBe(1);
+    });
+
+    it('shows an empty list as one row with its empty text and action', () => {
+      render(
+        <SettingsContainer>
+          <SettingsEmptyRow action={<button type="button">Add header</button>}>No request headers</SettingsEmptyRow>
         </SettingsContainer>,
       );
 
       const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.children).toHaveLength(1);
       expect(container?.contains(screen.getByText('No request headers'))).toBe(true);
-      fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
-      expect(added).toBe(1);
+      expect(container?.contains(screen.getByRole('button', { name: 'Add header' }))).toBe(true);
     });
   });
 
@@ -287,9 +305,9 @@ describe('Settings', () => {
     it('keeps them inside the container, and hides an empty notice row', () => {
       render(
         <SettingsContainer>
+          <SettingsListHeader action={<button type="button">Refresh</button>}>2 accounts</SettingsListHeader>
           <SettingsNoticeRow>Couldn’t load accounts</SettingsNoticeRow>
           <SettingsNoticeRow data-testid="empty-notices" />
-          <SettingsAddRow actions={<button type="button">Refresh</button>}>Add account</SettingsAddRow>
         </SettingsContainer>,
       );
 
@@ -297,27 +315,6 @@ describe('Settings', () => {
       expect(container?.contains(screen.getByText('Couldn’t load accounts'))).toBe(true);
       expect(container?.contains(screen.getByRole('button', { name: 'Refresh' }))).toBe(true);
       expect(screen.getByTestId('empty-notices').className).toContain('empty:hidden');
-    });
-  });
-
-  describe('when an add row sits inside a form', () => {
-    it('adds without submitting the form', () => {
-      let submitted = 0;
-      render(
-        <form
-          onSubmit={event => {
-            event.preventDefault();
-            submitted += 1;
-          }}
-        >
-          <SettingsContainer>
-            <SettingsAddRow>Add header</SettingsAddRow>
-          </SettingsContainer>
-        </form>,
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
-      expect(submitted).toBe(0);
     });
   });
 });

@@ -4,16 +4,15 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import {
-  SettingsAddRow,
   SettingsContainer,
   SettingsEmptyRow,
   SettingsGroup,
-  SettingsHeader,
+  SettingsListHeader,
   SettingsRow,
   SettingsTitle,
 } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { SaveIcon } from 'lucide-react';
+import { PlusIcon, SaveIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
@@ -90,16 +89,20 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
     </Button>
   );
 
+  const addHeaderButton = (
+    <Button type="button" size="sm" icon={<PlusIcon />} onClick={() => handleAddHeader({ name: '', value: '' })}>
+      Add header
+    </Button>
+  );
+
   if (variant === 'factory') {
     return (
       <TooltipProvider delayDuration={0}>
-        <Form onSubmit={handleSubmit} className="gap-8">
+        <Form onSubmit={handleSubmit} className="gap-7">
           <SettingsGroup>
-            <SettingsHeader>
-              <SettingsTitle info="The Mastra instance the studio talks to, and the path in front of its API routes.">
-                Mastra connection
-              </SettingsTitle>
-            </SettingsHeader>
+            <SettingsTitle info="The Mastra instance the studio talks to, and the path in front of its API routes.">
+              Mastra connection
+            </SettingsTitle>
             <SettingsContainer>
               {connectionFields.map(({ label, description, ...field }) => (
                 <SettingsRow key={field.name} label={label} description={description}>
@@ -110,24 +113,27 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
           </SettingsGroup>
 
           <SettingsGroup>
-            <SettingsHeader>
-              <SettingsTitle info="Sent with every request the studio makes, for auth or routing.">
-                Request headers
-              </SettingsTitle>
-            </SettingsHeader>
+            <SettingsTitle info="Sent with every request the studio makes, for auth or routing.">
+              Request headers
+            </SettingsTitle>
             <SettingsContainer>
               {headers.length === 0 ? (
-                <SettingsEmptyRow>No request headers</SettingsEmptyRow>
+                <SettingsEmptyRow action={addHeaderButton}>No request headers</SettingsEmptyRow>
               ) : (
-                headers.map((header, index) => (
-                  <div key={header.id} className="px-4 py-3">
-                    <HeaderFieldsRow index={index} header={header} onRemove={() => handleRemoveHeader(index)} />
-                  </div>
-                ))
+                <>
+                  <SettingsListHeader action={addHeaderButton}>
+                    {headers.length === 1 ? '1 header' : `${headers.length} headers`}
+                  </SettingsListHeader>
+                  {headers.map((header, index) => (
+                    <HeaderFieldsRow
+                      key={header.id}
+                      index={index}
+                      header={header}
+                      onRemove={() => handleRemoveHeader(index)}
+                    />
+                  ))}
+                </>
               )}
-              <SettingsAddRow type="button" onClick={() => handleAddHeader({ name: '', value: '' })}>
-                Add header
-              </SettingsAddRow>
             </SettingsContainer>
           </SettingsGroup>
 
