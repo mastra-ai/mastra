@@ -220,7 +220,11 @@ export const MessageRow = memo(function MessageRow({
       Reasoning: part => <ReasoningPartRenderer part={part} />,
       Data: part => (
         <Arriving>
-          <DataPartRenderer part={part} />
+          <DataPartRenderer
+            part={part}
+            messageId={message.id}
+            partIndex={(message.content.parts as unknown[]).indexOf(part)}
+          />
         </Arriving>
       ),
       ToolInvocation: renderTool,
@@ -231,7 +235,7 @@ export const MessageRow = memo(function MessageRow({
         </Notice>
       ),
     };
-  }, [metadata, dataParts, readOnly, toolGroups, isRunning]);
+  }, [message, metadata, dataParts, readOnly, toolGroups, isRunning]);
 
   const userRenderers = useMemo<MessageRenderers>(
     () => ({
