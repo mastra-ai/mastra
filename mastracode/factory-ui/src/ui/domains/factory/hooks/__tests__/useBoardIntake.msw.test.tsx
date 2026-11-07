@@ -24,7 +24,6 @@ import { githubWithLinearConfig, gitlabOnlyConfig, connectedLinear, disabledGitl
 
 const repository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-1', slug: 'acme/app' };
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
-const reviewBoard = builtinBoardCatalog.boards.find(board => board.id === 'review')!;
 
 const linearIssue = (identifier: string, sourceId: string): LinearIssue => ({
   id: identifier,
@@ -272,36 +271,7 @@ describe('useBoardIntake GitLab routing', () => {
     expect(githubLabelRouteRequests).toBe(0);
   });
 
-  it('settles Review even when configured GitLab intake has a disabled status query', async () => {
-    stubIntake([]);
-    let gitlabStatusRequests = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            gitlab: { enabled: true, sourceIds: ['gitlab-project:1'] },
-            linear: { enabled: false, sourceIds: null },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
-        gitlabStatusRequests++;
-        return HttpResponse.json({ enabled: true, configured: true, reauthRequired: false });
-      }),
-      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-        HttpResponse.json({ pullRequests: [], nextPage: null }),
-      ),
-    );
-
-    const { result, client } = renderIntake('factory-1', reviewBoard);
-
-    await waitFor(() => expect(client.getQueryState(queryKeys.intakeConfig())?.status).toBe('success'));
-    await waitFor(() => expect(result.current.isPending).toBe(false));
-    expect(gitlabStatusRequests).toBe(0);
-  });
-
-  it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
+  it('browses the GitLab MR feed on Work for a GitLab-linked repository and never requests GitHub PRs', async () => {
     stubIntake([]);
     let githubRequests = 0;
     server.use(
@@ -337,14 +307,16 @@ describe('useBoardIntake GitLab routing', () => {
       useBoardIntake({
         factoryProjectId: 'factory-1',
         repositories: [{ ...repository, provider: 'gitlab' }],
-        definition: reviewBoard,
+        definition: workBoard,
         knownSourceKeys: new Set(),
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.active).toBe('gitlab-prs');
-    expect(result.current.candidates[0]).toMatchObject({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' });
+    await waitFor(() =>
+      expect(result.current.candidates).toContainEqual(
+        expect.objectContaining({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' }),
+      ),
+    );
     expect(githubRequests).toBe(0);
   });
 
@@ -855,27 +827,6 @@ describe('useBoardIntake across linked repositories', () => {
     // Pull requests are not an issue source: Work still lists only its issue feeds.
     expect(result.current.available).toEqual(['github']);
     expect(requested).toEqual(expect.arrayContaining(['prs:repo-1', 'prs:repo-2', 'prs:repo-3']));
-  });
-
-  it('offers Review the pull requests of every linked GitHub repository', async () => {
-    const requested: string[] = [];
-    stubRepositories(requested);
-
-    const { result } = renderHookWithProviders(() =>
-      useBoardIntake({
-        factoryProjectId: 'factory-1',
-        repositories,
-        definition: reviewBoard,
-        knownSourceKeys: new Set(),
-      }),
-    );
-
-    await waitFor(() => expect(result.current.candidates).toHaveLength(3));
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
-      'github:1:pull-request:9',
-      'github:2:pull-request:9',
-      'github:3:pull-request:9',
-    ]);
   });
 
   it('drops a second repository candidate that is already a card without hiding the first repository one', async () => {

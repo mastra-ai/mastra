@@ -5,7 +5,6 @@ export {
   defaultBoards,
   defineBoard,
   FACTORY_AGENT_ID,
-  reviewBoard,
   workBoard,
 } from './boards/index.js';
 export type {
@@ -23,7 +22,6 @@ export type {
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
   InstalledBoard,
-  ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';
 export { BoardWriteError } from './boards/board-writes.js';

@@ -10,7 +10,6 @@ import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
 import { startsInAutoPhase } from './phase-automation.js';
 import { createBoardRegistry } from './registry.js';
 import type { InstalledBoard } from './registry.js';
-import { reviewBoard } from './review.js';
 import {
   boardDefinitionOf,
   codeBehaviourConflicts,
@@ -26,27 +25,27 @@ const GO = {
 };
 
 describe('boardDefinitionOf', () => {
-  it.each([
-    ['Work', workBoard],
-    ['Review', reviewBoard],
-  ])('describes the built-in %s board as a valid stored definition with the same phases', (_name, board) => {
-    const definition = boardDefinitionOf(board);
+  it.each([['Work', workBoard]])(
+    'describes the built-in %s board as a valid stored definition with the same phases',
+    (_name, board) => {
+      const definition = boardDefinitionOf(board);
 
-    expect(storedBoardInputSchema.safeParse(definition).error?.issues).toBeUndefined();
-    expect(definition).toMatchObject({ key: board.id, name: board.name });
-    expect(definition.phases[0]!.key).toBe(board.initialPhase);
-    expect(definition.phases.map(phase => phase.key).sort()).toEqual(Object.keys(board.phases).sort());
-    for (const phase of definition.phases) {
-      const code = board.phases[phase.key]!;
-      expect({ key: phase.key, name: phase.name, kind: phase.kind, nextPhases: phase.nextPhases }).toEqual({
-        key: phase.key,
-        name: code.name,
-        kind: code.kind,
-        nextPhases: [...code.nextPhases],
-      });
-      if (code.kind === 'working') expect(code.runner).toMatchObject(phase.runner!);
-    }
-  });
+      expect(storedBoardInputSchema.safeParse(definition).error?.issues).toBeUndefined();
+      expect(definition).toMatchObject({ key: board.id, name: board.name });
+      expect(definition.phases[0]!.key).toBe(board.initialPhase);
+      expect(definition.phases.map(phase => phase.key).sort()).toEqual(Object.keys(board.phases).sort());
+      for (const phase of definition.phases) {
+        const code = board.phases[phase.key]!;
+        expect({ key: phase.key, name: phase.name, kind: phase.kind, nextPhases: phase.nextPhases }).toEqual({
+          key: phase.key,
+          name: code.name,
+          kind: code.kind,
+          nextPhases: [...code.nextPhases],
+        });
+        if (code.kind === 'working') expect(code.runner).toMatchObject(phase.runner!);
+      }
+    },
+  );
 
   it('lets a stored copy of a board with outcomes move cards only where its stored next phases allow', () => {
     const board = defineBoard({
@@ -411,9 +410,11 @@ describe('stored boards with code behaviour', () => {
         editWork('planning', phase => ({ ...phase, nextPhases: phase.nextPhases?.filter(next => next !== 'execute') })),
       ),
     ).toEqual(['Phase "planning": Factory\'s code moves cards from it to "execute"; keep it in nextPhases.']);
-    expect(conflicts(editWork('pr-review', phase => ({ ...phase, nextPhases: ['intake', 'canceled'] })))).toEqual([
-      'Phase "pr-review": Factory\'s code moves cards from it to "done"; keep it in nextPhases.',
-    ]);
+    expect(
+      conflicts(
+        editWork('pr-review', phase => ({ ...phase, nextPhases: ['intake', 'planning', 'execute', 'canceled'] })),
+      ),
+    ).toEqual(['Phase "pr-review": Factory\'s code moves cards from it to "done"; keep it in nextPhases.']);
     // An exit tool would hold back the moves Building's code makes.
     expect(conflicts(editWork('execute', phase => ({ ...phase, exitTool: { id: 'submit_plan' } })))).toEqual([
       'Phase "execute" code handlers move cards on without an exit tool; leave exitTool unset.',
@@ -463,7 +464,7 @@ describe('stored boards with code behaviour', () => {
                 runner: { context: 'work', instructions: 'Keep plans short.' },
               }
             : phase.key === 'pr-review'
-              ? { ...phase, autoStart: true, nextPhases: ['intake', 'done', 'canceled', 'docs'] }
+              ? { ...phase, autoStart: true, nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled', 'docs'] }
               : phase,
         ),
         {

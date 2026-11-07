@@ -164,6 +164,7 @@ export function splitLegacyWorkItem(
           labels: provider.labels,
           author: provider.author,
           metadata: metadata.provider,
+          role: 'origin',
           revision: 1,
           synced_at: null,
           created_at: row.created_at,

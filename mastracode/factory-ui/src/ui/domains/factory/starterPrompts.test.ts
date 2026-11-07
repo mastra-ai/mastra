@@ -48,7 +48,7 @@ function triaged(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
 
 function pullRequest(number: number, stages: string[], metadata: Record<string, unknown> = {}): WorkItem {
   return card(`pr-${number}`, {
-    board: 'review',
+    board: 'work',
     source: 'github-pr',
     title: `Pull request ${number}`,
     stages,
@@ -147,7 +147,7 @@ describe('starterPrompts', () => {
     const prompts = build(
       [
         ...quietBoard,
-        pullRequest(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+        pullRequest(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
         card('stuck', { stages: ['execute'] }),
       ],
       [failedRun('stuck', 'Sandbox quota exceeded')],
@@ -163,7 +163,7 @@ describe('starterPrompts', () => {
       pullRequest(3, ['intake'], { draft: true }),
       pullRequest(4, ['done'], { merged: true }),
       pullRequest(5, ['canceled'], { state: 'closed' }),
-      pullRequest(6, ['review']),
+      pullRequest(6, ['pr-review']),
     ]);
 
     expect(review).toMatchObject({
@@ -287,20 +287,20 @@ describe('starterPrompts', () => {
 
   it('fixes review feedback only on open Factory pull requests whose verdict is still current', () => {
     const feedback = promptFor('feedback', [
-      pullRequest(1, ['review'], {
+      pullRequest(1, ['pr-review'], {
         factoryAuthored: true,
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc',
         pullRequestHeadSha: 'ABC',
       }),
-      pullRequest(2, ['review'], { reviewVerdict: 'request changes' }),
-      pullRequest(3, ['review'], {
+      pullRequest(2, ['pr-review'], { reviewVerdict: 'request changes' }),
+      pullRequest(3, ['pr-review'], {
         factoryAuthored: true,
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc',
         pullRequestHeadSha: 'def',
       }),
-      pullRequest(4, ['review'], { factoryAuthored: true, reviewVerdict: 'approve' }),
+      pullRequest(4, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'approve' }),
       pullRequest(5, ['done'], { factoryAuthored: true, reviewVerdict: 'request changes', merged: true }),
     ]);
 
@@ -310,7 +310,7 @@ describe('starterPrompts', () => {
   it('sends a prompt that names no card, pull request, error or area, whatever the board holds', () => {
     const busyBoard = [
       ...quietBoard,
-      pullRequest(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+      pullRequest(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
       card('stuck', { stages: ['execute'] }),
     ];
     const failures = [failedRun('stuck', 'Sandbox quota exceeded')];

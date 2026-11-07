@@ -10,12 +10,7 @@ import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
-import {
-  getFactorySessionKind,
-  getFactorySessionSource,
-  getSessionOwnerDetails,
-  getUserSessionLabel,
-} from './sessionPresentation';
+import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
@@ -108,8 +103,9 @@ function isOwnedByViewer(session: FactoryUserSession, viewer: SessionViewerProfi
   return !viewer?.userId || session.userId === viewer.userId;
 }
 
-export function sessionBoard(session: FactoryUserSession, item: WorkItem | undefined): string {
-  return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
+/** The board a session's card sits on; a session with no card (a pull request's review included) belongs to Work. */
+export function sessionBoard(item: WorkItem | undefined): string {
+  return item ? itemBoard(item) : 'work';
 }
 
 function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {
@@ -192,7 +188,7 @@ export function buildFactorySessionRow({
   return {
     session,
     origin: 'factory',
-    board: sessionBoard(session, item),
+    board: sessionBoard(item),
     source: getFactorySessionSource(session, item),
     name: factorySessionName(session, item),
     url,

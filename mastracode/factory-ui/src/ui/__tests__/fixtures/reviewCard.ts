@@ -60,7 +60,7 @@ export const reviewItem: Card = {
   id: 'review-item',
   orgId: 'org-1',
   factoryProjectId: 'fp-1',
-  board: 'review',
+  board: 'work',
   externalSource: {
     integrationId: 'github',
     type: 'pull-request',

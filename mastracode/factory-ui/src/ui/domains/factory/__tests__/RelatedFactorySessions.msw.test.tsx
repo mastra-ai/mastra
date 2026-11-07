@@ -152,6 +152,44 @@ describe('FactorySessionPage', () => {
     });
   });
 
+  describe("the breadcrumb leads to the card's own board", () => {
+    it('names and links Work for a card on Work', async () => {
+      stubHeader(workItem(undefined));
+      renderHeader();
+
+      expect(await screen.findByRole('link', { name: 'Work' })).toHaveAttribute(
+        'href',
+        `/factories/${FACTORY_ID}/work`,
+      );
+    });
+
+    it('names and links an installed board for a card on it', async () => {
+      stubHeader({ ...workItem(undefined), board: 'release' } as ReturnType<typeof workItem>);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+          HttpResponse.json({
+            boards: [
+              {
+                id: 'release',
+                name: 'Release train',
+                title: 'Release train',
+                initialPhase: 'queued',
+                phases: [
+                  { id: 'queued', name: 'Queued', title: 'Queued', kind: 'resting', nextPhases: [], transitions: [] },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+      renderHeader();
+
+      const crumb = await screen.findByRole('link', { name: 'Release train' });
+      expect(crumb).toHaveAttribute('href', `/factories/${FACTORY_ID}/boards/release`);
+      expect(screen.queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('when the active work item has an external issue URL', () => {
     it('renders an issue pill that opens the external issue in a new tab', async () => {
       const issueUrl = 'https://github.com/acme/app/issues/7';

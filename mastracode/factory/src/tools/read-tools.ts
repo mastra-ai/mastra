@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, pullRequestSourceNumber, pullRequestSources } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -92,9 +92,14 @@ export async function findWorkItem(
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
   const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
-  // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
-  const match = matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0];
-  return match ? structuredClone(match) : null;
+  // Issue and PR numbers share a space on GitHub; prefer the issue's card.
+  const own = matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0];
+  if (own) return structuredClone(own);
+  // A pull request attached to an issue's card is found through that card.
+  const carrier = items.find(item =>
+    pullRequestSources(item).some(source => pullRequestSourceNumber(source) === Number(number)),
+  );
+  return carrier ? structuredClone(carrier) : null;
 }
 
 export function workItemNotFound(ref: string): Error {
