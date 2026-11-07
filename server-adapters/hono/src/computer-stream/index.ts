@@ -28,6 +28,19 @@ export type ComputerViewerSource = (
   scope: { threadId: string; resourceId: string },
 ) => Promise<{ url: string; headers: Record<string, string> } | null>;
 
+/** Lease holder for a computer's input, as reported by `mastra.getComputers().controlState`. @experimental */
+export type ComputerControlSource = (
+  computerId: string,
+  scope: { threadId: string; resourceId: string },
+) => Promise<{ holder: 'agent' | 'human'; reason?: string }>;
+
+/** Hands a computer to the user or back to the agent; matches `mastra.getComputers().control`. @experimental */
+export type ComputerControlSetter = (
+  computerId: string,
+  scope: { threadId: string; resourceId: string },
+  change: { action: 'take' | 'release'; note?: string },
+) => Promise<{ holder: 'agent' | 'human'; notified: boolean; reason?: string }>;
+
 /** @experimental */
 export interface HonoComputerStreamConfig {
   mastra: Mastra;
@@ -36,6 +49,10 @@ export interface HonoComputerStreamConfig {
   apiPrefix?: string;
   /** Origins other than the server's own that may embed the viewer (same shape as `cors.origin`). */
   allowedOrigins?: BrowserStreamOrigin;
+  /** Control lease reader; with `setControl`, mounts the control routes. */
+  getControl?: ComputerControlSource;
+  /** Control lease writer; with `getControl`, mounts the control routes. */
+  setControl?: ComputerControlSetter;
   /** Shared WebSocket support; pass the instance the browser stream uses. */
   webSocket?: WebSocketSupport | null;
 }
@@ -52,6 +69,8 @@ export const MAX_PENDING_CLIENT_BYTES = 1024 * 1024;
 /** A session whose upgrade never completes is dropped after this long. */
 const OPEN_DEADLINE_MS = 10_000;
 const SESSION_BODY_MAX_BYTES = 1024;
+export const CONTROL_NOTE_MAX = 500;
+const CONTROL_BODY_MAX_BYTES = 4096;
 
 class ViewerUnavailable extends Error {}
 
@@ -114,6 +133,12 @@ function statusError(error: unknown): number | undefined {
  * - `GET /computer/:computerId/websockify?ticket=` — WebSocket upgrade from the
  *   same origin that minted the ticket; relays binary RFB frames only (a text
  *   frame from either side closes the socket with 1003).
+ * - `GET|POST {apiPrefix}/computers/:computerId/control` — authenticated; reads
+ *   (`memory:read`) or changes (`memory:write`, `{ action: 'take'|'release', note? }`)
+ *   who holds the computer's input. Mounted only when `getControl` and
+ *   `setControl` are given. POST requires a JSON body and, when the browser sends
+ *   an `Origin`, a same-origin or allowed one, so a cross-site form can't hand the
+ *   desktop over.
  * - Every other `/computer/:computerId/*` request is 404.
  *
  * The upstream auth (the sandbox preview cookie) is added server-side and never
@@ -229,6 +254,64 @@ export async function setupComputerStream(
     return next();
   };
 
+  /** Thread and resource for a request; the auth context wins over caller-supplied ids. */
+  const scopeOf = (
+    c: Context,
+    requestContext: RequestContext,
+    input: { threadId?: unknown; resourceId?: unknown },
+  ): { threadId: string; resourceId: string } | Response => {
+    const contextThreadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const threadId = contextThreadId || (typeof input.threadId === 'string' ? input.threadId : undefined);
+    if (!threadId) return c.json({ error: 'threadId is required' }, 400);
+    const contextResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const inputResourceId = typeof input.resourceId === 'string' ? input.resourceId : undefined;
+    if (contextResourceId && inputResourceId && inputResourceId !== contextResourceId) {
+      return c.json({ state: 'forbidden' }, 403);
+    }
+    const resourceId = contextResourceId || inputResourceId;
+    if (!resourceId) return c.json({ error: 'resourceId is required' }, 400);
+    return { threadId, resourceId };
+  };
+
+  /** The caller's canonical origin (the server's own when absent), or 403 for a foreign one. */
+  const callerOrigin = async (c: Context): Promise<string | Response> => {
+    const rawOrigin = c.req.header('origin');
+    if (!rawOrigin) return serverOrigin(c);
+    let parsed: URL;
+    try {
+      parsed = new URL(rawOrigin);
+    } catch {
+      return c.json({ state: 'forbidden' }, 403);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return c.json({ state: 'forbidden' }, 403);
+    const allowed =
+      isSameOrigin(parsed.origin, requestHost(c)) ||
+      (allowedOrigins !== undefined && (await isOriginAllowed(allowedOrigins, parsed.origin, c)));
+    return allowed ? parsed.origin : c.json({ state: 'forbidden' }, 403);
+  };
+
+  /** `undefined` when the caller may use the thread with `permission`, else the refusal. */
+  const authorizeThread = async (
+    c: Context,
+    requestContext: RequestContext,
+    { threadId, resourceId }: { threadId: string; resourceId: string },
+    permission: 'memory:read' | 'memory:write',
+  ): Promise<Response | undefined> => {
+    // No memory store means no thread-access check, which means no access.
+    const memoryStore = await mastra.getStorage()?.getStore('memory');
+    if (!memoryStore) return c.json({ state: 'forbidden' }, 403);
+    const thread = await memoryStore.getThreadById({ threadId });
+    // Unknown thread: refuse without revealing whether it exists.
+    if (!thread) return c.json({ state: 'forbidden' }, 403);
+    try {
+      await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId: resourceId, permission });
+    } catch (error) {
+      if (statusError(error) === 400) return c.json({ error: 'Invalid thread access request' }, 400);
+      return c.json({ state: 'forbidden' }, 403);
+    }
+    return undefined;
+  };
+
   // ---- 1. Authenticated session mint -------------------------------------------------------
   app.post(
     `${apiPrefix}/computers/:computerId/session`,
@@ -248,57 +331,22 @@ export async function setupComputerStream(
       }
       const mode: ComputerViewMode = body.mode;
       const requestContext = (c.get('requestContext') as RequestContext | undefined) ?? new RequestContext();
-      const contextThreadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-      const threadId = contextThreadId || (typeof body.threadId === 'string' ? body.threadId : undefined);
-      if (!threadId) return c.json({ error: 'threadId is required' }, 400);
-
-      const contextResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-      const bodyResourceId = typeof body.resourceId === 'string' ? body.resourceId : undefined;
-      if (contextResourceId && bodyResourceId && bodyResourceId !== contextResourceId) {
-        return c.json({ state: 'forbidden' }, 403);
-      }
-      const resourceId = contextResourceId || bodyResourceId;
-      if (!resourceId) return c.json({ error: 'resourceId is required' }, 400);
+      const ids = scopeOf(c, requestContext, body);
+      if (ids instanceof Response) return ids;
+      const { threadId, resourceId } = ids;
 
       // Canonicalize the embedding origin before any lookups so a hostile page gets nothing.
-      const rawOrigin = c.req.header('origin');
-      let studioOrigin = serverOrigin(c);
-      if (rawOrigin) {
-        let parsed: URL;
-        try {
-          parsed = new URL(rawOrigin);
-        } catch {
-          return c.json({ state: 'forbidden' }, 403);
-        }
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return c.json({ state: 'forbidden' }, 403);
-        studioOrigin = parsed.origin;
-        const allowed =
-          isSameOrigin(studioOrigin, requestHost(c)) ||
-          (allowedOrigins !== undefined && (await isOriginAllowed(allowedOrigins, studioOrigin, c)));
-        if (!allowed) return c.json({ state: 'forbidden' }, 403);
-      }
+      const studioOrigin = await callerOrigin(c);
+      if (studioOrigin instanceof Response) return studioOrigin;
 
-      // No memory store means no thread-access check, which means no access.
-      const memoryStore = await mastra.getStorage()?.getStore('memory');
-      if (!memoryStore) return c.json({ state: 'forbidden' }, 403);
-      const thread = await memoryStore.getThreadById({ threadId });
-      // Unknown thread: refuse without revealing whether it exists.
-      if (!thread) return c.json({ state: 'forbidden' }, 403);
-      try {
-        await enforceThreadAccess({
-          mastra,
-          requestContext,
-          threadId,
-          thread,
-          effectiveResourceId: resourceId,
-          // The relay doesn't filter input, so viewing a desktop is as powerful as driving it.
-          permission: 'memory:write',
-        });
-      } catch (error) {
-        const status = statusError(error);
-        if (status === 400) return c.json({ error: 'Invalid thread access request' }, 400);
-        return c.json({ state: 'forbidden' }, 403);
-      }
+      const denied = await authorizeThread(
+        c,
+        requestContext,
+        { threadId, resourceId },
+        // The relay doesn't filter input, so viewing a desktop is as powerful as driving it.
+        'memory:write',
+      );
+      if (denied) return denied;
 
       let viewer: Awaited<ReturnType<ComputerViewerSource>>;
       try {
@@ -316,6 +364,77 @@ export async function setupComputerStream(
       });
     },
   );
+
+  // ---- 2. Control lease ------------------------------------------------------------------------
+  const { getControl, setControl } = config;
+  if (getControl && setControl) {
+    const controlPath = `${apiPrefix}/computers/:computerId/control`;
+
+    app.get(controlPath, requireComputers, authenticate, async (c: Context) => {
+      const origin = await callerOrigin(c);
+      if (origin instanceof Response) return origin;
+      const requestContext = (c.get('requestContext') as RequestContext | undefined) ?? new RequestContext();
+      const ids = scopeOf(c, requestContext, { threadId: c.req.query('threadId'), resourceId: c.req.query('resourceId') });
+      if (ids instanceof Response) return ids;
+      const denied = await authorizeThread(c, requestContext, ids, 'memory:read');
+      if (denied) return denied;
+      let state: Awaited<ReturnType<ComputerControlSource>>;
+      try {
+        state = await getControl(computerIdOf(c), ids);
+      } catch {
+        return c.json({ error: 'not found' }, 404);
+      }
+      c.header('Cache-Control', 'no-store');
+      return c.json({ holder: state.holder, ...(state.reason !== undefined && { reason: state.reason }) });
+    });
+
+    app.post(
+      controlPath,
+      requireComputers,
+      authenticate,
+      bodyLimit({ maxSize: CONTROL_BODY_MAX_BYTES, onError: c => c.json({ error: 'Request body too large' }, 413) }),
+      async (c: Context) => {
+        // A cross-site form can't send JSON without a preflight; reject anything else first.
+        const mediaType = c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase();
+        if (mediaType !== 'application/json') return c.json({ error: 'Content-Type must be application/json' }, 415);
+        const origin = await callerOrigin(c);
+        if (origin instanceof Response) return origin;
+
+        let body: { threadId?: unknown; resourceId?: unknown; action?: unknown; note?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (body?.action !== 'take' && body?.action !== 'release') {
+          return c.json({ error: "action must be 'take' or 'release'" }, 400);
+        }
+        if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > CONTROL_NOTE_MAX)) {
+          return c.json({ error: `note must be a string of at most ${CONTROL_NOTE_MAX} characters` }, 400);
+        }
+        const requestContext = (c.get('requestContext') as RequestContext | undefined) ?? new RequestContext();
+        const ids = scopeOf(c, requestContext, body);
+        if (ids instanceof Response) return ids;
+        const denied = await authorizeThread(c, requestContext, ids, 'memory:write');
+        if (denied) return denied;
+        let result: Awaited<ReturnType<ComputerControlSetter>>;
+        try {
+          result = await setControl(computerIdOf(c), ids, {
+            action: body.action,
+            ...(typeof body.note === 'string' && body.note.length > 0 && { note: body.note }),
+          });
+        } catch {
+          return c.json({ error: 'not found' }, 404);
+        }
+        c.header('Cache-Control', 'no-store');
+        return c.json({
+          holder: result.holder,
+          notified: result.notified,
+          ...(result.reason !== undefined && { reason: result.reason }),
+        });
+      },
+    );
+  }
 
   // ---- 3. WebSocket proxy ----------------------------------------------------------------------
   const authorizeSocket: MiddlewareHandler = async (c, next) => {

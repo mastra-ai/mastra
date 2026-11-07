@@ -160,6 +160,8 @@ export async function startProxy(
     mastra: options.mastra ?? createStubMastra(),
     getViewer: 'getViewer' in options ? options.getViewer : async () => null,
     allowedOrigins: options.allowedOrigins,
+    getControl: options.getControl,
+    setControl: options.setControl,
     webSocket,
   });
   if (!stream) throw new Error('Expected computer stream to be set up');
