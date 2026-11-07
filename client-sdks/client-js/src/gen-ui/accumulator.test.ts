@@ -153,6 +153,16 @@ describe('accumulateGenUI', () => {
     expect(state.surfaces.dash!.nodes.kpi!.children).toEqual(['chart']);
   });
 
+  it('tells the model a child is listed twice instead of reporting two parents', () => {
+    const before = applyAll([dashboard()]);
+    const after = accumulateGenUI(
+      before,
+      env('dash', [{ op: 'setChildren', nodeId: 'root', children: ['kpi', 'kpi'] }]),
+    );
+    expect(after.surfaces.dash).toBe(before.surfaces.dash);
+    expect(after.diagnostics.at(-1)?.message).toBe('operations[0].children contains duplicate ids');
+  });
+
   it('enforces configurable limits', () => {
     const limits = { maxNodesPerSurface: 3 };
     const create = env('big', [

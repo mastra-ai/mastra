@@ -74,7 +74,7 @@ export function Chat() {
 
 With `tool: true`, `WeatherCard` is sent to the agent as a frontend tool named `ui_WeatherCard`. Its input schema is the component's props schema. When the model calls it, the card renders in the message with the validated props.
 
-`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, pass them as `renderers`. GenUI renders its own parts and hands the rest to yours.
+`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, pass them as `renderers`. GenUI renders its own parts and hands the rest to yours. Define your renderers outside the component or memoize them. New renderer functions on every render make every message re-render while a reply streams.
 
 ## Let the model call components
 
@@ -156,7 +156,7 @@ For tools that use [human-in-the-loop](/docs/agents/human-in-the-loop), `approva
 
 ## Stream surfaces from a tool
 
-A surface is a tree of registered components that the server builds and updates over time. Each node references a component by name and holds its props and child IDs. Use `createGenUIEmitter()` with the tool's `writer` to stream updates:
+A surface is a tree of registered components that the server builds and updates over time. Each node references a component by name and holds its props and child IDs. Use `createGenUIEmitter()` with the tool's execute context to stream updates:
 
 ```typescript title="src/mastra/tools/weather-report.ts"
 import { createTool } from '@mastra/core/tools'
@@ -167,8 +167,8 @@ export const weatherReport = createTool({
   id: 'weather-report',
   description: 'Show a live weather report for a city',
   inputSchema: z.object({ city: z.string() }),
-  execute: async ({ city }, { writer, agent }) => {
-    const ui = createGenUIEmitter(writer, { source: { toolCallId: agent?.toolCallId } }).surface()
+  execute: async ({ city }, context) => {
+    const ui = createGenUIEmitter(context).surface()
 
     await ui.create({
       nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 0 } }],
@@ -185,9 +185,9 @@ export const weatherReport = createTool({
 
 Calling `surface()` without an ID gives each run its own surface, so running the tool twice in a thread shows two cards. Pass an ID only to continue a surface created by an earlier run. IDs must be unique within a thread.
 
-Setting `source.toolCallId` links the surface to the tool call. If the tool throws before the surface is ready, the surface shows as failed instead of finished.
+Passing the execute context links the surface to the tool call. If the tool throws before the surface is ready, the surface shows as failed instead of finished. You can also pass only the `writer`, but then the surface isn't linked unless you set `source.toolCallId` yourself.
 
-The emitter validates operations on the server with the same rules as the client and throws on invalid input. Updates are written as `data-gen-ui` message parts. They're saved with the message. A reloaded thread rebuilds the same surface from them.
+The emitter validates operations on the server with the same rules as the client and throws on invalid input. Updates are written in call order, so a failed write doesn't block the updates after it. Each update becomes a `data-gen-ui` message part that's saved with the message. A reloaded thread rebuilds the same surface from them.
 
 On the client, nothing extra is needed. The renderers from `useGenUIChat` show inline surfaces where they were created in the message. Updating a node's props doesn't remount its component, so local component state is kept.
 

@@ -1,6 +1,6 @@
 import { formatGenUIContext } from '@mastra/client-js/gen-ui';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat } from '../agent/hooks';
 import type { MastraChatProps, SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
@@ -15,7 +15,10 @@ export interface UseGenUIChatProps extends MastraChatProps {
   genUI: GenUIRegistry;
   /** Action handlers that components dispatch with `useGenUIAction(name)`. Handlers from the latest render run. */
   actions?: Record<string, GenUIChatActionHandler<any>>;
-  /** Your own `MessageFactory` renderers, for parts GenUI does not render. */
+  /**
+   * Your own `MessageFactory` renderers, for parts GenUI does not render. Define them outside the
+   * component (or memoize them) so messages don't re-render on every streamed token.
+   */
   renderers?: MessageRenderers;
 }
 
@@ -60,6 +63,16 @@ export function useGenUIChat({ genUI, actions, renderers, ...chatProps }: UseGen
   const [controller] = useState(() =>
     createController({ genUI, actions }, { messages: chatProps.initialMessages, threadId: chatProps.threadId }),
   );
+  // Built once so memoized messages skip re-rendering while a reply streams. They read your
+  // renderers from a ref, so parts GenUI hands back to you use the latest ones.
+  const baseRenderers = useRef(renderers);
+  const [genUIRenderers] = useState(() =>
+    createGenUIRenderers(controller, {
+      Data: part => baseRenderers.current?.Data?.(part),
+      ToolInvocation: part => baseRenderers.current?.ToolInvocation?.(part),
+      DynamicTool: part => baseRenderers.current?.DynamicTool?.(part),
+    }),
+  );
   const { threadId } = chatProps;
   const chat = useChat({ ...chatProps, clientTools: mergeTools(chatProps.clientTools, controller.clientTools) });
 
@@ -92,6 +105,7 @@ export function useGenUIChat({ genUI, actions, renderers, ...chatProps }: UseGen
       threadId,
     });
     controller.setActions(actions);
+    baseRenderers.current = renderers;
   });
 
   function cancelRun(...args: Parameters<typeof chat.cancelRun>) {
@@ -101,7 +115,7 @@ export function useGenUIChat({ genUI, actions, renderers, ...chatProps }: UseGen
 
   const handle: GenUIChatHandle = {
     controller,
-    renderers: { ...renderers, ...createGenUIRenderers(controller, renderers) },
+    renderers: { ...renderers, ...genUIRenderers },
   };
   return { ...chat, sendMessage, cancelRun, genUI: handle };
 }
