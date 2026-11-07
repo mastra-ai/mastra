@@ -2111,6 +2111,7 @@ export class AgentChannels {
       textDisplay: adapterConfig?.textDisplay,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
+      onDataPart: adapterConfig?.onDataPart,
     };
   }
 
