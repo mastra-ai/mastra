@@ -12,6 +12,7 @@ import { Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
+import { formatDuration } from '../format-duration.js';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { statusDot, toolBlock } from './surface.js';
@@ -253,7 +254,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
       this.invalidate();
       this.ui.requestRender();
     };
-    const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
+    const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs, { precision: 'ms' })}`) : '';
     const footerText = `${theme.bold(colorText(this.colors.label, this.label, (text: string) => theme.fg('toolTitle', text)))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
 
     // Completed background work follows the ordinary tool display model: compact by default,
@@ -382,12 +383,6 @@ function formatToolCallLine(
   const prefix = `${icon} ${name}`;
   const argsSummary = summarizeArgs(tc.args, Math.max(20, maxWidth - stripAnsi(prefix).length - 1));
   return `${prefix} ${argsSummary}`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = (ms / 1000).toFixed(1);
-  return `${s}s`;
 }
 
 function stripAnsi(value: string): string {
