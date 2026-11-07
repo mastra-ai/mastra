@@ -6,8 +6,10 @@ import { Outlet } from 'react-router';
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { OverlaysProvider } from '../lib/overlays';
 import { AppSidebar } from '../AppSidebar';
+import { ServerProblemBanner } from './ServerProblemBanner';
 
 /**
  * Mobile-only bar above the page frame: the drawer trigger and global search.
@@ -37,7 +39,6 @@ function SidebarShortcuts() {
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
-
   return (
     <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
@@ -53,17 +54,22 @@ function AppFrame() {
  * Mounted under `FactoryLayout` so the sidebar only ever sees a valid factory.
  */
 export function AppLayout() {
+  const problem = useServerStatus().data?.problems[0];
+
   return (
-    <div className="bg-sidebar h-dvh">
-      <Sidebar.Provider storageKey="mastracode-web" collapsedWidth={0}>
-        <SidebarShortcuts />
-        <OverlaysProvider>
-          <ChatSessionRouteProvider>
-            <AppFrame />
-            <ChatOverlays />
-          </ChatSessionRouteProvider>
-        </OverlaysProvider>
-      </Sidebar.Provider>
+    <div className="bg-sidebar flex h-dvh flex-col">
+      {problem ? <ServerProblemBanner problem={problem} /> : null}
+      <div className="min-h-0 flex-1">
+        <Sidebar.Provider storageKey="mastracode-web" collapsedWidth={0}>
+          <SidebarShortcuts />
+          <OverlaysProvider>
+            <ChatSessionRouteProvider>
+              <AppFrame />
+              <ChatOverlays />
+            </ChatSessionRouteProvider>
+          </OverlaysProvider>
+        </Sidebar.Provider>
+      </div>
     </div>
   );
 }
