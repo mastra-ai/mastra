@@ -97,6 +97,20 @@ export interface StoredBoardRecord {
   phases: StoredPhaseRecord[];
 }
 
+/** A one-time rewrite of a stored board, keyed so each project gets it once. */
+export interface StoredBoardMigration {
+  key: string;
+  boardKey: string;
+  /** The board to write instead, with what changed; undefined leaves it as it is. */
+  migrate(board: StoredBoardRecord): { board: Omit<StoredBoardInput, 'key'>; filled: string[] } | undefined;
+}
+
+export interface AppliedBoardMigration {
+  key: string;
+  boardKey: string;
+  filled: string[];
+}
+
 export interface StoredBoardSnapshot {
   version: string | null;
   boards: StoredBoardRecord[];
@@ -280,6 +294,8 @@ interface VersionRow extends Record<string, unknown> {
   version: string;
   /** Keys of the boards Factory stored in the project; null on rows written before the list. */
   seeded_boards: string[] | null;
+  /** Keys of the board migrations applied to the project; null before the first one. */
+  applied_migrations: string[] | null;
 }
 
 interface PhaseRow extends Record<string, unknown> {
@@ -342,6 +358,7 @@ const VERSIONS = 'factory_board_definition_versions';
 const INTAKE_ROUTES = 'factory_intake_routes';
 const INTAKE_ROUTE_LOCKS = 'factory_intake_route_locks';
 const MAX_WRITE_ATTEMPTS = 3;
+const MIGRATION_ACTOR = 'factory';
 
 function scopeWhere({ orgId, factoryProjectId }: StoredBoardScope) {
   return { org_id: orgId, factory_project_id: factoryProjectId };
@@ -533,6 +550,54 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       );
       if (updated !== 1) throw new ConcurrentBoardWrite();
       return inserted;
+    });
+  }
+
+  /**
+   * Runs each migration the project hasn't had yet, once: the keys applied are recorded on the
+   * project's version row in the same transaction as the board writes, and the compare-and-set on
+   * its version makes a concurrent first load retry from fresh reads, where it finds them applied.
+   * A migration whose board the project doesn't have is recorded without running, and the version
+   * only changes when a board was rewritten. Reads one row
+   * when every key was applied before. Returns what each migration that rewrote a board filled.
+   */
+  async applyBoardMigrations(
+    scope: StoredBoardScope,
+    migrations: readonly StoredBoardMigration[],
+  ): Promise<AppliedBoardMigration[]> {
+    if (migrations.length === 0) return [];
+    const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
+    if (marker?.applied_migrations && migrations.every(({ key }) => marker.applied_migrations!.includes(key))) {
+      return [];
+    }
+    await ensureVersionRow(this.ops, scope);
+    return this.#transact(async ops => {
+      const current = (await ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))!;
+      const applied = current.applied_migrations ?? [];
+      const pending = migrations.filter(({ key }) => !applied.includes(key));
+      if (pending.length === 0) return [];
+      const changed: AppliedBoardMigration[] = [];
+      for (const migration of pending) {
+        const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: migration.boardKey });
+        if (!row) continue;
+        const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: row.board_key });
+        const result = migration.migrate(toRecord(row, phases));
+        if (!result) continue;
+        await writeBoard(ops, scope, row, { ...result.board, key: row.board_key }, MIGRATION_ACTOR);
+        changed.push({ key: migration.key, boardKey: row.board_key, filled: result.filled });
+      }
+      const updated = await ops.updateMany(
+        VERSIONS,
+        { ...scopeWhere(scope), version: current.version },
+        {
+          applied_migrations: [...applied, ...pending.map(({ key }) => key)],
+          // Only a rewritten board is news to the other replicas' caches.
+          version: changed.length > 0 ? randomUUID() : current.version,
+          updated_at: new Date(),
+        },
+      );
+      if (updated !== 1) throw new ConcurrentBoardWrite();
+      return changed;
     });
   }
 
