@@ -6,6 +6,7 @@ import xterm from '@xterm/headless';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CustomEditor } from '../components/custom-editor.js';
+import { GithubPRPickerDialog } from '../components/github-pr-picker.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
@@ -342,7 +343,7 @@ describe('shared list components', () => {
   });
 });
 
-describe('thread selector on PickerList', () => {
+describe('hand-drawn pickers on PickerList', () => {
   function thread(index: number, title: string): AgentControllerThread {
     const updatedAt = new Date(Date.now() - index * 60_000);
     return {
@@ -381,5 +382,30 @@ describe('thread selector on PickerList', () => {
 
     await harness.click(title.row, title.col);
     expect(picked).toEqual(['thread-000006']);
+  });
+
+  it('PR picker: a click does what Enter does, confirming the toggled PRs when any are toggled', async () => {
+    harness = createHarness();
+    const pullRequests = [101, 102, 103].map(number => ({ owner: 'o', repo: 'r', number, title: `pr-${number}` }));
+    const confirmed: string[][] = [];
+    const picker = new GithubPRPickerDialog({
+      tui: harness.ui,
+      pullRequests,
+      onConfirm: prs => confirmed.push(prs.map(pr => `#${pr.number}`)),
+      onCancel: () => {},
+    });
+    showModalOverlay(harness.ui, picker);
+    await harness.render();
+
+    const pr102 = harness.find('pr-102');
+    await harness.click(pr102.row, pr102.col);
+    expect(confirmed).toEqual([['#102']]);
+
+    // Space toggles the highlighted PR; Enter (and so a click) then confirms the toggled set.
+    harness.send(' ');
+    await harness.render();
+    const pr101 = harness.find('pr-101');
+    await harness.click(pr101.row, pr101.col);
+    expect(confirmed).toEqual([['#102'], ['#102']]);
   });
 });

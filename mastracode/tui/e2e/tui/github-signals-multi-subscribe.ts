@@ -44,7 +44,8 @@ export const githubSignalsMultiSubscribeScenario = {
     terminal.write(' ');
     terminal.write('\x1b[B');
     terminal.write(' ');
-    terminal.write('\r');
+    // A click does what Enter does: confirm the toggled PRs.
+    await terminal.clickText?.('mastra-ai/mastra#17637');
 
     await runtime.waitForScreenText(
       /GitHub PR batch complete: .*#1763[78]: subscribed; .*#1763[78]: subscribed/i,
