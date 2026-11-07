@@ -58,6 +58,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/sandbox', description: 'Manage sandbox allowed paths' },
     { key: '/hooks', description: 'Show/reload configured hooks' },
     { key: '/mcp', description: 'Show/reload MCP connections' },
+    { key: '/reload', description: 'Reload plugins, skills, commands, hooks, and MCP' },
     { key: '/connect', description: 'Connect a provider account or API key' },
     { key: '/login', description: 'Sign in with a provider account' },
     { key: '/factory', description: 'Switch to Factory mode (connects first if needed)' },
