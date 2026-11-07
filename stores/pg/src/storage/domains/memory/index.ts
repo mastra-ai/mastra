@@ -871,9 +871,12 @@ export class MemoryPG extends MemoryStorage {
       const createdAt = toUtcISOString(thread.createdAt);
       const updatedAt = toUtcISOString(thread.updatedAt);
       const metadataJson = thread.metadata ? toPgJson(thread.metadata) : null;
-      await this.#fenced(fence, 'saveThread', q =>
-        q.none(
-          `INSERT INTO ${tableName} (
+      // A re-save keeps the stored owner and createdAt. The WHERE clause skips the update when
+      // the id belongs to another resource, so no row comes back and we refuse the save instead
+      // of splitting ownership between the thread and its messages.
+      const saved = await this.#fenced(fence, 'saveThread', q =>
+        q.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+          `INSERT INTO ${tableName} AS t (
           id,
           "resourceId",
           title,
@@ -884,20 +887,41 @@ export class MemoryPG extends MemoryStorage {
           "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (id) DO UPDATE SET
-          "resourceId" = EXCLUDED."resourceId",
           title = EXCLUDED.title,
           metadata = EXCLUDED.metadata,
-          "createdAt" = EXCLUDED."createdAt",
-          "createdAtZ" = EXCLUDED."createdAtZ",
           "updatedAt" = EXCLUDED."updatedAt",
-          "updatedAtZ" = EXCLUDED."updatedAtZ"`,
+          "updatedAtZ" = EXCLUDED."updatedAtZ"
+        WHERE t."resourceId" = EXCLUDED."resourceId"
+        RETURNING *`,
           [thread.id, thread.resourceId, thread.title, metadataJson, createdAt, createdAt, updatedAt, updatedAt],
         ),
       );
 
-      return { ...thread, metadata: metadataJson ? JSON.parse(metadataJson) : thread.metadata };
+      if (!saved) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'SAVE_THREAD', 'RESOURCE_ID_MISMATCH'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Thread ${thread.id} already exists and belongs to a different resource. Use updateThreadResourceId to move a thread and its messages to another resource.`,
+          details: { threadId: thread.id, resourceId: thread.resourceId },
+        });
+      }
+
+      return {
+        id: saved.id,
+        resourceId: saved.resourceId,
+        title: saved.title,
+        metadata:
+          saved.metadata == null
+            ? undefined
+            : typeof saved.metadata === 'string'
+              ? JSON.parse(saved.metadata)
+              : saved.metadata,
+        createdAt: saved.createdAtZ || saved.createdAt,
+        updatedAt: saved.updatedAtZ || saved.updatedAt,
+      };
     } catch (error) {
-      if (isRunFenceConflictError(error)) throw error;
+      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'SAVE_THREAD', 'FAILED'),
