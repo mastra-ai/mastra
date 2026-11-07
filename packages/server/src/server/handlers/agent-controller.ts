@@ -718,27 +718,30 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           };
 
           // Live events are not replayed, so seed a late subscriber with the
-          // current display state (including the message in flight). This runs
-          // before subscribe() so it precedes the buffered workspace events
-          // subscribe() replays; both are synchronous, so no event slips between.
+          // current display state (including the message in flight), numbered
+          // like the last event so a resuming client can tell whether it missed
+          // any. This runs before subscribe() so it precedes the buffered
+          // workspace events subscribe() replays; both are synchronous, so no
+          // event slips between.
           if (displayState !== false) {
             try {
-              controller.enqueue(
-                toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
-              );
+              controller.enqueue({
+                ...toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+                seq: session.lastEventSeq,
+              });
             } catch {
               cleanup(controller);
               return;
             }
           }
 
-          unsubscribe = session.subscribe(event => {
+          unsubscribe = session.subscribe((event, seq) => {
             if (cleanedUp || (displayState === false && event.type === 'display_state_changed')) return;
             try {
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
-              controller.enqueue(toWireEvent(event));
+              controller.enqueue({ ...toWireEvent(event), seq });
               scheduleHeartbeat();
             } catch {
               cleanup();

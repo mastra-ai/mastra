@@ -78,14 +78,23 @@ export function useAgentControllerConnection({
     liveState,
   });
   const observedRun = useRef<{ sessionId: string; running?: boolean }>({ sessionId });
+  const streamRun = useRef<'started' | 'ended'>(undefined);
+  const tracked = useRef<{ sessionId: string; dropped: boolean; seq?: number }>({ sessionId, dropped: false });
+  const trackedStream = () => {
+    if (tracked.current.sessionId !== sessionId) tracked.current = { sessionId, dropped: false };
+    return tracked.current;
+  };
   useEffect(() => {
     const running = syncQuery.data?.running;
     const previous = observedRun.current;
     observedRun.current = { sessionId, running };
-    if (previous.sessionId !== sessionId || previous.running !== true || running !== false) return;
-    // A state poll can discover completion even when the connected SSE stream
-    // missed the final message. Recover that persisted message through the
-    // existing window merge rather than waiting for a manual page refresh.
+    const streamEnded = streamRun.current === 'ended';
+    if (running !== true || streamEnded) streamRun.current = undefined;
+    if (previous.sessionId !== sessionId || previous.running !== true || running !== false || streamEnded) return;
+    // A state poll can discover completion even when the stream missed the
+    // final message, and a stream that joined mid-run never drew the in-flight
+    // message. Recover it through the window merge; only a run this stream saw
+    // from start to end without a gap needs no refetch.
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
     });
@@ -98,34 +107,52 @@ export function useAgentControllerConnection({
     if (next === previous) return;
     sseStateRef.current = next;
     setSseConnectionState(next);
+    if (next === 'dropped') trackedStream().dropped = true;
     if (next !== 'connected') return;
-    // Events sent while the stream was down are gone for good (the server does
-    // not replay them), so a reconnect refetches the mounted message windows —
-    // mergeWindow folds whatever the gap dropped back into the transcript. A
-    // first connect retries only failed windows: the stream opens after the
-    // session is bound to its thread, so a read that raced that binding works now.
-    const reconnected = previous === 'dropped';
+    // The stream opens after the session is bound to its thread, so a window
+    // read that raced that binding works now.
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
-      predicate: query => reconnected || query.state.status === 'error',
+      predicate: query => query.state.status === 'error',
     });
-    // The gap can also have eaten agent_start/agent_end, so the cached state
-    // snapshot is refetched the same way.
-    if (reconnected) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
-        exact: true,
-      });
-    }
   };
 
-  const handleEvent = (event: AgentControllerEvent) => {
+  // The server does not replay missed events: mergeWindow folds the refetched
+  // window back in, and the state refetch covers a missed agent_start/agent_end.
+  const recoverMissedEvents = () => {
+    streamRun.current = undefined;
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
+      exact: true,
+    });
+  };
+
+  // A stream opens on a snapshot numbered like the session's last event, and
+  // each later event is numbered one higher: anything else means events were missed.
+  const trackSeq = (event: AgentControllerEvent, opensStream: boolean) => {
+    const seq = typeof event.seq === 'number' ? event.seq : undefined;
+    const stream = trackedStream();
+    const last = stream.seq;
+    if (seq !== undefined) stream.seq = opensStream ? seq : Math.max(seq, last ?? seq);
+    const missed = opensStream
+      ? stream.dropped && (seq === undefined || seq !== last)
+      : last !== undefined && seq !== undefined && seq > last + 1;
+    if (missed) recoverMissedEvents();
+  };
+
+  const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => {
+    trackSeq(event, opensStream);
     const displayStateRunning =
       isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
         ? event.displayState.isRunning
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
+    if (event.type === 'agent_start') streamRun.current = 'started';
+    else if (running === false && streamRun.current) streamRun.current = 'ended';
     if (typeof running === 'boolean' || tasks) {
       // Bump the generation so a state request that was already in flight
       // knows this event is newer than its response, and keep the latest

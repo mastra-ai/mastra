@@ -132,7 +132,9 @@ type Hydrated<T> = T extends { type: 'thread_created' }
  * derives from the controller's own events, with timestamps hydrated. This is a
  * discriminated union, so narrowing on `event.type` gives the right payload.
  */
-export type KnownAgentControllerEvent = Hydrated<AgentControllerWireEvent> | NotificationEvent;
+export type KnownAgentControllerEvent =
+  | Hydrated<AgentControllerWireEvent>
+  | (NotificationEvent & Pick<AgentControllerWireEvent, 'seq'>);
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
 export interface OtherAgentControllerEvent {
@@ -290,7 +292,9 @@ export interface SubscribeAgentControllerSessionOptions {
    * Called each time the stream is re-established after a drop (reconnect
    * only). The server does NOT replay events missed while disconnected, so
    * stateful consumers MUST re-sync from here (e.g. `session.state()`) or
-   * they will silently lose the gap.
+   * they will silently lose the gap. Every event carries a `seq`, one higher
+   * per event, and a stream opens on a snapshot carrying the last event's
+   * `seq`: when it equals the last `seq` received, nothing was missed.
    */
   onReconnect?: () => void;
   /**
