@@ -1,4 +1,5 @@
 import type { ToolAction } from '../tools';
+import type { Mastra } from './index';
 
 /**
  * Upstream access to a computer's live desktop viewer, for a server-side proxy.
@@ -18,6 +19,8 @@ export interface MastraComputerViewer {
  * @experimental
  */
 export interface MastraComputers {
+  /** Called by `new Mastra({ computers })` so the provider can reach storage outside tool calls. */
+  __registerMastra?(mastra: Mastra): void;
   tools(): Record<string, ToolAction<any, any, any, any>>;
   viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null>;
   /** Who holds a computer's input. Throws when the computer isn't attached to this thread. */

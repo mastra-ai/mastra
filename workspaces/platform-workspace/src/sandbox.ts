@@ -1276,6 +1276,29 @@ export class PlatformSandbox extends MastraSandbox {
     this._addressRegistry?.delete(destroyedSandboxId);
   }
 
+  /**
+   * Delete this sandbox's recovery checkpoint without touching the VM, on any
+   * provider. {@link destroy} skips this on E2B, where callers own their snapshots.
+   * Needs the started sandbox id and a caller-supplied recovery `id`.
+   *
+   * @experimental
+   */
+  async deleteCheckpoint(): Promise<'deleted' | 'not_found' | 'skipped'> {
+    if (!this._hasRecoveryKey || !this._sandboxId) return 'skipped';
+    try {
+      const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}/checkpoint`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: this.id }),
+      });
+      const json = (await response.json()) as { status?: string };
+      return json.status === 'deleted' ? 'deleted' : 'not_found';
+    } catch (error) {
+      if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) return 'not_found';
+      throw error;
+    }
+  }
+
   /** Persist the configured recovery checkpoint when available. */
   async snapshot(): Promise<void> {
     await this.captureCheckpoint();

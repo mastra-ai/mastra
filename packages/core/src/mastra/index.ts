@@ -1941,6 +1941,7 @@ export class Mastra<
     }
 
     this.#computers = config?.computers;
+    this.#computers?.__registerMastra?.(this as unknown as Mastra);
 
     if (config?.workspace) {
       this.#workspace = config.workspace;

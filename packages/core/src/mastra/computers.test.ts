@@ -24,4 +24,17 @@ describe('Mastra computers registration', () => {
   it('is undefined when no computers are registered', () => {
     expect(new Mastra({ logger: false }).getComputers()).toBeUndefined();
   });
+
+  it('hands the provider its Mastra instance', () => {
+    let seen: unknown;
+    const computers: MastraComputers = {
+      tools: () => ({}),
+      viewer: async () => null,
+      __registerMastra: mastra => {
+        seen = mastra;
+      },
+    };
+    const mastra = new Mastra({ logger: false, computers });
+    expect(seen).toBe(mastra);
+  });
 });
