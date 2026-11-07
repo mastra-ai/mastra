@@ -6,6 +6,7 @@ import {
   BookOpen,
   Bot,
   Brain,
+  Bug,
   Building2,
   Cable,
   CircleUserRound,
@@ -130,6 +131,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Building2,
         searchText:
           'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
+      },
+      {
+        id: 'debug',
+        label: SETTINGS_SECTION_LABELS.debug,
+        icon: Bug,
+        searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
   },

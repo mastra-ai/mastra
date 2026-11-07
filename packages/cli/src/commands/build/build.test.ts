@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
@@ -88,5 +88,25 @@ describe('build', () => {
     expect(logged.error).toHaveLength(1);
     expect(logged.error[0]![0]).toBe('Mastra Build failed: disk full');
     expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('ships the resolved Mastra package versions with the build output', async () => {
+    await writeFile(
+      join(rootDir, 'package.json'),
+      JSON.stringify({ name: 'app', type: 'module', dependencies: { '@mastra/example-pkg': '1.2.3', zod: '^3.0.0' } }),
+    );
+    platformDeployer.current = {
+      __setLogger: () => {},
+      getAllToolPaths: () => [],
+      prepare: async (outputDirectory: string) => mkdir(join(outputDirectory, 'output'), { recursive: true }),
+      bundle: async () => {},
+    };
+
+    const { build } = await import('./build');
+    await build({ root: rootDir, debug: false });
+
+    expect(logged.error).toEqual([]);
+    const manifest = JSON.parse(await readFile(join(rootDir, '.mastra', 'output', 'mastra-packages.json'), 'utf-8'));
+    expect(manifest).toEqual([{ name: '@mastra/example-pkg', version: '1.2.3' }]);
   });
 });
