@@ -4,6 +4,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@m
 import { createTool } from '@mastra/core/tools';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { DESKTOP_PACKAGES } from './computer.js';
 import type { ComputerSandbox } from './computers.js';
 import {
   DESTROY_FAILED,
@@ -15,6 +16,7 @@ import {
   UNAVAILABLE,
 } from './computers.js';
 import type { PlatformSandboxOptions } from './sandbox.js';
+import { Template, serializeSandboxTemplate } from './template.js';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -38,6 +40,7 @@ function gate(): Gate {
 class FakeBackend {
   vms = new Map<string, { alive: boolean }>();
   createCalls: { kind: 'provision' | 'reattach'; sandboxId?: string }[] = [];
+  createOptions: PlatformSandboxOptions[] = [];
   actions: string[] = [];
   latency: Record<string, number> = {};
   gates: Record<string, Gate> = {};
@@ -46,6 +49,7 @@ class FakeBackend {
   nextSandboxId?: string;
   failStart?: Error;
   failDestroy = false;
+  failScreenshot = false;
   checkpoint: any = { status: 'captured', checkpointName: 'ck-internal' };
   viewerUrl: string | null = 'https://6080-vm.preview.test/vnc.html?autoconnect=1';
   cookie: { name: string; value: string } | null = { name: '__mastra_preview', value: 'secret-cookie' };
@@ -53,6 +57,7 @@ class FakeBackend {
 
   create = (options: PlatformSandboxOptions): ComputerSandbox => {
     const backend = this;
+    backend.createOptions.push(options);
     let id: string | undefined;
     const act = async (name: string) => {
       await sleep(backend.latency[name] ?? 0);
@@ -115,6 +120,7 @@ class FakeBackend {
       },
       computer: {
         screenshot: async () => {
+          if (backend.failScreenshot) throw new Error('scrot failed');
           await act('screenshot');
           return { data: PNG, mediaType: 'image/png' as const };
         },
@@ -726,10 +732,21 @@ describe('control lease', () => {
     written.open();
     await out;
     await written.entered;
-    const failing = { ...ctx('r1', 't2'), writer: { custom: async () => { throw new Error('closed'); } } };
+    const failing = {
+      ...ctx('r1', 't2'),
+      writer: {
+        custom: async () => {
+          throw new Error('closed');
+        },
+      },
+    };
     const other = (await call(computers, 'computer_create', {}, ctx('r1', 't2'))).computer.id;
-    await expect(call(computers, 'computer_request_human', { reason: 'x' }, failing)).resolves.toMatchObject({ control: 'human' });
-    await expect(computers.controlState(other, { resourceId: 'r1', threadId: 't2' })).resolves.toMatchObject({ holder: 'human' });
+    await expect(call(computers, 'computer_request_human', { reason: 'x' }, failing)).resolves.toMatchObject({
+      control: 'human',
+    });
+    await expect(computers.controlState(other, { resourceId: 'r1', threadId: 't2' })).resolves.toMatchObject({
+      holder: 'human',
+    });
     expect(id).not.toBe(other);
   });
 
@@ -907,5 +924,108 @@ describe('control lease', () => {
       computer_type: HUMAN_HAS_CONTROL,
       computer_key: HUMAN_HAS_CONTROL,
     });
+  });
+});
+
+describe('screenshot after action', () => {
+  const HANDS: [string, unknown, string][] = [
+    ['computer_click', { x: 1, y: 2 }, 'click'],
+    ['computer_move', { x: 3, y: 4 }, 'move'],
+    ['computer_drag', { from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }, 'drag'],
+    ['computer_scroll', { direction: 'down', amount: 2 }, 'scroll'],
+    ['computer_type', { text: 'hi' }, 'type'],
+    ['computer_key', { keys: 'Enter' }, 'key'],
+  ];
+
+  it.each(HANDS)('%s returns text only by default', async (tool, input, action) => {
+    const computers = make();
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    const result = await call(computers, tool, input, ctx('r1', 't1'));
+    expect(typeof result).toBe('string');
+    expect((computers.tools()[tool] as any).toModelOutput(result)).toBeUndefined();
+    expect(backend.actions).toEqual([action]);
+  });
+
+  it.each(HANDS)('%s attaches one screenshot when enabled', async (tool, input, action) => {
+    const computers = make({ screenshotAfterAction: true });
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    const result = await call(computers, tool, input, ctx('r1', 't1'));
+    expect(backend.actions).toEqual([action, 'screenshot']);
+    const out = (computers.tools()[tool] as any).toModelOutput(result);
+    expect(out.value.map((p: { type: string }) => p.type)).toEqual(['text', 'media']);
+    expect(out.value[1]).toMatchObject({ mediaType: 'image/png', data: Buffer.from(PNG).toString('base64') });
+  });
+
+  it.each([false, true])('computer_screenshot takes exactly one screenshot (screenshotAfterAction: %s)', async on => {
+    const computers = make({ screenshotAfterAction: on });
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_screenshot', {}, ctx('r1', 't1'));
+    expect(backend.actions).toEqual(['screenshot']);
+  });
+
+  it('keeps model order with the screenshot inside each action slot', async () => {
+    const computers = make({ screenshotAfterAction: true });
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.latency.click = 20;
+    await Promise.all([
+      call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1')),
+      call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1')),
+    ]);
+    expect(backend.actions).toEqual(['click', 'screenshot', 'type', 'screenshot']);
+  });
+
+  it('reports the completed action when the follow-up screenshot fails', async () => {
+    const computers = make({ screenshotAfterAction: true });
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    backend.failScreenshot = true;
+    expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe('typed (screenshot failed)');
+    expect(backend.actions).toEqual(['type']);
+  });
+
+  it('skips the screenshot when the user takes control during the action', async () => {
+    const computers = make({ screenshotAfterAction: true });
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const g = (backend.gates.click = gate());
+    const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
+    await g.entered;
+    await computers.control(id, { resourceId: 'r1', threadId: 't1' }, { action: 'take' });
+    g.open();
+    expect(await click).toBe('clicked at (1, 1)');
+    expect(backend.actions).toEqual(['click']);
+  });
+});
+
+describe('desktop template', () => {
+  async function resolved(options: PlatformSandboxOptions) {
+    const t = typeof options.template === 'function' ? await options.template() : options.template;
+    return t && serializeSandboxTemplate(t);
+  }
+
+  it('boots new computers from withDesktop(Template()) by default, resources unchanged', async () => {
+    const computers = make();
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
+    expect(await resolved(backend.createOptions[0]!)).toEqual({
+      schemaVersion: 1,
+      operations: [{ method: 'aptInstall', args: [[...DESKTOP_PACKAGES]] }],
+    });
+    expect(backend.createOptions[0]).toMatchObject({ computer: true, environmentId: 'env-1' });
+  });
+
+  it('honors a custom template and omits it entirely with false', async () => {
+    const custom = Template().aptInstall(['jq']);
+    await call(make({ template: custom }), 'computer_create', {}, ctx('r1', 't1'));
+    expect(backend.createOptions[0]!.template).toBe(custom);
+    await call(make({ template: false }), 'computer_create', {}, ctx('r1', 't2'));
+    expect('template' in backend.createOptions[1]!).toBe(false);
+  });
+
+  it('reattaches a persistent id with reattach required, never provisioning', async () => {
+    const created = await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'));
+    backend.createCalls = [];
+    expect(await call(make(), 'computer_attach', { id: created.computer.id }, ctx('r1', 't1'))).toMatchObject({
+      computer: { id: created.computer.id, status: 'attached' },
+    });
+    expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: created.computer.id.split('_')[2] }]);
+    expect(backend.createOptions.at(-1)).toMatchObject({ reattach: 'required' });
   });
 });
