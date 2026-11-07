@@ -8325,7 +8325,9 @@ export class Agent<
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
-    const throwNotSuspended = (): never => {
+    // `timedOut` marks a run that may still suspend on the target once its snapshot is durable,
+    // so callers can retry it instead of treating the tool call as answered.
+    const throwNotSuspended = (timedOut = false): never => {
       throw new MastraError({
         id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
         domain: ErrorDomain.AGENT,
@@ -8336,6 +8338,7 @@ export class Agent<
           method,
           runId,
           toolCallId,
+          ...(timedOut ? { timedOut } : {}),
         },
       });
     };
@@ -8381,7 +8384,7 @@ export class Agent<
       throwNotSuspended();
     }
 
-    return throwNotSuspended();
+    return throwNotSuspended(true);
   }
 
   /**
