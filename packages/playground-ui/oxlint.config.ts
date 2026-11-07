@@ -61,14 +61,6 @@ export default defineConfig({
       },
     },
     {
-      files: [
-        'src/ds/primitives/transitions.ts',
-        'src/ds/components/Card/Card.tsx',
-        'src/ds/primitives/resize-handle-indicator.tsx',
-      ],
-      rules: { 'playground-ui/no-transition-all': 'off' },
-    },
-    {
       files: ['**/*.stories.tsx'],
       rules: {
         'no-console': 'off',

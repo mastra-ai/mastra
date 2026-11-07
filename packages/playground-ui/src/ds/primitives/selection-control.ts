@@ -1,4 +1,4 @@
-import { focusRingOffset, transitions } from './transitions';
+import { focusRingOffset } from './transitions';
 
 // Surface language shared by Checkbox and Radio. The two differ only in radius
 // and indicator glyph, so the surface lives here rather than in both files.
@@ -13,7 +13,7 @@ import { focusRingOffset, transitions } from './transitions';
 export const selectionControlStyle = [
   'flex size-4 shrink-0 cursor-pointer items-center justify-center',
   'border border-border bg-fill-hover text-background',
-  transitions.all,
+  'transition-[color,background-color,border-color,scale] duration-normal ease-out-custom',
   'hover:border-border-strong hover:bg-fill-active',
   'active:scale-95 active:border-border-hover active:bg-fill-strong',
   focusRingOffset,

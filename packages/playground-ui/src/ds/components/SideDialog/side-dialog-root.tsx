@@ -80,7 +80,7 @@ export function SideDialogRoot({
                     type="button"
                     className={cn(
                       'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border-strong bg-background text-muted-foreground',
-                      transitions.all,
+                      transitions.colors,
                       'hover:bg-fill-subtle hover:text-foreground',
                     )}
                     aria-label="Close"
