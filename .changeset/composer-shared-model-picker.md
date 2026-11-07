@@ -9,3 +9,40 @@ Added shared composer layout pieces so Studio and Factory render the same chat c
 - `ComposerActionsStart` and `ComposerActionsEnd`: leading and trailing groups for the composer actions row.
 - `ComposerHeader` `placement="overlay"`: floats the header above the composer so opening it never moves the transcript.
 - `PopoverContent` `positionerClassName`: style the positioner, for example to pin the popup as a bottom sheet.
+
+```tsx
+import {
+  Composer,
+  ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
+  ComposerBox,
+  ComposerHeader,
+  ComposerInput,
+  ComposerStatus,
+} from '@mastra/playground-ui/components/Composer';
+import { ModelPicker } from '@mastra/playground-ui/domains/llm';
+
+<>
+  <ComposerStatus>2 queued</ComposerStatus>
+  <Composer onSubmit={send}>
+    <ComposerHeader placement="overlay" open={reconnecting}>
+      Reconnecting…
+    </ComposerHeader>
+    <ComposerBox>
+      <ComposerInput placeholder="Message the agent" />
+      <ComposerActions>
+        <ComposerActionsStart>{attachButton}</ComposerActionsStart>
+        <ComposerActionsEnd>
+          <ModelPicker
+            providers={[{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-5', name: 'GPT-5' }] }]}
+            value={{ provider: 'openai', model: 'gpt-5' }}
+            onValueChange={({ provider, model }) => setModel(provider, model)}
+          />
+          {sendButton}
+        </ComposerActionsEnd>
+      </ComposerActions>
+    </ComposerBox>
+  </Composer>
+</>;
+```

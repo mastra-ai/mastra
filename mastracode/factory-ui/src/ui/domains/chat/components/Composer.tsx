@@ -134,8 +134,9 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       ? 'Steer the agent'
       : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = connectionLost
-    ? 'Sends once reconnected'
+  const sendWaitsOnConnection = connectionLost && !onUserDraft && blocked;
+  const sendTitle = sendWaitsOnConnection
+    ? 'You can send once reconnected'
     : chatPreparing
       ? 'Initializing session…'
       : startingDraft

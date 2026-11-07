@@ -6,7 +6,6 @@ import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Lock, TriangleAlert } from 'lucide-react';
-import { useMemo } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
@@ -21,19 +20,15 @@ export const ComposerModelSwitcher = () => {
   const allProviders = dataProviders?.providers || [];
   const sortedProviders = useFilteredProviders(useBuilderFilteredProviders(allProviders, policy), '', false);
   const allowedModels = useBuilderFilteredModels(useAllModels(allProviders), policy);
-  const pickerProviders = useMemo<ModelPickerProvider[]>(
-    () =>
-      sortedProviders.map(provider => ({
-        id: provider.id,
-        name: provider.name,
-        connected: provider.connected,
-        models: allowedModels
-          .filter(model => model.provider === provider.id)
-          .sort((a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model))
-          .map(model => ({ id: model.model, name: model.model })),
-      })),
-    [sortedProviders, allowedModels],
-  );
+  const pickerProviders: ModelPickerProvider[] = sortedProviders.map(provider => ({
+    id: provider.id,
+    name: provider.name,
+    connected: provider.connected,
+    models: allowedModels
+      .filter(model => model.provider === provider.id)
+      .sort((a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model))
+      .map(model => ({ id: model.model, name: model.model })),
+  }));
 
   if (!selection) return null;
   // Reserve the picker footprint so the action row doesn't collapse then pop in.

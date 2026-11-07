@@ -21,6 +21,11 @@
   }
 }
 
+/* An open overlay notice takes the status row's place; the row keeps its space so nothing shifts. */
+[data-slot='composer-status']:has(+ [data-slot='composer'] .composer-header[data-placement='overlay'][data-open]) {
+  visibility: hidden;
+}
+
 .composer-header-panel {
   height: var(--collapsible-panel-height);
   overflow: hidden;

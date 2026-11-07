@@ -18,11 +18,12 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { useModelCredential } from '../../hooks/useModelCredential';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 import { LockedModelButton } from './LockedModelButton';
-import { HolderBadge, ModelCredential } from './ModelCredential';
+import { ModelCredential } from './ModelCredential';
+import { ModelCredentialSummary } from './ModelCredentialSummary';
+import { ModelProviderMark } from './ModelProviderMark';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 
@@ -173,42 +174,6 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, side, alig
     >
       {children}
     </SharedModelPicker>
-  );
-}
-
-/** The credential the selected model runs on, shown at the top of the picker. */
-function ModelCredentialSummary({ modelId }: { modelId: string | undefined }) {
-  const credential = useModelCredential(modelId);
-  if (!credential) return null;
-  return (
-    <div className="flex flex-col gap-1 border-b border-border px-3 py-2 text-caption">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <ProviderBrandIcon provider={credential.provider} fallback={<KeyRound className="size-3.5" />} />
-        <span className="truncate font-medium text-foreground">{credential.credential}</span>
-      </div>
-      <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-        <HolderBadge holder={credential.holder} />
-        <span className="truncate">{credential.holderDescription}</span>
-      </div>
-      {credential.warning ? <span className="text-warning-foreground">{credential.warning}</span> : null}
-    </div>
-  );
-}
-
-/** Provider icon for the trigger, with the credential holder badged on its corner. */
-function ModelProviderMark({ modelId, provider }: { modelId: string | undefined; provider: string | undefined }) {
-  const credential = useModelCredential(modelId);
-  const shownProvider = credential?.provider ?? provider;
-  if (!shownProvider) return null;
-  return (
-    <span className="relative flex shrink-0">
-      <ProviderBrandIcon provider={shownProvider} fallback={<KeyRound className="size-3.5" />} />
-      {credential ? (
-        <span className="absolute -right-1.5 -bottom-1.5 scale-75">
-          <HolderBadge holder={credential.holder} />
-        </span>
-      ) : null}
-    </span>
   );
 }
 
