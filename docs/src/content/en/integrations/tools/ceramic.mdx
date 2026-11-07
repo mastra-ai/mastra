@@ -1,0 +1,212 @@
+---
+title: 'Ceramic | Tools'
+description: 'Add Ceramic web search to Mastra agents with typed Zod inputs and outputs and fast keyword search results.'
+packages:
+  - '@mastra/ceramic'
+---
+
+# Ceramic
+
+The `@mastra/ceramic` package exposes [Ceramic Search](https://docs.ceramic.ai/api/search/quickstart) as a Mastra-compatible tool. The factory returns a tool created with [`createTool()`](/reference/tools/create-tool) and a typed Zod input and output schema.
+
+Ceramic is a fast lexical search engine. It matches the words in a query rather than inferring intent, so agents get the best results from specific keyword queries.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/ceramic ceramic-ai zod
+```
+
+Set `CERAMIC_API_KEY` in your environment. You can create a key on the [Ceramic platform](https://platform.ceramic.ai/keys) or pass an API key directly to any factory.
+
+## Quick start
+
+Use `createCeramicTools()` to create the tool set with shared client configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createCeramicTools } from '@mastra/ceramic'
+
+export const ceramicTools = createCeramicTools()
+// Or pass an explicit API key:
+// export const ceramicTools = createCeramicTools({ apiKey: 'ceramic-api-key' })
+```
+
+The returned object contains `ceramicSearch`.
+
+You can also create the search tool directly:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createCeramicSearchTool } from '@mastra/ceramic'
+
+export const searchTool = createCeramicSearchTool()
+```
+
+The client isn't initialized until the tool executes. A missing API key therefore fails at execution time with a configuration error.
+
+## Configuration
+
+All factories accept `CeramicClientOptions`, an alias of `ClientOptions` from the official `ceramic-ai` client:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Ceramic API key. Falls back to the `CERAMIC_API_KEY` environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'baseURL',
+    type: 'string',
+    description: 'Override the Ceramic API base URL. The client also reads `CERAMIC_BASE_URL`.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Timeout in milliseconds for one request attempt.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'Fetch',
+    description: 'Custom `fetch` implementation.',
+    isOptional: true,
+  },
+  {
+    name: 'fetchOptions',
+    type: 'RequestInit',
+    description: 'Additional options passed to each `fetch` call.',
+    isOptional: true,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Maximum retries for temporary failures.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+  {
+    name: 'defaultHeaders',
+    type: 'HeadersLike',
+    description: 'Headers included with every request.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultQuery',
+    type: 'Record<string, string | undefined>',
+    description: 'Query parameters included with every request.',
+    isOptional: true,
+  },
+  {
+    name: 'logLevel',
+    type: 'LogLevel',
+    description: 'Client log level. Falls back to `CERAMIC_LOG`, then `warn`.',
+    isOptional: true,
+  },
+  {
+    name: 'logger',
+    type: 'Logger',
+    description: 'Client logger implementation.',
+    isOptional: true,
+  },
+]}
+/>
+
+The package also exports `getCeramicClient()` for applications that need the configured official client directly.
+
+## `createCeramicSearchTool()`
+
+Creates the `ceramic-search` tool. Search returns ranked results with titles, URLs, and page content for a keyword query.
+
+```typescript
+import { createCeramicSearchTool } from '@mastra/ceramic'
+
+const searchTool = createCeramicSearchTool()
+```
+
+### Search input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description:
+      "Keyword search query with 1 to 50 words. Supports `site:domain`, `OR` with parentheses, and quoted exact phrases. Queries can't contain slashes, numbers with commas, or non-Latin characters.",
+  },
+  {
+    name: 'maxResults',
+    type: 'number',
+    description: 'Number of results to return, from 1 to 20.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+  {
+    name: 'maxDescriptionLength',
+    type: 'number',
+    description:
+      'Maximum characters in each result description, from 1000 to 8000. Lower it to save model context, or raise it for deeper reading.',
+    isOptional: true,
+    defaultValue: '3000',
+  },
+]}
+/>
+
+### Search output
+
+<PropertiesTable
+  content={[
+  { name: 'requestId', type: 'string', description: 'Ceramic request ID.' },
+  {
+    name: 'results',
+    type: 'SearchResult[]',
+    description: 'Results ordered by decreasing relevance.',
+    properties: [
+      {
+        type: 'SearchResult',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Page title.' },
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'description', type: 'string', description: 'Text content from the page.' },
+        ],
+      },
+    ],
+  },
+  { name: 'totalResults', type: 'number', description: 'Number of results returned.' },
+  { name: 'executionTime', type: 'number', description: 'Search execution time in seconds.' },
+]}
+/>
+
+## Write effective queries
+
+Ceramic doesn't match synonyms or infer meaning, so the words in the query decide which pages match. The tool description tells agents to follow these practices:
+
+- Rewrite questions into specific keywords. Use `California rental laws` instead of `What are the rental laws in California?`.
+- Include alternative terms when a page might use different words, such as `college university tuition costs US`.
+- Use `site:` to limit results to one domain, `OR` with parentheses to match either term, and quotation marks to match an exact phrase.
+- Run several keyword variations for one request and combine the results. Searches are fast and inexpensive.
+
+Ceramic currently searches English web pages. See the [Ceramic best practices guide](https://docs.ceramic.ai/api/search/best-practices) for more detail.
+
+## Use the tools with an agent
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createCeramicTools } from '@mastra/ceramic'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  instructions:
+    'Search the web with specific keyword queries. Try several keyword variations and combine the results before answering.',
+  tools: createCeramicTools(),
+})
+```
+
+## Related
+
+- [Ceramic Search quickstart](https://docs.ceramic.ai/api/search/quickstart)
+- [Ceramic Search best practices](https://docs.ceramic.ai/api/search/best-practices)
+- [`createTool()` reference](/reference/tools/create-tool)
