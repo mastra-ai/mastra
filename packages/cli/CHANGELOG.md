@@ -1,5 +1,38 @@
 # mastra
 
+## 1.39.0-alpha.1
+
+### Patch Changes
+
+- Added the Factory board reset route (`POST /web/factory/projects/:id/boards/:boardKey/reset`) to `mastra api`. ([#29317](https://github.com/mastra-ai/mastra/pull/29317))
+
+- Improved `mastra auth login` in agents, CI, and other non-interactive shells. It now explains right away how to authenticate there (sign in once in your own terminal, or set `MASTRA_API_TOKEN` and `MASTRA_ORG_ID`), and exits with an error instead of reporting success when browser sign-in doesn't complete. If `MASTRA_API_TOKEN` is already set there, it skips browser sign-in, and exits with an error if the token can't be verified or no organization is selected. ([#29585](https://github.com/mastra-ai/mastra/pull/29585))
+
+- Factory sidebar groups with many sessions now reveal 20 more at a time instead of rendering every hidden session at once, so expanding a long group no longer stalls the page. "Show less" stays available while more sessions remain hidden, and the open session stays visible. ([#29613](https://github.com/mastra-ai/mastra/pull/29613))
+
+- Fixed `mastra api` commands exiting with code 1 after a successful request when the output was piped to a command that exits early, such as `mastra api tool execute ... | head`. The exit code now reflects whether the request succeeded, so scripts and agents no longer treat successful calls as failures. ([#29579](https://github.com/mastra-ai/mastra/pull/29579))
+
+- Added `on` and `allowWorkingPhase` to `mastra api factory intake-route create` and `update`, and allowed `event.type` and `event.reason` in route conditions. Both are fields of the JSON body: ([#29353](https://github.com/mastra-ai/mastra/pull/29353))
+
+  ```bash
+  # Send reopened issues to Triage by editing the default reopen route.
+  PROJECT_ID=your-project-id
+  ROUTE_ID=your-reopen-route-id
+  mastra api factory intake-route update "$PROJECT_ID" "$ROUTE_ID" '{"target":{"boardKey":"work","phaseKey":"triage"},"allowWorkingPhase":true,"expectedRevision":1}'
+  ```
+
+- Factory opens faster. When you open a page, the web UI now starts what it needs at the same time as the sign-in check: your Factories, the sidebar's sessions, boards and work items, the board's intake settings and connection status, and the page's own code. It no longer waits for each step to finish before starting the next. ([#29434](https://github.com/mastra-ai/mastra/pull/29434))
+
+- Improved session opening: the composer appears immediately and keeps typed drafts while history loads. The workspace panel opens on wide screens with inline skeletons, and the loading animation stays within the conversation. If a session fails to load, Retry appears inside the conversation and the draft is kept. ([#29593](https://github.com/mastra-ai/mastra/pull/29593))
+
+- Added `GET /observability/feedback/:feedbackId`. The endpoint returns `{ feedback: record | null }` and uses the existing observability authorization. Registered the route in the generated API CLI metadata. ([#29529](https://github.com/mastra-ai/mastra/pull/29529))
+
+  Single-feedback reads include the same optional author details as the list endpoint. Author lookup failures do not prevent reading feedback. Older Core stores without single-feedback reads return HTTP 501.
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`d076f44`](https://github.com/mastra-ai/mastra/commit/d076f44bd73688f85b4f9a94500feabeaef378b0), [`d076f44`](https://github.com/mastra-ai/mastra/commit/d076f44bd73688f85b4f9a94500feabeaef378b0), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`da7549b`](https://github.com/mastra-ai/mastra/commit/da7549b7418f516626ec5b792273254bf721f874), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`90e981b`](https://github.com/mastra-ai/mastra/commit/90e981b6e27fd877206a657572f0424fa0d32dfe), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+  - @mastra/deployer@1.83.0-alpha.1
+
 ## 1.39.0-alpha.0
 
 ### Minor Changes
