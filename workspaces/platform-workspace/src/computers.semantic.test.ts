@@ -285,6 +285,7 @@ describe('semantic tools over the daemon socket', () => {
     const { computers } = await attached();
     expect(await call(computers, 'computer_type', { text: 'hi', id: 'el-1' })).toEqual({
       element: { id: 'el-1', role: 'text', text: 'hi' },
+      note: "keys go to the element's window; delivery is unverified — read the element back",
     });
     expect(await call(computers, 'computer_type', { text: 'yo' })).toBe('typed');
     expect(daemon.requests.map(r => r.method)).toEqual(['typeText']);

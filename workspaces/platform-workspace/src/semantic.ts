@@ -29,7 +29,7 @@ if [ -f "$DEST/$MCC_COMMIT" ]; then echo "daemon present"; exit 0; fi
 export DEBIAN_FRONTEND=noninteractive
 SUDO=; [ "$(id -u)" = 0 ] || SUDO=sudo
 $SUDO apt-get update -qq
-$SUDO apt-get install -y -qq --no-install-recommends ca-certificates curl at-spi2-core dbus dbus-x11 libatk-adaptor kate dolphin konsole chromium >/dev/null
+$SUDO apt-get install -y -qq --no-install-recommends ca-certificates curl at-spi2-core dbus dbus-x11 libatk-adaptor x11-apps kate dolphin konsole chromium >/dev/null
 major=$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\\1/' || true)
 if [ "\${major:-0}" -lt 22 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash - >/dev/null
@@ -53,8 +53,12 @@ echo "daemon installed"
 `;
 
 /**
+ * Runs as `bash -c`, so process checks match names or pid files, never command lines (`pgrep -f` would
+ * match this script's own text).
+ *
  * Boots one session bus, the accessibility layer, the four granted apps and the daemon. Idempotent;
- * restarts only what is down. Grants are composed once, from the apps this script starts.
+ * restarts only what is down. Grants name the four apps this script starts, bound to their executables;
+ * apps started any other way are not drivable.
  */
 export const BOOT_SEMANTIC_SCRIPT = `set -uo pipefail
 [ -f ${DEST}/${MCC_COMMIT} ] || { echo missing; exit 0; }
@@ -66,7 +70,7 @@ up() { (echo >/dev/tcp/127.0.0.1/${DAEMON_PORT}) 2>/dev/null; }
 busok() { [ -f bus.env ] && (. ./bus.env && dbus-send --session --dest=org.freedesktop.DBus --print-reply / org.freedesktop.DBus.ListNames >/dev/null 2>&1); }
 if busok && up; then echo ready; exit 0; fi
 if ! busok; then
-  addr=$(dbus-daemon --session --fork --print-address=1 --print-pid=0 | head -1)
+  addr=$(dbus-daemon --session --fork --print-address=1 2>/dev/null 9>&- | head -1)
   cat > bus.env <<EOF
 export DISPLAY=:1
 export DBUS_SESSION_BUS_ADDRESS='$addr'
@@ -83,34 +87,30 @@ fi
 L=""
 for c in /usr/libexec/at-spi-bus-launcher /usr/libexec/at-spi2-core/at-spi-bus-launcher /usr/lib/at-spi2-core/at-spi-bus-launcher; do [ -x $c ] && L=$c && break; done
 [ -n "$L" ] || { echo "no at-spi-bus-launcher"; exit 1; }
-pgrep -f at-spi-bus-launcher >/dev/null || setsid nohup "$L" --launch-immediately --a11y=1 >launcher.log 2>&1 </dev/null &
+pgrep -x at-spi-bus-laun >/dev/null || { setsid nohup "$L" --launch-immediately --a11y=1 >launcher.log 2>&1 </dev/null 9>&- & }
 for _ in $(seq 1 40); do dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus org.a11y.Bus.GetAddress >/dev/null 2>&1 && break; sleep 0.25; done
 for p in IsEnabled ScreenReaderEnabled; do dbus-send --session --dest=org.a11y.Bus /org/a11y/bus org.freedesktop.DBus.Properties.Set string:org.a11y.Status string:$p variant:boolean:true >/dev/null 2>&1 || true; done
 [ -f "$HOME/notes.txt" ] || : > "$HOME/notes.txt"
-start() { name=$1; shift; pgrep -x "$name" >/dev/null || { setsid nohup "$@" >"app-$name.log" 2>&1 </dev/null & }; }
+launched=0
+start() { name=$1; shift; pgrep -x "$name" >/dev/null || { setsid nohup "$@" >"app-$name.log" 2>&1 </dev/null 9>&- & launched=1; }; }
 start kate kate "$HOME/notes.txt"
 start dolphin dolphin "$HOME"
 start konsole konsole
-pgrep -f user-data-dir=/tmp/mcc/chrome >/dev/null || setsid nohup chromium --no-sandbox --force-renderer-accessibility --no-first-run --no-default-browser-check --user-data-dir=/tmp/mcc/chrome --window-size=900,560 about:blank >app-chrome.log 2>&1 </dev/null &
+pgrep -x chromium >/dev/null || { launched=1; setsid nohup chromium --no-sandbox --force-renderer-accessibility --no-first-run --no-default-browser-check --user-data-dir=/tmp/mcc/chrome --window-size=900,560 about:blank >app-chrome.log 2>&1 </dev/null 9>&- & }
+# Keyboard input lands in the active window: leave Kate in front once the slower windows have mapped.
+if [ "$launched" = 1 ]; then
+  for _ in $(seq 1 60); do xdotool search --onlyvisible --class chromium >/dev/null 2>&1 && break; sleep 0.25; done
+  sleep 1; xdotool search --onlyvisible --class kate 2>/dev/null | head -1 | xargs -r xdotool windowactivate >/dev/null 2>&1 || true
+fi
 if [ ! -s grants.json ]; then
-  sleep 6
-  A=$(dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus org.a11y.Bus.GetAddress | grep -o '"[^"]*"' | tr -d '"')
-  : > apps.tsv
-  DBUS_SESSION_BUS_ADDRESS="$A" dbus-send --session --print-reply --dest=org.a11y.atspi.Registry /org/a11y/atspi/accessible/root org.a11y.atspi.Accessible.GetChildren \\
-    | awk '/string "/{gsub(/"/,"",$2); b=$2} /object path "/{gsub(/"/,"",$3); print b" "$3}' | while read -r bus path; do
-    [ -n "$bus" ] || continue
-    name=$(DBUS_SESSION_BUS_ADDRESS="$A" dbus-send --session --print-reply --dest="$bus" "$path" org.freedesktop.DBus.Properties.Get string:org.a11y.atspi.Accessible string:Name 2>/dev/null | grep -o 'string "[^"]*"' | head -1 | sed 's/string "//; s/"$//')
-    pid=$(DBUS_SESSION_BUS_ADDRESS="$A" dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.GetConnectionUnixProcessID string:"$bus" 2>/dev/null | awk '/uint32/{print $2}')
-    exe=$(readlink -f /proc/$pid/exe 2>/dev/null || true)
-    [ -n "$name" ] && [ -n "$exe" ] && printf '%s\\t%s\\n' "$name" "$exe" >> apps.tsv
-  done
-  node -e 'const l=require("fs").readFileSync("apps.tsv","utf8").split("\\n").filter(Boolean).map(r=>r.split("\\t"));process.stdout.write(JSON.stringify({applications:l.map(([name,executable])=>({name,executable}))}))' > grants.json
+  node -e 'const fs=require("fs");const apps=[["kate","/usr/bin/kate"],["dolphin","/usr/bin/dolphin"],["konsole","/usr/bin/konsole"],["Chromium","/usr/lib/chromium/chromium"]];process.stdout.write(JSON.stringify({applications:apps.map(([name,p])=>({name,executable:fs.realpathSync(p)}))}))' > grants.json || { rm -f grants.json; echo "grants failed"; exit 1; }
 fi
 if ! up; then
-  pkill -f "${DEST}/dist/main.mjs" 2>/dev/null || true
+  [ -f daemon.pid ] && kill "$(cat daemon.pid)" 2>/dev/null
   setsid nohup node ${DEST}/dist/main.mjs --backend atspi --grants /tmp/mcc/grants.json \\
     --allow edit --allow activate --allow submit --allow rawInput --acquire-accessibility \\
-    --audit /tmp/mcc/audit.jsonl --socket /tmp/mcc/daemon.sock --ws-port ${DAEMON_PORT} --ws-host 0.0.0.0 >daemon.log 2>&1 </dev/null &
+    --audit /tmp/mcc/audit.jsonl --socket /tmp/mcc/daemon.sock --ws-port ${DAEMON_PORT} --ws-host 0.0.0.0 >daemon.log 2>&1 </dev/null 9>&- &
+  echo $! > daemon.pid
   for _ in $(seq 1 60); do up && break; sleep 0.25; done
 fi
 up && echo ready || { echo "daemon not listening"; tail -5 daemon.log; exit 1; }

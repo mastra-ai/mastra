@@ -538,9 +538,10 @@ export class PlatformComputers implements MastraComputers {
     entry.boot ??= (async () => {
       await computer.getScreenSize();
       const r = await sandbox.executeCommand('bash', ['-c', BOOT_SEMANTIC_SCRIPT], { timeout: 120_000 });
+      const last = (text: string) => text.trim().split('\n').pop() ?? '';
       return r.exitCode === 0
-        ? r.stdout.trim().split('\n').pop()!
-        : `failed: ${r.stdout.trim().split('\n').pop() ?? ''}`;
+        ? last(r.stdout)
+        : `failed: exit ${r.exitCode} ${last(r.stdout)} ${last(r.stderr)}`.trim();
     })();
     const state = await entry.boot.catch(error => `failed: ${(error as Error)?.message}`);
     if (state !== 'ready') {
@@ -751,7 +752,7 @@ export class PlatformComputers implements MastraComputers {
       computer_type: createTool({
         id: 'computer_type',
         description:
-          'Type text. With an element id, types into that element (printable text only; use computer_key_chord for Enter). Without one, types at the keyboard focus.',
+          'Type text. With an element id, focuses that element and types into it (printable text only; use computer_key_chord for Enter); its window must be the active one. Without an id, types at the keyboard focus.',
         inputSchema: z.object({ text: z.string(), id: elementId.optional() }),
         execute: async (input, context) =>
           input.id === undefined
@@ -759,10 +760,19 @@ export class PlatformComputers implements MastraComputers {
                 await computer.type(input.text);
                 return 'typed';
               })
-            : this.#daemon(context, 'typeText', { id: input.id, text: input.text }, element, {
-                input: true,
-                timeoutMs: 30_000 + input.text.length * 50,
-              }),
+            : this.#daemon(
+                context,
+                'typeText',
+                { id: input.id, text: input.text },
+                r => ({
+                  ...element(r),
+                  note: "keys go to the element's window; delivery is unverified — read the element back",
+                }),
+                {
+                  input: true,
+                  timeoutMs: 30_000 + input.text.length * 50,
+                },
+              ),
         toModelOutput,
       }),
       computer_set_text: createTool({
