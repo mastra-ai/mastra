@@ -309,7 +309,13 @@ describe('details + buttons', () => {
   const goodRef = signRef(key, { teamId: 'T1', computerId: 'c1', threadId: 'th-1' });
 
   function harness(
-    opts: { holder?: 'agent' | 'human'; resourceId?: string; controlThrows?: boolean; noControl?: boolean } = {},
+    opts: {
+      holder?: 'agent' | 'human';
+      resourceId?: string;
+      controlThrows?: boolean;
+      noControl?: boolean;
+      embedDelay?: number;
+    } = {},
   ) {
     const thread = {
       id: 'th-1',
@@ -327,7 +333,10 @@ describe('details + buttons', () => {
       }),
       getComputers: () => (opts.noControl ? { tools: () => ({}) } : { control, controlState }),
     };
-    const embedUrl = vi.fn(async (a: any) => `https://embed.example/${a.mode}`);
+    const embedUrl = vi.fn(async (a: any) => {
+      if (opts.embedDelay) await new Promise(resolve => setTimeout(resolve, opts.embedDelay));
+      return `https://embed.example/${a.mode}`;
+    });
     const h = makeCards({ getMastra: () => mastra as any, embedUrl });
     return { ...h, control, embedUrl };
   }
@@ -430,6 +439,15 @@ describe('details + buttons', () => {
       expect(call.args.trigger_id).toBe('trig');
       expect(call.args.metadata.entity_payload.attributes.full_size_preview.preview_url).toContain('embed.example');
     }
+  });
+
+  it('presents details within two seconds when the embed URL is slow', async () => {
+    const { cards, calls } = harness({ embedDelay: 5_000 });
+    const startedAt = Date.now();
+    await cards.handleDetails(details());
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    const call = calls.find(c => c.method === 'entity.presentDetails')!;
+    expect(call.args.metadata.entity_payload.attributes.full_size_preview).toEqual({ is_supported: false });
   });
 
   it('non-owner details gets is_supported:false and no embed URL is minted', async () => {
