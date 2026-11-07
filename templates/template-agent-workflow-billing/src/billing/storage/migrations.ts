@@ -175,10 +175,41 @@ const accountingStatements = [
   ]),
 ];
 
+const workflowStatements = [
+  `CREATE TABLE billing_workflow_runs (
+    id TEXT PRIMARY KEY,
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    resource_id TEXT NOT NULL,
+    configuration TEXT NOT NULL,
+    adapter_version TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('created', 'running', 'suspended', 'canceling', 'completed', 'failed', 'canceled', 'uncertain')),
+    version INTEGER NOT NULL CHECK (version BETWEEN 0 AND 9007199254740991),
+    owner TEXT,
+    expires_at INTEGER,
+    measurement_complete INTEGER NOT NULL CHECK (measurement_complete IN (0, 1)),
+    input TEXT,
+    result TEXT,
+    created_at TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TRIGGER billing_workflow_identity_immutable BEFORE UPDATE OF id, actor_id, workspace_id, resource_id, configuration, adapter_version, created_at ON billing_workflow_runs BEGIN SELECT RAISE(ABORT, 'Workflow terms are immutable'); END`,
+  `CREATE TABLE billing_workflow_operations (
+    run_id TEXT NOT NULL REFERENCES billing_workflow_runs(id),
+    operation TEXT NOT NULL CHECK (operation IN ('create', 'start', 'resume', 'cancel')),
+    key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    PRIMARY KEY (run_id, operation, key)
+  ) STRICT`,
+  `CREATE TRIGGER billing_workflow_operations_no_update BEFORE UPDATE ON billing_workflow_operations BEGIN SELECT RAISE(ABORT, 'Workflow claims are immutable'); END`,
+  `CREATE TRIGGER billing_workflow_operations_no_delete BEFORE DELETE ON billing_workflow_operations BEGIN SELECT RAISE(ABORT, 'Workflow claims are retained'); END`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
   { version: 3, statements: accountingStatements },
+  { version: 4, statements: workflowStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),

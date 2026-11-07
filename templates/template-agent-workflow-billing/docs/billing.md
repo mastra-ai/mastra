@@ -2,7 +2,7 @@
 
 The billing modules validate policies and persist organization accounts, commercial eligibility and immutable usage in a local libSQL file. They require no payment credentials. Initialize them separately from Mastra with `initializeBilling` from `src/billing/setup.ts`.
 
-The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Agent/workflow execution, paid admission, Polar integration, checkout, portal sessions and webhook verification are unavailable.
+The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Typed agent generation and persistent workflow execution use the billing gateway described below. Polar integration, checkout, portal sessions and webhook verification are unavailable.
 
 ## Configure an account and meter
 
@@ -124,7 +124,7 @@ Invitation acceptance authenticates its existing, verified recipient identity. T
 | Admin  | Yes                         | Yes                      | No                    |
 | Member | Yes                         | No                       | No                    |
 
-Admins may manage admin/member roles and invitations, but cannot add, demote or remove owners. Registered deterministic executors use these permissions at transactional admission. The HTTP routes do not execute resources or charge an account. Actor-private records remain visible only to their initiating actor with current workspace membership, including historical records created before conversion. Owners and admins cannot read another actor's projection. The bounded `seedPrivateRecord` trusted storage contract demonstrates that boundary with a `{ text }` projection; it is not an execution engine or public write endpoint.
+Admins may manage admin/member roles and invitations, but cannot add, demote or remove owners. Registered deterministic executors use these permissions at transactional admission. Organization-management routes do not execute resources or charge an account. The configured execution routes below use the same authorization service before admission. Actor-private records remain visible only to their initiating actor with current workspace membership, including historical records created before conversion. Owners and admins cannot read another actor's projection. The bounded `seedPrivateRecord` trusted storage contract demonstrates that boundary with a `{ text }` projection; it is not an execution engine or public write endpoint.
 
 ## Server configuration and HTTP API
 
@@ -146,7 +146,7 @@ Send `Authorization: Bearer <credential>` on every request. Use `Content-Type: a
 
 HTTP request bodies are limited to 16 KiB before JSON parsing; oversized requests return `413`. Schemas reject additional body fields, including actor/account/payer overrides. Safe JSON errors use `401` for invalid credentials, `403` for denied access, `400` for invalid input, `409` for conflicts and `503` for storage failure. Private records do not distinguish missing from unauthorized records. The server does not log credentials or include them in persisted replay results.
 
-No agent/workflow resources are registered yet. This template therefore has no native billable resource path; future execution integration must close Mastra's native/protocol paths before adding resources. Studio is developer tooling. Do not add private database/source files to a static root or deploy developer tooling as an alternative customer API.
+The supplied entry point reserves customer access for `/billing/*`. Instance middleware closes early development/browser routes, and an earlier catch-all route closes native routes that skip user middleware. Keep both parts when registering resources. Studio and native agent/workflow, streaming, asynchronous, restart, time-travel, MCP, A2A, Responses and private-data routes cannot serve as alternative customer APIs. Keep databases and source files outside static roots.
 
 ## Optional JWT identities
 
@@ -204,7 +204,7 @@ const response = await gateway.execute(context, {
 const receipt = await gateway.read(context, response.billing.executionId);
 ```
 
-Use a resource/policy configuration whose measurement bound matches the executor. Usage registration requires a finite supported bound; prepaid configuration additionally requires an enforceable measurement declaration. The supplied executor contract is a trusted promise about application units, not a cap on model/provider costs. No Mastra resource adapter, customer execution HTTP route, workflow lifecycle, suspension recovery or Polar driver is included yet.
+Use a resource/policy configuration whose measurement bound matches the executor. Usage registration requires a finite supported bound; prepaid configuration additionally requires an enforceable measurement declaration. The supplied executor contract is a trusted promise about application units, not a cap on model/provider costs. Use `MastraBilling` below for real Mastra resources and lifecycle handling. The lower-level deterministic executor API remains available for trusted server components. The Polar driver is unavailable.
 
 Admission atomically rechecks current identity, local credential activity or verified JWT deadline, workspace membership, commercial version, idempotency and spendable credit. Provider observations occur outside SQL transactions. Version conflicts reread at most three times; unsafe or unverified commercial state returns retryable `state_unavailable`. Free work without an access guard needs no provider access. Paid access rechecks both configured entitlement and subscription validity, meter funding and current periods.
 
@@ -217,3 +217,144 @@ Keys are scoped by actor, workspace, resource and operation, with canonical JSON
 Inputs and result projections contain JSON only: at most 16 KiB UTF-8, depth 12, 2,048 nodes, 256 fields/items per container, 128-character keys and 16,384-character strings. Cycles, nonfinite numbers, accessors, symbols, sparse arrays, SDK instances and prototype-sensitive keys are rejected. Keys are bounded identifiers. Fingerprinting normalizes object key order and negative zero. Persist only the projection needed by your application; results can include private content and require appropriate database access and retention controls. Receipts expose execution/policy/state/unit fields without external account identifiers or provider details.
 
 Migration v3 appends execution claims, immutable configuration snapshots, reservations, deduplicated measurements, terminal ledger and outbox records without rewriting migrations v1/v2. All three named accounting proofs run through the public gateway with real disposable SQL, including 20 independent-process shared-credit races, rollback at outbox insertion, crash/replay uncertainty, policy/funding/outcome combinations and exact reflected-debit accounting. `npm run test:integration` includes them.
+
+## Typed Mastra execution
+
+Register real Mastra resources with `agentResource` and `workflowResource`, then construct `MastraBilling` with the same organization service and accounting provider. `initializeMastraBilling` opens the accounting components and a private persistent `workflow.db` beside `billing.db`. It rejects using the same file for accounting and Mastra snapshots. Keep both files and their WAL files on durable local disk; no transaction spans the two databases. Workflow setup creates the main file with owner-only permissions before opening SQLite and restricts existing WAL/SHM sidecars to the same mode. It accepts only regular files owned by the process user, rejects symbolic/hard links, and never changes a parent directory or the process umask. Use a trusted directory on a filesystem that enforces these permissions; startup cannot revoke another process's already-open descriptor or undo earlier disclosure.
+
+The following integration assumes you have constructed fresh `agent`, `workflow`, `organizations` and `configuration` instances for this process. Bind the returned storage to that same Mastra instance before starting the expiry worker; do not reuse native workflow instances tied to a closed store. A registered workflow must set `options: { autoRestartActiveRuns: false }`; the billing lifecycle owns recovery and never automatically repeats uncertain external work.
+
+```ts
+import { Mastra } from '@mastra/core/mastra';
+import { agentResource, workflowResource } from '../src/billing/mastra-resources.js';
+import { initializeMastraBilling } from '../src/billing/mastra-setup.js';
+import { billingOnlyServer, enforceBillingBoundary } from '../src/server/security.js';
+
+const execution = await initializeMastraBilling({
+  organizations,
+  configuration,
+  databaseUrl: 'file:///absolute/path/to/data/billing.db',
+  agents: {
+    assistant: agentResource(agent, {
+      version: 'assistant-v1',
+      maxSteps: 2,
+      maxOutputTokens: 512,
+    }),
+  },
+  workflows: {
+    report: workflowResource(workflow, {
+      version: 'report-v1',
+      measurement: 'facade-calls',
+      expectedCalls: [1, 1],
+    }),
+  },
+});
+
+export const mastra = enforceBillingBoundary(
+  new Mastra({
+    agents: { assistant: agent },
+    workflows: { report: workflow },
+    storage: execution.storage,
+    server: billingOnlyServer(organizations, execution.billing.http),
+  }),
+);
+
+const expiry = execution.billing.startExpiryWorker();
+await expiry.ready;
+// On application shutdown: expiry.stop(); await execution.close();
+```
+
+`enforceBillingBoundary` installs middleware before early browser and development routes. `billingOnlyServer` also registers a denial route before native handlers, including framework-public routes that bypass user middleware. Removing either part weakens this boundary. All customer operations authenticate through the `/billing` application. Internal Mastra objects stay in trusted setup; facades return no raw agent executor or workflow run handle.
+
+Resource adapter versions identify executable definitions and model/tool configuration. Persisted definition signatures also bind agent execution limits and workflow measurement checkpoints; billing policies are kept separately. Keep a compatible registered definition for suspended runs; changing its version causes existing runs to fail closed instead of resuming different code. Billing policy changes apply to new executions; an admitted workflow continues under its persisted policy and reservation.
+
+### Generate and replay
+
+```ts
+const billing = execution.billing;
+const context = await organizations.context({ credential, workspaceId });
+const response = await billing.agent('assistant').generate('Summarize the request.', {
+  billing: context,
+  idempotencyKey: 'summary-123',
+  abortSignal: AbortSignal.timeout(30_000),
+  onStepFinish: step => console.log(step.finishReason),
+});
+
+if (response.kind === 'immediate') {
+  console.log(response.result.text, response.billing.billedUnits);
+} else if (response.kind === 'replay') {
+  console.log(response.result?.text, response.billing.replayed);
+}
+```
+
+The facade accepts bounded text prompts and the explicit callback/abort subset. Model selection, request context, processors, persistence, token limits and required measurement callbacks remain controlled by registration. Accounting capture runs before a permitted `onStepFinish` callback. Supplying additional execution options fails validation. Structured output is configured with an `outputSchema` on `agentResource`; its type carries through the actual SDK result and replay projection.
+
+`kind: 'immediate'` contains the actual `FullOutput`, plus a separately named `projection`. `kind: 'replay'` contains only a validated projection or `null` when no output is available. The projection contains `text`, `finishReason` and optional schema-validated `object`; it never pretends to contain SDK steps, callbacks, streams or instances. HTTP returns the same projection, never the full SDK result. Projection limits are the same bounded JSON limits as accounting inputs.
+
+### Workflow lifecycle
+
+```ts
+const run = await billing.workflow('report').createRun({
+  billing: context,
+  idempotencyKey: 'create-report-123',
+});
+await run.start({
+  billing: context,
+  idempotencyKey: 'start-report-123',
+  inputData: { count: 0 },
+});
+
+// In a later process, obtain fresh credentials/context before loading the run.
+const recovered = await billing.workflow('report').getRun({
+  executionId: run.executionId,
+  billing: freshContext,
+});
+const result = await recovered.resume({
+  billing: freshContext,
+  idempotencyKey: 'approve-report-123',
+  step: 'approval',
+  resumeData: { approved: true },
+});
+```
+
+These input/resume shapes depend on your concrete registered workflow. `createRun` records a billing-owned ID without creating a Mastra run, executing a step or reserving credit. `start` admits the execution and creates its deterministic associated Mastra run. Repeated create/start/resume keys don't dispatch work again; conflicting inputs under the same operation key return `conflict`. Resume uses its own key and retains the original policy and reservation.
+
+`getRun`, `status`, `resume` and `cancel` verify current credentials, membership, selected workspace and initiating actor before accessing snapshots or private results. Another member or owner cannot read or resume the initiating actor's run. Resume also rechecks current paid eligibility. `run.status(context)` returns only a projection with execution ID, lifecycle status, optional validated output, suspended step IDs and expiry. Full steps, raw snapshots and suspension payloads are excluded.
+
+Workflow replies distinguish the actual immediate SDK return from persisted replay in the same way as generation. Input schemas are checked before admission, then original JSON is forwarded so the SDK applies input transforms once. Workflow output validation/transforms run once when capturing the projection. Replay checks its bounded stored envelope and matching definition, then returns that previously validated value without running schema transforms again. An output-transforming schema can therefore produce a projection different from the immediate native SDK result. The projection carries the lifecycle status; the accounting receipt can remain `running`/`reserved` while that lifecycle is suspended. A completed workflow with incomplete billable measurements exposes `uncertain` lifecycle state and pending settlement.
+
+`run.cancel({ billing: context, idempotencyKey })` cannot reverse a completed charge. Confirmed cancellation of a suspended run releases once. Cancellation of a locally active run propagates abort and waits for execution termination. A foreign active run may persist `canceled` in Mastra while external work continues; that snapshot alone never authorizes release. Its accounting outcome remains uncertain with the hold retained. Fencing versions prevent a late owner from charging after cancel/expiry has claimed the execution.
+
+Suspensions expire after `suspendedReservationTtlMs`, defaulting to 24 hours. The expiry worker scans immediately at startup and periodically afterward. It claims the suspension against resume/cancel, checks the actual persisted Mastra state is suspended, cancels it, then releases once. Runtime/accounting disagreement or unconfirmed termination retains an uncertain hold. The worker never restarts uncertain work. Inspect and reconcile such holds operationally; no automatic repair or destructive cleanup is provided.
+
+### Measurements and supported bounds
+
+Configure any needed `tokens`, `input-tokens`, `output-tokens` and `model-calls` measurements with matching meter units. Framework per-step usage is captured once with stable execution, segment, call and step identities. Aggregate `usage`/`totalUsage` is never added to those observations. A partial sum remains observable when a later call fails or omits usage. Missing values remain unknown; explicit numeric zero is a complete observation. Recovered tool errors can still produce a successful logical generation; unhandled model/workflow failures and cancellation bill zero.
+
+| Resource and measurement                                | Supported funding  | Admission and ceiling                                                                                                                                                                                                            |
+| ------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent model calls                                       | Prepaid or metered | `maxSteps` with SDK/processor retries disabled bounds each invocation; prepaid rejects explicit agent retries, fallback lists and dynamic model selection; nested invocations must fit the remaining call budget before dispatch |
+| Agent input/output/total tokens                         | Metered            | Finite `maxUnits`, bounded prompts/steps/output requests, abort after confirmed overflow; overflow bills zero after termination                                                                                                  |
+| Certified workflow facade calls and tokens              | Metered            | Required per-segment invocation counts and complete captured measurements; unsupported/unknown segments cannot dispatch                                                                                                          |
+| Uncertified workflow usage or prepaid workflow usage    | Rejected           | No completeness or enforceable reservation guarantee                                                                                                                                                                             |
+| Prepaid agent token usage                               | Rejected           | Request output limits don't establish a complete input/output token reservation bound                                                                                                                                            |
+| Fixed credits/tasks and free/subscription-only policies | Supported for both | Existing atomic admission and one successful logical charge                                                                                                                                                                      |
+
+An instrumented workflow declares `measurement: 'facade-calls'` and the exact number of facade generations expected in each start/resume segment. The array `[1, 1]` certifies one invocation before the first suspension and one after resume. A trusted step calls `billing.nestedAgent('assistant').generate(prompt)`; this helper works only inside an admitted execution, inherits its identity and contributes measurements to its parent without another reservation or charge. It rechecks current authorization and persists no bearer credential in snapshots.
+
+Certify selected workflow code and verify its model requests against these checkpoints. Arbitrary raw agent/model calls, background model work, or uninstrumented nested calls are outside this measurement contract; declaring a resource doesn't automatically certify it. A mismatched invocation count or any missing billable observation prevents usage settlement. Do not mark arbitrary workflow code complete because one visible call reported usage. No application token budget promises a cap on provider monetary cost.
+
+### Execution HTTP routes
+
+All routes use the authenticated workspace selection and the same facade/accounting rules. Writes require `Idempotency-Key`. Bodies reject extra fields and remain limited to 16 KiB.
+
+| Method | Path below `/billing/workspaces/:workspaceId`     | Body                                        |
+| ------ | ------------------------------------------------- | ------------------------------------------- |
+| POST   | `/agents/:resourceId/generate`                    | `{ "prompt": "..." }`                       |
+| POST   | `/workflows/:resourceId/runs`                     | `{}`                                        |
+| POST   | `/workflows/:resourceId/runs/:executionId/start`  | `{ "inputData": ... }`                      |
+| POST   | `/workflows/:resourceId/runs/:executionId/resume` | `{ "step": "approval", "resumeData": ... }` |
+| POST   | `/workflows/:resourceId/runs/:executionId/cancel` | `{}`                                        |
+| GET    | `/workflows/:resourceId/runs/:executionId`        | No body                                     |
+
+The installed route manifest is exercised against development and built servers with registered resources, valid customer credentials and a controlled model HTTP boundary. Native execution, private run data, streaming, asynchronous, restart/time-travel and alternate protocol requests must produce no model requests or private result disclosure. Re-run these proofs whenever Mastra dependencies change. Token streaming, durable agent resume, time travel and automatic uncertain-work retries remain unsupported.

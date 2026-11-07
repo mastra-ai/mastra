@@ -92,6 +92,8 @@ describe('trusted identity and shared workspace journeys', () => {
     const initialChecksum = (await legacyObserver.execute('SELECT checksum FROM billing_migrations WHERE version = 1'))
       .rows[0].checksum;
     for (const table of [
+      'billing_workflow_operations',
+      'billing_workflow_runs',
       'billing_outbox',
       'billing_ledger',
       'billing_measurements',
@@ -117,6 +119,7 @@ describe('trusted identity and shared workspace journeys', () => {
       { version: 1n, checksum: initialChecksum },
       { version: 2n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 3n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 4n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     expect((await legacyObserver.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
       { id: 'event-1', units: 3n },

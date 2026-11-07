@@ -5,8 +5,11 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import { BillingError, parseInput } from '../billing/contracts.js';
 import type { OrganizationService } from '../billing/organizations.js';
+import type { BillingHttpGateway } from '../billing/mastra.js';
+import { boundedJsonSchema } from '../billing/accounting.js';
+import { identifierSchema } from '../billing/contracts.js';
 
-export function createBillingApp(organizations: OrganizationService) {
+export function createBillingApp(organizations: OrganizationService, execution?: BillingHttpGateway) {
   const app = new Hono<{ Variables: { credential: string } }>();
   app.onError((error, context) => {
     const safe = error instanceof BillingError ? error : new BillingError('storage_unavailable');
@@ -137,11 +140,69 @@ export function createBillingApp(organizations: OrganizationService) {
     });
     return context.json(await organizations.readPrivateRecord(billing, context.req.param('recordId')));
   });
+  if (execution) {
+    const selection = async (context: { get(key: 'credential'): string; req: { param(key: 'workspaceId'): string } }) =>
+      organizations.context({ credential: context.get('credential'), workspaceId: context.req.param('workspaceId') });
+    app.post('/billing/workspaces/:workspaceId/agents/:resourceId/generate', async context => {
+      const input = parseInput(z.strictObject({ prompt: z.string().min(1).max(8192) }), await body(context.req));
+      const resourceId = parseInput(identifierSchema, context.req.param('resourceId'));
+      return context.json(
+        await execution.generate(
+          resourceId,
+          input.prompt,
+          await selection(context),
+          key(context.req.header('idempotency-key')),
+        ),
+      );
+    });
+    app.post('/billing/workspaces/:workspaceId/workflows/:resourceId/runs', async context => {
+      parseInput(z.strictObject({}), await body(context.req));
+      return context.json(
+        await execution.createRun(
+          parseInput(identifierSchema, context.req.param('resourceId')),
+          await selection(context),
+          key(context.req.header('idempotency-key')),
+        ),
+      );
+    });
+    app.get('/billing/workspaces/:workspaceId/workflows/:resourceId/runs/:executionId', async context =>
+      context.json(
+        await execution.workflowOperation(
+          parseInput(identifierSchema, context.req.param('resourceId')),
+          parseInput(identifierSchema, context.req.param('executionId')),
+          'status',
+          await selection(context),
+          undefined,
+          null,
+        ),
+      ),
+    );
+    app.post('/billing/workspaces/:workspaceId/workflows/:resourceId/runs/:executionId/:operation', async context => {
+      const operation = parseInput(z.enum(['start', 'resume', 'cancel']), context.req.param('operation'));
+      const input = await body(context.req);
+      const value =
+        operation === 'start'
+          ? parseInput(z.strictObject({ inputData: boundedJsonSchema }), input).inputData
+          : operation === 'resume'
+            ? parseInput(z.strictObject({ step: identifierSchema, resumeData: boundedJsonSchema }), input)
+            : parseInput(z.strictObject({}), input);
+      return context.json(
+        await execution.workflowOperation(
+          parseInput(identifierSchema, context.req.param('resourceId')),
+          parseInput(identifierSchema, context.req.param('executionId')),
+          operation,
+          await selection(context),
+          key(context.req.header('idempotency-key')),
+          value,
+        ),
+      );
+    });
+  }
   return app;
 }
 
-export function billingApiRoutes(organizations: OrganizationService): ApiRoute[] {
-  const app = createBillingApp(organizations);
+export function billingApiRoutes(organizations: OrganizationService, execution?: BillingHttpGateway): ApiRoute[] {
+  const app = createBillingApp(organizations, execution);
   // Mastra's custom Hono route passes through this application's own auth middleware.
   return [
     registerApiRoute('/billing/*', {

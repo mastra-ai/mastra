@@ -69,7 +69,7 @@ export const executionRequestSchema = z.strictObject({
 const measurementSchema = z.strictObject({ id: identifierSchema, measure: identifierSchema, units: quantitySchema });
 export const outcomeSchema = z
   .strictObject({
-    status: z.enum(['succeeded', 'failed', 'canceled', 'uncertain']),
+    status: z.enum(['succeeded', 'failed', 'canceled', 'uncertain', 'suspended']),
     result: boundedJsonSchema.optional(),
     measurements: z.array(measurementSchema).max(100).default([]),
     measurementComplete: z.boolean().default(false),
@@ -82,7 +82,11 @@ export type ExecutorOutcome = z.input<typeof outcomeSchema>;
 export interface BoundedExecutor {
   readonly resourceId: string;
   readonly operation: z.infer<typeof operationSchema>;
-  readonly measurements: readonly { readonly key: string; readonly maxUnits: number }[];
+  readonly measurements: readonly {
+    readonly key: string;
+    readonly maxUnits: number;
+    readonly enforceableBound?: boolean;
+  }[];
   execute(
     input: Json,
     budget: Readonly<{ executionId: string; maxUnits: number | null; measure: string | null }>,

@@ -115,6 +115,7 @@ export class AccountingStorage {
     claim: OperationClaim,
     resource: ResourceConfiguration,
     snapshot: CommercialSnapshot | null,
+    preferredExecutionId?: string,
   ): Promise<Admission> {
     return this.database.write(async transaction => {
       await this.authorize(transaction, claim.identity);
@@ -170,7 +171,7 @@ export class AccountingStorage {
           }
         }
       }
-      const executionId = randomUUID();
+      const executionId = preferredExecutionId ?? randomUUID();
       await transaction.execute({
         sql: 'INSERT INTO billing_executions (id, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL)',
         args: [
@@ -208,28 +209,72 @@ export class AccountingStorage {
     });
   }
 
-  finish(executionId: string, outcome: ExecutorOutcome, result: Json | null): Promise<BillingResponse> {
+  hasExecution(executionId: string): Promise<boolean> {
+    return this.database.write(
+      async transaction =>
+        (await transaction.execute({ sql: 'SELECT id FROM billing_executions WHERE id = ?', args: [executionId] })).rows
+          .length === 1,
+    );
+  }
+
+  capture(executionId: string, observations: NonNullable<ExecutorOutcome['measurements']>): Promise<void> {
+    return this.database.write(async transaction => {
+      const row = await this.find(transaction, executionId);
+      const resource = JSON.parse(String(row.configuration)) as ResourceConfiguration;
+      await this.recordMeasurements(transaction, executionId, resource, observations);
+    });
+  }
+
+  private async recordMeasurements(
+    transaction: Transaction,
+    executionId: string,
+    resource: ResourceConfiguration,
+    observations: NonNullable<ExecutorOutcome['measurements']>,
+  ): Promise<void> {
+    for (const observation of observations) {
+      if (!resource.measurements.some(measure => measure.key === observation.measure))
+        throw new BillingError('invalid_input');
+      const previous = (
+        await transaction.execute({
+          sql: 'SELECT measure, units FROM billing_measurements WHERE execution_id = ? AND id = ?',
+          args: [executionId, observation.id],
+        })
+      ).rows[0];
+      if (previous && (previous.measure !== observation.measure || previous.units !== BigInt(observation.units)))
+        throw new BillingError('conflict');
+      if (!previous)
+        await transaction.execute({
+          sql: 'INSERT INTO billing_measurements (execution_id, id, measure, units) VALUES (?, ?, ?, ?)',
+          args: [executionId, observation.id, observation.measure, observation.units],
+        });
+    }
+  }
+
+  finish(
+    executionId: string,
+    outcome: ExecutorOutcome,
+    result: Json | null,
+    lifecycle?: { executionId: string; version: number },
+  ): Promise<BillingResponse> {
     return this.database.write(async transaction => {
       const row = await this.find(transaction, executionId);
       if (!['running', 'uncertain'].includes(String(row.status))) return response(row, false);
       const resource = JSON.parse(String(row.configuration)) as ResourceConfiguration;
       const charge = resource.policy.charge;
-      for (const observation of outcome.measurements ?? []) {
-        const registered = resource.measurements.some(measure => measure.key === observation.measure);
-        if (!registered) throw new BillingError('invalid_input');
-        const previous = (
+      await this.recordMeasurements(transaction, executionId, resource, outcome.measurements ?? []);
+      if (lifecycle) {
+        const current = (
           await transaction.execute({
-            sql: 'SELECT measure, units FROM billing_measurements WHERE execution_id = ? AND id = ?',
-            args: [executionId, observation.id],
+            sql: 'SELECT version, status FROM billing_workflow_runs WHERE id = ?',
+            args: [lifecycle.executionId],
           })
         ).rows[0];
-        if (previous && (previous.measure !== observation.measure || previous.units !== BigInt(observation.units)))
-          throw new BillingError('conflict');
-        if (!previous)
-          await transaction.execute({
-            sql: 'INSERT INTO billing_measurements (execution_id, id, measure, units) VALUES (?, ?, ?, ?)',
-            args: [executionId, observation.id, observation.measure, observation.units],
-          });
+        if (
+          !current ||
+          current.version !== BigInt(lifecycle.version) ||
+          !['running', 'canceling'].includes(String(current.status))
+        )
+          return response(row, false);
       }
       const measurements =
         charge.type === 'usage'
@@ -245,7 +290,28 @@ export class AccountingStorage {
       if (measured !== null && measured > BigInt(Number.MAX_SAFE_INTEGER)) throw new BillingError('invalid_input');
       const observed =
         measured === null || (measurements!.length === 0 && !outcome.measurementComplete) ? null : Number(measured);
-      const unknown = outcome.status === 'uncertain';
+      if (
+        outcome.status === 'suspended' &&
+        !(charge.type === 'usage' && observed !== null && observed > charge.maxUnits)
+      ) {
+        if (!lifecycle) throw new BillingError('invalid_input');
+        await transaction.execute({
+          sql: 'UPDATE billing_executions SET observed_units = ? WHERE id = ?',
+          args: [observed, executionId],
+        });
+        await transaction.execute({
+          sql: "UPDATE billing_workflow_runs SET status = 'suspended', owner = NULL, expires_at = ?, measurement_complete = CASE WHEN ? = 1 THEN measurement_complete ELSE 0 END, result = ? WHERE id = ? AND version = ?",
+          args: [
+            Date.now() + (resource.policy.suspendedReservationTtlMs ?? 86400000),
+            outcome.measurementComplete ? 1 : 0,
+            result === null ? null : JSON.stringify(result),
+            lifecycle.executionId,
+            lifecycle.version,
+          ],
+        });
+        return response(await this.find(transaction, executionId), false);
+      }
+      const unknown = outcome.status === 'uncertain' || outcome.status === 'suspended';
       const overflow = charge.type === 'usage' && observed! > charge.maxUnits;
       const status = unknown
         ? 'uncertain'
@@ -254,7 +320,16 @@ export class AccountingStorage {
           : outcome.status === 'succeeded'
             ? 'completed'
             : outcome.status;
-      const incomplete = status === 'completed' && charge.type === 'usage' && !outcome.measurementComplete;
+      const workflowComplete = lifecycle
+        ? (
+            await transaction.execute({
+              sql: 'SELECT measurement_complete FROM billing_workflow_runs WHERE id = ?',
+              args: [lifecycle.executionId],
+            })
+          ).rows[0]?.measurement_complete === 1n
+        : true;
+      const incomplete =
+        status === 'completed' && charge.type === 'usage' && (!outcome.measurementComplete || !workflowComplete);
       const terminal = !unknown && !incomplete;
       const billed = !terminal
         ? null
@@ -323,6 +398,17 @@ export class AccountingStorage {
           });
         }
       }
+      if (lifecycle)
+        await transaction.execute({
+          sql: 'UPDATE billing_workflow_runs SET status = ?, owner = NULL, expires_at = NULL, measurement_complete = CASE WHEN ? = 1 THEN measurement_complete ELSE 0 END, result = ? WHERE id = ? AND version = ?',
+          args: [
+            unknown || incomplete ? 'uncertain' : status,
+            outcome.measurementComplete ? 1 : 0,
+            result === null ? null : JSON.stringify(result),
+            lifecycle.executionId,
+            lifecycle.version,
+          ],
+        });
       return response(await this.find(transaction, executionId), false);
     });
   }

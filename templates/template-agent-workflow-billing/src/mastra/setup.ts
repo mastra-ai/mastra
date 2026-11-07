@@ -8,7 +8,7 @@ import { JwtIdentityAdapter } from '../billing/identity.js';
 import type { JwtIdentityOptions } from '../billing/identity.js';
 import { OrganizationService } from '../billing/organizations.js';
 import { OrganizationStorage } from '../billing/storage/organizations.js';
-import { billingApiRoutes } from '../server/billing.js';
+import { billingOnlyServer } from '../server/security.js';
 
 export async function configuredOrganizations(
   environment: NodeJS.ProcessEnv = process.env,
@@ -54,7 +54,6 @@ export async function billingServerConfiguration(): Promise<ServerConfig> {
       .min(1)
       .max(65535)
       .parse(process.env.BILLING_PORT ?? 4111),
-    apiRoutes: billingApiRoutes(organizations),
-    cors: false,
+    ...billingOnlyServer(organizations),
   };
 }

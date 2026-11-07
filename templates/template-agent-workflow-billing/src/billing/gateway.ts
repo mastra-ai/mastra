@@ -4,6 +4,7 @@ import { BillingError, identifierSchema, parseInput } from './contracts.js';
 import type { BillingProvider, CommercialSnapshot } from './contracts.js';
 import { parseBillingConfiguration } from './configuration.js';
 import {
+  eligible,
   executionRequestSchema,
   fingerprint,
   needsCommercialState,
@@ -47,6 +48,7 @@ export class BillingGateway {
             z.strictObject({
               key: identifierSchema,
               maxUnits: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+              enforceableBound: z.boolean().optional(),
             }),
           )
           .max(100),
@@ -58,6 +60,12 @@ export class BillingGateway {
       )
         throw new BillingError('invalid_configuration');
       const charge = resource.policy.charge;
+      if (
+        charge.type === 'usage' &&
+        charge.funding === 'prepaid' &&
+        measurements.some(measure => measure.key === charge.measure && measure.enforceableBound === false)
+      )
+        throw new BillingError('invalid_configuration');
       if (
         charge.type === 'usage' &&
         !measurements.some(measure => measure.key === charge.measure && measure.maxUnits <= charge.maxUnits)
@@ -81,7 +89,11 @@ export class BillingGateway {
           throw new BillingError('invalid_configuration');
   }
 
-  async execute(context: BillingContext, input: unknown): Promise<BillingResponse> {
+  async execute(
+    context: BillingContext,
+    input: unknown,
+    lifecycle?: { executionId: string; version: number; configuration?: ReturnType<BillingGateway['resource']> },
+  ): Promise<BillingResponse> {
     const request = parseInput(executionRequestSchema, input);
     const projection = request.input;
     const identity = await this.organizations.accountingIdentity(context);
@@ -95,7 +107,8 @@ export class BillingGateway {
     };
     const previous = await this.storage.replay(claim);
     if (previous) return previous;
-    const resource = this.configuration.resources.find(resource => resource.id === request.resourceId);
+    const resource =
+      lifecycle?.configuration ?? this.configuration.resources.find(resource => resource.id === request.resourceId);
     const executor = this.executors.get(`${request.resourceId}:${request.operation}`);
     if (!resource || !executor) throw new BillingError('unsupported');
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -131,7 +144,12 @@ export class BillingGateway {
       // Reauthenticate after provider waits. SQL then checks credential activity,
       // token deadline, identity and membership together with the reservation.
       const current = await this.organizations.accountingIdentity(context);
-      const admitted = await this.storage.admit({ ...claim, identity: current }, resource, snapshot);
+      const admitted = await this.storage.admit(
+        { ...claim, identity: current },
+        resource,
+        snapshot,
+        lifecycle?.executionId,
+      );
       if (admitted.status === 'stale') continue;
       if (admitted.status === 'replayed') return admitted.response;
       let outcome;
@@ -155,10 +173,37 @@ export class BillingGateway {
         // Preserve the claim and reservation and never dispatch it again.
         outcome = { status: 'uncertain' as const, measurements: [], measurementComplete: false };
       }
-      return this.storage.finish(admitted.executionId, outcome, result);
+      return this.storage.finish(admitted.executionId, outcome, result, lifecycle);
     }
     throw new BillingError('state_unavailable');
   }
+  resource(resourceId: string) {
+    const resource = this.configuration.resources.find(resource => resource.id === resourceId);
+    if (!resource) throw new BillingError('unsupported');
+    return resource;
+  }
+
+  async revalidate(context: BillingContext, resource: ReturnType<BillingGateway['resource']>) {
+    const identity = await this.organizations.accountingIdentity(context);
+    if (needsCommercialState(resource.policy)) {
+      try {
+        const account = await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
+        if (account.workspaceId !== identity.workspaceId || account.provider !== this.provider.id)
+          throw new BillingError('state_unavailable');
+        const result = await this.provider.reconcile({ account, eventIds: await this.storage.eventIds(account.id) });
+        if (result.status !== 'confirmed') throw new BillingError('state_unavailable');
+        const snapshot = parseInput(snapshotSchema, result.snapshot);
+        if (Object.entries(snapshot.account).some(([key, value]) => account[key as keyof typeof account] !== value))
+          throw new BillingError('state_unavailable');
+        eligible(resource.policy, snapshot, Date.now());
+      } catch (error) {
+        if (error instanceof BillingError && error.code === 'forbidden') throw error;
+        throw new BillingError('state_unavailable');
+      }
+    }
+    return this.organizations.accountingIdentity(context);
+  }
+
   async read(context: BillingContext, executionId: string): Promise<BillingResponse> {
     return this.storage.read(
       await this.organizations.accountingIdentity(context),
