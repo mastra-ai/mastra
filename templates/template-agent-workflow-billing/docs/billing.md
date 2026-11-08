@@ -425,24 +425,39 @@ const configuration = {
     },
   ],
   mappings: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+  catalog: {
+    allowances: [
+      {
+        key: 'prepaid-credits',
+        version: 'credits-v1',
+        meter: 'credits',
+        kind: 'order',
+        units: 100,
+        expiry: { type: 'none' },
+      },
+    ],
+    offers: [
+      {
+        key: 'credit-pack',
+        version: 'v1',
+        allowances: [{ key: 'prepaid-credits', version: 'credits-v1' }],
+      },
+    ],
+  },
   polar: {
     server: 'https://sandbox-api.polar.sh',
     organizationId: sellerOrganizationId,
     grants: [
       {
-        kind: 'order',
-        meter: 'credits',
-        version: 'credits-v1',
+        allowance: { key: 'prepaid-credits', version: 'credits-v1' },
         productId,
         priceId,
         benefitId,
         meterId,
-        units: 100,
-        expiry: { type: 'none' },
       },
     ],
     meters: [{ key: 'credits', funding: 'prepaid', eventName: 'work.succeeded', unitsField: 'units' }],
-    products: [{ key: 'credit-pack', productId }],
+    products: [{ key: 'credit-pack', version: 'v1', productId }],
     returnUrls: ['https://app.example.com/billing'],
   },
 };
@@ -456,6 +471,12 @@ const commercial = await initializeBilling({
   },
 });
 ```
+
+`catalog` owns logical offer and allowance revisions. Allowances define application meter keys, units, source kind and expiry; offers reference exact allowance revisions and optional `entitlements`/`subscriptions` keys. Policies keep their own versions and reference the existing logical access and meter mappings. Provider grant bindings reference an allowance; checkout product bindings reference an offer. The schema rejects missing revisions and mismatched offer/grant or subscription bindings. Declared offer entitlements must be mapped and belong to the verified checkout product. External product prices remain provider authority; the catalog does not define currencies or tariffs.
+
+Catalog revisions are retained in SQL and cannot be changed or deleted. To change terms, add a new version and retain old revisions/bindings needed by existing sources. Reordering offer access keys or allowance references preserves its terms. Changing provider IDs does not require rewriting logical catalog terms. A replacement driver is still required to use another payment provider.
+
+Existing configurations with complete terms inside `polar.grants` and unversioned `polar.products` remain accepted without edits. Initialization normalizes them into `commercial.configuration.catalog` and reference-only Polar bindings. Compatibility allowance keys are deterministic `legacy-...` identifiers, while checkout offer keys remain unchanged. Save the complete returned configuration if adopting explicit catalog configuration; retain those keys and exact allowance versions. This preserves historical source keys, fingerprints, original/consumed units, ledger and outbox bytes. Do not combine legacy inline grant terms with an explicit catalog or rename historical revisions. Compatibility offers infer only access associations expressed by the old configuration.
 
 Use an organization access token scoped to the configured seller. Customer and event requests rely on that token's scope; responses and stored links must still match the configured seller organization. IDs in this example are server configuration values from your own Polar account. The contact resolver returns `{ email, name? }` for that workspace from a trusted server directory. It must not use the current member's email or an unverified token claim. A stable `workspace:<workspaceId>` customer external ID resolves customer-creation conflicts and lost responses. An existing local account cannot be repurposed as a Polar account.
 

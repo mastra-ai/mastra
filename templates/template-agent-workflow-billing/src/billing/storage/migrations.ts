@@ -330,6 +330,18 @@ const hostedDispatchStatements = [
   `ALTER TABLE hosted_operations ADD COLUMN dispatch_state TEXT NOT NULL DEFAULT 'dispatched' CHECK (dispatch_state IN ('not_dispatched', 'dispatched'))`,
 ];
 
+const commercialCatalogStatements = [
+  `CREATE TABLE billing_catalog (
+    kind TEXT NOT NULL CHECK (kind IN ('allowance', 'offer')),
+    key TEXT NOT NULL,
+    version TEXT NOT NULL,
+    terms TEXT NOT NULL,
+    PRIMARY KEY (kind, key, version)
+  ) STRICT`,
+  `CREATE TRIGGER billing_catalog_no_update BEFORE UPDATE ON billing_catalog BEGIN SELECT RAISE(ABORT, 'Catalog revisions are immutable'); END`,
+  `CREATE TRIGGER billing_catalog_no_delete BEFORE DELETE ON billing_catalog BEGIN SELECT RAISE(ABORT, 'Catalog revisions are retained'); END`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -340,6 +352,7 @@ const migrations = [
   { version: 7, statements: expiryRecoveryStatements },
   { version: 8, statements: usageBindingStatements },
   { version: 9, statements: hostedDispatchStatements },
+  { version: 10, statements: commercialCatalogStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -408,6 +421,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     ...recoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...expiryRecoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...usageBindingStatements,
+    ...commercialCatalogStatements,
   ]
     .map(normalizedSql)
     .sort();

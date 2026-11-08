@@ -6,7 +6,13 @@ import {
   quantitySchema,
   timestampSchema,
 } from './contracts.js';
-import { polarConfigurationSchema } from './providers/polar-contract.js';
+import { commercialCatalogSchema, referenceKey } from './catalog.js';
+import { normalizeLegacyCatalog } from './providers/polar-catalog.js';
+import {
+  polarBindingsSchema,
+  polarConfigurationSchema,
+  polarCatalogConfigurationSchema,
+} from './providers/polar-contract.js';
 import type { ProviderCapabilities } from './contracts.js';
 
 const fundingSchema = z.enum(['prepaid', 'metered']);
@@ -80,10 +86,11 @@ export const localAccountSeedSchema = z
   });
 export type LocalAccountSeed = z.infer<typeof localAccountSeedSchema>;
 
-export const billingConfigurationSchema = z
+const canonicalConfigurationSchema = z
   .strictObject({
     provider: z.enum(['local', 'polar']),
-    polar: polarConfigurationSchema.optional(),
+    polar: polarBindingsSchema.optional(),
+    catalog: commercialCatalogSchema.default({ allowances: [], offers: [] }),
     resources: z
       .array(
         z.strictObject({
@@ -172,7 +179,14 @@ export const billingConfigurationSchema = z
         if (!config.polar.subscriptions.some(value => value.key === key)) issue('Missing Polar subscription mapping.');
       for (const meter of config.mappings.meters) {
         if (!config.polar.meters.some(value => value.key === meter.key)) issue('Missing Polar meter mapping.');
-        if (meter.funding.includes('prepaid') && !config.polar.grants.some(value => value.meter === meter.key))
+        if (
+          meter.funding.includes('prepaid') &&
+          !config.polar.grants.some(value =>
+            config.catalog.allowances.some(
+              allowance => referenceKey(allowance) === referenceKey(value.allowance) && allowance.meter === meter.key,
+            ),
+          )
+        )
           issue('Missing Polar grant mapping.');
         if (
           meter.funding.length !== 1 ||
@@ -180,6 +194,19 @@ export const billingConfigurationSchema = z
         )
           issue('Polar meter funding does not match.');
       }
+    }
+    for (const allowance of config.catalog.allowances)
+      if (!meters.get(allowance.meter)?.funding.includes('prepaid')) issue('Unknown allowance meter or funding.');
+    for (const offer of config.catalog.offers) {
+      if (
+        offer.entitlements.some(key => !config.mappings.entitlements.includes(key)) ||
+        offer.subscriptions.some(key => !config.mappings.subscriptions.includes(key))
+      )
+        issue('Unknown offer access key.');
+    }
+    if (config.polar) {
+      const bindings = polarCatalogConfigurationSchema.safeParse({ polar: config.polar, catalog: config.catalog });
+      if (!bindings.success) issue('Invalid catalog provider bindings.');
     }
     if (config.provider !== 'local' && config.localAccounts.length > 0) issue('Local seeds require local mode.');
     for (const seed of config.localAccounts) {
@@ -192,6 +219,14 @@ export const billingConfigurationSchema = z
         if (!meters.get(meter.key)?.funding.includes(meter.funding)) issue('Unknown seed meter or funding.');
     }
   });
+
+export const billingConfigurationSchema = z.preprocess(input => {
+  if (input === null || typeof input !== 'object' || !('polar' in input)) return input;
+  const legacy = polarConfigurationSchema.safeParse(input.polar);
+  if (!legacy.success) return input;
+  if ('catalog' in input) return input;
+  return { ...input, ...normalizeLegacyCatalog(legacy.data) };
+}, canonicalConfigurationSchema);
 
 type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -209,7 +244,7 @@ export function freezeConfiguration<T>(value: T): DeepReadonly<T> {
 }
 
 export function parseBillingConfiguration(input: unknown, capabilities: ProviderCapabilities): BillingConfiguration {
-  const schema = billingConfigurationSchema.superRefine((configuration, ctx) => {
+  const schema = canonicalConfigurationSchema.superRefine((configuration, ctx) => {
     for (const resource of configuration.resources) {
       const { access, charge } = resource.policy;
       if ((access?.entitlement && !capabilities.entitlements) || (access?.subscription && !capabilities.subscriptions))
@@ -227,7 +262,8 @@ export function parseBillingConfiguration(input: unknown, capabilities: Provider
       }
     }
   });
-  const result = schema.safeParse(input);
+  const normalized = billingConfigurationSchema.safeParse(input);
+  const result = normalized.success ? schema.safeParse(normalized.data) : normalized;
   if (!result.success) throw new BillingError('invalid_configuration');
   return freezeConfiguration(result.data);
 }

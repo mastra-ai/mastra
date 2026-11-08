@@ -1,3 +1,5 @@
+import { BillingDatabase } from './storage/database.js';
+import { retainCatalog } from './storage/catalog.js';
 import { z } from 'zod';
 import { BillingError } from './contracts.js';
 import type { BillingProvider } from './contracts.js';
@@ -40,6 +42,7 @@ export async function initializeBilling(options: {
     const provider = await PolarBillingProvider.open({
       url: options.storage.url,
       configuration: configuration.polar,
+      catalog: configuration.catalog,
       ...options.polar,
     });
     return Object.freeze({ configuration, provider, close: () => provider.close() });
@@ -47,6 +50,12 @@ export async function initializeBilling(options: {
   const strategy = strategies[selection.data.provider as keyof typeof strategies];
   if (!strategy) throw new BillingError('unsupported');
   const configuration = parseBillingConfiguration(options.configuration, strategy.capabilities);
+  const catalogDatabase = await BillingDatabase.open(options.storage);
+  try {
+    await retainCatalog(catalogDatabase, configuration.catalog);
+  } finally {
+    catalogDatabase.close();
+  }
   const storage = await LocalBillingStorage.open(options.storage);
   return Object.freeze({
     configuration,

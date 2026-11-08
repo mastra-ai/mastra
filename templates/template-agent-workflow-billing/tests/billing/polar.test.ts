@@ -2,8 +2,9 @@ import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageBindingRecovery } from '../../src/billing/storage/usage-bindings.js';
 import { stat } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
+import { billingConfigurationSchema } from '../../src/billing/configuration.js';
 import { initializeBilling } from '../../src/billing/setup.js';
 import { CommercialService } from '../../src/billing/commercial.js';
 import { CommercialStorage } from '../../src/billing/storage/commercial.js';
@@ -56,6 +57,117 @@ function workflowWorker(phase: 'start' | 'resume' | 'deliver', options: object, 
 }
 
 describe('Polar commercial and authoritative prepaid journeys', () => {
+  it('reopens legacy purchases through a provider-neutral catalog without rewriting financial history', async () => {
+    const f = await fixture();
+    await f.execute('catalog-history');
+    const history = async () => {
+      const tables = ['credit_grants', 'billing_ledger', 'billing_outbox', 'billing_usage_bindings'];
+      return Promise.all(
+        tables.map(async table => (await f.observer.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows),
+      );
+    };
+    const before = await history();
+    // Retain the historical v9 provenance contract, including exact serialized
+    // field order and the original allocation version from inline Polar input.
+    for (const mapping of f.legacyConfiguration.polar.grants) {
+      const subscription = mapping.kind === 'subscription';
+      const validFrom = subscription
+        ? f.wire.data.subscriptions[0].current_period_start
+        : f.wire.data.orders[0].created_at;
+      const identity = {
+        kind: mapping.kind,
+        sourceId: subscription ? f.wire.ids.subscription : f.wire.ids.order,
+        benefitId: mapping.benefitId,
+        periodStart: subscription ? validFrom : null,
+      };
+      const provenance = JSON.stringify({
+        ...identity,
+        meter: mapping.meter,
+        productId: mapping.productId,
+        priceId: mapping.priceId,
+        units: mapping.units,
+        version: mapping.version,
+        expiry: mapping.expiry,
+        validFrom,
+      });
+      expect(before[0].find(row => row.kind === mapping.kind)).toMatchObject({
+        source_key: createHash('sha256').update(JSON.stringify(identity)).digest('hex'),
+        fingerprint: createHash('sha256').update(provenance).digest('hex'),
+        provenance,
+        original_units: BigInt(mapping.units),
+      });
+    }
+    const oldChecksums = (
+      await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 9 ORDER BY version')
+    ).rows;
+    f.commercial.close();
+    await f.observer.execute('DROP TABLE billing_catalog');
+    await f.observer.execute('DELETE FROM billing_migrations WHERE version = 10');
+    await f.observer.execute('PRAGMA user_version = 9');
+    const legacyReopened = await initializeBilling(f.initialization);
+    cleanups.push(legacyReopened.close);
+    const normalized = billingConfigurationSchema.parse(legacyReopened.configuration);
+    expect(normalized.catalog?.allowances.map(value => value.units)).toEqual([6, 4]);
+    expect(normalized.polar!.grants.every(value => value.allowance && !('units' in value))).toBe(true);
+    expect(normalized.catalog.offers.map(value => value.key)).toContain('credit-pack');
+    legacyReopened.close();
+    const reopened = await initializeBilling({ ...f.initialization, configuration: normalized });
+    cleanups.push(reopened.close);
+    const account = await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    expect((await reopened.provider.getState(account)).meters[0]).toMatchObject({
+      confirmedBalance: 7,
+      consumedUnits: 3,
+    });
+    expect(reopened.configuration.resources).toEqual(f.configuration.resources);
+    expect(reopened.configuration.mappings).toEqual(f.configuration.mappings);
+    expect(await history()).toEqual(before);
+    expect(
+      (await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 9 ORDER BY version'))
+        .rows,
+    ).toEqual(oldChecksums);
+    const mismatched = structuredClone(normalized);
+    mismatched.catalog.offers[0].allowances = [];
+    await expect(initializeBilling({ ...f.initialization, configuration: mismatched })).rejects.toMatchObject({
+      code: 'invalid_configuration',
+    });
+    expect(await history()).toEqual(before);
+    const wrongAccess = structuredClone(normalized);
+    wrongAccess.catalog.offers[0].version = 'different-benefit';
+    wrongAccess.catalog.offers[0].entitlements = ['access'];
+    wrongAccess.polar!.products[0].version = 'different-benefit';
+    const accessProvider = await initializeBilling({ ...f.initialization, configuration: wrongAccess });
+    cleanups.push(accessProvider.close);
+    await expect(
+      accessProvider.provider.prepareCheckout!({
+        account,
+        product: 'credit-pack',
+        returnUrl: normalized.polar!.returnUrls[0],
+      }),
+    ).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect(f.wire.data.hosted).toBe(0);
+    expect(await history()).toEqual(before);
+    const future = structuredClone(normalized);
+    future.catalog.allowances.push({ ...future.catalog.allowances[0], version: 'future-v2', units: 12 });
+    const added = await initializeBilling({ ...f.initialization, configuration: future });
+    cleanups.push(added.close);
+    expect((await added.provider.getState(account)).meters[0]).toMatchObject({ confirmedBalance: 7, consumedUnits: 3 });
+    expect(await history()).toEqual(before);
+    const catalogBefore = (await f.observer.execute('SELECT * FROM billing_catalog ORDER BY kind, key, version')).rows;
+    expect(catalogBefore.filter(row => row.kind === 'allowance')).toHaveLength(3);
+    const conflict = structuredClone(normalized);
+    conflict.catalog.allowances[0].units = 99;
+    conflict.catalog.allowances.unshift({ ...conflict.catalog.allowances[1], key: 'rolled-back-new-revision' });
+    await expect(initializeBilling({ ...f.initialization, configuration: conflict })).rejects.toMatchObject({
+      code: 'conflict',
+    });
+    expect(await history()).toEqual(before);
+    expect((await f.observer.execute('SELECT * FROM billing_catalog ORDER BY kind, key, version')).rows).toEqual(
+      catalogBefore,
+    );
+    await expect(f.observer.execute("UPDATE billing_catalog SET terms = '{}' ")).rejects.toThrow();
+    await expect(f.observer.execute('DELETE FROM billing_catalog')).rejects.toThrow();
+  });
+
   it.each(['current', 'legacy'] as const)(
     'Polar driver preserves customer and usage identity across retries (%s)',
     async bindingEra => {
@@ -100,6 +212,7 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
         await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 7')
       ).rows;
       if (bindingEra === 'legacy') {
+        await f.observer.execute('DROP TABLE billing_catalog');
         await f.observer.execute('DROP TABLE billing_usage_bindings');
         await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
         await f.observer.execute('DELETE FROM billing_migrations WHERE version >= 8');
@@ -282,6 +395,7 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     f.commercial.close();
     // Reconstruct the actual v7 boundary: settled outbox but no first attempt,
     // so no historical normalized claim can establish the delivery mapping.
+    await f.observer.execute('DROP TABLE billing_catalog');
     await f.observer.execute('DROP TABLE billing_usage_bindings');
     await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
     await f.observer.execute('DELETE FROM billing_migrations WHERE version >= 8');
@@ -387,7 +501,13 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     f.wire.data.grants[0].is_granted = true;
     f.wire.data.grants[0].is_revoked = false;
     const changed = structuredClone(f.configuration);
-    changed.polar!.grants[0].version = 'v2';
+    changed.catalog.allowances[0].version = 'v2';
+    changed.polar!.grants[0].allowance.version = 'v2';
+    for (const offer of changed.catalog.offers) offer.version = 'v2';
+    for (const product of changed.polar!.products) product.version = 'v2';
+    for (const offer of changed.catalog.offers)
+      for (const allowance of offer.allowances)
+        if (allowance.key === changed.catalog.allowances[0].key) allowance.version = 'v2';
     const reopened = await initializeBilling({ ...f.initialization, configuration: changed });
     cleanups.push(reopened.close);
     const account = await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
@@ -627,7 +747,8 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
       await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 8')
     ).rows;
     await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
-    await f.observer.execute('DELETE FROM billing_migrations WHERE version = 9');
+    await f.observer.execute('DROP TABLE billing_catalog');
+    await f.observer.execute('DELETE FROM billing_migrations WHERE version >= 9');
     await f.observer.execute('PRAGMA user_version = 8');
     const storage = await CommercialStorage.open({ url: f.database.url }, f.organizations.storage);
     cleanups.push(() => storage.close());
@@ -932,7 +1053,16 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     const renamed = structuredClone(f.configuration);
     renamed.mappings.meters[0].key = 'renamed';
     renamed.resources[0].policy.charge = { type: 'credits', meter: 'renamed', units: 3 };
-    for (const mapping of renamed.polar!.grants) mapping.meter = 'renamed';
+    for (const allowance of renamed.catalog.allowances) {
+      allowance.meter = 'renamed';
+      allowance.version = 'renamed-v1';
+    }
+    for (const mapping of renamed.polar!.grants) mapping.allowance.version = 'renamed-v1';
+    for (const offer of renamed.catalog.offers) {
+      offer.version = 'renamed-v1';
+      for (const allowance of offer.allowances) allowance.version = 'renamed-v1';
+    }
+    for (const mapping of renamed.polar!.products) mapping.version = 'renamed-v1';
     renamed.polar!.meters[0].key = 'renamed';
     const changed = await initializeBilling({ ...f.initialization, configuration: renamed });
     cleanups.push(changed.close);

@@ -1,3 +1,4 @@
+import { commercialCatalogSchema, catalogReferenceSchema, resolveAllowance } from '../../src/billing/catalog.js';
 import { describe, expect, it } from 'vitest';
 import { parseBillingConfiguration } from '../../src/billing/configuration.js';
 import { localCapabilities } from '../../src/billing/providers/local.js';
@@ -183,5 +184,68 @@ describe('billing policy configuration', () => {
     expect(() => Object.assign(parsed.resources[0].policy.charge, { units: 999 })).toThrow(TypeError);
     expect(() => Object.assign(parsed.localAccounts[0].meters[0], { balance: 999 })).toThrow(TypeError);
     expect(() => (parsed.mappings.meters as unknown[]).push({})).toThrow(TypeError);
+  });
+});
+
+describe('commercial catalog revisions', () => {
+  const terms = {
+    key: 'credit-pack',
+    version: 'credits-v1',
+    meter: 'credits',
+    kind: 'order',
+    units: 100,
+    expiry: { type: 'duration', milliseconds: 86400000 },
+  };
+  const catalog = () => ({
+    allowances: [structuredClone(terms)],
+    offers: [{ key: 'team-plan', version: 'v1', allowances: [{ key: 'credit-pack', version: 'credits-v1' }] }],
+  });
+
+  it('shares immutable application terms across independent provider references', () => {
+    const parsed = commercialCatalogSchema.parse(catalog());
+    const polar = {
+      allowance: catalogReferenceSchema.parse({ key: 'credit-pack', version: 'credits-v1' }),
+      productId: 'polar-product',
+    };
+    const stripe = {
+      allowance: catalogReferenceSchema.parse({ key: 'credit-pack', version: 'credits-v1' }),
+      priceId: 'stripe-price',
+    };
+    expect(resolveAllowance(parsed, polar.allowance)).toEqual(terms);
+    expect(resolveAllowance(parsed, stripe.allowance)).toEqual(terms);
+    const reordered = commercialCatalogSchema.parse({
+      allowances: [terms],
+      offers: [{ key: 'two', version: 'v1', entitlements: ['b', 'a'] }],
+    });
+    expect(
+      commercialCatalogSchema.parse({ ...reordered, offers: [{ ...reordered.offers[0], entitlements: ['a', 'b'] }] }),
+    ).toEqual(reordered);
+    const next = structuredClone(terms);
+    next.version = 'credits-v2';
+    next.units = 200;
+    parsed.allowances.push(commercialCatalogSchema.parse({ allowances: [next] }).allowances[0]);
+    expect(resolveAllowance(parsed, polar.allowance)?.units).toBe(100);
+    expect(resolveAllowance(parsed, { key: terms.key, version: 'credits-v2' })?.units).toBe(200);
+  });
+
+  it.each([
+    ['duplicate revision', (value: ReturnType<typeof catalog>) => value.allowances.push(value.allowances[0])],
+    ['missing revision', (value: ReturnType<typeof catalog>) => (value.offers[0].allowances[0].version = 'missing')],
+    [
+      'unsafe quantity',
+      (value: ReturnType<typeof catalog>) => (value.allowances[0].units = Number.MAX_SAFE_INTEGER + 1),
+    ],
+    [
+      'subscription without period expiry',
+      (value: ReturnType<typeof catalog>) => (value.allowances[0].kind = 'subscription'),
+    ],
+    [
+      'unexpected provider term',
+      (value: ReturnType<typeof catalog>) => Object.assign(value.allowances[0], { productId: 'external' }),
+    ],
+  ])('rejects %s before commercial admission', (_name, change) => {
+    const input = catalog();
+    change(input);
+    expect(commercialCatalogSchema.safeParse(input).success).toBe(false);
   });
 });

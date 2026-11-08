@@ -273,7 +273,7 @@ export async function polarFixture(
   };
   const owner = await profile('owner');
   const ids = wire.ids;
-  const configuration = billingConfigurationSchema.parse({
+  const legacyConfiguration = {
     provider: 'polar',
     resources: [
       {
@@ -321,9 +321,10 @@ export async function polarFixture(
       products: [{ key: 'credit-pack', productId: ids.orderProduct }],
       returnUrls: ['https://app.example.test/billing'],
     },
-  });
+  };
+  const configuration = billingConfigurationSchema.parse(legacyConfiguration);
   const initialization = {
-    configuration,
+    configuration: legacyConfiguration,
     storage: { url: database.url },
     polar: {
       token: 'loopback-test-token',
@@ -362,6 +363,7 @@ export async function polarFixture(
     owner,
     profile,
     configuration,
+    legacyConfiguration,
     initialization,
     jwks: { keys: [await exportJWK(keys.publicKey)] },
     commercial,

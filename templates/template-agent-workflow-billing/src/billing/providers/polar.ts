@@ -1,3 +1,7 @@
+import { commercialCatalogSchema, resolveAllowance } from '../catalog.js';
+import { normalizeLegacyCatalog } from './polar-catalog.js';
+import type { CommercialCatalog } from '../catalog.js';
+import { retainCatalog } from '../storage/catalog.js';
 import { createHash } from 'node:crypto';
 import { webhooks } from '@polar-sh/sdk/2026-10';
 import { z } from 'zod';
@@ -38,12 +42,14 @@ import {
   grantSchema,
   orderSchema,
   polarConfigurationSchema,
+  polarBindingsSchema,
+  polarCatalogConfigurationSchema,
   productSchema,
   sessionUrlSchema,
   stateSchema,
   subscriptionSchema,
 } from './polar-contract.js';
-import type { BillingContactResolver, PolarConfiguration } from './polar-contract.js';
+import type { BillingContactResolver, PolarBindings } from './polar-contract.js';
 
 export const polarCapabilities: ProviderCapabilities = Object.freeze({
   entitlements: true,
@@ -114,16 +120,17 @@ class WireError extends Error {
 export class PolarBillingProvider implements BillingProvider {
   readonly id = 'polar';
   readonly capabilities = polarCapabilities;
-  readonly configuration: PolarConfiguration;
+  readonly configuration: PolarBindings;
   private constructor(
     private readonly grants: GrantStorage,
     private readonly database: BillingDatabase,
     configuration: unknown,
+    private readonly catalog: CommercialCatalog,
     private readonly token: string,
     private readonly contact: BillingContactResolver,
     private readonly webhookSecret?: string,
   ) {
-    const parsed = polarConfigurationSchema.safeParse(configuration);
+    const parsed = polarBindingsSchema.safeParse(configuration);
     if (!parsed.success || !token || /[\r\n]/.test(token) || typeof contact !== 'function')
       throw new BillingError('invalid_configuration');
     if (
@@ -142,24 +149,37 @@ export class PolarBillingProvider implements BillingProvider {
   static async open(options: {
     url: string;
     configuration: unknown;
+    catalog?: unknown;
     token: string;
     contact: BillingContactResolver;
     webhookSecret?: string;
   }) {
-    const parsed = polarConfigurationSchema.safeParse(options.configuration);
-    if (!parsed.success || !options.token || typeof options.contact !== 'function')
+    const legacy = options.catalog === undefined ? polarConfigurationSchema.safeParse(options.configuration) : null;
+    const normalized = legacy?.success
+      ? normalizeLegacyCatalog(legacy.data)
+      : { polar: options.configuration, catalog: options.catalog };
+    const parsed = polarBindingsSchema.safeParse(normalized.polar);
+    const catalog = commercialCatalogSchema.safeParse(normalized.catalog);
+    if (!parsed.success || !catalog.success || !options.token || typeof options.contact !== 'function')
+      throw new BillingError('invalid_configuration');
+    if (!polarCatalogConfigurationSchema.safeParse({ polar: parsed.data, catalog: catalog.data }).success)
       throw new BillingError('invalid_configuration');
     const grants = await GrantStorage.open({ url: options.url });
+    const database = await BillingDatabase.open({ url: options.url });
     try {
-      return new PolarBillingProvider(
+      const provider = new PolarBillingProvider(
         grants,
-        await BillingDatabase.open({ url: options.url }),
-        options.configuration,
+        database,
+        parsed.data,
+        catalog.data,
         options.token,
         options.contact,
         options.webhookSecret,
       );
+      await retainCatalog(database, catalog.data);
+      return provider;
     } catch (error) {
+      database.close();
       grants.close();
       throw error;
     }
@@ -330,7 +350,10 @@ export class PolarBillingProvider implements BillingProvider {
           )
             throw new BillingError('state_unavailable');
         const sources: GrantSource[] = [];
-        for (const mapping of this.configuration.grants) {
+        for (const binding of this.configuration.grants) {
+          const allowance = resolveAllowance(this.catalog, binding.allowance);
+          if (!allowance) throw new BillingError('invalid_configuration');
+          const mapping = { ...binding, ...allowance };
           const product = products.get(mapping.productId)!;
           const benefit = product.benefits.find(value => value.id === mapping.benefitId);
           const price = product.prices.find(value => value.id === mapping.priceId && !value.is_archived);
@@ -679,7 +702,11 @@ export class PolarBillingProvider implements BillingProvider {
   }
   async prepareCheckout(request: CheckoutRequest): Promise<PreparedHostedSession> {
     const product = this.configuration.products.find(value => value.key === request.product);
-    if (!product || !this.configuration.returnUrls.includes(request.returnUrl)) throw new BillingError('invalid_input');
+    const offer = product
+      ? this.catalog.offers.find(value => value.key === product.key && value.version === product.version)
+      : undefined;
+    if (!product || !offer || !this.configuration.returnUrls.includes(request.returnUrl))
+      throw new BillingError('invalid_input');
     const returnUrl = request.returnUrl;
     const productId = product.productId;
     const { customerId } = await this.grants.observation(request.account);
@@ -688,7 +715,15 @@ export class PolarBillingProvider implements BillingProvider {
       if (
         verifiedProduct.id !== productId ||
         verifiedProduct.organization_id !== this.configuration.organizationId ||
-        verifiedProduct.is_archived
+        verifiedProduct.is_archived ||
+        offer.entitlements.some(
+          key =>
+            !verifiedProduct.benefits.some(
+              benefit =>
+                benefit.id === this.configuration.entitlements.find(value => value.key === key)?.benefitId &&
+                !benefit.is_deleted,
+            ),
+        )
       )
         throw new BillingError('state_unavailable');
     } catch {

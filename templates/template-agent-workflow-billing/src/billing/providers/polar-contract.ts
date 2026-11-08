@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { catalogReferenceSchema, commercialCatalogSchema, referenceKey } from '../catalog.js';
 import { identifierSchema, positiveQuantitySchema, quantitySchema, timestampSchema } from '../contracts.js';
 
 const id = z.uuid();
@@ -89,6 +90,77 @@ export const polarConfigurationSchema = z
     if (value.grants.some(grant => !value.meters.some(meter => meter.key === grant.meter)))
       ctx.addIssue({ code: 'custom', message: 'Missing event mapping.' });
   });
+export const polarBindingsSchema = z
+  .strictObject(polarConfigurationSchema.shape)
+  .omit({ grants: true, products: true })
+  .extend({
+    grants: z
+      .array(
+        z.strictObject({
+          allowance: catalogReferenceSchema,
+          productId: id,
+          priceId: id,
+          benefitId: id,
+          meterId: id,
+        }),
+      )
+      .max(100),
+    products: z.array(z.strictObject({ key: identifierSchema, version: identifierSchema, productId: id })).max(100),
+  })
+  .superRefine((value, ctx) => {
+    for (const values of [value.entitlements, value.subscriptions, value.meters, value.products])
+      if (new Set(values.map(entry => entry.key)).size !== values.length)
+        ctx.addIssue({ code: 'custom', message: 'Duplicate Polar mapping.' });
+    if (new Set(value.grants.map(grant => `${grant.productId}:${grant.benefitId}`)).size !== value.grants.length)
+      ctx.addIssue({ code: 'custom', message: 'Duplicate allocation mapping.' });
+    for (const meter of value.meters) {
+      if (['execution_id', 'policy_version', 'resourceId', 'resourceKind'].includes(meter.unitsField))
+        ctx.addIssue({ code: 'custom', message: 'Reserved event metadata field.' });
+      if (meter.funding === 'metered' && (!meter.productId || !meter.priceId || !meter.meterId))
+        ctx.addIssue({ code: 'custom', message: 'Metered mappings require product, price and meter.' });
+    }
+  });
+export const polarCatalogConfigurationSchema = z
+  .strictObject({
+    polar: polarBindingsSchema,
+    catalog: commercialCatalogSchema,
+  })
+  .superRefine((config, ctx) => {
+    const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
+    for (const binding of config.polar.grants) {
+      const allowance = config.catalog.allowances.find(
+        value => referenceKey(value) === referenceKey(binding.allowance),
+      );
+      if (
+        !allowance ||
+        !config.polar.meters.some(value => value.key === allowance.meter && value.funding === 'prepaid')
+      )
+        issue('Unknown allowance revision or event mapping.');
+    }
+    for (const product of config.polar.products) {
+      const offer = config.catalog.offers.find(value => referenceKey(value) === referenceKey(product));
+      if (!offer) {
+        issue('Unknown offer revision.');
+        continue;
+      }
+      const bound = config.polar.grants
+        .filter(value => value.productId === product.productId)
+        .map(value => referenceKey(value.allowance))
+        .sort();
+      const declared = offer.allowances.map(referenceKey).sort();
+      if (JSON.stringify(bound) !== JSON.stringify(declared))
+        issue('Offer allowances disagree with provider bindings.');
+      if (
+        offer.subscriptions.some(
+          key => !config.polar!.subscriptions.some(value => value.key === key && value.productId === product.productId),
+        )
+      )
+        issue('Offer subscriptions disagree with provider bindings.');
+      if (offer.entitlements.some(key => !config.polar!.entitlements.some(value => value.key === key)))
+        issue('Missing offer entitlement binding.');
+    }
+  });
+export type PolarBindings = z.infer<typeof polarBindingsSchema>;
 export type PolarConfiguration = z.infer<typeof polarConfigurationSchema>;
 export const billingContactSchema = z.strictObject({
   email: z.email().max(254),
