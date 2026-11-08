@@ -35,12 +35,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "gpt-oss-120b": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -52,7 +47,12 @@
         "values": ["high", "max"]
       }
     ],
-    "gpt-oss-20b": [
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
