@@ -103,6 +103,8 @@ export async function polarWire() {
     lostUsage: false,
     lostHosted: false,
     malformed: false,
+    rejectUsage: false,
+    pause: undefined as undefined | { path: string; reached: () => void; release: Promise<void> },
     requests: [] as { method: string; path: string; body: any; version: string | undefined }[],
     events: new Map<string, unknown>(),
     hosted: 0,
@@ -184,9 +186,16 @@ export async function polarWire() {
         },
       });
     }
+    if (data.pause?.path === url.pathname) {
+      const pause = data.pause;
+      data.pause = undefined;
+      pause.reached();
+      await pause.release;
+    }
     if (url.pathname.startsWith('/v1/products/'))
       return reply(data.products.find(value => url.pathname.endsWith(value.id)));
     if (url.pathname === '/v1/events/ingest') {
+      if (data.rejectUsage) return reply({}, 422);
       const event = body.events[0];
       const duplicate = data.events.has(event.external_id);
       data.events.set(event.external_id, event);
@@ -230,7 +239,9 @@ export async function polarWire() {
   };
 }
 
-export async function polarFixture(options: { units?: number; executor?: BoundedExecutor['execute'] } = {}) {
+export async function polarFixture(
+  options: { webhookSecret?: string; units?: number; executor?: BoundedExecutor['execute'] } = {},
+) {
   const database = await temporaryDatabase();
   const wire = await polarWire();
   const storage = await OrganizationStorage.open({ url: database.url });
@@ -313,6 +324,7 @@ export async function polarFixture(options: { units?: number; executor?: Bounded
     storage: { url: database.url },
     polar: {
       token: 'loopback-test-token',
+      webhookSecret: options.webhookSecret,
       contact: async () => ({ email: 'trusted@example.test', name: 'Workspace billing' }),
     },
   };

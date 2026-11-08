@@ -2,7 +2,7 @@
 
 The billing modules validate policies and persist organization accounts, commercial eligibility and immutable usage in a local libSQL file. The local provider requires no payment credentials. Initialize them separately from Mastra with `initializeBilling` from `src/billing/setup.ts`.
 
-The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Typed agent generation and persistent workflow execution use the billing gateway described below. Polar commercial services and hosted sessions are available with the explicit configuration below. Background webhook intake and delivery/recovery workers are not included.
+The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Typed agent generation and persistent workflow execution use the billing gateway described below. Polar commercial services and hosted sessions are available with the explicit configuration below. Durable webhook intake and bounded delivery/recovery workers share the same SQL history and source refresh service.
 
 ## Configure an account and meter
 
@@ -130,7 +130,7 @@ Admins may manage admin/member roles and invitations, but cannot add, demote or 
 
 `npm run dev` constructs the Mastra instance with these custom Hono routes. The default database is `data/billing.db`, the listener is `127.0.0.1:4111`, and CORS is disabled. The default path resolves against Mastra's project root, rather than its server/public working directory. `BILLING_DATABASE_URL` can select an absolute persistent file URL; its parent directory must exist. `BILLING_PORT` changes the port. Keep the database and secrets outside any static-file root. The template does not configure a static directory for private data.
 
-Send `Authorization: Bearer <credential>` on every request. Use `Content-Type: application/json` and `Idempotency-Key` for every write. Workspace selection never grants membership. Mutation keys are scoped by actor, workspace and operation and retain a normalized request fingerprint; changing the input under the same key returns `409`. Invitation creation returns its token only on the first committed request, so a lost response requires a new invitation/key rather than secret recovery.
+Send `Authorization: Bearer <credential>` on every organization, execution and commercial request. The exact `POST /billing/webhooks/polar` endpoint uses Polar signature authentication. Use `Content-Type: application/json` and `Idempotency-Key` for every write. Workspace selection never grants membership. Mutation keys are scoped by actor, workspace and operation and retain a normalized request fingerprint; changing the input under the same key returns `409`. Invitation creation returns its token only on the first committed request, so a lost response requires a new invitation/key rather than secret recovery.
 
 | Method | Path                                                         | Input / behavior                                                      |
 | ------ | ------------------------------------------------------------ | --------------------------------------------------------------------- |
@@ -255,13 +255,12 @@ export const mastra = enforceBillingBoundary(
     agents: { assistant: agent },
     workflows: { report: workflow },
     storage: execution.storage,
-    server: billingOnlyServer(organizations, execution.billing.http),
+    server: billingOnlyServer(organizations, execution.billing.http, execution.commercial, execution.recovery),
   }),
 );
 
-const expiry = execution.billing.startExpiryWorker();
-await expiry.ready;
-// On application shutdown: expiry.stop(); await execution.close();
+await execution.startRecovery().ready;
+// On application shutdown, await execution.close() before exiting.
 ```
 
 `enforceBillingBoundary` installs middleware before early browser and development routes. `billingOnlyServer` also registers a denial route before native handlers, including framework-public routes that bypass user middleware. Removing either part weakens this boundary. All customer operations authenticate through the `/billing` application. Internal Mastra objects stay in trusted setup; facades return no raw agent executor or workflow run handle.
@@ -403,6 +402,7 @@ const commercial = await initializeBilling({
   storage: { url: databaseUrl },
   polar: {
     token: process.env.POLAR_ACCESS_TOKEN!,
+    webhookSecret: process.env.POLAR_WEBHOOK_SECRET,
     contact: async workspaceId => trustedWorkspaceContacts[workspaceId],
   },
 });
@@ -416,9 +416,9 @@ The configured units must equal the verified meter-credit benefit units, with `r
 
 For postpaid usage, configure a logical meter with `funding: ['metered']`, and a Polar meter mapping with `funding: 'metered'`, `productId`, `priceId` and `meterId`. An active subscription must include that verified metered price. Use the existing bounded `usage` or `per-task` policy with `funding: 'metered'`. No prepaid allocations are created for that execution. Configure subscription/entitlement guards separately through `polar.subscriptions: [{ key, productId }]` and `polar.entitlements: [{ key, benefitId }]` and corresponding logical mappings.
 
-`initializeMastraBilling` accepts the same `polar: { token, contact }` options and returns `commercial` alongside the typed execution facade. Pass that service as the third argument to `billingOnlyServer(organizations, billing.http, commercial)` to expose the commercial routes. Instantiate `OrganizationService` with a verified JWT adapter and `provider: 'polar'`; local credentials are rejected in Polar mode.
+`initializeMastraBilling` accepts the same `polar: { token, contact, webhookSecret? }` options and returns `commercial` alongside the typed execution facade. Pass that service and the returned recovery component to `billingOnlyServer(organizations, billing.http, commercial, recovery)` to expose commercial and webhook routes. Attach registered resources and the returned persistent storage to Mastra before awaiting `startRecovery().ready`. Await `close()` on application shutdown; it stops new sweeps and drains active work before closing stores. Instantiate `OrganizationService` with a verified JWT adapter and `provider: 'polar'`; local credentials are rejected in Polar mode.
 
-The default server can expose commercial routes using `BILLING_PROVIDER=polar`, `BILLING_CONFIGURATION` containing the JSON configuration above, `BILLING_CONTACTS` containing a trusted workspace-ID-to-contact JSON object, `BILLING_JWT_CONFIGURATION` and `POLAR_ACCESS_TOKEN`. Provision JWT principals through trusted setup before admitting their tokens. The default entry point still registers no billable resources; register resources with `initializeMastraBilling` when adding execution. Keep configuration/contact files and the private SQL file outside static roots.
+The default server can expose commercial routes using `BILLING_PROVIDER=polar`, `BILLING_CONFIGURATION` containing the JSON configuration above, `BILLING_CONTACTS` containing a trusted workspace-ID-to-contact JSON object, `BILLING_JWT_CONFIGURATION` and `POLAR_ACCESS_TOKEN`. Set `POLAR_WEBHOOK_SECRET` to enable signed notifications. Provision JWT principals through trusted setup before admitting their tokens. The default entry point still registers no billable resources; register resources with `initializeMastraBilling` when adding execution. Keep configuration/contact files and the private SQL file outside static roots.
 
 ### Allowance and hosted sessions
 
@@ -436,11 +436,29 @@ The usage response labels `mode` and `authority`. Polar `allowance` lists each l
 
 Reservations allocate earliest expiry first, with a stable grant-ID tie break. Expiry/revocation prevents new allocation while admitted work retains its reservation. Confirmed success consumes its allocation once; confirmed failure/cancellation releases unused units back to the same source, whose validity still applies. Release cannot resurrect revoked or expired capacity. Fresh verified reactivation may restore only unused capacity of the original source. Usage delivery acceptance, duplicate acknowledgement and outages never change these local totals.
 
-Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the driver persists both the logical event and its normalized outbound request in one immutable delivery claim. Retries reuse that request even after event-name or units-field mappings change. Previously acknowledged logical-only delivery records remain acknowledged; an uncertain legacy record without its original outbound mapping fails closed and requires operator reconciliation. There is no background outbox worker or signed webhook endpoint yet. Undelivered events remain pending; do not interpret a local debit as proof of a Polar invoice or completed remote delivery. Production recovery, notification invalidation and automatic repair require those additional integrations.
+Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the driver persists both the logical event and its normalized outbound request in one immutable delivery claim. Retries reuse that request even after event-name or units-field mappings change. Previously acknowledged logical-only delivery records remain acknowledged; an uncertain legacy record without its original outbound mapping fails closed and requires operator reconciliation. The recovery worker retries durable outbox events independently of execution. A local debit does not prove a Polar invoice or completed remote delivery. Failed export never repeats compute or changes application credit.
+
+### Signed notifications and recovery
+
+Configure a Polar webhook endpoint for API version `2026-10` at `POST /billing/webhooks/polar`. Set `POLAR_WEBHOOK_SECRET` in the supplied server, or pass `polar.webhookSecret` to initialization. Keep this secret separate from immutable financial mappings. An omitted secret leaves webhook verification unavailable; an empty or malformed configured secret fails startup. Local mode needs no Polar token or signing secret.
+
+The endpoint uses the pinned `@polar-sh/sdk@1.0.2` verifier from `@polar-sh/sdk/2026-10` with the original request bytes. Both modern base64 signing keys and legacy UTF-8 keys are supported by the verifier. Deliveries require `webhook-id`, `webhook-timestamp`, `webhook-signature`, `webhook-api-version: 2026-10`, and signed body `api_version: "2026-10"`. The SDK rejects signatures outside its five-minute timestamp tolerance. Bodies remain limited to 16 KiB. The exact POST path is public for signature authentication; other billing paths and methods still require bearer credentials.
+
+A successful response is `202 { "received": true }`, returned only after durable inbox insertion or an identical duplicate. Conflicting bodies under one delivery ID return `409`; signature failure returns `401`; invalid API version returns `400`; failed durable insertion returns retryable `503`. Authenticated unknown types and notifications for unlinked customers are retained as ignored hints. The next synchronous source read still verifies any subsequently linked customer before paid work.
+
+Relevant customer, order, subscription and benefit-grant hints invalidate that account's commercial revision immediately. Notifications contain no balance authority. Background refresh and synchronous admission/resume call the same authenticated source reader and idempotent grant application service. An older observation or expired worker lease cannot publish state. Successful application marks only covered notification generations complete in the same transaction as source effects. A newer hint requires another bounded refresh; unavailable evidence denies new paid admission. Reordered or duplicate notifications cannot mint another purchase/period allowance or erase consumption.
+
+`BillingRecovery.runOnce()` runs one bounded sweep. `start()` exposes startup `ready`, schedules nonoverlapping ticks and uses an unreferenced timer; `stop()` drains active work. `initializeMastraBilling.startRecovery()` composes this worker with suspension expiry. Defaults are 10 deliveries and 10 accounts per sweep, a 60-second lease, and a 30-second interval. Standalone trusted integrations can construct `BillingRecovery` with `{ batchSize, leaseMs, intervalMs }`, a `RecoveryStorage` on the same billing file and an expiry callback. Network calls run outside SQL transactions.
+
+Delivery receipts distinguish `pending`, `accepted`, `retrying`, `failed` and `uncertain`. Attempts, next-attempt time, lease ownership and safe error codes are durable; immutable outbox and original provider wire payloads stay unchanged. Retry delay grows exponentially from one second up to one hour plus bounded jitter. An uncertain response retries the original event identity. Permanent rejection stays failed for operator investigation and does not silently retry. Source fetch failures retain pending hints and a persisted retry schedule. `recovery.metrics()` exposes status counts and oldest ages without credentials, signatures or customer content.
+
+After process death, interrupted running work becomes uncertain and retains its reservation. Recovery fences late completion and never invokes generate, start or resume automatically. Durable suspended workflows remain available for authorized resume; overdue compatible suspensions are canceled only after persisted Mastra snapshots confirm suspension and termination. Expiry claims retain durable intent, a bounded lease and a checkpoint that the compatible Mastra snapshot was suspended before cancellation. A restart can finish cancellation after a committed claim or after native cancellation but before accounting settlement, with one zero-charge release. Legacy interrupted expiry claims are adopted conservatively; a canceled snapshot without prior suspension evidence cannot release credit. Missing, active or conflicting runtime snapshots retain uncertain holds and a persisted 30-second retry schedule so they cannot starve later recoverable expirations. Live process ownership, unknown legacy ownership and reused process IDs are treated conservatively. Inspect uncertain holds and permanent delivery failures through trusted operational access; automatic financial repair, refunds and destructive resets are unavailable.
+
+Use one Node service with persistent local SQL on the same host. SQL leases coordinate connections and restarted processes; this template does not certify multi-host deployment or exactly-once external side effects. Keep both billing and workflow snapshot files durable and private, and drain workers before closing storage.
 
 ### Polar verification
 
-Run the deterministic integration suite with `./node_modules/.bin/vitest run tests/billing/polar.test.ts`. It uses real loopback HTTP, signed JWTs and actual libSQL, including repeated concurrent reservations, source/usage replay, invalid state and owner session boundaries. It makes no external requests.
+Run the deterministic integration suite with `./node_modules/.bin/vitest run tests/billing/polar.test.ts`. It uses real loopback HTTP, signed JWTs and actual libSQL, including repeated concurrent reservations, source/usage replay, invalid state and owner session boundaries. It makes no external requests. The cohesive `tests/billing/recovery.test.ts` suite additionally exercises official signature verification, HTTP intake, process death/restart, real Mastra snapshots and repeated SQL lease/source races.
 
 The optional `node scripts/test-polar-sandbox.mjs` proof requires an explicitly selected sandbox `POLAR_ACCESS_TOKEN` and `POLAR_SANDBOX_PROOF` JSON with `{ "organizationId": "...", "databaseUrl": "file:///absolute/proof/billing.db", "contactEmail": "sandbox-fixture@example.com", "country": "BR" }`. A fresh namespaced database is derived from that base path on every invocation; previous databases are retained. Use a synthetic contact supporting plus aliases; a unique alias is derived per workspace. The script provisions disposable zero-price products, benefits, meter, customer, paid purchase and recurring subscription. It uses the actual driver/gateway and retained private SQL file, discards one real usage acknowledgement through a transparent loopback proxy, verifies replay after restart and revokes its disposable subscription. It prints only a safe proof summary and the actual database location. It never targets production or supplies a payment method. Inspect and clean up disposable sandbox resources through your operator workflow; the script does not delete financial history.
 

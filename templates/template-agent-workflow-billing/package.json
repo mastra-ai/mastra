@@ -15,12 +15,13 @@
     "check": "tsc --noEmit && oxfmt --check .",
     "format": "oxfmt .",
     "test:unit": "vitest run tests/billing/policies.test.ts",
-    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts tests/billing/accounting.test.ts tests/billing/mastra.test.ts tests/billing/polar.test.ts && vitest run tests/billing/http.test.ts"
+    "test:integration": "vitest run tests/billing/provider-contracts.test.ts tests/billing/storage.test.ts tests/billing/identity-organizations.test.ts tests/billing/accounting.test.ts tests/billing/mastra.test.ts tests/billing/polar.test.ts tests/billing/recovery.test.ts && vitest run tests/billing/http.test.ts"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
+    "@polar-sh/sdk": "1.0.2",
     "hono": "4.13.16",
     "jose": "6.2.15",
     "zod": "4.6.7"

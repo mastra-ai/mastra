@@ -255,12 +255,74 @@ const providerStatements = [
   `CREATE TRIGGER provider_usage_terms_immutable BEFORE UPDATE OF id, account_id, payload ON provider_usage BEGIN SELECT RAISE(ABORT, 'Usage identity is immutable'); END`,
 ];
 
+const recoveryStatements = [
+  `CREATE TABLE billing_delivery (
+    event_id TEXT PRIMARY KEY REFERENCES billing_outbox(id),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'retrying', 'failed', 'uncertain')),
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 9007199254740991),
+    next_attempt INTEGER NOT NULL DEFAULT 0,
+    lease_token TEXT,
+    lease_until INTEGER,
+    last_error TEXT,
+    created_at INTEGER NOT NULL
+  ) STRICT`,
+  `CREATE TABLE billing_account_sync (
+    account_id TEXT PRIMARY KEY REFERENCES billing_accounts(id),
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation BETWEEN 0 AND 9007199254740991),
+    synchronized_generation INTEGER NOT NULL DEFAULT 0 CHECK (synchronized_generation BETWEEN 0 AND generation),
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 9007199254740991),
+    next_attempt INTEGER NOT NULL DEFAULT 0,
+    lease_token TEXT,
+    lease_until INTEGER,
+    last_error TEXT
+  ) STRICT`,
+  `CREATE TABLE billing_inbox (
+    id TEXT PRIMARY KEY,
+    digest TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    account_id TEXT REFERENCES billing_accounts(id),
+    occurred_at TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    generation INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'done', 'ignored'))
+  ) STRICT`,
+  `CREATE TRIGGER billing_inbox_terms_immutable BEFORE UPDATE OF id, digest, event_type, account_id, occurred_at, received_at, generation ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification identity is immutable'); END`,
+  `CREATE TRIGGER billing_inbox_no_delete BEFORE DELETE ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification history is retained'); END`,
+  `CREATE TABLE billing_refresh_leases (
+    token TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    generation INTEGER NOT NULL,
+    revision TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  ) STRICT`,
+  `CREATE TABLE billing_runtimes (id TEXT PRIMARY KEY, pid INTEGER NOT NULL) STRICT`,
+  `ALTER TABLE billing_executions ADD COLUMN recovery_fenced INTEGER NOT NULL DEFAULT 0 CHECK (recovery_fenced IN (0, 1))`,
+  `INSERT INTO billing_delivery (event_id, status, created_at) SELECT id, 'pending', CAST(unixepoch() * 1000 AS INTEGER) FROM billing_outbox`,
+];
+
+const expiryRecoveryStatements = [
+  `CREATE TABLE billing_expiry_recovery (
+    run_id TEXT PRIMARY KEY REFERENCES billing_workflow_runs(id),
+    confirmed_suspended INTEGER NOT NULL DEFAULT 0 CHECK (confirmed_suspended IN (0, 1)),
+    next_attempt INTEGER NOT NULL DEFAULT 0,
+    lease_token TEXT,
+    lease_until INTEGER,
+    CHECK ((lease_token IS NULL AND lease_until IS NULL) OR (lease_token IS NOT NULL AND lease_until IS NOT NULL))
+  ) STRICT`,
+  `CREATE TRIGGER billing_expiry_identity_immutable BEFORE UPDATE OF run_id ON billing_expiry_recovery BEGIN SELECT RAISE(ABORT, 'Expiry identity is immutable'); END`,
+  `CREATE TRIGGER billing_expiry_confirmation_monotonic BEFORE UPDATE OF confirmed_suspended ON billing_expiry_recovery WHEN OLD.confirmed_suspended = 1 AND NEW.confirmed_suspended != 1 BEGIN SELECT RAISE(ABORT, 'Suspension evidence is retained'); END`,
+  `CREATE TRIGGER billing_expiry_no_delete BEFORE DELETE ON billing_expiry_recovery BEGIN SELECT RAISE(ABORT, 'Expiry intent is retained'); END`,
+  `INSERT INTO billing_expiry_recovery (run_id) SELECT id FROM billing_workflow_runs WHERE status = 'canceling' AND owner IS NULL`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
   { version: 3, statements: accountingStatements },
   { version: 4, statements: workflowStatements },
   { version: 5, statements: providerStatements },
+  { version: 6, statements: recoveryStatements },
+  { version: 7, statements: expiryRecoveryStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -307,9 +369,18 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     accountSql,
     ...initialStatements.slice(1),
     ...organizationStatements,
-    ...accountingStatements,
+    ...accountingStatements.map(sql =>
+      sql.startsWith('CREATE TABLE billing_executions')
+        ? sql.replace(
+            'terminal_at TEXT,',
+            'terminal_at TEXT, recovery_fenced INTEGER NOT NULL DEFAULT 0 CHECK (recovery_fenced IN (0, 1)),',
+          )
+        : sql,
+    ),
     ...workflowStatements,
     ...providerStatements.slice(1),
+    ...recoveryStatements.filter(sql => sql.startsWith('CREATE')),
+    ...expiryRecoveryStatements.filter(sql => sql.startsWith('CREATE')),
   ]
     .map(normalizedSql)
     .sort();

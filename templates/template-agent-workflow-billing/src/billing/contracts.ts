@@ -169,7 +169,9 @@ export type ProviderNotification =
   | {
       readonly status: 'verified';
       readonly id: string;
-      readonly accountReference: string;
+      readonly accountReference: string | null;
+      readonly digest: string;
+      readonly type: string;
       readonly occurredAt: string;
     };
 
@@ -177,7 +179,7 @@ export interface BillingProvider {
   readonly id: string;
   readonly capabilities: ProviderCapabilities;
   ensureAccount(profile: OrganizationBillingProfile): Promise<ProviderAccount>;
-  getState(account: ProviderAccount): Promise<CommercialSnapshot>;
+  getState(account: ProviderAccount, synchronization?: { token: string }): Promise<CommercialSnapshot>;
   reportUsage(event: UsageEvent): Promise<UsageDelivery>;
   reconcile(request: ReconciliationRequest): Promise<ReconciliationResult>;
   createCheckout(request: CheckoutRequest): Promise<HostedSession>;

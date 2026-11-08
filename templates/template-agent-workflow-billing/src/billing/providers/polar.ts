@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { webhooks } from '@polar-sh/sdk/2026-10';
 import { z } from 'zod';
 import {
   BillingError,
@@ -21,6 +23,8 @@ import type {
   ReconciliationResult,
   UsageDelivery,
   UsageEvent,
+  RawWebhookRequest,
+  ProviderNotification,
 } from '../contracts.js';
 import { GrantStorage, opaqueId } from '../storage/grants.js';
 import type { GrantSource } from '../contracts.js';
@@ -48,7 +52,7 @@ export const polarCapabilities: ProviderCapabilities = Object.freeze({
   prepaidAuthority: 'application-ledger',
   checkout: true,
   portal: true,
-  webhooks: false,
+  webhooks: true,
 });
 
 const usageDeliveryClaimSchema = z
@@ -104,13 +108,31 @@ export class PolarBillingProvider implements BillingProvider {
     configuration: unknown,
     private readonly token: string,
     private readonly contact: BillingContactResolver,
+    private readonly webhookSecret?: string,
   ) {
     const parsed = polarConfigurationSchema.safeParse(configuration);
     if (!parsed.success || !token || /[\r\n]/.test(token) || typeof contact !== 'function')
       throw new BillingError('invalid_configuration');
+    if (
+      webhookSecret !== undefined &&
+      !z
+        .string()
+        .min(1)
+        .max(4096)
+        .regex(/^[^\r\n]+$/)
+        .refine(value => value.trim().length > 0)
+        .safeParse(webhookSecret).success
+    )
+      throw new BillingError('invalid_configuration');
     this.configuration = parsed.data;
   }
-  static async open(options: { url: string; configuration: unknown; token: string; contact: BillingContactResolver }) {
+  static async open(options: {
+    url: string;
+    configuration: unknown;
+    token: string;
+    contact: BillingContactResolver;
+    webhookSecret?: string;
+  }) {
     const parsed = polarConfigurationSchema.safeParse(options.configuration);
     if (!parsed.success || !options.token || typeof options.contact !== 'function')
       throw new BillingError('invalid_configuration');
@@ -122,6 +144,7 @@ export class PolarBillingProvider implements BillingProvider {
         options.configuration,
         options.token,
         options.contact,
+        options.webhookSecret,
       );
     } catch (error) {
       grants.close();
@@ -224,12 +247,12 @@ export class PolarBillingProvider implements BillingProvider {
     }
   }
 
-  async getState(input: ProviderAccount): Promise<CommercialSnapshot> {
+  async getState(input: ProviderAccount, synchronization?: { token: string }): Promise<CommercialSnapshot> {
     const account = parseInput(accountSchema, input);
     if (account.provider !== 'polar') throw new BillingError('conflict');
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
-        const observation = await this.grants.observation(account);
+        const observation = await this.grants.beginRefresh(account, synchronization);
         const state = this.customer(
           await this.request(`/customers/${observation.customerId}/state`, stateSchema),
           account.workspaceId,
@@ -493,11 +516,17 @@ export class PolarBillingProvider implements BillingProvider {
               });
           }
         }
-        const snapshot = await this.grants.apply(account, observation.revision, sources, {
-          entitlements,
-          subscriptions: commercialSubscriptions,
-          meters,
-        });
+        const snapshot = await this.grants.apply(
+          account,
+          observation.revision,
+          sources,
+          {
+            entitlements,
+            subscriptions: commercialSubscriptions,
+            meters,
+          },
+          observation,
+        );
         if (snapshot) return snapshot;
       }
     } catch {
@@ -657,7 +686,62 @@ export class PolarBillingProvider implements BillingProvider {
       throw new BillingError('state_unavailable');
     }
   }
-  async verifyWebhook(): Promise<never> {
-    throw new BillingError('unsupported');
+  async verifyWebhook(request: RawWebhookRequest): Promise<ProviderNotification> {
+    if (!this.webhookSecret) throw new BillingError('unsupported');
+    const headers = Object.fromEntries(
+      Object.entries(request.headers).map(([key, value]) => [key.toLowerCase(), value]),
+    );
+    // SDK verification receives the original bytes. Reject malformed UTF-8 so
+    // decoding cannot turn different byte sequences into the same signed text.
+    let payload: unknown;
+    let unknown = false;
+    try {
+      const decoded = new TextDecoder('utf-8', { fatal: true }).decode(request.body);
+      if (!Buffer.from(new TextEncoder().encode(decoded)).equals(Buffer.from(request.body)))
+        throw new BillingError('unauthenticated');
+      payload = await webhooks.validateEvent(request.body, { ...request.headers }, this.webhookSecret);
+    } catch (error) {
+      // The pinned SDK throws UnknownType only after authenticating the body.
+      if (error instanceof webhooks.PolarWebhookUnknownTypeError) unknown = true;
+      else throw new BillingError('unauthenticated');
+    }
+    if (headers['webhook-api-version'] !== '2026-10') throw new BillingError('invalid_input');
+    if (unknown) {
+      try {
+        payload = JSON.parse(new TextDecoder().decode(request.body));
+      } catch {
+        throw new BillingError('invalid_input');
+      }
+    }
+    const envelope = parseInput(
+      z.object({
+        api_version: z.literal('2026-10'),
+        type: z.string().min(1).max(128),
+        timestamp: timestampSchema,
+        data: z.record(z.string(), z.unknown()),
+      }),
+      payload,
+    );
+    const relevant = !unknown && /^(customer|order|subscription|benefit_grant)\./.test(envelope.type);
+    const data = envelope.data;
+    const customer =
+      typeof data.customer === 'object' && data.customer !== null
+        ? (data.customer as Record<string, unknown>)
+        : undefined;
+    const reference = relevant
+      ? envelope.type.startsWith('customer.')
+        ? data.id
+        : (data.customer_id ?? customer?.id)
+      : null;
+    const accountReference = parseInput(z.string().min(1).max(256).nullable(), reference ?? null);
+    if (relevant && accountReference === null) throw new BillingError('invalid_input');
+    return {
+      status: 'verified',
+      id: parseInput(identifierSchema, headers['webhook-id']),
+      type: envelope.type,
+      accountReference,
+      occurredAt: envelope.timestamp,
+      digest: createHash('sha256').update(request.body).digest('hex'),
+    };
   }
 }

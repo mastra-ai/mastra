@@ -1,3 +1,5 @@
+import { BillingRecovery } from './recovery.js';
+import { RecoveryStorage } from './storage/recovery.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LibSQLStore } from '@mastra/libsql';
@@ -58,6 +60,8 @@ export async function initializeMastraBilling<
   let accounting: AccountingStorage | undefined;
   let workflowStorage: WorkflowStorage | undefined;
   let snapshots: LibSQLStore | undefined;
+  let recoveryStorage: RecoveryStorage | undefined;
+  let recovery: BillingRecovery | undefined;
   try {
     await privateWorkflowFiles(fileURLToPath(workflowUrl));
     accounting = await AccountingStorage.open({ url: files.databaseUrl }, options.organizations.storage);
@@ -85,15 +89,24 @@ export async function initializeMastraBilling<
     const storage = snapshots;
     const ledger = accounting;
     const runs = workflowStorage;
+    recoveryStorage = await RecoveryStorage.open({ url: files.databaseUrl });
+    recovery = new BillingRecovery(recoveryStorage, commercial.provider, () => billing.expireSuspensions());
+    const worker = recovery;
+    const recoveryRecords = recoveryStorage;
     let closed = false;
     return {
       billing,
+      recovery: worker,
+      // Call after attaching agents/workflows and persistent storage to Mastra.
+      startRecovery: () => worker.start(),
       commercial: commercialService,
       storage,
       configuration: commercial.configuration,
       close: async () => {
         if (closed) return;
         closed = true;
+        await worker.stop();
+        recoveryRecords.close();
         sessions.close();
         ledger.close();
         runs.close();
@@ -102,6 +115,8 @@ export async function initializeMastraBilling<
       },
     };
   } catch (error) {
+    await recovery?.stop();
+    recoveryStorage?.close();
     commercialStorage?.close();
     accounting?.close();
     workflowStorage?.close();

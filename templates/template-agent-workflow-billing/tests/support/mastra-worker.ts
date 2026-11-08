@@ -4,9 +4,10 @@ const runtime = await runtimeFixture(JSON.parse(serialized));
 try {
   const handle =
     phase === 'start'
-      ? await runtime.billing
-          .workflow('report')
-          .createRun({ billing: runtime.billingContext, idempotencyKey: 'restart-create' })
+      ? await runtime.billing.workflow('report').createRun({
+          billing: runtime.billingContext,
+          idempotencyKey: executionId ? `restart-create:${executionId}` : 'restart-create',
+        })
       : await runtime.billing.workflow('report').getRun({ billing: runtime.billingContext, executionId });
   const result =
     phase === 'start'

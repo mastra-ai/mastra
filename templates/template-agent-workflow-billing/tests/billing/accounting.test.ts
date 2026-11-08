@@ -152,7 +152,7 @@ async function seedHistory(f: Awaited<ReturnType<typeof fixture>>, count: number
     events.push(event);
     statements.push(
       {
-        sql: 'INSERT INTO billing_executions SELECT ?, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at FROM billing_executions WHERE id = ?',
+        sql: 'INSERT INTO billing_executions (id, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at) SELECT ?, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at FROM billing_executions WHERE id = ?',
         args: [executionId, source.billing.executionId],
       },
       {

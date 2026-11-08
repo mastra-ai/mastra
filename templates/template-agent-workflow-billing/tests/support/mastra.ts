@@ -173,6 +173,7 @@ export async function runtimeFixture(options: {
   configuration?: BillingConfiguration;
   configure?: (configuration: ReturnType<typeof mastraConfiguration>) => BillingConfiguration;
   workflowPrompt?: string;
+  workflowAfterPrompt?: string;
   workflowExpectedCalls?: readonly number[];
   workflowTransforms?: boolean;
   processorRetry?: boolean;
@@ -244,7 +245,7 @@ export async function runtimeFixture(options: {
     outputSchema: schema,
     execute: async ({ inputData }) => {
       await appendFile(join(options.directory, 'workflow-events.jsonl'), JSON.stringify({ step: 'after' }) + '\n');
-      await billing.nestedAgent('assistant').generate('[success] after');
+      await billing.nestedAgent('assistant').generate(options.workflowAfterPrompt ?? '[success] after');
       return { count: inputData.count + 1 };
     },
   });
@@ -285,6 +286,7 @@ export async function runtimeFixture(options: {
     id: 'billing-workflow-snapshots',
     url: pathToFileURL(join(options.directory, 'workflow.db')).href,
   });
+  await storage.init();
   const mastra = new Mastra({ agents: { assistant: agent }, workflows: { report: workflow }, storage });
   let closed = false;
   return {

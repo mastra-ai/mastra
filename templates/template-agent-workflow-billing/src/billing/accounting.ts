@@ -105,7 +105,7 @@ export const receiptSchema = z.strictObject({
   policyVersion: identifierSchema,
   executionStatus: z.enum(['running', 'completed', 'failed', 'canceled', 'uncertain']),
   settlementStatus: z.enum(['not_required', 'reserved', 'pending', 'settled', 'released', 'uncertain']),
-  deliveryStatus: z.enum(['not_required', 'pending']),
+  deliveryStatus: z.enum(['not_required', 'pending', 'accepted', 'reconciled', 'retrying', 'failed', 'uncertain']),
   observedUnits: quantitySchema.nullable(),
   billedUnits: quantitySchema.nullable(),
   replayed: z.boolean(),

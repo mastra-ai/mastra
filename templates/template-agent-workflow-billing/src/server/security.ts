@@ -1,3 +1,4 @@
+import type { BillingRecovery } from '../billing/recovery.js';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerConfig } from '@mastra/core/server';
 import type { OrganizationService } from '../billing/organizations.js';
@@ -9,6 +10,7 @@ export function billingOnlyServer(
   organizations: OrganizationService,
   execution?: BillingHttpGateway,
   commercial?: CommercialService,
+  recovery?: BillingRecovery,
 ): Pick<ServerConfig, 'apiRoutes' | 'middleware' | 'cors'> {
   return {
     cors: false,
@@ -22,7 +24,7 @@ export function billingOnlyServer(
       },
     ],
     apiRoutes: [
-      ...billingApiRoutes(organizations, execution, commercial),
+      ...billingApiRoutes(organizations, execution, commercial, recovery),
       // Native framework-public routes skip user middleware. This earlier route
       // also denies those requests before any native execution/data handler.
       registerApiRoute('/*', {

@@ -38,7 +38,7 @@ function response(row: Row, replayed: boolean): BillingResponse {
       policyVersion: resource.policy.version,
       executionStatus: row.status,
       settlementStatus: row.settlement,
-      deliveryStatus: row.has_event === 1n ? 'pending' : 'not_required',
+      deliveryStatus: row.delivery_status ?? (row.has_event === 1n ? 'pending' : 'not_required'),
       observedUnits: row.observed_units === null ? null : Number(row.observed_units),
       billedUnits: row.billed_units === null ? null : Number(row.billed_units),
       replayed,
@@ -74,7 +74,7 @@ export class AccountingStorage {
   private async find(transaction: Transaction, id: string): Promise<Row> {
     const row = (
       await transaction.execute({
-        sql: 'SELECT e.*, EXISTS(SELECT 1 FROM billing_outbox o WHERE o.execution_id = e.id) AS has_event FROM billing_executions e WHERE e.id = ?',
+        sql: 'SELECT e.*, EXISTS(SELECT 1 FROM billing_outbox o WHERE o.execution_id = e.id) AS has_event, (SELECT d.status FROM billing_delivery d JOIN billing_outbox o ON o.id = d.event_id WHERE o.execution_id = e.id) AS delivery_status FROM billing_executions e WHERE e.id = ?',
         args: [id],
       })
     ).rows[0];
@@ -144,6 +144,14 @@ export class AccountingStorage {
         )
           throw new BillingError('state_unavailable');
         if (String(account.version) !== snapshot.evidence?.version) return { status: 'stale' };
+        const synchronization = (
+          await transaction.execute({
+            sql: 'SELECT generation, synchronized_generation FROM billing_account_sync WHERE account_id = ?',
+            args: [account.id],
+          })
+        ).rows[0];
+        if (synchronization && synchronization.generation !== synchronization.synchronized_generation)
+          return { status: 'stale' };
         accountId = String(account.id);
         if (charge.type !== 'none') {
           const meter = snapshot.meters.find(meter => meter.key === charge.meter)!;
@@ -176,6 +184,10 @@ export class AccountingStorage {
         }
       }
       const executionId = preferredExecutionId ?? randomUUID();
+      await transaction.execute({
+        sql: 'INSERT INTO billing_runtimes VALUES (?, ?) ON CONFLICT DO NOTHING',
+        args: [claim.runtimeId, process.pid],
+      });
       await transaction.execute({
         sql: 'INSERT INTO billing_executions (id, actor_id, workspace_id, account_id, resource_id, operation, configuration, runtime_id, status, settlement, observed_units, billed_units, result, created_at, terminal_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL)',
         args: [
@@ -231,6 +243,7 @@ export class AccountingStorage {
   capture(executionId: string, observations: NonNullable<ExecutorOutcome['measurements']>): Promise<void> {
     return this.database.write(async transaction => {
       const row = await this.find(transaction, executionId);
+      if (row.recovery_fenced === 1n || !['running', 'uncertain'].includes(String(row.status))) return;
       const resource = JSON.parse(String(row.configuration)) as ResourceConfiguration;
       await this.recordMeasurements(transaction, executionId, resource, observations);
     });
@@ -265,14 +278,14 @@ export class AccountingStorage {
     executionId: string,
     outcome: ExecutorOutcome,
     result: Json | null,
-    lifecycle?: { executionId: string; version: number },
+    lifecycle?: { executionId: string; version: number; expiryToken?: string },
   ): Promise<BillingResponse> {
     return this.database.write(async transaction => {
       const row = await this.find(transaction, executionId);
-      if (!['running', 'uncertain'].includes(String(row.status))) return response(row, false);
+      if (row.recovery_fenced === 1n || !['running', 'uncertain'].includes(String(row.status)))
+        return response(row, false);
       const resource = JSON.parse(String(row.configuration)) as ResourceConfiguration;
       const charge = resource.policy.charge;
-      await this.recordMeasurements(transaction, executionId, resource, outcome.measurements ?? []);
       if (lifecycle) {
         const current = (
           await transaction.execute({
@@ -287,6 +300,17 @@ export class AccountingStorage {
         )
           return response(row, false);
       }
+      if (lifecycle?.expiryToken) {
+        const expiry = (
+          await transaction.execute({
+            sql: 'SELECT * FROM billing_expiry_recovery WHERE run_id = ? AND lease_token = ? AND lease_until > ?',
+            args: [executionId, lifecycle.expiryToken, Date.now()],
+          })
+        ).rows[0];
+        if (!expiry || (outcome.status === 'canceled' && expiry.confirmed_suspended !== 1n))
+          return response(row, false);
+      }
+      await this.recordMeasurements(transaction, executionId, resource, outcome.measurements ?? []);
       const measurements =
         charge.type === 'usage'
           ? (
@@ -402,6 +426,10 @@ export class AccountingStorage {
           await transaction.execute({
             sql: 'INSERT INTO billing_outbox (id, execution_id, payload) VALUES (?, ?, ?)',
             args: [event.id, executionId, JSON.stringify(event)],
+          });
+          await transaction.execute({
+            sql: "INSERT INTO billing_delivery (event_id, status, created_at) VALUES (?, 'pending', ?)",
+            args: [event.id, Date.now()],
           });
         }
       }

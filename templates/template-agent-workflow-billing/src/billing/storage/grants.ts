@@ -69,11 +69,43 @@ export class GrantStorage {
     });
   }
 
+  async beginRefresh(account: ProviderAccount, synchronization?: { token: string }) {
+    const observation = await this.observation(account);
+    return this.database.write(async tx => {
+      await tx.execute({
+        sql: 'INSERT INTO billing_account_sync (account_id) VALUES (?) ON CONFLICT DO NOTHING',
+        args: [account.id],
+      });
+      const state = (
+        await tx.execute({
+          sql: 'SELECT s.*, c.version FROM billing_account_sync s JOIN commercial_state c ON c.account_id = s.account_id WHERE s.account_id = ?',
+          args: [account.id],
+        })
+      ).rows[0];
+      if (synchronization && (state.lease_token !== synchronization.token || Number(state.lease_until) <= Date.now()))
+        throw new BillingError('state_unavailable');
+      const token = randomUUID();
+      await tx.execute({ sql: 'DELETE FROM billing_refresh_leases WHERE expires_at <= ?', args: [Date.now()] });
+      await tx.execute({
+        sql: 'INSERT INTO billing_refresh_leases VALUES (?, ?, ?, ?, ?)',
+        args: [token, account.id, state.generation, String(state.version), Date.now() + 60000],
+      });
+      return {
+        ...observation,
+        revision: String(state.version),
+        generation: String(state.generation),
+        token,
+        synchronization,
+      };
+    });
+  }
+
   async apply(
     account: ProviderAccount,
     revision: string,
     sources: readonly GrantSource[],
     commercial: Pick<CommercialSnapshot, 'entitlements' | 'subscriptions' | 'meters'>,
+    observation?: { generation: string; token: string; synchronization?: { token: string } },
   ): Promise<CommercialSnapshot | null> {
     const parsed = z
       .array(grantSourceSchema)
@@ -86,6 +118,25 @@ export class GrantStorage {
         await tx.execute({ sql: 'SELECT version FROM commercial_state WHERE account_id = ?', args: [account.id] })
       ).rows[0];
       if (String(state.version) !== revision) return null;
+      if (observation) {
+        const lease = (
+          await tx.execute({
+            sql: 'SELECT l.*, s.generation AS current_generation, s.lease_token AS worker_token, s.lease_until AS worker_until FROM billing_refresh_leases l JOIN billing_account_sync s ON s.account_id = l.account_id WHERE l.token = ? AND l.account_id = ?',
+            args: [observation.token, account.id],
+          })
+        ).rows[0];
+        if (
+          !lease ||
+          String(lease.generation) !== observation.generation ||
+          String(lease.current_generation) !== observation.generation ||
+          lease.revision !== revision ||
+          Number(lease.expires_at) <= Date.now() ||
+          (observation.synchronization &&
+            (lease.worker_token !== observation.synchronization.token || Number(lease.worker_until) <= Date.now()))
+        )
+          return null;
+      }
+
       const now = Date.now();
       // Missing sources are unavailable. Complete reads must reverify every known
       // purchase/current period; absence never restores or invents capacity.
@@ -145,6 +196,17 @@ export class GrantStorage {
         sql: 'UPDATE commercial_state SET version = version + 1 WHERE account_id = ?',
         args: [account.id],
       });
+      if (observation) {
+        await tx.execute({
+          sql: 'UPDATE billing_account_sync SET synchronized_generation = ? WHERE account_id = ? AND generation = ?',
+          args: [BigInt(observation.generation), account.id, BigInt(observation.generation)],
+        });
+        await tx.execute({
+          sql: "UPDATE billing_inbox SET status = 'done' WHERE account_id = ? AND generation <= ? AND status = 'pending'",
+          args: [account.id, BigInt(observation.generation)],
+        });
+        await tx.execute({ sql: 'DELETE FROM billing_refresh_leases WHERE token = ?', args: [observation.token] });
+      }
       const grants = (await tx.execute({ sql: 'SELECT * FROM credit_grants WHERE account_id = ?', args: [account.id] }))
         .rows;
       const meteredDebits = (

@@ -20,7 +20,7 @@ import { OrganizationService } from './organizations.js';
 import type { BillingContext } from './organizations.js';
 import { AccountingStorage } from './storage/accounting.js';
 import { WorkflowStorage } from './storage/workflows.js';
-import type { WorkflowRecord } from './storage/workflows.js';
+import type { WorkflowRecord, ExpiryClaim } from './storage/workflows.js';
 import {
   AgentResource,
   WorkflowResource,
@@ -726,18 +726,45 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
       { executionId: record.id, version: record.version },
     );
   }
+  private async expireClaim(record: ExpiryClaim) {
+    let confirmed = false;
+    try {
+      try {
+        const workflow = this.options.workflows[record.resourceId].native;
+        const before = await workflow.getWorkflowRunById(record.id);
+        if (before?.status === 'suspended') {
+          if (!(await this.options.workflowStorage.confirmExpiredSuspension(record))) return;
+          const run = await workflow.createRun({ runId: record.id });
+          await run.cancel();
+          confirmed = (await workflow.getWorkflowRunById(record.id))?.status === 'canceled';
+        } else confirmed = before?.status === 'canceled' && record.expiry.confirmedSuspended;
+      } catch {
+        // Missing, active or conflicting snapshots never prove safe release.
+        confirmed = false;
+      }
+      await this.options.accounting.finish(
+        record.id,
+        { status: confirmed ? 'canceled' : 'uncertain', measurements: [], measurementComplete: false },
+        null,
+        { executionId: record.id, version: record.version, expiryToken: record.expiry.token },
+      );
+    } finally {
+      await this.options.workflowStorage.releaseExpiry(record, !confirmed);
+    }
+  }
+
   startExpiryWorker(options: { intervalMs?: number; onError?: (error: unknown) => void } = {}) {
     const intervalMs = parseInput(z.number().int().min(100).max(3600000), options.intervalMs ?? 30000);
-    let active = false;
+    let active: Promise<void> | undefined;
     let stopped = false;
     const tick = async () => {
       if (active || stopped) return;
-      active = true;
-      try {
-        await this.expireSuspensions();
-      } finally {
-        active = false;
-      }
+      active = this.expireSuspensions()
+        .then(() => {})
+        .finally(() => {
+          active = undefined;
+        });
+      await active;
     };
     const ready = tick();
     const timer = setInterval(() => {
@@ -746,9 +773,10 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
     timer.unref();
     return {
       ready,
-      stop: () => {
+      stop: async () => {
         stopped = true;
         clearInterval(timer);
+        await active;
       },
     };
   }
@@ -802,7 +830,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
       if (!resource || this.adapterVersion(candidate.resourceId) !== candidate.adapterVersion) continue;
       const record = await this.options.workflowStorage.claimExpiry(candidate.id, now);
       if (!record) continue;
-      await this.terminate(candidate.resourceId, record, true);
+      await this.expireClaim(record);
       expired.push(record.id);
     }
     return expired;

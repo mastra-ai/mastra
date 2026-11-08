@@ -686,7 +686,7 @@ describe('billed Mastra runtime', () => {
       workflows: { report: fresh.workflows.report.native },
       storage: reopened.storage,
     });
-    const expiry = reopened.billing.startExpiryWorker();
+    const expiry = reopened.startRecovery();
     cleanups.push(expiry.stop);
     await expiry.ready;
     const recovered = await reopened.billing

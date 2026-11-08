@@ -43,7 +43,12 @@ const decode = (row: Row): WorkflowRecord => ({
   result: row.result === null ? null : boundedJson(JSON.parse(String(row.result))),
 });
 
+export interface ExpiryClaim extends WorkflowRecord {
+  readonly expiry: { readonly token: string; readonly confirmedSuspended: boolean };
+}
+
 export class WorkflowStorage {
+  private expiryCursor = '';
   private constructor(
     private readonly database: BillingDatabase,
     private readonly organizations: OrganizationStorage,
@@ -69,11 +74,16 @@ export class WorkflowStorage {
     if (identity.commercial) {
       const row = (
         await transaction.execute({
-          sql: 'SELECT s.version FROM commercial_state s JOIN billing_accounts a ON a.id = s.account_id WHERE a.id = ? AND a.workspace_id = ?',
+          sql: 'SELECT s.version, q.generation, q.synchronized_generation FROM commercial_state s JOIN billing_accounts a ON a.id = s.account_id LEFT JOIN billing_account_sync q ON q.account_id = a.id WHERE a.id = ? AND a.workspace_id = ?',
           args: [identity.commercial.accountId, identity.workspaceId],
         })
       ).rows[0];
-      if (!row || String(row.version) !== identity.commercial.revision) throw new BillingError('state_unavailable');
+      if (
+        !row ||
+        String(row.version) !== identity.commercial.revision ||
+        row.generation !== row.synchronized_generation
+      )
+        throw new BillingError('state_unavailable');
     }
   }
   private async find(transaction: Transaction, id: string, identity?: AdmissionIdentity) {
@@ -172,6 +182,14 @@ export class WorkflowStorage {
           .safeParse({ suspended, step });
         if (!valid.success) throw new BillingError('invalid_input');
       }
+      await transaction.execute({
+        sql: 'INSERT INTO billing_runtimes VALUES (?, ?) ON CONFLICT DO NOTHING',
+        args: [owner, process.pid],
+      });
+      await transaction.execute({
+        sql: "UPDATE billing_executions SET runtime_id = ? WHERE id = ? AND status IN ('running', 'uncertain') AND recovery_fenced = 0",
+        args: [owner, id],
+      });
       const next = record.version + 1;
       await transaction.execute({
         sql: 'INSERT INTO billing_workflow_operations (run_id, operation, key, fingerprint, version) VALUES (?, ?, ?, ?, ?)',
@@ -210,25 +228,71 @@ export class WorkflowStorage {
       });
     });
   }
-  overdue(now = Date.now()) {
-    return this.database.write(async transaction =>
-      (
-        await transaction.execute({
-          sql: "SELECT * FROM billing_workflow_runs WHERE status = 'suspended' AND expires_at <= ? ORDER BY expires_at LIMIT 100",
-          args: [now],
-        })
-      ).rows.map(decode),
+  async overdue(now = Date.now()) {
+    const rows = await this.database.write(
+      async transaction =>
+        (
+          await transaction.execute({
+            sql: "SELECT w.* FROM billing_workflow_runs w LEFT JOIN billing_expiry_recovery e ON e.run_id = w.id WHERE ((w.status = 'suspended' AND w.expires_at <= ?) OR (w.status IN ('canceling', 'uncertain') AND e.run_id IS NOT NULL AND e.next_attempt <= ? AND (e.lease_until IS NULL OR e.lease_until <= ?))) AND w.id > ? ORDER BY w.id LIMIT 100",
+            args: [now, Date.now(), Date.now(), this.expiryCursor],
+          })
+        ).rows,
     );
+    // Progress also past incompatible definitions, which cannot safely be
+    // claimed or modified merely to move them out of the first batch.
+    this.expiryCursor = rows.length === 100 ? String(rows.at(-1)!.id) : '';
+    return rows.map(decode);
   }
-  claimExpiry(id: string, now = Date.now()) {
+  claimExpiry(id: string, now = Date.now(), leaseMs = 60000): Promise<ExpiryClaim | null> {
+    parseInput(z.number().int().min(100).max(300000), leaseMs);
     return this.database.write(async transaction => {
       const record = await this.find(transaction, id);
-      if (record.status !== 'suspended' || record.expiresAt === null || record.expiresAt > now) return null;
+      const intent = (
+        await transaction.execute({ sql: 'SELECT * FROM billing_expiry_recovery WHERE run_id = ?', args: [id] })
+      ).rows[0];
+      if (!intent && (record.status !== 'suspended' || record.expiresAt === null || record.expiresAt > now))
+        return null;
+      if (
+        intent &&
+        (!['canceling', 'uncertain'].includes(record.status) ||
+          Number(intent.next_attempt) > Date.now() ||
+          (intent.lease_until !== null && Number(intent.lease_until) > Date.now()))
+      )
+        return null;
+      const token = randomUUID();
+      if (!intent)
+        await transaction.execute({ sql: 'INSERT INTO billing_expiry_recovery (run_id) VALUES (?)', args: [id] });
       await transaction.execute({
-        sql: "UPDATE billing_workflow_runs SET status = 'canceling', version = version + 1, owner = NULL, expires_at = NULL WHERE id = ? AND version = ? AND status = 'suspended'",
+        sql: 'UPDATE billing_expiry_recovery SET lease_token = ?, lease_until = ? WHERE run_id = ?',
+        args: [token, Date.now() + leaseMs, id],
+      });
+      await transaction.execute({
+        sql: "UPDATE billing_workflow_runs SET status = 'canceling', version = version + 1, owner = NULL, expires_at = NULL WHERE id = ? AND version = ?",
         args: [id, record.version],
       });
-      return this.find(transaction, id);
+      return {
+        ...(await this.find(transaction, id)),
+        expiry: { token, confirmedSuspended: intent?.confirmed_suspended === 1n },
+      };
     });
+  }
+  confirmExpiredSuspension(claim: ExpiryClaim) {
+    return this.database.write(
+      async transaction =>
+        (
+          await transaction.execute({
+            sql: "UPDATE billing_expiry_recovery SET confirmed_suspended = 1 WHERE run_id = ? AND lease_token = ? AND lease_until > ? AND EXISTS (SELECT 1 FROM billing_workflow_runs w WHERE w.id = run_id AND w.version = ? AND w.status = 'canceling' AND w.owner IS NULL)",
+            args: [claim.id, claim.expiry.token, Date.now(), claim.version],
+          })
+        ).rowsAffected === 1,
+    );
+  }
+  releaseExpiry(claim: ExpiryClaim, retry = true) {
+    return this.database.write(async transaction =>
+      transaction.execute({
+        sql: 'UPDATE billing_expiry_recovery SET lease_token = NULL, lease_until = NULL, next_attempt = ? WHERE run_id = ? AND lease_token = ? AND EXISTS (SELECT 1 FROM billing_workflow_runs w WHERE w.id = run_id AND w.version = ?)',
+        args: [retry ? Date.now() + 30000 : 0, claim.id, claim.expiry.token, claim.version],
+      }),
+    );
   }
 }

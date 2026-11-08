@@ -19,6 +19,7 @@ const strategies = {
 export interface PolarProviderOptions {
   token: string;
   contact: BillingContactResolver;
+  webhookSecret?: string;
 }
 
 export async function initializeBilling(options: {

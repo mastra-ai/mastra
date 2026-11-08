@@ -1,3 +1,5 @@
+import { BillingRecovery } from '../billing/recovery.js';
+import { RecoveryStorage } from '../billing/storage/recovery.js';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -51,7 +53,18 @@ export async function configuredOrganizations(
 export async function billingServerConfiguration(): Promise<ServerConfig> {
   const organizations = await configuredOrganizations();
   let commercial: CommercialService | undefined;
+  let recovery: BillingRecovery | undefined;
   if (process.env.BILLING_PROVIDER === 'polar') {
+    let initialized: Awaited<ReturnType<typeof initializeBilling>> | undefined;
+    let storage: CommercialStorage | undefined;
+    let records: RecoveryStorage | undefined;
+    const close = async () => {
+      await recovery?.stop();
+      records?.close();
+      storage?.close();
+      initialized?.close();
+      organizations.close();
+    };
     try {
       const configuration: unknown = JSON.parse(process.env.BILLING_CONFIGURATION ?? 'null');
       const contacts = z
@@ -60,11 +73,12 @@ export async function billingServerConfiguration(): Promise<ServerConfig> {
       const databaseUrl =
         process.env.BILLING_DATABASE_URL ??
         pathToFileURL(resolve(process.env.MASTRA_PROJECT_ROOT ?? '.', 'data/billing.db')).href;
-      const initialized = await initializeBilling({
+      initialized = await initializeBilling({
         configuration,
         storage: { url: databaseUrl },
         polar: {
           token: process.env.POLAR_ACCESS_TOKEN ?? '',
+          webhookSecret: process.env.POLAR_WEBHOOK_SECRET,
           contact: async workspaceId => {
             const contact = contacts[workspaceId];
             if (!contact) throw new BillingError('invalid_configuration');
@@ -72,10 +86,18 @@ export async function billingServerConfiguration(): Promise<ServerConfig> {
           },
         },
       });
-      const storage = await CommercialStorage.open({ url: databaseUrl }, organizations.storage);
+      storage = await CommercialStorage.open({ url: databaseUrl }, organizations.storage);
       commercial = new CommercialService(organizations, storage, initialized.provider, initialized.configuration);
+      records = await RecoveryStorage.open({ url: databaseUrl });
+      recovery = new BillingRecovery(records, initialized.provider);
+      await recovery.start().ready;
+      // This bootstrap has no billable resources; composed applications use
+      // initializeMastraBilling.close() to drain all resources together.
+      process.once('beforeExit', () => {
+        void close();
+      });
     } catch {
-      organizations.close();
+      await close();
       throw new BillingError('invalid_configuration');
     }
   }
@@ -87,6 +109,6 @@ export async function billingServerConfiguration(): Promise<ServerConfig> {
       .min(1)
       .max(65535)
       .parse(process.env.BILLING_PORT ?? 4111),
-    ...billingOnlyServer(organizations, undefined, commercial),
+    ...billingOnlyServer(organizations, undefined, commercial, recovery),
   };
 }
