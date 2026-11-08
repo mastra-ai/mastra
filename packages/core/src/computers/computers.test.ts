@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Computers, type ComputerProvider, type ComputerSandbox } from './computers.js';
+import { Computers } from './computers.js';
+import type { ComputerProvider, ComputerSandbox } from './computers.js';
 
 const context = { agent: { resourceId: 'resource', threadId: 'thread' } } as any;
 

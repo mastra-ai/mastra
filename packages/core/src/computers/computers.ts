@@ -1,6 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod/v4';
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { createTool } from '../tools';
+import type { ToolAction, ToolExecutionContext } from '../tools';
+import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
+import type { SandboxComputer } from '../workspace';
+import { WORKSPACE_TOOLS } from '../workspace/constants';
 import type {
   MastraComputerControl,
   MastraComputerControlResult,
@@ -8,13 +15,6 @@ import type {
   MastraComputerScope,
   MastraComputerViewer,
 } from './contracts.js';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-import { createTool } from '../tools';
-import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
-import { WORKSPACE_TOOLS } from '../workspace/constants';
-import type { ToolAction, ToolExecutionContext } from '../tools';
-import type { SandboxComputer } from '../workspace';
-import { z } from 'zod/v4';
 import {
   BOOT_SEMANTIC_SCRIPT,
   DAEMON_PORT,

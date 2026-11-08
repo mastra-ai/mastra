@@ -1,5 +1,6 @@
 import { SandboxComputers } from '@mastra/core/computers';
-import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools, supportsComputer, type WorkspaceSandbox } from '@mastra/core/workspace';
+import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools, supportsComputer } from '@mastra/core/workspace';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { expect } from 'vitest';
 
 /** Shared borrowed-computer conformance exercised by real provider adapters around their SDK fakes. */

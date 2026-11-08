@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Workspace } from '../workspace/workspace';
 import type { WorkspaceSandbox } from '../workspace/sandbox';
+import { Workspace } from '../workspace/workspace';
 import { SandboxComputers } from './sandbox-computers';
 
 function sandbox(id = 'desktop-1', streamUrl?: string): WorkspaceSandbox {

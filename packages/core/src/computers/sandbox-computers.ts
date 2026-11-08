@@ -1,12 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod/v4';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
-import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
 import type { ToolAction } from '../tools';
+import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
 import { WORKSPACE_TOOLS } from '../workspace/constants';
-import { supportsComputer, type WorkspaceSandbox } from '../workspace/sandbox';
+import { supportsComputer } from '../workspace/sandbox';
+import type { WorkspaceSandbox } from '../workspace/sandbox';
 import type { Workspace } from '../workspace/workspace';
-import { z } from 'zod/v4';
 import type { MastraComputerScope, MastraComputerViewer, MastraComputers } from './contracts';
 
 const ID_PATTERN = /^cmp_s_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
