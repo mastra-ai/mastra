@@ -721,6 +721,21 @@ export async function createWorkspaceTools(
       targets: { sandbox: true },
     });
     await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, () => killProcessTool, { targets: { sandbox: true } });
+
+    if (workspace.hasSandboxResolver() && workspace.resolvesComputerTools()) {
+      const computerTool = { targets: { sandbox: true }, orderedGroup: COMPUTER_ORDERED_TOOL_GROUP };
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, () => computerScreenshotTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, () => computerClickTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, () => computerDoubleClickTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, () => computerRightClickTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, () => computerMoveMouseTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, () => computerDragTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, () => computerTypeTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, () => computerPressKeyTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, () => computerScrollTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, () => computerGetScreenInfoTool, computerTool);
+      await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, () => computerWaitTool, computerTool);
+    }
   }
 
   // LSP tools — only when LSP is configured and initialized on this workspace.

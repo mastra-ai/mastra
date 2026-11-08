@@ -6,7 +6,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import { createTool } from '../tools';
 import type { ToolAction, ToolExecutionContext } from '../tools';
 import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
-import type { SandboxComputer } from '../workspace';
+import type { SandboxComputer, WorkspaceSandbox, WorkspaceSandboxResolver } from '../workspace';
 import { WORKSPACE_TOOLS } from '../workspace/constants';
 import type {
   MastraComputerControl,
@@ -818,6 +818,13 @@ export class Computers implements MastraComputers {
         inputSchema: z.object({}),
         execute: async (_input, context) => this.#release(context),
       }),
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.REQUEST_HUMAN]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.REQUEST_HUMAN,
+        description:
+          'Ask the user to take over the attached computer (for example, to log in or solve a CAPTCHA). End your turn after calling this.',
+        inputSchema: z.object({ reason: z.string().trim().min(1).max(NOTE_MAX) }),
+        execute: async (input, context) => this.#requestHuman(input, context),
+      }),
       [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.SNAPSHOT]: createTool({
         id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.SNAPSHOT,
         description: "Save a checkpoint of the attached computer's state.",
@@ -841,6 +848,20 @@ export class Computers implements MastraComputers {
     };
     for (const tool of Object.values(this.#tools)) markOrderedTool(tool, COMPUTER_ORDERED_TOOL_GROUP);
     return this.#tools;
+  }
+
+  /** Resolve the attached owned sandbox for Workspace pixel tools. */
+  sandboxResolver(): WorkspaceSandboxResolver {
+    return async ({ requestContext }) => {
+      const scope = this.#scope({ requestContext } as Context);
+      if (!scope) throw new Error(MISSING_IDENTITY);
+      const id = this.#attachments.get(scope.key);
+      if (!id) throw new Error(NOT_ATTACHED);
+      const entry = this.#computers.get(id);
+      const sandbox = entry?.sandbox ?? (await entry?.ready);
+      if (!sandbox || entry?.ownerResourceId !== scope.resourceId) throw new Error(NOT_ATTACHED);
+      return sandbox as unknown as WorkspaceSandbox;
+    };
   }
 
   /**

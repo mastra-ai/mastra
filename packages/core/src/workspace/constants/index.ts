@@ -50,6 +50,7 @@ export const WORKSPACE_TOOLS = {
     CREATE: `${WORKSPACE_TOOLS_PREFIX}_computer_create` as const,
     ATTACH: `${WORKSPACE_TOOLS_PREFIX}_computer_attach` as const,
     RELEASE: `${WORKSPACE_TOOLS_PREFIX}_computer_release` as const,
+    REQUEST_HUMAN: `${WORKSPACE_TOOLS_PREFIX}_computer_request_human` as const,
     SNAPSHOT: `${WORKSPACE_TOOLS_PREFIX}_computer_snapshot` as const,
     DESTROY: `${WORKSPACE_TOOLS_PREFIX}_computer_destroy` as const,
   },

@@ -204,12 +204,22 @@ describe('PlatformComputers construction', () => {
     expect(new Mastra({ logger: false, computers }).getComputers()).toBe(computers);
     expect(Object.keys(computers.tools()).sort()).toEqual(
       [
-        'mastra_workspace_computer_list',
-        'mastra_workspace_computer_create',
-        'mastra_workspace_computer_attach',
-        'mastra_workspace_computer_release',
-        'mastra_workspace_computer_snapshot',
-        'mastra_workspace_computer_destroy',
+        'computer_list',
+        'computer_create',
+        'computer_attach',
+        'computer_release',
+        'computer_snapshot',
+        'computer_destroy',
+        'computer_screenshot',
+        'computer_click',
+        'computer_move',
+        'computer_drag',
+        'computer_scroll',
+        'computer_type',
+        'computer_key',
+        'computer_screen_info',
+        'computer_exec',
+        'computer_request_human',
       ].sort(),
     );
     for (const [id, tool] of Object.entries(computers.tools())) {
@@ -252,20 +262,20 @@ describe('computer ids', () => {
     backend.vms.set('sbx-1', { alive: true });
     const computers = make();
     const value = typeof id === 'function' ? id() : id;
-    expect(await call(computers, 'mastra_workspace_computer_attach', { id: value }, ctx('r1', 't1'))).toBe(NOT_FOUND);
-    expect(await call(computers, 'mastra_workspace_computer_destroy', { id: value }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_attach', { id: value }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_destroy', { id: value }, ctx('r1', 't1'))).toBe(NOT_FOUND);
     expect(backend.createCalls).toEqual([]);
   });
 });
 
-describe.skip('attachment', () => {
+describe('attachment', () => {
   it('refuses hands with no computer attached', async () => {
     const computers = make();
     for (const [tool, input] of [
       ['computer_click', { x: 1, y: 1 }],
       ['computer_screenshot', {}],
       ['computer_exec', { command: 'ls' }],
-      ['mastra_workspace_computer_snapshot', {}],
+      ['computer_snapshot', {}],
     ] as const) {
       expect(await call(computers, tool, input, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
     }
@@ -274,7 +284,7 @@ describe.skip('attachment', () => {
 
   it('refuses without a thread or resource id', async () => {
     const computers = make();
-    expect(await call(computers, 'mastra_workspace_computer_create', {}, ctx(undefined, 't1'))).toBe(MISSING_IDENTITY);
+    expect(await call(computers, 'computer_create', {}, ctx(undefined, 't1'))).toBe(MISSING_IDENTITY);
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', undefined))).toBe(MISSING_IDENTITY);
     expect(backend.createCalls).toEqual([]);
   });
@@ -282,7 +292,7 @@ describe.skip('attachment', () => {
   it('keys attachment by resource and thread', async () => {
     const computers = make();
     const events: any[] = [];
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', { name: 'box' }, ctx('r1', 't1', events));
+    const { computer } = await call(computers, 'computer_create', { name: 'box' }, ctx('r1', 't1', events));
     expect(computer).toEqual({
       id: computer.id,
       name: 'box',
@@ -306,7 +316,7 @@ describe.skip('attachment', () => {
     const rc = new RequestContext();
     rc.set(MASTRA_RESOURCE_ID_KEY, 'r-rc');
     rc.set(MASTRA_THREAD_ID_KEY, 't-rc');
-    await call(computers, 'mastra_workspace_computer_create', {}, { requestContext: rc });
+    await call(computers, 'computer_create', {}, { requestContext: rc });
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r-rc', 't-rc'))).toBe('clicked at (1, 1)');
     expect(
       await call(computers, 'computer_click', { x: 1, y: 1 }, { ...ctx('r-agent', 't-agent'), requestContext: rc }),
@@ -315,51 +325,51 @@ describe.skip('attachment', () => {
 
   it('replaces the thread attachment; the old computer stays listable and reattachable', async () => {
     const computers = make();
-    const a = (await call(computers, 'mastra_workspace_computer_create', { name: 'a' }, ctx('r1', 't1'))).computer;
-    const b = (await call(computers, 'mastra_workspace_computer_create', { name: 'b' }, ctx('r1', 't1'))).computer;
+    const a = (await call(computers, 'computer_create', { name: 'a' }, ctx('r1', 't1'))).computer;
+    const b = (await call(computers, 'computer_create', { name: 'b' }, ctx('r1', 't1'))).computer;
     expect(
-      (await call(computers, 'mastra_workspace_computer_list', {}, ctx('r1', 't1'))).computers.map((c: any) => [c.name, c.status]),
+      (await call(computers, 'computer_list', {}, ctx('r1', 't1'))).computers.map((c: any) => [c.name, c.status]),
     ).toEqual([
       ['a', 'available'],
       ['b', 'attached'],
     ]);
-    expect((await call(computers, 'mastra_workspace_computer_list', {}, ctx('r2', 't1'))).computers).toEqual([]);
-    const released = await call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
+    expect((await call(computers, 'computer_list', {}, ctx('r2', 't1'))).computers).toEqual([]);
+    const released = await call(computers, 'computer_release', {}, ctx('r1', 't1'));
     expect(released.computer.id).toBe(b.id);
-    expect((await call(computers, 'mastra_workspace_computer_attach', { id: a.id }, ctx('r1', 't1'))).computer.id).toBe(a.id);
+    expect((await call(computers, 'computer_attach', { id: a.id }, ctx('r1', 't1'))).computer.id).toBe(a.id);
   });
 
   it('does not let ids containing ":" collide across resources', async () => {
     const computers = make();
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('u1:x', 't'));
+    await call(computers, 'computer_create', {}, ctx('u1:x', 't'));
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('u1', 'x:t'))).toBe(NOT_ATTACHED);
-    expect(await call(computers, 'mastra_workspace_computer_list', {}, ctx('u1', 'x:t'))).toEqual({ computers: [] });
+    expect(await call(computers, 'computer_list', {}, ctx('u1', 'x:t'))).toEqual({ computers: [] });
   });
 
   it('rejects a non-canonical alias of a valid id', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'computer_create', { persist: true }, ctx('r1', 't1'));
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     const last = alphabet.indexOf(computer.id.at(-1));
     const alias = computer.id.slice(0, -1) + alphabet[last ^ 1];
     expect(Buffer.from(alias.slice(-22), 'base64url')).toEqual(Buffer.from(computer.id.slice(-22), 'base64url'));
     backend.createCalls = [];
-    expect(await call(make(), 'mastra_workspace_computer_attach', { id: alias }, ctx('r1', 't1'))).toBe(NOT_FOUND);
-    expect(await call(computers, 'mastra_workspace_computer_attach', { id: alias }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(make(), 'computer_attach', { id: alias }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_attach', { id: alias }, ctx('r1', 't1'))).toBe(NOT_FOUND);
     expect(backend.createCalls).toEqual([]);
   });
 
   it('serializes lifecycle calls per thread in call order', async () => {
     const computers = make();
     backend.startDelayMs = 10;
-    const a = call(computers, 'mastra_workspace_computer_create', { name: 'a' }, ctx('r1', 't1'));
-    const b = call(computers, 'mastra_workspace_computer_create', { name: 'b' }, ctx('r1', 't1'));
-    const released = call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
+    const a = call(computers, 'computer_create', { name: 'a' }, ctx('r1', 't1'));
+    const b = call(computers, 'computer_create', { name: 'b' }, ctx('r1', 't1'));
+    const released = call(computers, 'computer_release', {}, ctx('r1', 't1'));
     const [ra, rb] = await Promise.all([a, b]);
     expect([ra.computer.name, rb.computer.name]).toEqual(['a', 'b']);
     expect((await released).computer.name).toBe('b');
-    const att = call(computers, 'mastra_workspace_computer_attach', { id: ra.computer.id }, ctx('r1', 't1'));
-    const rel = call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
+    const att = call(computers, 'computer_attach', { id: ra.computer.id }, ctx('r1', 't1'));
+    const rel = call(computers, 'computer_release', {}, ctx('r1', 't1'));
     expect((await att).computer.id).toBe(ra.computer.id);
     expect((await rel).computer.id).toBe(ra.computer.id);
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
@@ -368,38 +378,38 @@ describe.skip('attachment', () => {
   it('completes lifecycle changes when the stream writer fails', async () => {
     const computers = make();
     const broken = { ...ctx('r1', 't1'), writer: { custom: async () => Promise.reject(new Error('closed')) } };
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, broken);
-    expect((await call(computers, 'mastra_workspace_computer_release', {}, broken)).computer.status).toBe('released');
-    expect((await call(computers, 'mastra_workspace_computer_attach', { id: computer.id }, broken)).computer.status).toBe('attached');
-    expect(await call(computers, 'mastra_workspace_computer_destroy', { id: computer.id }, broken)).toEqual({ destroyed: computer.id });
+    const { computer } = await call(computers, 'computer_create', {}, broken);
+    expect((await call(computers, 'computer_release', {}, broken)).computer.status).toBe('released');
+    expect((await call(computers, 'computer_attach', { id: computer.id }, broken)).computer.status).toBe('attached');
+    expect(await call(computers, 'computer_destroy', { id: computer.id }, broken)).toEqual({ destroyed: computer.id });
   });
 
   it('refuses another resource attaching or destroying a computer, without side effects', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'computer_create', { persist: true }, ctx('r1', 't1'));
     const events: unknown[] = [];
     backend.createCalls = [];
-    expect(await call(computers, 'mastra_workspace_computer_attach', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
-    expect(await call(computers, 'mastra_workspace_computer_destroy', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_attach', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_destroy', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
     expect(events).toEqual([]);
     expect(backend.createCalls).toEqual([]);
     expect([...backend.vms.values()].every(v => v.alive)).toBe(true);
   });
 });
 
-describe.skip('lifecycle', () => {
+describe('lifecycle', () => {
   it('maps create failures to a stable message and destroys the partial sandbox', async () => {
     backend.nextSandboxId = 'bad id!';
-    expect(await call(make(), 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).toBe(UNAVAILABLE);
+    expect(await call(make(), 'computer_create', {}, ctx('r1', 't1'))).toBe(UNAVAILABLE);
     expect(backend.vms.get('bad id!')?.alive).toBe(false);
   });
 
   it('destroys: queued hands finish, later hands are refused, then unattached', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     backend.latency.type = 20;
     const typed = call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'));
-    const destroyed = call(computers, 'mastra_workspace_computer_destroy', { id: computer.id }, ctx('r1', 't1'));
+    const destroyed = call(computers, 'computer_destroy', { id: computer.id }, ctx('r1', 't1'));
     const keyed = call(computers, 'computer_key', { keys: 'a' }, ctx('r1', 't1'));
     await sleep(0);
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
@@ -407,20 +417,20 @@ describe.skip('lifecycle', () => {
     expect(await keyed).toBe('pressed');
     expect(await destroyed).toEqual({ destroyed: computer.id });
     expect(backend.actions).toEqual(['type', 'key']);
-    expect(await call(computers, 'mastra_workspace_computer_attach', { id: computer.id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(computers, 'computer_attach', { id: computer.id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
   });
 
   it('reports destroy failure without leaking internals', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     backend.failDestroy = true;
-    expect(await call(computers, 'mastra_workspace_computer_destroy', { id: computer.id }, ctx('r1', 't1'))).toBe(DESTROY_FAILED);
+    expect(await call(computers, 'computer_destroy', { id: computer.id }, ctx('r1', 't1'))).toBe(DESTROY_FAILED);
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
   });
 
   it('runs hands tools against the driver', async () => {
     const computers = make();
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     const c = ctx('r1', 't1');
     const shot = await call(computers, 'computer_screenshot', {}, c);
     expect(shot).toMatchObject({ mediaType: 'image/png', data: Buffer.from(PNG).toString('base64') });
@@ -439,9 +449,9 @@ describe.skip('lifecycle', () => {
       stdout: 'out',
       stderr: '',
     });
-    expect(await call(computers, 'mastra_workspace_computer_snapshot', {}, c)).toEqual({ status: 'captured' });
+    expect(await call(computers, 'computer_snapshot', {}, c)).toEqual({ status: 'captured' });
     backend.checkpoint = { status: 'skipped', reason: 'sandbox-not-running' };
-    expect(await call(computers, 'mastra_workspace_computer_snapshot', {}, c)).toEqual({
+    expect(await call(computers, 'computer_snapshot', {}, c)).toEqual({
       status: 'skipped',
       reason: 'sandbox-not-running',
     });
@@ -465,12 +475,12 @@ describe.skip('lifecycle', () => {
   });
 });
 
-describe.skip('persistence across processes', () => {
+describe('persistence across processes', () => {
   it('reattaches a persistent id in a fresh process, with name reset', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { name: 'box', persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(make(), 'computer_create', { name: 'box', persist: true }, ctx('r1', 't1'))).computer.id;
     const fresh = make();
     const events: any[] = [];
-    const result = await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't2', events));
+    const result = await call(fresh, 'computer_attach', { id }, ctx('r1', 't2', events));
     expect(result.computer).toEqual({
       id,
       name: 'computer',
@@ -484,66 +494,66 @@ describe.skip('persistence across processes', () => {
   });
 
   it('does not reattach an ephemeral id in a fresh process', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(make(), 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     backend.createCalls = [];
-    expect(await call(make(), 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(make(), 'computer_attach', { id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
     expect(backend.createCalls).toEqual([]);
   });
 
   it('reattaches a released ephemeral computer in the same process', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
-    await call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
-    expect((await call(computers, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    await call(computers, 'computer_release', {}, ctx('r1', 't1'));
+    expect((await call(computers, 'computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
   });
 
   it('destroys a persistent id from a fresh process, then reports not found', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
-    expect(await call(make(), 'mastra_workspace_computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    expect(await call(make(), 'computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
     expect([...backend.vms.values()].every(v => !v.alive)).toBe(true);
-    const out = await call(make(), 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'));
+    const out = await call(make(), 'computer_attach', { id }, ctx('r1', 't1'));
     expect(out).toBe(NOT_FOUND);
   });
 
   it('shares one reconstruct between two threads attaching the same id', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
     backend.createCalls = [];
     backend.startDelayMs = 10;
     const fresh = make();
     const [a, b] = await Promise.all([
-      call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 'tA')),
-      call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 'tB')),
+      call(fresh, 'computer_attach', { id }, ctx('r1', 'tA')),
+      call(fresh, 'computer_attach', { id }, ctx('r1', 'tB')),
     ]);
     expect([a.computer.id, b.computer.id]).toEqual([id, id]);
     expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: id.split('_')[2] }]);
   });
 
   it('lets a destroy racing an attach win', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
     backend.startDelayMs = 10;
     const fresh = make();
-    const attached = call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 'tA'));
-    const destroyed = call(fresh, 'mastra_workspace_computer_destroy', { id }, ctx('r1', 'tB'));
+    const attached = call(fresh, 'computer_attach', { id }, ctx('r1', 'tA'));
+    const destroyed = call(fresh, 'computer_destroy', { id }, ctx('r1', 'tB'));
     expect(await destroyed).toEqual({ destroyed: id });
     expect(await attached).toBe(NOT_FOUND);
     expect(await call(fresh, 'computer_click', { x: 1, y: 1 }, ctx('r1', 'tA'))).toBe(NOT_ATTACHED);
   });
 
   it('retries after a transient reattach failure without leaking details', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
     backend.createCalls = [];
     const fresh = make();
     backend.failStart = new Error('proxy 503 sbx-1 body');
-    expect(await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).toBe(UNAVAILABLE);
-    expect((await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
+    expect(await call(fresh, 'computer_attach', { id }, ctx('r1', 't1'))).toBe(UNAVAILABLE);
+    expect((await call(fresh, 'computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
     expect(backend.createCalls).toHaveLength(1);
   });
 });
 
-describe.skip('viewer', () => {
+describe('viewer', () => {
   it('returns url and cookie header for the attached thread only', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     const viewer = await computers.viewer(computer.id, { resourceId: 'r1', threadId: 't1' });
     expect(viewer).toEqual({
       url: 'https://6080-vm.preview.test/vnc.html?autoconnect=1',
@@ -560,7 +570,7 @@ describe.skip('viewer', () => {
 
   it('returns null when the viewer url or cookie is unavailable', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     backend.cookie = null;
     expect(await computers.viewer(computer.id, { resourceId: 'r1', threadId: 't1' })).toBeNull();
     backend.cookie = { name: 'a', value: 'b' };
@@ -637,7 +647,7 @@ function streamingToolCallModel(calls: { toolName: string; input: unknown }[]) {
   };
 }
 
-describe.skip('ordering through a real agent at default tool concurrency', () => {
+describe('ordering through a real agent at default tool concurrency', () => {
   const steps = [
     { toolName: 'computer_click', input: { x: 1, y: 2 } },
     { toolName: 'computer_type', input: { text: 'echo hi' } },
@@ -660,7 +670,7 @@ describe.skip('ordering through a real agent at default tool concurrency', () =>
 
   it('reaches the desktop in model order even when earlier actions are slower', async () => {
     const computers = make();
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     backend.latency = { click: 30, type: 10, key: 0 };
     await run(computers.tools());
     expect(backend.actions).toEqual(['click', 'type', 'key']);
@@ -672,7 +682,7 @@ describe.skip('ordering through a real agent at default tool concurrency', () =>
       id: 'computer-events',
       name: 'computer-events',
       instructions: 'Use the computer.',
-      model: streamingToolCallModel([{ toolName: 'mastra_workspace_computer_create', input: { name: 'box' } }]) as any,
+      model: streamingToolCallModel([{ toolName: 'computer_create', input: { name: 'box' } }]) as any,
       tools: computers.tools(),
     });
     const rc = new RequestContext();
@@ -705,13 +715,13 @@ describe.skip('ordering through a real agent at default tool concurrency', () =>
   });
 });
 
-describe.skip('control lease', () => {
+describe('control lease', () => {
   const scope = { resourceId: 'r1', threadId: 't1' };
 
   async function handedOver() {
     const computers = make();
     const events: any[] = [];
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     const out = await call(computers, 'computer_request_human', { reason: 'log in please' }, ctx('r1', 't1', events));
     return { computers, id, out, events };
   }
@@ -733,7 +743,7 @@ describe.skip('control lease', () => {
 
   it('writes the control part before returning, and a failing writer keeps the handoff', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     const written = gate();
     const slow = { ...ctx('r1', 't1'), writer: { custom: () => written.opened.then(() => written.enter()) } };
     let returned = false;
@@ -751,7 +761,7 @@ describe.skip('control lease', () => {
         },
       },
     };
-    const other = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't2'))).computer.id;
+    const other = (await call(computers, 'computer_create', {}, ctx('r1', 't2'))).computer.id;
     await expect(call(computers, 'computer_request_human', { reason: 'x' }, failing)).resolves.toMatchObject({
       control: 'human',
     });
@@ -781,9 +791,9 @@ describe.skip('control lease', () => {
       ['computer_key', { keys: 'Enter' }],
       ['computer_screen_info', {}],
       ['computer_exec', { command: 'id' }],
-      ['mastra_workspace_computer_snapshot', {}],
-      ['mastra_workspace_computer_release', {}],
-      ['mastra_workspace_computer_destroy', { id }],
+      ['computer_snapshot', {}],
+      ['computer_release', {}],
+      ['computer_destroy', { id }],
     ];
     for (const [tool, input] of calls) {
       expect(await call(computers, tool, input, ctx('r1', 't1')), tool).toBe(HUMAN_HAS_CONTROL);
@@ -818,7 +828,7 @@ describe.skip('control lease', () => {
 
   it('user take works at any time and records a reason', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     await expect(computers.control(id, scope, { action: 'take' })).resolves.toMatchObject({ holder: 'human' });
     await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'user took control' });
     expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe(HUMAN_HAS_CONTROL);
@@ -826,7 +836,7 @@ describe.skip('control lease', () => {
 
   it('control and controlState throw for another thread or resource, and on long notes', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     for (const other of [
       { resourceId: 'r1', threadId: 't2' },
       { resourceId: 'r2', threadId: 't1' },
@@ -842,7 +852,7 @@ describe.skip('control lease', () => {
 
   it('a take while an action is in flight lets it finish and refuses the queued ones', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     const g = (backend.gates.click = gate());
     const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
     const type = call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'));
@@ -856,7 +866,7 @@ describe.skip('control lease', () => {
 
   it('request_human refuses a queued screenshot but lets an in-flight one finish', async () => {
     const computers = make();
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     const g = (backend.gates.click = gate());
     const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
     const queued = call(computers, 'computer_screenshot', {}, ctx('r1', 't1'));
@@ -868,7 +878,7 @@ describe.skip('control lease', () => {
     expect(backend.actions).toEqual(['click']);
 
     const computers2 = make();
-    await call(computers2, 'mastra_workspace_computer_create', {}, ctx('r1', 't9'));
+    await call(computers2, 'computer_create', {}, ctx('r1', 't9'));
     backend.actions = [];
     const g2 = (backend.gates.screenshot = gate());
     const inflight = call(computers2, 'computer_screenshot', {}, ctx('r1', 't9'));
@@ -881,11 +891,11 @@ describe.skip('control lease', () => {
 
   it('a destroy queued before a take refuses when it runs', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
-    const other = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't2'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const other = (await call(computers, 'computer_create', {}, ctx('r1', 't2'))).computer.id;
     backend.startDelayMs = 20;
-    const slow = call(computers, 'mastra_workspace_computer_attach', { id: other }, ctx('r1', 't1'));
-    const destroy = call(computers, 'mastra_workspace_computer_destroy', { id }, ctx('r1', 't1'));
+    const slow = call(computers, 'computer_attach', { id: other }, ctx('r1', 't1'));
+    const destroy = call(computers, 'computer_destroy', { id }, ctx('r1', 't1'));
     await computers.control(id, scope, { action: 'take' });
     await slow;
     expect(await destroy).toBe(HUMAN_HAS_CONTROL);
@@ -894,9 +904,9 @@ describe.skip('control lease', () => {
 
   it('a release queued before a take refuses when it runs', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
-    const reattach = call(computers, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'));
-    const release = call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const reattach = call(computers, 'computer_attach', { id }, ctx('r1', 't1'));
+    const release = call(computers, 'computer_release', {}, ctx('r1', 't1'));
     await computers.control(id, scope, { action: 'take' });
     await reattach;
     expect(await release).toBe(HUMAN_HAS_CONTROL);
@@ -905,7 +915,7 @@ describe.skip('control lease', () => {
 
   it('a take during one model step lets the click finish and refuses type and key (real agent)', async () => {
     const computers = make();
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     const agent = new Agent({
       id: 'computer-take',
       name: 'computer-take',
@@ -938,7 +948,7 @@ describe.skip('control lease', () => {
   });
 });
 
-describe.skip('screenshot after action', () => {
+describe('screenshot after action', () => {
   const HANDS: [string, unknown, string][] = [
     ['computer_click', { x: 1, y: 2 }, 'click'],
     ['computer_move', { x: 3, y: 4 }, 'move'],
@@ -950,7 +960,7 @@ describe.skip('screenshot after action', () => {
 
   it.each(HANDS)('%s returns text only by default', async (tool, input, action) => {
     const computers = make();
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     const result = await call(computers, tool, input, ctx('r1', 't1'));
     expect(typeof result).toBe('string');
     expect((computers.tools()[tool] as any).toModelOutput(result)).toBeUndefined();
@@ -959,7 +969,7 @@ describe.skip('screenshot after action', () => {
 
   it.each(HANDS)('%s attaches one screenshot when enabled', async (tool, input, action) => {
     const computers = make({ screenshotAfterAction: true });
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     const result = await call(computers, tool, input, ctx('r1', 't1'));
     expect(backend.actions).toEqual([action, 'screenshot']);
     const out = (computers.tools()[tool] as any).toModelOutput(result);
@@ -969,14 +979,14 @@ describe.skip('screenshot after action', () => {
 
   it.each([false, true])('computer_screenshot takes exactly one screenshot (screenshotAfterAction: %s)', async on => {
     const computers = make({ screenshotAfterAction: on });
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     await call(computers, 'computer_screenshot', {}, ctx('r1', 't1'));
     expect(backend.actions).toEqual(['screenshot']);
   });
 
   it('keeps model order with the screenshot inside each action slot', async () => {
     const computers = make({ screenshotAfterAction: true });
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     backend.latency.click = 20;
     await Promise.all([
       call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1')),
@@ -987,7 +997,7 @@ describe.skip('screenshot after action', () => {
 
   it('reports the completed action when the follow-up screenshot fails', async () => {
     const computers = make({ screenshotAfterAction: true });
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     backend.failScreenshot = true;
     expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe('typed (screenshot failed)');
     expect(backend.actions).toEqual(['type']);
@@ -995,7 +1005,7 @@ describe.skip('screenshot after action', () => {
 
   it('skips the screenshot when the user takes control during the action', async () => {
     const computers = make({ screenshotAfterAction: true });
-    const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(computers, 'computer_create', {}, ctx('r1', 't1'))).computer.id;
     const g = (backend.gates.click = gate());
     const click = call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'));
     await g.entered;
@@ -1006,7 +1016,7 @@ describe.skip('screenshot after action', () => {
   });
 });
 
-describe.skip('desktop template', () => {
+describe('desktop template', () => {
   async function resolved(options: PlatformSandboxOptions) {
     const t = typeof options.template === 'function' ? await options.template() : options.template;
     return t && serializeSandboxTemplate(t);
@@ -1014,7 +1024,7 @@ describe.skip('desktop template', () => {
 
   it('boots new computers from withDesktop(Template()) by default, resources unchanged', async () => {
     const computers = make();
-    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(computers, 'computer_create', {}, ctx('r1', 't1'));
     expect(await resolved(backend.createOptions[0]!)).toEqual({
       schemaVersion: 1,
       operations: [{ method: 'aptInstall', args: [[...DESKTOP_PACKAGES]] }],
@@ -1024,16 +1034,16 @@ describe.skip('desktop template', () => {
 
   it('honors a custom template and omits it entirely with false', async () => {
     const custom = Template().aptInstall(['jq']);
-    await call(make({ template: custom }), 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await call(make({ template: custom }), 'computer_create', {}, ctx('r1', 't1'));
     expect(backend.createOptions[0]!.template).toBe(custom);
-    await call(make({ template: false }), 'mastra_workspace_computer_create', {}, ctx('r1', 't2'));
+    await call(make({ template: false }), 'computer_create', {}, ctx('r1', 't2'));
     expect('template' in backend.createOptions[1]!).toBe(false);
   });
 
   it('reattaches a persistent id with reattach required, never provisioning', async () => {
-    const created = await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
+    const created = await call(make(), 'computer_create', { persist: true }, ctx('r1', 't1'));
     backend.createCalls = [];
-    expect(await call(make(), 'mastra_workspace_computer_attach', { id: created.computer.id }, ctx('r1', 't1'))).toMatchObject({
+    expect(await call(make(), 'computer_attach', { id: created.computer.id }, ctx('r1', 't1'))).toMatchObject({
       computer: { id: created.computer.id, status: 'attached' },
     });
     expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: created.computer.id.split('_')[2] }]);

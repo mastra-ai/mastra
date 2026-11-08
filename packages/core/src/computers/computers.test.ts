@@ -73,6 +73,7 @@ describe('Computers', () => {
       'mastra_workspace_computer_create',
       'mastra_workspace_computer_attach',
       'mastra_workspace_computer_release',
+      'mastra_workspace_computer_request_human',
       'mastra_workspace_computer_snapshot',
       'mastra_workspace_computer_destroy',
     ]);
