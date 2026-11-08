@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { InMemoryComputersStorage, InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -387,7 +388,7 @@ describe('attachment', () => {
 
   it('rejects a non-canonical alias of a valid id', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', { persist: false }, ctx('r1', 't1'));
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     const last = alphabet.indexOf(computer.id.at(-1));
     const alias = computer.id.slice(0, -1) + alphabet[last ^ 1];
@@ -425,7 +426,7 @@ describe('attachment', () => {
 
   it('refuses another resource attaching or destroying a computer, without side effects', async () => {
     const computers = make();
-    const { computer } = await call(computers, 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', { persist: false }, ctx('r1', 't1'));
     const events: unknown[] = [];
     backend.createCalls = [];
     expect(await call(computers, 'mastra_workspace_computer_attach', { id: computer.id }, ctx('r2', 't9', events))).toBe(NOT_FOUND);
@@ -519,27 +520,39 @@ describe('lifecycle', () => {
 });
 
 describe('persistence across processes', () => {
-  it('reattaches a persistent id in a fresh process, with name reset', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { name: 'box', persist: true }, ctx('r1', 't1'))).computer.id;
-    const fresh = make();
+  let storage: InMemoryStore;
+  const persistentMake = () => {
+    const computers = make();
+    new Mastra({ logger: false, storage, computers });
+    return computers;
+  };
+
+  beforeEach(() => {
+    storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+  });
+
+  it('reattaches a persistent id in a fresh process, with name preserved', async () => {
+    const id = (await call(persistentMake(), 'mastra_workspace_computer_create', { name: 'box', persist: true }, ctx('r1', 't1'))).computer.id;
+    const fresh = persistentMake();
     const events: any[] = [];
     const result = await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't2', events));
     expect(result.computer).toEqual({
       id,
-      name: 'computer',
+      name: 'box',
       template: 'desktop',
       status: 'attached',
       persistent: true,
     });
-    expect(backend.createCalls.at(-1)).toEqual({ kind: 'reattach', sandboxId: id.split('_')[2] });
+    expect(backend.createCalls.at(-1)).toEqual({ kind: 'reattach', sandboxId: 'sbx-1' });
     expect(events[0].data.status).toBe('attached');
     expect(await call(fresh, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't2'))).toBe('clicked at (1, 1)');
   });
 
   it('does not reattach an ephemeral id in a fresh process', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
+    const id = (await call(persistentMake(), 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
     backend.createCalls = [];
-    expect(await call(make(), 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
+    expect(await call(persistentMake(), 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
     expect(backend.createCalls).toEqual([]);
   });
 
@@ -551,30 +564,30 @@ describe('persistence across processes', () => {
   });
 
   it('destroys a persistent id from a fresh process, then reports not found', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
-    expect(await call(make(), 'mastra_workspace_computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
+    const id = (await call(persistentMake(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    expect(await call(persistentMake(), 'mastra_workspace_computer_destroy', { id }, ctx('r1', 't1'))).toEqual({ destroyed: id });
     expect([...backend.vms.values()].every(v => !v.alive)).toBe(true);
-    const out = await call(make(), 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'));
+    const out = await call(persistentMake(), 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'));
     expect(out).toBe(NOT_FOUND);
   });
 
   it('shares one reconstruct between two threads attaching the same id', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(persistentMake(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
     backend.createCalls = [];
     backend.startDelayMs = 10;
-    const fresh = make();
+    const fresh = persistentMake();
     const [a, b] = await Promise.all([
       call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 'tA')),
       call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 'tB')),
     ]);
     expect([a.computer.id, b.computer.id]).toEqual([id, id]);
-    expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: id.split('_')[2] }]);
+    expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: 'sbx-1' }]);
   });
 
   it('lets a destroy racing an attach win', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(persistentMake(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
     backend.startDelayMs = 10;
-    const fresh = make();
+    const fresh = persistentMake();
     const attached = call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 'tA'));
     const destroyed = call(fresh, 'mastra_workspace_computer_destroy', { id }, ctx('r1', 'tB'));
     expect(await destroyed).toEqual({ destroyed: id });
@@ -583,9 +596,9 @@ describe('persistence across processes', () => {
   });
 
   it('retries after a transient reattach failure without leaking details', async () => {
-    const id = (await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
+    const id = (await call(persistentMake(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'))).computer.id;
     backend.createCalls = [];
-    const fresh = make();
+    const fresh = persistentMake();
     backend.failStart = new Error('proxy 503 sbx-1 body');
     expect(await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).toBe(UNAVAILABLE);
     expect((await call(fresh, 'mastra_workspace_computer_attach', { id }, ctx('r1', 't1'))).computer.id).toBe(id);
@@ -786,6 +799,7 @@ describe('control lease', () => {
     expect(out).toEqual({
       computerId: id,
       reason: 'log in please',
+      revision: 1,
       control: 'human',
       message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
     });
@@ -793,7 +807,7 @@ describe('control lease', () => {
       { type: 'data-computer', data: { computerId: id, threadId: 't1', control: 'human', reason: 'log in please' } },
     ]);
     expect(events[0].data).not.toHaveProperty('status');
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'log in please' });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'log in please', revision: 1 });
   });
 
   it('writes the control part before returning, and a failing writer keeps the handoff', async () => {
@@ -870,14 +884,19 @@ describe('control lease', () => {
     const { computers, id } = await handedOver();
     await expect(computers.control(id, scope, { action: 'take' })).resolves.toEqual({
       holder: 'human',
+      revision: 1,
       notified: false,
       reason: 'no-change',
     });
     await expect(computers.control(id, scope, { action: 'release', note: 'done' })).resolves.toMatchObject({
       holder: 'agent',
+      revision: 2,
     });
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent' });
-    await expect(computers.control(id, scope, { action: 'release' })).resolves.toMatchObject({ reason: 'no-change' });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 2 });
+    await expect(computers.control(id, scope, { action: 'release' })).resolves.toMatchObject({
+      revision: 2,
+      reason: 'no-change',
+    });
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe('clicked at (1, 1)');
   });
 
@@ -885,7 +904,11 @@ describe('control lease', () => {
     const computers = make();
     const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
     await expect(computers.control(id, scope, { action: 'take' })).resolves.toMatchObject({ holder: 'human' });
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'human', reason: 'user took control' });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({
+      holder: 'human',
+      reason: 'user took control',
+      revision: 1,
+    });
     expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe(HUMAN_HAS_CONTROL);
   });
 
@@ -902,7 +925,7 @@ describe('control lease', () => {
     await expect(computers.control(id, scope, { action: 'take', note: 'x'.repeat(501) })).rejects.toThrow(
       'note too long',
     );
-    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent' });
+    await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent', revision: 0 });
   });
 
   it('direct Workspace executes already started before a take finish without a provider FIFO', async () => {
@@ -1115,12 +1138,18 @@ describe('desktop template', () => {
   });
 
   it('reattaches a persistent id with reattach required, never provisioning', async () => {
-    const created = await call(make(), 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = make();
+    new Mastra({ logger: false, storage, computers: first });
+    const created = await call(first, 'mastra_workspace_computer_create', { persist: true }, ctx('r1', 't1'));
     backend.createCalls = [];
-    expect(await call(make(), 'mastra_workspace_computer_attach', { id: created.computer.id }, ctx('r1', 't1'))).toMatchObject({
+    const second = make();
+    new Mastra({ logger: false, storage, computers: second });
+    expect(await call(second, 'mastra_workspace_computer_attach', { id: created.computer.id }, ctx('r1', 't1'))).toMatchObject({
       computer: { id: created.computer.id, status: 'attached' },
     });
-    expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: created.computer.id.split('_')[2] }]);
+    expect(backend.createCalls).toEqual([{ kind: 'reattach', sandboxId: 'sbx-1' }]);
     expect(backend.createOptions.at(-1)).toMatchObject({ reattach: 'required' });
   });
 });

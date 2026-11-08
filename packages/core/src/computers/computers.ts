@@ -193,6 +193,7 @@ export class Computers implements MastraComputers {
   readonly #connectDaemon?: DaemonConnect;
   #mastra?: Mastra;
   readonly #computers = new Map<string, Entry>();
+  readonly #lookups = new Map<string, Promise<Entry | undefined>>();
   readonly #attachments = new Map<string, string>();
   readonly #lifecycle = new Map<string, Promise<unknown>>();
   /** Last agent seen per thread, so a user take can notify it. */
@@ -420,7 +421,7 @@ export class Computers implements MastraComputers {
     });
   }
 
-  /** Same-process entry, or a pending reattach of a persistent id stored before any await. */
+  /** Same-process entry, or one shared pending reattach of a persistent id. */
   async #lookup(
     id: string,
     verified: { persistent: boolean; sandboxId?: string; recoveryId?: string },
@@ -429,38 +430,49 @@ export class Computers implements MastraComputers {
     const existing = this.#computers.get(id);
     if (existing) return existing;
     if (!verified.persistent) return undefined;
-    let sandboxId = verified.sandboxId;
-    let stored: StoredComputerRecord | undefined;
-    if (verified.recoveryId) {
-      const { computers } = await this.#stores();
-      stored = await computers?.getComputer(id);
-      if (!stored || stored.ownerResourceId !== ownerResourceId || stored.recoveryId !== verified.recoveryId) return undefined;
-      sandboxId = (stored.providerIdentity as { sandboxId?: string } | undefined)?.sandboxId;
+    const pending = this.#lookups.get(id);
+    if (pending) return pending;
+
+    const lookup = (async () => {
+      let sandboxId = verified.sandboxId;
+      let stored: StoredComputerRecord | undefined;
+      if (verified.recoveryId) {
+        const { computers } = await this.#stores();
+        stored = await computers?.getComputer(id);
+        if (!stored || stored.ownerResourceId !== ownerResourceId || stored.recoveryId !== verified.recoveryId) return undefined;
+        sandboxId = (stored.providerIdentity as { sandboxId?: string } | undefined)?.sandboxId;
+      }
+      if (!sandboxId) return undefined;
+      const sandbox = this.#provider.create({ sandboxId, reattach: 'required' });
+      const entry: Entry = {
+        id,
+        ready: sandbox.start().then(() => sandbox),
+        name: stored?.name ?? 'computer',
+        template: 'desktop',
+        persistent: true,
+        ownerResourceId,
+        queue: Promise.resolve(),
+        destroyed: false,
+        control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
+      };
+      entry.queue = entry.ready.catch(() => {});
+      entry.ready.then(
+        machine => {
+          entry.sandbox = machine;
+        },
+        () => {
+          if (this.#computers.get(id) === entry) this.#computers.delete(id);
+        },
+      );
+      this.#computers.set(id, entry);
+      return entry;
+    })();
+    this.#lookups.set(id, lookup);
+    try {
+      return await lookup;
+    } finally {
+      if (this.#lookups.get(id) === lookup) this.#lookups.delete(id);
     }
-    if (!sandboxId) return undefined;
-    const sandbox = this.#provider.create({ sandboxId, reattach: 'required' });
-    const entry: Entry = {
-      id,
-      ready: sandbox.start().then(() => sandbox),
-      name: stored?.name ?? 'computer',
-      template: 'desktop',
-      persistent: true,
-      ownerResourceId,
-      queue: Promise.resolve(),
-      destroyed: false,
-      control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
-    };
-    entry.queue = entry.ready.catch(() => {});
-    entry.ready.then(
-      machine => {
-        entry.sandbox = machine;
-      },
-      () => {
-        if (this.#computers.get(id) === entry) this.#computers.delete(id);
-      },
-    );
-    this.#computers.set(id, entry);
-    return entry;
   }
 
   #create(input: { name?: string; persist?: boolean }, context: Context) {
