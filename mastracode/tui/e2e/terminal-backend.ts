@@ -102,10 +102,12 @@ class EmulatedTerminal implements Terminal {
     if (data.includes('\x1b[6n')) {
       // Headless xterm runs with stdin disabled, so answer cursor position
       // requests ourselves once the preceding output has been applied.
-      this.outputQueue = this.outputQueue.then(() => {
-        const buffer = this.xterm.buffer.active;
-        this.inputHandler?.(`\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
-      });
+      this.outputQueue = this.outputQueue
+        .then(() => {
+          const buffer = this.xterm.buffer.active;
+          this.inputHandler?.(`\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+        })
+        .catch(() => undefined);
     }
   }
 
@@ -250,6 +252,7 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
       if (!position) throw new Error(`clickText: "${text}" not on screen\n\n${terminal.serialize().view}`);
       terminal.sendInput(`\x1b[<0;${position.col};${position.row}M`);
       terminal.sendInput(`\x1b[<0;${position.col};${position.row}m`);
+      return terminal.flushInput();
     },
     dragText(text: string, fromOffset: number, toOffset: number) {
       const position = terminal.findOnScreen(text);
@@ -258,6 +261,7 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
       terminal.sendInput(`\x1b[<0;${col + fromOffset};${row}M`);
       terminal.sendInput(`\x1b[<32;${col + toOffset};${row}M`);
       terminal.sendInput(`\x1b[<0;${col + toOffset};${row}m`);
+      return terminal.flushInput();
     },
     clipboardWrites() {
       return [...terminal.clipboardWrites];

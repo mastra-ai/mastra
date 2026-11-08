@@ -15,6 +15,7 @@ import { WrappingSelectList } from '../components/wrapping-select-list.js';
 import { showModalOverlay } from '../overlay.js';
 import { getEditorTheme, getSelectListTheme, getSettingsListTheme } from '../theme.js';
 import { MouseController } from './controller.js';
+import { tuiInternals } from './pi-tui-internals.js';
 
 const ROWS = 30;
 const COLS = 100;
@@ -28,7 +29,8 @@ const COLS = 100;
 function createHarness({
   rowOffset = 0,
   inputMouseModeEnabled = false,
-}: { rowOffset?: number; inputMouseModeEnabled?: boolean } = {}) {
+  answerCursorQueries = true,
+}: { rowOffset?: number; inputMouseModeEnabled?: boolean; answerCursorQueries?: boolean } = {}) {
   const screen = new xterm.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
   let onInput: ((data: string) => void) | undefined;
   let output = Promise.resolve();
@@ -43,7 +45,7 @@ function createHarness({
       written.push(data);
       output = output.then(() => new Promise<void>(resolve => screen.write(data, resolve)));
       // Headless xterm has no stdin, so answer cursor position requests like a real terminal.
-      if (data.includes('\x1b[6n')) {
+      if (data.includes('\x1b[6n') && answerCursorQueries) {
         output = output.then(() => {
           const { cursorY, cursorX } = screen.buffer.active;
           onInput?.(`\x1b[${cursorY + 1 + rowOffset};${cursorX + 1}R`);
@@ -137,7 +139,7 @@ function modalWithList(ui: TUI, count: number) {
   box.addChild(new Text('Pick one', 0, 0));
   box.addChild(list);
   const handle = showModalOverlay(ui, box);
-  return { list, selected, handle };
+  return { list, selected, handle, box };
 }
 
 function modalWith(ui: TUI, list: Component & { handleInput(data: string): void }) {
@@ -167,6 +169,40 @@ describe('MouseController on the real pi-tui renderer', () => {
     handle.hide();
     await harness.render();
     expect(harness.screen.modes.mouseTrackingMode).toBe('none');
+  });
+
+  it('swallows a cursor position reply that arrives after the query timed out', async () => {
+    harness = createHarness({ answerCursorQueries: false });
+    const { box } = modalWithList(harness.ui, 3);
+    const received: string[] = [];
+    const forward = box.handleInput;
+    box.handleInput = (data: string) => {
+      received.push(data);
+      forward(data);
+    };
+    await harness.render();
+
+    const target = harness.find('item-1');
+    await harness.hover(target.row, target.col);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    // A slow terminal (SSH, load) answers late; row 1 is also how a modified F3 key looks.
+    harness.send('\x1b[1;5R');
+    expect(received).toEqual([]);
+  });
+
+  it('releases the hover wrapper once its dialog closes', async () => {
+    harness = createHarness();
+    const { handle } = modalWithList(harness.ui, 3);
+    await harness.render();
+    const overlay = tuiInternals(harness.ui).getTopmostVisibleOverlay()!.component;
+    const originalRender = overlay.render;
+    const target = harness.find('item-1');
+    await harness.hover(target.row, target.col);
+    expect(overlay.render).not.toBe(originalRender);
+
+    handle.hide();
+    await harness.render();
+    expect(overlay.render).toBe(originalRender);
   });
 
   it('selects the item under the click, including in a scrolled list', async () => {

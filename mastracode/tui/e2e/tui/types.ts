@@ -248,13 +248,14 @@ export type McE2eTerminal = {
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
   /** Send an SGR left click at the first on-screen occurrence of `text`. */
-  clickText?: (text: string) => void;
+  clickText?: (text: string) => Promise<void>;
   /** Press at `text` + `fromOffset` columns, drag and release at `text` + `toOffset` columns. */
-  dragText?: (text: string, fromOffset: number, toOffset: number) => void;
+  dragText?: (text: string, fromOffset: number, toOffset: number) => Promise<void>;
   /** Texts the app copied through OSC 52, oldest first. */
   clipboardWrites?: () => string[];
-  /** Send SGR wheel events at the screen centre. */
+  /** Move the mouse (no button held) over the first on-screen occurrence of `text`. */
   hoverText?: (text: string) => void;
+  /** Send SGR wheel events at the screen centre. */
   wheel?: (direction: 'up' | 'down', count?: number) => void;
   /** xterm's current mouse tracking mode ('none' when the terminal owns the mouse). */
   mouseTracking?: () => string;

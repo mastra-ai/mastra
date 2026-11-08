@@ -1,6 +1,5 @@
 ---
 'mastracode': minor
-'@mastra/code-sdk': minor
 ---
 
 Added an opt-in mouse mode for the input box. Turn on **Input mouse mode** in `/settings`; after that, typing or editing in the input box captures the mouse: click to move the cursor, drag to select text (the selection is copied to your clipboard), and type, paste, or press Backspace to replace or remove the selection. The right side of the status line shows `mouse mode: auto` while the mouse is captured and `mouse mode: off` while the terminal has it.

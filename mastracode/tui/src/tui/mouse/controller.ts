@@ -74,6 +74,7 @@ export class MouseController {
   /** Pointer position local to the hovered overlay component. */
   private overlayHover: { component: Component; row: number; col: number } | undefined;
   private readonly decoratedRenders = new Map<Component, Component['render']>();
+  private outstandingCursorQueries = 0;
   private readonly removeInputListener: () => void;
   private readonly originalDoRender: () => void;
   private readonly originalStop: () => void;
@@ -181,6 +182,13 @@ export class MouseController {
   }
 
   private syncTracking(): void {
+    // Closed dialogs would otherwise stay referenced (with all their data) until exit.
+    const top = tuiInternals(this.ui).getTopmostVisibleOverlay()?.component;
+    for (const [component, render] of this.decoratedRenders) {
+      if (component === top) continue;
+      component.render = render;
+      this.decoratedRenders.delete(component);
+    }
     this.setTracking(this.wantsTracking());
   }
 
@@ -193,12 +201,17 @@ export class MouseController {
   }
 
   private handleInput(data: string): { consume?: boolean; data?: string } | undefined {
-    if (this.pendingPointer) {
+    if (this.outstandingCursorQueries > 0) {
       const position = parseCursorPositionReport(data);
       if (position) {
-        const { event, action } = this.pendingPointer;
-        this.clearPendingPointer();
-        this.resolvePointer(event, action, position.row);
+        // Swallow every reply we asked for, including ones that arrive after the timeout:
+        // left unconsumed they reach the focused component as keys (row 1 looks like a modified F3).
+        this.outstandingCursorQueries--;
+        const pending = this.pendingPointer;
+        if (pending) {
+          this.clearPendingPointer();
+          this.resolvePointer(pending.event, pending.action, position.row);
+        }
         return { consume: true };
       }
     }
@@ -273,6 +286,7 @@ export class MouseController {
       if (timedOut) this.resolvePointer(timedOut.event, timedOut.action, undefined);
     }, CURSOR_POSITION_TIMEOUT_MS);
     this.pendingPointer = { event, action, timer };
+    this.outstandingCursorQueries++;
     this.ui.terminal.write(REQUEST_CURSOR_POSITION);
   }
 

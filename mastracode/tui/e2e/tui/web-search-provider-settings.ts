@@ -31,8 +31,7 @@ export const webSearchProviderSettingsScenario = {
     await runtime.waitForScreenText(/Web search provider\s+Auto/i, terminal);
     runtime.printScreen('web search provider initial', terminal);
 
-    terminal.write('\x1b[B'.repeat(6));
-    terminal.write('\r');
+    await terminal.clickText?.('Web search provider');
     await runtime.waitForScreenText(/Missing PARALLEL_API_KEY/i, terminal);
     await runtime.waitForScreenText(/Parallel \(unavailable\)/i, terminal);
     runtime.printScreen('provider submenu open', terminal);
