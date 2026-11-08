@@ -14,6 +14,7 @@ import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
 import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
+import { COMPUTER_ROUTES } from './computers';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
@@ -194,6 +195,7 @@ export const ALL_SERVER_ROUTES: readonly ServerRoute[] = [
   ...TOOLS_ROUTES,
   ...PROCESSORS_ROUTES,
   ...RESPONSES_ROUTES,
+  ...COMPUTER_ROUTES,
   ...CONVERSATIONS_ROUTES,
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
@@ -241,6 +243,7 @@ export type ServerRoutes = readonly [
   ...typeof TOOLS_ROUTES,
   ...typeof PROCESSORS_ROUTES,
   ...typeof RESPONSES_ROUTES,
+  ...typeof COMPUTER_ROUTES,
   ...typeof CONVERSATIONS_ROUTES,
   ...typeof MEMORY_ROUTES,
   ...typeof SCORES_ROUTES,

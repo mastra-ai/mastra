@@ -90,6 +90,16 @@
         "default": "./dist/server/browser-stream/index.cjs"
       }
     },
+    "./computer-stream": {
+      "import": {
+        "types": "./dist/server/computer-stream/index.d.ts",
+        "default": "./dist/server/computer-stream/index.js"
+      },
+      "require": {
+        "types": "./dist/server/computer-stream/index.d.ts",
+        "default": "./dist/server/computer-stream/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

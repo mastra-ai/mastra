@@ -4,6 +4,7 @@ export * as agents from './handlers/agents';
 export * as plans from './handlers/plans';
 export * as a2a from './handlers/a2a';
 export * as conversations from './handlers/conversations';
+export * as computers from './handlers/computers';
 export * as logs from './handlers/logs';
 export * as mcp from './handlers/mcp';
 export * as memory from './handlers/memory';

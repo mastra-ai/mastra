@@ -21,6 +21,7 @@ export * from './agents';
 export * from './auth';
 export * from './common';
 export * from './conversations';
+export * from './computers';
 export * from './datasets';
 export * from './default-options';
 export * from './editor-builder';
