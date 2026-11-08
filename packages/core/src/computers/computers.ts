@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod/v4';
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import { createTool } from '../tools';
 import type { ComputersStorage, StoredComputerRecord, ThreadStateStorage } from '../storage';
 import type { ToolAction, ToolExecutionContext } from '../tools';
@@ -825,6 +825,9 @@ export class Computers implements MastraComputers {
       agent = undefined;
     }
     if (!agent) return;
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, target.resourceId);
+    requestContext.set(MASTRA_THREAD_ID_KEY, target.threadId);
     try {
       await agent.sendNotificationSignal(
         { source: 'computer', kind, priority: 'high', summary, attributes: { computerId: entry.id, ...attributes } },
@@ -833,7 +836,10 @@ export class Computers implements MastraComputers {
           threadId: target.threadId,
           ifIdle: {
             behavior: 'wake',
-            streamOptions: { memory: { thread: target.threadId, resource: target.resourceId } },
+            streamOptions: {
+              memory: { thread: target.threadId, resource: target.resourceId },
+              requestContext,
+            },
           },
         },
       );
@@ -1087,18 +1093,21 @@ export class Computers implements MastraComputers {
       if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
       const workspaceSandbox = sandbox as unknown as WorkspaceSandbox;
       if (!workspaceSandbox.computer) return workspaceSandbox;
-      return Object.assign(Object.create(workspaceSandbox), {
-        computer: new Proxy(workspaceSandbox.computer, {
-          get(target, property, receiver) {
-            const value = Reflect.get(target, property, receiver);
-            if (typeof value !== 'function') return value;
-            return (...args: unknown[]) => {
-              if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
-              return Reflect.apply(value, target, args);
-            };
-          },
-        }),
-      }) as WorkspaceSandbox;
+      const computer = new Proxy(workspaceSandbox.computer, {
+        get(target, property, receiver) {
+          const value = Reflect.get(target, property, receiver);
+          if (typeof value !== 'function') return value;
+          return (...args: unknown[]) => {
+            if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+            return Reflect.apply(value, target, args);
+          };
+        },
+      });
+      return new Proxy(workspaceSandbox, {
+        get(target, property, receiver) {
+          return property === 'computer' ? computer : Reflect.get(target, property, receiver);
+        },
+      });
     };
   }
 
@@ -1187,6 +1196,9 @@ export class Computers implements MastraComputers {
     const released = holder === 'agent';
     let reason: MastraComputerControlResult['reason'];
     try {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, target.resourceId);
+      requestContext.set(MASTRA_THREAD_ID_KEY, target.threadId);
       const result = await agent.sendNotificationSignal(
         {
           source: 'computer',
@@ -1204,7 +1216,10 @@ export class Computers implements MastraComputers {
           threadId: target.threadId,
           ifIdle: {
             behavior: 'wake',
-            streamOptions: { memory: { thread: target.threadId, resource: target.resourceId } },
+            streamOptions: {
+              memory: { thread: target.threadId, resource: target.resourceId },
+              requestContext,
+            },
           },
         },
       );
