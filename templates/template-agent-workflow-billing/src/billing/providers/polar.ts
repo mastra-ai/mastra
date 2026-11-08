@@ -16,6 +16,7 @@ import type {
   CheckoutRequest,
   CommercialSnapshot,
   HostedSession,
+  PreparedHostedSession,
   PortalRequest,
   ProviderAccount,
   ProviderCapabilities,
@@ -669,59 +670,84 @@ export class PolarBillingProvider implements BillingProvider {
   }
 
   async createCheckout(request: CheckoutRequest): Promise<HostedSession> {
+    const prepared = await this.prepareCheckout(request);
+    return prepared.status === 'prepared' ? prepared.dispatch() : prepared;
+  }
+  async createPortalSession(request: PortalRequest): Promise<HostedSession> {
+    const prepared = await this.preparePortalSession(request);
+    return prepared.status === 'prepared' ? prepared.dispatch() : prepared;
+  }
+  async prepareCheckout(request: CheckoutRequest): Promise<PreparedHostedSession> {
     const product = this.configuration.products.find(value => value.key === request.product);
     if (!product || !this.configuration.returnUrls.includes(request.returnUrl)) throw new BillingError('invalid_input');
-    const link = await this.grants.observation(request.account);
+    const returnUrl = request.returnUrl;
+    const productId = product.productId;
+    const { customerId } = await this.grants.observation(request.account);
     try {
-      const verifiedProduct = await this.request(`/products/${product.productId}`, productSchema);
+      const verifiedProduct = await this.request(`/products/${productId}`, productSchema);
       if (
-        verifiedProduct.id !== product.productId ||
+        verifiedProduct.id !== productId ||
         verifiedProduct.organization_id !== this.configuration.organizationId ||
         verifiedProduct.is_archived
       )
         throw new BillingError('state_unavailable');
-      const result = await this.request(
-        '/checkouts/',
-        z.object({
-          url: sessionUrlSchema,
-          customer_id: z.uuid(),
-          product_id: z.uuid(),
-          return_url: z.url(),
-          success_url: z.url(),
-        }),
-        {
-          products: [product.productId],
-          customer_id: link.customerId,
-          success_url: request.returnUrl,
-          return_url: request.returnUrl,
-        },
-      );
-      if (
-        result.customer_id !== link.customerId ||
-        result.product_id !== product.productId ||
-        result.return_url !== request.returnUrl ||
-        result.success_url !== request.returnUrl
-      )
-        throw new BillingError('state_unavailable');
-      return { status: 'created', url: result.url };
     } catch {
       throw new BillingError('state_unavailable');
     }
+    return {
+      status: 'prepared',
+      dispatch: async () => {
+        try {
+          const result = await this.request(
+            '/checkouts/',
+            z.object({
+              url: sessionUrlSchema,
+              customer_id: z.uuid(),
+              product_id: z.uuid(),
+              return_url: z.url(),
+              success_url: z.url(),
+            }),
+            {
+              products: [productId],
+              customer_id: customerId,
+              success_url: returnUrl,
+              return_url: returnUrl,
+            },
+          );
+          if (
+            result.customer_id !== customerId ||
+            result.product_id !== productId ||
+            result.return_url !== returnUrl ||
+            result.success_url !== returnUrl
+          )
+            throw new BillingError('state_unavailable');
+          return { status: 'created', url: result.url };
+        } catch {
+          throw new BillingError('state_unavailable');
+        }
+      },
+    };
   }
-  async createPortalSession(request: PortalRequest): Promise<HostedSession> {
+  async preparePortalSession(request: PortalRequest): Promise<PreparedHostedSession> {
     if (!this.configuration.returnUrls.includes(request.returnUrl)) throw new BillingError('invalid_input');
-    const link = await this.grants.observation(request.account);
-    try {
-      const result = await this.request(
-        '/customer-sessions/',
-        z.object({ customer_id: z.uuid(), customer_portal_url: sessionUrlSchema }),
-        { customer_id: link.customerId, return_url: request.returnUrl },
-      );
-      if (result.customer_id !== link.customerId) throw new BillingError('state_unavailable');
-      return { status: 'created', url: result.customer_portal_url };
-    } catch {
-      throw new BillingError('state_unavailable');
-    }
+    const returnUrl = request.returnUrl;
+    const { customerId } = await this.grants.observation(request.account);
+    return {
+      status: 'prepared',
+      dispatch: async () => {
+        try {
+          const result = await this.request(
+            '/customer-sessions/',
+            z.object({ customer_id: z.uuid(), customer_portal_url: sessionUrlSchema }),
+            { customer_id: customerId, return_url: returnUrl },
+          );
+          if (result.customer_id !== customerId) throw new BillingError('state_unavailable');
+          return { status: 'created', url: result.customer_portal_url };
+        } catch {
+          throw new BillingError('state_unavailable');
+        }
+      },
+    };
   }
   async verifyWebhook(request: RawWebhookRequest): Promise<ProviderNotification> {
     if (!this.webhookSecret) throw new BillingError('unsupported');

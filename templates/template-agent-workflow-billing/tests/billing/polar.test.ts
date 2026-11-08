@@ -101,7 +101,8 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
       ).rows;
       if (bindingEra === 'legacy') {
         await f.observer.execute('DROP TABLE billing_usage_bindings');
-        await f.observer.execute('DELETE FROM billing_migrations WHERE version = 8');
+        await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
+        await f.observer.execute('DELETE FROM billing_migrations WHERE version >= 8');
         await f.observer.execute('PRAGMA user_version = 7');
       }
       const changedExport = structuredClone(f.configuration);
@@ -282,7 +283,8 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     // Reconstruct the actual v7 boundary: settled outbox but no first attempt,
     // so no historical normalized claim can establish the delivery mapping.
     await f.observer.execute('DROP TABLE billing_usage_bindings');
-    await f.observer.execute('DELETE FROM billing_migrations WHERE version = 8');
+    await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
+    await f.observer.execute('DELETE FROM billing_migrations WHERE version >= 8');
     await f.observer.execute('PRAGMA user_version = 7');
     const changed = structuredClone(f.configuration);
     changed.polar!.meters[0].eventName = 'work.remapped';
@@ -395,6 +397,188 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     ).toBe(10n);
   });
 
+  it.each(['archived', 'unavailable'] as const)(
+    'checkout retries the same key after a %s product preflight recovers',
+    async failure => {
+      const f = await fixture();
+      await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+      const app = await httpServer(createBillingApp(f.organizations, undefined, f.sessions));
+      cleanups.push(app.close);
+      const body = { product: 'credit-pack', returnUrl: 'https://app.example.test/billing' };
+      const call = (url = app.url, input = body) =>
+        fetch(`${url}/billing/workspaces/${f.owner.workspaceId}/checkout`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${f.owner.credential}`,
+            'Idempotency-Key': 'preflight',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(input),
+        });
+      f.wire.data.products[0].is_archived = failure === 'archived';
+      f.wire.data.productUnavailable = failure === 'unavailable';
+      expect((await call()).status).toBe(503);
+      expect(f.wire.data.hosted).toBe(0);
+      const before = (
+        await f.observer.execute(
+          "SELECT fingerprint, url, dispatch_state FROM hosted_operations WHERE key = 'preflight'",
+        )
+      ).rows;
+      expect(before).toEqual([{ fingerprint: expect.any(String), url: null, dispatch_state: 'not_dispatched' }]);
+      f.wire.data.products[0].is_archived = false;
+      f.wire.data.productUnavailable = false;
+      // Reopen the complete driver/database stack with a second allowed input.
+      // The original claim must still conflict, even though no POST was sent.
+      const configuration = structuredClone(f.configuration);
+      configuration.polar!.returnUrls.push('https://app.example.test/other');
+      const reopened = await initializeBilling({ ...f.initialization, configuration });
+      cleanups.push(reopened.close);
+      const storage = await CommercialStorage.open({ url: f.database.url }, f.organizations.storage);
+      cleanups.push(() => storage.close());
+      const restarted = new CommercialService(f.organizations, storage, reopened.provider, reopened.configuration);
+      const retryApp = await httpServer(createBillingApp(f.organizations, undefined, restarted));
+      cleanups.push(retryApp.close);
+      expect((await call(retryApp.url, { ...body, returnUrl: 'https://app.example.test/other' })).status).toBe(409);
+      expect((await call(retryApp.url)).status).toBe(200);
+      expect((await call(retryApp.url)).status).toBe(200);
+      expect(f.wire.data.hosted).toBe(1);
+      expect(
+        (await f.observer.execute("SELECT fingerprint, dispatch_state FROM hosted_operations WHERE key = 'preflight'"))
+          .rows,
+      ).toEqual([{ fingerprint: before[0].fingerprint, dispatch_state: 'dispatched' }]);
+    },
+  );
+
+  it.each(['checkout', 'portal'] as const)(
+    '%s preparation freezes the validated return destination before awaiting storage',
+    async operation => {
+      const f = await fixture();
+      const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+      const request = { account, product: 'credit-pack', returnUrl: 'https://app.example.test/billing' };
+      const preparation =
+        operation === 'checkout'
+          ? f.commercial.provider.prepareCheckout(request)
+          : f.commercial.provider.preparePortalSession(request);
+      request.returnUrl = 'https://untrusted.example.test';
+      request.product = 'unmapped';
+      const prepared = await preparation;
+      expect(f.wire.data.hosted).toBe(0);
+      if (prepared.status !== 'prepared') throw new Error('Expected hosted preparation');
+      expect(await prepared.dispatch()).toMatchObject({ status: 'created' });
+      const posted = f.wire.data.requests.find(
+        value =>
+          value.method === 'POST' &&
+          value.path === (operation === 'checkout' ? '/v1/checkouts/' : '/v1/customer-sessions/'),
+      );
+      expect(posted?.body.return_url).toBe('https://app.example.test/billing');
+      if (operation === 'checkout') expect(posted?.body.products).toEqual([f.wire.ids.orderProduct]);
+      expect(f.wire.data.hosted).toBe(1);
+    },
+  );
+
+  it.each(['checkout', 'portal'] as const)(
+    '%s dispatches once across concurrent requests and never repeats a lost response',
+    async operation => {
+      const f = await fixture();
+      await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+      const reopened = await initializeBilling(f.initialization);
+      cleanups.push(reopened.close);
+      const storage = await CommercialStorage.open({ url: f.database.url }, f.organizations.storage);
+      cleanups.push(() => storage.close());
+      const second = new CommercialService(f.organizations, storage, reopened.provider, reopened.configuration);
+      const apps = await Promise.all(
+        [f.sessions, second].map(service => httpServer(createBillingApp(f.organizations, undefined, service))),
+      );
+      cleanups.push(...apps.map(app => app.close));
+      const body =
+        operation === 'checkout'
+          ? { product: 'credit-pack', returnUrl: 'https://app.example.test/billing' }
+          : { returnUrl: 'https://app.example.test/billing' };
+      const call = (index: number, key: string) =>
+        fetch(`${apps[index].url}/billing/workspaces/${f.owner.workspaceId}/${operation}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${f.owner.credential}`,
+            'Idempotency-Key': key,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+      for (let index = 0; index < 20; index++) {
+        const reached = deferred<void>(),
+          release = deferred<void>();
+        f.wire.data.pause = {
+          path: operation === 'checkout' ? `/v1/products/${f.wire.ids.orderProduct}` : '/v1/customer-sessions/',
+          reached: () => reached.resolve(),
+          release: release.promise,
+        };
+        const pending = call(0, `race-${index}`);
+        await reached.promise;
+        try {
+          expect((await call(1, `race-${index}`)).status).toBe(operation === 'checkout' ? 200 : 503);
+        } finally {
+          release.resolve();
+        }
+        expect((await pending).status).toBe(200);
+        expect((await call(1, `race-${index}`)).status).toBe(200);
+        expect(f.wire.data.hosted).toBe(index + 1);
+      }
+      f.wire.data.lostHosted = true;
+      expect((await call(0, 'lost')).status).toBe(503);
+      expect((await call(1, 'lost')).status).toBe(503);
+      expect(f.wire.data.hosted).toBe(21);
+      expect(
+        (await f.observer.execute("SELECT url, dispatch_state FROM hosted_operations WHERE key = 'lost'")).rows,
+      ).toEqual([{ url: null, dispatch_state: 'dispatched' }]);
+    },
+  );
+
+  it('owner revocation during checkout preparation blocks dispatch and keeps the claim recoverable', async () => {
+    const f = await fixture();
+    const successor = await f.profile('successor');
+    await f.organizations.convert(f.owner.context, 'share');
+    const invitation = await f.organizations.invite(f.owner.context, 'invite-successor', {
+      recipientId: successor.identity.id,
+      role: 'owner',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await f.organizations.accept(successor.context, 'accept-successor', { token: invitation.token! });
+    const successorContext = await f.organizations.context({
+      credential: successor.credential,
+      workspaceId: f.owner.workspaceId,
+    });
+    const reached = deferred<void>(),
+      release = deferred<void>();
+    f.wire.data.pause = {
+      path: `/v1/products/${f.wire.ids.orderProduct}`,
+      reached: () => reached.resolve(),
+      release: release.promise,
+    };
+    const body = { product: 'credit-pack', returnUrl: 'https://app.example.test/billing' };
+    const pending = f.sessions.checkout(f.owner.context, 'revoked-preflight', body);
+    await reached.promise;
+    try {
+      await f.organizations.changeMember(successorContext, 'demote-owner', {
+        memberId: f.owner.identity.id,
+        role: 'member',
+      });
+    } finally {
+      release.resolve();
+    }
+    await expect(pending).rejects.toMatchObject({ code: 'forbidden' });
+    expect(f.wire.data.hosted).toBe(0);
+    expect(
+      (await f.observer.execute("SELECT url, dispatch_state FROM hosted_operations WHERE key = 'revoked-preflight'"))
+        .rows,
+    ).toEqual([{ url: null, dispatch_state: 'not_dispatched' }]);
+    await f.organizations.changeMember(successorContext, 'restore-owner', {
+      memberId: f.owner.identity.id,
+      role: 'owner',
+    });
+    expect(await f.sessions.checkout(f.owner.context, 'revoked-preflight', body)).toMatchObject({ status: 'created' });
+    expect(f.wire.data.hosted).toBe(1);
+  });
+
   it('checkout and portal enforce workspace billing permissions and allowed destinations', async () => {
     const f = await fixture();
     const member = await f.profile('member');
@@ -439,14 +623,27 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
       headers: { Authorization: `Bearer ${f.owner.credential}` },
     });
     expect(await usage.json()).toMatchObject({ mode: 'polar', authority: 'application-ledger' });
+    const legacyHistory = (
+      await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 8')
+    ).rows;
+    await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
+    await f.observer.execute('DELETE FROM billing_migrations WHERE version = 9');
+    await f.observer.execute('PRAGMA user_version = 8');
     const storage = await CommercialStorage.open({ url: f.database.url }, f.organizations.storage);
     cleanups.push(() => storage.close());
+    expect(
+      (await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 8')).rows,
+    ).toEqual(legacyHistory);
+    expect((await f.observer.execute('SELECT DISTINCT dispatch_state FROM hosted_operations')).rows).toEqual([
+      { dispatch_state: 'dispatched' },
+    ]);
     const restarted = new CommercialService(
       f.organizations,
       storage,
       f.commercial.provider,
       f.commercial.configuration,
     );
+    expect(await restarted.checkout(f.owner.context, 'one', body)).toMatchObject({ status: 'created' });
     await expect(restarted.checkout(f.owner.context, 'ambiguous', body)).rejects.toMatchObject({
       code: 'state_unavailable',
     });

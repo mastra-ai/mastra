@@ -63,14 +63,23 @@ export class CommercialService {
     const current = await this.organizations.accountingIdentity(context);
     const claim = await this.storage.claim(current, operation, key, fingerprint(parsed));
     if (!claim.claimed) return { status: 'created', url: claim.url! };
-    const result =
+    const prepared =
       operation === 'checkout'
-        ? await this.provider.createCheckout({
+        ? await this.provider.prepareCheckout({
             account,
             product: (parsed as z.infer<typeof checkoutSchema>).product,
             returnUrl: parsed.returnUrl,
           })
-        : await this.provider.createPortalSession({ account, returnUrl: parsed.returnUrl });
+        : await this.provider.preparePortalSession({ account, returnUrl: parsed.returnUrl });
+    if (prepared.status !== 'prepared') throw new BillingError('state_unavailable');
+    const dispatch = await this.storage.dispatch(
+      await this.organizations.accountingIdentity(context),
+      operation,
+      key,
+      fingerprint(parsed),
+    );
+    if (!dispatch.claimed) return { status: 'created', url: dispatch.url! };
+    const result = await prepared.dispatch();
     if (result.status !== 'created') throw new BillingError('state_unavailable');
     await this.storage.complete(current, operation, key, result.url);
     // Session URLs contain credentials. Revalidate before releasing them and

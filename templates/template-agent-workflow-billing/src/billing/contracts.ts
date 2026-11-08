@@ -160,6 +160,14 @@ export interface PortalRequest {
   readonly returnUrl: string;
 }
 export type HostedSession = Unsupported | { readonly status: 'created'; readonly url: string };
+// Preparation must not create a hosted session. The caller durably fences
+// dispatch before invoking this closure; any dispatch failure is uncertain.
+export type PreparedHostedSession =
+  | Unsupported
+  | {
+      readonly status: 'prepared';
+      readonly dispatch: () => Promise<HostedSession>;
+    };
 export interface RawWebhookRequest {
   readonly body: Uint8Array;
   readonly headers: Readonly<Record<string, string>>;
@@ -197,6 +205,8 @@ export interface BillingProvider {
   // calls without an outbox may use the driver's current configuration.
   reportUsage(event: UsageEvent): Promise<UsageDelivery>;
   reconcile(request: ReconciliationRequest): Promise<ReconciliationResult>;
+  prepareCheckout(request: CheckoutRequest): Promise<PreparedHostedSession>;
+  preparePortalSession(request: PortalRequest): Promise<PreparedHostedSession>;
   createCheckout(request: CheckoutRequest): Promise<HostedSession>;
   createPortalSession(request: PortalRequest): Promise<HostedSession>;
   verifyWebhook(request: RawWebhookRequest): Promise<ProviderNotification>;

@@ -3,6 +3,7 @@ import type {
   CheckoutRequest,
   CommercialSnapshot,
   HostedSession,
+  PreparedHostedSession,
   OrganizationBillingProfile,
   PortalRequest,
   ProviderAccount,
@@ -65,6 +66,14 @@ export class LocalBillingProvider implements BillingProvider {
 
   reconcile(request: ReconciliationRequest): Promise<ReconciliationResult> {
     return this.storage.reconcile(request);
+  }
+
+  async prepareCheckout(_request: CheckoutRequest): Promise<PreparedHostedSession> {
+    return { status: 'unsupported', reason: 'local_mode' };
+  }
+
+  async preparePortalSession(_request: PortalRequest): Promise<PreparedHostedSession> {
+    return { status: 'unsupported', reason: 'local_mode' };
   }
 
   async createCheckout(_request: CheckoutRequest): Promise<HostedSession> {

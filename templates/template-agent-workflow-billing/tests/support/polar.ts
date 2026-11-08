@@ -102,6 +102,7 @@ export async function polarWire() {
     lostCustomer: false,
     lostUsage: false,
     lostHosted: false,
+    productUnavailable: false,
     malformed: false,
     rejectUsage: false,
     pause: undefined as undefined | { path: string; reached: () => void; release: Promise<void> },
@@ -193,7 +194,9 @@ export async function polarWire() {
       await pause.release;
     }
     if (url.pathname.startsWith('/v1/products/'))
-      return reply(data.products.find(value => url.pathname.endsWith(value.id)));
+      return data.productUnavailable
+        ? reply({}, 503)
+        : reply(data.products.find(value => url.pathname.endsWith(value.id)));
     if (url.pathname === '/v1/events/ingest') {
       if (data.rejectUsage) return reply({}, 422);
       const event = body.events[0];

@@ -325,6 +325,11 @@ const usageBindingStatements = [
   `CREATE TRIGGER billing_usage_bindings_no_delete BEFORE DELETE ON billing_usage_bindings BEGIN SELECT RAISE(ABORT, 'Usage bindings are immutable'); END`,
 ];
 
+const hostedDispatchStatements = [
+  // Old pending claims cannot prove whether a provider POST happened.
+  `ALTER TABLE hosted_operations ADD COLUMN dispatch_state TEXT NOT NULL DEFAULT 'dispatched' CHECK (dispatch_state IN ('not_dispatched', 'dispatched'))`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -334,6 +339,7 @@ const migrations = [
   { version: 6, statements: recoveryStatements },
   { version: 7, statements: expiryRecoveryStatements },
   { version: 8, statements: usageBindingStatements },
+  { version: 9, statements: hostedDispatchStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -389,7 +395,16 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
         : sql,
     ),
     ...workflowStatements,
-    ...providerStatements.slice(1),
+    ...providerStatements
+      .slice(1)
+      .map(sql =>
+        sql.startsWith('CREATE TABLE hosted_operations')
+          ? sql.replace(
+              'url TEXT,',
+              "url TEXT, dispatch_state TEXT NOT NULL DEFAULT 'dispatched' CHECK (dispatch_state IN ('not_dispatched', 'dispatched')),",
+            )
+          : sql,
+      ),
     ...recoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...expiryRecoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...usageBindingStatements,
