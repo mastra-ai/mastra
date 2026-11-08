@@ -218,7 +218,7 @@ After publishing, reconcile the verdict label: approve adds `status:auto-approve
 
 Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.
 
-Then make your terminal `factory_record_review_verdict` call with the published `verdict` (`approve` or `request changes`) and `reviewedHeadSha`, the head SHA you verified. The card stays in Reviewing with the verdict shown on it; Done is reserved for the merge, so never request a stage transition to end the re-review. The next push re-reviews it automatically.
+Then make your terminal `factory_record_review_verdict` call with the published `verdict` (`approve` or `request changes`) and `reviewedHeadSha`, the head SHA you verified. The card stays in its review phase with the verdict shown on it; the merge moves it to a terminal phase, so never request a stage transition to end the re-review. The next push re-reviews it automatically.
 
 If the call is rejected, read the stated reason, address it (re-examine contested findings, re-review if the PR changed again mid-run), and retry once corrected. Once the verdict is recorded, post the **session handoff** (the published body plus the `Factory routing` block) as your final conversation message — including how the verdict was published — and stop.
 

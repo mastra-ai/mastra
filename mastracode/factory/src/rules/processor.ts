@@ -539,12 +539,19 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // Skills name phases by role in the pull request loop, never by key: this line maps them.
     const flowPhase = (key: string | undefined) =>
       key ? `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})` : undefined;
+    const terminals = definition ? Object.keys(definition.phases).filter(key => definition.isTerminal(key)) : [];
+    const completed = definition?.sourceClosed?.completed ?? terminals[0];
+    const canceled = definition?.sourceClosed?.canceled ?? terminals.find(key => key !== completed);
     const flowParts = [
+      definition ? `rest: ${flowPhase(definition.initialPhase)}` : undefined,
+      flow.triage ? `triage: ${flowPhase(flow.triage)}` : undefined,
       flow.build ? `build: ${flowPhase(flow.build)}` : undefined,
       flow.selfReview ? `self-review: ${flowPhase(flow.selfReview)}` : undefined,
       flow.pullRequestReview ? `pull request review: ${flowPhase(flow.pullRequestReview)}` : undefined,
+      completed ? `completed: ${flowPhase(completed)}` : undefined,
+      canceled ? `canceled: ${flowPhase(canceled)}` : undefined,
     ].filter(part => part !== undefined);
-    const flowText = flowParts.length ? `Pull request loop phases: ${flowParts.join('; ')}\n` : '';
+    const flowText = flowParts.length ? `Board phases by part: ${flowParts.join('; ')}\n` : '';
     // The card moved to a phase another context works; this session's tools for it are gone.
     const handedOnText =
       phase?.kind === 'working' &&
