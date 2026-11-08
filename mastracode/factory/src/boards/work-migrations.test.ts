@@ -173,16 +173,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     expect(planning.exitTool).toEqual({ id: 'submit_plan', autoApprove: false, next: 'execute' });
   });
 
-  it("keeps a Review runner context a person changed, and fills Review's other fields", async () => {
+  it("keeps a Review runner context a person changed, and leaves the tools and automatic start that serve the seed's skill", async () => {
     const { boards, scope } = await setup(board => editPhase(board, 'review', { runner: { context: 'qa' } }));
 
     await firstLoad(boards, scope);
 
     const review = await phase(boards, scope, 'review');
     expect(review.runner).toEqual({ context: 'qa' });
-    const { runner: _runner, ...rest } = fieldsOf(review);
-    const { runner: _seedRunner, ...seedRest } = fieldsOf(seedPhase('review'));
-    expect(rest).toEqual(seedRest);
+    // No verdict tool or automatic start for a runner that is not the self-review skill.
+    expect(fieldsOf(review)).toMatchObject({ tools: null, autoStart: false, autoStartWhen: null });
+    expect(fieldsOf(review).nextPhases).toEqual(fieldsOf(seedPhase('review')).nextPhases);
+  });
+
+  it('starts the Building skill without its goal when a person narrowed its moves, so no goal is judged that cannot be met', async () => {
+    const { boards, scope } = await setup(board =>
+      editPhase(board, 'execute', { nextPhases: ['review', 'done', 'canceled'] }),
+    );
+
+    await firstLoad(boards, scope);
+
+    const building = await phase(boards, scope, 'execute');
+    expect(building.runner).toEqual({ skill: 'factory-build', context: 'work' });
+    expect(building.nextPhases).toEqual(['review', 'done', 'canceled']);
+    expect((await phase(boards, scope, 'planning')).runner).toEqual(seedPhase('planning').runner);
   });
 
   it('changes nothing the second time, neither the row nor its revision nor the version', async () => {
