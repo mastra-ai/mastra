@@ -189,6 +189,13 @@ describe('registered computer routes', () => {
     expect(viewer).not.toHaveBeenCalled();
     expect(controlState).not.toHaveBeenCalled();
     expect(control).not.toHaveBeenCalled();
+    const downgraded = await app.request('https://localhost/api/computers/c1/session', {
+      method: 'POST',
+      headers: { ...authorized, 'content-type': 'application/json', origin: 'http://localhost' },
+      body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', mode: 'control' }),
+    });
+    expect(downgraded.status).toBe(404);
+    expect(viewer).not.toHaveBeenCalled();
     expect((await session(app, {}, { origin: 'http://studio.test' })).status).toBe(200);
     expect(viewer).toHaveBeenCalledTimes(1);
   });

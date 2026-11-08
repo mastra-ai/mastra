@@ -71,7 +71,11 @@ function callerOrigin(request: Request | undefined, allowedOrigins?: string | st
   }
   if (origin.protocol !== 'http:' && origin.protocol !== 'https:') throw notFound();
   const allowed = Array.isArray(allowedOrigins) ? allowedOrigins : allowedOrigins ? [allowedOrigins] : [];
-  if (origin.host.toLowerCase() !== host.toLowerCase() && !allowed.includes('*') && !allowed.includes(origin.origin)) {
+  if (
+    origin.origin.toLowerCase() !== serverOrigin.toLowerCase() &&
+    !allowed.includes('*') &&
+    !allowed.includes(origin.origin)
+  ) {
     throw notFound();
   }
   return origin.origin;
