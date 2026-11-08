@@ -6,6 +6,7 @@ export * from './tool';
 export * from './processor';
 export * from './base';
 export * from './conversations';
+export * from './computer';
 export * from './workflow';
 export * from './a2a';
 export * from './mcp-tool';

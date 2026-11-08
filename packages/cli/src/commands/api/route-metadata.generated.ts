@@ -1148,6 +1148,60 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /computers/:computerId/session": {
+    "method": "POST",
+    "path": "/computers/:computerId/session",
+    "pathParams": [
+      "computerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "mode",
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /computers/:computerId/control": {
+    "method": "GET",
+    "path": "/computers/:computerId/control",
+    "pathParams": [
+      "computerId"
+    ],
+    "queryParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /computers/:computerId/control": {
+    "method": "POST",
+    "path": "/computers/:computerId/control",
+    "pathParams": [
+      "computerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "action",
+      "note",
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /v1/conversations": {
     "method": "POST",
     "path": "/v1/conversations",

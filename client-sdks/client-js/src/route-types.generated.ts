@@ -24,7 +24,7 @@ type InputShared_Auxiliary_116 = {
   parentWorkflow?: InputShared_Auxiliary_116 | undefined;
 };
 
-type InputShared_Auxiliary_208 =
+type InputShared_Auxiliary_212 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_208 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_208[];
+      args: InputShared_Auxiliary_212[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_208;
+      arg: InputShared_Auxiliary_212;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_235;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_235;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_235;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_235;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_235;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_235;
           };
     };
 
-type InputShared_Auxiliary_231 =
+type InputShared_Auxiliary_235 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_231 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_231[];
+      args: InputShared_Auxiliary_235[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_231;
+      arg: InputShared_Auxiliary_235;
     };
 
-type InputShared_Auxiliary_278 =
+type InputShared_Auxiliary_282 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_278[];
+      args: InputShared_Auxiliary_282[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_278;
+      arg: InputShared_Auxiliary_282;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_208;
+            some: InputShared_Auxiliary_212;
           }
         | {
-            none: InputShared_Auxiliary_208;
+            none: InputShared_Auxiliary_212;
           };
     };
 
-type InputShared_Auxiliary_732 =
+type InputShared_Auxiliary_736 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_732 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_732[];
+      args: InputShared_Auxiliary_736[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_732;
+      arg: InputShared_Auxiliary_736;
     };
 
-type InputShared_Auxiliary_806 = {
+type InputShared_Auxiliary_810 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_806[] | undefined;
+  children?: InputShared_Auxiliary_810[] | undefined;
 };
 
-type Shared_Auxiliary_795 = {
+type Shared_Auxiliary_799 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_795[] | undefined;
+  children?: Shared_Auxiliary_799[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1849,7 +1849,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_732[];
+  predicates: InputShared_Auxiliary_736[];
 };
 
 type InputShared_Type_90 = {
@@ -1863,7 +1863,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_732;
+  predicate: InputShared_Auxiliary_736;
 };
 
 type InputShared_Type_91 =
@@ -4497,7 +4497,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_795[] | undefined;
+  files?: Shared_Auxiliary_799[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8763,6 +8763,124 @@ export interface DeleteV1ResponsesResponseId_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /computers/:computerId/session
+// ============================================================================
+export type PostComputersComputerIdSession_PathParams = {
+  computerId: string;
+};
+
+export type PostComputersComputerIdSession_Body = {
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  mode: 'watch' | 'control';
+};
+
+export type PostComputersComputerIdSession_Response =
+  | {
+      state: 'ready';
+      socketUrl: string;
+    }
+  | {
+      state: 'not-running';
+    };
+
+export type PostComputersComputerIdSession_Request = Simplify<
+  (PostComputersComputerIdSession_PathParams extends never
+    ? {}
+    : { params: PostComputersComputerIdSession_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostComputersComputerIdSession_Body extends never
+      ? {}
+      : {} extends PostComputersComputerIdSession_Body
+        ? { body?: PostComputersComputerIdSession_Body }
+        : { body: PostComputersComputerIdSession_Body })
+>;
+
+export interface PostComputersComputerIdSession_RouteContract {
+  pathParams: PostComputersComputerIdSession_PathParams;
+  queryParams: never;
+  body: PostComputersComputerIdSession_Body;
+  request: PostComputersComputerIdSession_Request;
+  response: PostComputersComputerIdSession_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /computers/:computerId/control
+// ============================================================================
+export type GetComputersComputerIdControl_PathParams = PostComputersComputerIdSession_PathParams;
+
+export type GetComputersComputerIdControl_QueryParams = {
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+};
+
+export type GetComputersComputerIdControl_Response = {
+  holder: 'agent' | 'human';
+  reason?: string | undefined;
+  revision: number;
+};
+
+export type GetComputersComputerIdControl_Request = Simplify<
+  (GetComputersComputerIdControl_PathParams extends never ? {} : { params: GetComputersComputerIdControl_PathParams }) &
+    (GetComputersComputerIdControl_QueryParams extends never
+      ? {}
+      : {} extends GetComputersComputerIdControl_QueryParams
+        ? { query?: GetComputersComputerIdControl_QueryParams }
+        : { query: GetComputersComputerIdControl_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetComputersComputerIdControl_RouteContract {
+  pathParams: GetComputersComputerIdControl_PathParams;
+  queryParams: GetComputersComputerIdControl_QueryParams;
+  body: never;
+  request: GetComputersComputerIdControl_Request;
+  response: GetComputersComputerIdControl_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /computers/:computerId/control
+// ============================================================================
+export type PostComputersComputerIdControl_PathParams = PostComputersComputerIdSession_PathParams;
+
+export type PostComputersComputerIdControl_Body = {
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  action: 'take' | 'release';
+  note?: string | undefined;
+};
+
+export type PostComputersComputerIdControl_Response = {
+  holder: 'agent' | 'human';
+  revision: number;
+  notified: boolean;
+  reason?: ('no-change' | 'no-agent' | 'no-notifications-storage' | 'not-delivered' | 'error') | undefined;
+};
+
+export type PostComputersComputerIdControl_Request = Simplify<
+  (PostComputersComputerIdControl_PathParams extends never
+    ? {}
+    : { params: PostComputersComputerIdControl_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostComputersComputerIdControl_Body extends never
+      ? {}
+      : {} extends PostComputersComputerIdControl_Body
+        ? { body?: PostComputersComputerIdControl_Body }
+        : { body: PostComputersComputerIdControl_Body })
+>;
+
+export interface PostComputersComputerIdControl_RouteContract {
+  pathParams: PostComputersComputerIdControl_PathParams;
+  queryParams: never;
+  body: PostComputersComputerIdControl_Body;
+  request: PostComputersComputerIdControl_Request;
+  response: PostComputersComputerIdControl_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /v1/conversations
 // ============================================================================
 export type PostV1Conversations_Body = {
@@ -10779,7 +10897,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_208 | undefined;
+  where?: InputShared_Auxiliary_212 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10869,11 +10987,11 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_208 | undefined;
+  where?: InputShared_Auxiliary_212 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_231 | undefined;
+  having?: InputShared_Auxiliary_235 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10970,11 +11088,11 @@ export type PostObservabilitySpansAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_231 | undefined;
+  where?: InputShared_Auxiliary_235 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_231 | undefined;
+  having?: InputShared_Auxiliary_235 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -11022,7 +11140,7 @@ export type PostObservabilityThreadsQuery_Body =
               field: 'startedAt' | 'endedAt';
             };
           };
-      where?: InputShared_Auxiliary_231 | undefined;
+      where?: InputShared_Auxiliary_235 | undefined;
       orderBy?: {
         field: 'startedAt' | 'endedAt';
         direction: 'asc' | 'desc';
@@ -11038,9 +11156,9 @@ export type PostObservabilityThreadsQuery_Body =
           from: string;
           to: string;
         };
-        where?: InputShared_Auxiliary_208 | undefined;
+        where?: InputShared_Auxiliary_212 | undefined;
       };
-      where?: InputShared_Auxiliary_278 | undefined;
+      where?: InputShared_Auxiliary_282 | undefined;
       page?: {
         limit?: number;
         after?: (string | null) | undefined;
@@ -11117,7 +11235,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_231 | undefined;
+  where?: InputShared_Auxiliary_235 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
     direction: 'asc' | 'desc';
@@ -19742,7 +19860,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_806[] | undefined;
+  files?: InputShared_Auxiliary_810[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19800,7 +19918,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_806[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_810[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -25447,6 +25565,9 @@ export interface RouteTypes {
   'POST /v1/responses': PostV1Responses_RouteContract;
   'GET /v1/responses/:responseId': GetV1ResponsesResponseId_RouteContract;
   'DELETE /v1/responses/:responseId': DeleteV1ResponsesResponseId_RouteContract;
+  'POST /computers/:computerId/session': PostComputersComputerIdSession_RouteContract;
+  'GET /computers/:computerId/control': GetComputersComputerIdControl_RouteContract;
+  'POST /computers/:computerId/control': PostComputersComputerIdControl_RouteContract;
   'POST /v1/conversations': PostV1Conversations_RouteContract;
   'GET /v1/conversations/:conversationId': GetV1ConversationsConversationId_RouteContract;
   'GET /v1/conversations/:conversationId/items': GetV1ConversationsConversationIdItems_RouteContract;
@@ -26174,6 +26295,13 @@ export interface Client {
   };
   '/channels/platforms': {
     GET: GetChannelsPlatforms_RouteContract;
+  };
+  '/computers/:computerId/control': {
+    GET: GetComputersComputerIdControl_RouteContract;
+    POST: PostComputersComputerIdControl_RouteContract;
+  };
+  '/computers/:computerId/session': {
+    POST: PostComputersComputerIdSession_RouteContract;
   };
   '/datasets': {
     GET: GetDatasets_RouteContract;

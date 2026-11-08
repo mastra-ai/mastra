@@ -14,6 +14,7 @@ import {
   MCPTool,
   AgentBuilder,
   Conversations,
+  Computer,
   Observability,
   StoredAgent,
   DynamicWorkflow,
@@ -2146,6 +2147,11 @@ export class MastraClient extends BaseResource {
    */
   public getWorkspace(workspaceId: string): Workspace {
     return new Workspace(this.options, workspaceId);
+  }
+
+  /** Gets a provider-neutral client for an attached computer. */
+  public getComputer(computerId: string): Computer {
+    return new Computer(this.options, computerId);
   }
 
   // ============================================================================
