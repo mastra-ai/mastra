@@ -358,8 +358,10 @@ export class SandboxDestroyedError extends Error {
   }
 }
 
+/** Provider ceiling for one remote command. */
+export const PLATFORM_EXEC_TIMEOUT_MAX_MS = 10 * 60_000;
 /** Cap on one file command (a recursive copy can be large) when the sandbox sets no timeout. */
-const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
+const FILE_COMMAND_TIMEOUT_MS = PLATFORM_EXEC_TIMEOUT_MAX_MS;
 
 /**
  * Compose a shell command line from a `command` string and optional `args`.
@@ -1432,6 +1434,9 @@ export class PlatformSandbox extends MastraSandbox {
    * execution on the remote sandbox.
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
+    if (options?.timeout !== undefined && options.timeout > PLATFORM_EXEC_TIMEOUT_MAX_MS) {
+      throw new RangeError(`PlatformSandbox command timeout cannot exceed ${PLATFORM_EXEC_TIMEOUT_MAX_MS}ms`);
+    }
     return this._executeCommand(command, args, options, { once: false });
   }
 

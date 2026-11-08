@@ -55,4 +55,13 @@ export {
   type PrivateNetFetch,
 } from './private-net-exec.js';
 export { InProcessSandboxAddressRegistry } from './address-registry.js';
+export {
+  PlatformComputerControlPermanentError,
+  PlatformComputerControlSubscriber,
+  type PlatformComputerControlEnforcementOptions,
+  type PlatformComputerControlLease,
+  type PlatformComputerControlLeaseClient,
+  type PlatformComputerIdentity,
+  type PlatformComputerIdentityResolver,
+} from './computer-control.js';
 export { PlatformComputers, type PlatformComputersOptions } from './computers.js';

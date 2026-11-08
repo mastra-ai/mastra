@@ -4,6 +4,8 @@ import type { DaemonConnect } from '@mastra/computer-semantic';
 import { COMPUTER_VIEWER_PORT, Computers } from '@mastra/core/computers';
 import type { ComputerProvider, ComputerSandbox, ComputersOptions } from '@mastra/core/computers';
 import type { MastraComputerScope, MastraComputerViewer } from '@mastra/core/mastra';
+import { PlatformComputerControlSubscriber } from './computer-control.js';
+import type { PlatformComputerControlEnforcementOptions } from './computer-control.js';
 import { PlatformSandbox } from './sandbox.js';
 import type { PlatformSandboxOptions, PlatformSandboxTemplate } from './sandbox.js';
 import { Template, withDesktop } from './template.js';
@@ -30,6 +32,8 @@ export interface PlatformComputersOptions {
   createSandbox?: (options: PlatformSandboxOptions) => ComputerSandbox;
   /** @internal Test seam for the daemon socket. */
   connectDaemon?: DaemonConnect;
+  /** Required Platform projection of core's authoritative control revision. */
+  controlEnforcement?: PlatformComputerControlEnforcementOptions;
 }
 
 function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
@@ -111,8 +115,11 @@ function platformProvider(options: PlatformComputersOptions): ComputerProvider {
   };
 }
 
-/** Agent computers hosted by Mastra Platform. Platform owns provisioning and viewer auth only. */
+/** Agent computers hosted by Mastra Platform. Platform owns provisioning, viewer auth, and control enforcement. */
 export class PlatformComputers extends Computers {
+  readonly #controlSubscriber?: PlatformComputerControlSubscriber;
+  readonly #disposeControlSubscriber?: () => void;
+
   constructor(options: PlatformComputersOptions = {}) {
     assertExperimentalComputerEnabled();
     const generic: ComputersOptions = {
@@ -124,5 +131,15 @@ export class PlatformComputers extends Computers {
       }),
     };
     super(generic);
+    if (options.controlEnforcement) {
+      this.#controlSubscriber = new PlatformComputerControlSubscriber(options.controlEnforcement);
+      this.#disposeControlSubscriber = this.registerControlSubscriber(this.#controlSubscriber);
+    }
+  }
+
+  /** Stop accepting remote enforcement work and release this registration owner. */
+  closeControlEnforcement(): void {
+    this.#controlSubscriber?.close();
+    this.#disposeControlSubscriber?.();
   }
 }

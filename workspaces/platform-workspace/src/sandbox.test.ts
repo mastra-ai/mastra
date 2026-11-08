@@ -8,7 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { createWorkspaceTools, supportsComputer, supportsNetworking, Workspace } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
-import { PlatformSandbox } from './sandbox.js';
+import { PLATFORM_EXEC_TIMEOUT_MAX_MS, PlatformSandbox } from './sandbox.js';
 import type { SandboxAddressRegistry } from './sandbox.js';
 import { serializeSandboxTemplate, Template } from './template.js';
 
@@ -110,6 +110,21 @@ describe('PlatformSandbox', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('rejects command timeouts above the Platform provider ceiling before transport', async () => {
+    const fetchMock = vi.fn();
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await expect(
+      sandbox.executeCommand('sleep', ['1'], { timeout: PLATFORM_EXEC_TIMEOUT_MAX_MS + 1 }),
+    ).rejects.toThrow(`cannot exceed ${PLATFORM_EXEC_TIMEOUT_MAX_MS}ms`);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('creates a sandbox, mints an exec lease, and runs the command over the direct WebSocket', async () => {
