@@ -452,10 +452,10 @@ describe('lifecycle', () => {
     const keyed = call(computers, 'computer_key', { keys: 'a' }, ctx('r1', 't1'));
     await sleep(0);
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1'))).toBe(NOT_ATTACHED);
-    expect(await typed).toBe('typed');
-    expect(await keyed).toBe('pressed');
+    expect(await typed).toBe(NOT_ATTACHED);
+    expect(await keyed).toBe(NOT_ATTACHED);
     expect(await destroyed).toEqual({ destroyed: computer.id });
-    expect(backend.actions).toEqual(['type', 'key']);
+    expect(backend.actions).toEqual([]);
     expect(await call(computers, 'mastra_workspace_computer_attach', { id: computer.id }, ctx('r1', 't1'))).toBe(NOT_FOUND);
   });
 
@@ -473,21 +473,18 @@ describe('lifecycle', () => {
     const c = ctx('r1', 't1');
     const shot = await call(computers, 'computer_screenshot', {}, c);
     expect(shot).toMatchObject({ mediaType: 'image/png', data: Buffer.from(PNG).toString('base64') });
-    expect((computers.tools().computer_screenshot as any).toModelOutput(shot).value[1].type).toBe('media');
+    const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    const workspaceTools = await createWorkspaceTools(workspace);
+    expect((workspaceTools[WORKSPACE_TOOLS.COMPUTER.SCREENSHOT] as any).toModelOutput(shot).value[1].type).toBe('media');
     await call(computers, 'computer_click', { x: 1, y: 2, button: 'right' }, c);
     await call(computers, 'computer_click', { x: 1, y: 2, double: true }, c);
     await call(computers, 'computer_move', { x: 3, y: 4 }, c);
     await call(computers, 'computer_drag', { from: { x: 0, y: 0 }, to: { x: 5, y: 5 } }, c);
     await call(computers, 'computer_scroll', { direction: 'down', amount: 2 }, c);
-    expect(await call(computers, 'computer_screen_info', {}, c)).toEqual({
-      screen: { width: 1280, height: 800 },
-      cursor: { x: 1, y: 2 },
-    });
-    expect(await call(computers, 'computer_exec', { command: 'echo hi' }, c)).toEqual({
-      exitCode: 0,
-      stdout: 'out',
-      stderr: '',
-    });
+    expect(await call(computers, 'computer_screen_info', {}, c)).toBe(
+      'Screen size: 1280x800\nCursor position: (1, 2)',
+    );
+    expect(await call(computers, 'computer_exec', { command: 'echo hi' }, c)).toBe('out\n\nExit code: 0');
     expect(await call(computers, 'mastra_workspace_computer_snapshot', {}, c)).toEqual({ status: 'captured' });
     backend.checkpoint = { status: 'skipped', reason: 'sandbox-not-running' };
     expect(await call(computers, 'mastra_workspace_computer_snapshot', {}, c)).toEqual({
@@ -497,19 +494,26 @@ describe('lifecycle', () => {
     expect(backend.actions).toEqual([
       'screenshot',
       'rightClick',
+      'screenshot',
       'doubleClick',
+      'screenshot',
       'move',
+      'screenshot',
       'drag',
+      'screenshot',
       'scroll',
+      'screenshot',
       'exec:echo hi',
       'snapshot',
       'snapshot',
     ]);
   });
 
-  it('rejects out-of-range exec timeouts by schema', () => {
-    const schema = (make().tools().computer_exec as any).inputSchema;
-    expect(schema.safeParse({ command: 'ls', timeout: 600_001 }).success).toBe(false);
+  it('uses the Workspace execute-command timeout schema', async () => {
+    const computers = make();
+    const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    const schema = ((await createWorkspaceTools(workspace))[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] as any).inputSchema;
+    expect(schema.safeParse({ command: 'ls', timeout: 600_001 }).success).toBe(true);
     expect(schema.safeParse({ command: 'ls', timeout: 1000 }).success).toBe(true);
   });
 });
@@ -901,7 +905,7 @@ describe('control lease', () => {
     await expect(computers.controlState(id, scope)).resolves.toEqual({ holder: 'agent' });
   });
 
-  it('a take while an action is in flight lets it finish and refuses the queued ones', async () => {
+  it('direct Workspace executes already started before a take finish without a provider FIFO', async () => {
     const computers = make();
     const id = (await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'))).computer.id;
     const g = (backend.gates.click = gate());
@@ -911,11 +915,11 @@ describe('control lease', () => {
     await computers.control(id, scope, { action: 'take' });
     g.open();
     expect(await click).toBe('Clicked at (1, 1) (post-action screenshot failed)');
-    expect(await type).toBe(HUMAN_HAS_CONTROL);
-    expect(backend.actions).toEqual(['click']);
+    expect(await type).toBe('Typed 1 characters (post-action screenshot failed)');
+    expect(backend.actions).toEqual(['click', 'type']);
   });
 
-  it('request_human refuses a queued screenshot but lets an in-flight one finish', async () => {
+  it('direct Workspace screenshots already started before request_human finish without a provider FIFO', async () => {
     const computers = make();
     await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
     const g = (backend.gates.click = gate());
@@ -925,8 +929,8 @@ describe('control lease', () => {
     await call(computers, 'mastra_workspace_computer_request_human', { reason: 'r' }, ctx('r1', 't1'));
     g.open();
     await click;
-    expect(await queued).toBe(HUMAN_HAS_CONTROL);
-    expect(backend.actions).toEqual(['click']);
+    expect((await queued).text).toMatch(/^Screenshot/);
+    expect(backend.actions).toEqual(['click', 'screenshot']);
 
     const computers2 = make();
     await call(computers2, 'mastra_workspace_computer_create', {}, ctx('r1', 't9'));
@@ -972,11 +976,16 @@ describe('control lease', () => {
       name: 'computer-take',
       instructions: 'Use the computer.',
       model: parallelToolCallModel([
-        { toolName: 'computer_click', input: { x: 1, y: 2 } },
-        { toolName: 'computer_type', input: { text: 'echo hi' } },
-        { toolName: 'computer_key', input: { keys: 'Enter' } },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.CLICK, input: { x: 1, y: 2 } },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.TYPE, input: { text: 'echo hi' } },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, input: { key: 'Enter' } },
       ]) as any,
-      tools: computers.tools(),
+      tools: {
+        ...computers.tools(),
+        ...(await createWorkspaceTools(
+          new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' }),
+        )),
+      },
     });
     const rc = new RequestContext();
     rc.set(MASTRA_RESOURCE_ID_KEY, 'r1');
@@ -992,9 +1001,7 @@ describe('control lease', () => {
       result.toolResults.map((r: any) => [r.payload?.toolName ?? r.toolName, r.payload?.result ?? r.result]),
     );
     expect(outputs).toEqual({
-      computer_click: 'clicked at (1, 2)',
-      computer_type: HUMAN_HAS_CONTROL,
-      computer_key: HUMAN_HAS_CONTROL,
+      [WORKSPACE_TOOLS.COMPUTER.CLICK]: 'Clicked at (1, 2) (post-action screenshot failed)',
     });
   });
 });
@@ -1049,7 +1056,7 @@ describe('screenshot after action', () => {
     expect(backend.actions).toEqual(['screenshot']);
   });
 
-  it('keeps model order with the screenshot inside each action slot', async () => {
+  it('does not impose provider ordering on direct Workspace executes', async () => {
     const computers = make({ screenshotAfterAction: true });
     await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
     backend.latency.click = 20;
@@ -1057,7 +1064,7 @@ describe('screenshot after action', () => {
       call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r1', 't1')),
       call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1')),
     ]);
-    expect(backend.actions).toEqual(['click', 'screenshot', 'type', 'screenshot']);
+    expect(backend.actions).toEqual(['type', 'click', 'screenshot', 'screenshot']);
   });
 
   it('reports the completed action when the follow-up screenshot fails', async () => {
