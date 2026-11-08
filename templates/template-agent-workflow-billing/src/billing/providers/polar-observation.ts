@@ -43,7 +43,8 @@ export class PolarObservation {
       const products = new Map<string, z.infer<typeof productSchema>>();
       for (const id of productIds) {
         const product = await this.transport.request(`/products/${id}`, productSchema);
-        if (product.id !== id || product.organization_id !== this.configuration.organizationId || product.is_archived)
+        // Archiving stops new sales; verified purchases and active renewals retain access.
+        if (product.id !== id || product.organization_id !== this.configuration.organizationId)
           throw new BillingError('state_unavailable');
         products.set(id, product);
       }

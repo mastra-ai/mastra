@@ -520,6 +520,138 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     ).toBe(10n);
   });
 
+  it.each([
+    ['order', 'first connection'],
+    ['order', 'restart'],
+    ['subscription', 'first connection'],
+    ['subscription', 'restart'],
+  ] as const)('archived products preserve purchased %s credit on %s', async (kind, lifecycle) => {
+    const f = await fixture({ units: 1 });
+    const recurring = kind === 'subscription';
+    const units = recurring ? 4 : 6;
+    f.wire.data.grants = f.wire.data.grants.filter(grant => (grant.subscription_id !== null) === recurring);
+    if (recurring) f.wire.data.orders = [];
+    else f.wire.data.subscriptions = [];
+    const financialHistory = () =>
+      Promise.all(
+        ['billing_ledger', 'billing_outbox', 'billing_usage_bindings'].map(
+          async table => (await f.observer.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows,
+        ),
+      );
+    const grantHistory = async () => (await f.observer.execute('SELECT * FROM credit_grants ORDER BY rowid')).rows;
+    if (lifecycle === 'restart') await f.execute('before-archive');
+    const spent = lifecycle === 'restart' ? 1 : 0;
+    const beforeArchive = await grantHistory();
+    const financialBefore = await financialHistory();
+    // Archive both mapped products: an unrelated retired offer must not block
+    // verification of an otherwise valid paid source either.
+    for (const product of f.wire.data.products) product.is_archived = true;
+    f.commercial.close();
+    const reopened = await initializeBilling(f.initialization);
+    cleanups.push(reopened.close);
+    const account = await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    const refresh = () => reopened.provider.getState(account);
+    const state = await refresh();
+    expect(state.meters[0]).toMatchObject({ confirmedBalance: units - spent, consumedUnits: spent });
+    if (recurring) {
+      expect(state.entitlements.map(value => value.key)).toEqual(['access']);
+      expect(state.subscriptions.map(value => value.key)).toEqual(['subscription']);
+    }
+    const retained = await grantHistory();
+    expect(retained).toHaveLength(1);
+    if (lifecycle === 'restart') expect(retained).toEqual(beforeArchive);
+    await refresh();
+    await refresh();
+    expect(await grantHistory()).toEqual(retained);
+    expect(await financialHistory()).toEqual(financialBefore);
+    await expect(
+      reopened.provider.prepareCheckout({
+        account,
+        product: 'credit-pack',
+        returnUrl: 'https://app.example.test/billing',
+      }),
+    ).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect(f.wire.data.requests.filter(value => value.method === 'POST' && value.path === '/v1/checkouts/')).toEqual(
+      [],
+    );
+    const gateway = new BillingGateway(f.organizations, f.accounting, reopened.provider, f.configuration, [
+      {
+        resourceId: 'assistant',
+        operation: 'generate',
+        measurements: [],
+        execute: async () => ({ status: 'succeeded', result: { answer: 'done' } }),
+      },
+    ]);
+    const execute = (idempotencyKey: string) =>
+      gateway.execute(f.owner.context, {
+        resourceId: 'assistant',
+        operation: 'generate',
+        idempotencyKey,
+        input: {},
+      });
+    expect((await execute('after-archive')).billing.billedUnits).toBe(1);
+    const financialAfterSpend = await financialHistory();
+    const source = f.wire.data.grants[0];
+    source.is_granted = false;
+    source.is_revoked = true;
+    await expect(execute('revoked-archived')).rejects.toMatchObject({ code: 'forbidden' });
+    source.is_granted = true;
+    source.is_revoked = false;
+    if (!recurring) {
+      f.wire.data.orders[0].refunded_amount = 1;
+      await expect(execute('refunded-archived')).rejects.toMatchObject({ code: 'forbidden' });
+      f.wire.data.orders[0].refunded_amount = 0;
+    } else {
+      const subscription = f.wire.data.subscriptions[0];
+      const end = subscription.current_period_end;
+      subscription.current_period_end = new Date(Date.now() - 1000).toISOString();
+      await expect(execute('expired-archived')).rejects.toMatchObject({ code: 'forbidden' });
+      subscription.current_period_end = end;
+    }
+    expect(await financialHistory()).toEqual(financialAfterSpend);
+    expect((await refresh()).meters[0]).toMatchObject({
+      confirmedBalance: units - spent - 1,
+      consumedUnits: spent + 1,
+    });
+    for (let index = spent + 1; index < units; index++)
+      expect((await execute(`retained-${index}`)).billing.billedUnits).toBe(1);
+    await expect(execute('exhausted-archived')).rejects.toMatchObject({ code: 'insufficient_credits' });
+    const consumed = await grantHistory();
+    expect(consumed).toHaveLength(1);
+    expect(consumed[0]).toMatchObject({
+      id: retained[0].id,
+      source_key: retained[0].source_key,
+      fingerprint: retained[0].fingerprint,
+      provenance: retained[0].provenance,
+      original_units: BigInt(units),
+      consumed_units: BigInt(units),
+    });
+    if (recurring) {
+      const subscription = f.wire.data.subscriptions[0];
+      subscription.current_period_start = new Date(Date.now() - 500).toISOString();
+      subscription.current_period_end = new Date(Date.now() + 3600_000).toISOString();
+      const historyBeforeRenewal = await financialHistory();
+      const renewed = await refresh();
+      expect(renewed.meters[0]).toMatchObject({ confirmedBalance: 4, consumedUnits: 4 });
+      expect(renewed.entitlements.map(value => value.key)).toEqual(['access']);
+      expect(renewed.subscriptions.map(value => value.key)).toEqual(['subscription']);
+      await refresh();
+      await refresh();
+      const grants = await grantHistory();
+      expect(grants).toHaveLength(2);
+      expect(grants[0]).toEqual({ ...consumed[0], available: 0n });
+      expect(grants[1]).toMatchObject({ original_units: 4n, consumed_units: 0n, available: 1n });
+      expect(grants[1].source_key).not.toBe(consumed[0].source_key);
+      expect(await financialHistory()).toEqual(historyBeforeRenewal);
+      expect((await execute('renewed-archived')).billing.billedUnits).toBe(1);
+      expect((await refresh()).meters[0]).toMatchObject({ confirmedBalance: 3, consumedUnits: 5 });
+    }
+    const historyAfter = await financialHistory();
+    for (let index = 0; index < financialBefore.length; index++)
+      expect(historyAfter[index].slice(0, financialBefore[index].length)).toEqual(financialBefore[index]);
+    expect(f.wire.data.hosted).toBe(0);
+  });
+
   it.each(['archived', 'unavailable'] as const)(
     'checkout retries the same key after a %s product preflight recovers',
     async failure => {
