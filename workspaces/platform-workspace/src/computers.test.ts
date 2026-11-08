@@ -847,6 +847,27 @@ describe('control lease', () => {
     await expect(computers.controlState(id, scope)).resolves.toMatchObject({ reason: 'log in please' });
   });
 
+  it('request_human refuses a later screenshot but lets an in-flight screenshot finish', async () => {
+    const computers = make();
+    await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    const screenshotGate = gate();
+    backend.gates.screenshot = screenshotGate;
+
+    const inFlight = call(computers, 'computer_screenshot', {}, ctx('r1', 't1'));
+    await screenshotGate.entered;
+    await call(
+      computers,
+      'mastra_workspace_computer_request_human',
+      { reason: 'log in' },
+      ctx('r1', 't1'),
+    );
+    await expect(call(computers, 'computer_screenshot', {}, ctx('r1', 't1'))).resolves.toBe(HUMAN_HAS_CONTROL);
+
+    screenshotGate.open();
+    await expect(inFlight).resolves.toMatchObject({ __workspaceMedia: true, mediaType: 'image/png' });
+    expect(backend.actions).toEqual(['screenshot']);
+  });
+
   it('refuses every hand and lifecycle tool with the exact text without touching the driver', async () => {
     const { computers, id } = await handedOver();
     backend.actions = [];
