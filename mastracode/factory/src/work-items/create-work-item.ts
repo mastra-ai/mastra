@@ -3,6 +3,7 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
+import { DEFAULT_BOARD_ID } from '../boards/default-board.js';
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/intake-routing.js';
@@ -80,7 +81,7 @@ export async function createFactoryWorkItem({
           boards,
         )
       : undefined;
-  const boardId = placement?.board ?? input.board ?? 'work';
+  const boardId = placement?.board ?? input.board ?? DEFAULT_BOARD_ID;
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];

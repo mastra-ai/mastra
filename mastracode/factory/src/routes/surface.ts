@@ -7,8 +7,15 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem, hasPullRequest, PULL_REQUEST_REVIEW_PHASE, reviewedChangeRequest } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import {
+  boardFlow,
+  boardForWorkItem,
+  hasPullRequest,
+  isPullRequestReviewPhase,
+  REVIEW_CONTEXT,
+  reviewedChangeRequest,
+} from '../boards/index.js';
+import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -277,12 +284,12 @@ function sameBranch(held: string, branch: string): boolean {
 /** The branch a binding's session works on: the reviewed pull request's for PR review of an attached one. */
 function reviewBranch(
   input: FactoryBindingPreparationInput,
-  boardId: string,
+  board: InstalledBoard | undefined,
   stage: string,
   source: WorkItemBranchSource,
 ): string {
   const metadata = input.item.workItem.metadata;
-  if (input.role === 'review' && boardId === 'work' && stage === PULL_REQUEST_REVIEW_PHASE) {
+  if (input.role === REVIEW_CONTEXT && isPullRequestReviewPhase(board, stage)) {
     const change = reviewedChangeRequest({ ...input.item, source });
     if (change && !change.standalone && change.number !== undefined) {
       return pullRequestBranch({ id: input.item.id, provider: change.provider, number: change.number });
@@ -292,17 +299,14 @@ function reviewBranch(
 }
 
 /**
- * The lane a run started on a resting card moves it to. Work's phases share
- * contexts, so its roles keep their own lanes: `work` builds and the old `plan`
- * role plans. Other boards use the first phase that runs in the role's context.
+ * The lane a run started on a resting card moves it to: a review of a card with a pull request
+ * goes to the board's pull request review; otherwise the first phase that runs in the role's
+ * context. Work's phases share contexts, so its roles keep their own lanes: `work` builds and
+ * the old `plan` role plans.
  */
-function restingExitLane(
-  board: { phaseForRole(role: string): string | undefined } | undefined,
-  role: string,
-  hasPullRequest: boolean,
-): string | undefined {
-  // A card's pull request is reviewed in PR review; Work's Review lane is the builder's self-review.
-  if (hasPullRequest && role === 'review' && workLaneForRole(board, role)) return PULL_REQUEST_REVIEW_PHASE;
+function restingExitLane(board: InstalledBoard | undefined, role: string, hasPullRequest: boolean): string | undefined {
+  const pullRequestReview = boardFlow(board).pullRequestReview;
+  if (hasPullRequest && role === REVIEW_CONTEXT && pullRequestReview) return pullRequestReview;
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
@@ -349,7 +353,7 @@ export async function prepareFactoryRuleBinding(
     }
     // A PR review on an issue card checks the pull request out on its own branch, apart from
     // the builder's issue branch; every other seat works on the card's own branch.
-    const branch = reviewBranch(input, boardId, destinationStage, source);
+    const branch = reviewBranch(input, board, destinationStage, source);
     const connections = await sourceControl.connections.list({
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
@@ -370,7 +374,7 @@ export async function prepareFactoryRuleBinding(
     // The review seat moves between branches on one card (self-review on the builder's branch,
     // PR review on each pull request's), so its session is reused only on the branch it holds.
     const boundSession =
-      reusable && input.role === 'review' && !sameBranch(reusable.branch, branch) ? undefined : reusable;
+      reusable && input.role === REVIEW_CONTEXT && !sameBranch(reusable.branch, branch) ? undefined : reusable;
     const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
     let repository = await resolveWorkItemRepository({
       sourceControl,
@@ -465,7 +469,7 @@ export async function prepareFactoryRuleBinding(
           externalSource: input.item.externalSource,
           parentWorkItemId: input.item.parentWorkItemId,
           title: input.item.title,
-          stages: ['intake'],
+          stages: [...input.item.stages],
           sessions: input.item.sessions,
           metadata: input.item.metadata,
         },
@@ -510,7 +514,7 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
-    boardRegistry: BoardRegistry;
+    boardRegistry: BoardRegistry | ProjectBoardSource;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
     feed: CommentsDomain;
@@ -774,6 +778,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           }),
         deps.domains.intake,
         { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
+        deps.boardRegistry,
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -923,6 +928,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           configVersion: deps.configVersion,
+          boards: deps.boardRegistry,
         })
       : []),
   ];

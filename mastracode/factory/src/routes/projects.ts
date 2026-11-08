@@ -8,6 +8,8 @@ import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/wor
 import type { Context } from 'hono';
 
 import type { ProjectBoardCache } from '../boards/project-boards.js';
+import { createBoardRegistry } from '../boards/registry.js';
+import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
@@ -25,7 +27,6 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
-import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectListRepository } from './contracts.js';
@@ -687,6 +688,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
             binding => binding.status === 'active',
           );
+          const boards =
+            (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
+            createBoardRegistry();
           const seen = new Set<string>();
           const applied: string[] = [];
           const skipped: Array<{
@@ -710,7 +714,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
               continue;
             }
-            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+            // A bound run can still act on its card anywhere short of a terminal phase.
+            const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
+            if (phaseKind === undefined || phaseKind === 'terminal') {
               skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
               continue;
             }

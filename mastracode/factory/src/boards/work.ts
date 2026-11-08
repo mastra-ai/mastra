@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from './default-board.js';
 import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 
@@ -33,27 +34,8 @@ export type WorkBoardPhase =
   | 'done'
   | 'canceled';
 
-/** A pull request's own card on Work is only reviewed: it never enters these phases, whoever moves it. */
-const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'planning', 'execute', 'review']);
-
-/**
- * Why a move breaks the shape of a card on Work, or undefined when it does not: a pull request's
- * own card is only reviewed, and PR review holds only cards that carry a pull request (their own,
- * or one attached to their issue). `nextPhases` cannot say this: Intake leads to both Triage and
- * PR review, and which one fits depends on the card.
- */
-export function workPullRequestCardRejection(
-  card: { readonly standalonePullRequest: boolean; readonly hasPullRequest: boolean },
-  toStage: string,
-): string | undefined {
-  if (!card.hasPullRequest && toStage === 'pr-review')
-    return 'PR review holds only cards with a pull request; this work item goes to Review after Building.';
-  if (!card.standalonePullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
-  return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
-}
-
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
-  id: 'work',
+  id: DEFAULT_BOARD_ID,
   name: 'Work',
   initialPhase: 'intake',
   sourceClosed: { completed: 'done', canceled: 'canceled' },
@@ -129,7 +111,3 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
   },
 });
-
-export function isWorkBoardPhase(value: string): value is WorkBoardPhase {
-  return Object.prototype.hasOwnProperty.call(workBoard.phases, value);
-}

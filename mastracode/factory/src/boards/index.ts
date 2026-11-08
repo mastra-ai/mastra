@@ -1,4 +1,11 @@
-export { BoardDefinitionError, DEFAULT_PHASE_CONTEXT, defineBoard, FACTORY_AGENT_ID } from './define-board.js';
+export {
+  BoardDefinitionError,
+  DEFAULT_PHASE_CONTEXT,
+  defineBoard,
+  FACTORY_AGENT_ID,
+  REVIEW_CONTEXT,
+} from './define-board.js';
+export { DEFAULT_BOARD_ID } from './default-board.js';
 export { cardRuleFacts } from './card-facts.js';
 export type {
   BoardDefinition,
@@ -19,17 +26,20 @@ export type {
 } from './define-board.js';
 export {
   boardEventHandlers,
+  awaitsAcceptance,
+  boardFlow,
+  boardPhaseOutcomes,
   boardForWorkItem,
+  cardBoardFlow,
   boundChangeRequestNumber,
   eventBoardId,
   cardOwnsBranch,
   hasPullRequest,
   isPullRequestCard,
+  isPullRequestReviewPhase,
   isTerminalWorkItem,
   newestOpenPullRequestNumber,
   newestOwnedOpenPullRequestNumber,
-  PULL_REQUEST_REVIEW_PHASE,
-  pullRequestReviewPhase,
   pullRequestSourceNumber,
   pullRequestSources,
   resolveBoardClosure,
@@ -42,6 +52,9 @@ export {
   rulePhaseField,
   resolvePhaseSemantics,
   withBoardClosure,
+  withBoardFlow,
+  intakeTarget,
+  withIntakeTarget,
   workItemPhaseSemantics,
 } from './semantics.js';
 export type { PhaseSemantics, ReviewedChangeRequest } from './semantics.js';
@@ -52,11 +65,5 @@ export type {
 } from './transition-policy.js';
 export { createBoardRegistry, defaultBoards } from './registry.js';
 export type { BoardRegistry, InstalledBoard } from './registry.js';
-import { isWorkBoardPhase, workBoard } from './work.js';
-
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';
-
-export function allowsBuiltInBoardTransition(_board: 'work', from: string, to: string): boolean {
-  return isWorkBoardPhase(from) && isWorkBoardPhase(to) && workBoard.allowsTransition(from, to);
-}

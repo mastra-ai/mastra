@@ -3,6 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
+import { DEFAULT_BOARD_ID } from '../boards/default-board.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { placedByIntakeRoute } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -200,7 +201,7 @@ async function relocateLabeledCards({
     const targetBoard =
       resolveIntakeLabelRoute(routes, labels)?.board ??
       repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
-      'work';
+      DEFAULT_BOARD_ID;
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;

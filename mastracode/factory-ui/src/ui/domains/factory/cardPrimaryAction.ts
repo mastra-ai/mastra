@@ -1,5 +1,7 @@
-import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
-import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
+import { needsApproval } from '@mastra/factory/rules/types';
+import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+
+type FactoryRole = 'triage' | 'plan' | 'work' | 'review';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
 import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
@@ -63,7 +65,10 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if ((columnStage === 'pr-review' || columnStage === 'review') && cardHasPullRequest(item)) return [REVIEW_MOVE];
   if (columnStage === 'review') return [];
   if (item.source === 'github-issue') {
-    return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
+    return needsApproval(
+      { ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } },
+      stage => stage === 'intake' || stage === 'triage',
+    )
       ? [PREPARE_APPROVAL]
       : issueMoves(columnStage);
   }
@@ -89,7 +94,7 @@ function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): bo
 }
 
 // PR review carries a pull request card's reviewer, after the builder's lanes.
-const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROLE_STAGES), 'pr-review'];
+const WORKING_LANES: readonly FactoryRuleStage[] = ['triage', 'planning', 'execute', 'review', 'pr-review'];
 
 /**
  * Resume re-enters the deepest working lane a card parked in Intake has been in, and lets

@@ -326,16 +326,6 @@ export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity 
   updatedAt: Date;
 }
 
-/** Stages in which a bound run can still act on its work item. */
-export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
-  'intake',
-  'triage',
-  'planning',
-  'execute',
-  'review',
-  'pr-review',
-]);
-
 interface SetAttentionReceiptInput {
   orgId: string;
   factoryProjectId: string;
@@ -3162,7 +3152,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * left alone. Returns the cards moved; a second run finds none.
    */
   async returnHeldTriageCards(): Promise<Card[]> {
-    // Cards filed before boards were recorded carry no board; outside pull requests they are Work cards.
+    // A one-time migration of rows written when Work was the only board, so it reads Work's phase
+    // keys (`triage`, `intake`) by name. Cards filed before boards were recorded carry no board;
+    // outside pull requests they are Work cards.
     const held = (
       await this.#cards(this.#db, { transaction: false }).findMany({
         board: { in: ['work', null] },
@@ -3819,6 +3811,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (reused) return reused;
 
     const now = new Date();
+    // Legacy writers omit stages; they only ever filed onto the default board's resting phase.
     const stages = input.stages ?? ['intake'];
     if (input.parentWorkItemId != null) {
       await this.#copyLegacyParent(ops, orgId, input.parentWorkItemId);

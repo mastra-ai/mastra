@@ -1554,8 +1554,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(own).toMatchObject({ stages: ['pr-review'] });
       // The card's key is base64url JSON, so digits at its end are not the iid.
       expect(own.externalSource?.externalId).toMatch(/^gitlab-pr:/);
-      expect(boundChangeRequestNumber(joined)).toBe('17');
-      expect(boundChangeRequestNumber(own)).toBe('23');
+      expect(boundChangeRequestNumber(createBoardRegistry(), joined)).toBe('17');
+      expect(boundChangeRequestNumber(createBoardRegistry(), own)).toBe('23');
     });
 
     it("never files an outsider's \"Closes #42\" merge request on issue 42's card", async () => {

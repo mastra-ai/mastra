@@ -3,25 +3,33 @@ import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
+  cardBoardFlow,
   eventBoardId,
   isTerminalWorkItem,
   cardOwnsBranch,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
+  DEFAULT_BOARD_ID,
+  intakeTarget,
   rulePhaseField,
   withBoardClosure,
+  withBoardFlow,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
   FactoryPullRequestHome,
+  FactoryRuleIntakeTarget,
   FactoryRuleActor,
   FactoryRuleDecision,
   FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -30,6 +38,7 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { LEGACY_REVIEW_BOARD } from '../../storage/domains/work-items/legacy-review.js';
 import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
@@ -229,7 +238,8 @@ interface GitLabRulesOptions {
   storage: WorkItemsStorage;
   intake: IntakeStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
 }
 
 interface ProjectTarget {
@@ -239,6 +249,16 @@ interface ProjectTarget {
 
 export class GitLabRules {
   constructor(private readonly options: GitLabRulesOptions) {}
+
+  /** Brings the project's boards up to date, so the sync reads below see its stored boards. */
+  async loadBoards(scope: StoredBoardScope): Promise<void> {
+    await toBoardSource(this.options.boards).load(scope);
+  }
+
+  /** The project's loaded boards; {@link loadBoards} runs before an event is handled. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
 
   async ingest(parsed: ParsedGitLabWebhook): Promise<{ status: IngressStatus }> {
     const event = eventName(parsed);
@@ -253,6 +273,7 @@ export class GitLabRules {
     if (targets.length === 0) return { status: 'ignored' };
     const results: Array<{ status: IngressStatus }> = [];
     for (const target of targets) {
+      await this.loadBoards(target.target);
       results.push(await this.#ingestProject(parsed, event, projectId, projectPath, host, username, target));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
@@ -318,8 +339,11 @@ export class GitLabRules {
       candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
     );
     if (!binding) return { status: 'ignored' };
-    // A binding saved for the retired Review board files onto Work, where its merge requests now live.
-    const board = this.options.boards.get(binding.board === 'review' || !binding.board ? 'work' : binding.board);
+    // A binding saved for the retired Review board files onto the default board, where its merge
+    // requests now live.
+    const board = this.#boards(target.target).get(
+      binding.board === LEGACY_REVIEW_BOARD || !binding.board ? DEFAULT_BOARD_ID : binding.board,
+    );
     if (!board) return { status: 'ignored' };
 
     const connectionIds = [
@@ -420,7 +444,7 @@ export class GitLabRules {
       factoryAuthored: false,
     };
     // A merge request seen for the first time is filed on the card whose branch it comes from,
-    // when one is on Work. Otherwise a trusted author's merge request names the card of the issue
+    // when its board reviews merge requests. Otherwise a trusted author's merge request names the card of the issue
     // its description says it closes, and the project's intake routes decide, when it is filed,
     // whether it joins that card. An untrusted author's merge request never lands on another card.
     // A card with no source of its own (a manual card) never takes one: the merge request would
@@ -430,7 +454,7 @@ export class GitLabRules {
       card.externalSource !== null &&
       card.externalSource.integrationId !== 'github' &&
       card.externalSource.type !== 'pull-request' &&
-      !isTerminalWorkItem(this.options.boards, card);
+      !isTerminalWorkItem(this.#boards(card), card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
     if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
       // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
@@ -442,7 +466,7 @@ export class GitLabRules {
         fromThisProject &&
         (actorTrusted || mergeRequestAuthorTrusted) &&
         eligibleHome(authoringItem) &&
-        boardForWorkItem(authoringItem) === 'work'
+        cardBoardFlow(this.#boards(authoringItem), authoringItem).pullRequestReview !== undefined
       ) {
         home = { card: authoringItem, reason: 'authored' };
       } else if (mergeRequestAuthorTrusted) {
@@ -555,7 +579,7 @@ export class GitLabRules {
           orgId: target.target.orgId,
           factoryProjectId: target.target.factoryProjectId,
           factoryProject,
-          board: { board: board.id, initialPhase: board.initialPhase },
+          board: intakeTarget(this.#boards(target.target), board),
           issue,
           issueAuthor,
           issueAuthorTrusted,
@@ -700,7 +724,7 @@ export class GitLabRules {
       orgId: string;
       factoryProjectId: string;
       factoryProject: { createdAt: Date };
-      board: { board: string; initialPhase: string };
+      board: FactoryRuleIntakeTarget | undefined;
       issue: Record<string, unknown> | undefined;
       issueAuthor: string | undefined;
       issueAuthorTrusted: boolean;
@@ -751,11 +775,12 @@ export class GitLabRules {
             },
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
-            ...withBoardClosure(this.options.boards, input.item),
-            ...rulePhaseField(this.options.boards, input.item),
+            ...withBoardClosure(this.#boards(input), input.item),
+            ...rulePhaseField(this.#boards(input), input.item),
+            ...withBoardFlow(this.#boards(input), input.item),
           }
         : {}),
-      intake: input.board,
+      ...(input.board ? { intake: input.board } : {}),
       ...(input.pullRequestHome ? { pullRequestHome: input.pullRequestHome } : {}),
       event: input.event,
       deliveryId: input.parsed.deliveryId,
@@ -829,7 +854,7 @@ export class GitLabRules {
     const boardEvent = boardEventFor(context);
     if (boardEvent) context.boardEvent = boardEvent;
     const boardRules = boardEventHandlers(
-      this.options.boards,
+      this.#boards(input),
       input.mergeRequestOpenedScope === 'intake' ? undefined : eventBoardId(context),
       'gitlab',
     );
@@ -854,7 +879,7 @@ export class GitLabRules {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
           assertFactoryDecisionTarget(
             entry,
-            this.options.boards,
+            this.#boards(input),
             input.item ? boardForWorkItem(input.item) : undefined,
           );
           return { ...entry };
