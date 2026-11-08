@@ -67,26 +67,19 @@ describe('Computers', () => {
 
   it('owns the fixed tool ids and emits provider-neutral attachments', async () => {
     const computers = new Computers({ provider: provider(), secret: 'secret' });
-    expect(Object.keys(computers.tools())).toEqual(
-      expect.arrayContaining([
-        'computer_list',
-        'computer_create',
-        'computer_attach',
-        'computer_release',
-        'computer_snapshot',
-        'computer_destroy',
-        'computer_screenshot',
-        'computer_click',
-        'computer_type',
-        'computer_key',
-        'computer_exec',
-      ]),
-    );
+    expect(Object.keys(computers.tools())).toEqual([
+      'mastra_workspace_computer_list',
+      'mastra_workspace_computer_create',
+      'mastra_workspace_computer_attach',
+      'mastra_workspace_computer_release',
+      'mastra_workspace_computer_snapshot',
+      'mastra_workspace_computer_destroy',
+    ]);
     for (const [id, tool] of Object.entries(computers.tools())) {
       expect(tool.id).toBe(id);
       expect((tool as typeof tool & { orderedToolGroup?: string }).orderedToolGroup).toBe('workspace-computer');
     }
-    const result = await (computers.tools().computer_create as any).execute({ persist: false }, context);
+    const result = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: false }, context);
     expect(result.computer).toMatchObject({ status: 'attached', persistent: false });
     expect(result.computer.id).toMatch(/^cmp_e_sandbox-1_[A-Za-z0-9_-]{22}$/);
     await expect(computers.viewer(result.computer.id, { resourceId: 'resource', threadId: 'thread' })).resolves.toEqual({
@@ -97,8 +90,8 @@ describe('Computers', () => {
 
   it('binds signed ids to the owning resource', async () => {
     const computers = new Computers({ provider: provider(), secret: 'secret' });
-    const created = await (computers.tools().computer_create as any).execute({ persist: true }, context);
-    const attached = await (computers.tools().computer_attach as any).execute(
+    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    const attached = await (computers.tools().mastra_workspace_computer_attach as any).execute(
       { id: created.computer.id },
       { agent: { resourceId: 'other', threadId: 'thread' } },
     );

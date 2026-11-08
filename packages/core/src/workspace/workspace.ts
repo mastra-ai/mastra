@@ -160,6 +160,9 @@ export interface WorkspaceConfig<
    */
   sandbox?: TSandbox | WorkspaceSandboxResolver;
 
+  /** Register computer tools for resolver-backed sandboxes and validate capability at execution time. @experimental */
+  computerTools?: 'resolve';
+
   /**
    * Controls how a resolver-backed `sandbox` contributes to workspace instructions.
    * Defaults to `dynamicSandbox: 'placeholder'`. No effect on a static sandbox.
@@ -904,6 +907,11 @@ export class Workspace<
    */
   hasSandboxResolver(): boolean {
     return this._sandboxResolver !== undefined;
+  }
+
+  /** Whether resolver-backed computer tools were explicitly enabled. @experimental */
+  resolvesComputerTools(): boolean {
+    return this._config.computerTools === 'resolve';
   }
 
   /**

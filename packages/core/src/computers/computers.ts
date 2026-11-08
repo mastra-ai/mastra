@@ -10,6 +10,8 @@ import type {
 } from './contracts.js';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import { createTool } from '../tools';
+import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
+import { WORKSPACE_TOOLS } from '../workspace/constants';
 import type { ToolAction, ToolExecutionContext } from '../tools';
 import type { SandboxComputer } from '../workspace';
 import { z } from 'zod/v4';
@@ -40,13 +42,6 @@ const NOTE_MAX = 500;
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9-]{1,128}$/;
 const MAC_VERSION = 'mastra-computer-v1';
-const COMPUTER_ORDERED_TOOL_GROUP = 'workspace-computer';
-
-function markComputerTool<T extends object>(tool: T): T {
-  (tool as T & { orderedToolGroup: string }).orderedToolGroup = COMPUTER_ORDERED_TOOL_GROUP;
-  return tool;
-}
-
 /** The provider-owned sandbox surface driven by the generic Computer engine. */
 export interface ComputerSandbox {
   readonly sandboxId: string | undefined;
@@ -791,21 +786,19 @@ export class Computers implements MastraComputers {
     };
   }
 
-  /** The computer toolset. Spread into an agent's `tools`. */
+  /** The lifecycle toolset. Pixel actions come only from Workspace tools. */
   tools(): Record<string, ToolAction<any, any, any, any>> {
     if (this.#tools) return this.#tools;
-    const point = z.object({ x: z.number().int().min(0), y: z.number().int().min(0) });
     this.#tools = {
-      computer_list: createTool({
-        id: 'computer_list',
+      [WORKSPACE_TOOLS.COMPUTER.LIST]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER.LIST,
         description: 'List your computers.',
         inputSchema: z.object({}),
         execute: async (_input, context) => this.#list(context),
       }),
-      computer_create: createTool({
-        id: 'computer_create',
-        description:
-          'Create a desktop computer and attach it to this conversation. Set persist to keep it reattachable later by id.',
+      [WORKSPACE_TOOLS.COMPUTER.CREATE]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER.CREATE,
+        description: 'Create a desktop computer and attach it to this conversation.',
         inputSchema: z.object({
           template: z.literal('desktop').optional(),
           name: z.string().max(64).optional(),
@@ -813,146 +806,40 @@ export class Computers implements MastraComputers {
         }),
         execute: async (input, context) => this.#create(input, context),
       }),
-      computer_attach: createTool({
-        id: 'computer_attach',
+      [WORKSPACE_TOOLS.COMPUTER.ATTACH]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER.ATTACH,
         description: 'Attach an existing computer to this conversation by id.',
         inputSchema: z.object({ id: z.string().max(256) }),
         execute: async (input, context) => this.#attachTool(input, context),
       }),
-      computer_release: createTool({
-        id: 'computer_release',
+      [WORKSPACE_TOOLS.COMPUTER.RELEASE]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER.RELEASE,
         description: 'Detach the computer from this conversation without destroying it.',
         inputSchema: z.object({}),
         execute: async (_input, context) => this.#release(context),
       }),
-      computer_request_human: createTool({
-        id: 'computer_request_human',
-        description:
-          'Ask the user to take over the attached computer (e.g. to log in or solve a CAPTCHA). Your computer tools stop working until they hand it back; end your turn after calling this.',
-        inputSchema: z.object({ reason: z.string().trim().min(1).max(NOTE_MAX) }),
-        execute: async (input, context) => this.#requestHuman(input, context),
-      }),
-      computer_snapshot: createTool({
-        id: 'computer_snapshot',
+      [WORKSPACE_TOOLS.COMPUTER.SNAPSHOT]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER.SNAPSHOT,
         description: "Save a checkpoint of the attached computer's state.",
         inputSchema: z.object({}),
-        execute: async (_input, context) =>
-          this.#hands(context, async sandbox => {
-            const result = await sandbox.captureCheckpoint();
-            return result.status === 'skipped'
-              ? { status: result.status, reason: result.reason }
-              : { status: result.status };
-          }),
+        execute: async (_input, context) => {
+          const scope = this.#scope(context);
+          if (!scope) return MISSING_IDENTITY;
+          const id = this.#attachments.get(scope.key);
+          const entry = id ? this.#computers.get(id) : undefined;
+          if (!entry?.sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
+          const result = await entry.sandbox.captureCheckpoint();
+          return result.status === 'skipped' ? { status: result.status, reason: result.reason } : { status: result.status };
+        },
       }),
-      computer_destroy: createTool({
-        id: 'computer_destroy',
+      [WORKSPACE_TOOLS.COMPUTER.DESTROY]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER.DESTROY,
         description: 'Permanently destroy a computer by id.',
         inputSchema: z.object({ id: z.string().max(256) }),
         execute: async (input, context) => this.#destroy(input, context),
       }),
-      computer_screenshot: createTool({
-        id: 'computer_screenshot',
-        description: 'Take a screenshot of the attached computer.',
-        inputSchema: z.object({}),
-        execute: async (_input, context) =>
-          this.#hands(context, async (_s, computer) => media('', await computer.screenshot())),
-        toModelOutput,
-      }),
-      computer_click: createTool({
-        id: 'computer_click',
-        description: 'Click at screen coordinates.',
-        inputSchema: point.extend({ button: z.enum(['left', 'right']).optional(), double: z.boolean().optional() }),
-        execute: async (input, context) =>
-          this.#act(context, async computer => {
-            if (input.double) await computer.doubleClick(input.x, input.y);
-            else if (input.button === 'right') await computer.rightClick(input.x, input.y);
-            else await computer.leftClick(input.x, input.y);
-            return `clicked at (${input.x}, ${input.y})`;
-          }),
-        toModelOutput,
-      }),
-      computer_move: createTool({
-        id: 'computer_move',
-        description: 'Move the mouse to screen coordinates.',
-        inputSchema: point,
-        execute: async (input, context) =>
-          this.#act(context, async computer => {
-            await computer.moveMouse(input.x, input.y);
-            return `moved to (${input.x}, ${input.y})`;
-          }),
-        toModelOutput,
-      }),
-      computer_drag: createTool({
-        id: 'computer_drag',
-        description: 'Drag with the left button from one point to another.',
-        inputSchema: z.object({ from: point, to: point }),
-        execute: async (input, context) =>
-          this.#act(context, async computer => {
-            await computer.drag(input.from, input.to);
-            return 'dragged';
-          }),
-        toModelOutput,
-      }),
-      computer_scroll: createTool({
-        id: 'computer_scroll',
-        description: 'Scroll the mouse wheel.',
-        inputSchema: z.object({ direction: z.enum(['up', 'down']), amount: z.number().int().min(1).max(50) }),
-        execute: async (input, context) =>
-          this.#act(context, async computer => {
-            await computer.scroll(input.direction, input.amount);
-            return `scrolled ${input.direction}`;
-          }),
-        toModelOutput,
-      }),
-      computer_type: createTool({
-        id: 'computer_type',
-        description: 'Type text at the keyboard focus.',
-        inputSchema: z.object({ text: z.string() }),
-        execute: async (input, context) =>
-          this.#act(context, async computer => {
-            await computer.type(input.text);
-            return 'typed';
-          }),
-        toModelOutput,
-      }),
-      computer_key: createTool({
-        id: 'computer_key',
-        description: "Press a key or chord, e.g. 'Enter' or 'ctrl+l'.",
-        inputSchema: z.object({ keys: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]) }),
-        execute: async (input, context) =>
-          this.#act(context, async computer => {
-            await computer.press(input.keys);
-            return 'pressed';
-          }),
-        toModelOutput,
-      }),
-      computer_screen_info: createTool({
-        id: 'computer_screen_info',
-        description: 'Get the screen size and cursor position.',
-        inputSchema: z.object({}),
-        execute: async (_input, context) =>
-          this.#hands(context, async (_s, computer) => ({
-            screen: await computer.getScreenSize(),
-            cursor: await computer.getCursorPosition(),
-          })),
-      }),
-      computer_exec: createTool({
-        id: 'computer_exec',
-        description: 'Run a shell command on the attached computer.',
-        inputSchema: z.object({ command: z.string().min(1), timeout: z.number().int().min(1).max(600_000).optional() }),
-        execute: async (input, context) =>
-          this.#hands(context, async (sandbox, _c, entry) => {
-            const r = await this.#input(entry, () =>
-              sandbox.executeCommand(input.command, undefined, {
-                ...(input.timeout !== undefined && { timeout: input.timeout }),
-              }),
-            );
-            return { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr };
-          }),
-      }),
-      ...(this.#semantic && this.#semanticTools()),
     };
-    for (const tool of Object.values(this.#tools)) markComputerTool(tool);
+    for (const tool of Object.values(this.#tools)) markOrderedTool(tool, COMPUTER_ORDERED_TOOL_GROUP);
     return this.#tools;
   }
 

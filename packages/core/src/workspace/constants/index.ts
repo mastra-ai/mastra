@@ -43,6 +43,12 @@ export const WORKSPACE_TOOLS = {
     SCROLL: `${WORKSPACE_TOOLS_PREFIX}_computer_scroll` as const,
     GET_SCREEN_INFO: `${WORKSPACE_TOOLS_PREFIX}_computer_get_screen_info` as const,
     WAIT: `${WORKSPACE_TOOLS_PREFIX}_computer_wait` as const,
+    LIST: `${WORKSPACE_TOOLS_PREFIX}_computer_list` as const,
+    CREATE: `${WORKSPACE_TOOLS_PREFIX}_computer_create` as const,
+    ATTACH: `${WORKSPACE_TOOLS_PREFIX}_computer_attach` as const,
+    RELEASE: `${WORKSPACE_TOOLS_PREFIX}_computer_release` as const,
+    SNAPSHOT: `${WORKSPACE_TOOLS_PREFIX}_computer_snapshot` as const,
+    DESTROY: `${WORKSPACE_TOOLS_PREFIX}_computer_destroy` as const,
   },
   SEARCH: {
     SEARCH: `${WORKSPACE_TOOLS_PREFIX}_search` as const,

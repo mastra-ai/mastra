@@ -697,10 +697,8 @@ export async function createWorkspaceTools(
       await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, () => killProcessTool, { targets: { sandbox: true } });
     }
 
-    // Computer (desktop) tools — only when the sandbox supports the computer
-    // capability. Not offered for dynamic sandbox resolvers (no static
-    // instance) since the capability can't be detected at tool-listing time.
-    if (supportsComputer(workspace.sandbox)) {
+    // Static capability or explicit resolver opt-in; dynamic capability is validated at execution time.
+    if (supportsComputer(workspace.sandbox) || (workspace.hasSandboxResolver() && workspace.resolvesComputerTools())) {
       // Computer tools drive one desktop, so a step's calls run one at a time in emitted order.
       const computerTool = { targets: { sandbox: true }, orderedGroup: COMPUTER_ORDERED_TOOL_GROUP };
       await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, () => computerScreenshotTool, computerTool);
