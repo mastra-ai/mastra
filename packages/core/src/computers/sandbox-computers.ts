@@ -97,8 +97,8 @@ export class SandboxComputers implements MastraComputers {
   tools(): Record<string, ToolAction<any, any, any, any>> {
     if (this.#tools) return this.#tools;
     this.#tools = {
-      [WORKSPACE_TOOLS.COMPUTER.LIST]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.LIST,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.LIST]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.LIST,
         description: 'List the computer available from this workspace.',
         inputSchema: z.object({}),
         execute: async (_input, context: Context) => {
@@ -112,8 +112,8 @@ export class SandboxComputers implements MastraComputers {
           };
         },
       }),
-      [WORKSPACE_TOOLS.COMPUTER.ATTACH]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.ATTACH,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.ATTACH]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.ATTACH,
         description: 'Attach the workspace computer to this conversation.',
         inputSchema: z.object({ id: z.string().max(256) }),
         execute: async ({ id }, context: Context) => {
@@ -128,8 +128,8 @@ export class SandboxComputers implements MastraComputers {
           return { computer: { id, name: sandbox.name, status: 'attached', persistent: false } };
         },
       }),
-      [WORKSPACE_TOOLS.COMPUTER.RELEASE]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.RELEASE,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.RELEASE]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.RELEASE,
         description: 'Detach the workspace computer without changing the sandbox.',
         inputSchema: z.object({}),
         execute: async (_input, context: Context) => {

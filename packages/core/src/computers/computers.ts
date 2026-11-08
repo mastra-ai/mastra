@@ -790,14 +790,14 @@ export class Computers implements MastraComputers {
   tools(): Record<string, ToolAction<any, any, any, any>> {
     if (this.#tools) return this.#tools;
     this.#tools = {
-      [WORKSPACE_TOOLS.COMPUTER.LIST]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.LIST,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.LIST]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.LIST,
         description: 'List your computers.',
         inputSchema: z.object({}),
         execute: async (_input, context) => this.#list(context),
       }),
-      [WORKSPACE_TOOLS.COMPUTER.CREATE]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.CREATE,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.CREATE]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.CREATE,
         description: 'Create a desktop computer and attach it to this conversation.',
         inputSchema: z.object({
           template: z.literal('desktop').optional(),
@@ -806,20 +806,20 @@ export class Computers implements MastraComputers {
         }),
         execute: async (input, context) => this.#create(input, context),
       }),
-      [WORKSPACE_TOOLS.COMPUTER.ATTACH]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.ATTACH,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.ATTACH]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.ATTACH,
         description: 'Attach an existing computer to this conversation by id.',
         inputSchema: z.object({ id: z.string().max(256) }),
         execute: async (input, context) => this.#attachTool(input, context),
       }),
-      [WORKSPACE_TOOLS.COMPUTER.RELEASE]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.RELEASE,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.RELEASE]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.RELEASE,
         description: 'Detach the computer from this conversation without destroying it.',
         inputSchema: z.object({}),
         execute: async (_input, context) => this.#release(context),
       }),
-      [WORKSPACE_TOOLS.COMPUTER.SNAPSHOT]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.SNAPSHOT,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.SNAPSHOT]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.SNAPSHOT,
         description: "Save a checkpoint of the attached computer's state.",
         inputSchema: z.object({}),
         execute: async (_input, context) => {
@@ -832,8 +832,8 @@ export class Computers implements MastraComputers {
           return result.status === 'skipped' ? { status: result.status, reason: result.reason } : { status: result.status };
         },
       }),
-      [WORKSPACE_TOOLS.COMPUTER.DESTROY]: createTool({
-        id: WORKSPACE_TOOLS.COMPUTER.DESTROY,
+      [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.DESTROY]: createTool({
+        id: WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.DESTROY,
         description: 'Permanently destroy a computer by id.',
         inputSchema: z.object({ id: z.string().max(256) }),
         execute: async (input, context) => this.#destroy(input, context),

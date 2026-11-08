@@ -43,6 +43,9 @@ export const WORKSPACE_TOOLS = {
     SCROLL: `${WORKSPACE_TOOLS_PREFIX}_computer_scroll` as const,
     GET_SCREEN_INFO: `${WORKSPACE_TOOLS_PREFIX}_computer_get_screen_info` as const,
     WAIT: `${WORKSPACE_TOOLS_PREFIX}_computer_wait` as const,
+  },
+  /** Computer lifecycle tools, emitted by a Computers toolset rather than by Workspace. */
+  COMPUTER_LIFECYCLE: {
     LIST: `${WORKSPACE_TOOLS_PREFIX}_computer_list` as const,
     CREATE: `${WORKSPACE_TOOLS_PREFIX}_computer_create` as const,
     ATTACH: `${WORKSPACE_TOOLS_PREFIX}_computer_attach` as const,
