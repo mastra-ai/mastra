@@ -7,7 +7,10 @@ import { z } from 'zod';
 import type { AssistantConfig } from './config';
 
 // Only reviewed exact keys belong here. Names and retrieved content never grant permission.
-export const reviewedReadTools: ReadonlySet<string> = new Set(['google_mail_get_message']);
+export const reviewedReadTools: ReadonlySet<string> = new Set([
+  'google_mail_get_message',
+  'notion_get_page_as_markdown',
+]);
 
 export function requiresApproval(key: string) {
   return !reviewedReadTools.has(key);

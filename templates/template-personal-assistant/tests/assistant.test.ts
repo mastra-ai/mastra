@@ -454,6 +454,69 @@ test('connected reads respect policy and report unavailable providers', { timeou
   }
 });
 
+test(
+  'reviewed Notion reads run without approval while unknown actions remain protected',
+  { timeout: 120000 },
+  async () => {
+    const { notionAnalysisFixture } = await import('./connections');
+    const fixture = await notionAnalysisFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-notion-policy-'));
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      const generate = async (thread: string, prompt: string) =>
+        json(
+          await app!.request(`/agents/${agent}/generate`, 'POST', {
+            messages: [{ role: 'user', content: prompt }],
+            memory: { thread },
+            requireToolApproval: false,
+          }),
+        );
+      for (const page of ['analysis-page', 'another-page']) {
+        const read = await generate(`notion-${page}`, `case:notion-read Read ${page}. Do not change the source.`);
+        assert.equal(read.finishReason, 'stop', 'The exact reviewed Notion read must finish without approval.');
+        assert.match(read.text, /T1: Draft only.*T2: Restart evidence missing.*T3: Conflict unresolved/);
+        assert.ok(read.text.includes(`Source: ${page};`));
+        const request = fixture.providerCalls.at(-1)!;
+        assert.equal(request.method, 'GET');
+        assert.ok(request.path.includes(`/v1/pages/${page}/markdown`), request.path);
+        assert.match(request.path, /include_transcript=false/);
+        assert.equal(request.resource, 'local-owner');
+        assert.deepEqual(
+          (
+            await json(
+              await app.request(`/agents/${agent}/suspended-runs?threadId=notion-${page}&resourceId=local-owner`),
+            )
+          ).runs,
+          [],
+        );
+      }
+      for (const [scenario, key] of [
+        ['write', 'notion_update_page_markdown'],
+        ['unknown', 'notion_retrieve_page'],
+      ]) {
+        const protectedRun = await generate(
+          `notion-${scenario}`,
+          `case:notion-${scenario} Perform this requested action.`,
+        );
+        assert.equal(protectedRun.finishReason, 'suspended', key);
+        const approval = await pending(app, `notion-${scenario}`);
+        assert.equal(approval.toolCalls[0]!.toolName, key);
+        assert.equal(
+          fixture.providerCalls.length,
+          2,
+          'An explicit run option cannot bypass approval before provider execution.',
+        );
+      }
+      assert.equal(fixture.judges.length, 0);
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);
+
 test('external writes require matching approval across restart and policy changes', { timeout: 240000 }, async () => {
   const { connectedFixture } = await import('./connections');
   const fixture = await connectedFixture();
@@ -1496,6 +1559,135 @@ test('invalid timing and foreign schedule targets leave storage unchanged', { ti
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test(
+  'scheduled Notion analysis reads and answers without intervention within configured limits',
+  { timeout: 120000 },
+  async () => {
+    const { notionAnalysisFixture } = await import('./connections');
+    const { progressState } = await import('./progress');
+    const fixture = await notionAnalysisFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-notion-scheduled-'));
+    const thread = 'notion-scheduled-analysis';
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, {
+        ...fixture.env,
+        ASSISTANT_MAX_STEPS: '6',
+        ASSISTANT_MAX_OUTPUT_TOKENS: '1024',
+        ASSISTANT_MODEL_MAX_RETRIES: '0',
+      });
+      await json(
+        await app.request(`/memory/threads${query}`, 'POST', {
+          threadId: thread,
+          resourceId: 'local-owner',
+          title: 'Scheduled Notion analysis',
+        }),
+      );
+      const schedule = await nativeSchedule<AgentSchedule>(app, 'create', {
+        agentId: 'personal-assistant',
+        cron: recurring.cron,
+        timezone: recurring.timezone,
+        resourceId: 'local-owner',
+        threadId: thread,
+        prompt:
+          'case:notion-read Read analysis-page now with include_transcript=false. Assess T1, T2 and T3, cite the page and task IDs, and answer in English within 150 words with conclusion, blockers and missing evidence. Do not create an objective or change Notion.',
+        metadata: { personalAssistant: true },
+      });
+      assert.equal(fixture.models.length, 0);
+      assert.equal(fixture.providerCalls.length, 0);
+      assert.doesNotMatch(await history(app, thread), /Draft only|persisted edits verified/);
+      // Change the wire source after preparation: the wake must retrieve fresh evidence.
+      fixture.state.markdown.markdown =
+        'T1: persisted edits verified. T2: restart test passed locally, production proof missing. T3: conflict unresolved, owner decision required.';
+      await dueNow(app, schedule.id);
+      const persisted = await eventually(
+        () => history(app!, thread),
+        value => value.includes('Conclusion:'),
+      );
+      assert.equal(
+        fixture.providerCalls.length,
+        1,
+        'One due wake must retrieve the source without approval or continuation.',
+      );
+      assert.equal(fixture.providerCalls[0]!.method, 'GET');
+      assert.match(fixture.providerCalls[0]!.path, /\/v1\/pages\/analysis-page\/markdown\?include_transcript=false/);
+      assert.equal(
+        fixture.models.length,
+        2,
+        'A later native model step must answer from the tool result within the six-step allowance.',
+      );
+      assert.ok(fixture.models.every(body => (body.max_completion_tokens ?? body.max_tokens) === 1024));
+      assert.doesNotMatch(JSON.stringify(fixture.models[0]!.messages), /persisted edits verified/);
+      const secondMessages = fixture.models[1]!.messages as { role: string; content: unknown }[];
+      const sourceResult = secondMessages.find(message => message.role === 'tool');
+      assert.ok(sourceResult, 'The answer step must receive the actual connected result.');
+      assert.deepEqual(JSON.parse(String(sourceResult.content)), {
+        id: 'analysis-page',
+        markdown: fixture.state.markdown.markdown,
+        truncated: false,
+        unknown_block_ids: [],
+      });
+      assert.match(
+        persisted,
+        /Conclusion:.*persisted edits verified.*Blockers:.*Missing evidence:.*analysis-page; tasks T1, T2, T3/,
+      );
+      const messages = JSON.parse(persisted).messages as MastraDBMessage[];
+      const answers = messages.flatMap(message =>
+        message.role === 'assistant'
+          ? message.content.parts.filter(part => part.type === 'text' && part.text.startsWith('Conclusion:'))
+          : [],
+      );
+      assert.equal(answers.length, 1, 'Only one complete final answer is persisted for this occurrence.');
+      assert.ok(answers[0]!.type === 'text' && answers[0]!.text.trim().split(/\s+/).length <= 150);
+      assert.doesNotMatch(persisted, /Source incomplete|Draft only/);
+      assert.deepEqual(
+        (await json(await app.request(`/agents/${agent}/suspended-runs?threadId=${thread}&resourceId=local-owner`)))
+          .runs,
+        [],
+      );
+      assert.equal((await progressState(dataDir, thread)).objective, undefined);
+      assert.equal(fixture.judges.length, 0, 'No goal judge may execute for a scheduled analysis.');
+      const dispatched = await eventually(
+        () => occurrences(app!, schedule.id),
+        rows => rows.some(row => row.outcome === 'succeeded'),
+      );
+      assert.equal(dispatched.filter(row => row.outcome === 'succeeded').length, 1);
+      await nativeSchedule(app, 'patch', { id: schedule.id, patch: { status: 'paused' } });
+      await app.stop();
+      app = undefined;
+      const storage = new LibSQLStore({ id: 'notion-analysis-reader', url: `file:${join(dataDir, 'assistant.db')}` });
+      await storage.init();
+      try {
+        const domain = await storage.getStore('observability');
+        const roots = await domain!.listTraces({ pagination: { page: 0, perPage: 100 } });
+        const traces = [];
+        for (const root of roots.spans) traces.push(await domain!.getTrace({ traceId: root.traceId }));
+        const spans = traces.flatMap(trace => trace?.spans ?? []);
+        assert.ok(
+          spans.some(
+            span =>
+              span.attributes?.finishReason === 'stop' ||
+              (span.output as Record<string, unknown>)?.finishReason === 'stop',
+          ),
+          'The persisted native run must finish normally, without truncation or step exhaustion.',
+        );
+        assert.ok(spans.some(span => span.metadata?.scheduleId === schedule.id));
+        assert.ok(!spans.some(span => span.error));
+      } finally {
+        await storage.close();
+      }
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      assert.match(await history(app, thread), /Conclusion:.*persisted edits verified/);
+      assert.equal(fixture.models.length, 2, 'Readback and restart must not generate a continuation.');
+      assert.equal(fixture.providerCalls.length, 1);
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);
 
 test('scheduled model defaults bound output and disable provider retries', { timeout: 120000 }, async () => {
   const { connectedFixture } = await import('./connections');

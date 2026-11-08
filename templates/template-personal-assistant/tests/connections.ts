@@ -22,6 +22,7 @@ export async function connectedFixture(
   respond?: (body: Record<string, unknown>, judge: boolean) => FixtureReply | Promise<FixtureReply>,
 ) {
   const models: Record<string, unknown>[] = [];
+  const judges: Record<string, unknown>[] = [];
   const providerCalls: {
     method: string;
     path: string;
@@ -36,6 +37,13 @@ export async function connectedFixture(
     documentId: 'existing-document',
     messageId: 'source-message',
     message: undefined as unknown,
+    markdown: {
+      object: 'page_markdown',
+      id: 'analysis-page',
+      markdown: 'T1: Draft only. T2: Restart evidence missing. T3: Conflict unresolved.',
+      truncated: false,
+      unknown_block_ids: [] as string[],
+    },
     notion: {
       object: 'list',
       results: [
@@ -92,6 +100,8 @@ export async function connectedFixture(
         body,
         resource: req.headers['x-mastra-resource-id'] as string | undefined,
       });
+      const markdownPage = req.url.match(/\/pages\/([^/]+)\/markdown(?:\?|$)/)?.[1];
+      if (markdownPage) return send({ ...state.markdown, id: decodeURIComponent(markdownPage) });
       if (req.url.includes('/blocks/')) return send(state.notion);
       if (req.url.includes('/search/jql'))
         return send({
@@ -145,6 +155,7 @@ export async function connectedFixture(
     if (req.url === '/v1/chat/completions' || req.url === '/v1/judge/chat/completions') {
       const body = JSON.parse(raw);
       models.push(body);
+      if (req.url.includes('/judge/')) judges.push(body);
       const schemaError = modelToolSchemaError(body);
       if (schemaError) return send({ error: { message: schemaError } }, 400);
       const scripted = await respond?.(body, req.url.includes('/judge/'));
@@ -250,6 +261,7 @@ export async function connectedFixture(
     url,
     modelUrl: `${url}/v1`,
     models,
+    judges,
     providerCalls,
     discovery,
     state,
@@ -267,6 +279,51 @@ export async function connectedFixture(
         server.close(() => resolve());
       }),
   };
+}
+
+export async function notionAnalysisFixture() {
+  const fixture = await connectedFixture(body => {
+    const messages = body.messages as { role: string; content: unknown; tool_call_id?: string }[];
+    const latest = messages.findLastIndex(message => message.role === 'user');
+    const prompt = JSON.stringify(messages[latest]);
+    const results = messages.slice(latest + 1).filter(message => message.role === 'tool');
+    if (!results.length) {
+      const blocked = prompt.includes('case:notion-write')
+        ? {
+            name: 'notion_update_page_markdown',
+            args: {
+              page_id: 'analysis-page',
+              type: 'replace_content',
+              replace_content: { new_str: 'Unauthorized replacement' },
+            },
+          }
+        : prompt.includes('case:notion-unknown')
+          ? { name: 'notion_retrieve_page', args: { page_id: 'analysis-page' } }
+          : {
+              name: 'notion_get_page_as_markdown',
+              args: {
+                page_id: prompt.includes('another-page') ? 'another-page' : 'analysis-page',
+                include_transcript: false,
+              },
+            };
+      return { text: '', calls: [{ ...blocked, id: 'notion-analysis-read' }] };
+    }
+    const source = JSON.parse(String(results[0]!.content));
+    return {
+      text: `Conclusion: ${source.markdown} Blockers: unresolved conflict. Missing evidence: production restart proof. Source: ${source.id}; tasks T1, T2, T3.${source.truncated || source.unknown_block_ids?.length ? ' Source incomplete; no complete assessment is possible.' : ''}`,
+    };
+  });
+  fixture.state.providers = ['notion'];
+  fixture.env = {
+    ...fixture.env,
+    ASSISTANT_CONNECT_PROVIDERS: JSON.stringify(['notion']),
+    ASSISTANT_CONNECT_TOOLS: JSON.stringify([
+      'notion_get_page_as_markdown',
+      'notion_update_page_markdown',
+      'notion_retrieve_page',
+    ]),
+  };
+  return fixture;
 }
 
 export async function experienceFixture() {

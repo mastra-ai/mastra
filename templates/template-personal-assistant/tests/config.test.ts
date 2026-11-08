@@ -27,6 +27,16 @@ test('local configuration requires only an OpenAI key and applies bounded defaul
   assert.equal(config.timezone, undefined);
   assert.equal('OPENAI_API_KEY' in config, false);
   assert.equal(loadConfig({ OPENAI_API_KEY: 'example-key', ASSISTANT_MAX_STEPS: '1' }).maxSteps, 1);
+  const scheduled = loadConfig({
+    OPENAI_API_KEY: 'example-key',
+    ASSISTANT_MAX_STEPS: '6',
+    ASSISTANT_MAX_OUTPUT_TOKENS: '1024',
+    ASSISTANT_MODEL_MAX_RETRIES: '0',
+  });
+  assert.equal(scheduled.maxSteps, 6);
+  assert.deepEqual(scheduled.modelSettings, { maxOutputTokens: 1024 });
+  assert.equal(scheduled.modelMaxRetries, 0);
+  assert.equal(scheduled.model, config.model);
 });
 
 test('unavailable local storage identifies the setting without exposing its value', async () => {
@@ -86,12 +96,22 @@ test('invalid settings identify their names without echoing credentials or suppl
 test('Connect configuration rejects partial credentials and exact-key policy never guesses reads', async () => {
   const { requiresApproval } = await import('../src/mastra/connect');
   assert.equal(requiresApproval('google_mail_get_message'), false);
+  assert.equal(requiresApproval('notion_get_page_as_markdown'), false);
   for (const key of [
     'get_safe_record',
     'google_docs_list_revisions',
     'google_mail_get_message_extra',
     'google_mail_get_Message',
     'google_docs_create_document',
+    'notion_get_page_as_markdown_extra',
+    'notion_get_page_as_Markdown',
+    'notion_get_page_as_markdown.write',
+    'notion_get_page',
+    'notion_retrieve_page',
+    'notion_retrieve_block_children',
+    'notion_update_page_markdown',
+    'notion_create_page',
+    'notion_delete_block',
   ])
     assert.equal(requiresApproval(key), true, key);
   for (const env of [
