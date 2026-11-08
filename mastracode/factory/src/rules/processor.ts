@@ -539,9 +539,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // Skills name phases by role in the pull request loop, never by key: this line maps them.
     const flowPhase = (key: string | undefined) =>
       key ? `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})` : undefined;
-    const terminals = definition ? Object.keys(definition.phases).filter(key => definition.isTerminal(key)) : [];
-    const completed = definition?.sourceClosed?.completed ?? terminals[0];
-    const canceled = definition?.sourceClosed?.canceled ?? terminals.find(key => key !== completed);
+    const completed = flow.completed?.phase;
+    const canceled = flow.canceled?.phase === completed ? undefined : flow.canceled?.phase;
     const flowParts = [
       definition ? `rest: ${flowPhase(definition.initialPhase)}` : undefined,
       flow.triage ? `triage: ${flowPhase(flow.triage)}` : undefined,

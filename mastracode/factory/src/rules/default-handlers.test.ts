@@ -1156,6 +1156,8 @@ describe('built-in board and integration handlers', () => {
       board: 'work',
       stage: 'done',
       message: { text: expect.stringContaining('merged') },
+      // Tagged, so a route on the card's board naming the merge can send it elsewhere.
+      event: { type: 'pull_request.merged' },
     });
   });
 
@@ -1163,7 +1165,32 @@ describe('built-in board and integration handlers', () => {
     const context = githubContext('pullRequestMerged');
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
     const decision = await defaultGithubRules.pullRequestMerged?.(bind(context, item, 'work'));
-    expect(decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
+    expect(decision).toMatchObject({
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      event: { type: 'pull_request.merged' },
+    });
+  });
+
+  it("hands a merge or close on a pull request's own card on a board with no pull request loop to the routes alone", async () => {
+    const pullRequestCard = ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17', stages: ['queued'] });
+    const merged = githubContext('pullRequestMerged');
+    merged.pullRequest = { ...merged.pullRequest!, state: 'closed', merged: true };
+    expect(await defaultGithubRules.pullRequestMerged?.(bind(merged, pullRequestCard, 'release'))).toEqual({
+      type: 'routeEvent',
+      idempotencyKey: `${merged.ingress.id}:event-route`,
+      event: { type: 'pull_request.merged' },
+    });
+    const closed = githubContext('pullRequestClosed');
+    closed.pullRequest = { ...closed.pullRequest!, state: 'closed', merged: false };
+    expect(await defaultGithubRules.pullRequestClosed?.(bind(closed, pullRequestCard, 'release'))).toMatchObject({
+      type: 'routeEvent',
+      event: { type: 'pull_request.closed' },
+    });
+    // A finished card stays finished.
+    const shipped = ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17', stages: ['shipped'] });
+    expect(await defaultGithubRules.pullRequestMerged?.(bind(merged, shipped, 'release'))).toBeUndefined();
   });
 
   it('does not target the Work board when a pull request from a custom board merges', async () => {
@@ -1201,6 +1228,7 @@ describe('built-in board and integration handlers', () => {
       board: 'work',
       stage: 'canceled',
       message: { text: expect.stringContaining('closed without merging') },
+      event: { type: 'pull_request.closed' },
     });
   });
 

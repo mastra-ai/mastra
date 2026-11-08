@@ -1,5 +1,5 @@
-import type { BoardEventFacts } from '../boards/board-events.js';
-import { closeReason } from '../boards/board-events.js';
+import type { BoardEventFacts, PullRequestEvent } from '../boards/board-events.js';
+import { closeReason, eventMovesCard, isPullRequestEvent } from '../boards/board-events.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryRouteEventDecision, FactoryRuleHandler, FactoryTransitionDecision } from './types.js';
 
@@ -78,9 +78,16 @@ function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
   return typeof (value as { then?: unknown } | null | undefined)?.then === 'function';
 }
 
-/** A decision that carries a provider status event (a close, a reopen) for the card's routes. */
-export const isStatusEventDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'routeEvent' || (decision.type === 'transition' && decision.event !== undefined);
+/**
+ * A decision that carries a work item's status event (a close, a reopen) for the card's routes.
+ * Those overtake one another, so the source's last word wins. Pull request events don't: a merge,
+ * a close or a push each concerns its own pull request, and the default rules already decided it.
+ */
+export const isStatusEventDecision = (decision: Record<string, unknown>): boolean => {
+  if (decision.type !== 'routeEvent' && decision.type !== 'transition') return false;
+  const event = decision.event as BoardEventFacts | undefined;
+  return event !== undefined && !isPullRequestEvent(event.type);
+};
 
 const QUEUED_STATUSES = ['pending', 'retry', 'leased'] as const;
 
@@ -104,7 +111,8 @@ export async function routeEventDecision(
   // A close moves only an unfinished card and a reopen only a finished one, unless an earlier
   // status event is still queued for the card: this one overtakes it, so the last one wins.
   const finished = context.phase?.kind === 'terminal';
-  if (event.type === 'work_item.closed' ? !finished : finished) return decision;
+  if (eventMovesCard(event.type, finished)) return decision;
+  if (isPullRequestEvent(event.type)) return undefined;
   const queued = await storage.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
     workItemId: context.item.id,
     statuses: QUEUED_STATUSES,
@@ -121,6 +129,18 @@ export function closedByRoutes<T extends Omit<FactoryTransitionDecision, 'type' 
   move: T,
 ): FactoryTransitionDecision {
   return { type: 'transition', ...move, event: { type: 'work_item.closed', reason: closeReason(canceled) } };
+}
+
+/**
+ * A default pull request handler's answer: the move it decided on, which a route on the card's
+ * board naming the event sends elsewhere. A route to the same phase keeps the move as it is
+ * (its message, its re-entry).
+ */
+export function pullRequestMoveByRoutes<T extends Omit<FactoryTransitionDecision, 'type' | 'event'>>(
+  event: PullRequestEvent,
+  move: T,
+): FactoryTransitionDecision {
+  return { type: 'transition', ...move, event: { type: event } };
 }
 
 /**

@@ -6,8 +6,47 @@ import { CARD_RULE_FIELDS } from '../rules/rule-group.js';
  * webhooks onto these. Status events change where a card belongs: only these can move a card, so
  * only these may be named in a route's `on`.
  */
-export const STATUS_EVENTS = ['work_item.created', 'work_item.closed', 'work_item.reopened'] as const;
+export const STATUS_EVENTS = [
+  'work_item.created',
+  'work_item.closed',
+  'work_item.reopened',
+  'pull_request.opened',
+  'pull_request.synchronized',
+  'pull_request.review_requested',
+  'pull_request.merged',
+  'pull_request.closed',
+] as const;
 export type StatusEvent = (typeof STATUS_EVENTS)[number];
+
+/**
+ * What happened to a card's pull request (GitHub) or merge request (GitLab): opened by the card's
+ * session, pushed to, re-review requested, merged, or closed unmerged. A provider's default rule
+ * decides whether the event moves the card at all; a route on the card's board naming the event
+ * decides where it goes.
+ */
+export type PullRequestEvent = Extract<StatusEvent, `pull_request.${string}`>;
+
+export function isPullRequestEvent(type: StatusEvent): type is PullRequestEvent {
+  return type.startsWith('pull_request.');
+}
+
+/**
+ * Whether the event may move a card that is, or isn't, finished: a reopen moves only a finished
+ * card, a close or a merge only an unfinished one. A push or a review request re-reviews a pull
+ * request whatever its card's phase.
+ */
+export function eventMovesCard(type: StatusEvent, finished: boolean): boolean {
+  switch (type) {
+    case 'work_item.reopened':
+      return finished;
+    case 'work_item.closed':
+    case 'pull_request.merged':
+    case 'pull_request.closed':
+      return !finished;
+    default:
+      return true;
+  }
+}
 
 /** Activity on a card: it never moves the card, it only tells the card's session. */
 export const ACTIVITY_EVENTS = ['work_item.commented', 'work_item.edited'] as const;

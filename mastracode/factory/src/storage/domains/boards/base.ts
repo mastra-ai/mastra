@@ -219,6 +219,51 @@ export const REOPENED_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
+ * A merged pull request finishes its Work card: the pull request's own card, or the issue card
+ * whose session opened it (unless that card still has another pull request out).
+ */
+export const PULL_REQUEST_MERGED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Merged pull requests go to Done',
+  on: ['pull_request.merged'],
+  target: { boardKey: 'work', phaseKey: 'done' },
+};
+
+/** A pull request's own Work card goes to Canceled when the pull request is closed unmerged. */
+export const PULL_REQUEST_CLOSED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Pull requests closed unmerged go to Canceled',
+  on: ['pull_request.closed'],
+  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
+  target: { boardKey: 'work', phaseKey: 'canceled' },
+};
+
+/**
+ * An issue card in PR review whose last open pull request was closed unmerged goes back to
+ * Intake: the issue is still open.
+ */
+export const PULL_REQUEST_CLOSED_ISSUE_ROUTE: StoredIntakeRouteInput = {
+  name: 'Issues whose pull request closed unmerged go back to Intake',
+  on: ['pull_request.closed'],
+  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'not_equals', value: 'pull_request' }] },
+  target: { boardKey: 'work', phaseKey: 'intake' },
+};
+
+/** A push to a pull request in review restarts its review in PR review. */
+export const PULL_REQUEST_UPDATED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Pushes to a reviewed pull request re-review it',
+  on: ['pull_request.synchronized'],
+  target: { boardKey: 'work', phaseKey: 'pr-review' },
+  allowWorkingPhase: true,
+};
+
+/** A maintainer asking Factory to review a pull request again sends it to PR review. */
+export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Requested reviews go to PR review',
+  on: ['pull_request.review_requested'],
+  target: { boardKey: 'work', phaseKey: 'pr-review' },
+  allowWorkingPhase: true,
+};
+
+/**
  * A pull request from someone with write access that closes an issue nobody has started work on
  * joins that issue's card, which goes to PR review. Once the issue has left Intake, the pull request
  * gets its own card in PR review instead; projects can widen the phases. Its condition stands on its
@@ -252,6 +297,11 @@ export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeR
   { key: 'closed-completed', route: CLOSED_COMPLETED_ROUTE },
   { key: 'closed-canceled', route: CLOSED_CANCELED_ROUTE },
   { key: 'reopened', route: REOPENED_ROUTE },
+  { key: 'pull-request-merged', route: PULL_REQUEST_MERGED_ROUTE },
+  { key: 'pull-request-closed', route: PULL_REQUEST_CLOSED_ROUTE },
+  { key: 'pull-request-closed-issue', route: PULL_REQUEST_CLOSED_ISSUE_ROUTE },
+  { key: 'pull-request-updated', route: PULL_REQUEST_UPDATED_ROUTE },
+  { key: 'pull-request-review-requested', route: PULL_REQUEST_REVIEW_REQUESTED_ROUTE },
 ];
 
 /** The defaults a project whose lock row predates `seeded_defaults` was set up with. */
