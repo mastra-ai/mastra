@@ -9,7 +9,8 @@ import type { Component } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
 
 export interface PickerListOptions<T> {
-  maxVisible: number;
+  /** Items shown at once before the list scrolls; omit to show every item. */
+  maxVisible?: number;
   /** Lines for one item; each line wraps to the list width like a `Text`. */
   renderItem: (item: T, selected: boolean, index: number) => string[];
   /** Shown when there are no items; omit to render nothing. */
@@ -20,43 +21,37 @@ export interface PickerListOptions<T> {
 }
 
 export class PickerList<T> implements Component {
-  /** Text for the visible items, built when items are set (like the hand-drawn loops did). */
-  private visibleLines: string[][] = [];
-  private emptyLine: string | undefined;
-  private selectedIndex = 0;
-  private total = 0;
-  private startIndex = 0;
+  /** Rows for the current items, built when items are set (like the hand-drawn loops did) so each `Text` keeps its wrap cache between frames. */
+  private rows: Text[] = [];
 
   constructor(private readonly options: PickerListOptions<T>) {}
 
   setItems(items: T[], selectedIndex: number): void {
-    const { maxVisible, renderItem, emptyText } = this.options;
-    this.selectedIndex = selectedIndex;
-    this.total = items.length;
-    this.startIndex = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), items.length - maxVisible));
-    const endIndex = Math.min(this.startIndex + maxVisible, items.length);
-    this.visibleLines = [];
-    for (let i = this.startIndex; i < endIndex; i++) {
-      this.visibleLines.push(renderItem(items[i] as T, i === selectedIndex, i));
+    const { maxVisible = Number.POSITIVE_INFINITY, renderItem, emptyText, paddingX = 0, paddingY = 0 } = this.options;
+    this.rows = [];
+    if (items.length === 0) {
+      const emptyLine = emptyText?.();
+      if (emptyLine !== undefined) this.rows.push(new Text(theme.fg('muted', emptyLine), 0, 0));
+      return;
     }
-    this.emptyLine = items.length === 0 ? emptyText?.() : undefined;
+
+    const startIndex = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), items.length - maxVisible));
+    const endIndex = Math.min(startIndex + maxVisible, items.length);
+    for (let i = startIndex; i < endIndex; i++) {
+      for (const line of renderItem(items[i] as T, i === selectedIndex, i)) {
+        this.rows.push(new Text(line, paddingX, paddingY));
+      }
+    }
+    if (startIndex > 0 || endIndex < items.length) {
+      this.rows.push(new Text(theme.fg('muted', `(${selectedIndex + 1}/${items.length})`), 0, 0));
+    }
   }
 
   render(width: number): string[] {
-    if (this.total === 0) {
-      return this.emptyLine === undefined ? [] : new Text(theme.fg('muted', this.emptyLine), 0, 0).render(width);
-    }
-
-    const { paddingX = 0, paddingY = 0 } = this.options;
-    const lines: string[] = [];
-    for (const itemLines of this.visibleLines) {
-      for (const line of itemLines) lines.push(...new Text(line, paddingX, paddingY).render(width));
-    }
-    if (this.startIndex > 0 || this.startIndex + this.visibleLines.length < this.total) {
-      lines.push(...new Text(theme.fg('muted', `(${this.selectedIndex + 1}/${this.total})`), 0, 0).render(width));
-    }
-    return lines;
+    return this.rows.flatMap(row => row.render(width));
   }
 
-  invalidate(): void {}
+  invalidate(): void {
+    for (const row of this.rows) row.invalidate();
+  }
 }

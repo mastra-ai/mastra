@@ -53,7 +53,6 @@ export class LoginSelectorComponent extends Box {
     // Create list container
     this.listContainer = new Container();
     this.list = new PickerList({
-      maxVisible: Number.POSITIVE_INFINITY,
       paddingX: 1,
       paddingY: 1,
       renderItem: (provider, isSelected) => [this.renderProvider(provider, isSelected)],
