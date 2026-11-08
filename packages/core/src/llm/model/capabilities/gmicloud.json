@@ -35,6 +35,22 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Max": [
+      {
+        "type": "toggle"
+      }
+    ],
     "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
@@ -53,12 +69,6 @@
         "max": 63999
       }
     ],
-    "anthropic/claude-opus-4.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "anthropic/claude-opus-4.8": [
       {
         "type": "effort",
@@ -72,20 +82,10 @@
         "max": 127999
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Max": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.2-FP8": [
+    "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

@@ -7,6 +7,7 @@
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
+    "kimi-k3.1-pro",
     "mimo-v2.6-flash",
     "mimo-v2.6-pro",
     "minimax-m3",
@@ -41,41 +42,6 @@
     "nemotron-3-ultra"
   ],
   "reasoning": {
-    "muse-spark-open": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash:1017": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mistral-large-4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
     "minimax-m3.1-flash": [
       {
         "type": "effort",
@@ -91,6 +57,43 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "nemotron-3-nano:30b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4.1-flash:1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nemotron-3-super": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
     "glm-5.2": [
       {
         "type": "toggle"
@@ -100,41 +103,18 @@
         "values": ["high", "max"]
       }
     ],
-    "nemotron-3-nano:30b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gemma4:31b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss:120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "nemotron-3-ultra": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m3": [
+    "muse-spark-open": [
       {
         "type": "toggle"
       },
@@ -149,15 +129,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
     "gpt-oss:20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "nemotron-3-super": [
-      {
-        "type": "toggle"
       }
     ],
     "kimi-k2.7-code": [
@@ -165,21 +145,13 @@
         "type": "toggle"
       }
     ],
-    "nemotron-3-ultra": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
+    "mistral-large-4": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "mimo-v2.6-flash": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
       }
@@ -189,10 +161,48 @@
         "type": "toggle"
       }
     ],
+    "kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "beam": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gemma4:31b": [
+      {
+        "type": "toggle"
       }
     ]
   }

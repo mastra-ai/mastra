@@ -50,7 +50,6 @@ export class LoginAccountManagerComponent extends Box {
 
     this.listContainer = new Container();
     this.list = new PickerList({
-      maxVisible: Number.POSITIVE_INFINITY,
       paddingX: 1,
       paddingY: 1,
       renderItem: (row, isSelected, index) => [this.renderRow(row.label, isSelected, index)],

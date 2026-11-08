@@ -85,27 +85,10 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "google/diffusiongemma-26b-a4b-it": [
+    "minimaxai/minimax-m3.1-flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "meta/muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "stepfun-ai/step-5-preview": [
@@ -129,13 +112,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3": [
+    "meta/muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "z-ai/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -147,9 +136,20 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "nvidia/nemotron-3.5-content-safety": [
+    "deepseek-ai/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": -1,
+        "max": 32768
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
@@ -168,6 +168,11 @@
         "type": "toggle"
       }
     ],
+    "nvidia/nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
+      }
+    ],
     "nvidia/nemotron-3.5-super-vl-120b-a12b": [
       {
         "type": "toggle"
@@ -178,20 +183,15 @@
         "type": "toggle"
       }
     ],
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": -1,
-        "max": 32768
       }
     ],
-    "minimaxai/minimax-m3.1-flash": [
+    "google/diffusiongemma-26b-a4b-it": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

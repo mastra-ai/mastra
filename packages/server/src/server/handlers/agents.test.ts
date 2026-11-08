@@ -2770,6 +2770,22 @@ describe('Agent Routes Authorization', () => {
       expect(abort).not.toHaveBeenCalled();
     });
 
+    it('does not cancel a run known only to the in-process owner registry', async () => {
+      vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      const acknowledged = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged');
+      const abortRunStream = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'registry-only',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(acknowledged).not.toHaveBeenCalled();
+      expect(abortRunStream).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['another resource', 'user-a', 'user-b'],
       ['an ownerless run', 'user-a', undefined],

@@ -1,7 +1,8 @@
 /**
  * Scrolling list body shared by hand-drawn pickers. The picker keeps its own
- * selection and key handling; this draws the visible window and maps mouse
- * rows back to items, including items drawn across several rows.
+ * selection and key handling; this draws the visible window of items, each of
+ * which may span several rows, plus the `(n/total)` scroll indicator, and maps
+ * mouse rows back to the item drawn there.
  */
 
 import { Text } from '@earendil-works/pi-tui';
@@ -10,7 +11,8 @@ import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
 import { theme } from '../theme.js';
 
 export interface PickerListOptions<T> {
-  maxVisible: number;
+  /** Items shown at once before the list scrolls; omit to show every item. */
+  maxVisible?: number;
   /** Lines for one item; each line wraps to the list width like a `Text`. */
   renderItem: (item: T, selected: boolean, index: number) => string[];
   /** Called with the clicked item's index. Pickers should do whatever Enter does. */
@@ -23,60 +25,50 @@ export interface PickerListOptions<T> {
 }
 
 export class PickerList<T> implements Component, MouseAware {
-  private items: T[] = [];
-  private selectedIndex = 0;
+  /** Rows for the current items, built when items are set (like the hand-drawn loops did) so each `Text` keeps its wrap cache between frames. */
+  private rows: Text[] = [];
+  /** The visible items' rows, grouped by item index, for mapping clicks back to items. */
+  private itemRows: { index: number; rows: Text[] }[] = [];
 
   constructor(private readonly options: PickerListOptions<T>) {}
 
   setItems(items: T[], selectedIndex: number): void {
-    this.items = items;
-    this.selectedIndex = selectedIndex;
+    const { maxVisible = Number.POSITIVE_INFINITY, renderItem, emptyText, paddingX = 0, paddingY = 0 } = this.options;
+    this.rows = [];
+    this.itemRows = [];
+    if (items.length === 0) {
+      const emptyLine = emptyText?.();
+      if (emptyLine !== undefined) this.rows.push(new Text(theme.fg('muted', emptyLine), 0, 0));
+      return;
+    }
+
+    const startIndex = Math.max(0, Math.min(selectedIndex - Math.floor(maxVisible / 2), items.length - maxVisible));
+    const endIndex = Math.min(startIndex + maxVisible, items.length);
+    for (let i = startIndex; i < endIndex; i++) {
+      const rows = renderItem(items[i] as T, i === selectedIndex, i).map(line => new Text(line, paddingX, paddingY));
+      this.rows.push(...rows);
+      this.itemRows.push({ index: i, rows });
+    }
+    if (startIndex > 0 || endIndex < items.length) {
+      this.rows.push(new Text(theme.fg('muted', `(${selectedIndex + 1}/${items.length})`), 0, 0));
+    }
   }
 
   render(width: number): string[] {
-    if (this.items.length === 0) {
-      const { emptyText } = this.options;
-      return emptyText ? new Text(theme.fg('muted', emptyText()), 0, 0).render(width) : [];
-    }
-
-    const { startIndex, endIndex } = this.visibleRange();
-    const lines: string[] = [];
-    for (let i = startIndex; i < endIndex; i++) lines.push(...this.renderRows(i, width));
-    if (startIndex > 0 || endIndex < this.items.length) {
-      lines.push(
-        ...new Text(theme.fg('muted', `(${this.selectedIndex + 1}/${this.items.length})`), 0, 0).render(width),
-      );
-    }
-    return lines;
+    return this.rows.flatMap(row => row.render(width));
   }
 
   mouseTarget(point: MousePoint): MouseTarget | undefined {
-    const { startIndex, endIndex } = this.visibleRange();
     let top = 0;
-    for (let i = startIndex; i < endIndex; i++) {
-      const height = this.renderRows(i, point.width).length;
-      if (point.row < top + height) return { top, height, activate: () => this.options.onActivate(i) };
+    for (const { index, rows } of this.itemRows) {
+      const height = rows.reduce((sum, row) => sum + row.render(point.width).length, 0);
+      if (point.row < top + height) return { top, height, activate: () => this.options.onActivate(index) };
       top += height;
     }
     return undefined;
   }
 
-  invalidate(): void {}
-
-  private renderRows(index: number, width: number): string[] {
-    const item = this.items[index] as T;
-    const { paddingX = 0, paddingY = 0 } = this.options;
-    return this.options
-      .renderItem(item, index === this.selectedIndex, index)
-      .flatMap(line => new Text(line, paddingX, paddingY).render(width));
-  }
-
-  private visibleRange(): { startIndex: number; endIndex: number } {
-    const { maxVisible } = this.options;
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(maxVisible / 2), this.items.length - maxVisible),
-    );
-    return { startIndex, endIndex: Math.min(startIndex + maxVisible, this.items.length) };
+  invalidate(): void {
+    for (const row of this.rows) row.invalidate();
   }
 }

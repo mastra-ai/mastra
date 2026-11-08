@@ -73,36 +73,27 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "poolside/laguna-xs-2.1": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
       }
     ],
-    "qwen/qwen-flash": [
+    "upstage/solar-pro2": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["minimal", "high"]
       }
     ],
-    "qwen/qwen3.5-plus": [
+    "upstage/solar-pro3": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
-    "qwen/qwen3.6-plus": [
+    "upstage/solar-pro4": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "qwen/qwen3-vl-plus": [
@@ -113,7 +104,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
+    "qwen/qwen3.6-flash": [
       {
         "type": "toggle"
       },
@@ -137,7 +128,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-flash": [
+    "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       },
@@ -145,15 +136,36 @@
         "type": "budget_tokens"
       }
     ],
-    "meta/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "poolside/laguna-xs-2.1": [
+    "qwen/qwen3.6-plus": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.7-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "thinkingmachines/inkling-small": [
@@ -168,22 +180,10 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "upstage/solar-pro3": [
+    "meta/muse-spark-1.2-contributor": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "upstage/solar-pro4": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "upstage/solar-pro2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
     "sakana/fugu-ultra": [
