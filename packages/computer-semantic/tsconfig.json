@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": [
+    "src"
+  ],
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "../..",
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@mastra/platform-workspace": [
+        "../../workspaces/platform-workspace/src/index.ts"
+      ]
+    }
+  }
+}

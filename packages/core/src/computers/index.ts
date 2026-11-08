@@ -23,31 +23,11 @@ export {
   type ComputerExec,
   type ComputerExecOptions,
 } from './computer.js';
-export {
-  BOOT_SEMANTIC_SCRIPT,
-  DAEMON_PORT,
-  DaemonClient,
-  DaemonError,
-  INSTALL_SEMANTIC_SCRIPT,
-  KEY_CHORDS,
-  MCC_COMMIT,
-  MCC_SCHEMA_DIGEST,
-  MCC_SCHEMA_VERSION,
-  MCC_SHA256,
-  MAX_FRAME_CHARS,
-  SEMANTIC_LOW_MEMORY,
-  SEMANTIC_MEMORY_MB,
-  SEMANTIC_NO_NETWORK,
-  SEMANTIC_UNAVAILABLE,
-  checkPng,
-  refusalText,
-  slimElement,
-  withSemantic,
-  type DaemonConnect,
-  type DaemonEvent,
-  type DaemonSocket,
-  type SemanticTemplateBuilder,
-} from './semantic.js';
+export type {
+  ComputerHandsExtension,
+  ComputerHandsHost,
+  ComputerHandsSession,
+} from './hands-extension.js';
 export type {
   ComputerActionInput,
   ComputerControlEnforcementResult,

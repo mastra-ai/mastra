@@ -64,6 +64,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@mastra/computer-semantic": "workspace:*",
     "e2b": "^2.62.0"
   }
 }

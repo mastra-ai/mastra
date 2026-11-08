@@ -8,6 +8,7 @@ export {
 export { PlatformFilesystem, type PlatformFilesystemOptions } from './filesystem.js';
 export {
   Template,
+  serializeSandboxTemplate,
   withDesktop,
   type AptInstallOptions,
   type JsonPrimitive,

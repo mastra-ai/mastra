@@ -1,6 +1,8 @@
 import { hkdfSync } from 'node:crypto';
-import { COMPUTER_VIEWER_PORT, Computers, withSemantic } from '@mastra/core/computers';
-import type { ComputerProvider, ComputerSandbox, ComputersOptions, DaemonConnect } from '@mastra/core/computers';
+import { createSemanticHands, withSemantic } from '@mastra/computer-semantic';
+import type { DaemonConnect } from '@mastra/computer-semantic';
+import { COMPUTER_VIEWER_PORT, Computers } from '@mastra/core/computers';
+import type { ComputerProvider, ComputerSandbox, ComputersOptions } from '@mastra/core/computers';
 import type { MastraComputerScope, MastraComputerViewer } from '@mastra/core/mastra';
 import { PlatformSandbox } from './sandbox.js';
 import type { PlatformSandboxOptions, PlatformSandboxTemplate } from './sandbox.js';
@@ -117,8 +119,9 @@ export class PlatformComputers extends Computers {
       provider: platformProvider(options),
       secret: computerSecret(options),
       ...(options.screenshotAfterAction !== undefined && { screenshotAfterAction: options.screenshotAfterAction }),
-      ...(options.hands !== undefined && { hands: options.hands }),
-      ...(options.connectDaemon !== undefined && { connectDaemon: options.connectDaemon }),
+      ...(options.hands === 'semantic' && {
+        handsExtension: createSemanticHands({ connectDaemon: options.connectDaemon }),
+      }),
     };
     super(generic);
   }

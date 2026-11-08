@@ -1,0 +1,50 @@
+{
+  "name": "@mastra/computer-semantic",
+  "version": "0.0.1-alpha.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/computer-semantic"
+  },
+  "scripts": {
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "test": "vitest run --project 'unit:packages/computer-semantic'",
+    "lint": "oxlint --type-aware"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.83.0-alpha.1 <2.0.0-0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.15",
+    "tsdown": "0.23.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

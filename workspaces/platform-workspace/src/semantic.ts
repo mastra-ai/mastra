@@ -1,1 +1,1 @@
-export * from '@mastra/core/computers';
+export * from '@mastra/computer-semantic';

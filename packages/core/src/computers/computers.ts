@@ -18,20 +18,7 @@ import type {
   MastraComputerScope,
   MastraComputerViewer,
 } from './contracts.js';
-import {
-  BOOT_SEMANTIC_SCRIPT,
-  DAEMON_PORT,
-  DaemonClient,
-  DaemonError,
-  KEY_CHORDS,
-  SEMANTIC_LOW_MEMORY,
-  SEMANTIC_NO_NETWORK,
-  SEMANTIC_UNAVAILABLE,
-  checkPng,
-  refusalText,
-  slimElement,
-} from './semantic.js';
-import type { DaemonConnect, DaemonEvent } from './semantic.js';
+import type { ComputerHandsExtension, ComputerHandsHost } from './hands-extension.js';
 
 export const NOT_ATTACHED = 'no computer attached — call computer_attach or computer_create';
 export const NOT_FOUND = 'computer not found';
@@ -77,8 +64,7 @@ export interface ComputersOptions {
   provider: ComputerProvider;
   secret: string | Uint8Array;
   screenshotAfterAction?: boolean;
-  hands?: 'pixel' | 'semantic';
-  connectDaemon?: DaemonConnect;
+  handsExtension?: ComputerHandsExtension;
 }
 
 interface Entry {
@@ -92,29 +78,8 @@ interface Entry {
   queue: Promise<unknown>;
   destroyed: boolean;
   control: Lease;
-  /** Semantic hands: memoized boot, daemon connection, watches by subscription id, agent input in flight and its last end. */
-  boot?: Promise<string>;
-  daemon?: DaemonClient;
-  watches?: Map<string, Watch>;
-  inputs?: number;
-  lastInputAt?: number;
+  extensionState: Map<string, unknown>;
 }
-
-interface Watch {
-  subscriptionId: string;
-  elementId: string;
-  target: { resourceId: string; threadId: string } & AgentRef;
-  changes: number;
-  kinds: Set<Exclude<DaemonEvent['kind'], 'watchEnded'>>;
-  timer?: ReturnType<typeof setTimeout>;
-  lastSentAt: number;
-}
-
-/** Changes within this long after the agent's own input are its echo, not news. */
-const SELF_ECHO_MS = 1500;
-const UNSUBSCRIBE_MS = 5000;
-const WATCH_COALESCE_MS = 1000;
-const WATCH_MIN_INTERVAL_MS = 10_000;
 
 interface AgentRef {
   agentId?: string;
@@ -167,17 +132,6 @@ function media(prefix: string, shot: { data: Uint8Array; mediaType: string }) {
   };
 }
 
-function toModelOutput(output: unknown) {
-  const o = output as { __workspaceMedia?: boolean; text: string; data: string; mediaType: string };
-  if (!o || typeof o !== 'object' || !o.__workspaceMedia) return undefined;
-  return {
-    type: 'content' as const,
-    value: [
-      { type: 'text' as const, text: o.text },
-      { type: 'media' as const, data: o.data, mediaType: o.mediaType },
-    ],
-  };
-}
 
 /**
  * Provider-neutral agent computers exposed as a toolset. Register with
@@ -189,8 +143,7 @@ export class Computers implements MastraComputers {
   readonly #key: Buffer;
   readonly #provider: ComputerProvider;
   readonly #screenshotAfterAction: boolean;
-  readonly #semantic: boolean;
-  readonly #connectDaemon?: DaemonConnect;
+  readonly #handsExtension?: ComputerHandsExtension;
   #mastra?: Mastra;
   readonly #computers = new Map<string, Entry>();
   readonly #lookups = new Map<string, Promise<Entry | undefined>>();
@@ -209,8 +162,7 @@ export class Computers implements MastraComputers {
     if (typeof options.secret !== 'string' && options.secret.byteLength === 0) throw new Error('Computers needs a secret');
     this.#key = Buffer.from(options.secret);
     this.#provider = options.provider;
-    this.#semantic = options.hands === 'semantic';
-    this.#connectDaemon = options.connectDaemon;
+    this.#handsExtension = options.handsExtension;
     this.#screenshotAfterAction = options.screenshotAfterAction === true;
   }
 
@@ -379,7 +331,7 @@ export class Computers implements MastraComputers {
   #attach(scope: Scope, entry: Entry) {
     const previous = this.#attachments.get(scope.key);
     const old = previous !== undefined && previous !== entry.id ? this.#computers.get(previous) : undefined;
-    if (old) this.#endWatches(old, scope.threadId);
+    if (old) this.#handsExtension?.release?.(old.id, scope.threadId);
     this.#attachments.set(scope.key, entry.id);
   }
 
@@ -400,20 +352,11 @@ export class Computers implements MastraComputers {
   }
 
   /** Marks agent input in flight, so watch events it causes (during and just after) are not reported as news. */
-  async #input<T>(entry: Entry, fn: () => Promise<T>): Promise<T> {
-    entry.inputs = (entry.inputs ?? 0) + 1;
-    try {
-      return await fn();
-    } finally {
-      entry.inputs--;
-      entry.lastInputAt = Date.now();
-    }
-  }
 
   /** A hand action, plus a screenshot in the same slot when `screenshotAfterAction` is on and the agent still holds control. */
   #act(context: Context, fn: (computer: SandboxComputer) => Promise<string>) {
     return this.#hands(context, async (_s, computer, entry) => {
-      const text = await this.#input(entry, () => fn(computer));
+      const text = await fn(computer);
       if (!this.#screenshotAfterAction || entry.control.holder === 'human') return text;
       // The action already happened; a failed screenshot must not make the model retry it.
       const shot = await computer.screenshot().catch(() => undefined);
@@ -454,6 +397,7 @@ export class Computers implements MastraComputers {
         queue: Promise.resolve(),
         destroyed: false,
         control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
+      extensionState: new Map(),
       };
       entry.queue = entry.ready.catch(() => {});
       entry.ready.then(
@@ -500,6 +444,7 @@ export class Computers implements MastraComputers {
           queue: Promise.resolve(),
           destroyed: false,
           control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
+      extensionState: new Map(),
         };
       } catch {
         await sandbox.destroy().catch(() => {});
@@ -554,7 +499,7 @@ export class Computers implements MastraComputers {
       this.#attachments.delete(scope.key);
       await this.#deleteAttachment(scope);
       if (!entry) return NOT_ATTACHED;
-      this.#endWatches(entry, scope.threadId);
+      this.#handsExtension?.release?.(entry.id, scope.threadId);
       await this.#emit(context, entry, scope.threadId, 'released');
       return { computer: this.#describe(entry, 'released') };
     });
@@ -568,7 +513,7 @@ export class Computers implements MastraComputers {
       if (!entry || entry.destroyed) return NOT_FOUND;
       if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
       entry.destroyed = true;
-      this.#closeDaemon(entry);
+      this.#handsExtension?.destroy?.(entry.id);
       const releasedHere = this.#attachments.get(scope.key) === entry.id;
       for (const [key, id] of this.#attachments) if (id === entry.id) this.#attachments.delete(key);
       if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
@@ -654,182 +599,37 @@ export class Computers implements MastraComputers {
     return { computers: [...computersById.values()] };
   }
 
-  /**
-   * Runs a daemon request on the attached computer, in the same per-computer queue and under the same
-   * control lease as the pixel tools. Boots the daemon on first use. Refusals come back verbatim.
-   */
-  #daemon(
-    context: Context,
-    method: string,
-    params: Record<string, unknown>,
-    shape: (result: any, entry: Entry, scope: Scope) => unknown,
-    options: { input?: boolean; timeoutMs?: number } = {},
-  ) {
-    const scope = this.#scope(context);
-    if (!scope) return Promise.resolve(MISSING_IDENTITY);
-    return this.#hands(context, async (sandbox, computer, entry) => {
-      try {
-        const client = await this.#client(entry, sandbox, computer);
-        if (typeof client === 'string') return client;
-        const send = () => client.request(method, params, options.timeoutMs);
-        const result = options.input ? await this.#input(entry, send) : await send();
-        if (result?.refusal) return refusalText(result.refusal);
-        return shape(result, entry, scope);
-      } catch (error) {
-        // Only host-written messages reach the model here (refusals pass through above, labelled as such);
-        // other errors may carry the preview url or cookie.
-        return `semantic hands error: ${error instanceof DaemonError ? error.message.slice(0, 300) : 'the request failed'}`;
-      }
-    });
+  #handsHost(): ComputerHandsHost {
+    return {
+      run: async (context, fn) =>
+        this.#hands(context as Context, async (sandbox, computer, entry) => {
+          const scope = this.#scope(context as Context);
+          if (!scope) return MISSING_IDENTITY;
+          return fn({
+            computerId: entry.id,
+            sandbox,
+            computer,
+            resourceId: scope.resourceId,
+            threadId: scope.threadId,
+            state: entry.extensionState,
+            runInput: task => task(),
+            port: port => this.#provider.port?.(sandbox, port) ?? Promise.resolve(null),
+            signal: (kind, summary, attributes) => this.#signalExtension(scope, entry, kind, summary, attributes),
+          });
+        }),
+      act: (context, fn) => this.#act(context as Context, fn as (computer: SandboxComputer) => Promise<string>) as any,
+    };
   }
 
-  async #client(entry: Entry, sandbox: ComputerSandbox, computer: SandboxComputer): Promise<DaemonClient | string> {
-    if (!sandbox.networking) return SEMANTIC_NO_NETWORK;
-    entry.boot ??= (async () => {
-      await computer.getScreenSize();
-      const r = await sandbox.executeCommand('bash', ['-c', BOOT_SEMANTIC_SCRIPT], { timeout: 120_000 });
-      const last = r.stdout.trim().split('\n').pop() ?? '';
-      // Only the boot script's own status words are trusted; the sandbox writes everything else.
-      if (r.exitCode === 0 && ['ready', 'missing', 'lowmem'].includes(last)) return last;
-      return `failed: boot exited ${r.exitCode}`;
-    })();
-    const state = await entry.boot.catch(() => 'failed: the boot command could not run');
-    if (state !== 'ready') {
-      entry.boot = undefined;
-      if (state === 'missing') return SEMANTIC_UNAVAILABLE;
-      if (state === 'lowmem') return SEMANTIC_LOW_MEMORY;
-      return `semantic hands unavailable: the accessibility daemon did not start (${state}) — use the pixel tools`;
-    }
-    entry.daemon ??= new DaemonClient(
-      async () => this.#provider.port?.(sandbox, DAEMON_PORT) ?? null,
-      { onEvent: event => this.#onElementEvent(entry, event), onClose: () => this.#onDaemonClose(entry) },
-      this.#connectDaemon,
-    );
-    return entry.daemon;
-  }
-
-  #watch(input: { id: string }, context: Context) {
-    return this.#daemon(context, 'subscribeElement', { id: input.id, priority: 'high' }, (result, entry, scope) => {
-      const subscriptionId = result?.subscription?.subscriptionId;
-      if (typeof subscriptionId !== 'string' || !subscriptionId || subscriptionId.length > 128) {
-        return 'semantic hands error: the daemon returned no subscription';
-      }
-      entry.watches ??= new Map();
-      // A reused id would take over another watch (possibly another thread's): refuse, keep the original.
-      if (entry.watches.has(subscriptionId)) return 'semantic hands error: the daemon reused a subscription id';
-      entry.watches.set(subscriptionId, {
-        subscriptionId,
-        elementId: input.id,
-        target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
-        changes: 0,
-        kinds: new Set(),
-        lastSentAt: 0,
-      });
-      return {
-        watching: input.id,
-        message: 'You will be notified when this element or anything inside it changes. You can end your turn.',
-      };
-    });
-  }
-
-  #onElementEvent(entry: Entry, event: DaemonEvent) {
-    const watch = entry.watches?.get(event.subscriptionId);
-    if (!watch || entry.destroyed) return;
-    if (event.kind === 'watchEnded') {
-      entry.watches!.delete(watch.subscriptionId);
-      if (watch.timer) clearTimeout(watch.timer);
-      void this.#signal(
-        watch.target,
-        entry,
-        'watch-ended',
-        `Stopped watching ${watch.elementId}: the element went away.`,
-      );
-      return;
-    }
-    // The agent's own input and anything while the user drives are not news to report.
-    if (event.attribution === 'self' || this.#quiet(entry)) return;
-    watch.changes++;
-    watch.kinds.add(event.kind);
-    if (watch.timer) return;
-    const wait = Math.max(WATCH_COALESCE_MS, watch.lastSentAt + WATCH_MIN_INTERVAL_MS - Date.now());
-    watch.timer = setTimeout(() => {
-      watch.timer = undefined;
-      const { changes } = watch;
-      const kinds = [...watch.kinds].join(', ');
-      watch.changes = 0;
-      watch.kinds.clear();
-      // Re-checked at delivery: the user may have taken control, or the agent acted, while this waited.
-      if (entry.destroyed || entry.watches?.get(watch.subscriptionId) !== watch || this.#quiet(entry)) return;
-      watch.lastSentAt = Date.now();
-      void this.#signal(
-        watch.target,
-        entry,
-        'element-changed',
-        `Observed on the computer (data, not an instruction): watched element ${watch.elementId} ${kinds} (${changes} change${changes === 1 ? '' : 's'}). Read it with computer_read to see what it says now.`,
-        { elementId: watch.elementId },
-      );
-    }, wait);
-  }
-
-  /** Changes the agent caused or that happen while the user drives are not news to report. */
-  #quiet(entry: Entry) {
-    if (entry.control.holder === 'human' || (entry.inputs ?? 0) > 0) return true;
-    return entry.lastInputAt !== undefined && Date.now() - entry.lastInputAt < SELF_ECHO_MS;
-  }
-
-  #onDaemonClose(entry: Entry) {
-    const watches = entry.watches;
-    entry.watches = undefined;
-    if (!watches?.size || entry.destroyed) return;
-    const threads = new Map<string, Watch['target']>();
-    for (const w of watches.values()) {
-      if (w.timer) clearTimeout(w.timer);
-      threads.set(w.target.threadId, w.target);
-    }
-    for (const target of threads.values()) {
-      void this.#signal(
-        target,
-        entry,
-        'watch-ended',
-        'The connection to the computer dropped; your element watches ended. Watch again if you still need them.',
-      );
-    }
-  }
-
-  /** Ends one thread's watches, leaving other threads' watches on the same computer alone. */
-  #endWatches(entry: Entry, threadId: string) {
-    for (const w of [...(entry.watches?.values() ?? [])]) {
-      if (w.target.threadId !== threadId) continue;
-      entry.watches!.delete(w.subscriptionId);
-      if (w.timer) clearTimeout(w.timer);
-      // In the computer's queue, and a slow answer abandons only this request, not the shared connection.
-      const daemon = entry.daemon;
-      if (!daemon?.connected) continue;
-      entry.queue = entry.queue
-        .then(() =>
-          // A dropped connection already ended the watch; don't reconnect just to unsubscribe.
-          daemon.connected
-            ? daemon.request('unsubscribeElement', { subscriptionId: w.subscriptionId }, UNSUBSCRIBE_MS, false)
-            : undefined,
-        )
-        .catch(() => {});
-    }
-  }
-
-  #closeDaemon(entry: Entry) {
-    for (const w of entry.watches?.values() ?? []) if (w.timer) clearTimeout(w.timer);
-    entry.watches = undefined;
-    entry.daemon?.close();
-  }
-
-  /** Wakes or informs the agent on a watch's thread. Never throws. */
-  async #signal(
-    target: Watch['target'],
+  async #signalExtension(
+    scope: Scope,
     entry: Entry,
     kind: string,
     summary: string,
     attributes: Record<string, string> = {},
-  ) {
+  ): Promise<void> {
+    if (entry.control.holder === 'human') return;
+    const target = { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) };
     let agent: Agent | undefined;
     try {
       agent = target.agentId && target.mastra ? target.mastra.getAgentById(target.agentId) : undefined;
@@ -840,147 +640,17 @@ export class Computers implements MastraComputers {
     const requestContext = new RequestContext();
     requestContext.set(MASTRA_RESOURCE_ID_KEY, target.resourceId);
     requestContext.set(MASTRA_THREAD_ID_KEY, target.threadId);
-    try {
-      await agent.sendNotificationSignal(
-        { source: 'computer', kind, priority: 'high', summary, attributes: { computerId: entry.id, ...attributes } },
-        {
-          resourceId: target.resourceId,
-          threadId: target.threadId,
-          ifIdle: {
-            behavior: 'wake',
-            streamOptions: {
-              memory: { thread: target.threadId, resource: target.resourceId },
-              requestContext,
-            },
-          },
+    await agent.sendNotificationSignal(
+      { source: 'computer', kind, priority: 'high', summary, attributes: { computerId: entry.id, ...attributes } },
+      {
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { memory: { thread: target.threadId, resource: target.resourceId }, requestContext },
         },
-      );
-    } catch (error) {
-      target.mastra?.getLogger?.()?.warn('computer element change was not delivered to the agent', {
-        computer: entry.id.slice(0, 12),
-        error: String((error as Error)?.message).slice(0, 120),
-      });
-    }
-  }
-
-  #semanticTools(): Record<string, ToolAction<any, any, any, any>> {
-    const elementId = z.string().min(1).max(64).describe('Element id from computer_find');
-    const element = (r: any) => ({ element: slimElement(r?.element) });
-    return {
-      computer_find: createTool({
-        id: 'computer_find',
-        description:
-          'Find UI elements by role and/or name in one application (e.g. application "kate", role "text"). Much cheaper than a screenshot. Returns element ids for the other element tools.',
-        inputSchema: z
-          .object({
-            application: z.string().min(1).max(128),
-            role: z.string().min(1).max(64).optional(),
-            name: z.string().min(1).max(256).optional(),
-            window: z.string().min(1).max(256).optional(),
-            limit: z.number().int().min(1).max(20).optional(),
-          })
-          .refine(q => q.role !== undefined || q.name !== undefined, {
-            message: 'give a role or a name; listing everything in an application is refused',
-          }),
-        execute: async (input, context) =>
-          this.#daemon(context, 'queryElements', { ...input, limit: input.limit ?? 10 }, r => ({
-            elements: (Array.isArray(r?.elements) ? r.elements : []).slice(0, input.limit ?? 10).map(slimElement),
-          })),
-      }),
-      computer_read: createTool({
-        id: 'computer_read',
-        description: "Read an element's text content.",
-        inputSchema: z.object({
-          id: elementId,
-          offset: z.number().int().min(0).optional(),
-          limit: z.number().int().min(1).max(4000).optional(),
-        }),
-        execute: async (input, context) =>
-          this.#daemon(
-            context,
-            'readElementContent',
-            { id: input.id, offset: input.offset ?? 0, limit: input.limit ?? 2000 },
-            r => {
-              const limit = input.limit ?? 2000;
-              if (r?.content?.kind !== 'text' || typeof r.content.value !== 'string') return { text: null };
-              return { text: r.content.value.slice(0, limit) };
-            },
-          ),
-      }),
-      computer_look: createTool({
-        id: 'computer_look',
-        description: 'Get an image of just one element (much smaller than a screenshot).',
-        inputSchema: z.object({ id: elementId }),
-        execute: async (input, context) =>
-          this.#daemon(context, 'captureElement', { id: input.id }, r => {
-            const size = checkPng(r?.image?.data);
-            if (!size) return 'semantic hands error: the daemon returned no usable image';
-            return {
-              __workspaceMedia: true as const,
-              text: `Element ${input.id} (${size.width}x${size.height})`,
-              mediaType: 'image/png',
-              data: r.image.data as string,
-            };
-          }),
-        toModelOutput,
-      }),
-      computer_type: createTool({
-        id: 'computer_type',
-        description:
-          'Type text. With an element id, focuses that element and types into it (printable text only; use computer_key_chord for Enter); its window must be the active one. Without an id, types at the keyboard focus.',
-        inputSchema: z.object({ text: z.string().max(32_000), id: elementId.optional() }),
-        execute: async (input, context) =>
-          input.id === undefined
-            ? this.#act(context, async computer => {
-                await computer.type(input.text);
-                return 'typed';
-              })
-            : this.#daemon(
-                context,
-                'typeText',
-                { id: input.id, text: input.text },
-                r => ({
-                  ...element(r),
-                  note: "keys go to the element's window; delivery is unverified — read the element back",
-                }),
-                {
-                  input: true,
-                  timeoutMs: Math.min(30_000 + input.text.length * 50, 600_000),
-                },
-              ),
-        toModelOutput,
-      }),
-      computer_set_text: createTool({
-        id: 'computer_set_text',
-        description:
-          "Replace a field's whole text (or insert at offset). Works on simple fields; editors often refuse — then use computer_type with the id.",
-        inputSchema: z.object({
-          id: elementId,
-          text: z.string().max(32_000),
-          offset: z.number().int().min(0).optional(),
-        }),
-        execute: async (input, context) => this.#daemon(context, 'setElementText', input, element, { input: true }),
-      }),
-      computer_activate: createTool({
-        id: 'computer_activate',
-        description: 'Perform one of the actions an element advertises (from computer_find), e.g. "Press" on a button.',
-        inputSchema: z.object({ id: elementId, action: z.string().min(1).max(64) }),
-        execute: async (input, context) => this.#daemon(context, 'activateElement', input, element, { input: true }),
-      }),
-      computer_key_chord: createTool({
-        id: 'computer_key_chord',
-        description: 'Press a key aimed at an element; focus is restored afterwards.',
-        inputSchema: z.object({ id: elementId, chord: z.enum(KEY_CHORDS) }),
-        execute: async (input, context) => this.#daemon(context, 'sendKeyChord', input, element, { input: true }),
-      }),
-      computer_watch: createTool({
-        id: 'computer_watch',
-        description:
-          'Watch an element and everything inside it. You will be notified when it changes (not for your own input), so you can end your turn and wait.',
-        inputSchema: z.object({ id: elementId }),
-        execute: async (input, context) => this.#watch(input, context),
-      }),
-    };
+      },
+    );
   }
 
   /** The lifecycle toolset. Pixel actions come only from Workspace tools. */
@@ -1043,6 +713,7 @@ export class Computers implements MastraComputers {
         inputSchema: z.object({ id: z.string().max(256) }),
         execute: async (input, context) => this.#destroy(input, context),
       }),
+      ...(this.#handsExtension ? this.#handsExtension.tools(this.#handsHost()) : {}),
     };
     for (const tool of Object.values(this.#tools)) markOrderedTool(tool, COMPUTER_ORDERED_TOOL_GROUP);
     return this.#tools;
