@@ -866,14 +866,12 @@ export class Computers implements MastraComputers {
       return Object.assign(Object.create(workspaceSandbox), {
         computer: new Proxy(workspaceSandbox.computer, {
           get(target, property, receiver) {
-            if (property === 'screenshot') {
-              return async () => {
-                if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
-                return target.screenshot();
-              };
-            }
             const value = Reflect.get(target, property, receiver);
-            return typeof value === 'function' ? value.bind(target) : value;
+            if (typeof value !== 'function') return value;
+            return (...args: unknown[]) => {
+              if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+              return Reflect.apply(value, target, args);
+            };
           },
         }),
       }) as WorkspaceSandbox;
