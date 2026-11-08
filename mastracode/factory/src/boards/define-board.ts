@@ -80,6 +80,12 @@ export const FACTORY_AGENT_ID = CODE_AGENT_ID;
 
 /** The session context a working phase runs in when it names none. */
 export const DEFAULT_PHASE_CONTEXT = 'work';
+/**
+ * Seat review runs sit in. Review skills load only in it, it is the only seat granted the verdict
+ * tool, and its sessions check out code the author wrote, so they never trust that checkout's
+ * instruction files. A runner context, not a phase key: any board's phases may run in it.
+ */
+export const REVIEW_CONTEXT = 'review';
 
 /** Who runs a working phase, and with what. */
 export interface BoardPhaseRunner {
@@ -762,6 +768,7 @@ function buildBoard<
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
+      if (!kinds.has(from) || !kinds.has(to)) return false;
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;
     },
     phaseKind: (phase: string) => kinds.get(phase),

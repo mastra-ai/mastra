@@ -7,11 +7,15 @@ import {
   isTerminalWorkItem,
   rulePhaseField,
   withBoardClosure,
+  withIntakeTarget,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
@@ -59,7 +63,8 @@ export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   configVersion: string;
-  boards: BoardRegistry;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
   linearRules: LinearEventRules;
 }
 
@@ -88,9 +93,15 @@ export function boardEventFor(context: Pick<FactoryLinearRuleContext, 'event' | 
 export class LinearRules {
   constructor(private readonly options: LinearRulesOptions) {}
 
+  /** The project's boards, loaded at the start of {@link ingest}. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
+
   async ingest(input: LinearRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
+    await toBoardSource(this.options.boards).load(input);
 
     // A finished card may still be only in the legacy table; copy it so the issue finds it.
     await this.options.storage.copyLegacyCards({
@@ -109,7 +120,7 @@ export class LinearRules {
       const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
       const relatedItem =
         itemsBySourceKey.get(`linear:${issue.identifier}`) ??
-        byIssueId.find(item => !isTerminalWorkItem(this.options.boards, item)) ??
+        byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ??
         byIssueId[0];
       statuses.push(await this.#ingestIssue(input, issue, relatedItem));
     }
@@ -135,7 +146,7 @@ export class LinearRules {
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
     const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
-    const boundBoard = boundBoardId ? this.options.boards.get(boundBoardId) : undefined;
+    const boundBoard = boundBoardId ? this.#boards(input).get(boundBoardId) : undefined;
     const context: FactoryLinearRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
@@ -159,11 +170,11 @@ export class LinearRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
-            ...withBoardClosure(this.options.boards, relatedItem),
-            ...rulePhaseField(this.options.boards, relatedItem),
+            ...withBoardClosure(this.#boards(input), relatedItem),
+            ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
-      ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
+      ...withIntakeTarget(this.#boards(input), boundBoard),
       event,
       issue,
     };
@@ -172,12 +183,12 @@ export class LinearRules {
 
     const ownedByDeployment = deploymentOwnsEvent(
       this.options.linearRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'linear'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'linear'),
       context.event,
     );
     const rule = selectEventRule(
       this.options.linearRules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'linear'),
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'linear'),
       context.event,
     );
     let decision: FactoryRuleDecision | void = undefined;
@@ -191,7 +202,7 @@ export class LinearRules {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
           assertFactoryDecisionTarget(
             entry,
-            this.options.boards,
+            this.#boards(input),
             relatedItem ? boardForWorkItem(relatedItem) : undefined,
           );
           return { ...entry };

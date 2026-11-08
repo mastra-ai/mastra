@@ -1,6 +1,8 @@
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
-import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
+
+/** The default Work board's phases, in column order. */
+const WORK_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'pr-review', 'done', 'canceled'] as const;
 
 const BOARD_STAGE_LABELS = {
   intake: 'Intake',
@@ -11,18 +13,18 @@ const BOARD_STAGE_LABELS = {
   'pr-review': 'PR review',
   done: 'Done',
   canceled: 'Canceled',
-} satisfies Record<FactoryRuleStage, string>;
+} satisfies Record<(typeof WORK_STAGES)[number], string>;
 
 export type BoardStageId = FactoryRuleStage;
 
-export type BuiltinStageId = (typeof FACTORY_RULE_STAGES)[number];
+export type BuiltinStageId = (typeof WORK_STAGES)[number];
 
 export interface BoardStage {
   id: BoardStageId;
   label: string;
 }
 
-export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(id => ({
+export const BOARD_STAGES: ReadonlyArray<BoardStage> = WORK_STAGES.map(id => ({
   id,
   label: BOARD_STAGE_LABELS[id],
 }));
@@ -39,7 +41,7 @@ export function stageLabel(stage: string): string {
 
 /** The board column a raw stage id names, when it names one. */
 export function boardStage(stage: string): BuiltinStageId | undefined {
-  return FACTORY_RULE_STAGES.find(builtin => builtin === stage);
+  return WORK_STAGES.find(builtin => builtin === stage);
 }
 
 /** Position of a stage in the board's column order; unknown stages sort last. */

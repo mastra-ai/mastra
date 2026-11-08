@@ -6,12 +6,10 @@ import { z } from 'zod';
 import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
-import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
-const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
@@ -482,7 +480,8 @@ export const automationRunStartBodySchema = z
   .object({
     requestId: trimmedUuidSchema,
     expectedRevision: z.number().int().min(1),
-    role: z.enum(FACTORY_ROLE_VALUES),
+    // Checked against the card's board when the request arrives.
+    role: nonEmptyTrimmed(32),
     skillName: nonEmptyTrimmed(128),
     arguments: nonEmptyTrimmed(4_096).optional(),
   })

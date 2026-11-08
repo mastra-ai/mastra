@@ -7,12 +7,14 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
+  boardFlow,
   boardForWorkItem,
+  cardBoardFlow,
   cardRuleFacts,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
-  pullRequestReviewPhase,
+  REVIEW_CONTEXT,
   reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
@@ -69,7 +71,7 @@ import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { authorTrusted, externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from './types.js';
+import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -180,7 +182,7 @@ function isReviewRun(decision: unknown): boolean {
   if (!decision || typeof decision !== 'object') return false;
   const value = decision as { type?: unknown; role?: unknown; skillName?: unknown };
   // A builder checking its own work reviews no pull request, even on a card that carries one.
-  return value.type === 'invokeSkill' && value.role === 'review' && value.skillName !== 'factory-self-review';
+  return value.type === 'invokeSkill' && value.role === REVIEW_CONTEXT && value.skillName !== 'factory-self-review';
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
@@ -616,20 +618,22 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
+  boards: BoardRegistry,
   item: Pick<Card, 'metadata' | 'externalSource' | 'workItem'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
   if (decision.type === 'transition') {
+    const flow = boardFlow(boards.get(decision.board));
     return (
-      decision.stage === pullRequestReviewPhase(decision.board) &&
+      decision.stage === flow.pullRequestReview &&
       reviewsPullRequest({
-        board: decision.board,
+        flow,
         item: { source: workItemSource(item.externalSource), workItem: item.workItem },
       })
     );
   }
-  return decision.type === 'invokeSkill' && decision.role === 'review';
+  return decision.type === 'invokeSkill' && decision.role === REVIEW_CONTEXT;
 }
 
 function leaseIdentity(
@@ -1351,7 +1355,7 @@ export class FactoryDecisionDispatcher {
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
     if (item?.autonomyArmedAt != null) return false;
-    if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
+    if (item && reviewsFactoryAuthoredCode(boards, item, decision)) return false;
     if (item && startsInAutoPhase(boards, item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
@@ -1746,14 +1750,17 @@ export class FactoryDecisionDispatcher {
       }
       return;
     }
-    if (
-      !existing &&
-      requested.attachTo &&
-      (await this.#attachLinkedItem(record, requested, requested.attachTo.workItemId, causalChain, card =>
-        boardForWorkItem(card) === 'work' ? { phase: null } : undefined,
-      ))
-    ) {
-      return;
+    if (!existing && requested.attachTo) {
+      // A card takes a pull request when its board reviews pull requests; elsewhere the pull
+      // request is filed as its own card.
+      const attachBoards = await this.#boards.load(record);
+      if (
+        await this.#attachLinkedItem(record, requested, requested.attachTo.workItemId, causalChain, card =>
+          cardBoardFlow(attachBoards, card).pullRequestReview !== undefined ? { phase: null } : undefined,
+        )
+      ) {
+        return;
+      }
     }
     if (!existing && requested.closesIssue && (await this.#joinClosedIssue(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
@@ -1823,18 +1830,17 @@ export class FactoryDecisionDispatcher {
           reuseMode: 'preserve',
         });
     const itemBoard = boardForWorkItem(result.item);
-    // New pull request cards are filed on Work, but one a project keeps on the retired Review
-    // board stays there: filing its pull request again acts on it where it sits.
-    const board =
-      itemBoard === 'review' &&
-      decision.board === 'work' &&
-      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
-        ? itemBoard
-        : decision.board;
-    // Work's PR review is the Review board's Reviewing.
+    // A pull request's own card already on another board that reviews pull requests (the retired
+    // Review board, for a project still using it) stays there: filing its pull request again acts
+    // on it where it sits, in that board's own review phase.
+    const itemFlow = itemBoard === decision.board ? undefined : boardFlow(boards.get(itemBoard));
+    const keptReview = isPullRequestCard({ source: workItemSource(result.item.externalSource) })
+      ? itemFlow?.pullRequestReview
+      : undefined;
+    const board = keptReview === undefined ? decision.board : itemBoard;
     const placeStage =
-      board !== decision.board && decision.stage === pullRequestReviewPhase(decision.board)
-        ? pullRequestReviewPhase(board)
+      keptReview !== undefined && decision.stage === boardFlow(definition).pullRequestReview
+        ? keptReview
         : decision.stage;
     if (!skipRules && itemBoard !== board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
@@ -2323,13 +2329,20 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord | undefined> {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
-    return bindings
-      .filter(candidate => candidate.status === 'active' && (role === undefined || candidate.role === role))
-      .sort((left, right) => {
-        if (role === undefined && left.role === 'work' && right.role !== 'work') return -1;
-        if (role === undefined && right.role === 'work' && left.role !== 'work') return 1;
-        return right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id);
-      })[0];
+    const active = bindings.filter(
+      candidate => candidate.status === 'active' && (role === undefined || candidate.role === role),
+    );
+    // Without a role, the builder's session answers for the card: it owns the work.
+    let builder: string | undefined;
+    if (role === undefined && active.length > 1) {
+      const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+      builder = item ? cardBoardFlow(await this.#boards.load(record), item).buildRole : undefined;
+    }
+    return active.sort((left, right) => {
+      if (builder !== undefined && left.role === builder && right.role !== builder) return -1;
+      if (builder !== undefined && right.role === builder && left.role !== builder) return 1;
+      return right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id);
+    })[0];
   }
 
   async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
@@ -2831,5 +2844,4 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   openRunStaleMs: FACTORY_OPEN_RUN_STALE_MS,
   maxInFlight: MAX_IN_FLIGHT,
   reviewStatusTimeoutMs: REVIEW_STATUS_TIMEOUT_MS,
-  stages: FACTORY_RULE_STAGES,
 } as const;
