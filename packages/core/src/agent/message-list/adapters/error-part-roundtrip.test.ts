@@ -117,14 +117,17 @@ describe('error part survives DB -> UI -> DB round-trip', () => {
   });
 
   // Newer `ai` v7 releases add part types core doesn't know (`steering-message` in 7.0.163). (#29575)
-  it('AIV6 skips part types it does not know without shifting later parts (#29575)', () => {
+  it.each([
+    { name: 'a part type it does not know (#29575)', dropped: [{ type: 'steering-message', id: 's1', parts: [] }] },
+    { name: 'an empty text part', dropped: [{ type: 'text', text: '' }] },
+  ])('AIV6 drops $name without shifting later parts', ({ dropped }) => {
     const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
     messageList.add(
       {
         id: 'assistant-steered',
         role: 'assistant',
         parts: [
-          { type: 'steering-message', id: 's1', parts: [{ type: 'text', text: 'also check Paris' }] },
+          ...dropped,
           {
             type: 'dynamic-tool',
             toolName: 'weather',

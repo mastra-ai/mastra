@@ -461,15 +461,16 @@ export class AIV6Adapter {
 
   static fromUIMessage(uiMsg: AIV6Type.UIMessage): MastraDBMessage {
     // Parts are paired with the v5 bridge output by index below, so drop the ones the bridge would drop
-    // first. Otherwise a part type from a newer `ai` release (e.g. `steering-message`, #29575) shifts
-    // every later part.
-    uiMsg = { ...uiMsg, parts: uiMsg.parts.filter(isMappedV6UIPart) };
+    // first: part types it doesn't map (e.g. `steering-message` from a newer `ai`, #29575) and, like its
+    // filterEmptyTextParts, empty text unless nothing else is left. Otherwise every later part shifts.
+    const isBridgePart = (part: AIV6Type.UIMessage['parts'][number]) =>
+      part.type !== 'source-document' && !AIV6.isToolUIPart(part);
+    const isEmptyText = (part: AIV6Type.UIMessage['parts'][number]) => part.type === 'text' && part.text === '';
+    const mappedParts = uiMsg.parts.filter(isMappedV6UIPart);
+    const dropEmptyText = mappedParts.some(part => isBridgePart(part) && !isEmptyText(part));
+    uiMsg = { ...uiMsg, parts: dropEmptyText ? mappedParts.filter(part => !isEmptyText(part)) : mappedParts };
 
-    const compatibleParts = uiMsg.parts.filter(part => {
-      if (part.type === 'source-document') return false;
-      if (AIV6.isToolUIPart(part)) return false;
-      return true;
-    });
+    const compatibleParts = uiMsg.parts.filter(isBridgePart);
 
     const baseDb = AIV5Adapter.fromUIMessage({
       ...uiMsg,
