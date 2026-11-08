@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   CONNECT_TIMEOUT_MS,
@@ -86,8 +86,7 @@ type ConnectionState =
 /** Studio's request options for one computer's control route. */
 function useControlRequest(computerId: string, threadId: string, resourceId: string) {
   const client = useMastraClient();
-  const { baseUrl, apiPrefix, headers } = client.options;
-  return { computerId, threadId, resourceId, baseUrl, apiPrefix, headers };
+  return { computer: client.getComputer(computerId), threadId, resourceId };
 }
 
 /**
@@ -167,7 +166,8 @@ function HandBack({ computerId, threadId, resourceId }: LiveComputerProps) {
  */
 function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const client = useMastraClient();
-  const { baseUrl, apiPrefix, headers } = client.options;
+  const { baseUrl } = client.options;
+  const computer = useMemo(() => client.getComputer(computerId), [client, computerId]);
   const { computers, live, reportControl, readEpoch, scopeKey } = useComputerThread();
   const entry = computers.get(computerId);
   const control = effectiveHolder(entry, live.get(computerId));
@@ -180,7 +180,6 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const viewOnly = control.holder !== 'human';
   const viewOnlyRef = useRef(true);
   viewOnlyRef.current = viewOnly;
-  const headersKey = JSON.stringify(headers ?? {});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -192,13 +191,11 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
 
     const connect = async () => {
       const result = await requestComputerSession({
-        computerId,
+        computer,
         threadId,
         resourceId,
         mode: 'control',
         baseUrl,
-        apiPrefix,
-        headers: JSON.parse(headersKey) as Record<string, string>,
         signal,
       }).catch(() => undefined);
       if (signal.aborted || !result) return;
@@ -244,7 +241,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
       rfbRef.current = undefined;
       rfb?.disconnect();
     };
-  }, [computerId, threadId, resourceId, attempt, baseUrl, apiPrefix, headersKey]);
+  }, [computer, threadId, resourceId, attempt, baseUrl]);
 
   useEffect(() => {
     if (rfbRef.current) rfbRef.current.viewOnly = viewOnly;
@@ -257,12 +254,9 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
     const poll = async () => {
       const started = { scopeKey, epoch: readEpoch(computerId) };
       const result = await getComputerControl({
-        computerId,
+        computer,
         threadId,
         resourceId,
-        baseUrl,
-        apiPrefix,
-        headers: JSON.parse(headersKey) as Record<string, string>,
         signal: controller.signal,
       }).catch(() => undefined);
       if (controller.signal.aborted) return;
@@ -274,7 +268,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [computerId, threadId, resourceId, baseUrl, apiPrefix, headersKey, reportControl, readEpoch, scopeKey]);
+  }, [computer, computerId, threadId, resourceId, reportControl, readEpoch, scopeKey]);
 
   const sessionMessage = connection.phase === 'session' ? SESSION_MESSAGES[connection.state] : undefined;
   const human = control.holder === 'human';

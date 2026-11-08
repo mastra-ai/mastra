@@ -18,7 +18,7 @@ export interface ComputerEntry {
   reason?: string;
 }
 
-/** A control change in the transcript: `computer_request_human`, or a take / hand back signal. */
+/** A control change in the transcript: `mastra_workspace_computer_request_human`, or a take / hand back signal. */
 export interface ComputerControlChange {
   computerId: string;
   holder: ComputerHolder;
@@ -58,7 +58,7 @@ function readRequestResult(result: unknown): ComputerControlChange | undefined {
   return { computerId: r.computerId, holder: 'human', ...(typeof r.reason === 'string' && { reason: r.reason }) };
 }
 
-const ATTACH_TOOLS = new Set(['computer_create', 'computer_attach']);
+const ATTACH_TOOLS = new Set(['mastra_workspace_computer_create', 'mastra_workspace_computer_attach']);
 
 /** Stable key for a part occurrence in the transcript. */
 export function computerPartKey(messageId: string, partIndex: number) {
@@ -110,8 +110,8 @@ export function attachedComputerId(toolName: string, result: unknown): string | 
 /**
  * Latest known state of every computer in a thread, in transcript order.
  * `data-computer` parts are authoritative. Tool results stand in when a thread's
- * stored history has no parts: `computer_create` / `computer_attach` /
- * `computer_release` results carry the computer's status, `computer_destroy`
+ * stored history has no parts: `mastra_workspace_computer_create` / `mastra_workspace_computer_attach` /
+ * `mastra_workspace_computer_release` results carry the computer's status, `mastra_workspace_computer_destroy`
  * returns `{ destroyed: id }`. A result never takes ownership from a part
  * written for the same attach.
  */
@@ -160,15 +160,15 @@ export function deriveComputers(messages: MastraDBMessage[]): Map<string, Comput
       const invocation = part.type === 'tool-invocation' ? part.toolInvocation : undefined;
       if (!invocation || invocation.state !== 'result') return;
       const toolName = String(invocation.toolName);
-      if (toolName === 'computer_request_human') return control(readRequestResult(invocation.result));
-      if (toolName === 'computer_destroy') {
+      if (toolName === 'mastra_workspace_computer_request_human') return control(readRequestResult(invocation.result));
+      if (toolName === 'mastra_workspace_computer_destroy') {
         const destroyed = (readResult(invocation.result) as { destroyed?: unknown } | undefined)?.destroyed;
         const previous = typeof destroyed === 'string' ? computers.get(destroyed) : undefined;
         if (previous) computers.set(previous.computerId, { ...previous, status: 'released', ownerKey: undefined });
         if (typeof destroyed === 'string') ownedByPart.delete(destroyed);
         return;
       }
-      if (!ATTACH_TOOLS.has(toolName) && toolName !== 'computer_release') return;
+      if (!ATTACH_TOOLS.has(toolName) && toolName !== 'mastra_workspace_computer_release') return;
       const entry = readComputerResult(invocation.result);
       if (!entry) return;
       if (entry.status === 'released') {

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -71,9 +72,9 @@ const toolResult = (toolName: string, result: unknown, args: unknown = {}): Part
 const describeComputer = (status: 'attached' | 'released') => ({
   computer: { id: 'c1', name: 'Desk', template: 'desktop', status, persistent: true },
 });
-const attachResult = (toolName = 'computer_create'): Part => toolResult(toolName, describeComputer('attached'));
-const releaseResult = (): Part => toolResult('computer_release', describeComputer('released'));
-const destroyResult = (): Part => toolResult('computer_destroy', { destroyed: 'c1' }, { id: 'c1' });
+const attachResult = (toolName = 'mastra_workspace_computer_create'): Part => toolResult(toolName, describeComputer('attached'));
+const releaseResult = (): Part => toolResult('mastra_workspace_computer_release', describeComputer('released'));
+const destroyResult = (): Part => toolResult('mastra_workspace_computer_destroy', { destroyed: 'c1' }, { id: 'c1' });
 
 interface SessionRequest {
   computerId: string;
@@ -179,7 +180,7 @@ const controlSignal = (kind: 'control-taken' | 'control-returned', computerId = 
   },
 });
 const requestHumanResult = (reason = 'log in please'): Part =>
-  toolResult('computer_request_human', { computerId: 'c1', reason, control: 'human', message: 'Stop.' }, { reason });
+  toolResult('mastra_workspace_computer_request_human', { computerId: 'c1', reason, control: 'human', message: 'Stop.' }, { reason });
 
 beforeEach(() => {
   requests = [];
@@ -208,7 +209,7 @@ describe('deriveComputers', () => {
   });
 
   it('falls back to tool results when stored history has no parts', () => {
-    expect(deriveComputers([message('m1', [attachResult('computer_attach')])]).get('c1')).toMatchObject({
+    expect(deriveComputers([message('m1', [attachResult('mastra_workspace_computer_attach')])]).get('c1')).toMatchObject({
       status: 'attached',
       persistent: true,
       ownerKey: 'm1:0',
@@ -223,7 +224,7 @@ describe('deriveComputers', () => {
     expect(
       deriveComputers([
         message('m1', [attachResult(), releaseResult()]),
-        message('m2', [attachResult('computer_attach')]),
+        message('m2', [attachResult('mastra_workspace_computer_attach')]),
       ]).get('c1')?.ownerKey,
     ).toBe('m2:0');
   });
@@ -241,8 +242,8 @@ describe('deriveComputers', () => {
       deriveComputers([message('m1', [stored(attachResult())]), message('m2', [stored(destroyResult())])]).get('c1')
         ?.status,
     ).toBe('released');
-    expect(deriveComputers([message('m1', [toolResult('computer_create', '{not json')])]).size).toBe(0);
-    expect(attachedComputerId('computer_create', JSON.stringify(describeComputer('attached')))).toBe('c1');
+    expect(deriveComputers([message('m1', [toolResult('mastra_workspace_computer_create', '{not json')])]).size).toBe(0);
+    expect(attachedComputerId('mastra_workspace_computer_create', JSON.stringify(describeComputer('attached')))).toBe('c1');
   });
 
   it('lets the data part own an attach that also has a result, in either order', () => {
@@ -313,10 +314,10 @@ describe('deriveComputers', () => {
       message('m1', [
         { type: 'data-computer', data: { computerId: 'c1', status: 'gone' } },
         { type: 'data-computer', data: null },
-        { type: 'tool-invocation', toolInvocation: { toolName: 'computer_create', state: 'call' } },
+        { type: 'tool-invocation', toolInvocation: { toolName: 'mastra_workspace_computer_create', state: 'call' } },
         {
           type: 'tool-invocation',
-          toolInvocation: { toolName: 'computer_type', state: 'result', result: { computer: { id: 'x' } } },
+          toolInvocation: { toolName: 'mastra_workspace_computer_type', state: 'result', result: { computer: { id: 'x' } } },
         },
       ]),
     ]);
@@ -325,17 +326,18 @@ describe('deriveComputers', () => {
 });
 
 describe('requestComputerSession', () => {
+  const client = new MastraClient({ baseUrl: TEST_BASE_URL, headers: { authorization: 'Bearer secret' } });
   const base = {
-    computerId: 'a b/c',
+    computer: client.getComputer('a b/c'),
     threadId: 't',
     resourceId: 'r',
     mode: 'control' as const,
     baseUrl: TEST_BASE_URL,
   };
 
-  it('posts the thread scope and mode with Studio headers, never in the URL', async () => {
+  it('uses the typed Computer resource with Studio headers, never putting scope in the URL', async () => {
     serveSession(() => ready('abc'));
-    const result = await requestComputerSession({ ...base, headers: { authorization: 'Bearer secret' } });
+    const result = await requestComputerSession(base);
     expect(result).toEqual({ state: 'ready', socketUrl: `${WS_BASE}/computer/c1/websockify?ticket=abc` });
     expect(requests[0]).toMatchObject({
       computerId: 'a b/c',
@@ -347,7 +349,7 @@ describe('requestComputerSession', () => {
   it.each([
     [() => HttpResponse.json({ state: 'forbidden' }, { status: 403 }), 'forbidden'],
     [() => new HttpResponse(null, { status: 404 }), 'unavailable'],
-    [() => HttpResponse.json({ state: 'unavailable' }), 'unavailable'],
+    [() => HttpResponse.json({ state: 'unavailable' }), 'error'],
     [() => HttpResponse.json({ state: 'not-running' }), 'not-running'],
     [() => new HttpResponse(null, { status: 500 }), 'error'],
     [() => HttpResponse.json({ state: 'ready', socketUrl: 'wss://evil.test/x' }), 'error'],
@@ -598,6 +600,7 @@ describe('ComputerCard', () => {
     expect(live()).toEqual([client]);
 
     // Hand back from the request prompt reaches the shared state.
+    lease.posts = [];
     fireEvent.click(within(request).getByRole('button', { name: 'Hand back' }));
     await waitFor(() => expect(client.viewOnly).toBe(true));
     expect(lease.posts).toEqual([{ threadId: 'thread-1', resourceId: 'agent-1', action: 'release' }]);

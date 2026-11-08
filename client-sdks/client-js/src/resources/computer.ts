@@ -6,7 +6,7 @@ import type {
   PostComputersComputerIdSession_Body,
   PostComputersComputerIdSession_Response,
 } from '../route-types.generated';
-import type { ClientOptions } from '../types';
+import type { ClientOptions, RequestOptions } from '../types';
 import { BaseResource } from './base';
 
 function queryString(input: GetComputersComputerIdControl_QueryParams): string {
@@ -26,17 +26,24 @@ export class Computer extends BaseResource {
     this.#basePath = `/computers/${encodeURIComponent(computerId)}`;
   }
 
-  createSession(input: PostComputersComputerIdSession_Body): Promise<PostComputersComputerIdSession_Response> {
-    return this.request(`${this.#basePath}/session`, { method: 'POST', body: input });
+  createSession(
+    input: PostComputersComputerIdSession_Body,
+    options: RequestOptions = {},
+  ): Promise<PostComputersComputerIdSession_Response> {
+    return this.request(`${this.#basePath}/session`, { ...options, method: 'POST', body: input });
   }
 
   getControl(
     input: GetComputersComputerIdControl_QueryParams = {},
+    options: RequestOptions = {},
   ): Promise<GetComputersComputerIdControl_Response> {
-    return this.request(`${this.#basePath}/control${queryString(input)}`);
+    return this.request(`${this.#basePath}/control${queryString(input)}`, options);
   }
 
-  changeControl(input: PostComputersComputerIdControl_Body): Promise<PostComputersComputerIdControl_Response> {
-    return this.request(`${this.#basePath}/control`, { method: 'POST', body: input });
+  changeControl(
+    input: PostComputersComputerIdControl_Body,
+    options: RequestOptions = {},
+  ): Promise<PostComputersComputerIdControl_Response> {
+    return this.request(`${this.#basePath}/control`, { ...options, method: 'POST', body: input });
   }
 }

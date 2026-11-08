@@ -28,6 +28,7 @@ export type {
   KnowledgeTreeResponse,
 } from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
+export type { Computer } from './resources/computer';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
