@@ -74,6 +74,7 @@ export function weatherResources(environment: NodeJS.ProcessEnv = process.env) {
     workflows: {
       'weather-report': workflowResource(workflow, {
         version: 'weather-report-v1',
+        agentDependencies: ['weather-agent'],
         measurement: 'facade-calls',
         expectedCalls: [1, 1],
       }),

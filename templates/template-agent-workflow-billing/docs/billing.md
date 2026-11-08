@@ -277,6 +277,7 @@ const execution = await initializeMastraBilling({
   workflows: {
     report: workflowResource(workflow, {
       version: 'report-v1',
+      agentDependencies: ['assistant'],
       measurement: 'facade-calls',
       expectedCalls: [1, 1],
     }),
@@ -299,6 +300,21 @@ await execution.startRecovery().ready;
 `enforceBillingBoundary` installs middleware before early browser and development routes. `billingOnlyServer` also registers a denial route before native handlers, including framework-public routes that bypass user middleware. Removing either part weakens this boundary. All customer operations authenticate through the `/billing` application. Internal Mastra objects stay in trusted setup; facades return no raw agent executor or workflow run handle.
 
 Resource adapter versions identify executable definitions and model/tool configuration. Persisted definition signatures also bind agent execution limits and workflow measurement checkpoints; billing policies are kept separately. Keep a compatible registered definition for suspended runs; changing its version causes existing runs to fail closed instead of resuming different code. Billing policy changes apply to new executions; an admitted workflow continues under its persisted policy and reservation.
+
+Declare every agent used through a workflow's billing facade in `agentDependencies`. Only those agents' definitions affect compatibility, so adding, changing or removing an unrelated registration preserves existing runs and suspension expiry. Nested facade calls to undeclared agents are rejected. An omitted declaration conservatively includes all registered agents; use `[]` for a workflow with no agent calls. Bump the resource version when changing executable code, model, tools or schemas.
+
+Existing runs retain their original signatures and history. Legacy all-agent signatures are accepted only when recomputing the exact signature proves that the workflow settings and every declared dependency are unchanged. This works automatically when the historical registry equals either today's complete registry or the declared dependency registry. If an older registry also contained unrelated agents that have since changed or been removed, supply its full historical definition map in the trusted workflow registration:
+
+```ts
+legacyAgentDefinitions: [
+  {
+    assistant: previousAssistant.definition,
+    retiredAgent: previousRetiredAgent.definition,
+  },
+],
+```
+
+Save these maps from the prior deployment's `AgentResource.definition` values before replacing registrations. Each map must reproduce the stored legacy signature, and each declared dependency must equal its current definition. Without an explicit `agentDependencies` declaration, the historical and current registries must contain exactly the same agents and definitions. A signature alone, an incomplete map or a changed dependency cannot authorize resume or expiry. Keep the compatible prior deployment available for runs whose definitions cannot be proven; their reservations remain held for operational reconciliation.
 
 ### Generate and replay
 

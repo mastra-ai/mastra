@@ -149,9 +149,17 @@ export class WorkflowResource<W extends AnyWorkflow> {
   readonly version: string;
   readonly measurement: 'facade-calls' | 'none';
   readonly expectedCalls: readonly number[];
+  readonly agentDependencies: readonly string[] | undefined;
+  private readonly legacyAgentDefinitions: readonly Readonly<Record<string, string>>[];
   constructor(
     readonly native: W,
-    options: { version: string; measurement?: 'facade-calls' | 'none'; expectedCalls?: readonly number[] },
+    options: {
+      version: string;
+      measurement?: 'facade-calls' | 'none';
+      expectedCalls?: readonly number[];
+      agentDependencies?: readonly string[];
+      legacyAgentDefinitions?: readonly Readonly<Record<string, string>>[];
+    },
   ) {
     const validated = parseInput(
       z
@@ -159,6 +167,12 @@ export class WorkflowResource<W extends AnyWorkflow> {
           version: identifierSchema,
           measurement: z.enum(['facade-calls', 'none']).default('none'),
           expectedCalls: z.array(z.number().int().min(0).max(32)).max(32).default([]),
+          agentDependencies: z
+            .array(identifierSchema)
+            .max(100)
+            .refine(ids => new Set(ids).size === ids.length)
+            .optional(),
+          legacyAgentDefinitions: z.array(z.record(identifierSchema, identifierSchema)).max(16).default([]),
         })
         .refine(value => value.measurement !== 'facade-calls' || value.expectedCalls.length > 0),
       options,
@@ -166,7 +180,49 @@ export class WorkflowResource<W extends AnyWorkflow> {
     this.version = validated.version;
     this.measurement = validated.measurement;
     this.expectedCalls = Object.freeze(validated.expectedCalls);
+    this.agentDependencies = validated.agentDependencies && Object.freeze(validated.agentDependencies);
+    this.legacyAgentDefinitions = Object.freeze(
+      validated.legacyAgentDefinitions.map(definitions => Object.freeze(definitions)),
+    );
     if (native.options?.autoRestartActiveRuns !== false) throw new BillingError('invalid_configuration');
+  }
+  private definitionFields() {
+    return { version: this.version, measurement: this.measurement, expectedCalls: this.expectedCalls };
+  }
+  private agentDefinitions(agents: Readonly<Record<string, { readonly definition: string }>>) {
+    return Object.fromEntries(Object.entries(agents).map(([key, agent]) => [key, agent.definition]));
+  }
+  private dependencies(definitions: Readonly<Record<string, string>>) {
+    const ids = this.agentDependencies ?? Object.keys(definitions);
+    if (ids.some(id => !Object.hasOwn(definitions, id))) throw new BillingError('invalid_configuration');
+    return Object.fromEntries(ids.map(id => [id, definitions[id]]));
+  }
+  private signature(definitions: Readonly<Record<string, string>>, prefix: string) {
+    return `${prefix}:${fingerprint(
+      boundedJson({
+        ...this.definitionFields(),
+        agents: Object.entries(definitions)
+          .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+          .map(([key, definition]) => ({ key, definition })),
+      }),
+    )}`;
+  }
+  definition(agents: Readonly<Record<string, { readonly definition: string }>>) {
+    return this.signature(this.dependencies(this.agentDefinitions(agents)), 'workflow-definition-v2');
+  }
+  compatible(definition: string, agents: Readonly<Record<string, { readonly definition: string }>>) {
+    if (definition === this.definition(agents)) return true;
+    const current = this.agentDefinitions(agents);
+    const dependencies = this.dependencies(current);
+    // A legacy digest commits to the entire old registry. Recompute it from known
+    // definitions; never treat an arbitrary legacy signature as compatible.
+    const candidates = [current, dependencies, ...this.legacyAgentDefinitions];
+    return candidates.some(
+      previous =>
+        (this.agentDependencies !== undefined || Object.keys(previous).length === Object.keys(dependencies).length) &&
+        Object.entries(dependencies).every(([id, value]) => previous[id] === value) &&
+        this.signature(previous, 'definition') === definition,
+    );
   }
   async input(value: unknown): Promise<WorkflowInput<W>> {
     if (!this.native.inputSchema) throw new BillingError('invalid_configuration');

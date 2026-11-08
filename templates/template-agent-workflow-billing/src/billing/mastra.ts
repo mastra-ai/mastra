@@ -5,7 +5,7 @@ import type { FullOutput, LanguageModelUsage } from '@mastra/core/stream';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import { BillingError, identifierSchema, parseInput, quantitySchema } from './contracts.js';
 import type { BillingProvider } from './contracts.js';
-import { boundedJson, fingerprint } from './accounting.js';
+import { boundedJson } from './accounting.js';
 import type {
   AdmissionIdentity,
   BillingResponse,
@@ -82,6 +82,7 @@ class MeasurementCollector {
     private readonly workflow: boolean,
     private readonly cancel?: () => Promise<void>,
     initialUnits = 0,
+    readonly agentDependencies?: readonly string[],
   ) {
     this.observed = initialUnits;
   }
@@ -200,6 +201,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
       workflows: Workflows;
     },
   ) {
+    for (const workflow of Object.values(options.workflows)) workflow.definition(options.agents);
     const executors: BoundedExecutor[] = [];
     for (const id of Object.keys(options.agents))
       executors.push({
@@ -272,6 +274,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
         const safe = parseInput(safeGenerateOptionsSchema, options);
         const parent = parentExecution.getStore();
         if (parent) {
+          if (parent.agentDependencies && !parent.agentDependencies.includes(id)) throw new BillingError('unsupported');
           const identity = await this.options.organizations.accountingIdentity(billing);
           if (identity.actorId !== parent.identity.actorId || identity.workspaceId !== parent.identity.workspaceId)
             throw new BillingError('forbidden');
@@ -321,7 +324,8 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
         options: SafeGenerateOptions = {},
       ): Promise<FullOutput<AgentResult<Agents[K]>>> => {
         const parent = parentExecution.getStore();
-        if (!parent) throw new BillingError('unsupported');
+        if (!parent || (parent.agentDependencies && !parent.agentDependencies.includes(id)))
+          throw new BillingError('unsupported');
         parseInput(z.string().min(1).max(8192), prompt);
         const safe = parseInput(safeGenerateOptionsSchema, options);
         // Recheck the existing admitted identity without persisting bearer credentials in snapshots.
@@ -463,7 +467,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
   ): Promise<WorkflowProjection<WorkflowOutput<W>>> {
     const resource = this.options.workflows[id] as WorkflowResource<W>;
     let result: Record<string, Json> = {};
-    const definition = this.adapterVersion(id);
+    const definition = record.adapterVersion;
     if (record.result !== null) {
       this.compatible(id, record);
       const stored = parseInput(
@@ -494,20 +498,11 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
     return { kind: 'replay', result: await this.project(id, record), billing: await this.receipt(record, billing) };
   }
   private adapterVersion(id: string) {
-    const workflow = this.options.workflows[id];
-    return `definition:${fingerprint(
-      boundedJson({
-        version: workflow.version,
-        measurement: workflow.measurement,
-        expectedCalls: workflow.expectedCalls,
-        agents: Object.entries(this.options.agents)
-          .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-          .map(([key, agent]) => ({ key, definition: agent.definition })),
-      }),
-    )}`;
+    return this.options.workflows[id].definition(this.options.agents);
   }
   private compatible(id: string, record: WorkflowRecord) {
-    if (record.adapterVersion !== this.adapterVersion(id)) throw new BillingError('state_unavailable');
+    if (!this.options.workflows[id].compatible(record.adapterVersion, this.options.agents))
+      throw new BillingError('state_unavailable');
   }
   private async start<W extends AnyWorkflow>(
     id: string,
@@ -586,6 +581,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
       true,
       () => run.cancel(),
       previous.billing.observedUnits ?? 0,
+      resource.agentDependencies,
     );
     const abort = () => collector.controller.abort();
     run.abortController.signal.addEventListener('abort', abort, { once: true });
@@ -827,7 +823,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
     const expired: string[] = [];
     for (const candidate of await this.options.workflowStorage.overdue(now)) {
       const resource = this.options.workflows[candidate.resourceId];
-      if (!resource || this.adapterVersion(candidate.resourceId) !== candidate.adapterVersion) continue;
+      if (!resource || !resource.compatible(candidate.adapterVersion, this.options.agents)) continue;
       const record = await this.options.workflowStorage.claimExpiry(candidate.id, now);
       if (!record) continue;
       await this.expireClaim(record);

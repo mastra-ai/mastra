@@ -6,10 +6,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { modelBoundary, runtimeFixture, mastraConfiguration } from '../support/mastra.js';
 import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
-import { agentResource } from '../../src/billing/mastra-resources.js';
+import { agentResource, workflowResource } from '../../src/billing/mastra-resources.js';
 import { initializeMastraBilling } from '../../src/billing/mastra-setup.js';
 import { billingConfigurationSchema } from '../../src/billing/configuration.js';
 import { MastraBilling } from '../../src/billing/mastra.js';
+import { boundedJson, fingerprint } from '../../src/billing/accounting.js';
 import { independentClient, temporaryDatabase } from '../support/billing.js';
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
@@ -21,6 +22,7 @@ async function fixture(
     | 'configure'
     | 'workflowPrompt'
     | 'workflowExpectedCalls'
+    | 'workflowAgentDependencies'
     | 'workflowTransforms'
     | 'processorRetry'
     | 'agentMaxSteps'
@@ -136,6 +138,346 @@ describe('billed Mastra runtime', () => {
       (await observer.execute("SELECT SUM(units) AS units FROM billing_measurements WHERE measure = 'tokens'")).rows,
     ).toEqual([{ units: 10n }]);
   });
+  it('unrelated agent registrations preserve workflow reads, resume and expiry', async () => {
+    const { runtime, observer, model } = await fixture();
+    const reopen = (extra: boolean, version = 'unrelated-v1') => {
+      const configuration = {
+        ...runtime.configuration,
+        resources: [
+          ...runtime.configuration.resources,
+          ...(extra ? [{ ...runtime.configuration.resources[0], id: 'unrelated' }] : []),
+        ],
+      };
+      return new MastraBilling({
+        organizations: runtime.organizations,
+        accounting: runtime.accounting,
+        workflowStorage: runtime.workflowStorage,
+        provider: runtime.provider,
+        configuration,
+        agents: {
+          ...runtime.agents,
+          ...(extra ? { unrelated: agentResource(runtime.agents.assistant.native, { version }) } : {}),
+        },
+        workflows: runtime.workflows,
+      });
+    };
+    for (const [scenario, initial, changed] of [
+      ['added', runtime.billing, reopen(true)],
+      ['changed', reopen(true), reopen(true, 'unrelated-v2')],
+      ['removed', reopen(true), runtime.billing],
+    ] as const) {
+      const pending = [];
+      for (const operation of ['resume', 'expire']) {
+        const run = await initial.workflow('report').createRun({
+          billing: runtime.billingContext,
+          idempotencyKey: `${scenario}-${operation}`,
+        });
+        await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+        pending.push(
+          await changed.workflow('report').getRun({ billing: runtime.billingContext, executionId: run.executionId }),
+        );
+      }
+      const [resumed, expired] = pending;
+      expect(await resumed.status(runtime.billingContext)).toMatchObject({ result: { status: 'suspended' } });
+      expect(
+        await resumed.resume({
+          billing: runtime.billingContext,
+          idempotencyKey: 'resume',
+          step: 'approval',
+          resumeData: { approved: true },
+        }),
+      ).toMatchObject({ billing: { billedUnits: 2 }, projection: { output: { count: 2 } } });
+      expect(await changed.expireSuspensions(Date.now() + 172800000)).toContain(expired.executionId);
+      expect(await expired.status(runtime.billingContext)).toMatchObject({
+        result: { status: 'canceled' },
+        billing: { billedUnits: 0 },
+      });
+      expect(
+        (
+          await observer.execute({
+            sql: 'SELECT active FROM billing_reservations WHERE execution_id IN (?, ?)',
+            args: [resumed.executionId, expired.executionId],
+          })
+        ).rows,
+      ).toEqual([{ active: 0n }, { active: 0n }]);
+    }
+    expect(model.requests).toHaveLength(9);
+    expect((await observer.execute('SELECT units FROM billing_ledger ORDER BY units')).rows).toEqual([
+      { units: 0n },
+      { units: 0n },
+      { units: 0n },
+      { units: 2n },
+      { units: 2n },
+      { units: 2n },
+    ]);
+  });
+
+  it('legacy workflow signatures require proof of unchanged dependencies before resume or expiry', async () => {
+    const { runtime, observer, model } = await fixture();
+    const resource = runtime.workflows.report;
+    const current = { assistant: runtime.agents.assistant.definition };
+    const reopen = (
+      options: { manifest?: Record<string, string>; assistantVersion?: string; workflowVersion?: string } = {},
+    ) => {
+      const configuration = {
+        ...runtime.configuration,
+        resources: [...runtime.configuration.resources, { ...runtime.configuration.resources[0], id: 'unrelated' }],
+      };
+      return new MastraBilling({
+        organizations: runtime.organizations,
+        accounting: runtime.accounting,
+        workflowStorage: runtime.workflowStorage,
+        provider: runtime.provider,
+        configuration,
+        agents: {
+          assistant: options.assistantVersion
+            ? agentResource(runtime.agents.assistant.native, { version: options.assistantVersion })
+            : runtime.agents.assistant,
+          unrelated: agentResource(runtime.agents.assistant.native, { version: 'unrelated-current' }),
+        },
+        workflows: {
+          report: workflowResource(resource.native, {
+            version: options.workflowVersion ?? resource.version,
+            measurement: resource.measurement,
+            expectedCalls: resource.expectedCalls,
+            agentDependencies: ['assistant'],
+            legacyAgentDefinitions: options.manifest ? [options.manifest] : [],
+          }),
+        },
+      });
+    };
+    for (const retired of [false, true]) {
+      const definitions = { ...current, ...(retired ? { retired: 'agent:retired-definition' } : {}) };
+      // Seed historical creation terms through real SQL storage, then exercise
+      // the public lifecycle against real Mastra snapshots and reservations.
+      const legacy = `definition:${fingerprint(
+        boundedJson({
+          version: resource.version,
+          measurement: resource.measurement,
+          expectedCalls: resource.expectedCalls,
+          agents: Object.entries(definitions)
+            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+            .map(([key, definition]) => ({ key, definition })),
+        }),
+      )}`;
+      const runs = [];
+      for (const operation of ['resume', 'expire']) {
+        const identity = await runtime.organizations.accountingIdentity(runtime.billingContext);
+        const historical = await runtime.workflowStorage.create(
+          identity,
+          runtime.billing.gateway.resource('report'),
+          legacy,
+          `legacy-${retired}-${operation}`,
+        );
+        const initial = reopen(retired ? { manifest: definitions } : {});
+        const run = await initial
+          .workflow('report')
+          .getRun({ billing: runtime.billingContext, executionId: historical.id });
+        await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+        runs.push(run);
+      }
+      for (const options of [
+        ...(retired ? [{}, { manifest: { retired: 'agent:retired-definition' } }] : []),
+        { manifest: definitions, assistantVersion: 'assistant-changed' },
+        { manifest: definitions, workflowVersion: 'workflow-changed' },
+      ]) {
+        const changed = reopen(options);
+        const handle = await changed
+          .workflow('report')
+          .getRun({ billing: runtime.billingContext, executionId: runs[0].executionId });
+        await expect(handle.status(runtime.billingContext)).rejects.toMatchObject({ code: 'state_unavailable' });
+        await expect(
+          handle.resume({
+            billing: runtime.billingContext,
+            idempotencyKey: 'rejected-resume',
+            step: 'approval',
+            resumeData: { approved: true },
+          }),
+        ).rejects.toMatchObject({ code: 'state_unavailable' });
+        expect(await changed.expireSuspensions(Date.now() + 172800000)).toEqual([]);
+      }
+      const compatible = reopen(retired ? { manifest: definitions } : {});
+      const resumed = await compatible
+        .workflow('report')
+        .getRun({ billing: runtime.billingContext, executionId: runs[0].executionId });
+      expect(await resumed.status(runtime.billingContext)).toMatchObject({ result: { status: 'suspended' } });
+      expect(
+        await resumed.resume({
+          billing: runtime.billingContext,
+          idempotencyKey: 'approved-resume',
+          step: 'approval',
+          resumeData: { approved: true },
+        }),
+      ).toMatchObject({ projection: { status: 'completed', output: { count: 2 } }, billing: { billedUnits: 2 } });
+      expect(await compatible.expireSuspensions(Date.now() + 172800000)).toContain(runs[1].executionId);
+      expect(
+        (
+          await observer.execute({
+            sql: 'SELECT adapter_version FROM billing_workflow_runs WHERE id IN (?, ?)',
+            args: runs.map(run => run.executionId),
+          })
+        ).rows,
+      ).toEqual([{ adapter_version: legacy }, { adapter_version: legacy }]);
+    }
+    expect(model.requests).toHaveLength(6);
+    expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([
+      { active: 0n },
+      { active: 0n },
+      { active: 0n },
+      { active: 0n },
+    ]);
+    expect(
+      (await observer.execute("SELECT COUNT(*) AS count FROM billing_workflow_operations WHERE operation = 'resume'"))
+        .rows,
+    ).toEqual([{ count: 2n }]);
+  });
+
+  it('legacy manifests retain holds for removed agents without an explicit dependency declaration', async () => {
+    const { runtime, observer, model } = await fixture();
+    const resource = runtime.workflows.report;
+    const definitions = { assistant: runtime.agents.assistant.definition, retired: 'agent:retired-definition' };
+    const legacy = `definition:${fingerprint(
+      boundedJson({
+        version: resource.version,
+        measurement: resource.measurement,
+        expectedCalls: resource.expectedCalls,
+        agents: Object.entries(definitions).map(([key, definition]) => ({ key, definition })),
+      }),
+    )}`;
+    const reopen = (explicit: boolean) =>
+      new MastraBilling({
+        organizations: runtime.organizations,
+        accounting: runtime.accounting,
+        workflowStorage: runtime.workflowStorage,
+        provider: runtime.provider,
+        configuration: runtime.configuration,
+        agents: runtime.agents,
+        workflows: {
+          report: workflowResource(resource.native, {
+            version: resource.version,
+            measurement: resource.measurement,
+            expectedCalls: resource.expectedCalls,
+            legacyAgentDefinitions: [definitions],
+            ...(explicit ? { agentDependencies: ['assistant'] } : {}),
+          }),
+        },
+      });
+    const identity = await runtime.organizations.accountingIdentity(runtime.billingContext);
+    const historical = await runtime.workflowStorage.create(
+      identity,
+      runtime.billing.gateway.resource('report'),
+      legacy,
+      'legacy-removed-agent',
+    );
+    const explicit = reopen(true);
+    const run = await explicit
+      .workflow('report')
+      .getRun({ billing: runtime.billingContext, executionId: historical.id });
+    await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+    const conservative = reopen(false);
+    const blocked = await conservative
+      .workflow('report')
+      .getRun({ billing: runtime.billingContext, executionId: historical.id });
+    await expect(blocked.status(runtime.billingContext)).rejects.toMatchObject({ code: 'state_unavailable' });
+    await expect(
+      blocked.resume({
+        billing: runtime.billingContext,
+        idempotencyKey: 'resume',
+        step: 'approval',
+        resumeData: { approved: true },
+      }),
+    ).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect(await conservative.expireSuspensions(Date.now() + 172800000)).toEqual([]);
+    expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 1n }]);
+    expect((await observer.execute('SELECT status FROM billing_workflow_runs')).rows).toEqual([
+      { status: 'suspended' },
+    ]);
+    expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([]);
+    expect(model.requests).toHaveLength(1);
+    expect(
+      await run.resume({
+        billing: runtime.billingContext,
+        idempotencyKey: 'explicit-resume',
+        step: 'approval',
+        resumeData: { approved: true },
+      }),
+    ).toMatchObject({ projection: { status: 'completed' }, billing: { billedUnits: 2 } });
+    expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
+    expect(model.requests).toHaveLength(2);
+  });
+
+  it('changed declared dependencies remain incompatible and undeclared workflows retain registry safeguards', async () => {
+    const { runtime, observer, model } = await fixture();
+    const construct = (agents: typeof runtime.agents, dependencies?: readonly string[]) =>
+      new MastraBilling({
+        organizations: runtime.organizations,
+        accounting: runtime.accounting,
+        workflowStorage: runtime.workflowStorage,
+        provider: runtime.provider,
+        configuration: runtime.configuration,
+        agents,
+        workflows: {
+          report: workflowResource(runtime.workflows.report.native, {
+            version: runtime.workflows.report.version,
+            measurement: 'facade-calls',
+            expectedCalls: [1, 1],
+            ...(dependencies === undefined ? {} : { agentDependencies: dependencies }),
+          }),
+        },
+      });
+    for (const dependencies of [undefined, ['assistant']]) {
+      const initial = construct(runtime.agents, dependencies);
+      const run = await initial
+        .workflow('report')
+        .createRun({ billing: runtime.billingContext, idempotencyKey: `dependency-${dependencies === undefined}` });
+      await run.start({ billing: runtime.billingContext, idempotencyKey: 'start', inputData: { count: 0 } });
+      const changed = construct(
+        { assistant: agentResource(runtime.agents.assistant.native, { version: 'changed' }) },
+        dependencies,
+      );
+      const handle = await changed
+        .workflow('report')
+        .getRun({ billing: runtime.billingContext, executionId: run.executionId });
+      await expect(handle.status(runtime.billingContext)).rejects.toMatchObject({ code: 'state_unavailable' });
+      await expect(
+        handle.resume({
+          billing: runtime.billingContext,
+          idempotencyKey: 'resume',
+          step: 'approval',
+          resumeData: { approved: true },
+        }),
+      ).rejects.toMatchObject({ code: 'state_unavailable' });
+      expect(await changed.expireSuspensions(Date.now() + 172800000)).toEqual([]);
+    }
+    expect(() => construct(runtime.agents, ['missing'])).toThrowError(
+      expect.objectContaining({ code: 'invalid_configuration' }),
+    );
+    expect(model.requests).toHaveLength(2);
+    expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([
+      { active: 1n },
+      { active: 1n },
+    ]);
+  });
+
+  it('a workflow cannot execute an agent omitted from its declared dependencies', async () => {
+    const { runtime, observer, model } = await fixture({ workflowAgentDependencies: [] });
+    const run = await runtime.billing
+      .workflow('report')
+      .createRun({ billing: runtime.billingContext, idempotencyKey: 'undeclared-agent' });
+    const result = await run.start({
+      billing: runtime.billingContext,
+      idempotencyKey: 'start',
+      inputData: { count: 0 },
+    });
+    expect(result).toMatchObject({
+      projection: { status: 'failed' },
+      billing: { billedUnits: 0, settlementStatus: 'released' },
+    });
+    expect(model.requests).toEqual([]);
+    expect((await observer.execute('SELECT active FROM billing_reservations')).rows).toEqual([{ active: 0n }]);
+    expect((await observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 0n }]);
+  });
+
   it('workflow resume revalidates actor and membership', async () => {
     const { runtime, model, observer } = await fixture();
     await runtime.organizations.convert(runtime.billingContext, 'shared');

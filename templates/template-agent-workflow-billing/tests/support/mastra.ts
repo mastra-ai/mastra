@@ -223,6 +223,7 @@ export async function runtimeFixture(options: {
   workflowPrompt?: string;
   workflowAfterPrompt?: string;
   workflowExpectedCalls?: readonly number[];
+  workflowAgentDependencies?: readonly string[];
   workflowTransforms?: boolean;
   processorRetry?: boolean;
   agentMaxSteps?: number;
@@ -316,6 +317,7 @@ export async function runtimeFixture(options: {
   const workflows = {
     report: workflowResource(workflow, {
       version: 'workflow-adapter-v1',
+      agentDependencies: options.workflowAgentDependencies ?? ['assistant'],
       measurement: 'facade-calls',
       expectedCalls: options.workflowExpectedCalls ?? [1, 1],
     }),
