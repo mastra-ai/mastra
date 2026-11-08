@@ -67,8 +67,9 @@ if (kind.startsWith('expiry-')) {
   }
   if (kind === 'expiry-legacy') {
     // Reconstruct the shipped schema6 boundary in this disposable file only.
+    await observer.execute('DROP TABLE billing_usage_bindings');
     await observer.execute('DROP TABLE billing_expiry_recovery');
-    await observer.execute('DELETE FROM billing_migrations WHERE version = 7');
+    await observer.execute('DELETE FROM billing_migrations WHERE version >= 7');
     await observer.execute('PRAGMA user_version = 6');
   }
   observer.close();

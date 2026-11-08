@@ -151,6 +151,7 @@ export class BillingGateway {
         resource,
         snapshot,
         lifecycle?.executionId,
+        resource.policy.charge.type === 'none' ? undefined : this.provider.bindUsage(resource.policy.charge.meter),
       );
       if (admitted.status === 'stale') continue;
       if (admitted.status === 'replayed') return admitted.response;

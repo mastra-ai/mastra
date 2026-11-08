@@ -23,11 +23,13 @@ import type {
   ReconciliationResult,
   UsageDelivery,
   UsageEvent,
+  UsageBinding,
   RawWebhookRequest,
   ProviderNotification,
 } from '../contracts.js';
 import { GrantStorage, opaqueId } from '../storage/grants.js';
 import type { GrantSource } from '../contracts.js';
+import { readUsageBinding } from '../storage/usage-bindings.js';
 import { BillingDatabase } from '../storage/database.js';
 import {
   billingContactSchema,
@@ -53,6 +55,16 @@ export const polarCapabilities: ProviderCapabilities = Object.freeze({
   checkout: true,
   portal: true,
   webhooks: true,
+});
+
+const polarUsageBindingSchema = z.strictObject({
+  server: polarConfigurationSchema.shape.server,
+  organizationId: z.uuid(),
+  eventName: z.string().min(1).max(128),
+  unitsField: z
+    .string()
+    .regex(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/)
+    .refine(value => !['execution_id', 'policy_version', 'resourceId', 'resourceKind'].includes(value)),
 });
 
 const usageDeliveryClaimSchema = z
@@ -541,6 +553,18 @@ export class PolarBillingProvider implements BillingProvider {
     return { status: 'confirmed', reflectedEventIds: [], snapshot: await this.getState(request.account) };
   }
 
+  bindUsage(meter: string): UsageBinding {
+    const mapping = this.configuration.meters.find(value => value.key === meter);
+    if (!mapping) throw new BillingError('invalid_input');
+    const data = parseInput(polarUsageBindingSchema, {
+      server: this.configuration.server,
+      organizationId: this.configuration.organizationId,
+      eventName: mapping.eventName,
+      unitsField: mapping.unitsField,
+    });
+    return { provider: this.id, meter, version: 1, data: JSON.stringify(data) };
+  }
+
   async reportUsage(input: UsageEvent): Promise<UsageDelivery> {
     const event = parseInput(usageEventSchema, input);
     const account = await this.grants.observation(event.account);
@@ -549,6 +573,17 @@ export class PolarBillingProvider implements BillingProvider {
     const claim = await this.database.write(async tx => {
       const previous = (await tx.execute({ sql: 'SELECT * FROM provider_usage WHERE id = ?', args: [event.id] }))
         .rows[0];
+      const binding = await readUsageBinding(tx, event, Boolean(previous));
+      let mapping: z.infer<typeof polarUsageBindingSchema> | null = null;
+      if (binding) {
+        if (binding.version !== 1) throw new BillingError('storage_incompatible');
+        mapping = parseInput(polarUsageBindingSchema, JSON.parse(binding.data));
+        if (
+          mapping.server !== this.configuration.server ||
+          mapping.organizationId !== this.configuration.organizationId
+        )
+          throw new BillingError('state_unavailable');
+      }
       if (previous) {
         if (previous.account_id !== event.account.id) throw new BillingError('conflict');
         let stored: unknown;
@@ -560,6 +595,9 @@ export class PolarBillingProvider implements BillingProvider {
         const current = usageDeliveryClaimSchema.safeParse(stored);
         if (current.success) {
           if (JSON.stringify(current.data.event) !== logicalPayload) throw new BillingError('conflict');
+          const wire = current.data.request.events[0];
+          if (mapping && (wire.name !== mapping.eventName || wire.metadata[mapping.unitsField] !== event.units))
+            throw new BillingError('conflict');
           return {
             delivered: previous.delivered === 1n,
             payload: String(previous.payload),
@@ -575,8 +613,7 @@ export class PolarBillingProvider implements BillingProvider {
         if (previous.delivered !== 1n) throw new BillingError('state_unavailable');
         return { delivered: true, payload: String(previous.payload), request: null };
       }
-      const mapping = this.configuration.meters.find(value => value.key === event.meter);
-      if (!mapping) throw new BillingError('invalid_input');
+      mapping ??= parseInput(polarUsageBindingSchema, JSON.parse(this.bindUsage(event.meter).data));
       const normalized = usageDeliveryClaimSchema.parse({
         version: 1,
         event,

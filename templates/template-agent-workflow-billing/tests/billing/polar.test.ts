@@ -1,3 +1,6 @@
+import { fork } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { UsageBindingRecovery } from '../../src/billing/storage/usage-bindings.js';
 import { stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -9,7 +12,7 @@ import { OrganizationService } from '../../src/billing/organizations.js';
 import { BillingGateway } from '../../src/billing/gateway.js';
 import { BillingDatabase } from '../../src/billing/storage/database.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
-import { polarFixture } from '../support/polar.js';
+import { polarFixture, polarWire } from '../support/polar.js';
 import { httpServer } from '../support/organizations.js';
 
 const cleanups: (() => unknown | Promise<unknown>)[] = [];
@@ -30,83 +33,300 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function workflowWorker(phase: 'start' | 'resume' | 'deliver', options: object, executionId = '') {
+  return new Promise<any>((resolve, reject) => {
+    const child = fork(
+      fileURLToPath(new URL('../support/polar-workflow-worker.mjs', import.meta.url)),
+      [phase, JSON.stringify(options), executionId],
+      { execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+    );
+    let result: any;
+    let stderr = '';
+    child.stderr?.on('data', chunk => {
+      stderr += chunk;
+    });
+    child.on('message', message => {
+      result = message;
+    });
+    child.on('error', reject);
+    child.on('exit', code =>
+      code === 0 && !result?.error ? resolve(result) : reject(new Error(result?.error ?? stderr)),
+    );
+  });
+}
+
 describe('Polar commercial and authoritative prepaid journeys', () => {
-  it('Polar driver preserves customer and usage identity across retries', async () => {
+  it.each(['current', 'legacy'] as const)(
+    'Polar driver preserves customer and usage identity across retries (%s)',
+    async bindingEra => {
+      const f = await fixture();
+      const local = new OrganizationService(f.organizations.storage, { mode: 'local', provider: 'local' });
+      expect(() => new BillingGateway(local, f.accounting, f.commercial.provider, f.configuration, [])).toThrow(
+        expect.objectContaining({ code: 'invalid_configuration' }),
+      );
+      f.wire.data.lostCustomer = true;
+      const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+      expect(f.wire.data.creations).toBe(1);
+      const created = f.wire.data.requests.find(value => value.method === 'POST' && value.path === '/v1/customers/');
+      expect(created?.body).toMatchObject({
+        email: 'trusted@example.test',
+        external_id: `workspace:${f.owner.workspaceId}`,
+      });
+      expect(created?.body).not.toHaveProperty('organization_id');
+      expect(JSON.stringify(f.wire.data.requests)).not.toContain('untrusted@example.test');
+      const response = await f.execute('first');
+      expect(response.billing).toMatchObject({ billedUnits: 3, executionStatus: 'completed' });
+      const outbox = (await f.observer.execute('SELECT payload FROM billing_outbox')).rows[0];
+      const event = JSON.parse(String(outbox.payload));
+      f.wire.data.lostUsage = true;
+      expect(await f.commercial.provider.reportUsage(event)).toMatchObject({ status: 'uncertain' });
+      const initialWire = structuredClone(
+        f.wire.data.requests.filter(value => value.path === '/v1/events/ingest')[0].body,
+      );
+      const durableBeforeRetry = (
+        await f.observer.execute({ sql: 'SELECT payload FROM provider_usage WHERE id = ?', args: [event.id] })
+      ).rows[0].payload;
+      const otherWire = await polarWire();
+      cleanups.push(otherWire.close);
+      const redirected = structuredClone(f.configuration);
+      redirected.polar!.server = otherWire.url;
+      const otherDestination = await initializeBilling({ ...f.initialization, configuration: redirected });
+      cleanups.push(otherDestination.close);
+      await expect(otherDestination.provider.reportUsage(event)).rejects.toMatchObject({ code: 'state_unavailable' });
+      expect(otherWire.data.requests).toEqual([]);
+      // A normalized immutable claim from v7 remains replayable without inventing
+      // a mapping or rewriting its logical/wire payload during migration.
+      const originalHistory = (
+        await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 7')
+      ).rows;
+      if (bindingEra === 'legacy') {
+        await f.observer.execute('DROP TABLE billing_usage_bindings');
+        await f.observer.execute('DELETE FROM billing_migrations WHERE version = 8');
+        await f.observer.execute('PRAGMA user_version = 7');
+      }
+      const changedExport = structuredClone(f.configuration);
+      changedExport.polar!.meters[0].eventName = 'work.remapped';
+      changedExport.polar!.meters[0].unitsField = 'remapped_units';
+      const reopened = await initializeBilling({ ...f.initialization, configuration: changedExport });
+      cleanups.push(reopened.close);
+      expect(await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId })).toEqual(account);
+      expect(
+        (await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 7')).rows,
+      ).toEqual(originalHistory);
+      expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
+      expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
+      expect(f.wire.data.events.size).toBe(1);
+      expect(f.wire.data.requests.filter(value => value.path === '/v1/events/ingest').map(value => value.body)).toEqual(
+        [initialWire, initialWire],
+      );
+      expect(
+        (await f.observer.execute({ sql: 'SELECT payload FROM provider_usage WHERE id = ?', args: [event.id] })).rows[0]
+          .payload,
+      ).toBe(durableBeforeRetry);
+      expect([...f.wire.data.events.values()][0]).not.toHaveProperty('organization_id');
+      expect([...f.wire.data.events.values()][0]).toMatchObject({
+        external_id: event.id,
+        external_customer_id: account.externalReference,
+        metadata: { units: 3 },
+      });
+      expect((await reopened.provider.getState(account)).meters[0]).toMatchObject({
+        confirmedBalance: 7,
+        consumedUnits: 3,
+      });
+      expect(
+        (
+          await f.observer.execute(
+            'SELECT COUNT(*) AS grants, SUM(original_units) AS original, SUM(consumed_units) AS consumed FROM credit_grants',
+          )
+        ).rows,
+      ).toEqual([{ grants: 2n, original: 10n, consumed: 3n }]);
+      await expect(reopened.provider.reportUsage({ ...event, units: 9 })).rejects.toMatchObject({ code: 'conflict' });
+      expect((await f.execute('first')).billing).toMatchObject({ replayed: true, billedUnits: 3 });
+      expect(f.calls()).toBe(1);
+      expect(f.wire.data.requests.every(value => value.version === '2026-10')).toBe(true);
+      expect(await reopened.provider.reconcile({ account, eventIds: [event.id] })).toMatchObject({
+        status: 'confirmed',
+        reflectedEventIds: [],
+        snapshot: { prepaidAuthority: 'application-ledger' },
+      });
+      const localStorage = await LocalBillingStorage.open({ url: f.database.url });
+      cleanups.push(() => localStorage.close());
+      await expect(localStorage.ensureAccount({ workspaceId: f.owner.workspaceId })).rejects.toMatchObject({
+        code: 'conflict',
+      });
+    },
+  );
+
+  it('settled usage keeps its admitted export mapping before the first send after restart', async () => {
     const f = await fixture();
-    const local = new OrganizationService(f.organizations.storage, { mode: 'local', provider: 'local' });
-    expect(() => new BillingGateway(local, f.accounting, f.commercial.provider, f.configuration, [])).toThrow(
-      expect.objectContaining({ code: 'invalid_configuration' }),
-    );
-    f.wire.data.lostCustomer = true;
-    const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
-    expect(f.wire.data.creations).toBe(1);
-    const created = f.wire.data.requests.find(value => value.method === 'POST' && value.path === '/v1/customers/');
-    expect(created?.body).toMatchObject({
-      email: 'trusted@example.test',
-      external_id: `workspace:${f.owner.workspaceId}`,
-    });
-    expect(created?.body).not.toHaveProperty('organization_id');
-    expect(JSON.stringify(f.wire.data.requests)).not.toContain('untrusted@example.test');
-    const response = await f.execute('first');
-    expect(response.billing).toMatchObject({ billedUnits: 3, executionStatus: 'completed' });
-    const outbox = (await f.observer.execute('SELECT payload FROM billing_outbox')).rows[0];
-    const event = JSON.parse(String(outbox.payload));
-    f.wire.data.lostUsage = true;
-    expect(await f.commercial.provider.reportUsage(event)).toMatchObject({ status: 'uncertain' });
-    const initialWire = structuredClone(
-      f.wire.data.requests.filter(value => value.path === '/v1/events/ingest')[0].body,
-    );
-    const durableBeforeRetry = (
-      await f.observer.execute({ sql: 'SELECT payload FROM provider_usage WHERE id = ?', args: [event.id] })
-    ).rows[0].payload;
-    const changedExport = structuredClone(f.configuration);
-    changedExport.polar!.meters[0].eventName = 'work.remapped';
-    changedExport.polar!.meters[0].unitsField = 'remapped_units';
-    const reopened = await initializeBilling({ ...f.initialization, configuration: changedExport });
+    const response = await f.execute('settled-before-send');
+    const bindings = (await f.observer.execute('SELECT * FROM billing_usage_bindings')).rows;
+    expect(bindings).toHaveLength(1);
+    await expect(f.observer.execute("UPDATE billing_usage_bindings SET payload = '{}'")).rejects.toThrow();
+    await expect(f.observer.execute('DELETE FROM billing_usage_bindings')).rejects.toThrow();
+    const before = (await f.observer.execute('SELECT * FROM billing_outbox')).rows;
+    const event = JSON.parse(String(before[0].payload));
+    expect((await f.observer.execute('SELECT * FROM provider_usage')).rows).toEqual([]);
+    f.commercial.close();
+    const changed = structuredClone(f.configuration);
+    changed.polar!.meters[0].eventName = 'work.remapped';
+    changed.polar!.meters[0].unitsField = 'remapped_units';
+    const reopened = await initializeBilling({ ...f.initialization, configuration: changed });
     cleanups.push(reopened.close);
-    expect(await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId })).toEqual(account);
-    expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
-    expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
-    expect(f.wire.data.events.size).toBe(1);
+    expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'accepted', eventId: event.id });
     expect(f.wire.data.requests.filter(value => value.path === '/v1/events/ingest').map(value => value.body)).toEqual([
-      initialWire,
-      initialWire,
+      {
+        events: [
+          {
+            name: 'work.succeeded',
+            external_id: event.id,
+            external_customer_id: event.account.externalReference,
+            timestamp: event.occurredAt,
+            metadata: {
+              units: 3,
+              execution_id: response.billing.executionId,
+              policy_version: 'v1',
+              resourceId: 'assistant',
+              resourceKind: 'agent',
+            },
+          },
+        ],
+      },
     ]);
+    expect((await f.observer.execute('SELECT * FROM billing_outbox')).rows).toEqual(before);
+    expect((await f.observer.execute('SELECT * FROM billing_usage_bindings')).rows).toEqual(bindings);
+    expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
+    expect((await f.observer.execute('SELECT SUM(consumed_units) AS consumed FROM credit_grants')).rows).toEqual([
+      { consumed: 3n },
+    ]);
+  });
+
+  it('suspended work retains admission binding through resume and first delivery in new processes', async () => {
+    const f = await fixture();
+    const configuration = structuredClone(f.configuration);
+    configuration.resources = [
+      {
+        id: 'report',
+        kind: 'workflow',
+        operations: ['start', 'resume', 'cancel'],
+        measurements: [],
+        policy: { version: 'workflow-v1', charge: { type: 'credits', meter: 'credits', units: 3 } },
+      },
+    ];
+    const options = {
+      ...f.initialization,
+      configuration,
+      jwks: f.jwks,
+      credential: f.owner.credential,
+      workspaceId: f.owner.workspaceId,
+    };
+    const suspended = await workflowWorker('start', options);
+    expect(suspended.projection).toMatchObject({ status: 'suspended', suspendedSteps: ['approval'] });
+    expect(suspended.billing).toMatchObject({ settlementStatus: 'reserved', billedUnits: null });
+    const binding = (await f.observer.execute('SELECT * FROM billing_usage_bindings')).rows;
+    expect(binding).toHaveLength(1);
+    expect((await f.observer.execute('SELECT * FROM billing_outbox')).rows).toEqual([]);
+    configuration.polar!.meters[0].eventName = 'work.remapped';
+    configuration.polar!.meters[0].unitsField = 'remapped_units';
+    configuration.resources[0].policy.version = 'workflow-v2';
+    configuration.resources[0].policy.charge = { type: 'credits', meter: 'credits', units: 8 };
+    const resumed = await workflowWorker('resume', options, suspended.executionId);
+    expect(resumed.projection).toMatchObject({ status: 'completed', output: { count: 1 } });
+    expect(resumed.billing).toMatchObject({
+      policyVersion: 'workflow-v1',
+      billedUnits: 3,
+      settlementStatus: 'settled',
+    });
+    const before = (await f.observer.execute('SELECT * FROM billing_outbox')).rows;
+    expect(before).toHaveLength(1);
+    expect((await f.observer.execute('SELECT * FROM provider_usage')).rows).toEqual([]);
+    await workflowWorker('deliver', options);
+    const event = JSON.parse(String(before[0].payload));
     expect(
-      (await f.observer.execute({ sql: 'SELECT payload FROM provider_usage WHERE id = ?', args: [event.id] })).rows[0]
-        .payload,
-    ).toBe(durableBeforeRetry);
-    expect([...f.wire.data.events.values()][0]).not.toHaveProperty('organization_id');
-    expect([...f.wire.data.events.values()][0]).toMatchObject({
-      external_id: event.id,
-      external_customer_id: account.externalReference,
-      metadata: { units: 3 },
+      f.wire.data.requests.filter(value => value.path === '/v1/events/ingest').map(value => value.body.events[0]),
+    ).toEqual([
+      {
+        name: 'work.succeeded',
+        external_id: event.id,
+        external_customer_id: event.account.externalReference,
+        timestamp: event.occurredAt,
+        metadata: {
+          units: 3,
+          execution_id: suspended.executionId,
+          policy_version: 'workflow-v1',
+          resourceId: 'report',
+          resourceKind: 'workflow',
+        },
+      },
+    ]);
+    expect((await f.observer.execute('SELECT * FROM billing_usage_bindings')).rows).toEqual(binding);
+    expect((await f.observer.execute('SELECT * FROM billing_outbox')).rows).toEqual(before);
+    expect((await f.observer.execute('SELECT status, attempts FROM billing_delivery')).rows).toEqual([
+      { status: 'accepted', attempts: 1n },
+    ]);
+    expect((await f.observer.execute('SELECT units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
+    expect((await f.observer.execute('SELECT SUM(consumed_units) AS consumed FROM credit_grants')).rows).toEqual([
+      { consumed: 3n },
+    ]);
+  }, 30_000);
+
+  it('legacy pending outbox requires explicit original binding evidence and preserves financial history', async () => {
+    const f = await fixture();
+    await f.execute('legacy-outbox');
+    const before = (await f.observer.execute('SELECT * FROM billing_outbox')).rows;
+    const event = JSON.parse(String(before[0].payload));
+    const originalBinding = f.commercial.provider.bindUsage(event.meter);
+    const checksums = (await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 7'))
+      .rows;
+    f.commercial.close();
+    // Reconstruct the actual v7 boundary: settled outbox but no first attempt,
+    // so no historical normalized claim can establish the delivery mapping.
+    await f.observer.execute('DROP TABLE billing_usage_bindings');
+    await f.observer.execute('DELETE FROM billing_migrations WHERE version = 8');
+    await f.observer.execute('PRAGMA user_version = 7');
+    const changed = structuredClone(f.configuration);
+    changed.polar!.meters[0].eventName = 'work.remapped';
+    changed.polar!.meters[0].unitsField = 'remapped_units';
+    const reopened = await initializeBilling({ ...f.initialization, configuration: changed });
+    cleanups.push(reopened.close);
+    await expect(reopened.provider.reportUsage(event)).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect((await f.observer.execute('SELECT * FROM provider_usage')).rows).toEqual([]);
+    expect(f.wire.data.requests.filter(value => value.path === '/v1/events/ingest')).toEqual([]);
+    const recovery = await UsageBindingRecovery.open(f.initialization.storage);
+    cleanups.push(() => recovery.close());
+    await expect(
+      recovery.restore({ eventId: event.id, binding: originalBinding, evidence: ' ' }),
+    ).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(
+      recovery.restore({
+        eventId: event.id,
+        binding: { ...originalBinding, meter: 'wrong' },
+        evidence: 'deployment archive',
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    await recovery.restore({
+      eventId: event.id,
+      binding: originalBinding,
+      evidence: 'Trusted deployment archive: original export configuration for this execution',
     });
-    expect((await reopened.provider.getState(account)).meters[0]).toMatchObject({
-      confirmedBalance: 7,
-      consumedUnits: 3,
-    });
+    await expect(
+      recovery.restore({ eventId: event.id, binding: originalBinding, evidence: 'replacement' }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'accepted', eventId: event.id });
     expect(
-      (
-        await f.observer.execute(
-          'SELECT COUNT(*) AS grants, SUM(original_units) AS original, SUM(consumed_units) AS consumed FROM credit_grants',
-        )
-      ).rows,
-    ).toEqual([{ grants: 2n, original: 10n, consumed: 3n }]);
-    await expect(reopened.provider.reportUsage({ ...event, units: 9 })).rejects.toMatchObject({ code: 'conflict' });
-    expect((await f.execute('first')).billing).toMatchObject({ replayed: true, billedUnits: 3 });
-    expect(f.calls()).toBe(1);
-    expect(f.wire.data.requests.every(value => value.version === '2026-10')).toBe(true);
-    expect(await reopened.provider.reconcile({ account, eventIds: [event.id] })).toMatchObject({
-      status: 'confirmed',
-      reflectedEventIds: [],
-      snapshot: { prepaidAuthority: 'application-ledger' },
-    });
-    const localStorage = await LocalBillingStorage.open({ url: f.database.url });
-    cleanups.push(() => localStorage.close());
-    await expect(localStorage.ensureAccount({ workspaceId: f.owner.workspaceId })).rejects.toMatchObject({
-      code: 'conflict',
-    });
+      f.wire.data.requests.filter(value => value.path === '/v1/events/ingest').map(value => value.body.events[0]),
+    ).toEqual([expect.objectContaining({ name: 'work.succeeded', metadata: expect.objectContaining({ units: 3 }) })]);
+    expect((await f.observer.execute('SELECT * FROM billing_outbox')).rows).toEqual(before);
+    expect(
+      (await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 7')).rows,
+    ).toEqual(checksums);
+    expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
+    expect((await f.observer.execute('SELECT SUM(consumed_units) AS consumed FROM credit_grants')).rows).toEqual([
+      { consumed: 3n },
+    ]);
+    expect((await f.observer.execute('SELECT evidence FROM billing_usage_bindings')).rows).toEqual([
+      { evidence: 'Trusted deployment archive: original export configuration for this execution' },
+    ]);
   });
 
   it('legacy usage claims never invent an outbound payload after restart', async () => {

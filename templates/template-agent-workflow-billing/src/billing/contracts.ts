@@ -175,11 +175,26 @@ export type ProviderNotification =
       readonly occurredAt: string;
     };
 
+// Driver-owned, versioned delivery configuration. Accounting stores these bytes
+// at admission and never interprets the opaque data.
+export const usageBindingSchema = z
+  .strictObject({
+    provider: identifierSchema,
+    meter: identifierSchema,
+    version: positiveQuantitySchema,
+    data: z.string().min(1).max(8192),
+  })
+  .refine(binding => Buffer.byteLength(JSON.stringify(binding)) <= 16384);
+export type UsageBinding = Readonly<z.infer<typeof usageBindingSchema>>;
+
 export interface BillingProvider {
   readonly id: string;
   readonly capabilities: ProviderCapabilities;
   ensureAccount(profile: OrganizationBillingProfile): Promise<ProviderAccount>;
   getState(account: ProviderAccount, synchronization?: { token: string }): Promise<CommercialSnapshot>;
+  bindUsage(meter: string): UsageBinding;
+  // Outbox delivery must honor the persisted admission binding. Direct trusted
+  // calls without an outbox may use the driver's current configuration.
   reportUsage(event: UsageEvent): Promise<UsageDelivery>;
   reconcile(request: ReconciliationRequest): Promise<ReconciliationResult>;
   createCheckout(request: CheckoutRequest): Promise<HostedSession>;

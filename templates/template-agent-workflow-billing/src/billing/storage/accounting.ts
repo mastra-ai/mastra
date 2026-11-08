@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Row, Transaction } from '@libsql/client/node';
-import { BillingError, parseInput, usageEventSchema } from '../contracts.js';
-import type { CommercialSnapshot } from '../contracts.js';
+import { BillingError, parseInput, usageBindingSchema, usageEventSchema } from '../contracts.js';
+import type { CommercialSnapshot, UsageBinding } from '../contracts.js';
 import { boundedJson, eligible, needsCommercialState, receiptSchema, reservation } from '../accounting.js';
 import type {
   AdmissionIdentity,
@@ -118,6 +118,7 @@ export class AccountingStorage {
     resource: ResourceConfiguration,
     snapshot: CommercialSnapshot | null,
     preferredExecutionId?: string,
+    usageBinding?: UsageBinding,
   ): Promise<Admission> {
     return this.database.write(async transaction => {
       await this.authorize(transaction, claim.identity);
@@ -204,6 +205,15 @@ export class AccountingStorage {
           new Date().toISOString(),
         ],
       });
+      if (charge.type !== 'none') {
+        const binding = parseInput(usageBindingSchema, usageBinding);
+        if (binding.provider !== snapshot?.account.provider || binding.meter !== charge.meter)
+          throw new BillingError('state_unavailable');
+        await transaction.execute({
+          sql: 'INSERT INTO billing_usage_bindings (execution_id, payload, evidence) VALUES (?, ?, NULL)',
+          args: [executionId, JSON.stringify(binding)],
+        });
+      }
       await transaction.execute({
         sql: 'INSERT INTO billing_operations (actor_id, workspace_id, resource_id, operation, key, fingerprint, execution_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
         args: [

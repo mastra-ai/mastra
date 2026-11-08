@@ -485,7 +485,40 @@ The usage response labels `mode` and `authority`. Polar `allowance` lists each l
 
 Reservations allocate earliest expiry first, with a stable grant-ID tie break. Expiry/revocation prevents new allocation while admitted work retains its reservation. Confirmed success consumes its allocation once; confirmed failure/cancellation releases unused units back to the same source, whose validity still applies. Release cannot resurrect revoked or expired capacity. Fresh verified reactivation may restore only unused capacity of the original source. Usage delivery acceptance, duplicate acknowledgement and outages never change these local totals.
 
-Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the driver persists both the logical event and its normalized outbound request in one immutable delivery claim. Retries reuse that request even after event-name or units-field mappings change. Previously acknowledged logical-only delivery records remain acknowledged; an uncertain legacy record without its original outbound mapping fails closed and requires operator reconciliation. The recovery worker retries durable outbox events independently of execution. A local debit does not prove a Polar invoice or completed remote delivery. Failed export never repeats compute or changes application credit.
+Paid admission freezes a versioned provider delivery binding alongside the immutable execution policy. The accounting layer stores the driver's opaque binding without interpreting Polar fields. For Polar, it captures the event name, units field, organization and server. Suspension, process restart and later configuration changes preserve that binding before the first export. Changing the server or organization blocks delivery of bound work; credential rotation on the same destination remains supported.
+
+Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the driver uses the admission binding and persists both the logical event and its normalized outbound request in one immutable delivery claim. Retries reuse that request. The recovery worker exports independently of execution. Failed export never repeats compute or changes application credit. A direct trusted `reportUsage` call with no matching outbox uses the current mapping on its first attempt, then retains its normalized claim.
+
+Migration v8 adds immutable bindings without rewriting previous migrations, outbox payloads, provider claims, grant provenance or ledger amounts. Previously normalized delivery claims retain their exact outbound request; old acknowledged logical-only claims remain acknowledged. An uncertain logical-only claim cannot be retried safely and requires operator reconciliation. A legacy pending outbox event with neither an admission binding nor a normalized claim fails closed instead of adopting today's mapping. Older normalized claims don't record the server, so operators must retain their original destination configuration when replaying them.
+
+To restore one legacy pending outbox binding, first establish its exact original mapping and destination from trusted deployment records correlated with the execution's admission. Current configuration, a meter balance or an assumed default is insufficient evidence. Keep the event pending if the original values cannot be established. The trusted server API below accepts one event and an evidence reference of at most 2,048 characters per call. It requires an idle pending, retrying or uncertain delivery and refuses replacement of an existing binding. No HTTP route exposes it.
+
+```typescript
+import { UsageBindingRecovery } from './src/billing/storage/usage-bindings.js';
+
+const repair = await UsageBindingRecovery.open({ url: 'file:///absolute/path/billing.db' });
+try {
+  await repair.restore({
+    eventId: 'usage:0d769795-d67a-443f-87c7-0f4174e6fc62',
+    binding: {
+      provider: 'polar',
+      meter: 'credits',
+      version: 1,
+      data: JSON.stringify({
+        server: 'https://sandbox-api.polar.sh',
+        organizationId: '2cce6527-ab07-4e73-9bba-d1316faf0436',
+        eventName: 'work.succeeded',
+        unitsField: 'units',
+      }),
+    },
+    evidence: 'Verified deployment archive and execution admission record: incident-1842',
+  });
+} finally {
+  repair.close();
+}
+```
+
+Replace the sample values with the verified historical values. Restoration appends the binding and evidence; it preserves the original outbox, provider claims and financial history. It doesn't override an uncertain logical-only provider claim. Delivery continues through the normal worker. A replacement driver must implement `bindUsage(meter)` and honor persisted bindings when reporting outbox events; `readUsageBinding` provides the shared lookup and fails closed for unbound historical work.
 
 ### Signed notifications and recovery
 

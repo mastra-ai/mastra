@@ -315,6 +315,16 @@ const expiryRecoveryStatements = [
   `INSERT INTO billing_expiry_recovery (run_id) SELECT id FROM billing_workflow_runs WHERE status = 'canceling' AND owner IS NULL`,
 ];
 
+const usageBindingStatements = [
+  `CREATE TABLE billing_usage_bindings (
+    execution_id TEXT PRIMARY KEY REFERENCES billing_executions(id),
+    payload TEXT NOT NULL CHECK (length(payload) BETWEEN 1 AND 16384),
+    evidence TEXT CHECK (evidence IS NULL OR length(evidence) BETWEEN 1 AND 2048)
+  ) STRICT`,
+  `CREATE TRIGGER billing_usage_bindings_no_update BEFORE UPDATE ON billing_usage_bindings BEGIN SELECT RAISE(ABORT, 'Usage bindings are immutable'); END`,
+  `CREATE TRIGGER billing_usage_bindings_no_delete BEFORE DELETE ON billing_usage_bindings BEGIN SELECT RAISE(ABORT, 'Usage bindings are immutable'); END`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -323,6 +333,7 @@ const migrations = [
   { version: 5, statements: providerStatements },
   { version: 6, statements: recoveryStatements },
   { version: 7, statements: expiryRecoveryStatements },
+  { version: 8, statements: usageBindingStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -381,6 +392,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     ...providerStatements.slice(1),
     ...recoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...expiryRecoveryStatements.filter(sql => sql.startsWith('CREATE')),
+    ...usageBindingStatements,
   ]
     .map(normalizedSql)
     .sort();

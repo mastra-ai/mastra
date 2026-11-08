@@ -360,6 +360,7 @@ export async function polarFixture(
     profile,
     configuration,
     initialization,
+    jwks: { keys: [await exportJWK(keys.publicKey)] },
     commercial,
     accounting,
     gateway,

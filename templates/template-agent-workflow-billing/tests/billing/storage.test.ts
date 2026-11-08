@@ -115,9 +115,9 @@ describe('local billing storage', () => {
       billing.close();
       if (corruption === 'newer history') {
         await observer.execute(
-          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (8, 'unknown', '2026-11-06T00:00:00Z')",
+          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (9, 'unknown', '2026-11-06T00:00:00Z')",
         );
-        await observer.execute('PRAGMA user_version = 8');
+        await observer.execute('PRAGMA user_version = 9');
       } else if (corruption === 'checksum drift')
         await observer.execute("UPDATE billing_migrations SET checksum = 'changed'");
       else if (corruption === 'unknown schema')
@@ -149,8 +149,9 @@ describe('local billing storage', () => {
       { version: 5n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 6n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 7n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 8n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(7n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(8n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -255,6 +256,7 @@ describe('local billing storage', () => {
     // Reconstruct the previously shipped v4 schema while retaining its actual
     // local account, immutable usage and meter debit. No production reset API.
     for (const table of [
+      'billing_usage_bindings',
       'billing_expiry_recovery',
       'billing_refresh_leases',
       'billing_inbox',
@@ -282,6 +284,6 @@ describe('local billing storage', () => {
       { id: 'event-1', units: 3n },
     ]);
     expect((await observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(7n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(8n);
   });
 });

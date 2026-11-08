@@ -13,6 +13,7 @@ import type {
   ReconciliationResult,
   UsageDelivery,
   UsageEvent,
+  UsageBinding,
 } from '../contracts.js';
 import { organizationProfileSchema, parseInput } from '../contracts.js';
 import { localAccountSeedSchema } from '../configuration.js';
@@ -52,6 +53,10 @@ export class LocalBillingProvider implements BillingProvider {
 
   getState(account: ProviderAccount): Promise<CommercialSnapshot> {
     return this.storage.getState(account);
+  }
+
+  bindUsage(meter: string): UsageBinding {
+    return { provider: this.id, meter, version: 1, data: '{}' };
   }
 
   reportUsage(event: UsageEvent): Promise<UsageDelivery> {
