@@ -39,7 +39,7 @@ import {
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
-import { readReviewBoardInUse } from './legacy-review.js';
+import { LEGACY_REST_PHASE, LEGACY_TRIAGE_PHASE, LEGACY_WORK_BOARD, readReviewBoardInUse } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
@@ -3157,7 +3157,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     // outside pull requests they are Work cards.
     const held = (
       await this.#cards(this.#db, { transaction: false }).findMany({
-        board: { in: ['work', null] },
+        board: { in: [LEGACY_WORK_BOARD, null] },
         triage_type: { in: FACTORY_TRIAGE_TYPES.filter(type => type !== 'bug') },
         accepted_at: null,
       })
@@ -3166,8 +3166,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       .filter(
         item =>
           item.stages.length === 1 &&
-          item.stages[0] === 'triage' &&
-          (item.board === 'work' || item.externalSource?.type !== 'pull-request'),
+          item.stages[0] === LEGACY_TRIAGE_PHASE &&
+          (item.board === LEGACY_WORK_BOARD || item.externalSource?.type !== 'pull-request'),
       );
     if (held.length === 0) return [];
     // A binding stays active after its run ends until the stale-binding sweep, so the triage
@@ -3192,7 +3192,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         factoryProjectId: item.factoryProjectId,
         workItemId: item.id,
         expectedRevision: item.revision,
-        destinationStage: 'intake',
+        destinationStage: LEGACY_REST_PHASE,
         actorId: HELD_CARD_SWEEP_ACTOR,
         ingress: { identity, triggerType: 'factory.boot', transitionId: identity },
         configVersion: HELD_CARD_SWEEP_ACTOR,
@@ -3812,7 +3812,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
     const now = new Date();
     // Legacy writers omit stages; they only ever filed onto the default board's resting phase.
-    const stages = input.stages ?? ['intake'];
+    const stages = input.stages ?? [LEGACY_REST_PHASE];
     if (input.parentWorkItemId != null) {
       await this.#copyLegacyParent(ops, orgId, input.parentWorkItemId);
       validateParentRelation(await this.#listWithOps(ops, orgId, factoryProjectId), undefined, input.parentWorkItemId);
