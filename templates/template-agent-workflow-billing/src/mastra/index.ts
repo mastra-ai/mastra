@@ -1,6 +1,3 @@
-import { Mastra } from '@mastra/core/mastra';
-import { billingServerConfiguration } from './setup.js';
-import { enforceBillingBoundary } from '../server/security.js';
+import { configuredWeatherMastra } from './setup.js';
 
-export const mastra = new Mastra({ server: await billingServerConfiguration() });
-enforceBillingBoundary(mastra);
+export const mastra = await configuredWeatherMastra();

@@ -51,20 +51,24 @@ export async function mastraServer(databaseUrl: string, credential: string) {
   if (address === null || typeof address === 'string') throw new Error('No server address');
   const port = address.port;
   await new Promise<void>(resolve => portFinder.close(() => resolve()));
-  const child = spawn(process.execPath, ['node_modules/mastra/dist/index.js', 'dev'], {
-    cwd: fileURLToPath(new URL('../../', import.meta.url)),
-    detached: true,
-    env: {
-      ...process.env,
-      NODE_ENV: 'development',
-      BILLING_DATABASE_URL: databaseUrl,
-      BILLING_PORT: String(port),
-      BILLING_PROVIDER: 'local',
-      BILLING_JWT_CONFIGURATION: '',
-      MASTRA_TELEMETRY_DISABLED: 'true',
+  const child = spawn(
+    process.execPath,
+    ['node_modules/mastra/dist/index.js', 'dev', '--dir', 'tests/fixtures/organization-server'],
+    {
+      cwd: fileURLToPath(new URL('../../', import.meta.url)),
+      detached: true,
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        BILLING_DATABASE_URL: databaseUrl,
+        BILLING_PORT: String(port),
+        BILLING_PROVIDER: 'local',
+        BILLING_JWT_CONFIGURATION: '',
+        MASTRA_TELEMETRY_DISABLED: 'true',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  );
   let output = '';
   const capture = (chunk: Buffer) => {
     output = (output + String(chunk)).slice(-64000);

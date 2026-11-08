@@ -23,18 +23,37 @@ import { LocalBillingProvider } from '../../src/billing/providers/local.js';
 
 export async function modelBoundary() {
   const waiting: ServerResponse[] = [];
-  const requests: { body: Record<string, any>; scenario: string }[] = [];
+  const requests: { path: string; body: Record<string, any>; scenario: string }[] = [];
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString());
-    const prompt = JSON.stringify(body.messages);
+    const responses = request.url === '/v1/responses';
+    const prompt = JSON.stringify(responses ? body.input : body.messages);
     const scenario =
       /\[(success|zero|missing|multi|mixed|partial-error|model-error|abort|overflow|structured|tool-error|processor-retry)\]/.exec(
         prompt,
       )?.[1] ?? 'success';
-    requests.push({ body, scenario });
-    const hasToolResult = body.messages.some((message: { role: string }) => message.role === 'tool');
+    requests.push({ path: request.url!, body, scenario });
+    // The paid OpenAI boundary rejects this legacy parameter for GPT-6 Luna.
+    // Keep the older Chat protocol for the existing shared billing regressions.
+    if (body.model === 'gpt-6-luna' && 'max_tokens' in body) {
+      response.writeHead(400, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          error: {
+            message: 'Unsupported parameter: max_tokens',
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }),
+      );
+      return;
+    }
+    const hasToolResult = responses
+      ? body.input.some((item: { type: string }) => item.type === 'function_call_output')
+      : body.messages.some((message: { role: string }) => message.role === 'tool');
     if (scenario === 'abort') {
       waiting.push(response);
       return;
@@ -46,6 +65,35 @@ export async function modelBoundary() {
     ) {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'Controlled model error', type: 'invalid_request_error' } }));
+      return;
+    }
+    if (responses) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          id: 'resp-billing',
+          object: 'response',
+          created_at: 1,
+          status: 'completed',
+          model: body.model,
+          output: [
+            {
+              id: 'msg-billing',
+              type: 'message',
+              role: 'assistant',
+              status: 'completed',
+              content: [{ type: 'output_text', text: 'ok', annotations: [] }],
+            },
+          ],
+          usage: {
+            input_tokens: 3,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens: 2,
+            output_tokens_details: { reasoning_tokens: 0 },
+            total_tokens: 5,
+          },
+        }),
+      );
       return;
     }
     const tool = ['multi', 'mixed', 'partial-error', 'tool-error'].includes(scenario) && !hasToolResult;
