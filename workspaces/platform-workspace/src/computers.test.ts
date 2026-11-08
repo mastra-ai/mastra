@@ -152,7 +152,7 @@ let backend: FakeBackend;
 const make = (extra: Record<string, unknown> = {}) =>
   new PlatformComputers({ secret: 'test-secret', environmentId: 'env-1', createSandbox: backend.create, ...extra });
 
-async function call(computers: PlatformComputers, tool: string, input: any, context: any): Promise<any> {
+async function call(computers: PlatformComputers, tool: string, input: any, context: any, raw = false): Promise<any> {
   const lifecycle = computers.tools()[tool];
   if (lifecycle) return (lifecycle as any).execute(input, context);
 
@@ -188,7 +188,7 @@ async function call(computers: PlatformComputers, tool: string, input: any, cont
   if (!workspaceTool) throw new Error(`missing workspace tool ${mapped.id}; got ${Object.keys(tools).join(',')}`);
   try {
     const result = await (workspaceTool as any).execute(mapped.input, { ...context, requestContext });
-    if (tool !== 'computer_screenshot' && result?.__workspaceMedia && typeof result.text === 'string') {
+    if (!raw && tool !== 'computer_screenshot' && result?.__workspaceMedia && typeof result.text === 'string') {
       return result.text.charAt(0).toLowerCase() + result.text.slice(1);
     }
     return result;
@@ -910,7 +910,7 @@ describe('control lease', () => {
     await g.entered;
     await computers.control(id, scope, { action: 'take' });
     g.open();
-    expect(await click).toBe('clicked at (1, 1)');
+    expect(await click).toBe('Clicked at (1, 1) (post-action screenshot failed)');
     expect(await type).toBe(HUMAN_HAS_CONTROL);
     expect(backend.actions).toEqual(['click']);
   });
@@ -1009,22 +1009,36 @@ describe('screenshot after action', () => {
     ['computer_key', { keys: 'Enter' }, 'key'],
   ];
 
-  it.each(HANDS)('%s returns text only by default', async (tool, input, action) => {
+  const toolIds: Record<string, string> = {
+    computer_click: WORKSPACE_TOOLS.COMPUTER.CLICK,
+    computer_move: WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE,
+    computer_drag: WORKSPACE_TOOLS.COMPUTER.DRAG,
+    computer_scroll: WORKSPACE_TOOLS.COMPUTER.SCROLL,
+    computer_type: WORKSPACE_TOOLS.COMPUTER.TYPE,
+    computer_key: WORKSPACE_TOOLS.COMPUTER.PRESS_KEY,
+  };
+
+  async function outputTool(computers: PlatformComputers, tool: string) {
+    const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    return (await createWorkspaceTools(workspace))[toolIds[tool]!] as any;
+  }
+
+  it.each(HANDS)('%s uses the Workspace screenshot result by default', async (tool, input, action) => {
     const computers = make();
     await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
-    const result = await call(computers, tool, input, ctx('r1', 't1'));
-    expect(typeof result).toBe('string');
-    expect((computers.tools()[tool] as any).toModelOutput(result)).toBeUndefined();
-    expect(backend.actions).toEqual([action]);
+    const result = await call(computers, tool, input, ctx('r1', 't1'), true);
+    expect(backend.actions).toEqual([action, 'screenshot']);
+    const out = (await outputTool(computers, tool)).toModelOutput(result);
+    expect(out.value.map((part: { type: string }) => part.type)).toEqual(['text', 'media']);
   });
 
-  it.each(HANDS)('%s attaches one screenshot when enabled', async (tool, input, action) => {
+  it.each(HANDS)('%s keeps the Workspace screenshot result when the legacy option is enabled', async (tool, input, action) => {
     const computers = make({ screenshotAfterAction: true });
     await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
-    const result = await call(computers, tool, input, ctx('r1', 't1'));
+    const result = await call(computers, tool, input, ctx('r1', 't1'), true);
     expect(backend.actions).toEqual([action, 'screenshot']);
-    const out = (computers.tools()[tool] as any).toModelOutput(result);
-    expect(out.value.map((p: { type: string }) => p.type)).toEqual(['text', 'media']);
+    const out = (await outputTool(computers, tool)).toModelOutput(result);
+    expect(out.value.map((part: { type: string }) => part.type)).toEqual(['text', 'media']);
     expect(out.value[1]).toMatchObject({ mediaType: 'image/png', data: Buffer.from(PNG).toString('base64') });
   });
 
@@ -1050,7 +1064,9 @@ describe('screenshot after action', () => {
     const computers = make({ screenshotAfterAction: true });
     await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
     backend.failScreenshot = true;
-    expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe('typed (screenshot failed)');
+    expect(await call(computers, 'computer_type', { text: 'x' }, ctx('r1', 't1'))).toBe(
+      'Typed 1 characters (post-action screenshot failed)',
+    );
     expect(backend.actions).toEqual(['type']);
   });
 
