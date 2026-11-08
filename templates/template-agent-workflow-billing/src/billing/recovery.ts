@@ -27,10 +27,10 @@ export class BillingRecovery {
       },
     );
   }
-  async intake(request: RawWebhookRequest) {
-    const notification = await this.provider.verifyWebhook(request);
+  async intake(request: RawWebhookRequest, provider = this.provider.id) {
+    const notification = await this.provider.verifyWebhook(request, provider);
     if (notification.status !== 'verified') throw new BillingError('unsupported');
-    return this.storage.enqueue(notification);
+    return this.storage.enqueue(notification, provider);
   }
   runOnce(): Promise<void> {
     if (this.stopped) return Promise.resolve();

@@ -12,7 +12,7 @@ The agent requires the `weather-access` subscription and charges 3 prepaid `weat
 
 `npm run setup` works before dependencies are installed. It never overwrites `.env`, replaces identities, rotates credentials, restores revoked access, or resets allowance. Credentials are returned once, then promptly persisted with atomic private writes under an exclusive `data/setup.lock`. SQL and the filesystem are separate commits: a crash between provisioning and writing its returned credential fails safely on retry. Restore the matching private state; there is no reset command. A stale setup lock requires checking that no setup process is active before removing that lock. Preserve both databases and `data/local-profiles.json` together. Do not copy private profiles to a different database.
 
-`BILLING_MODE=local` permits local identities only with the local provider and loopback binding, including `npm start`. `BILLING_MODE=production` and Polar reject local identity. Without `BILLING_MODE`, production inference still follows `NODE_ENV`/`MASTRA_DEV`. Select production explicitly when integrating trusted JWT identity. Setup refuses production, Polar, JWT, or custom billing configuration so it cannot seed a paid account accidentally.
+`BILLING_MODE=local` permits local identities only with the local provider and loopback binding, including `npm start`. `BILLING_MODE=production` and every external provider reject local identity. Without `BILLING_MODE`, production inference still follows `NODE_ENV`/`MASTRA_DEV`. Select production explicitly when integrating trusted JWT identity. Setup refuses production, Polar, JWT, or custom billing configuration so it cannot seed a paid account accidentally.
 
 The CLI reads private bearer credentials itself; do not paste credentials into command arguments. Its default payer is the shared owner's workspace even for `--profile member` or `--profile outsider`. `--workspace <id>` selects a different authorized workspace. `--url http://127.0.0.1:<port>` selects a local port; credentials are not sent to remote URLs or followed redirects. `--key <key>` binds retries to the same operation and input. Omitting it generates a fresh key. Use `--input <file>` or `--json '<JSON>'` for caller input.
 
@@ -573,7 +573,37 @@ Set `POLAR_SANDBOX_DEBUG=1` when diagnosing the optional sandbox proof to print 
 
 A driver returns verified external account associations and complete source observations. Each source names an exact catalog allowance revision. The application validates its meter, kind, units, expiry and provenance hash against retained canonical terms, then applies all retained providers' observations in one fenced transaction. Missing sources become unavailable. Drivers must authenticate account ownership, purchases, source periods and revocations at the external boundary; the application does not infer purchased units from an external meter balance. Provenance must be JSON containing the normalized `kind`, `meter`, `units`, allowance `version`, `expiry` and `validFrom`, consistent with the source and allowance. Provider-specific extra fields and original serialized bytes are retained. An existing source cannot change these terms or its purchase expiry; an unchanged subscription period may refresh its verified end date.
 
-For a custom server integration, construct the application service with your external driver and pass it to `BillingGateway` or `MastraBilling` with a matching `configuration.provider`. Use trusted JWT organization identity for external providers. The default initialization and HTTP composition currently register local and Polar providers; custom driver composition uses this lower-level service API.
+Register a constructed driver through `drivers` in either `initializeBilling` or `initializeMastraBilling`. Set `configuration.provider` to its validated identifier and retain the same logical catalog, mappings, resources and policies. Every external driver requires trusted JWT organization identity, including when the application runs in local mode. The reserved `local` provider is the credential-free simulator and cannot be supplied as an external driver.
+
+```typescript
+import { initializeMastraBilling } from '../src/billing/mastra-setup.js';
+
+// Your adapter constructor validates its own provider-specific bindings and
+// exact catalog references before returning a BillingDriver. Keep credentials
+// inside that instance, separate from public configuration and publicBindings.
+const runtime = await initializeMastraBilling({
+  organizations, // OrganizationService with a verified JwtIdentityAdapter
+  configuration: {
+    provider: externalDriver.id,
+    catalog,
+    mappings,
+    resources,
+    hosted: { returnUrls: ['https://app.example.com/billing'] },
+  },
+  drivers: [externalDriver, historicalDriver],
+  agents,
+  workflows,
+  databaseUrl,
+});
+```
+
+The registry rejects duplicate IDs, an unknown selected provider, unsupported policy capabilities, invalid usage bindings and missing hosted destinations before serving. Each adapter constructor must validate its provider-specific binding schema, exact offer/allowance references, supported logical mappings and destination restrictions. Usage bindings must name the selected driver and logical meter. A driver receives no application storage argument. Register every retained historical driver in the same array; the application service uses one driver map for state refresh, hosted preparation, historical delivery and webhook verification.
+
+Checkout accepts only logical offer keys from `catalog.offers`; redirect URLs must exactly match `hosted.returnUrls`. These neutral destinations must use HTTPS, or HTTP on localhost/127.0.0.1, without credentials or fragments. For shipped full Polar configuration, `polar.returnUrls` remains authoritative: the compatibility boundary derives `hosted.returnUrls` from it on every parse, including normalized configuration round trips. Editing the top-level `hosted` field does not restrict that legacy Polar allowlist. Configure the legacy field, or construct `PolarBillingDriver` yourself and inject it without a `polar` configuration field when using the neutral API.
+
+The weather composition root accepts the same constructed drivers: `createWeatherApplication(environment, { drivers })` returns the application and its async `close()`, while `configuredWeatherMastra(environment, { drivers })` returns the Mastra instance with shutdown handlers. Set `BILLING_PROVIDER` and the JSON `BILLING_CONFIGURATION` to the selected driver, and provide trusted `BILLING_JWT_CONFIGURATION`. Register adapters from `src/mastra/index.ts` or your application caller. An injected Polar instance takes precedence over the built-in Polar environment factory, so its credentials/contacts need not also be supplied through environment variables. The default call still starts the local simulator.
+
+Use `BillingService.connect` directly for trusted administrative replacement:
 
 ```typescript
 import { BillingService } from '../src/billing/service.js';
@@ -600,3 +630,7 @@ Migration 11 adds associations, source ownership and immutable admission-account
 Keep every retained driver available with its original account destination, source bindings and catalog revisions. Historical catalog terms remain in SQL even when current checkout offers use newer revisions. A missing driver or unavailable original source blocks paid admission. All retained associations are reverified, including after their grants are consumed; there is no automatic driver-retirement API. Credential rotation at the same destination remains supported.
 
 `publicBindings` contains only credential-free JSON for immutable audit history. Keep API tokens and webhook secrets in the driver instance. Usage normalization and validation must be pure; hosted-session preparation must not create a session. The application persists the usage claim and hosted dispatch fence before the driver performs those effects. The HTTP reference driver in the tests demonstrates substitutability; the template does not include Stripe or Paddle integrations.
+
+Signed notifications use `POST /billing/webhooks/:provider`. The path must name a registered driver with webhook capability; the driver authenticates the original body bytes and headers before any account lookup or SQL change. Unknown drivers, bad signatures and webhook path lookalikes are rejected. `POST /billing/webhooks/polar` remains supported. The lower-level `recovery.intake(request)` defaults to the active provider; pass its identifier as the second argument for historical providers.
+
+Migration 12 retains each original Polar inbox row and adds a provider namespace. Duplicate detection uses `(provider, notification ID)`, so identical IDs from different drivers cannot suppress each other. Changed content under an existing provider/ID conflicts. Verified hints resolve retained associations, including providers selected before replacement. An ambiguous account reference across seller namespaces fails closed. A hint invalidates the account generation and commercial revision; existing refresh leases and paid admission checks keep their fencing behavior. Recovery refreshes all retained source associations through the registered drivers. Historical inbox rows, financial payloads and migration checksums 1–11 remain unchanged.

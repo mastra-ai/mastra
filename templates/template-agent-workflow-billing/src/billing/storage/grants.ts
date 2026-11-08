@@ -37,8 +37,8 @@ export class GrantStorage {
         if (replacement) throw new BillingError('conflict');
         const id = randomUUID();
         await tx.execute({
-          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference, effective_provider, active_provider) VALUES (?, ?, 'local', ?, ?, ?)",
-          args: [id, workspaceId, external.externalReference, provider === 'polar' ? 'polar' : 'local', provider],
+          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference, effective_provider, active_provider) VALUES (?, ?, 'local', ?, 'local', ?)",
+          args: [id, workspaceId, external.externalReference, provider],
         });
         await tx.execute({ sql: 'INSERT INTO commercial_state (account_id, version) VALUES (?, 0)', args: [id] });
         row = (await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [id] })).rows[0];
@@ -76,11 +76,6 @@ export class GrantStorage {
             legacySourceKeys ? 'legacy' : 'namespaced',
           ],
         });
-        if (provider === 'polar')
-          await tx.execute({
-            sql: 'INSERT INTO provider_links VALUES (?, ?, ?)',
-            args: [current.id, external.customerId, external.organizationId],
-          });
       }
       if (replacement) {
         await tx.execute({

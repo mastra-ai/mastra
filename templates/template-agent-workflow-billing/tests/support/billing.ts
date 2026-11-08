@@ -78,8 +78,47 @@ export async function independentClient(url: string) {
   return client;
 }
 
+// Reconstruct the shipped compatibility projections before removing newer
+// authoritative structures. Runtime code no longer writes these legacy tables.
+export async function restoreLegacyProviderProjection(client: Awaited<ReturnType<typeof independentClient>>) {
+  await client.execute(
+    "INSERT INTO provider_links SELECT account_id, customer_id, organization_id FROM billing_provider_links WHERE provider = 'polar' ON CONFLICT DO NOTHING",
+  );
+  await client.execute(
+    "UPDATE billing_accounts SET effective_provider = 'polar' WHERE id IN (SELECT account_id FROM billing_provider_links WHERE provider = 'polar')",
+  );
+}
+export async function removeWebhookMigration(client: Awaited<ReturnType<typeof independentClient>>) {
+  await client.execute('DROP TRIGGER billing_inbox_terms_immutable');
+  await client.execute('DROP TRIGGER billing_inbox_no_delete');
+  await client.execute('ALTER TABLE billing_inbox RENAME TO billing_inbox_current');
+  await client.execute(`CREATE TABLE billing_inbox (
+    id TEXT PRIMARY KEY,
+    digest TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    account_id TEXT REFERENCES billing_accounts(id),
+    occurred_at TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    generation INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'done', 'ignored'))
+  ) STRICT`);
+  await client.execute(
+    "INSERT INTO billing_inbox SELECT id, digest, event_type, account_id, occurred_at, received_at, generation, status FROM billing_inbox_current WHERE provider = 'polar'",
+  );
+  await client.execute('DROP TABLE billing_inbox_current');
+  await client.execute(
+    "CREATE TRIGGER billing_inbox_terms_immutable BEFORE UPDATE OF id, digest, event_type, account_id, occurred_at, received_at, generation ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification identity is immutable'); END",
+  );
+  await client.execute(
+    "CREATE TRIGGER billing_inbox_no_delete BEFORE DELETE ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification history is retained'); END",
+  );
+  await client.execute('DELETE FROM billing_migrations WHERE version = 12');
+}
+
 // Reconstruct a prior shipped schema without discarding its financial rows.
 export async function removeDriverMigration(client: Awaited<ReturnType<typeof independentClient>>) {
+  await removeWebhookMigration(client);
+  await restoreLegacyProviderProjection(client);
   for (const table of [
     'billing_source_owners',
     'billing_admitted_accounts',

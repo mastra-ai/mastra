@@ -87,10 +87,10 @@ export class JwtIdentityAdapter implements IdentityAdapter {
 
 export function assertIdentityMode(
   adapter: IdentityAdapter,
-  options: { mode: 'local' | 'production'; provider: 'local' | 'polar' },
+  options: { mode: 'local' | 'production'; provider: string },
 ): void {
   const configuration = z
-    .strictObject({ mode: z.enum(['local', 'production']), provider: z.enum(['local', 'polar']) })
+    .strictObject({ mode: z.enum(['local', 'production']), provider: identifierSchema })
     .safeParse(options);
   if (
     !configuration.success ||

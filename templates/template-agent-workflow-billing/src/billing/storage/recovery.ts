@@ -41,7 +41,8 @@ export class RecoveryStorage {
     this.database.close();
   }
 
-  enqueue(input: Exclude<ProviderNotification, { status: 'unsupported' }>) {
+  enqueue(input: Exclude<ProviderNotification, { status: 'unsupported' }>, provider: string) {
+    parseInput(identifierSchema, provider);
     const notification = parseInput(notificationSchema, {
       id: input.id,
       digest: input.digest,
@@ -51,21 +52,26 @@ export class RecoveryStorage {
     });
     return this.database.write(async tx => {
       const previous = (
-        await tx.execute({ sql: 'SELECT digest FROM billing_inbox WHERE id = ?', args: [notification.id] })
+        await tx.execute({
+          sql: 'SELECT digest FROM billing_inbox WHERE id = ? AND provider = ?',
+          args: [notification.id, provider],
+        })
       ).rows[0];
       if (previous) {
         if (previous.digest !== notification.digest) throw new BillingError('conflict');
         return { duplicate: true };
       }
-      const account =
+      const accounts =
         notification.accountReference === null
-          ? undefined
+          ? []
           : (
               await tx.execute({
-                sql: "SELECT a.id FROM billing_accounts a JOIN provider_links p ON p.account_id = a.id WHERE a.effective_provider = 'polar' AND (p.customer_id = ? OR a.external_reference = ?)",
-                args: [notification.accountReference, notification.accountReference],
+                sql: 'SELECT a.id FROM billing_accounts a JOIN billing_provider_links p ON p.account_id = a.id WHERE p.provider = ? AND (p.customer_id = ? OR p.external_reference = ?) LIMIT 2',
+                args: [provider, notification.accountReference, notification.accountReference],
               })
-            ).rows[0];
+            ).rows;
+      if (accounts.length > 1) throw new BillingError('conflict');
+      const account = accounts[0];
       let generation: bigint | null = null;
       if (account) {
         await tx.execute({
@@ -89,7 +95,7 @@ export class RecoveryStorage {
         });
       }
       await tx.execute({
-        sql: 'INSERT INTO billing_inbox VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        sql: 'INSERT INTO billing_inbox VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         args: [
           notification.id,
           notification.digest,
@@ -99,6 +105,7 @@ export class RecoveryStorage {
           Date.now(),
           generation,
           account ? 'pending' : 'ignored',
+          provider,
         ],
       });
       return { duplicate: false };

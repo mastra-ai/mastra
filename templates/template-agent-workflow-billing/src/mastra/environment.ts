@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { BillingError, parseInput } from '../billing/contracts.js';
+import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
 import { JwtIdentityAdapter } from '../billing/identity.js';
 import type { JwtIdentityOptions } from '../billing/identity.js';
 import { OrganizationService } from '../billing/organizations.js';
@@ -36,7 +36,7 @@ export async function configuredOrganizations(environment: NodeJS.ProcessEnv = p
     return new OrganizationService(storage, {
       identity,
       mode: applicationMode(environment),
-      provider: parseInput(z.enum(['local', 'polar']), environment.BILLING_PROVIDER ?? 'local'),
+      provider: parseInput(identifierSchema, environment.BILLING_PROVIDER ?? 'local'),
     });
   } catch (error) {
     storage.close();

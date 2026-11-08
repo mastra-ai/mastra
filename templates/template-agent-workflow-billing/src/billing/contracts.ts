@@ -209,5 +209,5 @@ export interface BillingProvider {
   preparePortalSession(request: PortalRequest): Promise<PreparedHostedSession>;
   createCheckout(request: CheckoutRequest): Promise<HostedSession>;
   createPortalSession(request: PortalRequest): Promise<HostedSession>;
-  verifyWebhook(request: RawWebhookRequest): Promise<ProviderNotification>;
+  verifyWebhook(request: RawWebhookRequest, provider?: string): Promise<ProviderNotification>;
 }

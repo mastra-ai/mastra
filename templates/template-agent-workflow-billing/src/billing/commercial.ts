@@ -15,7 +15,7 @@ export class CommercialService {
     private readonly provider: BillingProvider,
     private readonly configuration: BillingConfiguration,
   ) {
-    if (provider.id === 'polar' && organizations.identity.kind !== 'jwt')
+    if (provider.id !== 'local' && organizations.identity.kind !== 'jwt')
       throw new BillingError('invalid_configuration');
   }
   async usage(context: BillingContext) {
@@ -54,8 +54,8 @@ export class CommercialService {
     await this.organizations.authorize(context, 'manage-billing');
     if (!this.provider.capabilities[operation]) return { status: 'unsupported', reason: 'local_mode' };
     if (
-      !this.configuration.polar?.returnUrls.includes(parsed.returnUrl) ||
-      ('product' in parsed && !this.configuration.polar.products.some(value => value.key === parsed.product))
+      !this.configuration.hosted.returnUrls.includes(parsed.returnUrl) ||
+      ('product' in parsed && !this.configuration.catalog.offers.some(value => value.key === parsed.product))
     )
       throw new BillingError('invalid_input');
     const identity = await this.organizations.accountingIdentity(context);

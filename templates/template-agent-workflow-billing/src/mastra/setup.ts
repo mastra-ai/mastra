@@ -1,7 +1,8 @@
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
-import { BillingError, parseInput } from '../billing/contracts.js';
+import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
+import type { BillingDriver } from '../billing/driver.js';
 import { initializeMastraBilling } from '../billing/mastra-setup.js';
 import { billingContactSchema } from '../billing/providers/polar-contract.js';
 import { billingOnlyServer, enforceBillingBoundary } from '../server/security.js';
@@ -12,11 +13,17 @@ import { readLocalProfiles } from '../local/profiles.js';
 import { configuredOrganizations, billingDatabaseUrl } from './environment.js';
 export { configuredOrganizations } from './environment.js';
 
-export async function createWeatherApplication(environment: NodeJS.ProcessEnv = process.env) {
+export interface BillingApplicationOptions {
+  readonly drivers?: readonly BillingDriver[];
+}
+export async function createWeatherApplication(
+  environment: NodeJS.ProcessEnv = process.env,
+  options: BillingApplicationOptions = {},
+) {
   const organizations = await configuredOrganizations(environment);
   let initialized: Awaited<ReturnType<typeof initializeMastraBilling>> | undefined;
   try {
-    const provider = parseInput(z.enum(['local', 'polar']), environment.BILLING_PROVIDER ?? 'local');
+    const provider = parseInput(identifierSchema, environment.BILLING_PROVIDER ?? 'local');
     const root = resolve(environment.BILLING_PROJECT_ROOT ?? environment.MASTRA_PROJECT_ROOT ?? '.');
     const profiles =
       provider === 'local' && organizations.identity.kind === 'local' ? await readLocalProfiles(root) : null;
@@ -27,28 +34,28 @@ export async function createWeatherApplication(environment: NodeJS.ProcessEnv = 
       ? JSON.parse(environment.BILLING_CONFIGURATION)
       : weatherConfiguration(profiles?.profiles.owner?.workspaceId, policy);
     const resources = weatherResources(environment);
-    const contacts =
-      provider === 'polar'
-        ? z.record(z.string(), billingContactSchema).parse(JSON.parse(environment.BILLING_CONTACTS ?? 'null'))
-        : undefined;
+    const usePolarEnvironment = provider === 'polar' && !options.drivers?.some(driver => driver.id === provider);
+    const contacts = usePolarEnvironment
+      ? z.record(z.string(), billingContactSchema).parse(JSON.parse(environment.BILLING_CONTACTS ?? 'null'))
+      : undefined;
     const runtime = await initializeMastraBilling({
       organizations,
       configuration,
       agents: resources.agents,
       workflows: resources.workflows,
       databaseUrl: await billingDatabaseUrl(environment),
-      polar:
-        provider === 'polar'
-          ? {
-              token: environment.POLAR_ACCESS_TOKEN ?? '',
-              webhookSecret: environment.POLAR_WEBHOOK_SECRET,
-              contact: async workspaceId => {
-                const contact = contacts?.[workspaceId];
-                if (!contact) throw new BillingError('invalid_configuration');
-                return contact;
-              },
-            }
-          : undefined,
+      drivers: options.drivers,
+      polar: usePolarEnvironment
+        ? {
+            token: environment.POLAR_ACCESS_TOKEN ?? '',
+            webhookSecret: environment.POLAR_WEBHOOK_SECRET,
+            contact: async workspaceId => {
+              const contact = contacts?.[workspaceId];
+              if (!contact) throw new BillingError('invalid_configuration');
+              return contact;
+            },
+          }
+        : undefined,
     });
     initialized = runtime;
     if (runtime.configuration.provider !== provider) throw new BillingError('invalid_configuration');
@@ -98,8 +105,11 @@ export async function createWeatherApplication(environment: NodeJS.ProcessEnv = 
     throw error;
   }
 }
-export async function configuredWeatherMastra() {
-  const application = await createWeatherApplication();
+export async function configuredWeatherMastra(
+  environment: NodeJS.ProcessEnv = process.env,
+  options: BillingApplicationOptions = {},
+) {
+  const application = await createWeatherApplication(environment, options);
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= application.close());
   process.once('beforeExit', () => {

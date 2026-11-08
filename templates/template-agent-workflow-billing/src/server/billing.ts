@@ -52,12 +52,15 @@ export function createBillingApp(
   // Only this exact method/path is signature authenticated. Every other billing
   // route still traverses bearer authentication, including webhook lookalikes.
   if (recovery)
-    app.post('/billing/webhooks/polar', async context => {
+    app.post('/billing/webhooks/:provider', async context => {
       const headers: Record<string, string> = {};
       context.req.raw.headers.forEach((value, key) => {
         headers[key] = value;
       });
-      await recovery.intake({ body: new Uint8Array(await context.req.raw.arrayBuffer()), headers });
+      await recovery.intake(
+        { body: new Uint8Array(await context.req.raw.arrayBuffer()), headers },
+        parseInput(identifierSchema, context.req.param('provider')),
+      );
       return context.json({ received: true }, 202);
     });
   app.use('/billing/*', async (context, next) => {

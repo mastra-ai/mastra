@@ -88,6 +88,9 @@ export function catalogObservationSchema(catalog: CommercialCatalog) {
 
 // External effects only. No database handle or financial-table side effects are
 // required: BillingService validates and persists all verified observations.
+// Construct drivers only after validating their own binding schema, logical
+// catalog/mapping references and destination restrictions. Registration receives
+// that validated instance; credentials remain private to its external methods.
 export interface BillingDriver {
   readonly id: string;
   readonly capabilities: ProviderCapabilities;

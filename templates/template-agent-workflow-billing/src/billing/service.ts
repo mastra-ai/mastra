@@ -342,7 +342,9 @@ export class BillingService implements BillingProvider {
     const prepared = await this.preparePortalSession(request);
     return prepared.status === 'prepared' ? prepared.dispatch() : prepared;
   }
-  verifyWebhook(request: RawWebhookRequest) {
-    return this.driver(this.id).verifyWebhook(request);
+  verifyWebhook(request: RawWebhookRequest, provider = this.id) {
+    const driver = this.drivers.get(provider);
+    if (!driver?.capabilities.webhooks) throw new BillingError('unsupported');
+    return driver.verifyWebhook(request);
   }
 }

@@ -1,8 +1,14 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { BillingError, parseInput, usageEventSchema } from '../../src/billing/contracts.js';
+import {
+  BillingError,
+  identifierSchema,
+  parseInput,
+  timestampSchema,
+  usageEventSchema,
+} from '../../src/billing/contracts.js';
 import { driverObservationSchema, externalAccountSchema } from '../../src/billing/driver.js';
 import type { GrantSource } from '../../src/billing/contracts.js';
 import type { BillingDriver, ExternalAccount } from '../../src/billing/driver.js';
@@ -10,7 +16,12 @@ import type { CommercialCatalog } from '../../src/billing/catalog.js';
 
 // A second external provider boundary used by the public gateway suite. It has
 // no SQL imports, database argument or access to application storage.
-export async function referenceDriver(catalog: CommercialCatalog, options: { validFrom?: string } = {}) {
+export async function referenceDriver(
+  catalog: CommercialCatalog,
+  options: { validFrom?: string; hosted?: boolean; webhookSecret?: string; id?: string } = {},
+) {
+  const id = options.id ?? 'reference';
+  const returnUrl = 'https://app.example.test/billing';
   const allowance = catalog.allowances.find(value => value.kind === 'order')!;
   const validFrom = options.validFrom ?? '2025-01-01T00:00:00Z';
   const data = {
@@ -23,6 +34,8 @@ export async function referenceDriver(catalog: CommercialCatalog, options: { val
     sourceKey: 'shared-purchase',
     access: true,
     rawRequests: [] as string[],
+    hostedRequests: [] as { operation: string; body: unknown }[],
+    webhookBodies: [] as Uint8Array[],
     events: new Map<string, string>(),
   };
   const link = (workspaceId: string): ExternalAccount => ({
@@ -97,6 +110,11 @@ export async function referenceDriver(catalog: CommercialCatalog, options: { val
       reply({ status: duplicate ? 'duplicate' : 'accepted', eventId: body.event.id });
       return;
     }
+    if (request.url === '/checkout' || request.url === '/portal') {
+      data.hostedRequests.push({ operation: request.url, body });
+      reply({ status: 'created', url: `https://sessions.example.test/${id}/${data.hostedRequests.length}` });
+      return;
+    }
     response.statusCode = 404;
     reply({});
   });
@@ -120,7 +138,7 @@ export async function referenceDriver(catalog: CommercialCatalog, options: { val
     request: z.strictObject({ origin: z.url(), organizationId: z.literal('reference-org') }),
   });
   const driver: BillingDriver = {
-    id: 'reference',
+    id,
     publicBindings: JSON.stringify({ origin, allowance: { key: allowance.key, version: allowance.version } }),
     capabilities: {
       entitlements: true,
@@ -130,14 +148,14 @@ export async function referenceDriver(catalog: CommercialCatalog, options: { val
       replaySafeUsage: true,
       reconciliation: 'unverified',
       prepaidAuthority: 'application-ledger',
-      checkout: false,
-      portal: false,
-      webhooks: false,
+      checkout: options.hosted ?? false,
+      portal: options.hosted ?? false,
+      webhooks: Boolean(options.webhookSecret),
     },
     ensureAccount: async profile => parseInput(externalAccountSchema, await request('/account', profile)),
     validateAccount(account, evidence) {
       if (
-        account.provider !== 'reference' ||
+        account.provider !== id ||
         evidence.organizationId !== 'reference-org' ||
         evidence.externalReference !== account.externalReference
       )
@@ -146,13 +164,13 @@ export async function referenceDriver(catalog: CommercialCatalog, options: { val
     observe: async account =>
       parseInput(driverObservationSchema, await request('/observation', { workspaceId: account.workspaceId })),
     bindUsage: meter => ({
-      provider: 'reference',
+      provider: id,
       meter,
       version: 1,
       data: JSON.stringify({ origin, organizationId: 'reference-org' }),
     }),
     normalizeUsage(event, binding) {
-      if (binding.provider !== 'reference' || binding.version !== 1 || binding.meter !== event.meter)
+      if (binding.provider !== id || binding.version !== 1 || binding.meter !== event.meter)
         throw new BillingError('conflict');
       const mapping = parseInput(bindingSchema, JSON.parse(binding.data));
       if (mapping.origin !== origin) throw new BillingError('state_unavailable');
@@ -180,14 +198,55 @@ export async function referenceDriver(catalog: CommercialCatalog, options: { val
         await response.json(),
       );
     },
-    prepareCheckout: async () => {
-      throw new BillingError('unsupported');
+    async prepareCheckout(input) {
+      if (!options.hosted) throw new BillingError('unsupported');
+      if (input.returnUrl !== returnUrl || !catalog.offers.some(offer => offer.key === input.product))
+        throw new BillingError('invalid_input');
+      return {
+        status: 'prepared',
+        dispatch: async () =>
+          parseInput(z.strictObject({ status: z.literal('created'), url: z.url() }), await request('/checkout', input)),
+      };
     },
-    preparePortalSession: async () => {
-      throw new BillingError('unsupported');
+    async preparePortalSession(input) {
+      if (!options.hosted) throw new BillingError('unsupported');
+      if (input.returnUrl !== returnUrl) throw new BillingError('invalid_input');
+      return {
+        status: 'prepared',
+        dispatch: async () =>
+          parseInput(z.strictObject({ status: z.literal('created'), url: z.url() }), await request('/portal', input)),
+      };
     },
-    verifyWebhook: async () => {
-      throw new BillingError('unsupported');
+    async verifyWebhook(input) {
+      if (!options.webhookSecret) throw new BillingError('unsupported');
+      const eventId = input.headers['webhook-id'];
+      const timestamp = input.headers['webhook-timestamp'];
+      const signature = input.headers['webhook-signature'];
+      const expected = createHmac('sha256', options.webhookSecret)
+        .update(`${eventId}.${timestamp}.`)
+        .update(input.body)
+        .digest('hex');
+      if (
+        !identifierSchema.safeParse(eventId).success ||
+        !/^\d+$/.test(timestamp ?? '') ||
+        Math.abs(Date.now() / 1000 - Number(timestamp)) > 300 ||
+        !/^[a-f0-9]{64}$/.test(signature ?? '') ||
+        !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+      )
+        throw new BillingError('unauthenticated');
+      const payload = parseInput(
+        z.strictObject({ account: z.string().nullable(), occurredAt: timestampSchema }),
+        JSON.parse(Buffer.from(input.body).toString()),
+      );
+      data.webhookBodies.push(input.body);
+      return {
+        status: 'verified',
+        id: eventId,
+        digest: createHash('sha256').update(input.body).digest('hex'),
+        type: 'account.updated',
+        accountReference: payload.account,
+        occurredAt: payload.occurredAt,
+      };
     },
   };
   return {

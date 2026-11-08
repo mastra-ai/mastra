@@ -36,7 +36,7 @@ export class OrganizationService {
     options: {
       identity?: IdentityAdapter;
       mode: 'local' | 'production';
-      provider: 'local' | 'polar';
+      provider: string;
     },
   ) {
     this.identity = options.identity ?? new LocalIdentityAdapter(storage);

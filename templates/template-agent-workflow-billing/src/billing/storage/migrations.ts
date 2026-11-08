@@ -387,6 +387,28 @@ const driverStatements = [
   `INSERT INTO billing_admitted_accounts SELECT e.id, json_object('id', a.id, 'workspaceId', a.workspace_id, 'provider', COALESCE(json_extract(b.payload, '$.provider'), a.effective_provider), 'externalReference', a.external_reference) FROM billing_executions e JOIN billing_accounts a ON a.id = e.account_id LEFT JOIN billing_usage_bindings b ON b.execution_id = e.id`,
 ];
 
+const webhookStatements = [
+  `DROP TRIGGER billing_inbox_terms_immutable`,
+  `DROP TRIGGER billing_inbox_no_delete`,
+  `ALTER TABLE billing_inbox RENAME TO billing_inbox_legacy`,
+  `CREATE TABLE billing_inbox (
+    id TEXT NOT NULL,
+    digest TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    account_id TEXT REFERENCES billing_accounts(id),
+    occurred_at TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    generation INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'done', 'ignored')),
+    provider TEXT NOT NULL,
+    PRIMARY KEY (provider, id)
+  ) STRICT`,
+  `INSERT INTO billing_inbox SELECT *, 'polar' FROM billing_inbox_legacy`,
+  `DROP TABLE billing_inbox_legacy`,
+  `CREATE TRIGGER billing_inbox_terms_immutable BEFORE UPDATE OF provider, id, digest, event_type, account_id, occurred_at, received_at, generation ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification identity is immutable'); END`,
+  `CREATE TRIGGER billing_inbox_no_delete BEFORE DELETE ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification history is retained'); END`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -399,6 +421,7 @@ const migrations = [
   { version: 9, statements: hostedDispatchStatements },
   { version: 10, statements: commercialCatalogStatements },
   { version: 11, statements: driverStatements },
+  { version: 12, statements: webhookStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -464,7 +487,8 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
             )
           : sql,
       ),
-    ...recoveryStatements.filter(sql => sql.startsWith('CREATE')),
+    ...recoveryStatements.filter(sql => sql.startsWith('CREATE') && !sql.includes('billing_inbox')),
+    ...webhookStatements.filter(sql => sql.startsWith('CREATE')),
     ...expiryRecoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...usageBindingStatements,
     ...commercialCatalogStatements,
