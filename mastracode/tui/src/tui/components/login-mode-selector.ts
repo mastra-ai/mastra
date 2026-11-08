@@ -35,7 +35,6 @@ export class LoginModeSelectorComponent extends Box {
     this.addChild(new Spacer(1));
 
     this.list = new PickerList({
-      maxVisible: Number.POSITIVE_INFINITY,
       paddingX: 1,
       paddingY: 1,
       renderItem: (mode, isSelected) => {
