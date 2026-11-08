@@ -1,13 +1,13 @@
 ---
 name: factory-self-review
-description: Review and test a Factory work item's pushed branch before any pull or merge request exists, then send it back to Building or open the change request from the approved head and move the card to PR review
+description: Review and test a Factory work item's pushed branch before any pull or merge request exists, then send it back to the build phase or open the change request from the approved head and move the card to pull request review
 ---
 
 # Factory Self-review
 
 **Guard:** only run this skill when the `factory-phase` signal shows this session works the card in its current phase (the card is in Review and `factory_record_review_verdict` is among your tools) and the `factory-work-item` signal shows `Open change request: none`. If a pull or merge request is already open, or the card is in another phase, stop immediately: do not review, edit, or transition the work item, and report that self-review is not needed here.
 
-You are the independent reviewer for a branch a Factory builder pushed. No pull or merge request exists yet. Your verdict decides whether the work goes back to Building with your findings (request changes) or goes out for review: on approve you open the change request yourself from the exact head you approved and move the card to PR review. Hold the branch to the same bar as a PR review: the change request should arrive already finished.
+You are the independent reviewer for a branch a Factory builder pushed. No pull or merge request exists yet. Your verdict decides whether the work goes back to the build phase with your findings (request changes) or goes out for review: on approve you open the change request yourself from the exact head you approved and move the card to PR review. Hold the branch to the same bar as a PR review: the change request should arrive already finished.
 
 Complete the review in one pass. Never wait for or solicit human input. Your terminal steps are one `factory_record_review_verdict` call (repeated only if rejected, with the stated reason addressed) and, on approve, opening the change request and moving the card.
 
@@ -41,16 +41,16 @@ Write the findings argument of the verdict call as Markdown the builder (on requ
 
 ## Verdict
 
-Call `factory_record_review_verdict` with `verdict` (`approve` or `request changes`), `reviewedHeadSha` (the head you tested), and `findings` (the report). Request changes sends the card back to Building with your report. Once the rounds used reach the limit the signal shows, a further request changes parks the card for a person, so make each round's requests complete.
+Call `factory_record_review_verdict` with `verdict` (`approve` or `request changes`), `reviewedHeadSha` (the head you tested), and `findings` (the report). Request changes sends the card back to its build phase with your report. Once the rounds used reach the limit the signal shows, a further request changes parks the card for a person, so make each round's requests complete.
 
 ## Hand-off
 
 On request changes, post the report as your final conversation message and stop.
 
-On approve, keep the card in Review until the change request exists:
+On approve, keep the card where it is until the change request exists:
 
 1. Confirm `origin/<branch>` still points at the head you approved (`git ls-remote origin <branch>`). If it moved, do not open anything: record a fresh review of the new head instead.
 2. Open the change request from that head with `source_control_create_change_request` (head: the work branch; base: the default branch). Title it after the work item; put your report in the body and link the source issue (`Fixes #<n>` on GitHub, `Closes #<n>` on GitLab) when the card has one. Factory refuses a change request whose head is not the approved one.
-3. Move the card to PR review with `factory_transition_work_item` (`stage: "pr-review"`, `expectedRevision` from the latest `factory-phase` signal), with a one-sentence rationale naming the change request. PR review takes the card only once Factory has attached the change request to it, which happens when the provider reports it opened. If the move is refused because the card has no pull request yet, wait briefly (`sleep 20`), re-read the revision from the latest `factory-phase` signal, and retry, up to three times; if it is still refused, the change request is tracked on its own card instead (a manual card, or an issue from another provider than the repository): the project's intake routes decide where that card goes. Post the change request link, say it is tracked on its own card and that a person should confirm it is reviewed there, and leave this card where it is.
+3. Move the card to the `pull request review` phase the `factory-phase` signal's `Board phases by part:` line names (`pr-review` on the default board) with `factory_transition_work_item` (`expectedRevision` from the latest `factory-phase` signal), with a one-sentence rationale naming the change request. That phase takes the card only once Factory has attached the change request to it, which happens when the provider reports it opened. If the move is refused because the card has no pull request yet, wait briefly (`sleep 20`), re-read the revision from the latest `factory-phase` signal, and retry, up to three times; if it is still refused, the change request is tracked on its own card instead (a manual card, or an issue from another provider than the repository): the project's intake routes decide where that card goes. Post the change request link, say it is tracked on its own card and that a person should confirm it is reviewed there, and leave this card where it is.
 
-Never move the card to Done yourself: the merge finishes it. Then post the report and the change request link as your final conversation message and stop.
+Never move the card to a terminal phase yourself: the merge finishes it. Then post the report and the change request link as your final conversation message and stop.

@@ -1307,6 +1307,48 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(resting?.contents).toContain('request the transition into the working stage first');
   });
 
+  it("names each phase by its part in the loop, from the card's own board, so skills never assume Work's keys", async () => {
+    const ship = defineBoard({
+      id: 'ship',
+      name: 'Ship',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['think', 'pr', 'dropped'] },
+        think: { name: 'Think', kind: 'working', runner: { context: 'triage' }, nextPhases: ['inbox', 'make'] },
+        make: { name: 'Make', kind: 'working', runner: { context: 'work' }, nextPhases: ['check', 'pr'] },
+        check: {
+          name: 'Check',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict'],
+          nextPhases: ['make', 'pr', 'inbox'],
+        },
+        pr: {
+          name: 'PR',
+          kind: 'working',
+          runner: { context: 'review' },
+          tools: ['factory_record_review_verdict', 'factory_review_source'],
+          nextPhases: ['shipped', 'dropped'],
+        },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+        dropped: { name: 'Dropped', kind: 'terminal' },
+      },
+    });
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'work', 'issue', { id: 'ship', stage: 'make' });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [ship] }),
+      storage,
+    });
+
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+
+    expect(signal?.contents).toContain(
+      'Board phases by part: rest: Inbox (inbox); triage: Think (think); build: Make (make); self-review: Check (check); pull request review: PR (pr); completed: Shipped (shipped); canceled: Dropped (dropped)',
+    );
+  });
+
   it('does nothing for sessions that were never Factory-bound', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const boards = createBoardRegistry();
