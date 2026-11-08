@@ -19826,9 +19826,9 @@
       },
       "minimax/MiniMax-M3.1-Flash": {
         "cost": {
-          "input": 0.15,
-          "output": 0.6,
-          "cache_read": 0.015
+          "input": 0.075,
+          "output": 0.3,
+          "cache_read": 0.0075
         }
       },
       "mistral/codestral-2508": {
@@ -29846,9 +29846,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.033,
-          "output": 0.099,
-          "cache_read": 0.017
+          "input": 0.04,
+          "output": 0.15,
+          "cache_read": 0.01
         }
       },
       "google/gemma-4-31b-it": {
@@ -30828,15 +30828,15 @@
       "openai/gpt-oss-120b": {
         "cost": {
           "input": 0.019,
-          "output": 0.071,
+          "output": 0.07,
           "cache_read": 0.017
         }
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.006,
-          "output": 0.024,
-          "cache_read": 0.005
+          "input": 0.004,
+          "output": 0.017,
+          "cache_read": 0.003
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -31384,9 +31384,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.132,
-          "output": 0.528,
-          "cache_read": 0.033
+          "input": 0.0825,
+          "output": 0.33,
+          "cache_read": 0.020625
         }
       },
       "tencent/hy3-preview": {
@@ -31405,9 +31405,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -31769,7 +31769,7 @@
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
           "input": 0.0434,
-          "output": 0.3,
+          "output": 0.28,
           "cache_read": 0.035
         }
       },
@@ -31793,9 +31793,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.151,
-          "output": 10.5663,
-          "cache_read": 0.15
+          "input": 0.1605,
+          "output": 9.3388,
+          "cache_read": 0.16
         }
       },
       "~openai/gpt-astra-latest": {
@@ -42682,9 +42682,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.031,
-          "output": 0.093,
-          "cache_read": 0.016
+          "input": 0.065,
+          "output": 0.196,
+          "cache_read": 0.033
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42696,9 +42696,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.031,
-          "output": 0.093,
-          "cache_read": 0.016
+          "input": 0.065,
+          "output": 0.196,
+          "cache_read": 0.033
         }
       },
       "google/gemma-4-31b-it": {
@@ -43891,7 +43891,7 @@
       "openai/gpt-oss-20b": {
         "cost": {
           "input": 0.004,
-          "output": 0.017,
+          "output": 0.018,
           "cache_read": 0.003
         }
       },
@@ -44741,9 +44741,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -44922,9 +44922,9 @@
       },
       "xiaomi/mimo-v2.5": {
         "cost": {
-          "input": 0.413,
-          "output": 2.086,
-          "cache_read": 0.0028,
+          "input": 0.422,
+          "output": 2.11,
+          "cache_read": 0.0844,
           "cache_write": 0
         }
       },
@@ -44946,9 +44946,9 @@
       },
       "xiaomi/mimo-v2.5:thinking": {
         "cost": {
-          "input": 0.413,
-          "output": 2.086,
-          "cache_read": 0.0028,
+          "input": 0.422,
+          "output": 2.11,
+          "cache_read": 0.0844,
           "cache_write": 0
         }
       },
@@ -52116,7 +52116,7 @@
       "deepseek/deepseek-v4-flash-0731": {
         "cost": {
           "input": 0.0434,
-          "output": 0.3,
+          "output": 0.28,
           "cache_read": 0.035
         }
       },
@@ -52129,9 +52129,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.282054,
-          "output": 0.564108,
-          "cache_read": 0.023505
+          "input": 0.2088,
+          "output": 0.4176,
+          "cache_read": 0.0174
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -52144,8 +52144,8 @@
       "deepseek/deepseek-v4.1-flash": {
         "cost": {
           "input": 0.051,
-          "output": 0.41,
-          "cache_read": 0.022
+          "output": 0.567,
+          "cache_read": 0.018
         }
       },
       "deepseek/deepseek-v4.1-flash-1017": {
@@ -52626,9 +52626,8 @@
       },
       "meta-llama/llama-3.1-8b-instruct": {
         "cost": {
-          "input": 0.05,
-          "output": 0.08,
-          "cache_read": 0.025
+          "input": 0.02,
+          "output": 0.04
         }
       },
       "meta-llama/llama-3.2-1b-instruct": {
@@ -52760,9 +52759,9 @@
       },
       "minimax/minimax-m3.1-flash": {
         "cost": {
-          "input": 0.15,
-          "output": 0.6,
-          "cache_read": 0.015
+          "input": 0.075,
+          "output": 0.3,
+          "cache_read": 0.0075
         }
       },
       "mistralai/codestral-2508": {
@@ -53787,9 +53786,9 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.015,
-          "output": 0.054,
-          "cache_read": 0.013
+          "input": 0.021,
+          "output": 0.078,
+          "cache_read": 0.019
         }
       },
       "openai/gpt-oss-20b": {
@@ -54486,9 +54485,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.132,
-          "output": 0.528,
-          "cache_read": 0.033
+          "input": 0.0825,
+          "output": 0.33,
+          "cache_read": 0.020625
         }
       },
       "tencent/hy3-preview": {
@@ -54507,9 +54506,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -54968,7 +54967,7 @@
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
           "input": 0.0434,
-          "output": 0.3,
+          "output": 0.28,
           "cache_read": 0.035
         }
       },
@@ -55010,9 +55009,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.151,
-          "output": 10.5663,
-          "cache_read": 0.15
+          "input": 0.1605,
+          "output": 9.3388,
+          "cache_read": 0.16
         }
       },
       "~openai/gpt-astra-latest": {

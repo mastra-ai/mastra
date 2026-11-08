@@ -39,7 +39,18 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
       }
@@ -49,15 +60,21 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.6-pro-rl": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
     ],
-    "qwen3.8-flash-next": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "minimax-m3": [
@@ -71,40 +88,9 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
     "laguna-s-2.1": [
       {
         "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -116,10 +102,15 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-glimmer-30b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "qwen3.8-27b": [
@@ -129,6 +120,15 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
