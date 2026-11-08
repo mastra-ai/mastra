@@ -8,6 +8,7 @@
  * - Workspace computer tool emission
  */
 
+import { assertComputerConformance } from '@internal/workspace-test-utils/sandbox';
 import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools, supportsComputer } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -165,6 +166,15 @@ describe('E2BDesktopSandbox', () => {
 
       expect(sandbox.computer).toBeDefined();
       expect(supportsComputer(sandbox)).toBe(true);
+    });
+
+    it('satisfies borrowed computer conformance', async () => {
+      process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+      try {
+        await assertComputerConformance(() => new E2BDesktopSandbox());
+      } finally {
+        delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+      }
     });
 
     it('clone returns an E2BDesktopSandbox with inherited options', () => {

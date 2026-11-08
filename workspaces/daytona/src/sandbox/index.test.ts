@@ -13,6 +13,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { assertComputerConformance } from '@internal/workspace-test-utils/sandbox';
 import {
   SandboxNotReadyError,
   SandboxUnsupportedFeatureError,
@@ -1499,6 +1500,15 @@ describe('DaytonaSandbox', () => {
 
       expect(sandbox.computer).toBeDefined();
       expect(supportsComputer(sandbox)).toBe(true);
+    });
+
+    it('satisfies borrowed computer conformance', async () => {
+      process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+      try {
+        await assertComputerConformance(() => new DaytonaSandbox({ computerUse: true }));
+      } finally {
+        delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+      }
     });
 
     it('computerUse: false disables the capability', () => {
