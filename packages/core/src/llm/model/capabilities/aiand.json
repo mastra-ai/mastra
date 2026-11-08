@@ -37,10 +37,10 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "google/gemma-4-31b-it": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshotai/kimi-k3.1-pro": [
@@ -49,10 +49,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k3": [
+    "qwen/qwen3.6-27b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
     "qwen/qwen3.8-27b": [
@@ -61,10 +61,10 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3.6-27b": [
+    "zai-org/glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/glm-5.3": [
@@ -73,22 +73,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/glm-5.3-flash": [
+    "meta/muse-spark-open": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -103,10 +91,22 @@
         "values": ["none", "high"]
       }
     ],
-    "meta/muse-spark-open": [
+    "deepseek-ai/deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

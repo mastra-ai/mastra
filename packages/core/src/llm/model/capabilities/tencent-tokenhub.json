@@ -2,7 +2,10 @@
   "attachment": ["hy4"],
   "temperature": ["hy3", "hy3-preview", "hy4", "hy4-preview"],
   "reasoning": {
-    "hy4": [
+    "hy3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -17,10 +20,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hy3": [
-      {
-        "type": "toggle"
-      },
+    "hy4": [
       {
         "type": "effort",
         "values": ["none", "high"]
