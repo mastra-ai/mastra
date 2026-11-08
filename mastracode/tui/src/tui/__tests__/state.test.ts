@@ -57,7 +57,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
   return {
     ...actual,
     // Keep state initialization hermetic: don't read the host's real settings.
-    loadSettings: vi.fn(() => ({ voice: { enabled: false } })),
+    loadSettings: vi.fn(() => ({ voice: { enabled: false }, preferences: { inputMouseMode: false } })),
   };
 });
 

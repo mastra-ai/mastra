@@ -25,7 +25,10 @@ const COLS = 100;
  * frame no longer reaches the bottom of the screen): mouse reports and cursor position replies both
  * come back shifted by that many rows.
  */
-function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
+function createHarness({
+  rowOffset = 0,
+  inputMouseModeEnabled = false,
+}: { rowOffset?: number; inputMouseModeEnabled?: boolean } = {}) {
   const screen = new xterm.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
   let onInput: ((data: string) => void) | undefined;
   let output = Promise.resolve();
@@ -64,7 +67,7 @@ function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
   const editor = new CustomEditor(ui, getEditorTheme());
   ui.addChild(editor);
   ui.setFocus(editor);
-  const controller = new MouseController(ui, editor);
+  const controller = new MouseController(ui, editor, { inputMouseModeEnabled });
   ui.start();
 
   const render = async () => {
@@ -534,27 +537,40 @@ describe('hand-drawn pickers on PickerList', () => {
   });
 });
 
-describe('input box mouse mode (Alt+M)', () => {
-  const ALT_M = '\x1bm';
+describe('input box mouse mode', () => {
   const UNDO = '\x1f';
+  const RIGHT = '\x1b[C';
 
+  /** Opted in via /settings; pressing → at the end of the text is an editing key, which turns mouse mode on. */
   async function inputHarness(text: string) {
-    harness = createHarness();
+    harness = createHarness({ inputMouseModeEnabled: true });
     harness.editor.setText(text);
     await harness.render();
-    harness.send(ALT_M);
+    harness.send(RIGHT);
     await harness.render();
     return harness;
   }
 
-  it('captures the mouse only while toggled on', async () => {
+  it('never captures the mouse unless opted in through the setting', async () => {
+    harness = createHarness();
+    const h = harness;
+    h.send('h');
+    h.send(RIGHT);
+    await h.render();
+    expect(h.controller.isInputMouseMode()).toBe(false);
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
+  });
+
+  it('turning the setting off releases the mouse and stops typing from capturing it', async () => {
     const h = await inputHarness('hello');
     expect(h.screen.modes.mouseTrackingMode).toBe('any');
-    expect(h.controller.isInputMouseMode()).toBe(true);
-    h.send(ALT_M);
+    h.controller.setInputMouseModeEnabled(false);
     await h.render();
     expect(h.screen.modes.mouseTrackingMode).toBe('none');
+    h.send('!');
+    await h.render();
     expect(h.controller.isInputMouseMode()).toBe(false);
+    expect(h.editor.getText()).toBe('hello!');
   });
 
   it('a click moves the cursor to the clicked character', async () => {
@@ -577,12 +593,12 @@ describe('input box mouse mode (Alt+M)', () => {
   });
 
   it('treats a paste marker as one character', async () => {
-    harness = createHarness();
+    harness = createHarness({ inputMouseModeEnabled: true });
     const h = harness;
+    // Pasting turns mouse mode on, like typing.
     h.send(`\x1b[200~${Array.from({ length: 20 }, (_, i) => `pasted ${i}`).join('\n')}\x1b[201~`);
     await h.render();
-    h.send(ALT_M);
-    await h.render();
+    expect(h.controller.isInputMouseMode()).toBe(true);
     const marker = h.find('[paste #1');
     // Inside the left half of the marker: the cursor lands before it, never inside.
     await h.click(marker.row, marker.col + 2);
@@ -635,12 +651,66 @@ describe('input box mouse mode (Alt+M)', () => {
     expect(h.editor.getText()).toBe('hello braveworld');
   });
 
-  it('the wheel does nothing over the input box', async () => {
+  it('typing and editing keys turn mouse mode on; submit turns it off until the next one', async () => {
+    harness = createHarness({ inputMouseModeEnabled: true });
+    const h = harness;
+    h.editor.setText('one\ntwo');
+    await h.render();
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
+    for (const key of ['\x1b[A', '\x1b[D', '\x7f', '\x1b[H', 'x']) {
+      h.controller.setInputMouseMode(false);
+      h.send(key);
+      await h.render();
+      expect(h.controller.isInputMouseMode(), JSON.stringify(key)).toBe(true);
+      expect(h.screen.modes.mouseTrackingMode).toBe('any');
+    }
+  });
+
+  it('keys that do not edit leave mouse mode off', async () => {
+    harness = createHarness({ inputMouseModeEnabled: true });
+    const h = harness;
+    h.editor.setText('one\ntwo');
+    h.send('\x1b');
+    h.send('\x1bm');
+    expect(h.controller.isInputMouseMode()).toBe(false);
+  });
+
+  it('a mouse report it cannot decode hands the mouse back to the terminal', async () => {
+    const h = await inputHarness('hello');
+    // Legacy X10 encoding, sent by terminals that ignore the SGR mode request.
+    h.send('\x1b[M #!');
+    await h.render();
+    expect(h.controller.isInputMouseMode()).toBe(false);
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
+    expect(h.editor.getText()).toBe('hello');
+  });
+
+  it('the first wheel tick turns mouse mode off without touching the text', async () => {
     const h = await inputHarness('one\ntwo\nthree');
     const before = h.editor.getCursor();
-    const row = h.find('two').row;
-    h.send(`\x1b[<64;10;${row}M`);
-    h.send(`\x1b[<64;10;${row}M`);
+    h.send(`\x1b[<64;10;${h.find('two').row}M`);
+    await h.render();
+    expect(h.controller.isInputMouseMode()).toBe(false);
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
     expect(h.editor.getCursor()).toEqual(before);
+  });
+
+  it('a click outside the input box turns mouse mode off; a click on the box edge does not', async () => {
+    const h = await inputHarness('hello world');
+    const text = h.find('hello');
+    // The row above the text is the input box's top edge.
+    await h.click(text.row - 1, text.col);
+    await h.release(text.row - 1, text.col);
+    await h.render();
+    expect(h.controller.isInputMouseMode()).toBe(true);
+    expect(h.editor.getText()).toBe('hello world');
+
+    // The input box is the whole frame here, so the empty screen below it is outside.
+    await h.click(ROWS, text.col);
+    await h.release(ROWS, text.col);
+    await h.render();
+    expect(h.controller.isInputMouseMode()).toBe(false);
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
+    expect(h.editor.getText()).toBe('hello world');
   });
 });

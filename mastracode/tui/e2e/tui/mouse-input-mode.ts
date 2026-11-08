@@ -2,7 +2,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
 
-const ALT_M = '\x1bm';
+const AUTO = /alpha-model.*mouse mode: auto/;
+const OFF = /alpha-model.*mouse mode: off/;
 
 function expectTracking(terminal: Parameters<McE2eScenario['run']>[0]['terminal'], expected: string, when: string) {
   const mode = terminal.mouseTracking?.();
@@ -12,8 +13,9 @@ function expectTracking(terminal: Parameters<McE2eScenario['run']>[0]['terminal'
 export const mouseInputModeScenario = {
   name: 'mouse-input-mode',
   description:
-    'Alt+M turns on mouse mode for the input box: clicks place the cursor, a drag selects and copies, and submitting turns it off.',
-  testName: 'edits the prompt with the mouse while mouse mode is on and hands the mouse back on submit',
+    'With the opt-in input mouse mode setting on, typing or editing captures the mouse for the input box (clicks place the cursor, a drag selects and copies); a wheel tick, an outside click or submitting hands it back.',
+  testName:
+    'opts in through /settings, edits the prompt with the mouse and hands the mouse back on wheel, outside click and submit',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -45,14 +47,34 @@ export const mouseInputModeScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/\bbuild · pointer-e2e\/alpha-model/i, terminal, 10_000);
     await terminal.flushInput?.();
-    expectTracking(terminal, 'none', 'at startup (mouse mode always starts off)');
 
-    terminal.write('hello brave world');
-    await runtime.waitForScreenText(/hello brave world/, terminal, 8_000);
-    terminal.write(ALT_M);
-    await runtime.waitForScreenText(/pointer-e2e\/alpha-model.*\bmouse\b/, terminal, 8_000);
+    // Off by default: typing leaves the mouse with the terminal and no indicator shows.
+    terminal.write('draft');
+    await runtime.waitForScreenText(/→ draft/, terminal, 8_000);
     await terminal.flushInput?.();
-    expectTracking(terminal, 'any', 'after Alt+M');
+    await runtime.sleep(200);
+    expectTracking(terminal, 'none', 'while typing with the setting off');
+    if (/mouse mode/.test(terminal.serialize().view)) throw new Error('Mouse mode indicator shown before opting in');
+    for (let i = 0; i < 5; i++) terminal.write('\x7f');
+    await runtime.waitForScreenTextAbsent(/→ draft/, terminal, 8_000);
+
+    // Opt in through /settings.
+    terminal.submit('/settings');
+    await runtime.waitForScreenText(/Input mouse mode/, terminal, 8_000);
+    terminal.clickText?.('Input mouse mode');
+    await runtime.waitForScreenText(/The terminal keeps the mouse/, terminal, 8_000);
+    terminal.clickText?.('Typing or editing captures the mouse');
+    await runtime.waitForScreenText(/Input mouse mode\s+On/, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(OFF, terminal, 8_000);
+    await terminal.flushInput?.();
+    expectTracking(terminal, 'none', 'after opting in, before typing');
+
+    // Typing turns mouse mode on.
+    terminal.write('hello brave world');
+    await runtime.waitForScreenText(AUTO, terminal, 8_000);
+    await terminal.flushInput?.();
+    expectTracking(terminal, 'any', 'after typing');
 
     // A click mid-text places the cursor there.
     terminal.clickText?.('world');
@@ -72,19 +94,26 @@ export const mouseInputModeScenario = {
     await runtime.waitForScreenText(/hello bold big world/, terminal, 8_000);
     runtime.printScreen('after editing with the mouse', terminal);
 
-    // Alt+M again turns it off.
-    terminal.write(ALT_M);
-    await runtime.waitForScreenTextAbsent(/pointer-e2e\/alpha-model.*\bmouse\b/, terminal, 8_000);
+    // The first wheel tick hands the wheel back to the terminal; typing takes the mouse again.
+    terminal.wheel?.('up');
+    await runtime.waitForScreenText(OFF, terminal, 8_000);
     await terminal.flushInput?.();
-    expectTracking(terminal, 'none', 'after the second Alt+M');
+    expectTracking(terminal, 'none', 'after a wheel tick');
+    terminal.write('!');
+    await runtime.waitForScreenText(AUTO, terminal, 8_000);
 
-    // Submitting a message turns mouse mode off.
-    terminal.write(ALT_M);
-    await runtime.waitForScreenText(/pointer-e2e\/alpha-model.*\bmouse\b/, terminal, 8_000);
+    // A click outside the input box hands the mouse back too; an editing key takes it again.
+    terminal.clickText?.('build · ');
+    await runtime.waitForScreenText(OFF, terminal, 8_000);
     await terminal.flushInput?.();
-    expectTracking(terminal, 'any', 'after turning mouse mode back on');
+    expectTracking(terminal, 'none', 'after clicking outside the input box');
+    await runtime.waitForScreenText(/hello bold! big world/, terminal, 8_000);
+    terminal.write('\x1b[D');
+    await runtime.waitForScreenText(AUTO, terminal, 8_000);
+
+    // Submitting turns mouse mode off.
     terminal.write('\r');
-    await runtime.waitForScreenTextAbsent(/pointer-e2e\/alpha-model.*\bmouse\b/, terminal, 8_000);
+    await runtime.waitForScreenText(OFF, terminal, 8_000);
     await terminal.flushInput?.();
     expectTracking(terminal, 'none', 'after submitting');
 

@@ -16,9 +16,15 @@
  *   Autocomplete rows are resolved relative to the cursor; modals are shifted
  *   by the measured offset.
  *
- * Mouse mode (Alt+M, off on submit) also captures the mouse while no dialog is
- * open, for the input box: a press places the cursor, a drag selects, and the
- * release copies the selection through OSC 52. The wheel does nothing there.
+ * Input mouse mode (opt-in through the `inputMouseMode` setting) also
+ * captures the mouse while no dialog is open, for the input box: a press
+ * places the cursor, a drag selects, and the release copies the selection
+ * through OSC 52. It turns on when you type or edit in the input box and off
+ * on submit, on the first wheel tick, on a click outside the input box, or on
+ * a mouse report we can't decode, so the terminal gets its wheel scrollback
+ * and text selection back as soon as you reach for them. The terminal can't
+ * report clicks without also taking the wheel, so the tick or click that turns
+ * it off is used up.
  */
 import type { Component, TUI } from '@earendil-works/pi-tui';
 
@@ -52,6 +58,9 @@ export class MouseController {
     | { event: TerminalMouseEvent; action: MouseAction; timer: ReturnType<typeof setTimeout> }
     | undefined;
   private lastHoverCell: string | undefined;
+  /** Whether the user opted in to input mouse mode in /settings. */
+  private inputMouseModeEnabled: boolean;
+  /** Whether input mouse mode is currently capturing the mouse. */
   private inputMouseMode = false;
   /**
    * Input box drag: 'pending' while the press waits for its cursor position
@@ -60,7 +69,7 @@ export class MouseController {
   private inputDrag: 'pending' | 'active' | undefined;
   private queuedDrag: TerminalMouseEvent | undefined;
   private queuedRelease: TerminalMouseEvent | undefined;
-  /** Called when mouse mode turns on or off (for the status line badge). */
+  /** Called when mouse mode turns on or off, or the setting changes (for the status line). */
   onInputMouseModeChange?: () => void;
   /** Pointer position local to the hovered overlay component. */
   private overlayHover: { component: Component; row: number; col: number } | undefined;
@@ -76,9 +85,13 @@ export class MouseController {
   constructor(
     private readonly ui: TUI,
     private readonly editor: CustomEditor,
+    options: { inputMouseModeEnabled?: boolean } = {},
   ) {
+    this.inputMouseModeEnabled = options.inputMouseModeEnabled ?? false;
     this.removeInputListener = ui.addInputListener(data => this.handleInput(data));
-    editor.onAction('toggleMouseMode', () => this.setInputMouseMode(!this.inputMouseMode));
+    editor.onAction('editInput', () => {
+      this.setInputMouseMode(true);
+    });
 
     const internals = tuiInternals(ui);
     this.originalDoRender = internals.doRender;
@@ -112,7 +125,20 @@ export class MouseController {
     return this.inputMouseMode;
   }
 
+  isInputMouseModeEnabled(): boolean {
+    return this.inputMouseModeEnabled;
+  }
+
+  /** Applies the /settings opt-in; turning it off also releases the mouse. */
+  setInputMouseModeEnabled(enabled: boolean): void {
+    if (this.inputMouseModeEnabled === enabled) return;
+    this.inputMouseModeEnabled = enabled;
+    if (!enabled) this.setInputMouseMode(false);
+    this.onInputMouseModeChange?.();
+  }
+
   setInputMouseMode(enabled: boolean): void {
+    if (enabled && !this.inputMouseModeEnabled) return;
     if (this.inputMouseMode === enabled) return;
     this.inputMouseMode = enabled;
     if (!enabled) {
@@ -179,12 +205,20 @@ export class MouseController {
 
     if (!isMouseReport(data)) return undefined;
     const event = parseSgrMouse(data);
-    if (!event) return { consume: true };
+    if (!event) {
+      // A report we can't decode (e.g. a terminal without SGR mouse support) would leave
+      // the input box capturing a mouse that does nothing, so hand it back to the terminal.
+      if (this.inputOwnsPointer()) this.setInputMouseMode(false);
+      return { consume: true };
+    }
 
     const inputOwnsPointer = this.inputOwnsPointer();
     if (event.kind === 'wheelUp' || event.kind === 'wheelDown') {
-      // Over the input box the wheel does nothing; dialogs and suggestions still scroll.
-      if (inputOwnsPointer && !this.editor.isShowingAutocomplete()) return { consume: true };
+      // Outside dialogs and suggestions, the first tick hands the wheel back to the terminal.
+      if (inputOwnsPointer && !this.editor.isShowingAutocomplete()) {
+        this.setInputMouseMode(false);
+        return { consume: true };
+      }
       return { data: event.kind === 'wheelUp' ? WHEEL_UP_KEY : WHEEL_DOWN_KEY };
     }
     if (event.kind === 'press' && event.button === 0) {
@@ -277,8 +311,11 @@ export class MouseController {
       this.ui.requestRender();
       return;
     }
-    if (!this.editor.pointerPress(cursorRow, event.row, event.col)) {
+    const hit = this.editor.pointerPress(cursorRow, event.row, event.col);
+    if (hit !== 'text') {
       this.endInputDrag();
+      // A click outside the input box hands the mouse back to the terminal.
+      if (hit === 'outside') this.setInputMouseMode(false);
       return;
     }
     const { queuedDrag, queuedRelease } = this;

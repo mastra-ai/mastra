@@ -23,6 +23,7 @@ export interface SettingsConfig {
   thinkingLevel: string;
   currentModelId: string;
   escapeAsCancel: boolean;
+  inputMouseMode: boolean;
   previewLines: number;
   storageBackend: StorageBackend;
   pgConnectionString: string;
@@ -43,6 +44,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
+  onInputMouseModeChange: (enabled: boolean) => void;
   onPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
@@ -352,6 +354,35 @@ export class SettingsComponent extends Box implements Focusable {
               config.escapeAsCancel = value === 'on';
               callbacks.onEscapeAsCancelChange(config.escapeAsCancel);
               done(config.escapeAsCancel ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'inputMouseMode',
+        label: 'Input mouse mode',
+        description:
+          'Click and drag in the input box while typing. Turns off on send, a wheel tick, or a click outside the box.',
+        currentValue: config.inputMouseMode ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Typing or editing captures the mouse for the input box',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'The terminal keeps the mouse (native scrolling and selection)',
+              },
+            ],
+            config.inputMouseMode ? 'on' : 'off',
+            value => {
+              config.inputMouseMode = value === 'on';
+              callbacks.onInputMouseModeChange(config.inputMouseMode);
+              done(config.inputMouseMode ? 'On' : 'Off');
             },
             () => done(),
           ),

@@ -456,7 +456,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   globalBackgroundNoticeContainer.addChild(globalBackgroundNotice);
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.requestRender = () => ui.requestRender();
-  const mouseController = new MouseController(ui, editor);
+  const mouseController = new MouseController(ui, editor, {
+    inputMouseModeEnabled: loadSettings().preferences.inputMouseMode,
+  });
   result = {
     // Core dependencies
     controller: options.controller,

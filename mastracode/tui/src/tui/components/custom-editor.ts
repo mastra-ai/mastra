@@ -65,6 +65,37 @@ const SPACE_HOLD_REPEAT_THRESHOLD = 3;
 // this long (comfortably above the ~80ms repeat cadence).
 const SPACE_RELEASE_IDLE_MS = 250;
 
+/** Typed characters or a bracketed paste (not keys like Enter, arrows or shortcuts). */
+function isTextInput(data: string): boolean {
+  return (
+    data.startsWith('\x1b[200~') ||
+    (data.length > 0 && !data.startsWith('\x1b') && [...data].every(ch => ch >= ' ' && ch !== '\x7f'))
+  );
+}
+
+const EDITING_KEYS = [
+  'left',
+  'right',
+  'up',
+  'down',
+  'home',
+  'end',
+  'backspace',
+  'delete',
+  'ctrl+left',
+  'ctrl+right',
+  'alt+left',
+  'alt+right',
+  'ctrl+backspace',
+  'alt+backspace',
+  'alt+delete',
+] as const;
+
+/** Text input or a key that moves through or deletes text — anything that means "working in the input box". */
+function isEditingInput(data: string): boolean {
+  return isTextInput(data) || EDITING_KEYS.some(key => matchesKey(data, key));
+}
+
 export type AppAction =
   | 'clear'
   | 'exit'
@@ -78,7 +109,7 @@ export type AppAction =
   | 'queueFollowUp'
   | 'cycleMode'
   | 'toggleYolo'
-  | 'toggleMouseMode';
+  | 'editInput';
 
 // Pre-compiled constant (avoid re-creation per render)
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
@@ -152,6 +183,7 @@ export class CustomEditor extends Editor {
   // Layout of the last render, used to map mouse clicks onto autocomplete rows.
   // Row indexes are into the array returned by render().
   private lastCursorRow = -1;
+  private lastRenderedRowCount = 0;
   private lastAutocompleteStartRow = -1;
   /** Autocomplete list row under the mouse pointer, so hover follows the pointer when the list scrolls. */
   private hoveredAutocompleteRow: number | undefined;
@@ -361,6 +393,7 @@ export class CustomEditor extends Editor {
     // fadePanel adds one edge row above the content; autocomplete rows trail the content.
     this.lastAutocompleteStartRow = autocompleteList ? 1 + contentLines.length - autocompleteList.renderedRowCount : -1;
     this.lastCursorRow = result.findIndex(line => line.includes(CURSOR_MARKER));
+    this.lastRenderedRowCount = result.length;
 
     if (!autocompleteList) this.hoveredAutocompleteRow = undefined;
     const hoveredIndex =
@@ -461,19 +494,22 @@ export class CustomEditor extends Editor {
 
   /**
    * Mouse mode: a left press at `screenRow`/`screenCol` (1-based) while the
-   * terminal reports the hardware cursor on `cursorRow`. Places the cursor
-   * there and starts a selection. Returns false when the press is outside the text.
+   * terminal reports the hardware cursor on `cursorRow`. On text it places the
+   * cursor there and starts a selection ('text'); elsewhere in the input box
+   * it does nothing ('box'); 'outside' means the press missed the input box.
    */
-  pointerPress(cursorRow: number, screenRow: number, screenCol: number): boolean {
+  pointerPress(cursorRow: number, screenRow: number, screenCol: number): 'text' | 'box' | 'outside' {
     const layout = this.inputLayout;
-    if (!layout || this.lastCursorRow < 0) return false;
-    const firstScreenRow = cursorRow - this.lastCursorRow + layout.firstRow;
+    if (!layout || this.lastCursorRow < 0) return 'outside';
+    const topScreenRow = cursorRow - this.lastCursorRow;
+    if (screenRow < topScreenRow || screenRow >= topScreenRow + this.lastRenderedRowCount) return 'outside';
+    const firstScreenRow = topScreenRow + layout.firstRow;
     const position = this.positionAt(screenRow - firstScreenRow, screenCol);
-    if (!position) return false;
+    if (!position) return 'box';
     this.dragFirstScreenRow = firstScreenRow;
     this.selection.start(position);
     this.moveCursorTo(position);
-    return true;
+    return 'text';
   }
 
   /** Mouse mode: drag after pointerPress; extends the selection to the pointer. */
@@ -560,10 +596,7 @@ export class CustomEditor extends Editor {
       this.selection.clear();
       return true;
     }
-    if (
-      data.startsWith('\x1b[200~') ||
-      (!data.startsWith('\x1b') && [...data].every(ch => ch >= ' ' && ch !== '\x7f'))
-    ) {
+    if (isTextInput(data)) {
       this.deleteSelection();
       return false;
     }
@@ -1044,13 +1077,7 @@ export class CustomEditor extends Editor {
   }
 
   handleInput(data: string): void {
-    if (matchesKey(data, 'alt+m')) {
-      const handler = this.actionHandlers.get('toggleMouseMode');
-      if (handler) {
-        handler();
-        return;
-      }
-    }
+    if (isEditingInput(data)) this.actionHandlers.get('editInput')?.();
 
     if (this.selection.range() && this.handleSelectionInput(data)) {
       this.requestEditorRender();
