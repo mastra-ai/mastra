@@ -66,7 +66,7 @@ import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
-import { PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
+import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { authorTrusted, externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from './types.js';
@@ -1140,6 +1140,10 @@ export class FactoryDecisionDispatcher {
     session: BoundDispatcherSession,
     binding: FactoryRunBindingRecord,
   ): Promise<GoalObjectiveRecord> {
+    // The phase this run is for, read before the goal exists (the kickoff was checked against it):
+    // reading it afterwards could stamp the phase the card moved to meanwhile.
+    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+    const phaseKey = item?.stages.length === 1 ? item.stages[0] : undefined;
     const objective = await startPhaseGoal(session.machinery.getAgent(), {
       threadId: binding.threadId,
       resourceId: binding.resourceId,
@@ -1152,24 +1156,21 @@ export class FactoryDecisionDispatcher {
     if (!objective) {
       throw new FactoryDispatchError('run_configuration_invalid', 'The Factory session has no storage to hold a goal.');
     }
-    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    const phaseKey = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (item && phaseKey && phaseGoalOf(item.metadata)?.goalId !== objective.id) {
+    if (!item || !phaseKey) return objective;
+    const stamp = { phaseKey, goalId: record.id, threadId: binding.threadId, sessionId: binding.sessionId };
+    if (phaseGoalOf(item.metadata)?.goalId !== record.id) {
       await this.#storage.update({
         orgId: record.orgId,
         id: item.id,
         userId: 'factory',
-        patch: {
-          metadata: {
-            [PHASE_GOAL_METADATA_KEY]: {
-              phaseKey,
-              goalId: objective.id,
-              threadId: binding.threadId,
-              sessionId: binding.sessionId,
-            },
-          },
-        },
+        patch: { metadata: { [PHASE_GOAL_METADATA_KEY]: stamp } },
       });
+    }
+    // A move that committed before the stamp landed found no goal to end: end it here instead.
+    const after = await this.#storage.get({ orgId: record.orgId, id: item.id });
+    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey) {
+      await endPhaseGoal(stamp, { agentFor: async () => session.machinery.getAgent(), store: async () => undefined });
+      throw new FactoryDecisionSuperseded();
     }
     return objective;
   }

@@ -362,6 +362,13 @@ describe('defineBoard phase fields', () => {
     expect(withGoal({ objective: 'Ship.', maxRuns: 51 })).toThrow('must be a whole number from 1 to 50.');
     expect(withGoal({ objective: 'Ship.', maxRuns: 2.5 })).toThrow('must be a whole number from 1 to 50.');
     expect(withGoal({ objective: 'Ship.', judge: 'x' })).toThrow('runner.goal may only set objective and maxRuns.');
+    // A goal is pursued by the skill's run: without a skill, nothing would start to pursue it.
+    expect(() =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+        build: { name: 'Build', kind: 'working', runner: { goal: { objective: 'Ship.' } } },
+      }),
+    ).toThrow('Phase "build" runner.goal needs runner.skill');
   });
 
   it('starts the runner skill with its instructions for every source, ignoring a declared onEnter', () => {

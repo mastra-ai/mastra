@@ -4,6 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
+import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -8285,14 +8286,26 @@ describe('phase goals', () => {
     return new Map([[board.id, board]]) as BoardRegistry;
   }
 
-  async function enterBuilding(boards: BoardRegistry, agent: Agent) {
+  async function enterBuilding(boards: BoardRegistry, agent: Agent, options: { sessionOpen?: () => boolean } = {}) {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const transitionService = new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
       boards,
-      onTransitionCommitted: createPhaseGoalEnder({ workItems: storage, agentFor: async () => agent }),
+      onTransitionCommitted: createPhaseGoalEnder({
+        workItems: storage,
+        agentFor: async () => ((options.sessionOpen?.() ?? true) ? agent : undefined),
+        store: async () => {
+          const store = await resolveGoalStore(agent.getMastraInstance());
+          return (
+            store && {
+              read: threadId => readObjective(store, threadId),
+              write: (threadId, record) => writeObjective(store, threadId, record),
+            }
+          );
+        },
+      }),
     });
     const entered = await transitionService.transition({
       orgId: 'org-1',
@@ -8426,6 +8439,67 @@ describe('phase goals', () => {
       objective: 'A person’s own goal',
       status: 'active',
     });
+  });
+
+  it('ends the goal through the thread when its session is not open as the card leaves', async () => {
+    const agent = await goalAgent();
+    let open = true;
+    const boards = boardsWithRunner({ context: 'work', skill: 'factory-build', goal: { objective: OBJECTIVE } });
+    const { storage, item, transitionService, dispatcher } = await enterBuilding(boards, agent, {
+      sessionOpen: () => open,
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    open = false;
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'planning',
+      expectedRevision: current!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'back-to-planning' },
+      cause: 'human_move',
+    });
+
+    // Reopening the thread later finds the goal finished, not one to resume.
+    await vi.waitFor(async () =>
+      expect(await readObjective(await resolveGoalStore(agent.getMastraInstance()), 'thread-1')).toMatchObject({
+        status: 'done',
+      }),
+    );
+  });
+
+  it('ends the goal it just set when the card moved on before the goal was stamped on it', async () => {
+    const agent = await goalAgent();
+    const boards = boardsWithRunner({ context: 'work', skill: 'factory-build', goal: { objective: OBJECTIVE } });
+    const { storage, item, transitionService, dispatcher } = await enterBuilding(boards, agent);
+    // The move commits while the goal is being set: its ender finds no goal on the card yet.
+    const setObjective = agent.setObjective.bind(agent);
+    vi.spyOn(agent, 'setObjective').mockImplementation(async (...args) => {
+      const record = await setObjective(...args);
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      await transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        board: 'work',
+        stage: 'planning',
+        expectedRevision: current!.revision,
+        actor: { type: 'human', id: 'user-1' },
+        ingress: { type: 'human', identity: 'back-to-planning' },
+        cause: 'human_move',
+      });
+      return record;
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({ status: 'superseded' });
+    expect(await agent.getObjective({ threadId: 'thread-1' })).toMatchObject({ id: decision!.id, status: 'done' });
   });
 
   it('sets no goal for a runner without one', async () => {

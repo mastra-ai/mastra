@@ -113,6 +113,23 @@ export function migrateWorkPhaseRunners(
       next.exitTool = phase.exitTool;
       filled.splice(filled.indexOf(`${phase.key}.exitTool`), 1);
     }
+    const revert = (field: MigratedField) => {
+      if (!filled.includes(`${phase.key}.${field}`)) return;
+      Object.assign(next, { [field]: phase[field] });
+      filled.splice(filled.indexOf(`${phase.key}.${field}`), 1);
+    };
+    // The seed's goal is done only once the card moved on along the seed's moves (Building to PR
+    // review, say): a phase whose moves a person narrowed runs the skill without the goal, rather
+    // than judging a goal it may never meet.
+    const seedMoves = (target.nextPhases ?? []).filter(key => phaseKeys.has(key));
+    if (filled.includes(`${phase.key}.runner`) && next.runner?.goal && !seedMoves.every(key => moves.includes(key))) {
+      const { goal: _goal, ...runner } = next.runner;
+      next.runner = runner;
+    }
+    // Auto-start and Factory tools serve the seed's skill; a phase running another skill keeps its own.
+    if (next.runner?.skill !== target.runner?.skill || next.runner?.context !== target.runner?.context) {
+      for (const field of ['tools', 'autoStart', 'autoStartWhen'] as const) revert(field);
+    }
     return next;
   });
   if (filled.length === 0) return undefined;

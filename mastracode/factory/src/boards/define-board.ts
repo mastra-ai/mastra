@@ -378,6 +378,11 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
     MAX_INSTRUCTIONS_LENGTH,
   );
   const goal = resolveGoal(phaseId, runner.goal);
+  if (goal !== undefined && skill === undefined) {
+    throw new BoardDefinitionError(
+      `Phase "${phaseId}" runner.goal needs runner.skill: the skill's run pursues the goal.`,
+    );
+  }
   return Object.freeze({
     agentId,
     context,

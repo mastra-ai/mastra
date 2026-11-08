@@ -38,6 +38,7 @@ import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
+import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
@@ -1286,6 +1287,15 @@ export class MastraFactory {
               workItems: workItemsStorage,
               agentFor: async goal =>
                 (await this.#prepared?.base.controller.getSession(goal.sessionId))?.machinery.getAgent(),
+              store: async () => {
+                const store = await resolveGoalStore(this.#prepared?.base.controller.getMastra());
+                return store
+                  ? {
+                      read: threadId => readObjective(store, threadId),
+                      write: (threadId, record) => writeObjective(store, threadId, record),
+                    }
+                  : undefined;
+              },
             });
             return async (args: Parameters<typeof notifyStageChange>[0]) => {
               await Promise.all([notifyStageChange(args), endPhaseGoal(args)]);
