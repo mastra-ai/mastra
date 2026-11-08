@@ -2579,40 +2579,47 @@ async function authorizeDurableRun({
 }
 
 /**
- * Authorizes observing a run: the caller must own it and have read access to
- * its thread. Plain agent runs are checked against their shared run record,
- * so any server sharing the agent's record cache can authorize them. Durable
- * runs use the owner the agent tracks in this process, then their workflow
- * rows. Throws 404 when the run cannot be found or verified.
+ * The ownership policy for observing (`MEMORY_READ`) and aborting
+ * (`MEMORY_WRITE`) a run: the caller must own the run and have `permission` on
+ * its thread. Throws 403 when access is denied and 503 when ownership cannot be
+ * read. Returns undefined when the run is unknown, expired, or its owner cannot
+ * be verified; the caller decides how to report that.
+ *
+ * Plain runs are checked against their shared run record. Durable runs are
+ * checked against their workflow rows; observers may also use the owner the
+ * agent tracks in this process, which outlives the run so finished runs can be
+ * replayed. Aborts never use it, so a finished run is not reported stopped.
  */
-async function authorizeRunObservation({
+async function authorizeRunAccess({
   mastra,
   agent,
   runId,
   requestContext,
+  permission,
 }: {
   mastra: Mastra;
   agent: Agent<any, any, any, any>;
   runId: string;
   requestContext: RequestContext;
-}): Promise<void> {
-  const permission = MastraFGAPermissions.MEMORY_READ;
+  permission: string;
+}): Promise<{ status?: PlainRunRecord['status'] } | undefined> {
   if (!isDurableAgentLike(agent)) {
     const record = await getPlainRunRecord(agent, runId);
-    if (!record) throw new HTTPException(404, { message: 'Run not found' });
+    if (!record) return undefined;
     await authorizeRunOwner({ mastra, agent, owner: record, requestContext, permission });
-    return;
+    return record;
   }
   const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
-  const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
+  const owner =
+    permission === MastraFGAPermissions.MEMORY_READ && typeof getOwner === 'function'
+      ? getOwner.call(agent, runId)
+      : undefined;
   if (owner) {
     await authorizeRunOwner({ mastra, agent, owner, requestContext, permission });
-    return;
+    return {};
   }
   const access = await authorizeDurableRun({ mastra, agent, runId, requestContext, permission });
-  if (access !== 'ok') {
-    throw new HTTPException(404, { message: 'Run not found' });
-  }
+  return access === 'ok' ? {} : undefined;
 }
 
 export const ABORT_AGENT_RUN_ROUTE = createRoute({
@@ -2640,31 +2647,27 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
             message: 'Run-scoped cancellation requires a durable agent or an agent with resumable streams',
           });
         }
-        const record = await getPlainRunRecord(agent, runId);
-        if (!record) throw new HTTPException(404, { message: 'Run not found' });
-        await authorizeRunOwner({
-          mastra,
-          agent,
-          owner: record,
-          requestContext,
-          permission: MastraFGAPermissions.MEMORY_WRITE,
-        });
-        if (record.status === 'finished') return { aborted: false };
-        // The run may execute on another server: only report it aborted once
-        // the executing process confirms.
-        if (typeof resumable.__abortRunAcknowledged === 'function') {
-          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
-        }
-        return { aborted: agent.abortRunStream(runId) };
       }
-      const access = await authorizeDurableRun({
+      const run = await authorizeRunAccess({
         mastra,
         agent,
         runId,
         requestContext,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      if (access !== 'ok') return { aborted: false };
+      if (!isDurableAgentLike(agent)) {
+        if (!run) throw new HTTPException(404, { message: 'Run not found' });
+        if (run.status === 'finished') return { aborted: false };
+        // The run may execute on another server: only report it aborted once
+        // the executing process confirms.
+        const resumable = agent as unknown as ResumableStreamsAgent;
+        if (typeof resumable.__abortRunAcknowledged === 'function') {
+          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
+        }
+        return { aborted: agent.abortRunStream(runId) };
+      }
+      // A durable run that cannot be found or verified is not stopped.
+      if (!run) return { aborted: false };
       // Another server may be executing the run: only report it aborted once that server confirms.
       if (typeof agent.__abortRunAcknowledged === 'function') {
         return { aborted: await agent.__abortRunAcknowledged(runId) };
@@ -3045,7 +3048,14 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
-      await authorizeRunObservation({ mastra, agent, runId, requestContext });
+      const run = await authorizeRunAccess({
+        mastra,
+        agent,
+        runId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
+      if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
