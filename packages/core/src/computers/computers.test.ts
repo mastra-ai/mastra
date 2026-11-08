@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Mastra } from '../mastra';
+import { InMemoryComputersStorage, InMemoryStore } from '../storage';
 import { Computers } from './computers.js';
 import type { ComputerProvider, ComputerSandbox } from './computers.js';
 
@@ -92,7 +94,7 @@ describe('Computers', () => {
 
   it('binds signed ids to the owning resource', async () => {
     const computers = new Computers({ provider: provider(), secret: 'secret' });
-    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: false }, context);
     const attached = await (computers.tools().mastra_workspace_computer_attach as any).execute(
       { id: created.computer.id },
       { agent: { resourceId: 'other', threadId: 'thread' } },
@@ -146,5 +148,32 @@ describe('Computers', () => {
         async () => 'mutated',
       ),
     ).rejects.toThrow('still being enforced');
+  });
+
+  it('hydrates persistent attachments and human control across a process restart', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: first });
+    const created = await (first.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    expect(created.computer.id).toMatch(/^cmp_p2_[0-9a-f]{32}_[A-Za-z0-9_-]{22}$/);
+    await first.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'take' });
+
+    const second = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: second });
+    await expect(second.controlState(created.computer.id, { resourceId: 'resource', threadId: 'thread' })).resolves.toMatchObject({
+      holder: 'human',
+      revision: 1,
+    });
+  });
+
+  it('fails persistent creation before provisioning when computer storage is unavailable', async () => {
+    const created: ComputerSandbox[] = [];
+    const computers = new Computers({ provider: provider(created), secret: 'secret' });
+    new Mastra({ logger: false, storage: new InMemoryStore(), computers });
+    await expect((computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context)).resolves.toBe(
+      'persistent computers require computers and thread-state storage',
+    );
+    expect(created).toEqual([]);
   });
 });

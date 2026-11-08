@@ -1,9 +1,10 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod/v4';
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import { createTool } from '../tools';
+import type { ComputersStorage, StoredComputerRecord, ThreadStateStorage } from '../storage';
 import type { ToolAction, ToolExecutionContext } from '../tools';
 import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-tools';
 import type { SandboxComputer, WorkspaceSandbox, WorkspaceSandboxResolver } from '../workspace';
@@ -43,6 +44,9 @@ export const CONTROL_NOT_ENFORCED = 'computer control change is still being enfo
 const NOTE_MAX = 500;
 
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
+const PERSISTENT_ID_PATTERN = /^cmp_p2_([0-9a-f]{32})_([A-Za-z0-9_-]{22})$/;
+const MAC_VERSION_PERSISTENT = 'mastra-computer-v2';
+const ATTACHMENT_TYPE = 'mastra-computer';
 const SANDBOX_ID_PATTERN = /^[A-Za-z0-9-]{1,128}$/;
 const MAC_VERSION = 'mastra-computer-v1';
 /** The provider-owned sandbox surface driven by the generic Computer engine. */
@@ -132,6 +136,12 @@ interface SubscriberRegistration {
   owners: Set<symbol>;
 }
 
+interface StoredAttachment {
+  schemaVersion: 1;
+  computerId: string;
+  control: MastraComputerControl & { enforcedRevision: number };
+}
+
 interface Scope {
   resourceId: string;
   threadId: string;
@@ -207,6 +217,37 @@ export class Computers implements MastraComputers {
     this.#mastra = mastra;
   }
 
+  async #stores(): Promise<{ computers?: ComputersStorage; threadState?: ThreadStateStorage }> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) return {};
+    return {
+      computers: await storage.getStore('computers'),
+      threadState: await storage.getStore('threadState'),
+    };
+  }
+
+  async #persistAttachment(scope: Scope, entry: Entry): Promise<void> {
+    if (!entry.persistent) return;
+    const { threadState } = await this.#stores();
+    if (!threadState) throw new Error('persistent computers require thread-state storage');
+    const value: StoredAttachment = {
+      schemaVersion: 1,
+      computerId: entry.id,
+      control: {
+        holder: entry.control.holder,
+        ...(entry.control.reason ? { reason: entry.control.reason } : {}),
+        revision: entry.control.revision,
+        enforcedRevision: entry.control.enforcedRevision,
+      },
+    };
+    await threadState.setState({ threadId: scope.threadId, type: `${ATTACHMENT_TYPE}:${scope.resourceId}`, value });
+  }
+
+  async #deleteAttachment(scope: Scope): Promise<void> {
+    const { threadState } = await this.#stores();
+    await threadState?.deleteState({ threadId: scope.threadId, type: `${ATTACHMENT_TYPE}:${scope.resourceId}` });
+  }
+
   registerControlSubscriber(subscriber: ComputerControlSubscriber): () => void {
     const owner = Symbol(subscriber.id);
     const existing = this.#controlSubscribers.get(subscriber.id);
@@ -258,14 +299,31 @@ export class Computers implements MastraComputers {
     return createHmac('sha256', this.#key).update(message, 'utf8').digest().subarray(0, 16);
   }
 
+  #persistentMac(recoveryId: string, ownerResourceId: string): Buffer {
+    const message = JSON.stringify([MAC_VERSION_PERSISTENT, this.#provider.id, this.#provider.macContext, recoveryId, ownerResourceId]);
+    return createHmac('sha256', this.#key).update(message, 'utf8').digest().subarray(0, 16);
+  }
+
+  #mintPersistentId(recoveryId: string, ownerResourceId: string): string {
+    return `cmp_p2_${recoveryId}_${this.#persistentMac(recoveryId, ownerResourceId).toString('base64url')}`;
+  }
+
   /** @internal */
   mintId(persistent: boolean, sandboxId: string, ownerResourceId: string): string {
     const flag = persistent ? 'p' : 'e';
     return `cmp_${flag}_${sandboxId}_${this.#mac(flag, sandboxId, ownerResourceId).toString('base64url')}`;
   }
 
-  #verify(id: unknown, ownerResourceId: string): { persistent: boolean; sandboxId: string } | undefined {
+  #verify(id: unknown, ownerResourceId: string): { persistent: boolean; sandboxId?: string; recoveryId?: string } | undefined {
     if (typeof id !== 'string') return undefined;
+    const persistentMatch = PERSISTENT_ID_PATTERN.exec(id);
+    if (persistentMatch) {
+      const [, recoveryId, mac] = persistentMatch;
+      const given = Buffer.from(mac!, 'base64url');
+      const expected = this.#persistentMac(recoveryId!, ownerResourceId);
+      if (given.length !== expected.length || given.toString('base64url') !== mac || !timingSafeEqual(given, expected)) return undefined;
+      return { persistent: true, recoveryId };
+    }
     const match = ID_PATTERN.exec(id);
     if (!match) return undefined;
     const [, flag, sandboxId, mac] = match as unknown as [string, 'p' | 'e', string, string];
@@ -363,15 +421,28 @@ export class Computers implements MastraComputers {
   }
 
   /** Same-process entry, or a pending reattach of a persistent id stored before any await. */
-  #lookup(id: string, verified: { persistent: boolean; sandboxId: string }, ownerResourceId: string) {
+  async #lookup(
+    id: string,
+    verified: { persistent: boolean; sandboxId?: string; recoveryId?: string },
+    ownerResourceId: string,
+  ): Promise<Entry | undefined> {
     const existing = this.#computers.get(id);
     if (existing) return existing;
     if (!verified.persistent) return undefined;
-    const sandbox = this.#provider.create({ sandboxId: verified.sandboxId, reattach: 'required' });
+    let sandboxId = verified.sandboxId;
+    let stored: StoredComputerRecord | undefined;
+    if (verified.recoveryId) {
+      const { computers } = await this.#stores();
+      stored = await computers?.getComputer(id);
+      if (!stored || stored.ownerResourceId !== ownerResourceId || stored.recoveryId !== verified.recoveryId) return undefined;
+      sandboxId = (stored.providerIdentity as { sandboxId?: string } | undefined)?.sandboxId;
+    }
+    if (!sandboxId) return undefined;
+    const sandbox = this.#provider.create({ sandboxId, reattach: 'required' });
     const entry: Entry = {
       id,
       ready: sandbox.start().then(() => sandbox),
-      name: 'computer',
+      name: stored?.name ?? 'computer',
       template: 'desktop',
       persistent: true,
       ownerResourceId,
@@ -381,8 +452,8 @@ export class Computers implements MastraComputers {
     };
     entry.queue = entry.ready.catch(() => {});
     entry.ready.then(
-      s => {
-        entry.sandbox = s;
+      machine => {
+        entry.sandbox = machine;
       },
       () => {
         if (this.#computers.get(id) === entry) this.#computers.delete(id);
@@ -395,6 +466,11 @@ export class Computers implements MastraComputers {
   #create(input: { name?: string; persist?: boolean }, context: Context) {
     return this.#serial(context, async scope => {
       const persistent = input.persist === true;
+      const stores = persistent ? await this.#stores() : {};
+      if (persistent && (!stores.computers || !stores.threadState)) {
+        return 'persistent computers require computers and thread-state storage';
+      }
+      const recoveryId = persistent ? randomBytes(16).toString('hex') : undefined;
       const sandbox = this.#provider.create({});
       let entry: Entry | undefined;
       try {
@@ -402,7 +478,7 @@ export class Computers implements MastraComputers {
         const sandboxId = sandbox.sandboxId;
         if (!sandboxId || !SANDBOX_ID_PATTERN.test(sandboxId)) throw new Error('unexpected sandbox id');
         entry = {
-          id: this.mintId(persistent, sandboxId, scope.resourceId),
+          id: persistent ? this.#mintPersistentId(recoveryId!, scope.resourceId) : this.mintId(false, sandboxId, scope.resourceId),
           ready: Promise.resolve(sandbox),
           sandbox,
           name: input.name?.trim() || 'computer',
@@ -417,8 +493,23 @@ export class Computers implements MastraComputers {
         await sandbox.destroy().catch(() => {});
         return UNAVAILABLE;
       }
+      if (persistent) {
+        const record: StoredComputerRecord = {
+          schemaVersion: 1,
+          id: entry.id,
+          recoveryId: recoveryId!,
+          providerId: this.#provider.id,
+          providerIdentity: { sandboxId: entry.sandbox!.sandboxId },
+          ownerResourceId: scope.resourceId,
+          name: entry.name,
+          template: 'desktop',
+          createdAt: Date.now(),
+        };
+        await stores.computers!.setComputer(record);
+      }
       this.#computers.set(entry.id, entry);
       this.#attach(scope, entry);
+      await this.#persistAttachment(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });
@@ -428,7 +519,7 @@ export class Computers implements MastraComputers {
     return this.#serial(context, async scope => {
       const verified = this.#verify(input.id, scope.resourceId);
       if (!verified) return NOT_FOUND;
-      const entry = this.#lookup(input.id, verified, scope.resourceId);
+      const entry = await this.#lookup(input.id, verified, scope.resourceId);
       if (!entry || entry.destroyed) return NOT_FOUND;
       try {
         await entry.ready;
@@ -437,6 +528,7 @@ export class Computers implements MastraComputers {
       }
       if (entry.destroyed) return NOT_FOUND;
       this.#attach(scope, entry);
+      await this.#persistAttachment(scope, entry);
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });
@@ -448,6 +540,7 @@ export class Computers implements MastraComputers {
       const entry = id ? this.#computers.get(id) : undefined;
       if (entry?.control.holder === 'human') return HUMAN_HAS_CONTROL;
       this.#attachments.delete(scope.key);
+      await this.#deleteAttachment(scope);
       if (!entry) return NOT_ATTACHED;
       this.#endWatches(entry, scope.threadId);
       await this.#emit(context, entry, scope.threadId, 'released');
@@ -459,7 +552,7 @@ export class Computers implements MastraComputers {
     return this.#serial(context, async scope => {
       const verified = this.#verify(input.id, scope.resourceId);
       if (!verified) return NOT_FOUND;
-      const entry = this.#lookup(input.id, verified, scope.resourceId);
+      const entry = await this.#lookup(input.id, verified, scope.resourceId);
       if (!entry || entry.destroyed) return NOT_FOUND;
       if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
       entry.destroyed = true;
@@ -474,7 +567,14 @@ export class Computers implements MastraComputers {
       } catch (error) {
         return isReattachFailure(error) ? NOT_FOUND : DESTROY_FAILED;
       }
-      if (releasedHere) await this.#emit(context, entry, scope.threadId, 'released');
+      if (entry.persistent) {
+        const { computers } = await this.#stores();
+        await computers?.deleteComputer(entry.id);
+      }
+      if (releasedHere) {
+        await this.#deleteAttachment(scope);
+        await this.#emit(context, entry, scope.threadId, 'released');
+      }
       return { destroyed: entry.id };
     });
   }
@@ -518,14 +618,28 @@ export class Computers implements MastraComputers {
     return run;
   }
 
-  #list(context: Context) {
+  async #list(context: Context) {
     const scope = this.#scope(context);
     if (!scope) return MISSING_IDENTITY;
-    const attachedId = this.#attachments.get(scope.key);
-    const computers = [...this.#computers.values()]
-      .filter(e => e.ownerResourceId === scope.resourceId && e.sandbox && !e.destroyed)
-      .map(e => this.#describe(e, e.id === attachedId ? 'attached' : 'available'));
-    return { computers };
+    const attached = await this.#attachedEntry(scope);
+    const computersById = new Map(
+      [...this.#computers.values()]
+        .filter(entry => entry.ownerResourceId === scope.resourceId && entry.sandbox && !entry.destroyed)
+        .map(entry => [entry.id, this.#describe(entry, entry.id === attached?.id ? 'attached' : 'available')]),
+    );
+    const { computers: store } = await this.#stores();
+    for (const record of (await store?.listComputers(scope.resourceId)) ?? []) {
+      if (!computersById.has(record.id)) {
+        computersById.set(record.id, {
+          id: record.id,
+          name: record.name,
+          template: record.template,
+          status: record.id === attached?.id ? 'attached' : 'available',
+          persistent: true,
+        });
+      }
+    }
+    return { computers: [...computersById.values()] };
   }
 
   /**
@@ -916,13 +1030,42 @@ export class Computers implements MastraComputers {
     return this.#tools;
   }
 
+  async #attachedEntry(scope: Scope): Promise<Entry | undefined> {
+    const currentId = this.#attachments.get(scope.key);
+    if (currentId) return this.#computers.get(currentId);
+    const { threadState } = await this.#stores();
+    const pointer = await threadState?.getState<StoredAttachment>({
+      threadId: scope.threadId,
+      type: `${ATTACHMENT_TYPE}:${scope.resourceId}`,
+    });
+    if (!pointer || pointer.schemaVersion !== 1) return undefined;
+    const verified = this.#verify(pointer.computerId, scope.resourceId);
+    if (!verified?.persistent) {
+      await this.#deleteAttachment(scope);
+      return undefined;
+    }
+    const entry = await this.#lookup(pointer.computerId, verified, scope.resourceId);
+    if (!entry) {
+      await this.#deleteAttachment(scope);
+      return undefined;
+    }
+    entry.control = {
+      holder: pointer.control.holder,
+      ...(pointer.control.reason ? { reason: pointer.control.reason } : {}),
+      revision: pointer.control.revision,
+      enforcedRevision: pointer.control.enforcedRevision,
+    };
+    await entry.ready;
+    this.#attachments.set(scope.key, entry.id);
+    return entry;
+  }
+
   async runComputerAction<T>(input: ComputerActionInput, fn: () => Promise<T>): Promise<T> {
     if (input.action === 'read') return fn();
     const scope = this.#scope(input.context);
     if (!scope) return fn();
-    const id = this.#attachments.get(scope.key);
-    const entry = id ? this.#computers.get(id) : undefined;
-    if (!entry || entry.ownerResourceId !== scope.resourceId || entry.sandbox?.sandboxId !== input.sandboxId) return fn();
+    const entry = await this.#attachedEntry(scope);
+    if (!entry || entry.ownerResourceId !== scope.resourceId || (entry.sandbox ?? (await entry.ready)).sandboxId !== input.sandboxId) return fn();
     const run = entry.queue.then(async () => {
       if (input.signal?.aborted) throw input.signal.reason ?? new Error('computer action aborted');
       if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
@@ -938,9 +1081,7 @@ export class Computers implements MastraComputers {
     return async ({ requestContext }) => {
       const scope = this.#scope({ requestContext } as Context);
       if (!scope) throw new Error(MISSING_IDENTITY);
-      const id = this.#attachments.get(scope.key);
-      if (!id) throw new Error(NOT_ATTACHED);
-      const entry = this.#computers.get(id);
+      const entry = await this.#attachedEntry(scope);
       const sandbox = entry?.sandbox ?? (await entry?.ready);
       if (!sandbox || entry?.ownerResourceId !== scope.resourceId) throw new Error(NOT_ATTACHED);
       if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
@@ -966,14 +1107,14 @@ export class Computers implements MastraComputers {
    * Returns `null` when the computer isn't running; throws when it isn't attached to this thread.
    */
   async viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
-    const sandbox = this.#attached(computerId, scope).sandbox!;
+    const sandbox = (await this.#attached(computerId, scope)).sandbox!;
     return this.#provider.viewer(sandbox, scope);
   }
 
-  #attached(computerId: string, scope: MastraComputerScope): Entry {
-    const entry = this.#computers.get(computerId);
-    const key = JSON.stringify([scope.resourceId, scope.threadId]);
-    if (this.#attachments.get(key) !== computerId || !entry?.sandbox || entry.ownerResourceId !== scope.resourceId) {
+  async #attached(computerId: string, scope: MastraComputerScope): Promise<Entry> {
+    const fullScope = { ...scope, key: JSON.stringify([scope.resourceId, scope.threadId]) };
+    const entry = await this.#attachedEntry(fullScope);
+    if (entry?.id !== computerId || !entry.sandbox || entry.ownerResourceId !== scope.resourceId) {
       throw new Error('computer not attached');
     }
     return entry;
@@ -985,7 +1126,7 @@ export class Computers implements MastraComputers {
    * @experimental
    */
   async controlState(computerId: string, scope: MastraComputerScope): Promise<MastraComputerControl> {
-    const { control } = this.#attached(computerId, scope);
+    const { control } = await this.#attached(computerId, scope);
     return {
       holder: control.holder,
       ...(control.reason !== undefined && { reason: control.reason }),
@@ -1004,7 +1145,7 @@ export class Computers implements MastraComputers {
     scope: MastraComputerScope,
     input: { action: 'take' | 'release'; note?: string },
   ): Promise<MastraComputerControlResult> {
-    const entry = this.#attached(computerId, scope);
+    const entry = await this.#attached(computerId, scope);
     const note = input.note?.trim() || undefined;
     if (note && note.length > NOTE_MAX) throw new Error('note too long');
     const holder = input.action === 'take' ? 'human' : 'agent';
@@ -1023,6 +1164,7 @@ export class Computers implements MastraComputers {
       enforcedRevision: entry.control.enforcedRevision,
     };
     const enforced = await this.#enforce(entry, scope, new AbortController().signal);
+    await this.#persistAttachment({ ...scope, key }, entry);
     if (!enforced) return { holder, revision: entry.control.revision, notified: false, reason: 'not-delivered' };
     return { holder, revision: entry.control.revision, ...(await this.#notify(entry, holder, target, note)) };
   }
