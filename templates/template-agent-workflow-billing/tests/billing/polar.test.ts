@@ -2,7 +2,6 @@ import { removeDriverMigration } from '../support/billing.js';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageBindingRecovery } from '../../src/billing/storage/usage-bindings.js';
-import { stat } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { billingConfigurationSchema } from '../../src/billing/configuration.js';

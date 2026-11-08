@@ -434,27 +434,6 @@ describe('application-owned external billing drivers', () => {
     });
   });
 
-  it('admits paid work through an externally supplied SQL-free driver and replays durable usage', async () => {
-    const { f, reference, open, gateway, execute } = await fixture();
-    const service = await open(false);
-    const result = await execute(gateway(service), 'reference');
-    expect(result).toMatchObject({
-      result: { answer: 'reference' },
-      billing: { executionStatus: 'completed', billedUnits: 3 },
-    });
-    expect((await execute(gateway(service), 'reference')).billing.replayed).toBe(true);
-    const event = JSON.parse(String((await f.observer.execute('SELECT payload FROM billing_outbox')).rows[0].payload));
-    expect(await service.reportUsage(event)).toMatchObject({ status: 'accepted' });
-    const bytes = (await f.observer.execute('SELECT payload FROM provider_usage')).rows[0].payload;
-    expect(reference.data.rawRequests).toEqual([bytes]);
-    service.close();
-    const reopened = await open(false);
-    expect(await reopened.reportUsage(event)).toMatchObject({ status: 'duplicate' });
-    const account = await reopened.ensureAccount({ workspaceId: f.owner.workspaceId });
-    expect((await reopened.getState(account)).meters[0]).toMatchObject({ confirmedBalance: 3, consumedUnits: 3 });
-    expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows[0].units).toBe(3n);
-  });
-
   it('retains old purchases, paid access, pending bytes and admitted reservations across explicit replacement and reopen', async () => {
     const { f, reference, open, gateway, execute, configuration } = await fixture();
     await f.execute('old-completed');

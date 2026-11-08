@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Row, Transaction } from '@libsql/client/node';
+import type { Transaction } from '@libsql/client/node';
 import { z } from 'zod';
 import {
   BillingError,
@@ -22,7 +22,7 @@ import type {
 import { localAccountSeedSchema } from '../configuration.js';
 import type { LocalAccountSeed } from '../configuration.js';
 import { BillingDatabase } from './database.js';
-import { accountFromRow, requireProvider } from './accounts.js';
+import { requireProvider } from './accounts.js';
 
 function publicInteger(value: unknown): number {
   if (typeof value !== 'bigint' || value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER))

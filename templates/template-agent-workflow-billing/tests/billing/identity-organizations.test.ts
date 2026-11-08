@@ -151,7 +151,7 @@ describe('trusted identity and shared workspace journeys', () => {
     expect((await legacyObserver.execute('SELECT balance, consumed FROM commercial_meters')).rows).toEqual([
       { balance: 97n, consumed: 3n },
     ]);
-    const { database, service, storage, observer } = await fixture();
+    const { database, service, observer } = await fixture();
     const owner = await profile(service, 'alice');
     const member = await profile(service, 'bob');
     const outsider = await profile(service, 'mallory');

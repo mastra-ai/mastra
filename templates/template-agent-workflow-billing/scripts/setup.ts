@@ -5,7 +5,7 @@ import { BillingError } from '../src/billing/contracts.js';
 import { initializeBilling } from '../src/billing/setup.js';
 import { weatherConfiguration } from '../src/weather/configuration.js';
 import { localPaths, privateDirectory, readLocalProfiles, writeLocalProfiles } from '../src/local/profiles.js';
-import type { LocalProfiles, ProfileName } from '../src/local/profiles.js';
+import type { LocalProfiles } from '../src/local/profiles.js';
 
 export async function setupLocal(environment: NodeJS.ProcessEnv) {
   const root = environment.MASTRA_PROJECT_ROOT!;

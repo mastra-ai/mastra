@@ -5,6 +5,8 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2023", "DOM"],
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
