@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../message-list';
 import type { MastraDBMessage, MastraErrorPart, MastraMessagePart } from '../state/types';
+import type { MessageListInput } from '../types';
 import { AIV4Adapter } from './AIV4Adapter';
 import type { AIV4AdapterContext } from './AIV4Adapter';
 import { AIV5Adapter } from './AIV5Adapter';
@@ -113,6 +114,34 @@ describe('error part survives DB -> UI -> DB round-trip', () => {
     expect(roundTripped.content.parts?.map(part => part.type)).toEqual(['text', 'reasoning', 'error', 'text']);
     expect(errorPartsOf(roundTripped.content.parts)).toEqual([ERROR_PART]);
     expect(roundTripped.content.parts?.at(-1)).toMatchObject({ type: 'text', text: 'trailing text' });
+  });
+
+  // Newer `ai` v7 releases add part types core doesn't know (`steering-message` in 7.0.163). (#29575)
+  it('AIV6 skips part types it does not know without shifting later parts (#29575)', () => {
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+    messageList.add(
+      {
+        id: 'assistant-steered',
+        role: 'assistant',
+        parts: [
+          { type: 'steering-message', id: 's1', parts: [{ type: 'text', text: 'also check Paris' }] },
+          {
+            type: 'dynamic-tool',
+            toolName: 'weather',
+            toolCallId: 'c1',
+            state: 'output-available',
+            input: {},
+            output: 1,
+          },
+          { type: 'text', text: 'It is sunny.' },
+        ],
+      } as unknown as MessageListInput,
+      'response',
+    );
+
+    const parts = messageList.get.all.db().at(-1)?.content.parts;
+    expect(parts?.map(part => part.type)).toEqual(['tool-invocation', 'text']);
+    expect(parts?.at(-1)).toMatchObject({ type: 'text', text: 'It is sunny.' });
   });
 
   it('AIV6 preserves an error-only record', () => {

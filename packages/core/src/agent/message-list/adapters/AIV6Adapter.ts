@@ -177,6 +177,15 @@ function normalizeV6PartForV5Bridge(part: AIV6Type.UIMessage['parts'][number]): 
   return part as unknown as AIV5Type.UIMessage['parts'][number];
 }
 
+/** Part types `fromUIMessage` maps: its own tool and source-document handling plus what the v5 bridge keeps. */
+function isMappedV6UIPart(part: { type: string }): boolean {
+  return (
+    AIV6.isToolUIPart(part as AIV6Type.UIMessage['parts'][number]) ||
+    part.type.startsWith('data-') ||
+    ['text', 'reasoning', 'file', 'source-url', 'source-document', 'step-start', 'error'].includes(part.type)
+  );
+}
+
 function getSuspendedToolCallId(part: { type: string }): string | undefined {
   if (part.type !== 'data-tool-call-suspended' || !('data' in part)) return undefined;
   const data = part.data;
@@ -451,6 +460,11 @@ export class AIV6Adapter {
   }
 
   static fromUIMessage(uiMsg: AIV6Type.UIMessage): MastraDBMessage {
+    // Parts are paired with the v5 bridge output by index below, so drop the ones the bridge would drop
+    // first. Otherwise a part type from a newer `ai` release (e.g. `steering-message`, #29575) shifts
+    // every later part.
+    uiMsg = { ...uiMsg, parts: uiMsg.parts.filter(isMappedV6UIPart) };
+
     const compatibleParts = uiMsg.parts.filter(part => {
       if (part.type === 'source-document') return false;
       if (AIV6.isToolUIPart(part)) return false;
