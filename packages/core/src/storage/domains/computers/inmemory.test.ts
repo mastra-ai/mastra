@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { InMemoryComputersStorage } from './inmemory';
 import type { StoredComputerRecord } from './base';
+import { InMemoryComputersStorage } from './inmemory';
 
 const record: StoredComputerRecord = {
   schemaVersion: 1,
