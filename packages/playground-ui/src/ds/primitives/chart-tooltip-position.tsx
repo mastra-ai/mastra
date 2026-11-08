@@ -36,7 +36,7 @@ export function ChartTooltipPosition({
   const active = contentProps.active === true;
   // On touch, Recharts keeps the tooltip active after the finger lifts (there's no mouseleave), and
   // the portal is fixed to the window, so it would float over the page as it scrolls. Hide it on any
-  // scroll or on a press outside its chart; touching or hovering the chart brings it back.
+  // scroll or on a press outside its chart; touching, hovering or arrowing through the chart brings it back.
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     if (!active) {
@@ -53,10 +53,12 @@ export function ChartTooltipPosition({
     window.addEventListener('scroll', dismiss, { capture: true, passive: true });
     document.addEventListener('pointerdown', onPointerDown, true);
     chart?.addEventListener('pointermove', show);
+    chart?.addEventListener('keydown', show);
     return () => {
       window.removeEventListener('scroll', dismiss, { capture: true });
       document.removeEventListener('pointerdown', onPointerDown, true);
       chart?.removeEventListener('pointermove', show);
+      chart?.removeEventListener('keydown', show);
     };
   }, [active]);
   useLayoutEffect(() => {

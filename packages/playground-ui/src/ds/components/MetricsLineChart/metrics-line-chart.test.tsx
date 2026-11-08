@@ -21,10 +21,12 @@ const renderChart = () => {
 
 const tooltip = () => document.body.querySelector('[data-slot="chart-tooltip-portal"]');
 
+const nextFrame = () => act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+
 /** Recharts applies pointer moves on the next animation frame. */
 const hover = async (wrapper: Element, clientX = 300) => {
   fireEvent.mouseMove(wrapper, { clientX, clientY: 20 });
-  await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+  await nextFrame();
 };
 
 describe('MetricsLineChart tooltip', () => {
@@ -62,5 +64,26 @@ describe('MetricsLineChart tooltip', () => {
 
     fireEvent.pointerMove(wrapper);
     expect(tooltip()).not.toBeNull();
+  });
+
+  it('comes back on arrow-key navigation after a scroll', async () => {
+    const { wrapper } = renderChart();
+    const surface = wrapper.querySelector<SVGElement>('.recharts-surface');
+    if (!surface) throw new Error('chart surface did not render');
+    act(() => {
+      surface.focus();
+    });
+    await nextFrame();
+    expect(tooltip()?.textContent).toContain('1 PM');
+
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(tooltip()).toBeNull();
+
+    fireEvent.keyDown(surface, { key: 'ArrowRight' });
+    await nextFrame();
+    await nextFrame();
+    expect(tooltip()?.textContent).toContain('2 PM');
   });
 });
