@@ -1,3 +1,4 @@
+import { removeDriverMigration } from '../support/billing.js';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -91,6 +92,7 @@ describe('trusted identity and shared workspace journeys', () => {
     cleanups.push(() => legacyObserver.close());
     const initialChecksum = (await legacyObserver.execute('SELECT checksum FROM billing_migrations WHERE version = 1'))
       .rows[0].checksum;
+    await removeDriverMigration(legacyObserver);
     for (const table of [
       'billing_catalog',
       'billing_usage_bindings',
@@ -140,6 +142,7 @@ describe('trusted identity and shared workspace journeys', () => {
       { version: 8n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 9n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 10n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 11n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     expect((await legacyObserver.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
       { id: 'event-1', units: 3n },

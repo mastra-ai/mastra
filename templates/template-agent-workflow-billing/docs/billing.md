@@ -508,7 +508,7 @@ Reservations allocate earliest expiry first, with a stable grant-ID tie break. E
 
 Paid admission freezes a versioned provider delivery binding alongside the immutable execution policy. The accounting layer stores the driver's opaque binding without interpreting Polar fields. For Polar, it captures the event name, units field, organization and server. Suspension, process restart and later configuration changes preserve that binding before the first export. Changing the server or organization blocks delivery of bound work; credential rotation on the same destination remains supported.
 
-Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the driver uses the admission binding and persists both the logical event and its normalized outbound request in one immutable delivery claim. Retries reuse that request. The recovery worker exports independently of execution. Failed export never repeats compute or changes application credit. A direct trusted `reportUsage` call with no matching outbox uses the current mapping on its first attempt, then retains its normalized claim.
+Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the application service uses the admission binding and persists both the logical event and its normalized outbound request in one immutable delivery claim. The external driver validates the destination and sends that retained request. Retries reuse that request. The recovery worker exports independently of execution. Failed export never repeats compute or changes application credit. A direct trusted `reportUsage` call with no matching outbox uses the current mapping on its first attempt, then retains its normalized claim.
 
 Migration v8 adds immutable bindings without rewriting previous migrations, outbox payloads, provider claims, grant provenance or ledger amounts. Previously normalized delivery claims retain their exact outbound request; old acknowledged logical-only claims remain acknowledged. An uncertain logical-only claim cannot be retried safely and requires operator reconciliation. A legacy pending outbox event with neither an admission binding nor a normalized claim fails closed instead of adopting today's mapping. Older normalized claims don't record the server, so operators must retain their original destination configuration when replaying them.
 
@@ -539,7 +539,7 @@ try {
 }
 ```
 
-Replace the sample values with the verified historical values. Restoration appends the binding and evidence; it preserves the original outbox, provider claims and financial history. It doesn't override an uncertain logical-only provider claim. Delivery continues through the normal worker. A replacement driver must implement `bindUsage(meter)` and honor persisted bindings when reporting outbox events; `readUsageBinding` provides the shared lookup and fails closed for unbound historical work.
+Replace the sample values with the verified historical values. Restoration appends the binding and evidence; it preserves the original outbox, provider claims and financial history. It doesn't override an uncertain logical-only provider claim. Delivery continues through the normal worker. A replacement driver must implement `bindUsage(meter)`, normalize and validate usage against that binding, and send the retained request. The application service owns the shared binding lookup and fails closed for unbound historical work.
 
 ### Signed notifications and recovery
 
@@ -566,3 +566,37 @@ Run the deterministic integration suite with `./node_modules/.bin/vitest run tes
 The optional `node scripts/test-polar-sandbox.mjs` proof requires an explicitly selected sandbox `POLAR_ACCESS_TOKEN` and `POLAR_SANDBOX_PROOF` JSON with `{ "organizationId": "...", "databaseUrl": "file:///absolute/proof/billing.db", "contactEmail": "sandbox-fixture@example.com", "country": "BR" }`. A fresh namespaced database is derived from that base path on every invocation; previous databases are retained. Use a synthetic contact supporting plus aliases; a unique alias is derived per workspace. The script provisions disposable zero-price products, benefits, meter, customer, paid purchase and recurring subscription. It uses the actual driver/gateway and retained private SQL file, discards one real usage acknowledgement through a transparent loopback proxy, verifies replay after restart and revokes its disposable subscription. It prints only a safe proof summary and the actual database location. It never targets production or supplies a payment method. Inspect and clean up disposable sandbox resources through your operator workflow; the script does not delete financial history.
 
 Set `POLAR_SANDBOX_DEBUG=1` when diagnosing the optional sandbox proof to print endpoint phases, HTTP status/version and selected field types/linkage booleans. These diagnostics omit response values, credentials and hosted URLs.
+
+## External drivers and provider replacement
+
+`BillingDriver` in `src/billing/driver.ts` performs external requests without a database argument or application-table side effects. `PolarBillingDriver` in `src/billing/providers/polar-driver.ts` implements that boundary. `PolarBillingProvider.open` remains the compatible application-service entry point for existing Polar configuration.
+
+A driver returns verified external account associations and complete source observations. Each source names an exact catalog allowance revision. The application validates its meter, kind, units, expiry and provenance hash against retained canonical terms, then applies all retained providers' observations in one fenced transaction. Missing sources become unavailable. Drivers must authenticate account ownership, purchases, source periods and revocations at the external boundary; the application does not infer purchased units from an external meter balance. Provenance must be JSON containing the normalized `kind`, `meter`, `units`, allowance `version`, `expiry` and `validFrom`, consistent with the source and allowance. Provider-specific extra fields and original serialized bytes are retained. An existing source cannot change these terms or its purchase expiry; an unchanged subscription period may refresh its verified end date.
+
+For a custom server integration, construct the application service with your external driver and pass it to `BillingGateway` or `MastraBilling` with a matching `configuration.provider`. Use trusted JWT organization identity for external providers. The default initialization and HTTP composition currently register local and Polar providers; custom driver composition uses this lower-level service API.
+
+```typescript
+import { BillingService } from '../src/billing/service.js';
+
+const provider = await BillingService.connect({
+  url: databaseUrl,
+  catalog: configuration.catalog,
+  activeProvider: replacementDriver.id,
+  drivers: [replacementDriver, originalDriver],
+});
+
+// Trusted server administration only. Provider selection alone cannot switch
+// an existing account or promote local seed credits into paid capacity.
+const account = await provider.switchProvider({
+  workspaceId,
+  expectedProvider: originalDriver.id,
+});
+```
+
+Replacement retains the account ID and every historical provider association. Freshly verified entitlements and subscriptions from retained providers continue satisfying the same logical access keys. Prepaid admission can spend remaining verified historical grants, with their original units, expiry and consumed history. Metered eligibility for new work comes from the active provider. New source keys are namespaced by provider; the Polar compatibility adapter retains its original source identities without reminting purchases. Same-source term changes and ownership conflicts fail closed.
+
+Migration 11 adds associations, source ownership and immutable admission-account evidence without rewriting migrations 1–10 or existing financial rows. An execution admitted before replacement, including a suspended workflow, settles and exports with its original provider/account and delivery binding. Pending exports route through their original driver and preserve their normalized claim bytes and event identity. Newly admitted work binds to the selected provider. Replacement does not transfer subscriptions, purchases or provider invoices.
+
+Keep every retained driver available with its original account destination, source bindings and catalog revisions. Historical catalog terms remain in SQL even when current checkout offers use newer revisions. A missing driver or unavailable original source blocks paid admission. All retained associations are reverified, including after their grants are consumed; there is no automatic driver-retirement API. Credential rotation at the same destination remains supported.
+
+`publicBindings` contains only credential-free JSON for immutable audit history. Keep API tokens and webhook secrets in the driver instance. Usage normalization and validation must be pure; hosted-session preparation must not create a session. The application persists the usage claim and hosted dispatch fence before the driver performs those effects. The HTTP reference driver in the tests demonstrates substitutability; the template does not include Stripe or Paddle integrations.

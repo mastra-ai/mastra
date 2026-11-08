@@ -140,7 +140,7 @@ export class AccountingStorage {
         if (
           !account ||
           account.workspace_id !== snapshot.account.workspaceId ||
-          account.effective_provider !== snapshot.account.provider ||
+          accountFromRow(account).provider !== snapshot.account.provider ||
           account.external_reference !== snapshot.account.externalReference
         )
           throw new BillingError('state_unavailable');
@@ -205,6 +205,11 @@ export class AccountingStorage {
           new Date().toISOString(),
         ],
       });
+      if (snapshot)
+        await transaction.execute({
+          sql: 'INSERT INTO billing_admitted_accounts VALUES (?, ?)',
+          args: [executionId, JSON.stringify(snapshot.account)],
+        });
       if (charge.type !== 'none') {
         const binding = parseInput(usageBindingSchema, usageBinding);
         if (binding.provider !== snapshot?.account.provider || binding.meter !== charge.meter)
@@ -421,12 +426,16 @@ export class AccountingStorage {
         });
         if (billed! > 0 && charge.type !== 'none') {
           const account = (
-            await transaction.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [row.account_id] })
+            await transaction.execute({
+              sql: 'SELECT payload FROM billing_admitted_accounts WHERE execution_id = ?',
+              args: [executionId],
+            })
           ).rows[0];
+          if (!account) throw new BillingError('state_unavailable');
           const event = parseInput(usageEventSchema, {
             id: `usage:${executionId}`,
             executionId,
-            account: accountFromRow(account),
+            account: JSON.parse(String(account.payload)),
             policyVersion: resource.policy.version,
             meter: charge.meter,
             units: billed,

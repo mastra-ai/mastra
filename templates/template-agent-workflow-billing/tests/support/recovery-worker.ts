@@ -1,4 +1,4 @@
-import { independentClient } from './billing.js';
+import { independentClient, removeDriverMigration } from './billing.js';
 import { runtimeFixture } from './mastra.js';
 import { initializeBilling } from '../../src/billing/setup.js';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
@@ -66,6 +66,7 @@ if (kind.startsWith('expiry-')) {
     });
   }
   if (kind === 'expiry-legacy') {
+    await removeDriverMigration(observer);
     // Reconstruct the shipped schema6 boundary in this disposable file only.
     await observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
     await observer.execute('DROP TABLE billing_catalog');

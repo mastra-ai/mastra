@@ -1,5 +1,5 @@
 import { BillingError } from '../contracts.js';
-import { commercialCatalogSchema } from '../catalog.js';
+import { allowanceSchema, offerSchema, commercialCatalogSchema } from '../catalog.js';
 import type { BillingDatabase } from './database.js';
 
 export async function retainCatalog(database: BillingDatabase, input: unknown): Promise<void> {
@@ -25,5 +25,19 @@ export async function retainCatalog(database: BillingDatabase, input: unknown): 
           });
       }
     }
+  });
+}
+
+export async function retainedCatalog(database: BillingDatabase) {
+  return database.write(async tx => {
+    const rows = (await tx.execute('SELECT kind, terms FROM billing_catalog ORDER BY kind, key, version')).rows;
+    // Each saved revision was validated on insertion. Historical accumulation
+    // may exceed the per-configuration size limit without discarding purchases.
+    return {
+      allowances: rows
+        .filter(row => row.kind === 'allowance')
+        .map(row => allowanceSchema.parse(JSON.parse(String(row.terms)))),
+      offers: rows.filter(row => row.kind === 'offer').map(row => offerSchema.parse(JSON.parse(String(row.terms)))),
+    };
   });
 }

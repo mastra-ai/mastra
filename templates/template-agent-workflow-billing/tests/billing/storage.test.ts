@@ -1,3 +1,4 @@
+import { removeDriverMigration } from '../support/billing.js';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeBilling } from '../../src/billing/setup.js';
@@ -115,9 +116,9 @@ describe('local billing storage', () => {
       billing.close();
       if (corruption === 'newer history') {
         await observer.execute(
-          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (11, 'unknown', '2026-11-06T00:00:00Z')",
+          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (12, 'unknown', '2026-11-06T00:00:00Z')",
         );
-        await observer.execute('PRAGMA user_version = 11');
+        await observer.execute('PRAGMA user_version = 12');
       } else if (corruption === 'checksum drift')
         await observer.execute("UPDATE billing_migrations SET checksum = 'changed'");
       else if (corruption === 'unknown schema')
@@ -152,8 +153,9 @@ describe('local billing storage', () => {
       { version: 8n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 9n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 10n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 11n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(10n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(11n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -255,6 +257,7 @@ describe('local billing storage', () => {
     const checksums = (
       await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 4 ORDER BY version')
     ).rows;
+    await removeDriverMigration(observer);
     // Reconstruct the previously shipped v4 schema while retaining its actual
     // local account, immutable usage and meter debit. No production reset API.
     for (const table of [
@@ -287,6 +290,6 @@ describe('local billing storage', () => {
       { id: 'event-1', units: 3n },
     ]);
     expect((await observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(10n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(11n);
   });
 });

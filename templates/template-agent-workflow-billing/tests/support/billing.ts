@@ -77,3 +77,16 @@ export async function independentClient(url: string) {
   await client.execute('PRAGMA foreign_keys = ON');
   return client;
 }
+
+// Reconstruct a prior shipped schema without discarding its financial rows.
+export async function removeDriverMigration(client: Awaited<ReturnType<typeof independentClient>>) {
+  for (const table of [
+    'billing_source_owners',
+    'billing_admitted_accounts',
+    'billing_provider_links',
+    'billing_driver_configurations',
+  ])
+    await client.execute(`DROP TABLE ${table}`);
+  await client.execute('ALTER TABLE billing_accounts DROP COLUMN active_provider');
+  await client.execute('DELETE FROM billing_migrations WHERE version = 11');
+}

@@ -141,23 +141,29 @@ export const snapshotSchema = z
     evidence: z.strictObject({ version: identifierSchema }).nullable(),
     prepaidAuthority: z.literal('application-ledger').optional(),
   })
-  .superRefine((snapshot, ctx) => {
-    for (const entries of [snapshot.entitlements, snapshot.subscriptions, snapshot.meters])
-      if (new Set(entries.map(entry => entry.key)).size !== entries.length)
-        ctx.addIssue({ code: 'custom', message: 'Duplicate key.' });
-    for (const grant of [...snapshot.entitlements, ...snapshot.subscriptions])
-      if (grant.validUntil !== null && Date.parse(grant.validUntil) <= Date.parse(grant.validFrom))
-        ctx.addIssue({ code: 'custom', message: 'Invalid grant.' });
-    for (const meter of snapshot.meters)
-      if (
-        (meter.funding === 'prepaid') !== (meter.confirmedBalance !== null) ||
-        (meter.periodStart === null) !== (meter.periodEnd === null) ||
-        (meter.periodStart !== null &&
-          meter.periodEnd !== null &&
-          Date.parse(meter.periodStart) >= Date.parse(meter.periodEnd))
-      )
-        ctx.addIssue({ code: 'custom', message: 'Invalid meter.' });
-  });
+  .superRefine(refineCommercialState);
+
+export function refineCommercialState(
+  snapshot: Pick<CommercialSnapshot, 'entitlements' | 'subscriptions' | 'meters'>,
+  ctx: z.RefinementCtx,
+) {
+  for (const entries of [snapshot.entitlements, snapshot.subscriptions, snapshot.meters])
+    if (new Set(entries.map(entry => entry.key)).size !== entries.length)
+      ctx.addIssue({ code: 'custom', message: 'Duplicate key.' });
+  for (const grant of [...snapshot.entitlements, ...snapshot.subscriptions])
+    if (grant.validUntil !== null && Date.parse(grant.validUntil) <= Date.parse(grant.validFrom))
+      ctx.addIssue({ code: 'custom', message: 'Invalid grant.' });
+  for (const meter of snapshot.meters)
+    if (
+      (meter.funding === 'prepaid') !== (meter.confirmedBalance !== null) ||
+      (meter.periodStart === null) !== (meter.periodEnd === null) ||
+      (meter.periodStart !== null &&
+        meter.periodEnd !== null &&
+        Date.parse(meter.periodStart) >= Date.parse(meter.periodEnd))
+    )
+      ctx.addIssue({ code: 'custom', message: 'Invalid meter.' });
+}
+
 export function reservation(policy: BillingPolicy): number {
   const charge = policy.charge;
   return charge.type === 'none' ? 0 : charge.type === 'usage' ? charge.maxUnits : charge.units;

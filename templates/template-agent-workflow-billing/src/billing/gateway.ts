@@ -29,7 +29,7 @@ export class BillingGateway {
     configuration: unknown,
     executors: readonly BoundedExecutor[],
   ) {
-    if (provider.id === 'polar' && organizations.identity.kind !== 'jwt')
+    if (provider.id !== 'local' && organizations.identity.kind !== 'jwt')
       throw new BillingError('invalid_configuration');
     this.configuration = parseBillingConfiguration(configuration, provider.capabilities);
     if (this.configuration.provider !== provider.id) throw new BillingError('invalid_configuration');

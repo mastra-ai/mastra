@@ -88,7 +88,7 @@ export type LocalAccountSeed = z.infer<typeof localAccountSeedSchema>;
 
 const canonicalConfigurationSchema = z
   .strictObject({
-    provider: z.enum(['local', 'polar']),
+    provider: identifierSchema,
     polar: polarBindingsSchema.optional(),
     catalog: commercialCatalogSchema.default({ allowances: [], offers: [] }),
     resources: z

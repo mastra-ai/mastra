@@ -342,6 +342,51 @@ const commercialCatalogStatements = [
   `CREATE TRIGGER billing_catalog_no_delete BEFORE DELETE ON billing_catalog BEGIN SELECT RAISE(ABORT, 'Catalog revisions are retained'); END`,
 ];
 
+const driverStatements = [
+  `ALTER TABLE billing_accounts ADD COLUMN active_provider TEXT`,
+  `CREATE TABLE billing_provider_links (
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    provider TEXT NOT NULL,
+    customer_id TEXT NOT NULL,
+    organization_id TEXT NOT NULL,
+    external_reference TEXT NOT NULL,
+    source_key_mode TEXT NOT NULL CHECK (source_key_mode IN ('legacy', 'namespaced')),
+    PRIMARY KEY (account_id, provider),
+    UNIQUE (provider, organization_id, customer_id)
+  ) STRICT`,
+  `CREATE TABLE billing_driver_configurations (
+    provider TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    configuration TEXT NOT NULL,
+    PRIMARY KEY (provider, fingerprint)
+  ) STRICT`,
+  `CREATE TABLE billing_source_owners (
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    source_key TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    PRIMARY KEY (account_id, source_key),
+    FOREIGN KEY (account_id, source_key) REFERENCES credit_grants(account_id, source_key)
+  ) STRICT`,
+  `CREATE TABLE billing_admitted_accounts (
+    execution_id TEXT PRIMARY KEY REFERENCES billing_executions(id),
+    payload TEXT NOT NULL
+  ) STRICT`,
+  ...[
+    'billing_provider_links',
+    'billing_driver_configurations',
+    'billing_source_owners',
+    'billing_admitted_accounts',
+  ].flatMap(table => [
+    `CREATE TRIGGER ${table}_no_update BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(ABORT, 'Provider history is immutable'); END`,
+    `CREATE TRIGGER ${table}_no_delete BEFORE DELETE ON ${table} BEGIN SELECT RAISE(ABORT, 'Provider history is retained'); END`,
+  ]),
+  `INSERT INTO billing_provider_links SELECT a.id, 'polar', l.customer_id, l.organization_id, a.external_reference, 'legacy' FROM billing_accounts a JOIN provider_links l ON l.account_id = a.id`,
+  `INSERT INTO billing_source_owners SELECT account_id, source_key, 'polar' FROM credit_grants`,
+  // Before this migration provider replacement was impossible. Existing binding
+  // evidence and the original account establish admission ownership additively.
+  `INSERT INTO billing_admitted_accounts SELECT e.id, json_object('id', a.id, 'workspaceId', a.workspace_id, 'provider', COALESCE(json_extract(b.payload, '$.provider'), a.effective_provider), 'externalReference', a.external_reference) FROM billing_executions e JOIN billing_accounts a ON a.id = e.account_id LEFT JOIN billing_usage_bindings b ON b.execution_id = e.id`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -353,6 +398,7 @@ const migrations = [
   { version: 8, statements: usageBindingStatements },
   { version: 9, statements: hostedDispatchStatements },
   { version: 10, statements: commercialCatalogStatements },
+  { version: 11, statements: driverStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -392,7 +438,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
   const actual = schema.rows.map(row => normalizedSql(String(row.sql))).sort();
   const accountSql = initialStatements[0].replace(
     'external_reference TEXT NOT NULL,',
-    "external_reference TEXT NOT NULL, effective_provider TEXT NOT NULL DEFAULT 'local' CHECK (effective_provider IN ('local', 'polar')),",
+    "external_reference TEXT NOT NULL, effective_provider TEXT NOT NULL DEFAULT 'local' CHECK (effective_provider IN ('local', 'polar')), active_provider TEXT,",
   );
   const expected = [
     historySql,
@@ -422,6 +468,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     ...expiryRecoveryStatements.filter(sql => sql.startsWith('CREATE')),
     ...usageBindingStatements,
     ...commercialCatalogStatements,
+    ...driverStatements.filter(sql => sql.startsWith('CREATE')),
   ]
     .map(normalizedSql)
     .sort();

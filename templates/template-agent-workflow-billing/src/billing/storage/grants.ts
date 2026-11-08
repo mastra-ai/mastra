@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { BillingError, accountSchema, grantSourceSchema } from '../contracts.js';
 import type { CommercialSnapshot, ProviderAccount, GrantSource } from '../contracts.js';
 import { BillingDatabase } from './database.js';
-import { requireProvider } from './accounts.js';
+import { accountFromRow } from './accounts.js';
+import type { ExternalAccount } from '../driver.js';
 
 export const opaqueId = (value: string) => createHash('sha256').update(value).digest('hex');
 const integer = (value: bigint) => {
@@ -21,32 +22,102 @@ export class GrantStorage {
     this.database.close();
   }
 
-  async link(workspaceId: string, customerId: string, organizationId: string): Promise<ProviderAccount> {
+  async link(
+    workspaceId: string,
+    provider: string,
+    external: ExternalAccount,
+    legacySourceKeys = false,
+    replacement?: { expectedProvider: string },
+  ): Promise<ProviderAccount> {
     return this.database.write(async tx => {
       let row = (
         await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE workspace_id = ?', args: [workspaceId] })
       ).rows[0];
       if (!row) {
+        if (replacement) throw new BillingError('conflict');
         const id = randomUUID();
         await tx.execute({
-          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference, effective_provider) VALUES (?, ?, 'local', ?, 'polar')",
-          args: [id, workspaceId, `workspace:${workspaceId}`],
+          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference, effective_provider, active_provider) VALUES (?, ?, 'local', ?, ?, ?)",
+          args: [id, workspaceId, external.externalReference, provider === 'polar' ? 'polar' : 'local', provider],
         });
         await tx.execute({ sql: 'INSERT INTO commercial_state (account_id, version) VALUES (?, 0)', args: [id] });
         row = (await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [id] })).rows[0];
       }
-      const account = requireProvider(row, 'polar');
-      const existing = (
-        await tx.execute({ sql: 'SELECT * FROM provider_links WHERE account_id = ?', args: [account.id] })
-      ).rows[0];
-      if (existing && (existing.customer_id !== customerId || existing.organization_id !== organizationId))
+      const current = accountFromRow(row);
+      if (
+        current.externalReference !== external.externalReference ||
+        current.provider === 'local' ||
+        (replacement ? current.provider !== replacement.expectedProvider : current.provider !== provider)
+      )
         throw new BillingError('conflict');
-      if (!existing)
+      const existing = (
         await tx.execute({
-          sql: 'INSERT INTO provider_links VALUES (?, ?, ?)',
-          args: [account.id, customerId, organizationId],
+          sql: 'SELECT * FROM billing_provider_links WHERE account_id = ? AND provider = ?',
+          args: [current.id, provider],
+        })
+      ).rows[0];
+      if (
+        existing &&
+        (existing.customer_id !== external.customerId ||
+          existing.organization_id !== external.organizationId ||
+          existing.external_reference !== external.externalReference ||
+          existing.source_key_mode !== (legacySourceKeys ? 'legacy' : 'namespaced'))
+      )
+        throw new BillingError('conflict');
+      if (!existing) {
+        await tx.execute({
+          sql: 'INSERT INTO billing_provider_links VALUES (?, ?, ?, ?, ?, ?)',
+          args: [
+            current.id,
+            provider,
+            external.customerId,
+            external.organizationId,
+            external.externalReference,
+            legacySourceKeys ? 'legacy' : 'namespaced',
+          ],
         });
-      return account;
+        if (provider === 'polar')
+          await tx.execute({
+            sql: 'INSERT INTO provider_links VALUES (?, ?, ?)',
+            args: [current.id, external.customerId, external.organizationId],
+          });
+      }
+      if (replacement) {
+        await tx.execute({
+          sql: 'UPDATE billing_accounts SET active_provider = ? WHERE id = ?',
+          args: [provider, current.id],
+        });
+        await tx.execute({
+          sql: 'UPDATE commercial_state SET version = version + 1 WHERE account_id = ?',
+          args: [current.id],
+        });
+        await tx.execute({
+          sql: 'UPDATE billing_account_sync SET generation = generation + 1 WHERE account_id = ?',
+          args: [current.id],
+        });
+      }
+      return { ...current, provider };
+    });
+  }
+
+  links(account: ProviderAccount) {
+    return this.database.write(async tx => {
+      const row = (await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [account.id] }))
+        .rows[0];
+      if (!row || JSON.stringify(accountFromRow(row)) !== JSON.stringify(accountSchema.parse(account)))
+        throw new BillingError('conflict');
+      return (
+        await tx.execute({
+          sql: 'SELECT * FROM billing_provider_links WHERE account_id = ? ORDER BY provider',
+          args: [account.id],
+        })
+      ).rows.map(link => ({
+        provider: String(link.provider),
+        sourceKeyMode: String(link.source_key_mode),
+        customerId: String(link.customer_id),
+        organizationId: String(link.organization_id),
+        externalReference: String(link.external_reference),
+      }));
     });
   }
 
@@ -54,16 +125,26 @@ export class GrantStorage {
     return this.database.write(async tx => {
       const row = (await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [account.id] }))
         .rows[0];
-      if (!row || JSON.stringify(requireProvider(row, 'polar')) !== JSON.stringify(accountSchema.parse(account)))
+      const link = (
+        await tx.execute({
+          sql: 'SELECT * FROM billing_provider_links WHERE account_id = ? AND provider = ?',
+          args: [account.id, account.provider],
+        })
+      ).rows[0];
+      if (
+        !row ||
+        !link ||
+        row.workspace_id !== account.workspaceId ||
+        link.external_reference !== account.externalReference
+      )
         throw new BillingError('conflict');
-      const link = (await tx.execute({ sql: 'SELECT * FROM provider_links WHERE account_id = ?', args: [account.id] }))
-        .rows[0];
       const state = (
         await tx.execute({ sql: 'SELECT version FROM commercial_state WHERE account_id = ?', args: [account.id] })
       ).rows[0];
       return {
         customerId: String(link.customer_id),
         organizationId: String(link.organization_id),
+        externalReference: String(link.external_reference),
         revision: String(state.version),
       };
     });
@@ -106,6 +187,7 @@ export class GrantStorage {
     sources: readonly GrantSource[],
     commercial: Pick<CommercialSnapshot, 'entitlements' | 'subscriptions' | 'meters'>,
     observation?: { generation: string; token: string; synchronization?: { token: string } },
+    owners: ReadonlyMap<string, string> = new Map(),
   ): Promise<CommercialSnapshot | null> {
     const parsed = z
       .array(grantSourceSchema)
@@ -148,7 +230,26 @@ export class GrantStorage {
             args: [account.id, source.key],
           })
         ).rows[0];
-        if (previous && previous.fingerprint !== source.fingerprint) throw new BillingError('conflict');
+        const owner = owners.get(source.key);
+        if (!owner) throw new BillingError('conflict');
+        const priorOwner = (
+          await tx.execute({
+            sql: 'SELECT provider FROM billing_source_owners WHERE account_id = ? AND source_key = ?',
+            args: [account.id, source.key],
+          })
+        ).rows[0];
+        if (
+          previous &&
+          (previous.fingerprint !== source.fingerprint ||
+            priorOwner?.provider !== owner ||
+            previous.provenance !== source.provenance ||
+            previous.meter !== source.meter ||
+            previous.kind !== source.kind ||
+            Number(previous.original_units) !== source.units ||
+            previous.valid_from !== source.validFrom ||
+            (previous.kind === 'order' && previous.valid_until !== source.validUntil))
+        )
+          throw new BillingError('conflict');
         const active =
           source.active &&
           Date.parse(source.validFrom) <= now &&
@@ -170,6 +271,11 @@ export class GrantStorage {
               source.validUntil,
               active ? 1 : 0,
             ],
+          });
+        if (!previous)
+          await tx.execute({
+            sql: 'INSERT INTO billing_source_owners VALUES (?, ?, ?)',
+            args: [account.id, source.key, owner],
           });
         else
           await tx.execute({

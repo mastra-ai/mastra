@@ -1,3 +1,4 @@
+import { removeDriverMigration } from '../support/billing.js';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageBindingRecovery } from '../../src/billing/storage/usage-bindings.js';
@@ -101,6 +102,7 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
       await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 9 ORDER BY version')
     ).rows;
     f.commercial.close();
+    await removeDriverMigration(f.observer);
     await f.observer.execute('DROP TABLE billing_catalog');
     await f.observer.execute('DELETE FROM billing_migrations WHERE version = 10');
     await f.observer.execute('PRAGMA user_version = 9');
@@ -212,6 +214,7 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
         await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 7')
       ).rows;
       if (bindingEra === 'legacy') {
+        await removeDriverMigration(f.observer);
         await f.observer.execute('DROP TABLE billing_catalog');
         await f.observer.execute('DROP TABLE billing_usage_bindings');
         await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
@@ -395,6 +398,7 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
     f.commercial.close();
     // Reconstruct the actual v7 boundary: settled outbox but no first attempt,
     // so no historical normalized claim can establish the delivery mapping.
+    await removeDriverMigration(f.observer);
     await f.observer.execute('DROP TABLE billing_catalog');
     await f.observer.execute('DROP TABLE billing_usage_bindings');
     await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
@@ -747,6 +751,7 @@ describe('Polar commercial and authoritative prepaid journeys', () => {
       await f.observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 8')
     ).rows;
     await f.observer.execute('ALTER TABLE hosted_operations DROP COLUMN dispatch_state');
+    await removeDriverMigration(f.observer);
     await f.observer.execute('DROP TABLE billing_catalog');
     await f.observer.execute('DELETE FROM billing_migrations WHERE version >= 9');
     await f.observer.execute('PRAGMA user_version = 8');
