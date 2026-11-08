@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { packagesManifestCandidates, readRunningPackages } from './running-packages.js';
@@ -43,6 +44,15 @@ describe('readRunningPackages', () => {
 
     expect(candidates[0]).toBe(devFile);
     expect(await readRunningPackages(candidates)).toEqual([{ name: 'mastra', version: '1.39.0' }]);
+  });
+
+  it('falls back to the manifest next to the bundled module, then the build output under cwd', () => {
+    const bundled = join(dirname(fileURLToPath(import.meta.url)), 'mastra-packages.json');
+
+    expect(packagesManifestCandidates({}, '', dir)).toEqual([
+      bundled,
+      join(dir, '.mastra', 'output', 'mastra-packages.json'),
+    ]);
   });
 
   it('uses the first manifest that exists, even when later ones do too', async () => {
