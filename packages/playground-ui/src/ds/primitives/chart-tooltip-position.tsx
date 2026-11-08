@@ -43,22 +43,26 @@ export function ChartTooltipPosition({
       setDismissed(false);
       return;
     }
-    const chart = anchor.current?.closest('.recharts-wrapper');
+    const chart = anchor.current?.closest<HTMLElement>('.recharts-wrapper');
     const dismiss = () => setDismissed(true);
     const show = () => setDismissed(false);
     const onPointerDown = (event: PointerEvent) => {
       if (chart?.contains(event.target as Node)) show();
       else dismiss();
     };
+    // The keys Recharts uses to move its tooltip.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Enter') show();
+    };
     window.addEventListener('scroll', dismiss, { capture: true, passive: true });
     document.addEventListener('pointerdown', onPointerDown, true);
     chart?.addEventListener('pointermove', show);
-    chart?.addEventListener('keydown', show);
+    chart?.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('scroll', dismiss, { capture: true });
       document.removeEventListener('pointerdown', onPointerDown, true);
       chart?.removeEventListener('pointermove', show);
-      chart?.removeEventListener('keydown', show);
+      chart?.removeEventListener('keydown', onKeyDown);
     };
   }, [active]);
   useLayoutEffect(() => {

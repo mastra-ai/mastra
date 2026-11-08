@@ -81,6 +81,10 @@ describe('MetricsLineChart tooltip', () => {
     });
     expect(tooltip()).toBeNull();
 
+    fireEvent.keyDown(surface, { key: 'Shift' });
+    await nextFrame();
+    expect(tooltip()).toBeNull();
+
     fireEvent.keyDown(surface, { key: 'ArrowRight' });
     await nextFrame();
     await nextFrame();
