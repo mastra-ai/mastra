@@ -2,34 +2,23 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig } from '@mastra/core/agent';
-import { SimpleAuth } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { createObjectiveTool, createProgressProtection, goalGuidance } from './objectives';
 import type { JudgeModel } from './objectives';
 import { Mastra } from '@mastra/core/mastra';
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { createObservability } from './observability';
-import { z } from 'zod';
 import type { AssistantConfig } from './config';
 import { createConnections, connectedContentProcessor } from './connect';
 import { createScheduleOperations } from './schedules';
-
-function asObject(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
+import { createAssistantServer } from './server';
 
 export function createAssistant(
   config: AssistantConfig,
   model: AgentConfig['model'] = { id: config.model },
   judge: JudgeModel = { id: config.judgeModel },
 ) {
-  const runLimits = z.object({ maxSteps: z.number().int().min(1).max(config.maxSteps).optional() });
-  const concurrency = z.union([
-    z.literal(1),
-    z.object({ limit: z.literal(1), strategy: z.literal('called').optional() }).strict(),
-  ]);
   let storage: LibSQLStore;
   try {
     if (config.runtime.mode === 'local') mkdirSync(dirname(config.runtime.databasePath), { recursive: true });
@@ -116,141 +105,7 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
     agents: { personalAssistant },
     storage,
     schedules: schedules.hooks,
-    server: {
-      host: config.runtime.mode === 'local' ? '127.0.0.1' : '0.0.0.0',
-      ...(config.runtime.mode === 'hosted'
-        ? {
-            auth: new SimpleAuth({ tokens: { [config.runtime.ownerToken]: { id: config.ownerId } } }),
-          }
-        : {}),
-      middleware: [
-        async (c, next) => {
-          // Native handlers honor this server-owned value over request bodies and headers.
-          c.get('requestContext').set(MASTRA_RESOURCE_ID_KEY, config.ownerId);
-          const schedulePath = c.req.path.match(/\/schedules(?:\/(.*))?$/);
-          if (schedulePath) {
-            if (c.req.method !== 'GET')
-              return c.json({ error: 'Manage schedules through the assistant conversation.' }, 403);
-            const segments = (schedulePath[1] ?? '').split('/').filter(Boolean);
-            if (segments.length > 2 || (segments.length === 2 && segments[1] !== 'triggers'))
-              return c.json({ error: 'Schedule route not found.' }, 404);
-            if (segments[0]) {
-              let scheduleId: string;
-              try {
-                scheduleId = decodeURIComponent(segments[0]);
-              } catch {
-                return c.json({ error: 'Schedule not found.' }, 404);
-              }
-              if (!(await schedules.canRead(scheduleId))) return c.json({ error: 'Schedule not found.' }, 404);
-            }
-            await next();
-            if (!segments[0] && c.res.ok) {
-              const body = await c.res.clone().json();
-              const visible = [];
-              for (const value of body.schedules ?? []) if (await schedules.canRead(value.id)) visible.push(value);
-              c.res = c.json({ ...body, schedules: visible });
-            }
-            return;
-          }
-          const directTool = c.req.path.match(/\/agents\/[^/]+\/tools\/([^/]+)\/execute$/);
-          if (c.req.method === 'POST' && directTool && directTool[1] !== 'connection-status') {
-            return c.json(
-              {
-                error: 'Use the assistant conversation and native approval controls for connected tool execution.',
-              },
-              403,
-            );
-          }
-          if (c.req.method === 'POST' && c.req.path.includes('/agents/') && c.req.raw.body) {
-            let value: unknown;
-            try {
-              const request = c.req.raw.clone();
-              const contentType = c.req.header('content-type') || '';
-              if (contentType.includes('multipart/form-data')) {
-                const form = await request.formData();
-                const fields: Record<string, unknown> = {};
-                // Native Hono JSON-decodes form fields and uses the last duplicate value.
-                for (const key of [
-                  'maxSteps',
-                  'hooks',
-                  'toolCallConcurrency',
-                  'eagerToolExecution',
-                  'streamOptions',
-                  'ifIdle',
-                  'autoResumeSuspendedTools',
-                  'toolsets',
-                  'clientTools',
-                  'resumeData',
-                ]) {
-                  const field = form.getAll(key).at(-1);
-                  if (field === undefined) continue;
-                  fields[key] = field;
-                  if (typeof field === 'string') {
-                    try {
-                      fields[key] = JSON.parse(field);
-                    } catch {}
-                  }
-                }
-                value = fields;
-              } else if (contentType.includes('application/json')) {
-                value = await request.json();
-              }
-            } catch {
-              // Native routes own malformed bodies and unsupported content types.
-            }
-            const body = asObject(value);
-            if (
-              body?.resumeData !== undefined &&
-              /\/(?:resume-stream(?:-until-idle)?|send-tool-approval)$/.test(c.req.path) &&
-              !z.object({ approved: z.boolean(), reason: z.string().optional() }).strict().safeParse(body.resumeData)
-                .success
-            ) {
-              return c.json(
-                {
-                  error:
-                    'Approval resume data must contain only the native decision and optional reason; arguments cannot be changed.',
-                },
-                400,
-              );
-            }
-            // Only known execution-option objects are inspected, never message contents.
-            const options = [body, asObject(body?.streamOptions), asObject(asObject(body?.ifIdle)?.streamOptions)];
-            if (
-              options.some(
-                option =>
-                  option &&
-                  (option.autoResumeSuspendedTools === true ||
-                    option.toolsets !== undefined ||
-                    option.clientTools !== undefined ||
-                    option.hooks !== undefined),
-              )
-            ) {
-              return c.json({ error: 'Tool injection and automatic approval recovery are not allowed.' }, 400);
-            }
-            if (
-              options.some(
-                option =>
-                  option &&
-                  ((option.toolCallConcurrency !== undefined &&
-                    !concurrency.safeParse(option.toolCallConcurrency).success) ||
-                    option.eagerToolExecution === true),
-              )
-            ) {
-              return c.json(
-                {
-                  error: 'Stateful tools require toolCallConcurrency 1 in called order and eagerToolExecution false.',
-                },
-                400,
-              );
-            }
-            if (options.some(option => option && !runLimits.safeParse(option).success)) {
-              return c.json({ error: `maxSteps must be an integer between 1 and ${config.maxSteps}.` }, 400);
-            }
-          }
-          await next();
-        },
-      ],
-    },
+    server: createAssistantServer(config, schedules),
     observability: createObservability(config),
   });
 }

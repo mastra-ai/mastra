@@ -19,6 +19,207 @@ const agent = 'personalAssistant';
 const query = `?agentId=${agent}`;
 const preferencePrompt = 'Please remember: Prefer concise bullet points. private-turn-marker';
 
+test('direct tool execution routes cannot bypass native approval', { timeout: 120000 }, async () => {
+  const { connectedFixture } = await import('./connections');
+  for (const mode of ['hosted', 'local']) {
+    const fixture = await connectedFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-direct-tools-'));
+    const token = 'example-owner-token-at-least-32-characters';
+    const headers: Record<string, string> = mode === 'hosted' ? { authorization: `Bearer ${token}` } : {};
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, {
+        ...fixture.env,
+        TEST_SEED_FOREIGN: 'true',
+        ...(mode === 'hosted'
+          ? {
+              ASSISTANT_RUNTIME: 'hosted',
+              TURSO_DATABASE_URL: 'libsql://assistant-example.turso.io',
+              TURSO_AUTH_TOKEN: 'example-database-token',
+              ASSISTANT_API_TOKEN: token,
+              MASTRA_PLATFORM_STUDIO_AUTH: 'disabled',
+              TEST_AUTH_DATABASE_URL: `file:${join(dataDir, 'assistant.db')}`,
+            }
+          : {}),
+      });
+      const bases = ['/tools', `/agents/${agent}/tools`, '/agents/personal-assistant/tools'];
+      const write = 'google_docs_create_document';
+      const directBody = { data: { title: 'Direct execution must require approval' } };
+      // This first public request reproduced a real provider write before the repair.
+      const first = await app.request(`/tools/${write}/execute`, 'POST', directBody, headers);
+      assert.equal(
+        first.status,
+        403,
+        JSON.stringify({ result: await first.text(), providerCalls: fixture.providerCalls }),
+      );
+      assert.equal(fixture.providerCalls.length, 0);
+      if (mode === 'hosted') {
+        for (const credentials of [{}, { authorization: 'Bearer invalid-owner-token' }] as Record<string, string>[]) {
+          for (const base of bases) {
+            for (const tool of [write, 'connection-status']) {
+              const response = await app.request(`${base}/${tool}/execute`, 'POST', directBody, credentials);
+              assert.equal(
+                response.status,
+                tool === 'connection-status' ? 401 : 403,
+                `${base}/${tool}: ${await response.text()}`,
+              );
+            }
+          }
+        }
+      }
+      const suspended = await json(
+        await app.request(
+          `/agents/${agent}/generate`,
+          'POST',
+          {
+            messages: [{ role: 'user', content: 'case:write preserve this pending document request' }],
+            memory: { thread: 'owner-thread' },
+          },
+          headers,
+        ),
+      );
+      assert.equal(suspended.finishReason, 'suspended');
+      const pendingPath = `/agents/${agent}/suspended-runs?threadId=owner-thread&resourceId=local-owner`;
+      const beforePending = await json(await app.request(pendingPath, 'GET', undefined, headers));
+      assert.equal(beforePending.runs.length, 1);
+      await json(
+        await app.request(
+          `/memory/threads/owner-thread/working-memory${query}`,
+          'POST',
+          {
+            workingMemory: 'Owner preference: keep the reviewed document title unchanged.',
+          },
+          headers,
+        ),
+      );
+      const before = await readState(dataDir);
+      const modelCalls = fixture.models.length;
+      const scheduleState = await json(await app.request('/schedules', 'GET', undefined, headers));
+      const send = (path: string, body: BodyInit, contentType?: string) =>
+        fetch(`${app!.url}/api${path}`, {
+          method: 'POST',
+          headers: { ...headers, ...(contentType ? { 'content-type': contentType } : {}) },
+          body,
+        });
+      const form = (fields: [string, string][]) => {
+        const value = new FormData();
+        value.set('data', JSON.stringify(directBody.data));
+        for (const [key, field] of fields) value.append(key, field);
+        return value;
+      };
+      for (const base of bases) {
+        for (const tool of [
+          write,
+          'google_mail_get_message',
+          'google_docs_list_revisions',
+          'unknown_tool',
+          'connection_status',
+        ]) {
+          for (const body of [JSON.stringify(directBody), form([])]) {
+            const response = await send(
+              `${base}/${tool}/execute`,
+              body,
+              typeof body === 'string' ? 'application/json' : undefined,
+            );
+            assert.equal(response.status, 403, `${mode} ${base}/${tool}: ${await response.text()}`);
+          }
+        }
+        for (const path of [
+          `${base}/%67oogle_docs_create_document/execute`,
+          `${base}/${write}/%65xecute`,
+          `${base}/${write}/execute/`,
+          `${base}/${write}/execute/extra`,
+          `${base}/${write}%2Fextra/execute`,
+          `${base}/%2563onnection-status/execute`,
+          `${base}/connection-status%2Fextra/execute`,
+        ]) {
+          const response = await send(path, JSON.stringify(directBody), 'application/json');
+          assert.ok([403, 404].includes(response.status), `${path}: ${response.status} ${await response.text()}`);
+        }
+        const statusPath = `${base}/connection-status/execute`;
+        const protectedOverride = await send(
+          `${base}/${write}/execute?toolId=connection-status`,
+          JSON.stringify({ ...directBody, toolId: 'connection-status' }),
+          'application/json',
+        );
+        assert.equal(protectedOverride.status, 403, await protectedOverride.text());
+        for (const suffix of [
+          `?toolId=${write}`,
+          `?toolId=connection-status&toolId=${write}`,
+          `?toolId=${write}&toolId=connection-status`,
+          `?toolId[value]=${write}`,
+          '?agentId=unknown-agent',
+        ]) {
+          const response = await send(statusPath + suffix, JSON.stringify(directBody), 'application/json');
+          assert.equal(response.status, 403, `${statusPath + suffix}: ${await response.text()}`);
+        }
+        for (const body of [
+          JSON.stringify({ ...directBody, toolId: write }),
+          `{"data":{},"toolId":"connection-status","toolId":"${write}"}`,
+          JSON.stringify({ ...directBody, agentId: 'unknown-agent' }),
+          JSON.stringify({ ...directBody, toolId: null }),
+          form([['toolId', write]]),
+          form([
+            ['toolId', '"connection-status"'],
+            ['toolId', JSON.stringify(write)],
+          ]),
+          form([['agentId', '"unknown-agent"']]),
+        ]) {
+          const response = await send(statusPath, body, typeof body === 'string' ? 'application/json' : undefined);
+          assert.equal(response.status, 403, `${statusPath}: ${await response.text()}`);
+        }
+        // Native JSON and multipart parsing selects the final duplicate field.
+        for (const body of [
+          JSON.stringify({ data: {} }),
+          `{"data":{},"toolId":"${write}","toolId":"connection-status"}`,
+          form([
+            ['toolId', JSON.stringify(write)],
+            ['toolId', '"connection-status"'],
+          ]),
+        ]) {
+          const status = await json(
+            await send(statusPath, body, typeof body === 'string' ? 'application/json' : undefined),
+          );
+          assert.equal(status.state, 'available');
+        }
+        const encodedStatus = await json(
+          await send(`${base}/%63onnection-status/execute`, '{"data":{}}', 'application/json'),
+        );
+        assert.equal(encodedStatus.state, 'available');
+        const matchingQuery = await json(
+          await send(`${statusPath}?toolId=connection-status`, '{"data":{}}', 'application/json'),
+        );
+        assert.equal(matchingQuery.state, 'available');
+        const malformed = await json(await send(statusPath, '{', 'application/json'), 400);
+        assert.match(malformed.error, /Invalid request body/);
+      }
+      for (const path of [
+        `/agents/%70ersonalAssistant/tools/${write}/execute`,
+        `/agents/personal%2Dassistant/tools/${write}/execute`,
+        `/agents/${agent}/%74ools/${write}/execute`,
+        `/agents/${agent}/tools//${write}/execute`,
+        `/extra/tools/${write}/execute`,
+        `/%74ools/${write}/execute`,
+        `/tools/${write}/execute%2Fextra`,
+        '/tools/%zz/execute',
+      ]) {
+        const response = await send(path, JSON.stringify(directBody), 'application/json');
+        assert.ok([403, 404].includes(response.status), `${path}: ${response.status} ${await response.text()}`);
+      }
+      assert.equal(fixture.providerCalls.length, 0, 'Direct calls cannot read or mutate a provider.');
+      assert.equal(fixture.models.length, modelCalls, 'Direct calls cannot start a conversation or model run.');
+      assert.deepEqual(await readState(dataDir), before, 'Owner and foreign state must remain unchanged.');
+      assert.deepEqual(await json(await app.request(pendingPath, 'GET', undefined, headers)), beforePending);
+      assert.deepEqual(await json(await app.request('/schedules', 'GET', undefined, headers)), scheduleState);
+      assert.ok(fixture.discovery.every(path => path.includes('resourceId=local-owner')));
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('ordinary execution limits protect native message and approval options', { timeout: 90000 }, async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-bounds-'));
   const model = await modelFixture();
