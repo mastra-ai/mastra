@@ -95,11 +95,25 @@ export class GrantStorage {
     });
   }
 
-  links(account: ProviderAccount) {
+  links(account: ProviderAccount, activeProvider = account.provider) {
     return this.database.write(async tx => {
       const row = (await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [account.id] }))
         .rows[0];
-      if (!row || JSON.stringify(accountFromRow(row)) !== JSON.stringify(accountSchema.parse(account)))
+      const parsed = accountSchema.parse(account);
+      const linked = (
+        await tx.execute({
+          sql: 'SELECT external_reference FROM billing_provider_links WHERE account_id = ? AND provider = ?',
+          args: [parsed.id, parsed.provider],
+        })
+      ).rows[0];
+      if (
+        !row ||
+        !linked ||
+        accountFromRow(row).provider !== activeProvider ||
+        row.workspace_id !== parsed.workspaceId ||
+        row.external_reference !== parsed.externalReference ||
+        linked.external_reference !== parsed.externalReference
+      )
         throw new BillingError('conflict');
       return (
         await tx.execute({

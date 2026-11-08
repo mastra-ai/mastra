@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Row, Transaction } from '@libsql/client/node';
-import { BillingError, parseInput, usageBindingSchema, usageEventSchema } from '../contracts.js';
+import { BillingError, accountSchema, parseInput, usageBindingSchema, usageEventSchema } from '../contracts.js';
 import type { CommercialSnapshot, UsageBinding } from '../contracts.js';
 import { boundedJson, eligible, needsCommercialState, receiptSchema, reservation } from '../accounting.js';
 import type {
@@ -103,6 +103,26 @@ export class AccountingStorage {
       return this.previous(transaction, claim);
     });
   }
+  admittedAccount(identity: AdmissionIdentity, executionId: string) {
+    return this.database.write(async transaction => {
+      await this.authorize(transaction, identity);
+      const execution = await this.find(transaction, executionId);
+      if (execution.actor_id !== identity.actorId || execution.workspace_id !== identity.workspaceId)
+        throw new BillingError('forbidden');
+      const admitted = (
+        await transaction.execute({
+          sql: 'SELECT payload FROM billing_admitted_accounts WHERE execution_id = ?',
+          args: [executionId],
+        })
+      ).rows[0];
+      if (!admitted) throw new BillingError('state_unavailable');
+      const account = parseInput(accountSchema, JSON.parse(String(admitted.payload)));
+      if (account.id !== execution.account_id || account.workspaceId !== identity.workspaceId)
+        throw new BillingError('state_unavailable');
+      return account;
+    });
+  }
+
   eventIds(accountId: string): Promise<string[]> {
     return this.database.write(async transaction =>
       (

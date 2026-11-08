@@ -149,11 +149,10 @@ export class BillingService implements BillingProvider {
   }
   async getState(input: ProviderAccount, synchronization?: { token: string }): Promise<CommercialSnapshot> {
     const account = parseInput(accountSchema, input);
-    if (account.provider !== this.id) throw new BillingError('conflict');
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const lease = await this.resources.grants.beginRefresh(account, synchronization);
-        const links = await this.resources.grants.links(account);
+        const links = await this.resources.grants.links(account, this.id);
         const observations: (DriverObservation & { provider: string; sourceKeyMode: string })[] = [];
         for (const { provider, sourceKeyMode, ...link } of links) {
           const driver = this.driver(provider);
@@ -216,7 +215,7 @@ export class BillingService implements BillingProvider {
             }
           return [...combined.values()];
         };
-        const current = observations.find(value => value.provider === this.id);
+        const current = observations.find(value => value.provider === account.provider);
         if (!current) throw new BillingError('conflict');
         const meters: CommercialSnapshot['meters'][number][] = current.commercial.meters.filter(
           meter => meter.funding === 'metered',

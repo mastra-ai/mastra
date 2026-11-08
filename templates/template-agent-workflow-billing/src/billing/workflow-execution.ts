@@ -285,7 +285,7 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       { step: request.step, resumeData: request.resumeData },
     );
     await this.options.workflows[id].resumeInput(input.step, input.resumeData);
-    const identity = await this.options.gateway.revalidate(request.billing, record.configuration);
+    const identity = await this.options.gateway.revalidate(request.billing, record.configuration, executionId);
     const claim = await this.options.workflowStorage.claim(
       identity,
       executionId,

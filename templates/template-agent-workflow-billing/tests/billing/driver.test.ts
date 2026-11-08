@@ -434,6 +434,186 @@ describe('application-owned external billing drivers', () => {
     });
   });
 
+  it.each([
+    {
+      name: 'eligible original contract despite an ineligible replacement',
+      original: true,
+      replacement: false,
+      failure: null,
+    },
+    {
+      name: 'ineligible original contract despite an eligible replacement',
+      original: false,
+      replacement: true,
+      failure: 'forbidden',
+    },
+    { name: 'unavailable original contract', original: true, replacement: true, failure: 'state_unavailable' },
+    { name: 'foreign original account', original: true, replacement: true, failure: 'state_unavailable' },
+  ])('resumes metered work using the $name after replacement and reopen', async scenario => {
+    const f = await polarFixture();
+    cleanups.push(f.close);
+    const original = await referenceDriver(f.configuration.catalog, { id: 'original', metered: true });
+    const replacement = await referenceDriver(f.configuration.catalog, { id: 'replacement', metered: true });
+    cleanups.push(original.close, replacement.close);
+    const drivers = [original.driver, replacement.driver];
+    const open = async (activeProvider: string) => {
+      const service = await BillingService.connect({
+        url: f.database.url,
+        catalog: f.configuration.catalog,
+        activeProvider,
+        drivers,
+      });
+      cleanups.push(() => service.close());
+      return service;
+    };
+    const schema = z.object({ count: z.number().int() });
+    let completions = 0;
+    const approval = createStep({
+      id: 'approval',
+      inputSchema: schema,
+      outputSchema: schema,
+      resumeSchema: z.object({ approved: z.boolean() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData?.approved) return suspend({ reason: 'Approval required' });
+        completions++;
+        return { count: inputData.count + 1 };
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'report',
+      inputSchema: schema,
+      outputSchema: schema,
+      options: { autoRestartActiveRuns: false },
+    })
+      .then(approval)
+      .commit();
+    const snapshots = new LibSQLStore({
+      id: 'metered-switch',
+      url: pathToFileURL(join(f.database.directory, 'workflow.db')).href,
+    });
+    await snapshots.init();
+    cleanups.push(() => snapshots.close());
+    new Mastra({ workflows: { report: workflow }, storage: snapshots });
+    const workflowStorage = await WorkflowStorage.open({ url: f.database.url }, f.organizations.storage);
+    cleanups.push(() => workflowStorage.close());
+    const resource = {
+      id: 'report',
+      kind: 'workflow',
+      operations: ['start', 'resume', 'cancel'],
+      policy: {
+        version: 'metered-v1',
+        access: { entitlement: 'access', subscription: 'subscription' },
+        charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' },
+      },
+    };
+    const configuration = {
+      ...f.configuration,
+      polar: undefined,
+      mappings: {
+        ...f.configuration.mappings,
+        meters: [...f.configuration.mappings.meters, { key: 'tasks', unit: 'tasks', funding: ['metered'] }],
+      },
+      resources: [resource],
+    };
+    const billing = (provider: BillingService, accounting = f.accounting) =>
+      new MastraBilling({
+        organizations: f.organizations,
+        accounting,
+        workflowStorage,
+        provider,
+        configuration: { ...configuration, provider: provider.id },
+        agents: {},
+        workflows: { report: workflowResource(workflow, { version: 'metered-workflow-v1', agentDependencies: [] }) },
+      });
+    const before = await open('original');
+    const admittedAccount = await before.ensureAccount({ workspaceId: f.owner.workspaceId });
+    const run = await billing(before)
+      .workflow('report')
+      .createRun({ billing: f.owner.context, idempotencyKey: 'create' });
+    const held = await run.start({ billing: f.owner.context, idempotencyKey: 'start', inputData: { count: 0 } });
+    expect(held.kind === 'immediate' && held.projection.status).toBe('suspended');
+    const admitted = (await f.observer.execute('SELECT * FROM billing_admitted_accounts')).rows;
+    const bindings = (await f.observer.execute('SELECT * FROM billing_usage_bindings')).rows;
+    const policies = (await f.observer.execute('SELECT configuration FROM billing_executions')).rows;
+    const switching = await open('replacement');
+    await switching.switchProvider({ workspaceId: f.owner.workspaceId, expectedProvider: 'original' });
+    before.close();
+    switching.close();
+    // Access keys remain pooled across retained providers; only the metered
+    // contract is tied to the provider that admitted this execution.
+    original.data.access = false;
+    original.data.metered = scenario.original;
+    replacement.data.metered = scenario.replacement;
+    if (scenario.name === 'unavailable original contract') original.data.available = false;
+    if (scenario.name === 'foreign original account') original.data.wrongAccount = true;
+    const reopened = await open('replacement');
+    const accounting = await AccountingStorage.open({ url: f.database.url }, f.organizations.storage);
+    cleanups.push(() => accounting.close());
+    const restarted = billing(reopened, accounting);
+    const reloaded = await restarted
+      .workflow('report')
+      .getRun({ billing: f.owner.context, executionId: run.executionId });
+    const resume = {
+      billing: f.owner.context,
+      idempotencyKey: 'resume',
+      step: 'approval',
+      resumeData: { approved: true },
+    };
+    if (scenario.failure) {
+      await expect(reloaded.resume(resume)).rejects.toMatchObject({ code: scenario.failure });
+      expect((await reloaded.status(f.owner.context)).result).toMatchObject({ status: 'suspended' });
+      expect(completions).toBe(0);
+      expect((await f.observer.execute('SELECT * FROM billing_outbox')).rows).toEqual([]);
+    } else {
+      expect((await reloaded.resume(resume)).billing).toMatchObject({
+        executionStatus: 'completed',
+        billedUnits: 1,
+        policyVersion: 'metered-v1',
+      });
+      const settled = (await f.observer.execute('SELECT * FROM billing_ledger')).rows;
+      expect((await reloaded.resume(resume)).billing).toMatchObject({ executionStatus: 'completed', billedUnits: 1 });
+      expect(completions).toBe(1);
+      expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(settled);
+      const events = (await f.observer.execute('SELECT payload FROM billing_outbox')).rows;
+      expect(events).toHaveLength(1);
+      const event = JSON.parse(String(events[0].payload));
+      expect(event).toMatchObject({ account: admittedAccount, policyVersion: 'metered-v1', units: 1 });
+      expect(await reopened.reportUsage(event)).toMatchObject({ status: 'accepted' });
+      expect(await reopened.reportUsage(event)).toMatchObject({ status: 'duplicate' });
+      expect(original.data.events.size).toBe(1);
+      expect(replacement.data.rawRequests).toEqual([]);
+      const next = await restarted
+        .workflow('report')
+        .createRun({ billing: f.owner.context, idempotencyKey: 'new-create' });
+      await expect(
+        next.start({ billing: f.owner.context, idempotencyKey: 'new-start', inputData: { count: 0 } }),
+      ).rejects.toMatchObject({ code: 'forbidden' });
+    }
+    expect((await f.observer.execute('SELECT * FROM billing_admitted_accounts')).rows).toEqual(admitted);
+    expect((await f.observer.execute('SELECT * FROM billing_usage_bindings')).rows).toEqual(bindings);
+    expect((await f.observer.execute('SELECT configuration FROM billing_executions')).rows).toEqual(policies);
+    expect((await reopened.ensureAccount({ workspaceId: f.owner.workspaceId })).provider).toBe('replacement');
+    if (!scenario.original && scenario.replacement) {
+      const next = await restarted
+        .workflow('report')
+        .createRun({ billing: f.owner.context, idempotencyKey: 'active-create' });
+      const active = await next.start({
+        billing: f.owner.context,
+        idempotencyKey: 'active-start',
+        inputData: { count: 0 },
+      });
+      expect(active.kind === 'immediate' && active.projection.status).toBe('suspended');
+      const selected = (
+        await f.observer.execute({
+          sql: 'SELECT payload FROM billing_admitted_accounts WHERE execution_id = ?',
+          args: [next.executionId],
+        })
+      ).rows[0];
+      expect(JSON.parse(String(selected.payload))).toEqual({ ...admittedAccount, provider: 'replacement' });
+    }
+  });
+
   it('retains old purchases, paid access, pending bytes and admitted reservations across explicit replacement and reopen', async () => {
     const { f, reference, open, gateway, execute, configuration } = await fixture();
     await f.execute('old-completed');

@@ -18,7 +18,7 @@ import type { CommercialCatalog } from '../../src/billing/catalog.js';
 // no SQL imports, database argument or access to application storage.
 export async function referenceDriver(
   catalog: CommercialCatalog,
-  options: { validFrom?: string; hosted?: boolean; webhookSecret?: string; id?: string } = {},
+  options: { validFrom?: string; hosted?: boolean; webhookSecret?: string; id?: string; metered?: boolean } = {},
 ) {
   const id = options.id ?? 'reference';
   const returnUrl = 'https://app.example.test/billing';
@@ -26,6 +26,7 @@ export async function referenceDriver(
   const validFrom = options.validFrom ?? '2025-01-01T00:00:00Z';
   const data = {
     available: true,
+    metered: options.metered ?? false,
     wrongAccount: false,
     sources: true,
     units: allowance.units,
@@ -98,7 +99,18 @@ export async function referenceDriver(
         commercial: {
           entitlements: data.access ? [{ key: 'access', validFrom: now, validUntil: null }] : [],
           subscriptions: data.access ? [{ key: 'subscription', validFrom: now, validUntil: null }] : [],
-          meters: [],
+          meters: data.metered
+            ? [
+                {
+                  key: 'tasks',
+                  funding: 'metered',
+                  confirmedBalance: null,
+                  consumedUnits: 0,
+                  periodStart: null,
+                  periodEnd: null,
+                },
+              ]
+            : [],
         },
       });
       return;
@@ -144,7 +156,7 @@ export async function referenceDriver(
       entitlements: true,
       subscriptions: true,
       prepaid: true,
-      metered: false,
+      metered: options.metered ?? false,
       replaySafeUsage: true,
       reconciliation: 'unverified',
       prepaidAuthority: 'application-ledger',

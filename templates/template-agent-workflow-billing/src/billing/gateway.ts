@@ -186,13 +186,17 @@ export class BillingGateway {
     return resource;
   }
 
-  async revalidate(context: BillingContext, resource: ReturnType<BillingGateway['resource']>) {
+  async revalidate(context: BillingContext, resource: ReturnType<BillingGateway['resource']>, executionId: string) {
     const identity = await this.organizations.accountingIdentity(context);
     let commercial: { accountId: string; revision: string } | undefined;
     if (needsCommercialState(resource.policy)) {
       try {
-        const account = await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
-        if (account.workspaceId !== identity.workspaceId || account.provider !== this.provider.id)
+        const charge = resource.policy.charge;
+        const metered = (charge.type === 'per-task' || charge.type === 'usage') && charge.funding === 'metered';
+        const account = metered
+          ? await this.storage.admittedAccount(identity, executionId)
+          : await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
+        if (account.workspaceId !== identity.workspaceId || (!metered && account.provider !== this.provider.id))
           throw new BillingError('state_unavailable');
         const result = await this.provider.reconcile({ account, eventIds: await this.storage.eventIds(account.id) });
         if (result.status !== 'confirmed') throw new BillingError('state_unavailable');
