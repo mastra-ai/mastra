@@ -23,6 +23,7 @@ import type {
   ToolProviderConnectionsStorage,
   NotificationsStorage,
   ThreadStateStorage,
+  ComputersStorage,
   WorkflowDefinitionsStorage,
   KnowledgeStorage,
 } from './domains';
@@ -55,6 +56,7 @@ export type StorageDomains = {
   schedules?: SchedulesStorage;
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
+  computers?: ComputersStorage;
   threadState?: ThreadStateStorage;
   knowledge?: KnowledgeStorage;
 };
@@ -105,6 +107,7 @@ export const DOMAIN_KEYS = [
   'harness',
   'toolProviderConnections',
   'notifications',
+  'computers',
   'threadState',
   'knowledge',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
