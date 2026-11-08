@@ -29,6 +29,7 @@ function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
   const screen = new xterm.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
   let onInput: ((data: string) => void) | undefined;
   let output = Promise.resolve();
+  const written: string[] = [];
   const terminal = {
     start(input: (data: string) => void) {
       onInput = input;
@@ -36,6 +37,7 @@ function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
     stop() {},
     async drainInput() {},
     write: (data: string) => {
+      written.push(data);
       output = output.then(() => new Promise<void>(resolve => screen.write(data, resolve)));
       // Headless xterm has no stdin, so answer cursor position requests like a real terminal.
       if (data.includes('\x1b[6n')) {
@@ -87,6 +89,12 @@ function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
     await output;
   };
   const click = (row: number, col: number) => pointer(0, row, col);
+  // Left button held while moving (32 motion + 0), then the SGR release report.
+  const drag = (row: number, col: number) => pointer(32, row, col);
+  const release = async (row: number, col: number) => {
+    onInput?.(`\x1b[<0;${col};${row + rowOffset}m`);
+    await output;
+  };
   // SGR motion with no button held: button code 35 (32 motion + 3 none).
   const hover = (row: number, col: number) => pointer(35, row, col);
 
@@ -104,7 +112,11 @@ function createHarness({ rowOffset = 0 }: { rowOffset?: number } = {}) {
     lineAt,
     markedRows,
     click,
+    drag,
+    release,
     hover,
+    editor,
+    written,
     send: (data: string) => onInput?.(data),
   };
 }
@@ -519,5 +531,116 @@ describe('hand-drawn pickers on PickerList', () => {
     expect(harness.markedRows()).toEqual([reconnect.row]);
     await harness.click(reconnect.row, reconnect.col);
     expect(reconnected).toEqual(['beta']);
+  });
+});
+
+describe('input box mouse mode (Alt+M)', () => {
+  const ALT_M = '\x1bm';
+  const UNDO = '\x1f';
+
+  async function inputHarness(text: string) {
+    harness = createHarness();
+    harness.editor.setText(text);
+    await harness.render();
+    harness.send(ALT_M);
+    await harness.render();
+    return harness;
+  }
+
+  it('captures the mouse only while toggled on', async () => {
+    const h = await inputHarness('hello');
+    expect(h.screen.modes.mouseTrackingMode).toBe('any');
+    expect(h.controller.isInputMouseMode()).toBe(true);
+    h.send(ALT_M);
+    await h.render();
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
+    expect(h.controller.isInputMouseMode()).toBe(false);
+  });
+
+  it('a click moves the cursor to the clicked character', async () => {
+    const h = await inputHarness('hello world');
+    const word = h.find('world');
+    await h.click(word.row, word.col);
+    await h.release(word.row, word.col);
+    h.send('X');
+    expect(h.editor.getText()).toBe('hello Xworld');
+  });
+
+  it('maps clicks through wrapped rows and wide characters', async () => {
+    const h = await inputHarness(`${'a'.repeat(90)} tail 你好end`);
+    const wide = h.find('你');
+    // 你 takes two cells, so 好 starts two columns further right.
+    await h.click(wide.row, wide.col + 2);
+    await h.release(wide.row, wide.col + 2);
+    h.send('X');
+    expect(h.editor.getText()).toBe(`${'a'.repeat(90)} tail 你X好end`);
+  });
+
+  it('treats a paste marker as one character', async () => {
+    harness = createHarness();
+    const h = harness;
+    h.send(`\x1b[200~${Array.from({ length: 20 }, (_, i) => `pasted ${i}`).join('\n')}\x1b[201~`);
+    await h.render();
+    h.send(ALT_M);
+    await h.render();
+    const marker = h.find('[paste #1');
+    // Inside the left half of the marker: the cursor lands before it, never inside.
+    await h.click(marker.row, marker.col + 2);
+    await h.release(marker.row, marker.col + 2);
+    h.send('X');
+    expect(h.editor.getText()).toMatch(/^X\[paste #1 [^\]]+\]$/);
+  });
+
+  it('maps clicks in a scrolled input box', async () => {
+    const lines = Array.from({ length: 20 }, (_, i) => `line-${String(i).padStart(2, '0')}`);
+    const h = await inputHarness(lines.join('\n'));
+    expect(() => h.find('line-00')).toThrow();
+    const target = h.find('line-15');
+    await h.click(target.row, target.col);
+    await h.release(target.row, target.col);
+    h.send('X');
+    expect(h.editor.getText().split('\n')[15]).toBe('Xline-15');
+  });
+
+  it('a drag selects, copies through OSC 52, and typing replaces the selection', async () => {
+    const h = await inputHarness('hello brave world');
+    const word = h.find('brave');
+    await h.click(word.row, word.col);
+    await h.drag(word.row, word.col + 3);
+    await h.release(word.row, word.col + 5);
+    expect(h.written).toContain(`\x1b]52;c;${Buffer.from('brave').toString('base64')}\x07`);
+    h.send('Z');
+    expect(h.editor.getText()).toBe('hello Z world');
+  });
+
+  it('backspace removes the selection as one undoable edit', async () => {
+    const h = await inputHarness('hello brave world');
+    const word = h.find('brave');
+    await h.click(word.row, word.col);
+    await h.release(word.row, word.col + 6);
+    h.send('\x7f');
+    expect(h.editor.getText()).toBe('hello world');
+    h.send(UNDO);
+    expect(h.editor.getText()).toBe('hello brave world');
+  });
+
+  it('arrow keys clear the selection without editing', async () => {
+    const h = await inputHarness('hello brave world');
+    const word = h.find('brave');
+    await h.click(word.row, word.col);
+    await h.release(word.row, word.col + 5);
+    // The cursor sits at the drag's end; → steps past the space, and Backspace edits normally.
+    h.send('\x1b[C');
+    h.send('\x7f');
+    expect(h.editor.getText()).toBe('hello braveworld');
+  });
+
+  it('the wheel does nothing over the input box', async () => {
+    const h = await inputHarness('one\ntwo\nthree');
+    const before = h.editor.getCursor();
+    const row = h.find('two').row;
+    h.send(`\x1b[<64;10;${row}M`);
+    h.send(`\x1b[<64;10;${row}M`);
+    expect(h.editor.getCursor()).toEqual(before);
   });
 });

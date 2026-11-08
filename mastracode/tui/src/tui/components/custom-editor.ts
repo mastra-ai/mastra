@@ -5,12 +5,16 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CURSOR_MARKER, Editor, matchesKey } from '@earendil-works/pi-tui';
+import { CURSOR_MARKER, Editor, matchesKey, visibleWidth } from '@earendil-works/pi-tui';
 import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/index';
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
 import { markHoveredRows } from '../mouse/hover-marker.js';
+import { highlightColumns, InputSelection, rangeFits, removeRange, textInRange } from '../mouse/input-selection.js';
+import type { TextPosition } from '../mouse/input-selection.js';
+import { editorInternals } from '../mouse/pi-tui-internals.js';
+import type { EditorVisualLine } from '../mouse/pi-tui-internals.js';
 import { displayModeColor, mastra, theme } from '../theme.js';
 import { fadePanel } from './surface.js';
 import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
@@ -73,7 +77,8 @@ export type AppAction =
   | 'followUp'
   | 'queueFollowUp'
   | 'cycleMode'
-  | 'toggleYolo';
+  | 'toggleYolo'
+  | 'toggleMouseMode';
 
 // Pre-compiled constant (avoid re-creation per render)
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
@@ -84,6 +89,22 @@ function parseHex(hex: string): [number, number, number] {
 
 // Vertical bar glyphs ordered low→high; cycled to animate a soundwave cell.
 const VOICE_WAVE_BARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
+
+/** Where the last render drew the text, for mapping mouse positions back to text positions. */
+interface InputLayout {
+  /** Lines as they were laid out (a hidden `/`, `@` or `!` prompt marker removed). */
+  lines: string[];
+  visualLines: EditorVisualLine[];
+  scrollOffset: number;
+  /** Index of the hidden prompt marker in line 0, or -1. */
+  hiddenMarkerIndex: number;
+  /** Render row of the first visible text row. */
+  firstRow: number;
+  /** Number of visible text rows. */
+  rowCount: number;
+  /** 0-based screen column where text starts. */
+  firstCol: number;
+}
 
 export class CustomEditor extends Editor {
   private actionHandlers: Map<AppAction, () => unknown> = new Map();
@@ -134,6 +155,10 @@ export class CustomEditor extends Editor {
   private lastAutocompleteStartRow = -1;
   /** Autocomplete list row under the mouse pointer, so hover follows the pointer when the list scrolls. */
   private hoveredAutocompleteRow: number | undefined;
+  private inputLayout: InputLayout | undefined;
+  private readonly selection = new InputSelection();
+  /** Screen row of the first visible text row, captured when a mouse-mode press starts a drag. */
+  private dragFirstScreenRow: number | undefined;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
@@ -246,6 +271,7 @@ export class CustomEditor extends Editor {
       prompt = `\x1b[7m${prompt}\x1b[0m`;
     }
     let editorLines: string[];
+    let layout: Pick<InputLayout, 'lines' | 'visualLines' | 'scrollOffset'>;
     if (shouldHideDecorativePrompt) {
       editorState.lines[0] = firstLine.slice(0, markerIndex) + firstLine.slice(markerIndex + 1);
       if (cursorOnDecorativePrompt) {
@@ -255,6 +281,7 @@ export class CustomEditor extends Editor {
       }
       try {
         editorLines = super.render(contentWidth);
+        layout = this.captureLayout();
       } finally {
         editorState.lines[0] = firstLine;
         editorState.cursorLine = cursorLine;
@@ -262,6 +289,7 @@ export class CustomEditor extends Editor {
       }
     } else {
       editorLines = super.render(contentWidth);
+      layout = this.captureLayout();
     }
 
     // Extract content lines (skip editor's invisible borders)
@@ -283,6 +311,18 @@ export class CustomEditor extends Editor {
       }
       contentLines.push(line);
     }
+
+    const autocompleteList = this.visibleAutocompleteList();
+    const paddingX = Math.min(this.getPaddingX(), Math.max(0, Math.floor((contentWidth - 1) / 2)));
+    this.inputLayout = {
+      ...layout,
+      hiddenMarkerIndex: shouldHideDecorativePrompt ? markerIndex : -1,
+      // fadePanel adds one edge row above the content.
+      firstRow: 1,
+      rowCount: contentLines.length - (autocompleteList?.renderedRowCount ?? 0),
+      firstCol: promptWidth + paddingX,
+    };
+    this.highlightSelection(contentLines, paddingX);
 
     const result: string[] = [];
     const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
@@ -318,7 +358,6 @@ export class CustomEditor extends Editor {
       result.push(ind);
     }
 
-    const autocompleteList = this.visibleAutocompleteList();
     // fadePanel adds one edge row above the content; autocomplete rows trail the content.
     this.lastAutocompleteStartRow = autocompleteList ? 1 + contentLines.length - autocompleteList.renderedRowCount : -1;
     this.lastCursorRow = result.findIndex(line => line.includes(CURSOR_MARKER));
@@ -365,6 +404,171 @@ export class CustomEditor extends Editor {
     if (this.hoveredAutocompleteRow === undefined) return false;
     this.hoveredAutocompleteRow = undefined;
     return true;
+  }
+
+  private captureLayout(): Pick<InputLayout, 'lines' | 'visualLines' | 'scrollOffset'> {
+    const internals = editorInternals(this);
+    return {
+      lines: [...internals.state.lines],
+      visualLines: internals.buildVisualLineMap(internals.lastWidth),
+      scrollOffset: internals.scrollOffset,
+    };
+  }
+
+  /**
+   * Text position under the given row of visible text (0 = first visible row)
+   * and 1-based screen column, or undefined outside the text. With `clamp`,
+   * rows above/below the text resolve to its start/end, as a drag needs.
+   */
+  private positionAt(textRow: number, screenCol: number, clamp = false): TextPosition | undefined {
+    const layout = this.inputLayout;
+    if (!layout || layout.rowCount <= 0) return undefined;
+    let row = textRow;
+    let x = screenCol - 1 - layout.firstCol;
+    if (row < 0 || row >= layout.rowCount) {
+      if (!clamp) return undefined;
+      row = row < 0 ? 0 : layout.rowCount - 1;
+      x = textRow < 0 ? -1 : Number.MAX_SAFE_INTEGER;
+    }
+    const index = layout.scrollOffset + row;
+    const visual = layout.visualLines[index];
+    if (!visual) return undefined;
+    const line = layout.lines[visual.logicalLine] ?? '';
+    const endCol = visual.startCol + visual.length;
+    let col = visual.startCol;
+    let width = 0;
+    // Paste markers segment as one unit, so a click never lands inside one.
+    for (const { segment } of editorInternals(this).segment(line.slice(visual.startCol, endCol), 'grapheme')) {
+      const segmentWidth = visibleWidth(segment);
+      if (x < width + segmentWidth / 2) break;
+      width += segmentWidth;
+      col += segment.length;
+    }
+    // A wrapped row's end is the next row's start; keep the cursor on the row that was clicked.
+    const wrapsOnward = layout.visualLines[index + 1]?.logicalLine === visual.logicalLine;
+    if (wrapsOnward && col >= endCol && visual.length > 0) col = endCol - 1;
+    // Positions after a hidden prompt marker are one further right in the real text.
+    if (visual.logicalLine === 0 && layout.hiddenMarkerIndex >= 0 && col >= layout.hiddenMarkerIndex) col += 1;
+    return { line: visual.logicalLine, col };
+  }
+
+  private moveCursorTo(position: TextPosition): void {
+    const internals = editorInternals(this);
+    internals.state.cursorLine = position.line;
+    internals.setCursorCol(position.col);
+    internals.lastAction = null;
+  }
+
+  /**
+   * Mouse mode: a left press at `screenRow`/`screenCol` (1-based) while the
+   * terminal reports the hardware cursor on `cursorRow`. Places the cursor
+   * there and starts a selection. Returns false when the press is outside the text.
+   */
+  pointerPress(cursorRow: number, screenRow: number, screenCol: number): boolean {
+    const layout = this.inputLayout;
+    if (!layout || this.lastCursorRow < 0) return false;
+    const firstScreenRow = cursorRow - this.lastCursorRow + layout.firstRow;
+    const position = this.positionAt(screenRow - firstScreenRow, screenCol);
+    if (!position) return false;
+    this.dragFirstScreenRow = firstScreenRow;
+    this.selection.start(position);
+    this.moveCursorTo(position);
+    return true;
+  }
+
+  /** Mouse mode: drag after pointerPress; extends the selection to the pointer. */
+  pointerDrag(screenRow: number, screenCol: number): boolean {
+    if (this.dragFirstScreenRow === undefined) return false;
+    const position = this.positionAt(screenRow - this.dragFirstScreenRow, screenCol, true);
+    if (!position) return false;
+    this.selection.extend(position);
+    this.moveCursorTo(position);
+    return true;
+  }
+
+  /** Mouse mode: release after pointerPress. Returns the selected text (paste markers expanded), if any. */
+  pointerRelease(screenRow: number, screenCol: number): string | undefined {
+    this.pointerDrag(screenRow, screenCol);
+    this.dragFirstScreenRow = undefined;
+    const range = this.selection.range();
+    if (!range) {
+      this.selection.clear();
+      return undefined;
+    }
+    const internals = editorInternals(this);
+    return internals.expandPasteMarkers(textInRange(internals.state.lines, range));
+  }
+
+  clearInputSelection(): void {
+    this.dragFirstScreenRow = undefined;
+    this.selection.clear();
+  }
+
+  private highlightSelection(contentLines: string[], paddingX: number): void {
+    const range = this.selection.range();
+    const layout = this.inputLayout;
+    if (!range || !layout) return;
+    if (!rangeFits(editorInternals(this).state.lines, range)) {
+      this.selection.clear();
+      return;
+    }
+    // Into laid-out coordinates (a hidden prompt marker shifts line 0 left by one).
+    const toLayout = ({ line, col }: TextPosition): TextPosition =>
+      line === 0 && layout.hiddenMarkerIndex >= 0 && col > layout.hiddenMarkerIndex
+        ? { line, col: col - 1 }
+        : { line, col };
+    const start = toLayout(range.start);
+    const end = toLayout(range.end);
+    for (let row = 0; row < layout.rowCount; row++) {
+      const visual = layout.visualLines[layout.scrollOffset + row];
+      if (!visual || visual.logicalLine < start.line || visual.logicalLine > end.line) continue;
+      const rowEnd = visual.startCol + visual.length;
+      const from = visual.logicalLine === start.line ? Math.max(start.col, visual.startCol) : visual.startCol;
+      const to = visual.logicalLine === end.line ? Math.min(end.col, rowEnd) : rowEnd;
+      if (to <= from) continue;
+      const line = layout.lines[visual.logicalLine] ?? '';
+      const startCol = paddingX + visibleWidth(line.slice(visual.startCol, from));
+      const endCol = paddingX + visibleWidth(line.slice(visual.startCol, to));
+      contentLines[row] = highlightColumns(contentLines[row]!, startCol, endCol);
+    }
+  }
+
+  /** Removes the selected text as one undoable edit. */
+  private deleteSelection(): void {
+    const range = this.selection.range();
+    this.selection.clear();
+    if (!range) return;
+    const internals = editorInternals(this);
+    if (!rangeFits(internals.state.lines, range)) return;
+    internals.pushUndoSnapshot();
+    internals.state.lines = removeRange(internals.state.lines, range);
+    this.moveCursorTo(range.start);
+    internals.onChange?.(this.getText());
+  }
+
+  /**
+   * Keys while a mouse selection exists. Backspace/Delete remove it, Esc and
+   * arrows clear it, and text or a paste replaces it. Returns true when the key
+   * is fully handled.
+   */
+  private handleSelectionInput(data: string): boolean {
+    if (matchesKey(data, 'backspace') || matchesKey(data, 'delete')) {
+      this.deleteSelection();
+      return true;
+    }
+    if (matchesKey(data, 'escape')) {
+      this.selection.clear();
+      return true;
+    }
+    if (
+      data.startsWith('\x1b[200~') ||
+      (!data.startsWith('\x1b') && [...data].every(ch => ch >= ' ' && ch !== '\x7f'))
+    ) {
+      this.deleteSelection();
+      return false;
+    }
+    this.selection.clear();
+    return false;
   }
 
   private maybeHandleBracketedPaste(data: string): boolean {
@@ -840,6 +1044,19 @@ export class CustomEditor extends Editor {
   }
 
   handleInput(data: string): void {
+    if (matchesKey(data, 'alt+m')) {
+      const handler = this.actionHandlers.get('toggleMouseMode');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    if (this.selection.range() && this.handleSelectionInput(data)) {
+      this.requestEditorRender();
+      return;
+    }
+
     if (this.maybeHandleBracketedPaste(data)) {
       return;
     }

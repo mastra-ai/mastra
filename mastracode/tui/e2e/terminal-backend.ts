@@ -91,8 +91,14 @@ class EmulatedTerminal implements Terminal {
 
   async drainInput(_maxMs?: number, _idleMs?: number): Promise<void> {}
 
+  /** Text written to the clipboard through OSC 52, oldest first. */
+  readonly clipboardWrites: string[] = [];
+
   write(data: string): void {
     this.writeToXterm(data);
+    for (const match of data.matchAll(/\x1b\]52;c;([^\x07]*)\x07/g)) {
+      this.clipboardWrites.push(Buffer.from(match[1]!, 'base64').toString('utf8'));
+    }
     if (data.includes('\x1b[6n')) {
       // Headless xterm runs with stdin disabled, so answer cursor position
       // requests ourselves once the preceding output has been applied.
@@ -244,6 +250,17 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
       if (!position) throw new Error(`clickText: "${text}" not on screen\n\n${terminal.serialize().view}`);
       terminal.sendInput(`\x1b[<0;${position.col};${position.row}M`);
       terminal.sendInput(`\x1b[<0;${position.col};${position.row}m`);
+    },
+    dragText(text: string, fromOffset: number, toOffset: number) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`dragText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      const { row, col } = position;
+      terminal.sendInput(`\x1b[<0;${col + fromOffset};${row}M`);
+      terminal.sendInput(`\x1b[<32;${col + toOffset};${row}M`);
+      terminal.sendInput(`\x1b[<0;${col + toOffset};${row}m`);
+    },
+    clipboardWrites() {
+      return [...terminal.clipboardWrites];
     },
     hoverText(text: string) {
       const position = terminal.findOnScreen(text);

@@ -151,6 +151,7 @@ export type ScenarioName =
   | 'mcp-skipped-validation'
   | 'model-search'
   | 'mouse-modal-and-autocomplete'
+  | 'mouse-input-mode'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'mode-switch-applies-pack-model'
@@ -248,6 +249,10 @@ export type McE2eTerminal = {
   keyCtrlC: () => void;
   /** Send an SGR left click at the first on-screen occurrence of `text`. */
   clickText?: (text: string) => void;
+  /** Press at `text` + `fromOffset` columns, drag and release at `text` + `toOffset` columns. */
+  dragText?: (text: string, fromOffset: number, toOffset: number) => void;
+  /** Texts the app copied through OSC 52, oldest first. */
+  clipboardWrites?: () => string[];
   /** Send SGR wheel events at the screen centre. */
   hoverText?: (text: string) => void;
   wheel?: (direction: 'up' | 'down', count?: number) => void;

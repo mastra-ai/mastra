@@ -359,7 +359,10 @@ export function updateStatusLine(state: TUIState): void {
     const location = locationPart(termWidth - width(present) - SEP_WIDTH, fit);
     return location ? fitsRow([...present, location]) : null;
   };
-  const transient = [fallbackPart, goalPart, queuedPart];
+  const mousePart: Part | null = state.mouseController?.isInputMouseMode()
+    ? { plain: 'mouse', styled: theme.fg('accent', 'mouse') }
+    : null;
+  const transient = [fallbackPart, mousePart, goalPart, queuedPart];
   // Once the footer has needed two rows at this width, keep the location on the second row
   // even when it would fit on one again. Dropping back to one row shrinks the UI, which leaves a blank
   // line at the bottom of the terminal until new output pushes the prompt back down.
@@ -375,8 +378,8 @@ export function updateStatusLine(state: TUIState): void {
     fitsRow([modePart, modelPart(fullModelId), ...transient, contextPart]) ??
     fitsRow([modePart, modelPart(shortModelId), ...transient, contextPart]) ??
     fitsRow([modePart, modelPart(tinyModelId), ...transient, contextPart]) ??
-    fitsRow([modePart, modelPart(tinyModelId), goalPart, queuedPart, contextPart]) ??
-    fitsRow([modePart, modelPart(tinyModelId), goalPart, queuedPart]) ??
+    fitsRow([modePart, modelPart(tinyModelId), mousePart, goalPart, queuedPart, contextPart]) ??
+    fitsRow([modePart, modelPart(tinyModelId), mousePart, goalPart, queuedPart]) ??
     fitsRow([modePart, modelPart(tinyModelId)]) ??
     fitsRow([modeInitial, modelPart(tinyModelId)]) ??
     fitsRow([modePart]) ??

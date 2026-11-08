@@ -15,6 +15,10 @@
  *   the rendered frame even when the screen is offset from pi-tui's model.
  *   Autocomplete rows are resolved relative to the cursor; modals are shifted
  *   by the measured offset.
+ *
+ * Mouse mode (Alt+M, off on submit) also captures the mouse while no dialog is
+ * open, for the input box: a press places the cursor, a drag selects, and the
+ * release copies the selection through OSC 52. The wheel does nothing there.
  */
 import type { Component, TUI } from '@earendil-works/pi-tui';
 
@@ -35,7 +39,11 @@ const WHEEL_UP_KEY = '\x1b[A';
 const WHEEL_DOWN_KEY = '\x1b[B';
 const CURSOR_POSITION_TIMEOUT_MS = 200;
 
-type MouseAction = 'click' | 'hover';
+type MouseAction = 'click' | 'hover' | 'inputPress';
+
+function osc52Copy(text: string): string {
+  return `\x1b]52;c;${Buffer.from(text, 'utf8').toString('base64')}\x07`;
+}
 
 export class MouseController {
   private tracking = false;
@@ -44,6 +52,16 @@ export class MouseController {
     | { event: TerminalMouseEvent; action: MouseAction; timer: ReturnType<typeof setTimeout> }
     | undefined;
   private lastHoverCell: string | undefined;
+  private inputMouseMode = false;
+  /**
+   * Input box drag: 'pending' while the press waits for its cursor position
+   * reply (drag/release reports are queued until then), 'active' once placed.
+   */
+  private inputDrag: 'pending' | 'active' | undefined;
+  private queuedDrag: TerminalMouseEvent | undefined;
+  private queuedRelease: TerminalMouseEvent | undefined;
+  /** Called when mouse mode turns on or off (for the status line badge). */
+  onInputMouseModeChange?: () => void;
   /** Pointer position local to the hovered overlay component. */
   private overlayHover: { component: Component; row: number; col: number } | undefined;
   private readonly decoratedRenders = new Map<Component, Component['render']>();
@@ -60,6 +78,7 @@ export class MouseController {
     private readonly editor: CustomEditor,
   ) {
     this.removeInputListener = ui.addInputListener(data => this.handleInput(data));
+    editor.onAction('toggleMouseMode', () => this.setInputMouseMode(!this.inputMouseMode));
 
     const internals = tuiInternals(ui);
     this.originalDoRender = internals.doRender;
@@ -89,8 +108,50 @@ export class MouseController {
     process.off('exit', this.onProcessExit);
   }
 
+  isInputMouseMode(): boolean {
+    return this.inputMouseMode;
+  }
+
+  setInputMouseMode(enabled: boolean): void {
+    if (this.inputMouseMode === enabled) return;
+    this.inputMouseMode = enabled;
+    if (!enabled) {
+      this.endInputDrag();
+      this.editor.clearInputSelection();
+    }
+    this.syncTracking();
+    this.onInputMouseModeChange?.();
+    this.ui.requestRender();
+  }
+
   private wantsTracking(): boolean {
-    return tuiInternals(this.ui).getTopmostVisibleOverlay() !== undefined || this.editor.isShowingAutocomplete();
+    return (
+      this.inputMouseMode ||
+      tuiInternals(this.ui).getTopmostVisibleOverlay() !== undefined ||
+      this.editor.isShowingAutocomplete()
+    );
+  }
+
+  /** True when pointer events belong to the input box rather than a dialog or suggestion list. */
+  private inputOwnsPointer(): boolean {
+    return this.inputMouseMode && tuiInternals(this.ui).getTopmostVisibleOverlay() === undefined;
+  }
+
+  private endInputDrag(): void {
+    this.inputDrag = undefined;
+    this.queuedDrag = undefined;
+    this.queuedRelease = undefined;
+  }
+
+  private dragInput(event: TerminalMouseEvent): void {
+    if (this.editor.pointerDrag(event.row, event.col)) this.ui.requestRender();
+  }
+
+  private releaseInput(event: TerminalMouseEvent): void {
+    this.endInputDrag();
+    const selected = this.editor.pointerRelease(event.row, event.col);
+    if (selected) this.ui.terminal.write(osc52Copy(selected));
+    this.ui.requestRender();
   }
 
   private syncTracking(): void {
@@ -120,9 +181,30 @@ export class MouseController {
     const event = parseSgrMouse(data);
     if (!event) return { consume: true };
 
-    if (event.kind === 'wheelUp') return { data: WHEEL_UP_KEY };
-    if (event.kind === 'wheelDown') return { data: WHEEL_DOWN_KEY };
-    if (event.kind === 'press' && event.button === 0) this.handlePointer(event, 'click');
+    const inputOwnsPointer = this.inputOwnsPointer();
+    if (event.kind === 'wheelUp' || event.kind === 'wheelDown') {
+      // Over the input box the wheel does nothing; dialogs and suggestions still scroll.
+      if (inputOwnsPointer && !this.editor.isShowingAutocomplete()) return { consume: true };
+      return { data: event.kind === 'wheelUp' ? WHEEL_UP_KEY : WHEEL_DOWN_KEY };
+    }
+    if (event.kind === 'press' && event.button === 0) {
+      if (inputOwnsPointer) {
+        this.endInputDrag();
+        this.inputDrag = 'pending';
+        this.handlePointer(event, 'inputPress');
+      } else {
+        this.handlePointer(event, 'click');
+      }
+    }
+    if (inputOwnsPointer && event.button === 0 && (event.kind === 'drag' || event.kind === 'release')) {
+      if (this.inputDrag === 'pending') {
+        if (event.kind === 'drag') this.queuedDrag = event;
+        else this.queuedRelease = event;
+      } else if (this.inputDrag === 'active') {
+        if (event.kind === 'drag') this.dragInput(event);
+        else this.releaseInput(event);
+      }
+    }
     if (event.kind === 'move') {
       // Terminals repeat motion reports within a cell; only act when the pointer changes cell.
       const cell = `${event.row}:${event.col}`;
@@ -142,12 +224,12 @@ export class MouseController {
    */
   private handlePointer(event: TerminalMouseEvent, action: MouseAction): void {
     const overlay = tuiInternals(this.ui).getTopmostVisibleOverlay();
-    if (!overlay && !this.editor.isShowingAutocomplete()) return;
+    if (!overlay && !this.editor.isShowingAutocomplete() && action !== 'inputPress') return;
 
     const pending = this.pendingPointer;
     if (pending) {
       // One cursor query at a time: a newer hover replaces the queued one, a click wins over hover.
-      if (action === 'click' || pending.action === 'hover') this.pendingPointer = { ...pending, event, action };
+      if (action !== 'hover' || pending.action === 'hover') this.pendingPointer = { ...pending, event, action };
       return;
     }
     const timer = setTimeout(() => {
@@ -161,6 +243,10 @@ export class MouseController {
   }
 
   private resolvePointer(event: TerminalMouseEvent, action: MouseAction, cursorRow: number | undefined): void {
+    if (action === 'inputPress') {
+      this.resolveInputPress(event, cursorRow);
+      return;
+    }
     const overlay = tuiInternals(this.ui).getTopmostVisibleOverlay();
     if (overlay) {
       const shifted = { ...event, row: event.row - (cursorRow === undefined ? 0 : this.overlayRowShift(cursorRow)) };
@@ -178,6 +264,30 @@ export class MouseController {
     }
     if (cursorRow === undefined || !this.editor.isShowingAutocomplete()) return;
     if (this.editor.pointAutocompleteRow(event.row - cursorRow, action)) this.ui.requestRender();
+  }
+
+  private resolveInputPress(event: TerminalMouseEvent, cursorRow: number | undefined): void {
+    // Input positions are relative to the cursor, so without a reply (or with a dialog opened since) drop the press.
+    if (cursorRow === undefined || !this.inputOwnsPointer() || this.inputDrag !== 'pending') {
+      this.endInputDrag();
+      return;
+    }
+    if (this.editor.isShowingAutocomplete() && this.editor.pointAutocompleteRow(event.row - cursorRow, 'click')) {
+      this.endInputDrag();
+      this.ui.requestRender();
+      return;
+    }
+    if (!this.editor.pointerPress(cursorRow, event.row, event.col)) {
+      this.endInputDrag();
+      return;
+    }
+    const { queuedDrag, queuedRelease } = this;
+    this.inputDrag = 'active';
+    this.queuedDrag = undefined;
+    this.queuedRelease = undefined;
+    if (queuedDrag) this.dragInput(queuedDrag);
+    if (queuedRelease) this.releaseInput(queuedRelease);
+    this.ui.requestRender();
   }
 
   /**

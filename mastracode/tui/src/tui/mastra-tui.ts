@@ -1372,6 +1372,7 @@ export class MastraTUI {
         this.state.editor.addToHistory(text);
       }
       this.state.editor.setText('');
+      this.state.mouseController?.setInputMouseMode(false);
 
       if (this.state.session.run.isRunning()) {
         if (text.startsWith('/')) {
