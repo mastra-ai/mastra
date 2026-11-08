@@ -3,8 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { upstreamSocketUrl, viewerTarget } from '../index.js';
 import {
   SECRET,
-  createStubMastra,
-  mintSession,
   mintSocketUrl,
   nextClose,
   nextMessage,
@@ -40,104 +38,6 @@ async function start(options: Parameters<typeof startProxy>[0] = {}) {
 }
 
 
-describe('session route', () => {
-  it('requires authentication when server auth is configured', async () => {
-    const { origin } = await start();
-    const res = await fetch(`${origin}/api/computers/c1/session`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', mode: 'watch' }),
-    });
-    expect(res.status).toBe(401);
-    expect(viewer.state.calls).toBe(0);
-  });
-
-  it('returns a ticket-bearing socket URL for an attached, running computer', async () => {
-    const { origin } = await start();
-    const res = await mintSession(origin, 'c1', { mode: 'watch' });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { state: string; socketUrl: string };
-    expect(body.state).toBe('ready');
-    expect(body.socketUrl).toMatch(/^\/computer\/c1\/websockify\?ticket=[A-Za-z0-9_-]{43}$/);
-    expect(JSON.stringify(body)).not.toContain(SECRET);
-    expect(JSON.stringify(body)).not.toContain('127.0.0.1');
-  });
-
-  it('is forbidden when the computer is not attached to the thread/resource', async () => {
-    const { origin } = await start();
-    viewer.state.attached = false;
-    const res = await mintSession(origin, 'c1');
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ state: 'forbidden' });
-  });
-
-  it('reports not-running when the viewer resolves to null', async () => {
-    const { origin } = await start();
-    viewer.state.running = false;
-    const res = await mintSession(origin, 'c1');
-    expect(await res.json()).toEqual({ state: 'not-running' });
-  });
-
-  it('404s when no computers are registered', async () => {
-    const { origin } = await start({ getViewer: undefined });
-    expect((await mintSession(origin, 'c1')).status).toBe(404);
-    expect((await fetch(`${origin}/computer/c1/connect?ticket=x`)).status).toBe(404);
-    expect((await fetch(`${origin}/computer/c1/vnc.html`)).status).toBe(404);
-  });
-
-  it.each([
-    [{ mode: 'drive' }, 400],
-    [{ mode: undefined }, 400],
-    [{ threadId: undefined }, 400],
-    [{ resourceId: undefined }, 400],
-  ])('validates the body %j', async (body, status) => {
-    const { origin } = await start();
-    expect((await mintSession(origin, 'c1', body)).status).toBe(status);
-  });
-
-  it('403s for an unknown thread and for a thread of another resource', async () => {
-    const mastra = createStubMastra({
-      threads: [
-        { id: 'thread-1', resourceId: 'res-1' },
-        { id: 'thread-2', resourceId: 'res-2' },
-      ],
-    });
-    const { origin } = await start({ mastra });
-    const unknown = await mintSession(origin, 'c1', { threadId: 'nope' });
-    expect(unknown.status).toBe(403);
-    expect(await unknown.json()).toEqual({ state: 'forbidden' });
-    expect((await mintSession(origin, 'c1', { threadId: 'thread-2' })).status).toBe(403);
-  });
-
-  it('requires memory:write for both modes, since the relay does not filter input', async () => {
-    const checked: string[] = [];
-    const fga = {
-      check: async () => true,
-      require: async (_user: unknown, { permission }: { permission: string }) => {
-        checked.push(permission);
-        if (permission === 'memory:write') throw Object.assign(new Error('denied'), { status: 403 });
-      },
-      filterAccessible: async (_u: unknown, items: unknown[]) => items,
-    };
-    const { origin } = await start({ mastra: createStubMastra({ fga }) });
-    expect((await mintSession(origin, 'c1', { mode: 'watch' })).status).toBe(403);
-    expect((await mintSession(origin, 'c1', { mode: 'control' })).status).toBe(403);
-    expect(checked).toEqual(['memory:write', 'memory:write']);
-    expect(viewer.state.calls).toBe(0);
-  });
-
-  it('rejects disallowed, malformed and non-http origins without minting', async () => {
-    const { origin } = await start({ allowedOrigins: ['http://studio.test'] });
-    for (const bad of ['http://evil.test', 'not a url', 'file://x', 'http://\u0000x']) {
-      const res = await mintSession(origin, 'c1', {}, { origin: bad }).catch(() => undefined);
-      if (res) expect(res.status).toBe(403);
-    }
-    const allowed = await mintSession(origin, 'c1', {}, { origin: 'http://studio.test' });
-    expect(allowed.status).toBe(200);
-    expect(viewer.state.calls).toBe(1);
-  });
-});
-
 describe('no sandbox HTTP content', () => {
   it('404s every non-websocket /computer path and never fetches sandbox vnc.html or rfb.js', async () => {
     const { origin } = await start();
@@ -153,13 +53,7 @@ describe('no sandbox HTTP content', () => {
     expect(upstream.requests.length).toBe(before);
   });
 
-  it('refuses sessions with 403 when no memory store is configured', async () => {
-    const { origin } = await start({ mastra: createStubMastra({ threads: null }) });
-    const res = await mintSession(origin, 'c1');
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ state: 'forbidden' });
-    expect(viewer.state.calls).toBe(0);
-  });
+
 });
 
 describe('websocket proxy', () => {
@@ -192,11 +86,9 @@ describe('websocket proxy', () => {
     expect((await openSocket(second.url, { origin })).status).toBe(401);
 
     // Minted from the allowed Studio origin: only that origin may redeem it.
-    const studio = await mintSession(origin, 'c1', {}, { origin: 'http://studio.test' });
-    const { socketUrl } = (await studio.json()) as { socketUrl: string };
+    const { socketUrl } = await mintSocketUrl(origin, 'c1', { studioOrigin: 'http://studio.test' });
     expect((await openSocket(`${origin.replace('http', 'ws')}${socketUrl}`, { origin })).status).toBe(401);
-    const again = await mintSession(origin, 'c1', {}, { origin: 'http://studio.test' });
-    const againUrl = ((await again.json()) as { socketUrl: string }).socketUrl;
+    const againUrl = (await mintSocketUrl(origin, 'c1', { studioOrigin: 'http://studio.test' })).socketUrl;
     const studioSocket = await openSocket(`${origin.replace('http', 'ws')}${againUrl}`, { origin: 'http://studio.test' });
     expect(studioSocket.ws).toBeDefined();
     studioSocket.ws!.close();
@@ -292,7 +184,7 @@ describe('websocket proxy', () => {
     expect(await closed).toBe(4401);
     vi.useRealTimers();
     await waitFor(() => upstream.upstreamSockets.size === 0);
-    expect((await mintSession(origin, 'c1')).status).toBe(403);
+    expect((await openSocket((await mintSocketUrl(origin, 'c1')).url, { origin })).status).toBe(401);
   });
 
   it('round-trips computer ids with reserved and unicode characters', async () => {

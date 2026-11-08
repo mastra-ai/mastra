@@ -4,6 +4,8 @@ import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
+import { InMemoryComputerTicketStore } from '@mastra/server/computer-stream';
+import type { ComputerTicketStore } from '@mastra/server/computer-stream';
 import { Hono } from 'hono';
 import WebSocket, { WebSocketServer } from 'ws';
 
@@ -13,6 +15,7 @@ import { setupComputerStream } from '../index.js';
 import type { ComputerViewerSource, HonoComputerStreamConfig } from '../index.js';
 
 export const SECRET = 'test-secret';
+const proxyTickets = new Map<string, ComputerTicketStore>();
 
 export interface UpstreamRequest {
   method: string;
@@ -156,12 +159,12 @@ export async function startProxy(
   if (options.withBrowserStream) {
     await setupBrowserStream(app, { mastra: options.mastra ?? createStubMastra(), getToolset: () => undefined, webSocket });
   }
+  const ticketStore = options.ticketStore ?? new InMemoryComputerTicketStore();
   const stream = await setupComputerStream(app, {
     mastra: options.mastra ?? createStubMastra(),
     getViewer: 'getViewer' in options ? options.getViewer : async () => null,
     allowedOrigins: options.allowedOrigins,
-    getControl: options.getControl,
-    setControl: options.setControl,
+    ticketStore,
     webSocket,
   });
   if (!stream) throw new Error('Expected computer stream to be set up');
@@ -170,10 +173,15 @@ export async function startProxy(
   await new Promise<void>(resolve => server.once('listening', () => resolve()));
   const port = (server.address() as AddressInfo).port;
   const origin = `http://127.0.0.1:${port}`;
+  proxyTickets.set(origin, ticketStore);
   return {
     server,
     origin,
+    ticketStore,
+    issueTicket: (computerId = 'computer-1', mode: 'watch' | 'control' = 'control') =>
+      ticketStore.issue({ computerId, threadId: 'thread-1', resourceId: 'res-1', mode, studioOrigin: origin }),
     close: async () => {
+      proxyTickets.delete(origin);
       stream.close();
       server.closeAllConnections();
       await new Promise<void>(resolve => server.close(() => resolve()));
@@ -195,25 +203,24 @@ export function stubViewer(upstreamViewerUrl: string, upstreamState: { secret: s
   return { state, getViewer };
 }
 
-export async function mintSession(
+/** Issue a ticket through the same injected store used by the proxy. */
+export async function mintSocketUrl(
   origin: string,
   computerId: string,
-  body: Record<string, unknown> = {},
-  headers: Record<string, string> = {},
+  options: { mode?: 'watch' | 'control'; studioOrigin?: string } = {},
 ) {
-  return fetch(`${origin}/api/computers/${encodeURIComponent(computerId)}/session`, {
-    method: 'POST',
-    headers: { authorization: 'Bearer valid-token', 'content-type': 'application/json', origin, ...headers },
-    body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', mode: 'control', ...body }),
+  const store = proxyTickets.get(origin);
+  if (!store) throw new Error(`no ticket store for ${origin}`);
+  const issued = await store.issue({
+    computerId,
+    threadId: 'thread-1',
+    resourceId: 'res-1',
+    mode: options.mode ?? 'control',
+    studioOrigin: options.studioOrigin ?? origin,
   });
-}
-
-/** Mint a session and return the ticketed websocket URL (absolute ws:). */
-export async function mintSocketUrl(origin: string, computerId: string, body: Record<string, unknown> = {}) {
-  const minted = await mintSession(origin, computerId, body);
-  const json = (await minted.json()) as { state: string; socketUrl: string };
-  if (json.state !== 'ready') throw new Error(`expected ready, got ${JSON.stringify(json)}`);
-  return { url: `${origin.replace('http', 'ws')}${json.socketUrl}`, socketUrl: json.socketUrl };
+  if (!issued.ok) throw new Error(`ticket issue failed: ${issued.reason}`);
+  const socketUrl = `/computer/${encodeURIComponent(computerId)}/websockify?ticket=${encodeURIComponent(issued.ticket)}`;
+  return { url: `${origin.replace('http', 'ws')}${socketUrl}`, socketUrl };
 }
 
 export interface SocketResult {

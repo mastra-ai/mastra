@@ -12,7 +12,6 @@ import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
 import {
   MastraServer,
-  createAuthMiddleware,
   createWebSocketSupport,
   setupBrowserStream,
   setupComputerStream,
@@ -21,6 +20,7 @@ import {
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
+import { configureComputerServer, InMemoryComputerTicketStore } from '@mastra/server/computer-stream';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import type { MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
@@ -314,25 +314,19 @@ export async function createHonoServer(
     );
   }
 
+  const computerTicketStore = new InMemoryComputerTicketStore();
   const computerStreamSetup = computers
     ? await setupComputerStream(app, {
         mastra,
         webSocket,
         apiPrefix,
         allowedOrigins: browserStreamOrigins,
+        ticketStore: computerTicketStore,
         getViewer: (computerId, scope) => computers.viewer(computerId, scope),
-        ...(computers.control &&
-          computers.controlState && {
-            getControl: (computerId, scope) => computers.controlState!(computerId, scope),
-            setControl: (computerId, scope, change) => computers.control!(computerId, scope, change),
-          }),
       })
     : null;
-  if (computers && !computerStreamSetup) {
-    // No WebSocket support (e.g. serverless): report that instead of a bare 404.
-    app.post(`${apiPrefix}/computers/:computerId/session`, createAuthMiddleware({ mastra }), c =>
-      c.json({ state: 'unavailable' }),
-    );
+  if (computers && computerStreamSetup) {
+    configureComputerServer(mastra, { ticketStore: computerTicketStore });
   }
 
   // Global CORS config

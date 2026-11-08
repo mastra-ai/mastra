@@ -149,14 +149,16 @@ describe('deployer computer stream wiring', () => {
     expect(setupComputerStream.mock.calls[0]![1].webSocket).toBe(shared);
   });
 
-  it('reports unavailable when WebSocket support is missing', async () => {
+  it('hides session minting when WebSocket support is missing', async () => {
     vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
     vi.doMock('@mastra/hono', async () => ({
       ...(await vi.importActual<typeof MastraHono>('@mastra/hono')),
       createWebSocketSupport: vi.fn().mockResolvedValue(null),
     }));
     const app = await createServer(mastraWithComputers(vi.fn<Viewer>()));
-    await expect((await sessionRequest(app)).json()).resolves.toEqual({ state: 'unavailable' });
+    const response = await sessionRequest(app);
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'Computer not found' });
   });
 
   it('keeps the ticketed websocket reachable past user middleware on the API prefix', async () => {

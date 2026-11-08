@@ -116,7 +116,7 @@ export const GET_COMPUTER_CONTROL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, requestContext, computerId, ...query }) => {
     const computers = mastra.getComputers?.();
-    if (!computers?.controlState) throw notFound();
+    if (!getComputerServerState(mastra) || !computers?.controlState) throw notFound();
     const scope = scopeOf(requestContext, query);
     await authorize(mastra, requestContext, scope, 'memory:read');
     try {
@@ -139,7 +139,7 @@ export const CHANGE_COMPUTER_CONTROL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, requestContext, computerId, action, note, ...body }) => {
     const computers = mastra.getComputers?.();
-    if (!computers?.control) throw notFound();
+    if (!getComputerServerState(mastra) || !computers?.control) throw notFound();
     const scope = scopeOf(requestContext, body);
     await authorize(mastra, requestContext, scope, 'memory:write');
     try {
