@@ -57,6 +57,10 @@ export interface ComputerProvider {
   readonly macContext: string;
   create(options: { sandboxId?: string; reattach?: 'required' }): ComputerSandbox;
   viewer(sandbox: ComputerSandbox, scope: MastraComputerScope): Promise<MastraComputerViewer | null>;
+  embed?(
+    sandbox: ComputerSandbox,
+    options: { origin: string; mode: 'watch' | 'control' },
+  ): Promise<string | null>;
   port?(sandbox: ComputerSandbox, port: number): Promise<{ url: string; headers: Record<string, string> } | null>;
 }
 
@@ -801,6 +805,16 @@ export class Computers implements MastraComputers {
   async viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
     const sandbox = (await this.#attached(computerId, scope)).sandbox!;
     return this.#provider.viewer(sandbox, scope);
+  }
+
+  async embed(
+    computerId: string,
+    scope: MastraComputerScope,
+    options: { origin: string; mode: 'watch' | 'control' },
+  ): Promise<string | null> {
+    if (!this.#provider.embed) return null;
+    const sandbox = (await this.#attached(computerId, scope)).sandbox!;
+    return this.#provider.embed(sandbox, options);
   }
 
   async #attached(computerId: string, scope: MastraComputerScope): Promise<Entry> {

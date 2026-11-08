@@ -71,6 +71,12 @@ export interface MastraComputers {
   __registerMastra?(mastra: Mastra): void;
   tools(): Record<string, ToolAction<any, any, any, any>>;
   viewer(computerId: string, scope: MastraComputerScope): Promise<MastraComputerViewer | null>;
+  /** Mint an origin-bound embed URL when the provider supports external presentation. */
+  embed?(
+    computerId: string,
+    scope: MastraComputerScope,
+    options: { origin: string; mode: 'watch' | 'control' },
+  ): Promise<string | null>;
   /** Who holds a computer's input. Throws when the computer isn't attached to this thread. */
   controlState?(computerId: string, scope: MastraComputerScope): Promise<MastraComputerControl>;
   /** Hands a computer's input to the user (`take`) or back to the agent (`release`). */

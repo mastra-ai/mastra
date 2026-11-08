@@ -9,28 +9,11 @@ import type { Mastra } from '@mastra/core/mastra';
 /** @experimental Computer cards are on only when the experimental computer flag is set. */
 export const computerCardsEnabled = (): boolean => process.env.MASTRA_EXPERIMENTAL_COMPUTER === 'true';
 
-/** @experimental Arguments passed to {@link ComputerEmbedUrlFn}. */
-export interface ComputerEmbedUrlArgs {
-  computerId: string;
-  threadId: string;
-  resourceId: string;
-  /** `'control'` while the person holds the input lease, otherwise `'watch'`. */
-  mode: 'watch' | 'control';
-}
-
-/**
- * @experimental Return a URL Slack can frame in the Work Object flexpane, or `null`.
- * The URL is only sent to Slack in the flexpane details response, never in a channel message.
- */
-export type ComputerEmbedUrlFn = (args: ComputerEmbedUrlArgs) => string | null | Promise<string | null>;
-
 export const COMPUTER_TAKE_ACTION = 'computer_take';
 export const COMPUTER_RELEASE_ACTION = 'computer_release';
 export const EMBED_MIME_TYPE = 'application/vnd.slack-embed';
 const ENDED_TEXT = 'This computer is no longer attached to this conversation.';
 const FALLBACK_NAME = 'Computer';
-const PREVIEW_BUDGET_MS = 1_500;
-const PREVIEW_TIMEOUT_NOTICE = 'The desktop preview is still starting. Refresh this card in a moment.';
 
 export const OWNER_ONLY_TEXT = 'Only the person who started this conversation can control its computer.';
 
@@ -191,7 +174,6 @@ export interface ComputerCardsOptions {
   client: CardWebClient;
   /** Decodes a chat SDK thread id into Slack coordinates (the conversation adapter's `decodeThreadId`). */
   decodeThreadId: (threadId: string) => { channel: string; threadTs?: string };
-  embedUrl?: ComputerEmbedUrlFn;
   getBaseUrl: () => string | undefined;
   getMastra: () => Mastra | undefined;
   /** False when the host disabled actions (`handlers.onAction: false`). */
@@ -324,7 +306,7 @@ export class ComputerCards {
         threadId: p.threadId,
       });
       const card: CardState = { channel, name, holder: 'agent', ended: false, ref };
-      const url = this.#opts.embedUrl && ref.length <= 128 ? this.#entityUrl(ref) : undefined;
+      const url = ref.length <= 128 ? this.#entityUrl(ref) : undefined;
       const res = await client.chat.postMessage({
         channel,
         ...(threadTs ? { thread_ts: threadTs } : {}),
@@ -460,60 +442,36 @@ export class ComputerCards {
     const name = this.#cards.get(`${ref.computerId}:${ref.threadId}`)?.name ?? FALLBACK_NAME;
 
     const startedAt = Date.now();
-    const preview = this.#previewUrl(ref, event);
-    const timed = await Promise.race([
-      preview.then(previewUrl => ({ previewUrl, timedOut: false as const })).catch(err => {
-        this.#warn('Computer flexpane check failed', err);
-        return { previewUrl: null, timedOut: false as const };
-      }),
-      new Promise<{ previewUrl: null; timedOut: true }>(resolve =>
-        setTimeout(() => resolve({ previewUrl: null, timedOut: true }), PREVIEW_BUDGET_MS),
-      ),
-    ]);
+    let previewUrl: string | null;
+    try {
+      previewUrl = await this.#previewUrl(ref, event);
+    } catch (error) {
+      this.#warn('Computer flexpane embed mint failed', error);
+      return;
+    }
 
     await this.#opts.client
       .apiCall('entity.presentDetails', {
         trigger_id: triggerId,
-        metadata: buildEntity({ ref: externalRef as string, url, name, previewUrl: timed.previewUrl }),
+        metadata: buildEntity({ ref: externalRef as string, url, name, previewUrl }),
       })
       .then(() =>
         this.#opts.logger?.info?.('[Slack] Computer flexpane details presented', { elapsedMs: Date.now() - startedAt }),
       )
       .catch(err => this.#warn('Computer flexpane details failed', err));
-
-    if (timed.timedOut) {
-      void preview.then(
-        () => this.#postPreviewTimeoutNotice(ref),
-        () => this.#postPreviewTimeoutNotice(ref),
-      );
-    }
-  }
-
-  async #postPreviewTimeoutNotice(ref: ComputerRef): Promise<void> {
-    const thread = await this.#loadThread(ref.threadId);
-    const externalThreadId = thread?.metadata?.channel_externalThreadId;
-    if (typeof externalThreadId !== 'string') return;
-    const { channel, threadTs } = this.#opts.decodeThreadId(externalThreadId);
-    await this.#opts.client.chat
-      .postMessage({ channel, ...(threadTs ? { thread_ts: threadTs } : {}), text: PREVIEW_TIMEOUT_NOTICE })
-      .catch(err => this.#warn('Computer preview timeout notice failed', err));
   }
 
   async #previewUrl(ref: ComputerRef, event: Record<string, unknown>): Promise<string | null> {
-    if (!this.#opts.embedUrl) return null;
     const userId = typeof event.user === 'string' ? event.user : undefined;
     const thread = await this.#loadThread(ref.threadId);
     if (!thread || !userId || thread.metadata?.channel_platform !== 'slack') return null;
     if (thread.resourceId !== `slack:${userId}`) return null;
     const computers = this.#opts.getMastra()?.getComputers();
-    if (!computers?.controlState) return null;
+    if (!computers?.controlState || !computers.embed) return null;
     const scope = { threadId: ref.threadId, resourceId: thread.resourceId };
     const state = await computers.controlState(ref.computerId, scope);
-    if (!state) return null;
-    return this.#opts.embedUrl({
-      computerId: ref.computerId,
-      threadId: ref.threadId,
-      resourceId: thread.resourceId,
+    return computers.embed(ref.computerId, scope, {
+      origin: 'https://app.slack.com',
       mode: state.holder === 'human' ? 'control' : 'watch',
     });
   }

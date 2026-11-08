@@ -143,8 +143,9 @@ describe('card lifecycle', () => {
       expect(calls[0]!.method).toBe('chat.postMessage');
       expect(calls[0]!.args.channel).toBe(channel);
       expect(calls[0]!.args.thread_ts).toBe(threadTs);
-      expect(calls[0]!.args.metadata).toBeUndefined();
-      expect(JSON.stringify(calls[0]!.args)).not.toMatch(/https?:\/\//);
+      expect(calls[0]!.args.metadata.entities[0].entity_payload.attributes.full_size_preview).toEqual({
+        is_supported: false,
+      });
     });
   }
 
@@ -177,14 +178,16 @@ describe('card lifecycle', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('with an embed hook, posts Work Object metadata whose url is the static page, never a viewer url', async () => {
-    const embedUrl = vi.fn(async () => 'https://viewer.example/secret-token');
-    const { cards, calls } = makeCards({ embedUrl });
+  it('posts static Work Object metadata without minting an embed', async () => {
+    const embed = vi.fn(async () => 'https://viewer.example/secret-token');
+    const { cards, calls } = makeCards({
+      getMastra: () => ({ getComputers: () => ({ embed }) }) as any,
+    });
     await cards.onDataPart(part({ computerId: 'c1', status: 'attached', name: 'Desk' }), ctx('slack:C1:1.1'));
     const entity = calls[0]!.args.metadata.entities[0];
     expect(entity.url).toMatch(/^https:\/\/example\.com\/slack\/computers\/w1\?ref=/);
     expect(entity.external_ref.id).toMatch(REF_CHARSET);
-    expect(embedUrl).not.toHaveBeenCalled();
+    expect(embed).not.toHaveBeenCalled();
     expect(JSON.stringify(calls)).not.toContain('secret-token');
   });
 
@@ -314,7 +317,9 @@ describe('details + buttons', () => {
       resourceId?: string;
       controlThrows?: boolean;
       noControl?: boolean;
-      embedDelay?: number;
+      noEmbed?: boolean;
+      embedNull?: boolean;
+      embedThrows?: boolean;
     } = {},
   ) {
     const thread = {
@@ -327,18 +332,21 @@ describe('details + buttons', () => {
       return { holder: input.action === 'take' ? ('human' as const) : ('agent' as const), notified: true };
     });
     const controlState = vi.fn(async () => ({ holder: opts.holder ?? ('agent' as const) }));
+    const embed = vi.fn(async (_id: string, _scope: unknown, input: { origin: string; mode: string }) => {
+      if (opts.embedThrows) throw new Error('mint failed');
+      return opts.embedNull ? null : `https://embed.example/${input.mode}`;
+    });
     const mastra = {
       getStorage: () => ({
         getStore: async () => ({ getThreadById: async ({ threadId }: any) => (threadId === 'th-1' ? thread : null) }),
       }),
-      getComputers: () => (opts.noControl ? { tools: () => ({}) } : { control, controlState }),
+      getComputers: () =>
+        opts.noControl
+          ? { tools: () => ({}) }
+          : { control, controlState, ...(!opts.noEmbed && { embed }) },
     };
-    const embedUrl = vi.fn(async (a: any) => {
-      if (opts.embedDelay) await new Promise(resolve => setTimeout(resolve, opts.embedDelay));
-      return `https://embed.example/${a.mode}`;
-    });
-    const h = makeCards({ getMastra: () => mastra as any, embedUrl });
-    return { ...h, control, embedUrl };
+    const h = makeCards({ getMastra: () => mastra as any });
+    return { ...h, control, embed };
   }
   const click = (over: Record<string, unknown> = {}) => ({
     actionId: 'computer_take',
@@ -425,35 +433,42 @@ describe('details + buttons', () => {
     event: { type: 'entity_details_requested', user: 'U1', trigger_id: 'trig', external_ref: { id: goodRef }, ...over },
   });
 
-  it('owner details gets a framed preview in watch/control mode by holder', async () => {
+  it('owner details mints a fresh origin-bound embed in watch/control mode', async () => {
     for (const holder of ['agent', 'human'] as const) {
-      const { cards, calls, embedUrl } = harness({ holder });
+      const { cards, calls, embed } = harness({ holder });
       await cards.handleDetails(details());
-      expect(embedUrl).toHaveBeenCalledWith({
-        computerId: 'c1',
-        threadId: 'th-1',
-        resourceId: 'slack:U1',
-        mode: holder === 'human' ? 'control' : 'watch',
-      });
+      await cards.handleDetails(details({ trigger_id: 'trig-2' }));
+      expect(embed).toHaveBeenCalledTimes(2);
+      expect(embed).toHaveBeenLastCalledWith(
+        'c1',
+        { threadId: 'th-1', resourceId: 'slack:U1' },
+        { origin: 'https://app.slack.com', mode: holder === 'human' ? 'control' : 'watch' },
+      );
       const call = calls.find(c => c.method === 'entity.presentDetails')!;
       expect(call.args.trigger_id).toBe('trig');
       expect(call.args.metadata.entity_payload.attributes.full_size_preview.preview_url).toContain('embed.example');
     }
   });
 
-  it('presents details within two seconds when the embed URL is slow', async () => {
-    const { cards, calls } = harness({ embedDelay: 5_000 });
-    const startedAt = Date.now();
+  it.each([{ noEmbed: true }, { embedNull: true }])(
+    'reports unsupported when the provider embed is absent or returns null',
+    async options => {
+      const { cards, calls } = harness(options);
+      await cards.handleDetails(details());
+      expect(calls[0]!.args.metadata.entity_payload.attributes.full_size_preview).toEqual({ is_supported: false });
+    },
+  );
+
+  it('treats embed failures as operational and does not present unsupported details', async () => {
+    const { cards, calls } = harness({ embedThrows: true });
     await cards.handleDetails(details());
-    expect(Date.now() - startedAt).toBeLessThan(2_000);
-    const call = calls.find(c => c.method === 'entity.presentDetails')!;
-    expect(call.args.metadata.entity_payload.attributes.full_size_preview).toEqual({ is_supported: false });
+    expect(calls).toHaveLength(0);
   });
 
   it('non-owner details gets is_supported:false and no embed URL is minted', async () => {
-    const { cards, calls, embedUrl } = harness();
+    const { cards, calls, embed } = harness();
     await cards.handleDetails(details({ user: 'U2' }));
-    expect(embedUrl).not.toHaveBeenCalled();
+    expect(embed).not.toHaveBeenCalled();
     expect(calls[0]!.args.metadata.entity_payload.attributes.full_size_preview).toEqual({ is_supported: false });
   });
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { InMemoryComputersStorage, InMemoryStore } from '../storage';
 import { Computers } from './computers.js';
@@ -90,6 +90,26 @@ describe('Computers', () => {
       url: 'https://viewer.test/sandbox-1',
       headers: {},
     });
+  });
+
+  it('mints provider embeds only for an attached owner scope', async () => {
+    const embed: NonNullable<ComputerProvider['embed']> = vi.fn(
+      async (_machine, options) => `https://embed.test/${options.mode}`,
+    );
+    const computers = new Computers({ provider: { ...provider(), embed }, secret: 'secret' });
+    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({ persist: false }, context);
+    const scope = { resourceId: 'resource', threadId: 'thread' };
+
+    await expect(computers.embed(created.computer.id, scope, { origin: 'https://app.slack.com', mode: 'watch' })).resolves.toBe(
+      'https://embed.test/watch',
+    );
+    expect(embed).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'sandbox-1' }), {
+      origin: 'https://app.slack.com',
+      mode: 'watch',
+    });
+    await expect(
+      computers.embed(created.computer.id, { ...scope, threadId: 'other' }, { origin: 'https://app.slack.com', mode: 'watch' }),
+    ).rejects.toThrow();
   });
 
   it('binds signed ids to the owning resource', async () => {

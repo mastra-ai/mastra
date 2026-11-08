@@ -905,7 +905,6 @@ export class SlackProvider implements ChannelProvider {
       },
       client,
       decodeThreadId: id => adapter.decodeThreadId(id),
-      embedUrl: this.#channelConfig.computerEmbedUrl,
       getBaseUrl: () => this.#getBaseUrl(),
       getMastra: () => this.#mastra,
       buttons: hostHandlers?.onAction !== false,
