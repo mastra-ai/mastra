@@ -56,37 +56,7 @@
     "kimi-k2.5"
   ],
   "reasoning": {
-    "claude-haiku-4-5": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-5-3-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-3-1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "grok-4-3": [
+    "gpt-5-4-nano": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -99,16 +69,20 @@
         "max": 32768
       }
     ],
-    "gpt-5-5": [
+    "grok-4-3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-oss-120b": [
+    "claude-sonnet-4-6": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
       }
     ],
     "gemini-3-flash-preview": [
@@ -117,7 +91,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5-4-nano": [
+    "claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3-1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -130,7 +110,19 @@
         "max": 24576
       }
     ],
-    "claude-sonnet-4-6": [
+    "claude-haiku-4-5": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "gpt-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-6": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -146,14 +138,22 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-opus-4-6": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      },
+      }
+    ],
+    "gpt-oss-120b": [
       {
-        "type": "budget_tokens",
-        "min": 1024
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5-3-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

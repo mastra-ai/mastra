@@ -3,6 +3,15 @@
   "temperature": ["deepseek-v4-flash", "glm-5.3"],
   "structuredOutput": ["deepseek-v4-flash", "glm-5.3", "gpt-5.6-sol"],
   "reasoning": {
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
@@ -25,15 +34,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

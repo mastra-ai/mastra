@@ -19826,9 +19826,9 @@
       },
       "minimax/MiniMax-M3.1-Flash": {
         "cost": {
-          "input": 0.075,
-          "output": 0.3,
-          "cache_read": 0.0075
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.015
         }
       },
       "mistral/codestral-2508": {
@@ -22834,20 +22834,6 @@
           "cache_read": 0.03
         }
       },
-      "accounts/fireworks/models/gpt-oss-120b": {
-        "cost": {
-          "input": 0.15,
-          "output": 0.6,
-          "cache_read": 0.015
-        }
-      },
-      "accounts/fireworks/models/inkling": {
-        "cost": {
-          "input": 1,
-          "output": 4.05,
-          "cache_read": 0.17
-        }
-      },
       "accounts/fireworks/models/kimi-k3": {
         "cost": {
           "input": 3,
@@ -22881,20 +22867,6 @@
           "input": 1.25,
           "output": 4.25,
           "cache_read": 0.15
-        }
-      },
-      "accounts/fireworks/models/nemotron-3-ultra-nvfp4": {
-        "cost": {
-          "input": 0.6,
-          "output": 2.4,
-          "cache_read": 0.12
-        }
-      },
-      "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {
-        "cost": {
-          "input": 0.05,
-          "output": 0.2,
-          "cache_read": 0.01
         }
       },
       "accounts/fireworks/models/qwen3p8-2p4t-a95b": {
@@ -29874,9 +29846,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.04,
-          "output": 0.121,
-          "cache_read": 0.02
+          "input": 0.027,
+          "output": 0.08,
+          "cache_read": 0.013
         }
       },
       "google/gemma-4-31b-it": {
@@ -29909,27 +29881,6 @@
           "input": 0.06,
           "output": 0.15,
           "cache_read": 0.015
-        }
-      },
-      "inception/mercury-2": {
-        "cost": {
-          "input": 0.25,
-          "output": 0.75,
-          "cache_read": 0.025
-        }
-      },
-      "inception/mercury-2.5": {
-        "cost": {
-          "input": 0.2,
-          "output": 0.75,
-          "cache_read": 0.02
-        }
-      },
-      "inception/mercury-3": {
-        "cost": {
-          "input": 0.2,
-          "output": 0.7,
-          "cache_read": 0.02
         }
       },
       "inclusionai/ling-3.0-flash": {
@@ -30876,15 +30827,15 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.03,
-          "output": 0.15,
-          "cache_read": 0.015
+          "input": 0.023,
+          "output": 0.084,
+          "cache_read": 0.02
         }
       },
       "openai/gpt-oss-20b": {
         "cost": {
           "input": 0.004,
-          "output": 0.018,
+          "output": 0.017,
           "cache_read": 0.003
         }
       },
@@ -31433,9 +31384,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.0825,
-          "output": 0.33,
-          "cache_read": 0.020625
+          "input": 0.132,
+          "output": 0.528,
+          "cache_read": 0.033
         }
       },
       "tencent/hy3-preview": {
@@ -31454,9 +31405,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -31842,9 +31793,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.1824,
-          "output": 10.5478,
-          "cache_read": 0.18
+          "input": 0.1567,
+          "output": 9.3388,
+          "cache_read": 0.15
         }
       },
       "~openai/gpt-astra-latest": {
@@ -42731,9 +42682,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.026,
-          "output": 0.079,
-          "cache_read": 0.013
+          "input": 0.018,
+          "output": 0.053,
+          "cache_read": 0.009
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42745,9 +42696,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.026,
-          "output": 0.079,
-          "cache_read": 0.013
+          "input": 0.018,
+          "output": 0.053,
+          "cache_read": 0.009
         }
       },
       "google/gemma-4-31b-it": {
@@ -43940,7 +43891,7 @@
       "openai/gpt-oss-20b": {
         "cost": {
           "input": 0.004,
-          "output": 0.018,
+          "output": 0.017,
           "cache_read": 0.003
         }
       },
@@ -44031,9 +43982,9 @@
       },
       "ornith-ai/ornith-1.5-122b": {
         "cost": {
-          "input": 0.2,
-          "output": 0.8,
-          "cache_read": 0.02
+          "input": 0.26,
+          "output": 2.08,
+          "cache_read": 0.07
         }
       },
       "ornith-ai/ornith-1.5-35b-a3b": {
@@ -44790,9 +44741,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -44894,16 +44845,16 @@
       },
       "upstage/solar-pro4": {
         "cost": {
-          "input": 0.03,
-          "output": 0.12,
-          "cache_read": 0.006
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.03
         }
       },
       "upstage/solar-pro4:thinking": {
         "cost": {
-          "input": 0.03,
-          "output": 0.12,
-          "cache_read": 0.006
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.03
         }
       },
       "venice-uncensored": {
@@ -52178,9 +52129,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.505122,
-          "output": 1.010244,
-          "cache_read": 0.042094
+          "input": 0.423864,
+          "output": 0.847728,
+          "cache_read": 0.035322
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -52199,9 +52150,9 @@
       },
       "deepseek/deepseek-v4.1-flash-1017": {
         "cost": {
-          "input": 0.15,
-          "output": 0.6,
-          "cache_read": 0.003
+          "input": 0.006,
+          "output": 0.5,
+          "cache_read": 0.005
         }
       },
       "dots-studio/dots-3-note-preview:free": {
@@ -52709,8 +52660,8 @@
       },
       "meta-llama/llama-3.2-3b-instruct": {
         "cost": {
-          "input": 0.0509,
-          "output": 0.335
+          "input": 0.05,
+          "output": 0.33
         }
       },
       "meta-llama/llama-3.3-70b-instruct": {
@@ -52830,9 +52781,9 @@
       },
       "minimax/minimax-m3.1-flash": {
         "cost": {
-          "input": 0.075,
-          "output": 0.3,
-          "cache_read": 0.0075
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.015
         }
       },
       "mistralai/codestral-2508": {
@@ -53857,9 +53808,9 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.019,
-          "output": 0.072,
-          "cache_read": 0.018
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.075
         }
       },
       "openai/gpt-oss-20b": {
@@ -54213,8 +54164,8 @@
       },
       "qwen/qwen3.6-27b": {
         "cost": {
-          "input": 0.45,
-          "output": 2.7
+          "input": 0.32,
+          "output": 3.2
         }
       },
       "qwen/qwen3.6-35b-a3b": {
@@ -54556,9 +54507,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.0825,
-          "output": 0.33,
-          "cache_read": 0.020625
+          "input": 0.132,
+          "output": 0.528,
+          "cache_read": 0.033
         }
       },
       "tencent/hy3-preview": {
@@ -54577,9 +54528,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -54944,8 +54895,8 @@
       },
       "z-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.15,
-          "output": 0.5,
+          "input": 0.0335,
+          "output": 0.083,
           "cache_read": 0.03
         }
       },
@@ -55081,7 +55032,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.1824,
-          "output": 10.5478,
+          "output": 9.3388,
           "cache_read": 0.18
         }
       },
