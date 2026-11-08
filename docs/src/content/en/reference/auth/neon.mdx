@@ -10,7 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable"
 
 # `MastraAuthNeon` and `MastraRBACNeon`
 
-[`MastraAuthNeon`](https://github.com/mastra-ai/mastra/tree/main/auth/neon) connects Mastra authentication to [Neon Auth](https://neon.com/docs/guides/neon-auth). It authenticates JWT bearer tokens with Neon Auth's JWKS endpoint and falls back to validating Neon Auth session cookies through its session API. The provider also supports email-and-password sign-in, sign-up, and session management.
+[`MastraAuthNeon`](https://github.com/mastra-ai/mastra/tree/main/auth/neon) connects Mastra authentication to [Neon Auth](https://neon.com/docs/guides/neon-auth). It verifies Neon Auth JWTs sent as bearer tokens with Neon Auth's JWKS endpoint and validates Neon Auth session cookies through its session API. The provider also supports email-and-password sign-in, sign-up, and session management.
 
 `MastraRBACNeon` maps Neon Auth organization roles to Mastra permissions. Register it separately when your application uses Neon Auth organization memberships for role-based access control.
 
@@ -44,7 +44,9 @@ export const mastra = new Mastra({
 })
 ```
 
-Set `NEON_AUTH_BASE_URL` to your Neon Auth service URL. You can also pass `baseUrl` directly to both constructors.
+Set `NEON_AUTH_BASE_URL` to the Neon Auth URL shown in the Neon Console, for example `https://ep-example-123456.neonauth.us-east-2.aws.neon.tech/neondb/auth`. You can also pass `baseUrl` directly to both constructors.
+
+Visit the [Neon integration guide](/integrations/auth/neon) for setup steps.
 
 ## `MastraAuthNeon`
 
@@ -58,23 +60,24 @@ The `MastraAuthNeon` constructor accepts an optional `MastraAuthNeonOptions` obj
     name: 'baseUrl?',
     type: 'string',
     description:
-      'Neon Auth service URL. Falls back to the NEON_AUTH_BASE_URL environment variable. Trailing slashes are removed.',
+      'Neon Auth URL, including the database path (for example /neondb/auth). Falls back to the NEON_AUTH_BASE_URL environment variable. Trailing slashes are removed. The JWT issuer and audience must equal the origin of this URL.',
   },
   {
     name: 'jwksUrl?',
     type: 'string',
     description:
-      'JWKS endpoint used to verify bearer tokens. Falls back to NEON_AUTH_JWKS_URL, then <baseUrl>/auth/jwks.',
+      'JWKS endpoint used to verify bearer tokens. Falls back to NEON_AUTH_JWKS_URL, then <baseUrl>/.well-known/jwks.json.',
   },
   {
     name: 'sessionCookieName?',
     type: 'string',
-    description: 'Name of the Neon Auth session cookie. Defaults to neonauth.session_token.',
+    description: 'Name of the Neon Auth session cookie. Defaults to __Secure-neon-auth.session_token.',
   },
   {
     name: 'signUpEnabled?',
     type: 'boolean',
-    description: 'Whether credentials-based sign-up is enabled. Defaults to true.',
+    description:
+      'Whether credentials-based sign-up is enabled. When false, signUp() throws and no Neon Auth account is created. Defaults to true.',
   },
   {
     name: 'name?',
@@ -129,7 +132,9 @@ The `MastraAuthNeon` constructor accepts an optional `MastraAuthNeonOptions` obj
 await auth.authenticateToken(token, request)
 ```
 
-Verifies the token as a JWT with the configured JWKS endpoint. If JWT verification fails, the provider validates it as a Neon Auth session token through the session API. Returns the authenticated `NeonAuthUser`, or `null` when neither method succeeds.
+Verifies a JWT-shaped token against the configured JWKS endpoint, checking its signature, issuer, audience, and expiry. Otherwise, validates the Neon Auth session cookie from the request through the session API. If JWT verification fails, the session cookie is still accepted, so an expired bearer token doesn't sign out a client that also sends cookies. When the request has no session cookie, a non-JWT token is treated as the session cookie value. Returns the authenticated `NeonAuthUser`, or `null` when validation fails.
+
+`NeonAuthUser` contains the top-level `id`, `email`, and `name`, the Neon Auth `user` object, and either the `session` (cookie authentication) or the verified `jwt` claims (bearer authentication).
 
 #### `authorizeUser()`
 
@@ -147,7 +152,7 @@ Runs the configured custom authorization function when one is provided. Otherwis
 const result = await auth.signIn(email, password, request)
 ```
 
-Authenticates email-and-password credentials through Neon Auth. Returns the authenticated user, optional token, and response cookies.
+Authenticates email-and-password credentials through Neon Auth. Returns the authenticated user, a Neon Auth JWT as `token`, and the Neon Auth session cookies. Neon Auth must trust the origin of the incoming request.
 
 #### `signUp()`
 
@@ -155,7 +160,7 @@ Authenticates email-and-password credentials through Neon Auth. Returns the auth
 const result = await auth.signUp(email, password, name, request)
 ```
 
-Creates a Neon Auth account using email-and-password credentials. `name` is optional; when omitted, the provider derives a display name from the email address. Returns the authenticated user, optional token, and response cookies.
+Creates a Neon Auth account using email-and-password credentials. `name` is optional. When omitted, the provider derives a display name from the email address. Returns the same result as `signIn()`.
 
 #### `isSignUpEnabled()`
 
@@ -194,10 +199,13 @@ Validates the session through Neon Auth. Neon Auth refreshes sessions automatica
 #### `destroySession()`
 
 ```typescript
-await auth.destroySession(sessionId)
+const sessionId = auth.getSessionIdFromRequest(request)
+if (sessionId) await auth.destroySession(sessionId)
 ```
 
-Completes without a remote request. Neon Auth handles session destruction through its sign-out endpoint, while `getClearSessionHeaders()` returns the headers used to clear local session cookies.
+Pass the signed session cookie value from `getSessionIdFromRequest()`, not the `id` returned by `validateSession()`. `destroySession()` attempts to revoke that session through the Neon Auth sign-out endpoint. A network error or non-2xx response can leave the session active, and the method doesn't throw for these failures. When Mastra sends the header from `getClearSessionHeaders()`, it clears the matching cookie on the Mastra host, not a cookie on a separate Neon Auth host. A separate Neon Auth session can remain active after Studio sign-out.
+
+Revoking a session doesn't invalidate an already-issued JWT. Bearer tokens that pass JWT verification can still authenticate because verification doesn't check the Neon Auth session. JWT verification doesn't require an expiration claim, so a token without one may remain usable after sign-out.
 
 ## `MastraRBACNeon`
 
@@ -218,18 +226,18 @@ The `MastraRBACNeon` constructor accepts a `MastraRBACNeonOptions` object.
     name: 'baseUrl?',
     type: 'string',
     description:
-      'Neon Auth service URL. Falls back to the NEON_AUTH_BASE_URL environment variable. Trailing slashes are removed.',
+      'Neon Auth URL. Falls back to the NEON_AUTH_BASE_URL environment variable. Trailing slashes are removed.',
   },
   {
     name: 'organizationId?',
     type: 'string',
-    description: 'Restricts membership lookup to one Neon Auth organization.',
+    description: 'Organization whose membership role is used. Defaults to the active organization of the session.',
   },
   {
     name: 'getUserRoles?',
     type: '(user: NeonAuthUser) => Promise<string[]> | string[]',
     description:
-      'Custom function for extracting role names. When omitted, the provider fetches organization memberships from Neon Auth.',
+      'Custom function that returns role names for a user. Use it to assign roles to bearer JWT requests, which carry no organization roles.',
   },
   {
     name: 'cache?',
@@ -247,7 +255,9 @@ The `MastraRBACNeon` constructor accepts a `MastraRBACNeonOptions` object.
 const roles = await rbac.getRoles(user)
 ```
 
-Returns roles from the configured `getUserRoles` function, the user's JWT `role` claim, or Neon Auth organization memberships. When `organizationId` is set, only memberships for that organization are considered.
+Returns roles from the configured `getUserRoles` function when provided. Otherwise, when `organizationId` is set or the session has an active organization, returns the user's role in that organization, read from Neon Auth with the user's session cookie. Non-members get no roles. Without an organization, returns the user's Neon Auth role, such as `user` or `admin`.
+
+Bearer JWT requests have no session, so they get no roles unless `getUserRoles` is provided. The JWT `role` claim (`authenticated`) is never used as a Mastra role.
 
 #### `hasRole()`
 

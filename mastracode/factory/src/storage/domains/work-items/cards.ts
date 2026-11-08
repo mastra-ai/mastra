@@ -28,6 +28,13 @@ const PROJECTED_COLUMNS = new Set([
   'feed_activity_at',
 ]);
 const ID_BATCH = 500;
+const LEGACY = WORK_ITEMS_SCHEMA.name;
+const LEGACY_KEYS = ['id', 'org_id', 'factory_project_id', 'source_key'] as const;
+
+/** Copies legacy cards that have no split rows yet; only supplied while the split backfill is pending. */
+export interface LegacyCardCopier {
+  copy(rows: readonly WorkItemDbRow[]): Promise<void>;
+}
 
 export type CardInsert = Pick<
   WorkItemDbRow,
@@ -117,7 +124,39 @@ export class Cards {
   constructor(
     private readonly ops: FactoryStorageOps,
     private readonly legacyMode = false,
+    private readonly copier?: LegacyCardCopier,
   ) {}
+
+  /**
+   * Copies the legacy cards a lookup by id or source addresses that have no split rows and no
+   * tombstone. Returns whether it tried, so the caller re-reads the split tables.
+   */
+  async #copyLegacy(where: CollectionWhere): Promise<boolean> {
+    if (!this.copier || (where.id === undefined && where.source_key === undefined)) return false;
+    const legacyWhere: CollectionWhere = {};
+    for (const key of LEGACY_KEYS) if (where[key] !== undefined) legacyWhere[key] = where[key];
+    const rows = await this.ops.findMany<WorkItemDbRow>(LEGACY, legacyWhere);
+    if (!rows.length) return false;
+    const ids = { in: rows.map(row => row.id) };
+    const done = new Set(
+      [
+        ...(await this.ops.findMany<{ id: string }>(BOARD_ITEMS, { id: ids })),
+        ...(await this.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, { id: ids })),
+      ].map(row => row.id),
+    );
+    const missing = rows.filter(row => !done.has(row.id));
+    if (!missing.length) return false;
+    await this.copier.copy(missing);
+    return true;
+  }
+
+  /** Single-card writes copy first only when the split tables miss the card. */
+  async #copyLegacyOnMiss(where: CollectionWhere): Promise<void> {
+    if (!this.copier) return;
+    const boardWhere = await this.#where(where);
+    if (boardWhere && (await this.ops.findOne(BOARD_ITEMS, boardWhere))) return;
+    await this.#copyLegacy(where);
+  }
 
   async #where(where: CollectionWhere): Promise<CollectionWhere | null> {
     const { source_key: sourceKey, ...rest } = where;
@@ -174,6 +213,11 @@ export class Cards {
 
   async findOne(where: CollectionWhere): Promise<WorkItemDbRow | null> {
     if (this.legacyMode) return this.ops.findOne(WORK_ITEMS_SCHEMA.name, where);
+    const found = await this.#findOne(where);
+    return found || !(await this.#copyLegacy(where)) ? found : this.#findOne(where);
+  }
+
+  async #findOne(where: CollectionWhere): Promise<WorkItemDbRow | null> {
     const boardWhere = await this.#where(where);
     if (!boardWhere) return null;
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, boardWhere);
@@ -182,6 +226,8 @@ export class Cards {
 
   async findMany(where: CollectionWhere, options?: CollectionListOptions): Promise<WorkItemDbRow[]> {
     if (this.legacyMode) return this.ops.findMany(WORK_ITEMS_SCHEMA.name, where, options);
+    // A split hit does not prove every match is copied (a source spans projects), so check first.
+    await this.#copyLegacy(where);
     const boardWhere = await this.#where(where);
     return boardWhere ? this.#join(await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, options)) : [];
   }
@@ -218,6 +264,7 @@ export class Cards {
     { touch = false }: { touch?: boolean } = {},
   ): Promise<WorkItemDbRow | null> {
     if (this.legacyMode) return this.ops.updateAtomic(WORK_ITEMS_SCHEMA.name, where, updater);
+    await this.#copyLegacyOnMiss(where);
     const boardWhere = await this.#where(where);
     if (!boardWhere) return null;
     const board = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, async row => {
@@ -313,6 +360,8 @@ export class Cards {
 
   async deleteMany(where: CollectionWhere): Promise<number> {
     if (this.legacyMode) return this.ops.deleteMany(WORK_ITEMS_SCHEMA.name, where);
+    // Copy first so the delete tombstones the card; otherwise the backfill would bring it back.
+    await this.#copyLegacy(where);
     const boardWhere = await this.#where(where);
     if (!boardWhere) return 0;
     const boards = await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, { orderBy: [['id', 'asc']] });

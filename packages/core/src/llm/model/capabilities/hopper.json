@@ -3,7 +3,7 @@
   "temperature": ["deepseek-v4.1-flash-1017", "deepseek-v4.1-flash-1017-abliterated"],
   "structuredOutput": ["deepseek-v4.1-flash-1017", "deepseek-v4.1-flash-1017-abliterated"],
   "reasoning": {
-    "deepseek-v4.1-flash-1017": [
+    "deepseek-v4.1-flash-1017-abliterated": [
       {
         "type": "toggle"
       },
@@ -12,7 +12,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash-1017-abliterated": [
+    "deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
       },
