@@ -3,6 +3,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
 import { BillingError, parseInput } from './contracts.js';
+import { CommercialStorage } from './storage/commercial.js';
+import { CommercialService } from './commercial.js';
+import type { PolarProviderOptions } from './setup.js';
 import { initializeBilling } from './setup.js';
 import { MastraBilling } from './mastra.js';
 import type { AgentResource, WorkflowResource } from './mastra-resources.js';
@@ -37,6 +40,7 @@ export async function initializeMastraBilling<
   workflows: Workflows;
   databaseUrl: string;
   workflowDatabaseUrl?: string;
+  polar?: PolarProviderOptions;
 }) {
   const files = parseInput(z.strictObject({ databaseUrl: localFile, workflowDatabaseUrl: localFile.optional() }), {
     databaseUrl: options.databaseUrl,
@@ -48,7 +52,9 @@ export async function initializeMastraBilling<
   const commercial = await initializeBilling({
     storage: { url: files.databaseUrl },
     configuration: options.configuration,
+    polar: options.polar,
   });
+  let commercialStorage: CommercialStorage | undefined;
   let accounting: AccountingStorage | undefined;
   let workflowStorage: WorkflowStorage | undefined;
   let snapshots: LibSQLStore | undefined;
@@ -68,17 +74,27 @@ export async function initializeMastraBilling<
       agents: options.agents,
       workflows: options.workflows,
     });
+    commercialStorage = await CommercialStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    const sessions = commercialStorage;
+    const commercialService = new CommercialService(
+      options.organizations,
+      sessions,
+      commercial.provider,
+      commercial.configuration,
+    );
     const storage = snapshots;
     const ledger = accounting;
     const runs = workflowStorage;
     let closed = false;
     return {
       billing,
+      commercial: commercialService,
       storage,
       configuration: commercial.configuration,
       close: async () => {
         if (closed) return;
         closed = true;
+        sessions.close();
         ledger.close();
         runs.close();
         commercial.close();
@@ -86,6 +102,7 @@ export async function initializeMastraBilling<
       },
     };
   } catch (error) {
+    commercialStorage?.close();
     accounting?.close();
     workflowStorage?.close();
     commercial.close();

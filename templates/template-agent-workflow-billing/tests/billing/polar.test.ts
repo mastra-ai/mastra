@@ -1,0 +1,527 @@
+import { stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { afterEach, describe, expect, it } from 'vitest';
+import { initializeBilling } from '../../src/billing/setup.js';
+import { CommercialService } from '../../src/billing/commercial.js';
+import { CommercialStorage } from '../../src/billing/storage/commercial.js';
+import { createBillingApp } from '../../src/server/billing.js';
+import { OrganizationService } from '../../src/billing/organizations.js';
+import { BillingGateway } from '../../src/billing/gateway.js';
+import { BillingDatabase } from '../../src/billing/storage/database.js';
+import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
+import { polarFixture } from '../support/polar.js';
+import { httpServer } from '../support/organizations.js';
+
+const cleanups: (() => unknown | Promise<unknown>)[] = [];
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+});
+async function fixture(options: Parameters<typeof polarFixture>[0] = {}) {
+  const value = await polarFixture(options);
+  cleanups.push(value.close);
+  return value;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+describe('Polar commercial and authoritative prepaid journeys', () => {
+  it('Polar driver preserves customer and usage identity across retries', async () => {
+    const f = await fixture();
+    const local = new OrganizationService(f.organizations.storage, { mode: 'local', provider: 'local' });
+    expect(() => new BillingGateway(local, f.accounting, f.commercial.provider, f.configuration, [])).toThrow(
+      expect.objectContaining({ code: 'invalid_configuration' }),
+    );
+    f.wire.data.lostCustomer = true;
+    const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    expect(f.wire.data.creations).toBe(1);
+    const created = f.wire.data.requests.find(value => value.method === 'POST' && value.path === '/v1/customers/');
+    expect(created?.body).toMatchObject({
+      email: 'trusted@example.test',
+      external_id: `workspace:${f.owner.workspaceId}`,
+    });
+    expect(created?.body).not.toHaveProperty('organization_id');
+    expect(JSON.stringify(f.wire.data.requests)).not.toContain('untrusted@example.test');
+    const response = await f.execute('first');
+    expect(response.billing).toMatchObject({ billedUnits: 3, executionStatus: 'completed' });
+    const outbox = (await f.observer.execute('SELECT payload FROM billing_outbox')).rows[0];
+    const event = JSON.parse(String(outbox.payload));
+    f.wire.data.lostUsage = true;
+    expect(await f.commercial.provider.reportUsage(event)).toMatchObject({ status: 'uncertain' });
+    const initialWire = structuredClone(
+      f.wire.data.requests.filter(value => value.path === '/v1/events/ingest')[0].body,
+    );
+    const durableBeforeRetry = (
+      await f.observer.execute({ sql: 'SELECT payload FROM provider_usage WHERE id = ?', args: [event.id] })
+    ).rows[0].payload;
+    const changedExport = structuredClone(f.configuration);
+    changedExport.polar!.meters[0].eventName = 'work.remapped';
+    changedExport.polar!.meters[0].unitsField = 'remapped_units';
+    const reopened = await initializeBilling({ ...f.initialization, configuration: changedExport });
+    cleanups.push(reopened.close);
+    expect(await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId })).toEqual(account);
+    expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
+    expect(await reopened.provider.reportUsage(event)).toEqual({ status: 'duplicate', eventId: event.id });
+    expect(f.wire.data.events.size).toBe(1);
+    expect(f.wire.data.requests.filter(value => value.path === '/v1/events/ingest').map(value => value.body)).toEqual([
+      initialWire,
+      initialWire,
+    ]);
+    expect(
+      (await f.observer.execute({ sql: 'SELECT payload FROM provider_usage WHERE id = ?', args: [event.id] })).rows[0]
+        .payload,
+    ).toBe(durableBeforeRetry);
+    expect([...f.wire.data.events.values()][0]).not.toHaveProperty('organization_id');
+    expect([...f.wire.data.events.values()][0]).toMatchObject({
+      external_id: event.id,
+      external_customer_id: account.externalReference,
+      metadata: { units: 3 },
+    });
+    expect((await reopened.provider.getState(account)).meters[0]).toMatchObject({
+      confirmedBalance: 7,
+      consumedUnits: 3,
+    });
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT COUNT(*) AS grants, SUM(original_units) AS original, SUM(consumed_units) AS consumed FROM credit_grants',
+        )
+      ).rows,
+    ).toEqual([{ grants: 2n, original: 10n, consumed: 3n }]);
+    await expect(reopened.provider.reportUsage({ ...event, units: 9 })).rejects.toMatchObject({ code: 'conflict' });
+    expect((await f.execute('first')).billing).toMatchObject({ replayed: true, billedUnits: 3 });
+    expect(f.calls()).toBe(1);
+    expect(f.wire.data.requests.every(value => value.version === '2026-10')).toBe(true);
+    expect(await reopened.provider.reconcile({ account, eventIds: [event.id] })).toMatchObject({
+      status: 'confirmed',
+      reflectedEventIds: [],
+      snapshot: { prepaidAuthority: 'application-ledger' },
+    });
+    const localStorage = await LocalBillingStorage.open({ url: f.database.url });
+    cleanups.push(() => localStorage.close());
+    await expect(localStorage.ensureAccount({ workspaceId: f.owner.workspaceId })).rejects.toMatchObject({
+      code: 'conflict',
+    });
+  });
+
+  it('legacy usage claims never invent an outbound payload after restart', async () => {
+    const f = await fixture();
+    await f.execute('legacy-pending');
+    await f.execute('legacy-acknowledged');
+    const events = (await f.observer.execute('SELECT payload FROM billing_outbox ORDER BY id')).rows.map(row =>
+      JSON.parse(String(row.payload)),
+    );
+    // These are the exact logical-only records written by the prior driver.
+    // Preserve its durable acknowledgement; uncertain history has no original
+    // event-name/units-field evidence and must not be reconstructed by guessing.
+    for (const [index, event] of events.entries())
+      await f.observer.execute({
+        sql: 'INSERT INTO provider_usage VALUES (?, ?, ?, ?)',
+        args: [event.id, event.account.id, JSON.stringify(event), index],
+      });
+    const before = (await f.observer.execute('SELECT * FROM provider_usage ORDER BY id')).rows;
+    f.commercial.close();
+    const changed = structuredClone(f.configuration);
+    changed.polar!.meters[0].eventName = 'work.remapped';
+    changed.polar!.meters[0].unitsField = 'remapped_units';
+    const reopened = await initializeBilling({ ...f.initialization, configuration: changed });
+    cleanups.push(reopened.close);
+    await expect(reopened.provider.reportUsage(events[0])).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect(await reopened.provider.reportUsage(events[1])).toEqual({ status: 'duplicate', eventId: events[1].id });
+    await expect(reopened.provider.reportUsage({ ...events[1], units: 9 })).rejects.toMatchObject({ code: 'conflict' });
+    expect(f.wire.data.requests.filter(value => value.path === '/v1/events/ingest')).toEqual([]);
+    expect((await f.observer.execute('SELECT * FROM provider_usage ORDER BY id')).rows).toEqual(before);
+    expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows).toEqual([{ units: 6n }]);
+    expect((await f.observer.execute('SELECT SUM(consumed_units) AS consumed FROM credit_grants')).rows).toEqual([
+      { consumed: 6n },
+    ]);
+  });
+
+  it('unavailable or unverified Polar grant state blocks new paid admission', async () => {
+    const f = await fixture();
+    await f.execute('funded');
+    for (const property of ['unavailable', 'truncated', 'wrongVersion', 'malformed'] as const) {
+      f.wire.data[property] = true;
+      await expect(f.execute(property)).rejects.toMatchObject({ code: 'state_unavailable' });
+      f.wire.data[property] = false;
+    }
+    const grant = f.wire.data.grants[0];
+    grant.customer_id = randomUUID();
+    await expect(f.execute('wrong-customer')).rejects.toMatchObject({ code: 'state_unavailable' });
+    grant.customer_id = f.wire.ids.customer;
+    f.wire.data.subscriptions[0].status = 'trialing';
+    f.wire.data.grants[0].is_granted = false;
+    f.wire.data.grants[0].is_revoked = true;
+    await expect(f.execute('inactive')).rejects.toMatchObject({ code: 'forbidden' });
+    expect(f.calls()).toBe(1);
+    expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows[0].units).toBe(3n);
+    // The same source cannot fund again after changing mapping version or meter.
+    f.wire.data.subscriptions[0].status = 'active';
+    f.wire.data.grants[0].is_granted = true;
+    f.wire.data.grants[0].is_revoked = false;
+    const changed = structuredClone(f.configuration);
+    changed.polar!.grants[0].version = 'v2';
+    const reopened = await initializeBilling({ ...f.initialization, configuration: changed });
+    cleanups.push(reopened.close);
+    const account = await reopened.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    await expect(reopened.provider.getState(account)).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect(
+      (await f.observer.execute('SELECT SUM(original_units) AS original FROM credit_grants')).rows[0].original,
+    ).toBe(10n);
+  });
+
+  it('checkout and portal enforce workspace billing permissions and allowed destinations', async () => {
+    const f = await fixture();
+    const member = await f.profile('member');
+    const outsider = await f.profile('outsider');
+    await f.organizations.convert(f.owner.context, 'share');
+    const invitation = await f.organizations.invite(f.owner.context, 'invite', {
+      recipientId: member.identity.id,
+      role: 'admin',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await f.organizations.accept(member.context, 'accept', { token: invitation.token! });
+    const app = await httpServer(createBillingApp(f.organizations, undefined, f.sessions));
+    cleanups.push(app.close);
+    const call = (credential: string, operation: string, key: string, body: unknown, workspace = f.owner.workspaceId) =>
+      fetch(`${app.url}/billing/workspaces/${workspace}/${operation}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${credential}`, 'Idempotency-Key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const body = { product: 'credit-pack', returnUrl: 'https://app.example.test/billing' };
+    expect((await call(member.credential, 'checkout', 'denied', body)).status).toBe(403);
+    expect((await call(outsider.credential, 'checkout', 'foreign', body)).status).toBe(403);
+    expect(
+      (await call(f.owner.credential, 'checkout', 'arbitrary', { ...body, returnUrl: `${body.returnUrl}/evil` }))
+        .status,
+    ).toBe(400);
+    expect((await call(f.owner.credential, 'checkout', 'product', { ...body, product: 'unmapped' })).status).toBe(400);
+    expect(f.wire.data.hosted).toBe(0);
+    const first = await call(f.owner.credential, 'checkout', 'one', body);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual(await (await call(f.owner.credential, 'checkout', 'one', body)).json());
+    expect(f.wire.data.hosted).toBe(1);
+    expect((await call(f.owner.credential, 'portal', 'portal', { returnUrl: body.returnUrl })).status).toBe(200);
+    f.wire.data.lostHosted = true;
+    expect((await call(f.owner.credential, 'checkout', 'ambiguous', body)).status).toBe(503);
+    expect((await call(f.owner.credential, 'checkout', 'ambiguous', body)).status).toBe(503);
+    expect(f.wire.data.hosted).toBe(3);
+    expect((await f.observer.execute("SELECT url FROM hosted_operations WHERE key = 'ambiguous'")).rows).toEqual([
+      { url: null },
+    ]);
+    const usage = await fetch(`${app.url}/billing/workspaces/${f.owner.workspaceId}/usage`, {
+      headers: { Authorization: `Bearer ${f.owner.credential}` },
+    });
+    expect(await usage.json()).toMatchObject({ mode: 'polar', authority: 'application-ledger' });
+    const storage = await CommercialStorage.open({ url: f.database.url }, f.organizations.storage);
+    cleanups.push(() => storage.close());
+    const restarted = new CommercialService(
+      f.organizations,
+      storage,
+      f.commercial.provider,
+      f.commercial.configuration,
+    );
+    await expect(restarted.checkout(f.owner.context, 'ambiguous', body)).rejects.toMatchObject({
+      code: 'state_unavailable',
+    });
+    expect(f.wire.data.hosted).toBe(3);
+  });
+
+  it('verified prepaid grants survive replay expiry revocation and concurrent spending', async () => {
+    const f = await fixture({ units: 6 });
+    // Two independently opened driver/database stacks race the same shared
+    // sources and SQL reservations, repeatedly rather than relying on timing once.
+    const second = await initializeBilling(f.initialization);
+    cleanups.push(second.close);
+    const gateway = new BillingGateway(f.organizations, f.accounting, second.provider, f.configuration, [
+      {
+        resourceId: 'assistant',
+        operation: 'generate',
+        measurements: [],
+        execute: async () => ({ status: 'succeeded', result: { answer: 'done' } }),
+      },
+    ]);
+    for (let round = 0; round < 21; round++) {
+      if (round) f.wire.data.addOrder();
+      const results = await Promise.allSettled([
+        f.execute(`race-a-${round}`),
+        gateway.execute(f.owner.context, {
+          resourceId: 'assistant',
+          operation: 'generate',
+          idempotencyKey: `race-b-${round}`,
+          input: {},
+        }),
+      ]);
+      expect(results.filter(value => value.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter(value => value.status === 'rejected').map(value => value.reason.code)).toEqual([
+        'insufficient_credits',
+      ]);
+    }
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT SUM(original_units) AS original, SUM(consumed_units) AS consumed FROM credit_grants',
+        )
+      ).rows,
+    ).toEqual([{ original: 130n, consumed: 126n }]);
+    expect(
+      (await f.observer.execute('SELECT COUNT(*) AS count, SUM(units) AS units FROM billing_ledger')).rows,
+    ).toEqual([{ count: 21n, units: 126n }]);
+    expect(
+      (await f.observer.execute('SELECT COUNT(*) AS count FROM grant_allocations WHERE committed_units IS NULL'))
+        .rows[0].count,
+    ).toBe(0n);
+    const before = (
+      await f.observer.execute('SELECT id, fingerprint, original_units, consumed_units FROM credit_grants ORDER BY id')
+    ).rows;
+    f.wire.data.subscriptions[0].current_period_end = new Date(Date.now() - 1000).toISOString();
+    if (f.wire.data.subscriptions[0].current_meter_period_start !== null)
+      f.wire.data.subscriptions[0].current_meter_period_end = f.wire.data.subscriptions[0].current_period_end;
+    for (const grant of f.wire.data.grants) {
+      grant.is_granted = false;
+      grant.is_revoked = true;
+    }
+    await expect(f.execute('revoked')).rejects.toMatchObject({ code: 'forbidden' });
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT id, fingerprint, original_units, consumed_units FROM credit_grants ORDER BY id',
+        )
+      ).rows,
+    ).toEqual(before);
+    expect((await f.observer.execute('SELECT SUM(available) AS available FROM credit_grants')).rows[0].available).toBe(
+      0n,
+    );
+    await expect(
+      f.observer.execute('UPDATE credit_grants SET original_units = original_units + 1'),
+    ).rejects.toMatchObject({ extendedCode: 'SQLITE_CONSTRAINT_TRIGGER' });
+  }, 60000);
+
+  it('revoked reservations can settle or release without resurrecting invalid credit', async () => {
+    const entered = deferred<void>();
+    const finish = deferred<void>();
+    const f = await fixture({
+      executor: async input => {
+        entered.resolve();
+        await finish.promise;
+        return { status: input === null ? 'failed' : 'succeeded', result: {} };
+      },
+    });
+    const pending = f.execute('admitted');
+    await Promise.race([
+      entered.promise,
+      pending.then(() => {
+        throw new Error('The admitted executor did not pause.');
+      }),
+    ]);
+    expect((await f.sessions.usage(f.owner.context)).allowance).toEqual([
+      { meter: 'credits', granted: 10, consumed: 0, reserved: 3, unavailable: 0, spendable: 7 },
+    ]);
+    for (const grant of f.wire.data.grants) {
+      grant.is_granted = false;
+      grant.is_revoked = true;
+    }
+    await expect(f.execute('new')).rejects.toMatchObject({ code: 'forbidden' });
+    finish.resolve();
+    expect((await pending).billing.billedUnits).toBe(3);
+    const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    expect((await f.commercial.provider.getState(account)).meters).toEqual([]);
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT SUM(consumed_units) AS consumed, SUM(available) AS available FROM credit_grants',
+        )
+      ).rows,
+    ).toEqual([{ consumed: 3n, available: 0n }]);
+    // Publicly confirmed failure releases only its allocation; a later source
+    // refresh, rather than release, is the only way to restore unused capacity.
+    for (const grant of f.wire.data.grants) {
+      grant.is_granted = true;
+      grant.is_revoked = false;
+    }
+    const failing = new BillingGateway(f.organizations, f.accounting, f.commercial.provider, f.configuration, [
+      {
+        resourceId: 'assistant',
+        operation: 'generate',
+        measurements: [],
+        execute: async () => {
+          for (const grant of f.wire.data.grants) {
+            grant.is_granted = false;
+            grant.is_revoked = true;
+          }
+          await f.commercial.provider.getState(account);
+          return { status: 'failed' };
+        },
+      },
+    ]);
+    expect(
+      (
+        await failing.execute(f.owner.context, {
+          resourceId: 'assistant',
+          operation: 'generate',
+          idempotencyKey: 'failure',
+          input: {},
+        })
+      ).billing,
+    ).toMatchObject({ billedUnits: 0, settlementStatus: 'released' });
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT SUM(consumed_units) AS consumed, SUM(available) AS available FROM credit_grants',
+        )
+      ).rows,
+    ).toEqual([{ consumed: 3n, available: 0n }]);
+    expect(
+      (await f.observer.execute('SELECT COUNT(*) AS count FROM grant_allocations WHERE committed_units IS NULL'))
+        .rows[0].count,
+    ).toBe(0n);
+    expect((await f.sessions.usage(f.owner.context)).allowance).toEqual([
+      { meter: 'credits', granted: 10, consumed: 3, reserved: 0, unavailable: 7, spendable: 0 },
+    ]);
+    const database = await BillingDatabase.open({ url: f.database.url });
+    cleanups.push(() => database.close());
+    expect((await f.observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
+  });
+  it('metered usage requires a verified active product and never debits prepaid grants', async () => {
+    const f = await fixture();
+    const productId = randomUUID(),
+      priceId = randomUUID(),
+      meterId = randomUUID();
+    const product = {
+      ...f.wire.data.products[1],
+      id: productId,
+      benefits: [],
+      prices: [{ id: priceId, amount_type: 'metered_unit', price_amount: 0, meter_id: meterId }],
+    };
+    f.wire.data.products.push(product);
+    const subscription = {
+      ...f.wire.data.subscriptions[0],
+      id: randomUUID(),
+      product_id: productId,
+      prices: product.prices,
+    };
+    f.wire.data.subscriptions.push(subscription);
+    const configuration = structuredClone(f.configuration);
+    configuration.mappings.meters.push({ key: 'tokens', unit: 'tokens', funding: ['metered'] });
+    configuration.polar!.meters.push({
+      key: 'tokens',
+      eventName: 'tokens.succeeded',
+      unitsField: 'tokens',
+      funding: 'metered',
+      productId,
+      priceId,
+      meterId,
+    });
+    configuration.resources[0].measurements = [{ key: 'tokens', unit: 'tokens', enforceableBound: false }];
+    configuration.resources[0].policy.charge = {
+      type: 'usage',
+      meter: 'tokens',
+      measure: 'tokens',
+      maxUnits: 20,
+      funding: 'metered',
+    };
+    const initialized = await initializeBilling({ ...f.initialization, configuration });
+    cleanups.push(initialized.close);
+    let calls = 0;
+    const gateway = new BillingGateway(f.organizations, f.accounting, initialized.provider, configuration, [
+      {
+        resourceId: 'assistant',
+        operation: 'generate',
+        measurements: [{ key: 'tokens', maxUnits: 20, enforceableBound: false }],
+        execute: async () => {
+          calls++;
+          return {
+            status: 'succeeded',
+            result: {},
+            measurements: [{ id: 'call', measure: 'tokens', units: 7 }],
+            measurementComplete: true,
+          };
+        },
+      },
+    ]);
+    const request = { resourceId: 'assistant', operation: 'generate', idempotencyKey: 'metered', input: {} };
+    expect((await gateway.execute(f.owner.context, request)).billing).toMatchObject({
+      billedUnits: 7,
+      settlementStatus: 'settled',
+    });
+    expect((await f.observer.execute('SELECT COUNT(*) AS count FROM grant_allocations')).rows[0].count).toBe(0n);
+    expect(
+      (await f.observer.execute('SELECT SUM(consumed_units) AS consumed FROM credit_grants')).rows[0].consumed,
+    ).toBe(0n);
+    const event = JSON.parse(String((await f.observer.execute('SELECT payload FROM billing_outbox')).rows[0].payload));
+    expect(await initialized.provider.reportUsage(event)).toMatchObject({ status: 'accepted' });
+    expect([...f.wire.data.events.values()][0]).toMatchObject({ name: 'tokens.succeeded', metadata: { tokens: 7 } });
+    const account = await initialized.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    expect((await initialized.provider.getState(account)).meters.find(meter => meter.key === 'tokens')).toMatchObject({
+      confirmedBalance: null,
+      consumedUnits: 7,
+    });
+    subscription.status = 'past_due';
+    await expect(
+      gateway.execute(f.owner.context, { ...request, idempotencyKey: 'inactive-metered' }),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+    expect(calls).toBe(1);
+  });
+  it('expired recurring periods cannot roll unused credit into their replacement', async () => {
+    const f = await fixture();
+    const account = await f.commercial.provider.ensureAccount({ workspaceId: f.owner.workspaceId });
+    await f.commercial.provider.getState(account);
+    const oldPeriod = (await f.observer.execute("SELECT id FROM credit_grants WHERE kind = 'subscription'")).rows[0].id;
+    const subscription = f.wire.data.subscriptions[0];
+    subscription.current_period_end = new Date(Date.now() - 1000).toISOString();
+    if (subscription.current_meter_period_start !== null)
+      subscription.current_meter_period_end = subscription.current_period_end;
+    expect((await f.sessions.usage(f.owner.context)).allowance).toEqual([
+      { meter: 'credits', granted: 10, consumed: 0, reserved: 0, unavailable: 4, spendable: 6 },
+    ]);
+    subscription.current_period_start = new Date(Date.now() - 500).toISOString();
+    subscription.current_period_end = new Date(Date.now() + 3600000).toISOString();
+    subscription.current_meter_period_start = subscription.current_period_start;
+    subscription.current_meter_period_end = subscription.current_period_end;
+    for (let refresh = 0; refresh < 3; refresh++) await f.commercial.provider.getState(account);
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT kind, original_units, consumed_units, available FROM credit_grants ORDER BY kind, available',
+        )
+      ).rows,
+    ).toEqual([
+      { kind: 'order', original_units: 6n, consumed_units: 0n, available: 1n },
+      { kind: 'subscription', original_units: 4n, consumed_units: 0n, available: 0n },
+      { kind: 'subscription', original_units: 4n, consumed_units: 0n, available: 1n },
+    ]);
+    await f.execute('replacement');
+    expect(
+      (
+        await f.observer.execute({
+          sql: 'SELECT consumed_units, available FROM credit_grants WHERE id = ?',
+          args: [oldPeriod],
+        })
+      ).rows,
+    ).toEqual([{ consumed_units: 0n, available: 0n }]);
+    expect(
+      (
+        await f.observer.execute(
+          'SELECT g.kind, g.id, a.committed_units FROM grant_allocations a JOIN credit_grants g ON g.id = a.grant_id',
+        )
+      ).rows,
+    ).toEqual([{ kind: 'subscription', id: expect.not.stringMatching(String(oldPeriod)), committed_units: 3n }]);
+    const renamed = structuredClone(f.configuration);
+    renamed.mappings.meters[0].key = 'renamed';
+    renamed.resources[0].policy.charge = { type: 'credits', meter: 'renamed', units: 3 };
+    for (const mapping of renamed.polar!.grants) mapping.meter = 'renamed';
+    renamed.polar!.meters[0].key = 'renamed';
+    const changed = await initializeBilling({ ...f.initialization, configuration: renamed });
+    cleanups.push(changed.close);
+    await expect(changed.provider.getState(account)).rejects.toMatchObject({ code: 'state_unavailable' });
+    expect(
+      (await f.observer.execute('SELECT COUNT(*) AS count, SUM(original_units) AS original FROM credit_grants')).rows,
+    ).toEqual([{ count: 3n, original: 14n }]);
+  });
+});

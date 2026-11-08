@@ -5,11 +5,16 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import { BillingError, parseInput } from '../billing/contracts.js';
 import type { OrganizationService } from '../billing/organizations.js';
+import type { CommercialService } from '../billing/commercial.js';
 import type { BillingHttpGateway } from '../billing/mastra.js';
 import { boundedJsonSchema } from '../billing/accounting.js';
 import { identifierSchema } from '../billing/contracts.js';
 
-export function createBillingApp(organizations: OrganizationService, execution?: BillingHttpGateway) {
+export function createBillingApp(
+  organizations: OrganizationService,
+  execution?: BillingHttpGateway,
+  commercial?: CommercialService,
+) {
   const app = new Hono<{ Variables: { credential: string } }>();
   app.onError((error, context) => {
     const safe = error instanceof BillingError ? error : new BillingError('storage_unavailable');
@@ -198,11 +203,40 @@ export function createBillingApp(organizations: OrganizationService, execution?:
       );
     });
   }
+  if (commercial) {
+    const selected = (context: { get(key: 'credential'): string; req: { param(key: 'workspaceId'): string } }) =>
+      organizations.context({ credential: context.get('credential'), workspaceId: context.req.param('workspaceId') });
+    app.get('/billing/workspaces/:workspaceId/usage', async context =>
+      context.json(await commercial.usage(await selected(context))),
+    );
+    app.post('/billing/workspaces/:workspaceId/checkout', async context =>
+      context.json(
+        await commercial.checkout(
+          await selected(context),
+          key(context.req.header('idempotency-key')),
+          await body(context.req),
+        ),
+      ),
+    );
+    app.post('/billing/workspaces/:workspaceId/portal', async context =>
+      context.json(
+        await commercial.portal(
+          await selected(context),
+          key(context.req.header('idempotency-key')),
+          await body(context.req),
+        ),
+      ),
+    );
+  }
   return app;
 }
 
-export function billingApiRoutes(organizations: OrganizationService, execution?: BillingHttpGateway): ApiRoute[] {
-  const app = createBillingApp(organizations, execution);
+export function billingApiRoutes(
+  organizations: OrganizationService,
+  execution?: BillingHttpGateway,
+  commercial?: CommercialService,
+): ApiRoute[] {
+  const app = createBillingApp(organizations, execution, commercial);
   // Mastra's custom Hono route passes through this application's own auth middleware.
   return [
     registerApiRoute('/billing/*', {

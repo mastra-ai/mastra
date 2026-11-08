@@ -96,6 +96,7 @@ export interface AdmissionIdentity {
   readonly actorId: string;
   readonly workspaceId: string;
   readonly credentialHash: string | null;
+  readonly commercial?: { accountId: string; revision: string };
   readonly validUntil: number | null;
 }
 export const receiptSchema = z.strictObject({
@@ -138,6 +139,7 @@ export const snapshotSchema = z
       )
       .max(100),
     evidence: z.strictObject({ version: identifierSchema }).nullable(),
+    prepaidAuthority: z.literal('application-ledger').optional(),
   })
   .superRefine((snapshot, ctx) => {
     for (const entries of [snapshot.entitlements, snapshot.subscriptions, snapshot.meters])

@@ -205,11 +205,62 @@ const workflowStatements = [
   `CREATE TRIGGER billing_workflow_operations_no_delete BEFORE DELETE ON billing_workflow_operations BEGIN SELECT RAISE(ABORT, 'Workflow claims are retained'); END`,
 ];
 
+const providerStatements = [
+  `ALTER TABLE billing_accounts ADD COLUMN effective_provider TEXT NOT NULL DEFAULT 'local' CHECK (effective_provider IN ('local', 'polar'))`,
+  `CREATE TABLE provider_links (
+    account_id TEXT PRIMARY KEY REFERENCES billing_accounts(id),
+    customer_id TEXT NOT NULL UNIQUE,
+    organization_id TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TABLE credit_grants (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    source_key TEXT NOT NULL,
+    meter TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('order', 'subscription')),
+    fingerprint TEXT NOT NULL,
+    provenance TEXT NOT NULL,
+    original_units INTEGER NOT NULL CHECK (original_units BETWEEN 1 AND 9007199254740991),
+    consumed_units INTEGER NOT NULL DEFAULT 0 CHECK (consumed_units BETWEEN 0 AND original_units),
+    valid_from TEXT NOT NULL,
+    valid_until TEXT,
+    available INTEGER NOT NULL CHECK (available IN (0, 1)),
+    UNIQUE (account_id, source_key),
+    CHECK (valid_until IS NULL OR julianday(valid_until) > julianday(valid_from))
+  ) STRICT`,
+  `CREATE TRIGGER credit_grant_terms_immutable BEFORE UPDATE OF id, account_id, source_key, meter, kind, fingerprint, provenance, original_units, valid_from ON credit_grants BEGIN SELECT RAISE(ABORT, 'Grant provenance is immutable'); END`,
+  `CREATE TRIGGER credit_grants_no_delete BEFORE DELETE ON credit_grants BEGIN SELECT RAISE(ABORT, 'Grant history is retained'); END`,
+  `CREATE TABLE grant_allocations (
+    execution_id TEXT NOT NULL REFERENCES billing_executions(id),
+    grant_id TEXT NOT NULL REFERENCES credit_grants(id),
+    reserved_units INTEGER NOT NULL CHECK (reserved_units BETWEEN 1 AND 9007199254740991),
+    committed_units INTEGER CHECK (committed_units BETWEEN 0 AND reserved_units),
+    PRIMARY KEY (execution_id, grant_id)
+  ) STRICT`,
+  `CREATE TABLE hosted_operations (
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    operation TEXT NOT NULL CHECK (operation IN ('checkout', 'portal')),
+    key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    url TEXT,
+    PRIMARY KEY (actor_id, workspace_id, operation, key)
+  ) STRICT`,
+  `CREATE TABLE provider_usage (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES billing_accounts(id),
+    payload TEXT NOT NULL,
+    delivered INTEGER NOT NULL CHECK (delivered IN (0, 1))
+  ) STRICT`,
+  `CREATE TRIGGER provider_usage_terms_immutable BEFORE UPDATE OF id, account_id, payload ON provider_usage BEGIN SELECT RAISE(ABORT, 'Usage identity is immutable'); END`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
   { version: 3, statements: accountingStatements },
   { version: 4, statements: workflowStatements },
+  { version: 5, statements: providerStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -247,7 +298,21 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     "SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY name",
   );
   const actual = schema.rows.map(row => normalizedSql(String(row.sql))).sort();
-  const expected = [historySql, ...migrations.flatMap(migration => migration.statements)].map(normalizedSql).sort();
+  const accountSql = initialStatements[0].replace(
+    'external_reference TEXT NOT NULL,',
+    "external_reference TEXT NOT NULL, effective_provider TEXT NOT NULL DEFAULT 'local' CHECK (effective_provider IN ('local', 'polar')),",
+  );
+  const expected = [
+    historySql,
+    accountSql,
+    ...initialStatements.slice(1),
+    ...organizationStatements,
+    ...accountingStatements,
+    ...workflowStatements,
+    ...providerStatements.slice(1),
+  ]
+    .map(normalizedSql)
+    .sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new BillingError('storage_incompatible');
   if ((await transaction.execute('PRAGMA foreign_key_check')).rows.length > 0)
     throw new BillingError('storage_incompatible');

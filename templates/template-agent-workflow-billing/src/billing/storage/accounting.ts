@@ -12,6 +12,8 @@ import type {
 } from '../accounting.js';
 import { BillingDatabase } from './database.js';
 import { OrganizationStorage } from './organizations.js';
+import { accountFromRow } from './accounts.js';
+import { allocateGrants, settleGrants } from './grants.js';
 
 export interface OperationClaim {
   readonly identity: AdmissionIdentity;
@@ -137,7 +139,7 @@ export class AccountingStorage {
         if (
           !account ||
           account.workspace_id !== snapshot.account.workspaceId ||
-          account.provider !== snapshot.account.provider ||
+          account.effective_provider !== snapshot.account.provider ||
           account.external_reference !== snapshot.account.externalReference
         )
           throw new BillingError('state_unavailable');
@@ -146,7 +148,9 @@ export class AccountingStorage {
         if (charge.type !== 'none') {
           const meter = snapshot.meters.find(meter => meter.key === charge.meter)!;
           const funding = charge.type === 'credits' ? 'prepaid' : charge.funding;
-          if (funding === 'prepaid') {
+          if (funding === 'prepaid' && snapshot.prepaidAuthority === 'application-ledger') {
+            await allocateGrants(transaction, accountId, charge.meter, units);
+          } else if (funding === 'prepaid') {
             const holds = (
               await transaction.execute({
                 sql: 'SELECT units FROM billing_reservations WHERE account_id = ? AND meter = ? AND active = 1',
@@ -200,6 +204,13 @@ export class AccountingStorage {
           executionId,
         ],
       });
+      if (
+        charge.type !== 'none' &&
+        (charge.type === 'credits' || charge.funding === 'prepaid') &&
+        snapshot?.prepaidAuthority === 'application-ledger'
+      ) {
+        await allocateGrants(transaction, accountId!, charge.meter, units, executionId);
+      }
       if (charge.type !== 'none')
         await transaction.execute({
           sql: 'INSERT INTO billing_reservations (execution_id, account_id, meter, units, active) VALUES (?, ?, ?, ?, 1)',
@@ -365,6 +376,7 @@ export class AccountingStorage {
         ],
       });
       if (terminal) {
+        await settleGrants(transaction, executionId, billed!);
         await transaction.execute({
           sql: 'UPDATE billing_reservations SET active = 0 WHERE execution_id = ? AND active = 1',
           args: [executionId],
@@ -380,12 +392,7 @@ export class AccountingStorage {
           const event = parseInput(usageEventSchema, {
             id: `usage:${executionId}`,
             executionId,
-            account: {
-              id: account.id,
-              workspaceId: account.workspace_id,
-              provider: account.provider,
-              externalReference: account.external_reference,
-            },
+            account: accountFromRow(account),
             policyVersion: resource.policy.version,
             meter: charge.meter,
             units: billed,

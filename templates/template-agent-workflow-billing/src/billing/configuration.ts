@@ -6,6 +6,7 @@ import {
   quantitySchema,
   timestampSchema,
 } from './contracts.js';
+import { polarConfigurationSchema } from './providers/polar-contract.js';
 import type { ProviderCapabilities } from './contracts.js';
 
 const fundingSchema = z.enum(['prepaid', 'metered']);
@@ -82,6 +83,7 @@ export type LocalAccountSeed = z.infer<typeof localAccountSeedSchema>;
 export const billingConfigurationSchema = z
   .strictObject({
     provider: z.enum(['local', 'polar']),
+    polar: polarConfigurationSchema.optional(),
     resources: z
       .array(
         z.strictObject({
@@ -162,6 +164,23 @@ export const billingConfigurationSchema = z
           issue('Unsupported measurement or prepaid bound.');
       }
     }
+    if (config.provider === 'local' && config.polar) issue('Polar configuration requires Polar mode.');
+    if (config.provider === 'polar' && config.polar) {
+      for (const key of config.mappings.entitlements)
+        if (!config.polar.entitlements.some(value => value.key === key)) issue('Missing Polar entitlement mapping.');
+      for (const key of config.mappings.subscriptions)
+        if (!config.polar.subscriptions.some(value => value.key === key)) issue('Missing Polar subscription mapping.');
+      for (const meter of config.mappings.meters) {
+        if (!config.polar.meters.some(value => value.key === meter.key)) issue('Missing Polar meter mapping.');
+        if (meter.funding.includes('prepaid') && !config.polar.grants.some(value => value.meter === meter.key))
+          issue('Missing Polar grant mapping.');
+        if (
+          meter.funding.length !== 1 ||
+          config.polar.meters.find(value => value.key === meter.key)?.funding !== meter.funding[0]
+        )
+          issue('Polar meter funding does not match.');
+      }
+    }
     if (config.provider !== 'local' && config.localAccounts.length > 0) issue('Local seeds require local mode.');
     for (const seed of config.localAccounts) {
       if (
@@ -200,7 +219,9 @@ export function parseBillingConfiguration(input: unknown, capabilities: Provider
         if (
           !capabilities[funding] ||
           !capabilities.replaySafeUsage ||
-          (funding === 'prepaid' && capabilities.reconciliation !== 'reflected-events')
+          (funding === 'prepaid' &&
+            capabilities.reconciliation !== 'reflected-events' &&
+            capabilities.prepaidAuthority !== 'application-ledger')
         )
           ctx.addIssue({ code: 'custom', message: 'Unsupported accounting capability.' });
       }

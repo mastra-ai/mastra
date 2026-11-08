@@ -5,6 +5,8 @@ import { parseBillingConfiguration } from './configuration.js';
 import type { BillingConfiguration } from './configuration.js';
 import { LocalBillingProvider, localCapabilities } from './providers/local.js';
 import { LocalBillingStorage } from './storage/libsql.js';
+import { PolarBillingProvider, polarCapabilities } from './providers/polar.js';
+import type { BillingContactResolver } from './providers/polar-contract.js';
 
 const strategies = {
   local: {
@@ -14,13 +16,33 @@ const strategies = {
   },
 };
 
-export async function initializeBilling(options: { configuration: unknown; storage: { url: string } }): Promise<{
+export interface PolarProviderOptions {
+  token: string;
+  contact: BillingContactResolver;
+}
+
+export async function initializeBilling(options: {
+  configuration: unknown;
+  storage: { url: string };
+  polar?: PolarProviderOptions;
+}): Promise<{
   readonly configuration: BillingConfiguration;
   readonly provider: BillingProvider;
   readonly close: () => void;
 }> {
   const selection = z.object({ provider: z.enum(['local', 'polar']) }).safeParse(options.configuration);
   if (!selection.success) throw new BillingError('invalid_configuration');
+  if (selection.data.provider === 'polar') {
+    const polar = z.object({ polar: z.unknown() }).safeParse(options.configuration);
+    if (!options.polar || !polar.success || !polar.data.polar) throw new BillingError('unsupported');
+    const configuration = parseBillingConfiguration(options.configuration, polarCapabilities);
+    const provider = await PolarBillingProvider.open({
+      url: options.storage.url,
+      configuration: configuration.polar,
+      ...options.polar,
+    });
+    return Object.freeze({ configuration, provider, close: () => provider.close() });
+  }
   const strategy = strategies[selection.data.provider as keyof typeof strategies];
   if (!strategy) throw new BillingError('unsupported');
   const configuration = parseBillingConfiguration(options.configuration, strategy.capabilities);

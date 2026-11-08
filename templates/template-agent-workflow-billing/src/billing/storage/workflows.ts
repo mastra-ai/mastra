@@ -66,6 +66,15 @@ export class WorkflowStorage {
       if (row?.active !== 1n) throw new BillingError('unauthenticated');
     }
     await this.organizations.authorizeInTransaction(transaction, identity.actorId, identity.workspaceId, 'execute');
+    if (identity.commercial) {
+      const row = (
+        await transaction.execute({
+          sql: 'SELECT s.version FROM commercial_state s JOIN billing_accounts a ON a.id = s.account_id WHERE a.id = ? AND a.workspace_id = ?',
+          args: [identity.commercial.accountId, identity.workspaceId],
+        })
+      ).rows[0];
+      if (!row || String(row.version) !== identity.commercial.revision) throw new BillingError('state_unavailable');
+    }
   }
   private async find(transaction: Transaction, id: string, identity?: AdmissionIdentity) {
     const row = (await transaction.execute({ sql: 'SELECT * FROM billing_workflow_runs WHERE id = ?', args: [id] }))

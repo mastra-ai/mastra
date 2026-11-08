@@ -83,6 +83,21 @@ export const usageEventSchema = z.strictObject({
 });
 export type UsageEvent = z.input<typeof usageEventSchema>;
 
+export const grantSourceSchema = z
+  .strictObject({
+    key: identifierSchema,
+    meter: identifierSchema,
+    kind: z.enum(['order', 'subscription']),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    provenance: z.string().min(1).max(8192),
+    units: positiveQuantitySchema,
+    validFrom: timestampSchema,
+    validUntil: timestampSchema.nullable(),
+    active: z.boolean(),
+  })
+  .refine(source => source.validUntil === null || Date.parse(source.validUntil) > Date.parse(source.validFrom));
+export type GrantSource = z.infer<typeof grantSourceSchema>;
+
 export interface ProviderCapabilities {
   readonly entitlements: boolean;
   readonly subscriptions: boolean;
@@ -90,6 +105,7 @@ export interface ProviderCapabilities {
   readonly metered: boolean;
   readonly replaySafeUsage: boolean;
   readonly reconciliation: 'reflected-events' | 'unverified';
+  readonly prepaidAuthority?: 'application-ledger';
   readonly checkout: boolean;
   readonly portal: boolean;
   readonly webhooks: boolean;
@@ -116,6 +132,7 @@ export interface CommercialSnapshot {
     periodEnd: string | null;
   }[];
   readonly evidence: { readonly version: string } | null;
+  readonly prepaidAuthority?: 'application-ledger';
 }
 
 export type Unsupported = { readonly status: 'unsupported'; readonly reason: 'local_mode' };

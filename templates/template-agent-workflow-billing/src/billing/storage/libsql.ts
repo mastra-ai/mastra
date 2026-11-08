@@ -22,20 +22,12 @@ import type {
 import { localAccountSeedSchema } from '../configuration.js';
 import type { LocalAccountSeed } from '../configuration.js';
 import { BillingDatabase } from './database.js';
+import { accountFromRow, requireProvider } from './accounts.js';
 
 function publicInteger(value: unknown): number {
   if (typeof value !== 'bigint' || value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER))
     throw new BillingError('storage_incompatible');
   return Number(value);
-}
-
-function accountFromRow(row: Row): ProviderAccount {
-  return accountSchema.parse({
-    id: row.id,
-    workspaceId: row.workspace_id,
-    provider: row.provider,
-    externalReference: row.external_reference,
-  });
 }
 
 export class LocalBillingStorage {
@@ -62,7 +54,7 @@ export class LocalBillingStorage {
         sql: 'SELECT * FROM billing_accounts WHERE workspace_id = ?',
         args: [workspaceId],
       });
-      if (existing.rows.length > 0) return accountFromRow(existing.rows[0]);
+      if (existing.rows.length > 0) return requireProvider(existing.rows[0], 'local');
       const account: ProviderAccount = {
         id: randomUUID(),
         workspaceId,
@@ -101,7 +93,7 @@ export class LocalBillingStorage {
   private async requireAccount(transaction: Transaction, account: ProviderAccount): Promise<void> {
     const found = await transaction.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [account.id] });
     if (!found.rows.length) throw new BillingError('account_not_found');
-    const stored = accountFromRow(found.rows[0]);
+    const stored = requireProvider(found.rows[0], 'local');
     if (
       stored.workspaceId !== account.workspaceId ||
       stored.provider !== account.provider ||

@@ -8,6 +8,10 @@ import { JwtIdentityAdapter } from '../billing/identity.js';
 import type { JwtIdentityOptions } from '../billing/identity.js';
 import { OrganizationService } from '../billing/organizations.js';
 import { OrganizationStorage } from '../billing/storage/organizations.js';
+import { initializeBilling } from '../billing/setup.js';
+import { CommercialService } from '../billing/commercial.js';
+import { CommercialStorage } from '../billing/storage/commercial.js';
+import { billingContactSchema } from '../billing/providers/polar-contract.js';
 import { billingOnlyServer } from '../server/security.js';
 
 export async function configuredOrganizations(
@@ -46,6 +50,35 @@ export async function configuredOrganizations(
 
 export async function billingServerConfiguration(): Promise<ServerConfig> {
   const organizations = await configuredOrganizations();
+  let commercial: CommercialService | undefined;
+  if (process.env.BILLING_PROVIDER === 'polar') {
+    try {
+      const configuration: unknown = JSON.parse(process.env.BILLING_CONFIGURATION ?? 'null');
+      const contacts = z
+        .record(z.string(), billingContactSchema)
+        .parse(JSON.parse(process.env.BILLING_CONTACTS ?? 'null'));
+      const databaseUrl =
+        process.env.BILLING_DATABASE_URL ??
+        pathToFileURL(resolve(process.env.MASTRA_PROJECT_ROOT ?? '.', 'data/billing.db')).href;
+      const initialized = await initializeBilling({
+        configuration,
+        storage: { url: databaseUrl },
+        polar: {
+          token: process.env.POLAR_ACCESS_TOKEN ?? '',
+          contact: async workspaceId => {
+            const contact = contacts[workspaceId];
+            if (!contact) throw new BillingError('invalid_configuration');
+            return contact;
+          },
+        },
+      });
+      const storage = await CommercialStorage.open({ url: databaseUrl }, organizations.storage);
+      commercial = new CommercialService(organizations, storage, initialized.provider, initialized.configuration);
+    } catch {
+      organizations.close();
+      throw new BillingError('invalid_configuration');
+    }
+  }
   return {
     host: '127.0.0.1',
     port: z.coerce
@@ -54,6 +87,6 @@ export async function billingServerConfiguration(): Promise<ServerConfig> {
       .min(1)
       .max(65535)
       .parse(process.env.BILLING_PORT ?? 4111),
-    ...billingOnlyServer(organizations),
+    ...billingOnlyServer(organizations, undefined, commercial),
   };
 }

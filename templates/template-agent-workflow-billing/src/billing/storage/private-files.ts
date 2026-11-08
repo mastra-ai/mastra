@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { open, lstat } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { BillingError } from '../contracts.js';
 
@@ -28,4 +28,17 @@ export async function privateWorkflowFiles(filename: string): Promise<void> {
   await restrictFile(filename, true);
   await restrictFile(`${filename}-wal`, false);
   await restrictFile(`${filename}-shm`, false);
+}
+
+export async function verifyPrivateFiles(filename: string): Promise<void> {
+  for (const [index, path] of [filename, `${filename}-wal`, `${filename}-shm`].entries()) {
+    try {
+      const info = await lstat(path);
+      if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o7777) !== 0o600)
+        throw new BillingError('storage_unavailable');
+    } catch (error) {
+      if (index > 0 && error instanceof Error && 'code' in error && error.code === 'ENOENT') continue;
+      throw error instanceof BillingError ? error : new BillingError('storage_unavailable');
+    }
+  }
 }

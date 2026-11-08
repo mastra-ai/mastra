@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+import { privateWorkflowFiles, verifyPrivateFiles } from './private-files.js';
 import { setTimeout } from 'node:timers/promises';
 import { createClient } from '@libsql/client/node';
 import type { Client, Transaction } from '@libsql/client/node';
@@ -30,6 +32,11 @@ const isBusy = (error: unknown) =>
   'code' in error &&
   ['SQLITE_BUSY', 'SQLITE_BUSY_SNAPSHOT', 'SQLITE_LOCKED', 'TRANSACTION_ACTIVE'].includes(String(error.code));
 
+// Closing an unrelated descriptor for the same inode can release POSIX locks
+// held by SQLite in this process. Prepare permissions once before opening SQL;
+// subsequent transaction checks use lstat and never open/close that inode.
+const preparedFiles = new Map<string, Promise<void>>();
+
 export class BillingDatabase {
   private closed = false;
   private constructor(private readonly url: string) {}
@@ -37,6 +44,14 @@ export class BillingDatabase {
   static async open(options: { url: string }): Promise<BillingDatabase> {
     const parsed = storageOptionsSchema.safeParse(options);
     if (!parsed.success) throw new BillingError('invalid_configuration');
+    const filename = fileURLToPath(parsed.data.url);
+    if (!preparedFiles.has(filename)) preparedFiles.set(filename, privateWorkflowFiles(filename));
+    try {
+      await preparedFiles.get(filename);
+    } catch (error) {
+      preparedFiles.delete(filename);
+      throw error;
+    }
     const database = new BillingDatabase(parsed.data.url);
     await database.write(migrateStorage);
     return database;
@@ -54,6 +69,7 @@ export class BillingDatabase {
       let transaction: Transaction | undefined;
       try {
         // Dispose every attempt: libSQL can retain a failed BEGIN on its connection.
+        await verifyPrivateFiles(fileURLToPath(this.url));
         client = createClient({ url: this.url, intMode: 'bigint', concurrency: 1, timeout: 0 });
         const journal = await client.execute('PRAGMA journal_mode');
         if (journal.rows[0].journal_mode !== 'wal') {
@@ -67,6 +83,7 @@ export class BillingDatabase {
         if (enforcement.rows[0].foreign_keys !== 1n) throw new BillingError('storage_incompatible');
         const result = await operation(transaction);
         await transaction.commit();
+        await verifyPrivateFiles(fileURLToPath(this.url));
         return result;
       } catch (error) {
         if (transaction && !transaction.closed) {

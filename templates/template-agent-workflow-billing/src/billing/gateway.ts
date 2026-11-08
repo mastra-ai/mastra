@@ -29,6 +29,8 @@ export class BillingGateway {
     configuration: unknown,
     executors: readonly BoundedExecutor[],
   ) {
+    if (provider.id === 'polar' && organizations.identity.kind !== 'jwt')
+      throw new BillingError('invalid_configuration');
     this.configuration = parseBillingConfiguration(configuration, provider.capabilities);
     if (this.configuration.provider !== provider.id) throw new BillingError('invalid_configuration');
     for (const executor of executors) {
@@ -185,6 +187,7 @@ export class BillingGateway {
 
   async revalidate(context: BillingContext, resource: ReturnType<BillingGateway['resource']>) {
     const identity = await this.organizations.accountingIdentity(context);
+    let commercial: { accountId: string; revision: string } | undefined;
     if (needsCommercialState(resource.policy)) {
       try {
         const account = await this.provider.ensureAccount({ workspaceId: identity.workspaceId });
@@ -196,12 +199,13 @@ export class BillingGateway {
         if (Object.entries(snapshot.account).some(([key, value]) => account[key as keyof typeof account] !== value))
           throw new BillingError('state_unavailable');
         eligible(resource.policy, snapshot, Date.now());
+        commercial = { accountId: account.id, revision: snapshot.evidence!.version };
       } catch (error) {
         if (error instanceof BillingError && error.code === 'forbidden') throw error;
         throw new BillingError('state_unavailable');
       }
     }
-    return this.organizations.accountingIdentity(context);
+    return { ...(await this.organizations.accountingIdentity(context)), commercial };
   }
 
   async read(context: BillingContext, executionId: string): Promise<BillingResponse> {

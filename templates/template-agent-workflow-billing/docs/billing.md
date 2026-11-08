@@ -1,8 +1,8 @@
-# Local billing components
+# Billing components
 
-The billing modules validate policies and persist organization accounts, commercial eligibility and immutable usage in a local libSQL file. They require no payment credentials. Initialize them separately from Mastra with `initializeBilling` from `src/billing/setup.ts`.
+The billing modules validate policies and persist organization accounts, commercial eligibility and immutable usage in a local libSQL file. The local provider requires no payment credentials. Initialize them separately from Mastra with `initializeBilling` from `src/billing/setup.ts`.
 
-The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Typed agent generation and persistent workflow execution use the billing gateway described below. Polar integration, checkout, portal sessions and webhook verification are unavailable.
+The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Typed agent generation and persistent workflow execution use the billing gateway described below. Polar commercial services and hosted sessions are available with the explicit configuration below. Background webhook intake and delivery/recovery workers are not included.
 
 ## Configure an account and meter
 
@@ -204,7 +204,7 @@ const response = await gateway.execute(context, {
 const receipt = await gateway.read(context, response.billing.executionId);
 ```
 
-Use a resource/policy configuration whose measurement bound matches the executor. Usage registration requires a finite supported bound; prepaid configuration additionally requires an enforceable measurement declaration. The supplied executor contract is a trusted promise about application units, not a cap on model/provider costs. Use `MastraBilling` below for real Mastra resources and lifecycle handling. The lower-level deterministic executor API remains available for trusted server components. The Polar driver is unavailable.
+Use a resource/policy configuration whose measurement bound matches the executor. Usage registration requires a finite supported bound; prepaid configuration additionally requires an enforceable measurement declaration. The supplied executor contract is a trusted promise about application units, not a cap on model/provider costs. Use `MastraBilling` below for real Mastra resources and lifecycle handling. The lower-level deterministic executor API remains available for trusted server components. Configure the Polar provider as described below when using verified remote commercial sources.
 
 Admission atomically rechecks current identity, local credential activity or verified JWT deadline, workspace membership, commercial version, idempotency and spendable credit. Provider observations occur outside SQL transactions. Version conflicts reread at most three times; unsafe or unverified commercial state returns retryable `state_unavailable`. Free work without an access guard needs no provider access. Paid access rechecks both configured entitlement and subscription validity, meter funding and current periods.
 
@@ -358,3 +358,90 @@ All routes use the authenticated workspace selection and the same facade/account
 | GET    | `/workflows/:resourceId/runs/:executionId`        | No body                                     |
 
 The installed route manifest is exercised against development and built servers with registered resources, valid customer credentials and a controlled model HTTP boundary. Native execution, private run data, streaming, asynchronous, restart/time-travel and alternate protocol requests must produce no model requests or private result disclosure. Re-run these proofs whenever Mastra dependencies change. Token streaming, durable agent resume, time travel and automatic uncertain-work retries remain unsupported.
+
+## Polar configuration
+
+Polar owns products, paid orders, subscriptions and benefit eligibility. The application owns prepaid grants, allocations and successful consumption. This integration uses native fetch and the pinned `Polar-Version: 2026-10` contract. It rejects a different response version and never infers a local grant from a Polar meter balance.
+
+Set `provider: 'polar'`, omit local seeds and add a `polar` configuration to the existing resource/policy configuration:
+
+```ts
+const configuration = {
+  provider: 'polar',
+  resources: [
+    {
+      id: 'assistant',
+      kind: 'agent',
+      operations: ['generate'],
+      policy: { version: 'v1', charge: { type: 'credits', meter: 'credits', units: 3 } },
+    },
+  ],
+  mappings: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+  polar: {
+    server: 'https://sandbox-api.polar.sh',
+    organizationId: sellerOrganizationId,
+    grants: [
+      {
+        kind: 'order',
+        meter: 'credits',
+        version: 'credits-v1',
+        productId,
+        priceId,
+        benefitId,
+        meterId,
+        units: 100,
+        expiry: { type: 'none' },
+      },
+    ],
+    meters: [{ key: 'credits', funding: 'prepaid', eventName: 'work.succeeded', unitsField: 'units' }],
+    products: [{ key: 'credit-pack', productId }],
+    returnUrls: ['https://app.example.com/billing'],
+  },
+};
+const commercial = await initializeBilling({
+  configuration,
+  storage: { url: databaseUrl },
+  polar: {
+    token: process.env.POLAR_ACCESS_TOKEN!,
+    contact: async workspaceId => trustedWorkspaceContacts[workspaceId],
+  },
+});
+```
+
+Use an organization access token scoped to the configured seller. Customer and event requests rely on that token's scope; responses and stored links must still match the configured seller organization. IDs in this example are server configuration values from your own Polar account. The contact resolver returns `{ email, name? }` for that workspace from a trusted server directory. It must not use the current member's email or an unverified token claim. A stable `workspace:<workspaceId>` customer external ID resolves customer-creation conflicts and lost responses. An existing local account cannot be repurposed as a Polar account.
+
+For recurring grants, use `kind: 'subscription'` and `expiry: { type: 'period' }`. The product must be recurring, with a matching active subscription, configured fixed price and granted, non-revoked meter-credit benefit. Each exact subscription period funds once; active free subscriptions qualify with explicit mappings even when no order exists. The provider meter cycle must match the subscription allowance cycle when a distinct cycle is configured. One-time grants require a matching paid purchase order and order-linked benefit; a zero-price paid order is valid. One-time expiry is either explicit `none` or `{ type: 'duration', milliseconds }` anchored to the verified order creation time.
+
+The configured units must equal the verified meter-credit benefit units, with `rollover: false`. Credit products cannot attach metered overage prices. Product, benefit, source, price or immutable mapping conflicts fail closed. Renaming a logical meter or changing a mapping version cannot reissue a purchase or period. Unsupported prorations, pending plan changes, refunds and revoked sources cannot mint credit. Complete authenticated pagination and current source links are checked on every paid admission/resume; there is no cached-eligibility fallback. This is point-in-time provider evidence, rather than a transaction across Polar endpoints.
+
+For postpaid usage, configure a logical meter with `funding: ['metered']`, and a Polar meter mapping with `funding: 'metered'`, `productId`, `priceId` and `meterId`. An active subscription must include that verified metered price. Use the existing bounded `usage` or `per-task` policy with `funding: 'metered'`. No prepaid allocations are created for that execution. Configure subscription/entitlement guards separately through `polar.subscriptions: [{ key, productId }]` and `polar.entitlements: [{ key, benefitId }]` and corresponding logical mappings.
+
+`initializeMastraBilling` accepts the same `polar: { token, contact }` options and returns `commercial` alongside the typed execution facade. Pass that service as the third argument to `billingOnlyServer(organizations, billing.http, commercial)` to expose the commercial routes. Instantiate `OrganizationService` with a verified JWT adapter and `provider: 'polar'`; local credentials are rejected in Polar mode.
+
+The default server can expose commercial routes using `BILLING_PROVIDER=polar`, `BILLING_CONFIGURATION` containing the JSON configuration above, `BILLING_CONTACTS` containing a trusted workspace-ID-to-contact JSON object, `BILLING_JWT_CONFIGURATION` and `POLAR_ACCESS_TOKEN`. Provision JWT principals through trusted setup before admitting their tokens. The default entry point still registers no billable resources; register resources with `initializeMastraBilling` when adding execution. Keep configuration/contact files and the private SQL file outside static roots.
+
+### Allowance and hosted sessions
+
+All three routes require current workspace owner permission. Checkout/portal writes also require `Idempotency-Key`:
+
+| Method | Path below `/billing/workspaces/:workspaceId` | Body                                                                           |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| GET    | `/usage`                                      | No body                                                                        |
+| POST   | `/checkout`                                   | `{ "product": "credit-pack", "returnUrl": "https://app.example.com/billing" }` |
+| POST   | `/portal`                                     | `{ "returnUrl": "https://app.example.com/billing" }`                           |
+
+Products are logical allowlisted keys and redirects must exactly match configured URLs. Admins/members cannot open billing sessions. The service checks current authorization before the provider call and before returning a new session. Completed session claims replay their original URL; a lost/uncertain provider response leaves a durable ambiguous claim, so the same key never blindly creates another session. Resolve such cases operationally before attempting a new operation. Session URLs are bearer credentials: keep them out of logs and receipts. Billing database files and SQLite sidecars use private `0600` permissions; initialization rejects unsafe links or later permission weakening.
+
+The usage response labels `mode` and `authority`. Polar `allowance` lists each logical meter's `granted`, `consumed`, `reserved`, `unavailable` and `spendable` units from one SQL transaction. Reserved units are not spendable. Historical invalid sources remain visible and consumed history is never reset. Snapshot `confirmedBalance` excludes committed consumption but includes outstanding reservations; use the allowance's `spendable` field for available application credit. No provider meter aggregation watermark is claimed.
+
+Reservations allocate earliest expiry first, with a stable grant-ID tie break. Expiry/revocation prevents new allocation while admitted work retains its reservation. Confirmed success consumes its allocation once; confirmed failure/cancellation releases unused units back to the same source, whose validity still applies. Release cannot resurrect revoked or expired capacity. Fresh verified reactivation may restore only unused capacity of the original source. Usage delivery acceptance, duplicate acknowledgement and outages never change these local totals.
+
+Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the driver persists both the logical event and its normalized outbound request in one immutable delivery claim. Retries reuse that request even after event-name or units-field mappings change. Previously acknowledged logical-only delivery records remain acknowledged; an uncertain legacy record without its original outbound mapping fails closed and requires operator reconciliation. There is no background outbox worker or signed webhook endpoint yet. Undelivered events remain pending; do not interpret a local debit as proof of a Polar invoice or completed remote delivery. Production recovery, notification invalidation and automatic repair require those additional integrations.
+
+### Polar verification
+
+Run the deterministic integration suite with `./node_modules/.bin/vitest run tests/billing/polar.test.ts`. It uses real loopback HTTP, signed JWTs and actual libSQL, including repeated concurrent reservations, source/usage replay, invalid state and owner session boundaries. It makes no external requests.
+
+The optional `node scripts/test-polar-sandbox.mjs` proof requires an explicitly selected sandbox `POLAR_ACCESS_TOKEN` and `POLAR_SANDBOX_PROOF` JSON with `{ "organizationId": "...", "databaseUrl": "file:///absolute/proof/billing.db", "contactEmail": "sandbox-fixture@example.com", "country": "BR" }`. A fresh namespaced database is derived from that base path on every invocation; previous databases are retained. Use a synthetic contact supporting plus aliases; a unique alias is derived per workspace. The script provisions disposable zero-price products, benefits, meter, customer, paid purchase and recurring subscription. It uses the actual driver/gateway and retained private SQL file, discards one real usage acknowledgement through a transparent loopback proxy, verifies replay after restart and revokes its disposable subscription. It prints only a safe proof summary and the actual database location. It never targets production or supplies a payment method. Inspect and clean up disposable sandbox resources through your operator workflow; the script does not delete financial history.
+
+Set `POLAR_SANDBOX_DEBUG=1` when diagnosing the optional sandbox proof to print endpoint phases, HTTP status/version and selected field types/linkage booleans. These diagnostics omit response values, credentials and hosted URLs.

@@ -115,9 +115,9 @@ describe('local billing storage', () => {
       billing.close();
       if (corruption === 'newer history') {
         await observer.execute(
-          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (5, 'unknown', '2026-11-06T00:00:00Z')",
+          "INSERT INTO billing_migrations (version, checksum, applied_at) VALUES (6, 'unknown', '2026-11-06T00:00:00Z')",
         );
-        await observer.execute('PRAGMA user_version = 5');
+        await observer.execute('PRAGMA user_version = 6');
       } else if (corruption === 'checksum drift')
         await observer.execute("UPDATE billing_migrations SET checksum = 'changed'");
       else if (corruption === 'unknown schema')
@@ -146,8 +146,9 @@ describe('local billing storage', () => {
       { version: 2n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 3n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 4n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 5n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(4n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(5n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -242,4 +243,32 @@ describe('local billing storage', () => {
       [{ count: 21n, units: 90n }],
     );
   }, 60_000);
+  it('additive provider migration preserves existing local usage and migration checksums', async () => {
+    const { billing, account, observer, database } = await fixture();
+    await billing.provider.reportUsage(usage(account));
+    billing.close();
+    const checksums = (
+      await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 4 ORDER BY version')
+    ).rows;
+    // Reconstruct the previously shipped v4 schema while retaining its actual
+    // local account, immutable usage and meter debit. No production reset API.
+    for (const table of ['provider_usage', 'hosted_operations', 'grant_allocations', 'credit_grants', 'provider_links'])
+      await observer.execute(`DROP TABLE ${table}`);
+    await observer.execute('ALTER TABLE billing_accounts DROP COLUMN effective_provider');
+    await observer.execute('DELETE FROM billing_migrations WHERE version = 5');
+    await observer.execute('PRAGMA user_version = 4');
+    const upgraded = await LocalBillingStorage.open({ url: database.url });
+    cleanups.push(() => upgraded.close());
+    expect(await upgraded.ensureAccount({ workspaceId: 'team' })).toEqual(account);
+    expect((await upgraded.getState(account)).meters[0]).toMatchObject({ confirmedBalance: 97, consumedUnits: 3 });
+    expect(
+      (await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version <= 4 ORDER BY version'))
+        .rows,
+    ).toEqual(checksums);
+    expect((await observer.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
+      { id: 'event-1', units: 3n },
+    ]);
+    expect((await observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(5n);
+  });
 });
