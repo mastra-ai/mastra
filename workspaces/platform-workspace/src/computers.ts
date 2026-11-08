@@ -1,11 +1,12 @@
 import { hkdfSync } from 'node:crypto';
 import { createSemanticHands, withSemantic } from '@mastra/computer-semantic';
 import type { DaemonConnect } from '@mastra/computer-semantic';
-import { COMPUTER_VIEWER_PORT, Computers } from '@mastra/core/computers';
+import { Computers } from '@mastra/core/computers';
 import type { ComputerProvider, ComputerSandbox, ComputersOptions } from '@mastra/core/computers';
 import type { MastraComputerScope, MastraComputerViewer } from '@mastra/core/mastra';
 import { PlatformComputerControlSubscriber } from './computer-control.js';
 import type { PlatformComputerControlEnforcementOptions } from './computer-control.js';
+import { COMPUTER_VIEWER_PORT } from './computer.js';
 import { PlatformSandbox } from './sandbox.js';
 import type { PlatformSandboxOptions, PlatformSandboxTemplate } from './sandbox.js';
 import { Template, withDesktop } from './template.js';

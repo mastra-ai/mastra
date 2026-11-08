@@ -13,16 +13,6 @@ export {
   type ComputerSandbox,
   type ComputersOptions,
 } from './computers.js';
-export {
-  COMPUTER_VIEWER_PORT,
-  DESKTOP_PACKAGES,
-  ENSURE_SCRIPT,
-  SCREENSHOT_SCRIPT,
-  createComputer,
-  type ComputerDriverDeps,
-  type ComputerExec,
-  type ComputerExecOptions,
-} from './computer.js';
 export type {
   ComputerHandsExtension,
   ComputerHandsHost,
