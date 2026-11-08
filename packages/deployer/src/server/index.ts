@@ -326,7 +326,12 @@ export async function createHonoServer(
       })
     : null;
   if (computers && computerStreamSetup) {
-    configureComputerServer(mastra, { ticketStore: computerTicketStore });
+    configureComputerServer(mastra, {
+      ticketStore: computerTicketStore,
+      ...(typeof browserStreamOrigins === 'string' || Array.isArray(browserStreamOrigins)
+        ? { allowedOrigins: browserStreamOrigins }
+        : {}),
+    });
   }
 
   // Global CORS config

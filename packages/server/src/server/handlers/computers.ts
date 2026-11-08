@@ -53,10 +53,13 @@ async function authorize(
   }
 }
 
-function callerOrigin(request?: Request): string {
+function callerOrigin(request: Request | undefined, allowedOrigins?: string | string[]): string {
   if (!request) return 'http://localhost';
   const forwarded = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
-  const host = request.headers.get('host')?.split(',')[0]?.trim() || new URL(request.url).host;
+  const host =
+    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
+    request.headers.get('host')?.split(',')[0]?.trim() ||
+    new URL(request.url).host;
   const serverOrigin = `${forwarded === 'https' || new URL(request.url).protocol === 'https:' ? 'https' : 'http'}://${host}`;
   const raw = request.headers.get('origin');
   if (!raw) return serverOrigin;
@@ -66,7 +69,11 @@ function callerOrigin(request?: Request): string {
   } catch {
     throw notFound();
   }
-  if ((origin.protocol !== 'http:' && origin.protocol !== 'https:') || origin.origin !== serverOrigin) throw notFound();
+  if (origin.protocol !== 'http:' && origin.protocol !== 'https:') throw notFound();
+  const allowed = Array.isArray(allowedOrigins) ? allowedOrigins : allowedOrigins ? [allowedOrigins] : [];
+  if (origin.host.toLowerCase() !== host.toLowerCase() && !allowed.includes('*') && !allowed.includes(origin.origin)) {
+    throw notFound();
+  }
   return origin.origin;
 }
 
@@ -87,7 +94,7 @@ export const CREATE_COMPUTER_SESSION_ROUTE = createRoute({
     if (!computers?.viewer || !server) throw notFound();
     const scope = scopeOf(requestContext, body);
     await authorize(mastra, requestContext, scope, 'memory:write');
-    const origin = callerOrigin(request);
+    const origin = callerOrigin(request, server.allowedOrigins);
     let viewer;
     try {
       viewer = await computers.viewer(computerId, scope);
@@ -114,9 +121,11 @@ export const GET_COMPUTER_CONTROL_ROUTE = createRoute({
   summary: 'Get computer control state',
   tags: ['Computers'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, computerId, ...query }) => {
+  handler: async ({ mastra, requestContext, request, computerId, ...query }) => {
     const computers = mastra.getComputers?.();
-    if (!getComputerServerState(mastra) || !computers?.controlState) throw notFound();
+    const server = getComputerServerState(mastra);
+    if (!server || !computers?.controlState) throw notFound();
+    callerOrigin(request, server.allowedOrigins);
     const scope = scopeOf(requestContext, query);
     await authorize(mastra, requestContext, scope, 'memory:read');
     try {
@@ -137,13 +146,15 @@ export const CHANGE_COMPUTER_CONTROL_ROUTE = createRoute({
   summary: 'Change computer control state',
   tags: ['Computers'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, computerId, action, note, ...body }) => {
+  handler: async ({ mastra, requestContext, request, computerId, action, note, ...body }) => {
     const computers = mastra.getComputers?.();
-    if (!getComputerServerState(mastra) || !computers?.control) throw notFound();
+    const server = getComputerServerState(mastra);
+    if (!server || !computers?.control) throw notFound();
+    callerOrigin(request, server.allowedOrigins);
     const scope = scopeOf(requestContext, body);
     await authorize(mastra, requestContext, scope, 'memory:write');
     try {
-      return await computers.control(computerId, scope, { action, note });
+      return await computers.control(computerId, scope, { action, ...(note ? { note } : {}) });
     } catch {
       throw notFound();
     }

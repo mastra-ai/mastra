@@ -73,8 +73,10 @@ export class InMemoryComputerTicketStore implements ComputerTicketStore {
   }
 }
 
-interface ComputerServerState {
+export interface ComputerServerState {
   ticketStore: ComputerTicketStore;
+  /** Browser origins allowed to mint tickets in addition to the server's own host. */
+  allowedOrigins?: string | string[];
 }
 
 const states = new WeakMap<Mastra, ComputerServerState>();
