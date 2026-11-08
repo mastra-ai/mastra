@@ -18,6 +18,7 @@ import type {
   CommercialSnapshot,
   HostedSession,
   PortalRequest,
+  PreparedHostedSession,
   ProviderAccount,
   RawWebhookRequest,
   ReconciliationRequest,
@@ -28,6 +29,7 @@ import type { BillingDriver, DriverObservation } from './driver.js';
 import { BillingDatabase } from './storage/database.js';
 import { GrantStorage, opaqueId } from './storage/grants.js';
 import { retainCatalog, retainedCatalog } from './storage/catalog.js';
+import { ProviderLifecycleStorage, requireLiveProvider } from './storage/provider-lifecycle.js';
 import { readUsageBinding } from './storage/usage-bindings.js';
 
 interface ServiceResources {
@@ -127,9 +129,17 @@ export class BillingService implements BillingProvider {
   }
   // Trusted server-side operation; deliberately absent from HTTP routes. A caller
   // must name the current provider. Selection alone never migrates purchases.
-  async switchProvider(input: { workspaceId: string; expectedProvider: string }): Promise<ProviderAccount> {
+  async switchProvider(input: {
+    workspaceId: string;
+    expectedProvider: string;
+    evidence?: string;
+  }): Promise<ProviderAccount> {
     const request = parseInput(
-      z.strictObject({ workspaceId: identifierSchema, expectedProvider: identifierSchema }),
+      z.strictObject({
+        workspaceId: identifierSchema,
+        expectedProvider: identifierSchema,
+        evidence: z.string().trim().min(1).max(2048).optional(),
+      }),
       input,
     );
     if (request.expectedProvider === 'local' || this.id === 'local' || request.expectedProvider === this.id)
@@ -146,6 +156,38 @@ export class BillingService implements BillingProvider {
       Boolean(this.driver(this.id).legacySourceKeys),
       request,
     );
+  }
+  // Operator-only lifecycle change. Closing external sales and renewal channels
+  // is an explicit attestation; this method never cancels provider contracts.
+  async retireProvider(input: {
+    workspaceId: string;
+    provider: string;
+    evidence: string;
+    externalSalesClosed: true;
+  }): Promise<void> {
+    const request = parseInput(
+      z.strictObject({
+        workspaceId: identifierSchema,
+        provider: identifierSchema,
+        evidence: z.string().trim().min(1).max(2048),
+        externalSalesClosed: z.literal(true),
+      }),
+      input,
+    );
+    const lifecycle = new ProviderLifecycleStorage(this.resources.database);
+    const candidate = await lifecycle.candidate(request.workspaceId, this.id, request.provider);
+    const driver = this.driver(request.provider);
+    if (candidate.sourceKeyMode !== (driver.legacySourceKeys ? 'legacy' : 'namespaced'))
+      throw new BillingError('conflict');
+    driver.validateAccount(candidate.account, candidate.link);
+    let observation: DriverObservation;
+    try {
+      observation = parseInput(this.observationSchema, await driver.observe(candidate.account, candidate.link));
+      if (JSON.stringify(observation.account) !== JSON.stringify(candidate.link)) throw new BillingError('conflict');
+    } catch {
+      throw new BillingError('state_unavailable');
+    }
+    await lifecycle.retire(candidate, observation, request.evidence);
   }
   async getState(input: ProviderAccount, synchronization?: { token: string }): Promise<CommercialSnapshot> {
     const account = parseInput(accountSchema, input);
@@ -265,16 +307,42 @@ export class BillingService implements BillingProvider {
   }
   async reportUsage(input: UsageEvent) {
     const event = parseInput(usageEventSchema, input);
-    const driver = this.driver(event.account.provider);
-    // Historical events are checked against their retained association, never
-    // the active billing account provider selected for new work.
-    driver.validateAccount(event.account, await this.resources.grants.observation(event.account));
+    const lifecycle = new ProviderLifecycleStorage(this.resources.database);
     const claim = await this.resources.database.write(async tx => {
       const previous = (await tx.execute({ sql: 'SELECT * FROM provider_usage WHERE id = ?', args: [event.id] }))
         .rows[0];
       const binding = await readUsageBinding(tx, event, Boolean(previous));
+      if (previous?.account_id !== undefined && previous.account_id !== event.account.id)
+        throw new BillingError('conflict');
+      const retained = (
+        await tx.execute({ sql: 'SELECT payload FROM billing_usage_events WHERE id = ?', args: [event.id] })
+      ).rows[0];
+      if (retained && String(retained.payload) !== JSON.stringify(event)) throw new BillingError('conflict');
+      // Existing outbox/claim bytes identify acknowledgements without requiring
+      // a retired driver. Legacy direct calls still need driver validation.
+      const outbox = (await tx.execute({ sql: 'SELECT id FROM billing_outbox WHERE id = ?', args: [event.id] }))
+        .rows[0];
+      if (previous?.delivered === 1n && (retained || outbox))
+        return { delivered: true as const, payload: String(previous.payload), effect: null };
+      const driver = this.driver(event.account.provider);
+      const link = (
+        await tx.execute({
+          sql: 'SELECT p.*, a.workspace_id FROM billing_provider_links p JOIN billing_accounts a ON a.id = p.account_id WHERE p.account_id = ? AND p.provider = ?',
+          args: [event.account.id, event.account.provider],
+        })
+      ).rows[0];
+      if (
+        !link ||
+        link.workspace_id !== event.account.workspaceId ||
+        link.external_reference !== event.account.externalReference
+      )
+        throw new BillingError('conflict');
+      driver.validateAccount(event.account, {
+        customerId: String(link.customer_id),
+        organizationId: String(link.organization_id),
+        externalReference: String(link.external_reference),
+      });
       if (previous) {
-        if (previous.account_id !== event.account.id) throw new BillingError('conflict');
         const payload = String(previous.payload);
         let stored: unknown;
         try {
@@ -286,35 +354,84 @@ export class BillingService implements BillingProvider {
         if (legacy.success) {
           if (JSON.stringify(legacy.data) !== JSON.stringify(event)) throw new BillingError('conflict');
           if (previous.delivered !== 1n) throw new BillingError('state_unavailable');
-          // Destination binding is still validated even for an acknowledged row.
           if (binding) driver.normalizeUsage(event, binding);
         } else driver.validateUsage(payload, event, binding);
-        return { delivered: previous.delivered === 1n, payload };
+        if (previous.delivered === 1n) return { delivered: true as const, payload, effect: null };
       }
-      const chosen = binding ?? parseInput(usageBindingSchema, driver.bindUsage(event.meter));
-      if (chosen.provider !== event.account.provider || chosen.meter !== event.meter)
-        throw new BillingError('conflict');
-      const payload = driver.normalizeUsage(event, chosen);
-      if (Buffer.byteLength(payload) > 65536) throw new BillingError('state_unavailable');
-      driver.validateUsage(payload, event, chosen);
-      await tx.execute({
-        sql: 'INSERT INTO provider_usage VALUES (?, ?, ?, 0)',
-        args: [event.id, event.account.id, payload],
-      });
-      return { delivered: false, payload };
+      await requireLiveProvider(tx, event.account);
+      let payload: string;
+      if (previous) payload = String(previous.payload);
+      else {
+        const chosen = binding ?? parseInput(usageBindingSchema, driver.bindUsage(event.meter));
+        if (chosen.provider !== event.account.provider || chosen.meter !== event.meter)
+          throw new BillingError('conflict');
+        payload = driver.normalizeUsage(event, chosen);
+        if (Buffer.byteLength(payload) > 65536) throw new BillingError('state_unavailable');
+        driver.validateUsage(payload, event, chosen);
+      }
+      if (!previous)
+        await tx.execute({
+          sql: 'INSERT INTO provider_usage VALUES (?, ?, ?, 0)',
+          args: [event.id, event.account.id, payload],
+        });
+      if (!retained)
+        await tx.execute({
+          sql: 'INSERT INTO billing_usage_events VALUES (?, ?)',
+          args: [event.id, JSON.stringify(event)],
+        });
+      const effect = await lifecycle.beginEffectInTransaction(tx, event.account, 'usage', event.id);
+      return { delivered: false as const, payload, effect };
     });
     if (claim.delivered) return { status: 'duplicate' as const, eventId: event.id };
-    const result = await driver.sendUsage(claim.payload);
-    if (result.status === 'accepted' || result.status === 'duplicate') {
-      if (result.eventId !== event.id) throw new BillingError('state_unavailable');
-      await this.resources.database.write(tx =>
-        tx.execute({
-          sql: 'UPDATE provider_usage SET delivered = 1 WHERE id = ? AND payload = ?',
-          args: [event.id, claim.payload],
-        }),
-      );
+    const driver = this.driver(event.account.provider);
+    let accepted = false;
+    try {
+      const result = await driver.sendUsage(claim.payload);
+      accepted = result.status === 'accepted' || result.status === 'duplicate';
+      if ((result.status === 'accepted' || result.status === 'duplicate') && result.eventId !== event.id) {
+        accepted = false;
+        throw new BillingError('state_unavailable');
+      }
+      await this.resources.database.write(async tx => {
+        if (accepted)
+          await tx.execute({
+            sql: 'UPDATE provider_usage SET delivered = 1 WHERE id = ? AND payload = ?',
+            args: [event.id, claim.payload],
+          });
+        await lifecycle.finishEffectInTransaction(tx, claim.effect, accepted);
+      });
+      return result;
+    } catch (error) {
+      await lifecycle.finishEffect(claim.effect, false);
+      throw error;
     }
-    return result;
+  }
+  private fenceHosted(
+    account: ProviderAccount,
+    kind: 'checkout' | 'portal',
+    prepared: PreparedHostedSession,
+  ): PreparedHostedSession {
+    if (prepared.status !== 'prepared') return prepared;
+    const lifecycle = new ProviderLifecycleStorage(this.resources.database);
+    return {
+      status: 'prepared',
+      dispatch: async () => {
+        const effect = await lifecycle.beginEffect(
+          account,
+          kind,
+          createHash('sha256').update(JSON.stringify(account)).digest('hex'),
+          true,
+        );
+        try {
+          const result = await prepared.dispatch();
+          await lifecycle.finishEffect(effect, result.status === 'created');
+          return result;
+        } catch (error) {
+          await lifecycle.finishEffect(effect, false);
+          throw error;
+        }
+      },
+    };
   }
   async prepareCheckout(request: CheckoutRequest) {
     request = parseInput(
@@ -324,14 +441,16 @@ export class BillingService implements BillingProvider {
     if (request.account.provider !== this.id) throw new BillingError('conflict');
     const link = await this.resources.grants.observation(request.account);
     this.driver(this.id).validateAccount(request.account, link);
-    return this.driver(this.id).prepareCheckout(request, link);
+    await this.resources.database.write(tx => requireLiveProvider(tx, request.account, true));
+    return this.fenceHosted(request.account, 'checkout', await this.driver(this.id).prepareCheckout(request, link));
   }
   async preparePortalSession(request: PortalRequest) {
     request = parseInput(z.object({ account: accountSchema, returnUrl: z.url() }), request);
     if (request.account.provider !== this.id) throw new BillingError('conflict');
     const link = await this.resources.grants.observation(request.account);
     this.driver(this.id).validateAccount(request.account, link);
-    return this.driver(this.id).preparePortalSession(request, link);
+    await this.resources.database.write(tx => requireLiveProvider(tx, request.account, true));
+    return this.fenceHosted(request.account, 'portal', await this.driver(this.id).preparePortalSession(request, link));
   }
   async createCheckout(request: CheckoutRequest): Promise<HostedSession> {
     const prepared = await this.prepareCheckout(request);

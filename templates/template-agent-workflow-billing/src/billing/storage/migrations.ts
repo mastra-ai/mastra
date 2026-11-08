@@ -409,6 +409,37 @@ const webhookStatements = [
   `CREATE TRIGGER billing_inbox_no_delete BEFORE DELETE ON billing_inbox BEGIN SELECT RAISE(ABORT, 'Notification history is retained'); END`,
 ];
 
+const lifecycleStatements = [
+  `CREATE TABLE billing_provider_lifecycle (
+    id INTEGER PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('retired', 'reactivated')),
+    evidence TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (account_id, provider) REFERENCES billing_provider_links(account_id, provider)
+  ) STRICT`,
+  `CREATE TABLE billing_external_effects (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('usage', 'checkout', 'portal')),
+    external_key TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'uncertain', 'complete')),
+    FOREIGN KEY (account_id, provider) REFERENCES billing_provider_links(account_id, provider)
+  ) STRICT`,
+  `CREATE TABLE billing_usage_events (
+    id TEXT PRIMARY KEY REFERENCES provider_usage(id),
+    payload TEXT NOT NULL
+  ) STRICT`,
+  ...['billing_provider_lifecycle', 'billing_usage_events'].flatMap(table => [
+    `CREATE TRIGGER ${table}_no_update BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(ABORT, 'Lifecycle evidence is immutable'); END`,
+    `CREATE TRIGGER ${table}_no_delete BEFORE DELETE ON ${table} BEGIN SELECT RAISE(ABORT, 'Lifecycle evidence is retained'); END`,
+  ]),
+  `CREATE TRIGGER billing_external_effects_terms_immutable BEFORE UPDATE OF id, account_id, provider, kind, external_key ON billing_external_effects BEGIN SELECT RAISE(ABORT, 'External effect identity is immutable'); END`,
+  `CREATE TRIGGER billing_external_effects_no_delete BEFORE DELETE ON billing_external_effects BEGIN SELECT RAISE(ABORT, 'External effect history is retained'); END`,
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -422,6 +453,7 @@ const migrations = [
   { version: 10, statements: commercialCatalogStatements },
   { version: 11, statements: driverStatements },
   { version: 12, statements: webhookStatements },
+  { version: 13, statements: lifecycleStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -493,6 +525,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     ...usageBindingStatements,
     ...commercialCatalogStatements,
     ...driverStatements.filter(sql => sql.startsWith('CREATE')),
+    ...lifecycleStatements,
   ]
     .map(normalizedSql)
     .sort();

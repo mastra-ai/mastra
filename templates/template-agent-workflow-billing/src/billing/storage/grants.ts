@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { BillingError, accountSchema, grantSourceSchema } from '../contracts.js';
 import type { CommercialSnapshot, ProviderAccount, GrantSource } from '../contracts.js';
 import { BillingDatabase } from './database.js';
+import { isRetired, reactivateProvider } from './provider-lifecycle.js';
 import { accountFromRow } from './accounts.js';
 import type { ExternalAccount } from '../driver.js';
 
@@ -27,7 +28,7 @@ export class GrantStorage {
     provider: string,
     external: ExternalAccount,
     legacySourceKeys = false,
-    replacement?: { expectedProvider: string },
+    replacement?: { expectedProvider: string; evidence?: string },
   ): Promise<ProviderAccount> {
     return this.database.write(async tx => {
       let row = (
@@ -78,6 +79,10 @@ export class GrantStorage {
         });
       }
       if (replacement) {
+        if (await isRetired(tx, current.id, provider)) {
+          if (!replacement.evidence) throw new BillingError('conflict');
+          await reactivateProvider(tx, current.id, provider, `switch:${replacement.evidence}`);
+        }
         await tx.execute({
           sql: 'UPDATE billing_accounts SET active_provider = ? WHERE id = ?',
           args: [provider, current.id],
@@ -110,6 +115,7 @@ export class GrantStorage {
         !row ||
         !linked ||
         accountFromRow(row).provider !== activeProvider ||
+        (await isRetired(tx, parsed.id, parsed.provider)) ||
         row.workspace_id !== parsed.workspaceId ||
         row.external_reference !== parsed.externalReference ||
         linked.external_reference !== parsed.externalReference
@@ -117,7 +123,7 @@ export class GrantStorage {
         throw new BillingError('conflict');
       return (
         await tx.execute({
-          sql: 'SELECT * FROM billing_provider_links WHERE account_id = ? ORDER BY provider',
+          sql: `SELECT p.* FROM billing_provider_links p WHERE account_id = ? AND COALESCE((SELECT state FROM billing_provider_lifecycle l WHERE l.account_id = p.account_id AND l.provider = p.provider ORDER BY id DESC LIMIT 1), '') <> 'retired' ORDER BY provider`,
           args: [account.id],
         })
       ).rows.map(link => ({

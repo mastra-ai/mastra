@@ -88,7 +88,13 @@ export async function restoreLegacyProviderProjection(client: Awaited<ReturnType
     "UPDATE billing_accounts SET effective_provider = 'polar' WHERE id IN (SELECT account_id FROM billing_provider_links WHERE provider = 'polar')",
   );
 }
+export async function removeLifecycleMigration(client: Awaited<ReturnType<typeof independentClient>>) {
+  for (const table of ['billing_provider_lifecycle', 'billing_external_effects', 'billing_usage_events'])
+    await client.execute(`DROP TABLE IF EXISTS ${table}`);
+  await client.execute('DELETE FROM billing_migrations WHERE version = 13');
+}
 export async function removeWebhookMigration(client: Awaited<ReturnType<typeof independentClient>>) {
+  await removeLifecycleMigration(client);
   await client.execute('DROP TRIGGER billing_inbox_terms_immutable');
   await client.execute('DROP TRIGGER billing_inbox_no_delete');
   await client.execute('ALTER TABLE billing_inbox RENAME TO billing_inbox_current');

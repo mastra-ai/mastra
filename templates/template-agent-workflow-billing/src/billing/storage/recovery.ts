@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { BillingError, parseInput, usageEventSchema, identifierSchema, timestampSchema } from '../contracts.js';
 import type { BillingProvider, ProviderAccount, ProviderNotification, UsageDelivery } from '../contracts.js';
 import { BillingDatabase } from './database.js';
+import { reactivateProvider } from './provider-lifecycle.js';
 import { accountFromRow } from './accounts.js';
 
 const bounds = z.strictObject({
@@ -74,6 +75,12 @@ export class RecoveryStorage {
       const account = accounts[0];
       let generation: bigint | null = null;
       if (account) {
+        await reactivateProvider(
+          tx,
+          String(account.id),
+          provider,
+          `notification:${notification.id}:${notification.digest}`,
+        );
         await tx.execute({
           sql: 'INSERT INTO billing_account_sync (account_id) VALUES (?) ON CONFLICT DO NOTHING',
           args: [account.id],

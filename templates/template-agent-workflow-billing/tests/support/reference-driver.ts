@@ -26,6 +26,13 @@ export async function referenceDriver(
   const validFrom = options.validFrom ?? '2025-01-01T00:00:00Z';
   const data = {
     available: true,
+    observationGate: null as (() => Promise<void>) | null,
+    usageGate: null as (() => Promise<void>) | null,
+    hostedGate: null as (() => Promise<void>) | null,
+    usageUncertain: false,
+    usageRejected: false,
+    hostedUncertain: false,
+    commercialOverrides: {} as Partial<import('../../src/billing/driver.js').DriverObservation['commercial']>,
     metered: options.metered ?? false,
     wrongAccount: false,
     sources: true,
@@ -72,7 +79,7 @@ export async function referenceDriver(
         validFrom,
       });
       const now = new Date(Date.now() - 1000).toISOString();
-      reply({
+      const observation = {
         account: data.wrongAccount ? link('foreign') : link(body.workspaceId),
         sources: data.sources
           ? [
@@ -111,19 +118,39 @@ export async function referenceDriver(
                 },
               ]
             : [],
+          ...data.commercialOverrides,
         },
-      });
+      };
+      await data.observationGate?.();
+      reply(observation);
       return;
     }
     if (request.url === '/usage') {
       data.rawRequests.push(raw);
       const duplicate = data.events.has(body.event.id);
       data.events.set(body.event.id, raw);
+      await data.usageGate?.();
+      if (data.usageRejected) {
+        response.statusCode = 422;
+        reply({});
+        return;
+      }
+      if (data.usageUncertain) {
+        response.statusCode = 503;
+        reply({});
+        return;
+      }
       reply({ status: duplicate ? 'duplicate' : 'accepted', eventId: body.event.id });
       return;
     }
     if (request.url === '/checkout' || request.url === '/portal') {
       data.hostedRequests.push({ operation: request.url, body });
+      await data.hostedGate?.();
+      if (data.hostedUncertain) {
+        response.statusCode = 503;
+        reply({});
+        return;
+      }
       reply({ status: 'created', url: `https://sessions.example.test/${id}/${data.hostedRequests.length}` });
       return;
     }
@@ -204,7 +231,8 @@ export async function referenceDriver(
         headers: { 'content-type': 'application/json' },
         body: payload,
       });
-      if (!response.ok) return { status: 'uncertain', code: 'reference_unavailable' };
+      if (!response.ok)
+        return { status: response.status === 422 ? 'permanent_failure' : 'uncertain', code: 'reference_unavailable' };
       return parseInput(
         z.strictObject({ status: z.enum(['accepted', 'duplicate']), eventId: z.string() }),
         await response.json(),

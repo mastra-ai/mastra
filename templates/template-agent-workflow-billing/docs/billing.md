@@ -599,7 +599,7 @@ const runtime = await initializeMastraBilling({
 });
 ```
 
-The registry rejects duplicate IDs, an unknown selected provider, unsupported policy capabilities, invalid usage bindings and missing hosted destinations before serving. Each adapter constructor must validate its provider-specific binding schema, exact offer/allowance references, supported logical mappings and destination restrictions. Usage bindings must name the selected driver and logical meter. A driver receives no application storage argument. Register every retained historical driver in the same array; the application service uses one driver map for state refresh, hosted preparation, historical delivery and webhook verification.
+The registry rejects duplicate IDs, an unknown selected provider, unsupported policy capabilities, invalid usage bindings and missing hosted destinations before serving. Each adapter constructor must validate its provider-specific binding schema, exact offer/allowance references, supported logical mappings and destination restrictions. Usage bindings must name the selected driver and logical meter. A driver receives no application storage argument. Register every nonretired historical driver in the same array; the application service uses one driver map for state refresh, hosted preparation, historical delivery and webhook verification.
 
 Checkout accepts only logical offer keys from `catalog.offers`; redirect URLs must exactly match `hosted.returnUrls`. These neutral destinations must use HTTPS, or HTTP on localhost/127.0.0.1, without credentials or fragments. For shipped full Polar configuration, `polar.returnUrls` remains authoritative: the compatibility boundary derives `hosted.returnUrls` from it on every parse, including normalized configuration round trips. Editing the top-level `hosted` field does not restrict that legacy Polar allowlist. Configure the legacy field, or construct `PolarBillingDriver` yourself and inject it without a `polar` configuration field when using the neutral API.
 
@@ -629,10 +629,45 @@ Replacement retains the account ID and every historical provider association. Fr
 
 Migration 11 adds associations, source ownership and immutable admission-account evidence without rewriting migrations 1–10 or existing financial rows. An execution admitted before replacement, including a suspended workflow, settles and exports with its original provider/account and delivery binding. Pending exports route through their original driver and preserve their normalized claim bytes and event identity. A metered workflow resume revalidates the meter/funding contract of its immutable admitted account, even after replacement and restart. Shared logical access keys and prepaid grants retain their pooled behavior. Trusted `getState`/`reconcile` calls may name a retained account association; the returned metered state belongs to that named provider, with the same complete source refresh and revision/generation fences. The active provider remains unchanged. Newly admitted work binds to the selected provider. Replacement does not transfer subscriptions, purchases or provider invoices.
 
-Keep every retained driver available with its original account destination, source bindings and catalog revisions. Historical catalog terms remain in SQL even when current checkout offers use newer revisions. A missing driver or unavailable original source blocks paid admission. All retained associations are reverified, including after their grants are consumed; there is no automatic driver-retirement API. Credential rotation at the same destination remains supported.
+Keep every nonretired driver available with its original account destination, source bindings and catalog revisions. Historical catalog terms remain in SQL even when current checkout offers use newer revisions. A missing driver or unavailable original source blocks paid admission until explicit retirement succeeds. Consuming a grant alone never retires its provider. Credential rotation at the same destination remains supported.
+
+### Retire a historical provider
+
+After replacing a provider, trusted server code can retire its historical association once no obligations remain. The selected `BillingService` must match the workspace's active provider. Keep the historical driver registered for the retirement call because it performs a fresh authenticated observation.
+
+```typescript
+await provider.retireProvider({
+  workspaceId,
+  provider: originalDriver.id,
+  evidence: 'operations:closed-original-sales-and-renewals',
+  externalSalesClosed: true,
+});
+```
+
+`externalSalesClosed: true` attests that an operator has stopped external purchases, renewals and outstanding checkout links for this account. Perform those external operations through your provider administration before calling retirement. The method doesn't cancel contracts, close checkout links, transfer purchases or change policies and allowances. This trusted API has no customer HTTP route.
+
+Retirement rejects the current provider, `local`, an unlinked provider or a mismatched workspace. It also rejects live or future access, subscriptions, metered contracts and unconsumed usable or future grants. A missing unexpired source with remaining units is insufficient evidence of revocation. Fresh explicit revocation or expiry can make remaining units unavailable, but consumption and original financial terms remain unchanged.
+
+Running, suspended or uncertain executions and outstanding grant reservations block retirement across the account. This includes replacement-provider work funded by historical grants. Historical exports must be acknowledged, with no active delivery lease or permanent failure. In-flight and uncertain external writes block retirement. Unresolved legacy direct usage claims without a retained provider association, and legacy dispatched hosted operations without a URL, block conservatively across the workspace because their destination can't be proven. Resolve these obligations through your existing trusted operations process; retirement doesn't repair or discard uncertain effects.
+
+The committing transaction checks the observed active provider, revision and synchronization generations, then advances the revision and generation. Concurrent hints, refreshes or provider switches invalidate stale observations. Hosted and usage writes persist a dispatch fence before network activity; a stale service or prepared hosted closure can't initiate a write after retirement. A known usage acknowledgement can replay without another request or the retired driver when its original outbox event or retained claim establishes the exact input. Legacy direct acknowledgements without that evidence still require their original driver for pure payload validation.
+
+Successful retirement keeps provider links and financial history. Only the grant availability projection becomes unavailable. Migration 13 adds immutable retirement/reactivation audit evidence, exact usage-event evidence and retained external dispatch records without rewriting migrations 1–12. Refresh skips only explicitly retired associations. You can subsequently reopen the active service without the retired driver, while retaining its original bindings and credentials in your operator records for any future reactivation.
+
+A new authenticated notification for a retired association appends a reactivation record and restores its verification requirement. Duplicate notifications don't reactivate again. Register the historical driver again before accepting its notifications; paid work then requires fresh observation and preserves all prior consumption. Explicitly switching back to a retired provider also requires an evidence reference:
+
+```typescript
+await originalService.switchProvider({
+  workspaceId,
+  expectedProvider: replacementDriver.id,
+  evidence: 'operations:resume-original-sales',
+});
+```
+
+Switchback reactivates verification and never remints consumed purchases. The driver must still return the original account association and retained source terms.
 
 `publicBindings` contains only credential-free JSON for immutable audit history. Keep API tokens and webhook secrets in the driver instance. Usage normalization and validation must be pure; hosted-session preparation must not create a session. The application persists the usage claim and hosted dispatch fence before the driver performs those effects. The HTTP reference driver in the tests demonstrates substitutability; the template does not include Stripe or Paddle integrations.
 
 Signed notifications use `POST /billing/webhooks/:provider`. The path must name a registered driver with webhook capability; the driver authenticates the original body bytes and headers before any account lookup or SQL change. Unknown drivers, bad signatures and webhook path lookalikes are rejected. `POST /billing/webhooks/polar` remains supported. The lower-level `recovery.intake(request)` defaults to the active provider; pass its identifier as the second argument for historical providers.
 
-Migration 12 retains each original Polar inbox row and adds a provider namespace. Duplicate detection uses `(provider, notification ID)`, so identical IDs from different drivers cannot suppress each other. Changed content under an existing provider/ID conflicts. Verified hints resolve retained associations, including providers selected before replacement. An ambiguous account reference across seller namespaces fails closed. A hint invalidates the account generation and commercial revision; existing refresh leases and paid admission checks keep their fencing behavior. Recovery refreshes all retained source associations through the registered drivers. Historical inbox rows, financial payloads and migration checksums 1–11 remain unchanged.
+Migration 12 retains each original Polar inbox row and adds a provider namespace. Duplicate detection uses `(provider, notification ID)`, so identical IDs from different drivers cannot suppress each other. Changed content under an existing provider/ID conflicts. Verified hints resolve retained associations, including providers selected before replacement. An ambiguous account reference across seller namespaces fails closed. A hint invalidates the account generation and commercial revision; existing refresh leases and paid admission checks keep their fencing behavior. Recovery refreshes all nonretired source associations through the registered drivers. Historical inbox rows, financial payloads and migration checksums 1–11 remain unchanged.

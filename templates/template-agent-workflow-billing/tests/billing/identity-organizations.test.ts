@@ -144,6 +144,7 @@ describe('trusted identity and shared workspace journeys', () => {
       { version: 10n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 11n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { version: 12n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { version: 13n, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     expect((await legacyObserver.execute('SELECT id, units FROM immutable_usage')).rows).toEqual([
       { id: 'event-1', units: 3n },
