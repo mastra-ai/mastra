@@ -2,6 +2,7 @@ export { SandboxComputers, type SandboxComputersOptions } from './sandbox-comput
 
 export {
   Computers,
+  CONTROL_NOT_ENFORCED,
   DESTROY_FAILED,
   HUMAN_HAS_CONTROL,
   MISSING_IDENTITY,
@@ -48,6 +49,9 @@ export {
   type SemanticTemplateBuilder,
 } from './semantic.js';
 export type {
+  ComputerActionInput,
+  ComputerControlEnforcementResult,
+  ComputerControlSubscriber,
   MastraComputerControl,
   MastraComputerControlResult,
   MastraComputerScope,

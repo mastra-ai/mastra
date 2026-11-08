@@ -258,13 +258,37 @@ async function resolveEffectiveWorkspace(
  * Clone a standalone tool with config overrides and inject workspace into context.
  * `targets` declares which providers the tool needs resolved per request.
  */
+const COMPUTER_MUTATION_TOOLS = new Set<string>([
+  WORKSPACE_TOOLS.COMPUTER.CLICK,
+  WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK,
+  WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK,
+  WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE,
+  WORKSPACE_TOOLS.COMPUTER.DRAG,
+  WORKSPACE_TOOLS.COMPUTER.TYPE,
+  WORKSPACE_TOOLS.COMPUTER.PRESS_KEY,
+  WORKSPACE_TOOLS.COMPUTER.SCROLL,
+]);
+
 function wrapTool(tool: any, workspace: Workspace, targets: ResolveTargets): any {
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
       const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context, targets);
       const enrichedContext = { ...context, workspace: effectiveWorkspace };
-      return tool.execute(input, enrichedContext);
+      const execute = () => tool.execute(input, enrichedContext);
+      const sandbox = effectiveWorkspace.sandbox;
+      const computers = context?.mastra?.getComputers?.();
+      if (
+        sandbox &&
+        COMPUTER_MUTATION_TOOLS.has(tool.id) &&
+        typeof computers?.runComputerAction === 'function'
+      ) {
+        return computers.runComputerAction(
+          { sandboxId: sandbox.id, action: 'mutate', context: enrichedContext, signal: context?.abortSignal },
+          execute,
+        );
+      }
+      return execute();
     },
   };
 }

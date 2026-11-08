@@ -99,4 +99,52 @@ describe('Computers', () => {
     );
     expect(attached).toBe('computer not found');
   });
+
+  it('increments control revisions and reference-counts duplicate subscriber owners', async () => {
+    const computers = new Computers({ provider: provider(), secret: 'secret' });
+    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, context);
+    const revisions: number[] = [];
+    const enforce = async ({ control }: any) => {
+      revisions.push(control.revision);
+      return { status: 'enforced' as const, enforcedRevision: control.revision };
+    };
+    const subscriber = { id: 'relay', required: true, enforce };
+    const disposeFirst = computers.registerControlSubscriber(subscriber);
+    const disposeSecond = computers.registerControlSubscriber(subscriber);
+    disposeFirst();
+
+    await expect(
+      computers.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'take' }),
+    ).resolves.toMatchObject({ holder: 'human', revision: 1 });
+    expect(await computers.controlState(created.computer.id, { resourceId: 'resource', threadId: 'thread' })).toMatchObject({
+      holder: 'human',
+      revision: 1,
+    });
+    await expect(
+      computers.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'release' }),
+    ).resolves.toMatchObject({ holder: 'agent', revision: 2 });
+    expect(revisions).toEqual([1, 2]);
+
+    disposeSecond();
+  });
+
+  it('fails managed mutations closed until required subscribers enforce the revision', async () => {
+    const computers = new Computers({ provider: provider(), secret: 'secret' });
+    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, context);
+    computers.registerControlSubscriber({
+      id: 'relay',
+      required: true,
+      async enforce() {
+        return { status: 'retryable', error: 'relay unavailable' };
+      },
+    });
+    await computers.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'take' });
+    await computers.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'release' });
+    await expect(
+      computers.runComputerAction(
+        { sandboxId: 'sandbox-1', action: 'mutate', context },
+        async () => 'mutated',
+      ),
+    ).rejects.toThrow('still being enforced');
+  });
 });

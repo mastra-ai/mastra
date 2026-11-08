@@ -1,5 +1,5 @@
 import type { Mastra } from '../mastra/index.js';
-import type { ToolAction } from '../tools/index.js';
+import type { ToolAction, ToolExecutionContext } from '../tools/index.js';
 
 /**
  * Upstream access to a computer's live desktop viewer, for a server-side proxy.
@@ -10,6 +10,54 @@ import type { ToolAction } from '../tools/index.js';
 export interface MastraComputerViewer {
   url: string;
   headers: Record<string, string>;
+}
+
+/** @experimental */
+export interface MastraComputerScope {
+  threadId: string;
+  resourceId: string;
+}
+
+/** Who may drive a computer's input. @experimental */
+export interface MastraComputerControl {
+  holder: 'agent' | 'human';
+  reason?: string;
+  revision: number;
+}
+
+/** Result of a control change. @experimental */
+export interface MastraComputerControlResult {
+  holder: 'agent' | 'human';
+  revision: number;
+  notified: boolean;
+  reason?: 'no-change' | 'no-agent' | 'no-notifications-storage' | 'not-delivered' | 'error';
+}
+
+/** @experimental */
+export type ComputerControlEnforcementResult =
+  | { status: 'enforced'; enforcedRevision: number }
+  | { status: 'retryable'; error: string }
+  | { status: 'permanent'; error: string };
+
+/** A subscriber that enforces authoritative core control state at an external boundary. @experimental */
+export interface ComputerControlSubscriber {
+  id: string;
+  required: boolean;
+  enforce(input: {
+    computerId: string;
+    scope: MastraComputerScope;
+    identity: unknown;
+    control: MastraComputerControl;
+    signal: AbortSignal;
+  }): Promise<ComputerControlEnforcementResult>;
+}
+
+/** @experimental */
+export interface ComputerActionInput {
+  sandboxId: string;
+  action: 'read' | 'mutate';
+  context: ToolExecutionContext<any, any, any>;
+  signal?: AbortSignal;
 }
 
 /**
@@ -31,23 +79,8 @@ export interface MastraComputers {
     scope: MastraComputerScope,
     input: { action: 'take' | 'release'; note?: string },
   ): Promise<MastraComputerControlResult>;
-}
-
-/** @experimental */
-export interface MastraComputerScope {
-  threadId: string;
-  resourceId: string;
-}
-
-/** Who may drive a computer's input. @experimental */
-export interface MastraComputerControl {
-  holder: 'agent' | 'human';
-  reason?: string;
-}
-
-/** Result of a control change. @experimental */
-export interface MastraComputerControlResult {
-  holder: 'agent' | 'human';
-  notified: boolean;
-  reason?: 'no-change' | 'no-agent' | 'no-notifications-storage' | 'not-delivered' | 'error';
+  /** Register an enforcement subscriber. The disposer releases only this registration owner. */
+  registerControlSubscriber?(subscriber: ComputerControlSubscriber): () => void;
+  /** Run a Workspace computer action under this provider's cross-run control lease when managed. */
+  runComputerAction?<T>(input: ComputerActionInput, fn: () => Promise<T>): Promise<T>;
 }

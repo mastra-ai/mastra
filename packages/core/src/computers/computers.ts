@@ -9,6 +9,8 @@ import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../tools/ordered-t
 import type { SandboxComputer, WorkspaceSandbox, WorkspaceSandboxResolver } from '../workspace';
 import { WORKSPACE_TOOLS } from '../workspace/constants';
 import type {
+  ComputerActionInput,
+  ComputerControlSubscriber,
   MastraComputerControl,
   MastraComputerControlResult,
   MastraComputers,
@@ -37,6 +39,7 @@ export const DESTROY_FAILED = 'computer destroy failed';
 export const MISSING_IDENTITY = 'missing thread or resource id';
 /** @experimental */
 export const HUMAN_HAS_CONTROL = 'the user has control of this computer; wait for them to hand it back';
+export const CONTROL_NOT_ENFORCED = 'computer control change is still being enforced; try again';
 const NOTE_MAX = 500;
 
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
@@ -118,8 +121,15 @@ interface AgentRef {
 interface Lease {
   holder: 'agent' | 'human';
   reason?: string;
+  revision: number;
+  enforcedRevision: number;
   /** The thread (and its agent) to notify when the user hands control back. */
   target?: { resourceId: string; threadId: string } & AgentRef;
+}
+
+interface SubscriberRegistration {
+  subscriber: ComputerControlSubscriber;
+  owners: Set<symbol>;
 }
 
 interface Scope {
@@ -177,6 +187,7 @@ export class Computers implements MastraComputers {
   readonly #lifecycle = new Map<string, Promise<unknown>>();
   /** Last agent seen per thread, so a user take can notify it. */
   readonly #agents = new Map<string, AgentRef>();
+  readonly #controlSubscribers = new Map<string, SubscriberRegistration>();
   #tools?: Record<string, ToolAction<any, any, any, any>>;
 
   constructor(options: ComputersOptions) {
@@ -194,6 +205,52 @@ export class Computers implements MastraComputers {
 
   __registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
+  }
+
+  registerControlSubscriber(subscriber: ComputerControlSubscriber): () => void {
+    const owner = Symbol(subscriber.id);
+    const existing = this.#controlSubscribers.get(subscriber.id);
+    if (existing) {
+      if (existing.subscriber.required !== subscriber.required || existing.subscriber.enforce !== subscriber.enforce) {
+        throw new Error(`conflicting computer control subscriber: ${subscriber.id}`);
+      }
+      existing.owners.add(owner);
+    } else {
+      this.#controlSubscribers.set(subscriber.id, { subscriber, owners: new Set([owner]) });
+    }
+    return () => {
+      const current = this.#controlSubscribers.get(subscriber.id);
+      if (!current) return;
+      current.owners.delete(owner);
+      if (current.owners.size === 0) this.#controlSubscribers.delete(subscriber.id);
+    };
+  }
+
+  async #enforce(entry: Entry, scope: MastraComputerScope, signal: AbortSignal): Promise<boolean> {
+    const required = [...this.#controlSubscribers.values()].filter(registration => registration.subscriber.required);
+    if (required.length === 0) {
+      entry.control.enforcedRevision = entry.control.revision;
+      return true;
+    }
+    const control = {
+      holder: entry.control.holder,
+      ...(entry.control.reason ? { reason: entry.control.reason } : {}),
+      revision: entry.control.revision,
+    } satisfies MastraComputerControl;
+    const identity = { providerId: this.#provider.id, sandboxId: entry.sandbox?.sandboxId };
+    const results = await Promise.all(
+      required.map(({ subscriber }) =>
+        subscriber.enforce({ computerId: entry.id, scope, identity, control, signal }).catch(error => ({
+          status: 'retryable' as const,
+          error: String((error as Error)?.message ?? error),
+        })),
+      ),
+    );
+    const enforced = results.every(
+      result => result.status === 'enforced' && result.enforcedRevision >= entry.control.revision,
+    );
+    if (enforced) entry.control.enforcedRevision = entry.control.revision;
+    return enforced;
   }
 
   #mac(flag: 'p' | 'e', sandboxId: string, ownerResourceId: string): Buffer {
@@ -320,7 +377,7 @@ export class Computers implements MastraComputers {
       ownerResourceId,
       queue: Promise.resolve(),
       destroyed: false,
-      control: { holder: 'agent' },
+      control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
     };
     entry.queue = entry.ready.catch(() => {});
     entry.ready.then(
@@ -354,7 +411,7 @@ export class Computers implements MastraComputers {
           ownerResourceId: scope.resourceId,
           queue: Promise.resolve(),
           destroyed: false,
-          control: { holder: 'agent' },
+          control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
         };
       } catch {
         await sandbox.destroy().catch(() => {});
@@ -429,28 +486,36 @@ export class Computers implements MastraComputers {
     const entry = id ? this.#computers.get(id) : undefined;
     if (!entry || entry.ownerResourceId !== scope.resourceId || !entry.sandbox || entry.destroyed) return NOT_ATTACHED;
     const reason = input.reason.trim();
-    if (entry.control.holder !== 'human') {
-      entry.control = {
-        holder: 'human',
-        reason,
-        target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
+    const run = entry.queue.then(async () => {
+      if (entry.control.holder !== 'human') {
+        entry.control = {
+          holder: 'human',
+          reason,
+          revision: entry.control.revision + 1,
+          enforcedRevision: entry.control.enforcedRevision,
+          target: { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(scope.key) },
+        };
+        await this.#enforce(entry, scope, new AbortController().signal);
+      }
+      const shown = entry.control.reason ?? reason;
+      try {
+        await context?.writer?.custom({
+          type: 'data-computer',
+          data: { computerId: entry.id, threadId: scope.threadId, control: 'human', reason: shown },
+        });
+      } catch {
+        // A closed stream must not undo the handoff.
+      }
+      return {
+        computerId: entry.id,
+        reason: shown,
+        revision: entry.control.revision,
+        control: 'human' as const,
+        message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
       };
-    }
-    const shown = entry.control.reason ?? reason;
-    try {
-      await context?.writer?.custom({
-        type: 'data-computer',
-        data: { computerId: entry.id, threadId: scope.threadId, control: 'human', reason: shown },
-      });
-    } catch {
-      // A closed stream must not undo the handoff.
-    }
-    return {
-      computerId: entry.id,
-      reason: shown,
-      control: 'human' as const,
-      message: 'Stop using the computer and end your turn. You will be notified when the user hands it back.',
-    };
+    });
+    entry.queue = run.catch(() => {});
+    return run;
   }
 
   #list(context: Context) {
@@ -851,6 +916,23 @@ export class Computers implements MastraComputers {
     return this.#tools;
   }
 
+  async runComputerAction<T>(input: ComputerActionInput, fn: () => Promise<T>): Promise<T> {
+    if (input.action === 'read') return fn();
+    const scope = this.#scope(input.context);
+    if (!scope) return fn();
+    const id = this.#attachments.get(scope.key);
+    const entry = id ? this.#computers.get(id) : undefined;
+    if (!entry || entry.ownerResourceId !== scope.resourceId || entry.sandbox?.sandboxId !== input.sandboxId) return fn();
+    const run = entry.queue.then(async () => {
+      if (input.signal?.aborted) throw input.signal.reason ?? new Error('computer action aborted');
+      if (entry.control.holder === 'human') throw new Error(HUMAN_HAS_CONTROL);
+      if (entry.control.enforcedRevision < entry.control.revision) throw new Error(CONTROL_NOT_ENFORCED);
+      return fn();
+    });
+    entry.queue = run.catch(() => {});
+    return run;
+  }
+
   /** Resolve the attached owned sandbox for Workspace pixel tools. */
   sandboxResolver(): WorkspaceSandboxResolver {
     return async ({ requestContext }) => {
@@ -904,7 +986,11 @@ export class Computers implements MastraComputers {
    */
   async controlState(computerId: string, scope: MastraComputerScope): Promise<MastraComputerControl> {
     const { control } = this.#attached(computerId, scope);
-    return { holder: control.holder, ...(control.reason !== undefined && { reason: control.reason }) };
+    return {
+      holder: control.holder,
+      ...(control.reason !== undefined && { reason: control.reason }),
+      revision: control.revision,
+    };
   }
 
   /**
@@ -922,14 +1008,23 @@ export class Computers implements MastraComputers {
     const note = input.note?.trim() || undefined;
     if (note && note.length > NOTE_MAX) throw new Error('note too long');
     const holder = input.action === 'take' ? 'human' : 'agent';
-    if (entry.control.holder === holder) return { holder, notified: false, reason: 'no-change' };
+    if (entry.control.holder === holder) {
+      return { holder, revision: entry.control.revision, notified: false, reason: 'no-change' };
+    }
     const key = JSON.stringify([scope.resourceId, scope.threadId]);
     const target =
       holder === 'human'
         ? { resourceId: scope.resourceId, threadId: scope.threadId, ...this.#agents.get(key) }
         : entry.control.target;
-    entry.control = holder === 'human' ? { holder, reason: 'user took control', target } : { holder };
-    return { holder, ...(await this.#notify(entry, holder, target, note)) };
+    entry.control = {
+      holder,
+      ...(holder === 'human' ? { reason: note ?? 'user took control', target } : {}),
+      revision: entry.control.revision + 1,
+      enforcedRevision: entry.control.enforcedRevision,
+    };
+    const enforced = await this.#enforce(entry, scope, new AbortController().signal);
+    if (!enforced) return { holder, revision: entry.control.revision, notified: false, reason: 'not-delivered' };
+    return { holder, revision: entry.control.revision, ...(await this.#notify(entry, holder, target, note)) };
   }
 
   /** Tells the agent on the lease's thread that control changed hands. Never throws. */
@@ -938,7 +1033,7 @@ export class Computers implements MastraComputers {
     holder: 'agent' | 'human',
     target: Lease['target'],
     note: string | undefined,
-  ): Promise<Omit<MastraComputerControlResult, 'holder'>> {
+  ): Promise<Omit<MastraComputerControlResult, 'holder' | 'revision'>> {
     const mastra = target?.mastra;
     let agent: Agent | undefined;
     try {
