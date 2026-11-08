@@ -1,4 +1,4 @@
-import { cloneElement, useLayoutEffect, useRef } from 'react';
+import { cloneElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -33,6 +33,32 @@ export function ChartTooltipPosition({
   // Stays in the chart, to find it: Recharts' coordinate is relative to the chart.
   const anchor = useRef<HTMLSpanElement>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const active = contentProps.active === true;
+  // On touch, Recharts keeps the tooltip active after the finger lifts (there's no mouseleave), and
+  // the portal is fixed to the window, so it would float over the page as it scrolls. Hide it on any
+  // scroll or on a press outside its chart; touching or hovering the chart brings it back.
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setDismissed(false);
+      return;
+    }
+    const chart = anchor.current?.closest('.recharts-wrapper');
+    const dismiss = () => setDismissed(true);
+    const show = () => setDismissed(false);
+    const onPointerDown = (event: PointerEvent) => {
+      if (chart?.contains(event.target as Node)) show();
+      else dismiss();
+    };
+    window.addEventListener('scroll', dismiss, { capture: true, passive: true });
+    document.addEventListener('pointerdown', onPointerDown, true);
+    chart?.addEventListener('pointermove', show);
+    return () => {
+      window.removeEventListener('scroll', dismiss, { capture: true });
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      chart?.removeEventListener('pointermove', show);
+    };
+  }, [active]);
   useLayoutEffect(() => {
     const el = ref.current;
     const chart = anchor.current?.closest('.recharts-wrapper');
@@ -55,7 +81,8 @@ export function ChartTooltipPosition({
   return (
     <>
       <span ref={anchor} hidden />
-      {contentProps.active === true &&
+      {active &&
+        !dismissed &&
         createPortal(
           <div ref={ref} data-slot="chart-tooltip-portal" className="pointer-events-none fixed top-0 left-0 z-50">
             {cloneElement(children, { ...contentProps, coordinate })}
