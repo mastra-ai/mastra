@@ -58,6 +58,9 @@ export const TABLE_NOTIFICATIONS = 'mastra_notifications';
 // Harness sessions
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 
+// Durable provider-neutral Computer records
+export const TABLE_COMPUTERS = 'mastra_computers';
+
 // Thread state (per-thread, per-type durable state; e.g. the task list)
 export const TABLE_THREAD_STATE = 'mastra_thread_state';
 
@@ -139,6 +142,7 @@ export type TABLE_NAMES =
   | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
   | typeof TABLE_NOTIFICATIONS
   | typeof TABLE_HARNESS_SESSIONS
+  | typeof TABLE_COMPUTERS
   | typeof TABLE_THREAD_STATE
   | typeof TABLE_WORKFLOW_DEFINITIONS
   | typeof TABLE_KNOWLEDGE_NODES
@@ -510,6 +514,14 @@ export const HARNESS_SESSIONS_SCHEMA: Record<string, StorageColumn> = {
   closeDeadlineAt: { type: 'timestamp', nullable: true },
   closedAt: { type: 'timestamp', nullable: true },
   deletedAt: { type: 'timestamp', nullable: true },
+};
+
+export const COMPUTERS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  resourceId: { type: 'text', nullable: false },
+  value: { type: 'jsonb', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const THREAD_STATE_SCHEMA: Record<string, StorageColumn> = {
@@ -1064,6 +1076,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
   [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
+  [TABLE_COMPUTERS]: COMPUTERS_SCHEMA,
   [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
   [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
@@ -1085,6 +1098,7 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
+  [TABLE_COMPUTERS]: { columns: COMPUTERS_SCHEMA },
   [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
   [TABLE_KNOWLEDGE_MENTIONS]: {
     columns: KNOWLEDGE_MENTIONS_SCHEMA,

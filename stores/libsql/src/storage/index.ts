@@ -12,6 +12,7 @@ import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
 import { ChannelsLibSQL } from './domains/channels';
+import { ComputersLibSQL } from './domains/computers';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { FavoritesLibSQL } from './domains/favorites';
@@ -42,6 +43,7 @@ export {
   BackgroundTasksLibSQL,
   BlobsLibSQL,
   ChannelsLibSQL,
+  ComputersLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
   HarnessLibSQL,
@@ -292,6 +294,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const harness = new HarnessLibSQL(domainConfig);
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
     const notifications = new NotificationsLibSQL(domainConfig);
+    const computers = new ComputersLibSQL(domainConfig);
     const threadState = new ThreadStateLibSQL(domainConfig);
 
     this.stores = {
@@ -318,6 +321,7 @@ export class LibSQLStore extends MastraCompositeStore {
       harness,
       toolProviderConnections,
       notifications,
+      computers,
       threadState,
     };
   }
