@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Mastra } from '@mastra/core';
 import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
+import type { MastraComputers } from '@mastra/core/computers';
 import { createScorer } from '@mastra/core/evals';
 import { LogLevel } from '@mastra/core/logger';
 import type { BaseLogMessage, IMastraLogger } from '@mastra/core/logger';
@@ -23,6 +24,7 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { defineEvent, MCPServer } from '@mastra/mcp';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { configureComputerServer, InMemoryComputerTicketStore } from '@mastra/server/computer-stream';
 import { WorkflowRegistry } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { expect, vi } from 'vitest';
@@ -564,9 +566,24 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     ],
   };
 
+  const computers: MastraComputers = {
+    tools: () => ({}),
+    viewer: async computerId =>
+      computerId === 'test-computer' ? { url: 'http://computer.test/vnc/', headers: { cookie: 'test' } } : null,
+    controlState: async computerId => {
+      if (computerId !== 'test-computer') throw new Error('Computer not found');
+      return { holder: 'agent', revision: 0 };
+    },
+    control: async computerId => {
+      if (computerId !== 'test-computer') throw new Error('Computer not found');
+      return { holder: 'human', revision: 1, notified: true };
+    },
+  };
+
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
     storage: new InMemoryStore(),
+    computers,
     agents: {
       'test-agent': agent,
     },
@@ -590,6 +607,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-platform': mockChannelProvider as any,
     },
   });
+  configureComputerServer(mastra, { ticketStore: new InMemoryComputerTicketStore() });
 
   // Mock getEditor to return an object with namespaced methods for stored agents routes
   const mockToolProvider = {

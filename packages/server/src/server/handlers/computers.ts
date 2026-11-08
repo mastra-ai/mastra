@@ -123,6 +123,7 @@ export const GET_COMPUTER_CONTROL_ROUTE = createRoute({
   queryParamSchema: getComputerControlQuerySchema,
   responseSchema: computerControlSchema,
   summary: 'Get computer control state',
+  description: 'Returns the revisioned control state for an attached computer.',
   tags: ['Computers'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, request, computerId, ...query }) => {
@@ -148,6 +149,7 @@ export const CHANGE_COMPUTER_CONTROL_ROUTE = createRoute({
   bodySchema: changeComputerControlBodySchema,
   responseSchema: changeComputerControlResponseSchema,
   summary: 'Change computer control state',
+  description: 'Takes or releases control of an attached computer.',
   tags: ['Computers'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, request, computerId, action, note, ...body }) => {

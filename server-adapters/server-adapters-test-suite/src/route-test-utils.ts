@@ -47,6 +47,15 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
     return { body: { resourceId: 'test-resource' } };
   }
 
+  if (route.path === '/computers/:computerId/session') {
+    return { body: { threadId: 'test-thread', resourceId: 'test-resource', mode: 'control' } };
+  }
+
+  if (route.path === '/computers/:computerId/control') {
+    const scope = { threadId: 'test-thread', resourceId: 'test-resource' };
+    return route.method === 'GET' ? { query: scope } : { body: { ...scope, action: 'take' } };
+  }
+
   // `data` must match the payloadSchema of the 'ticket.created' event on test-server-1.
   if (route.path === '/mcp/:serverId/events/:eventName/emit') {
     return { body: { data: { id: 'test-ticket' } } };
@@ -409,6 +418,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
+  if (route.path.includes(':computerId')) params.computerId = 'test-computer';
   if (route.path.includes(':controllerId')) params.controllerId = 'test-controller';
   if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
