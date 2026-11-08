@@ -1,3 +1,5 @@
+export { SandboxComputers, type SandboxComputersOptions } from './sandbox-computers.js';
+
 export {
   Computers,
   DESTROY_FAILED,
