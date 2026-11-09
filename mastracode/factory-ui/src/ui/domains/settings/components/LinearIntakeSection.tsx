@@ -12,12 +12,14 @@ import {
   linearTeamSourceId,
 } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { useLinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupLinearSourcesByTeam, partitionLinearSources } from './intakeSourceGroups';
 import { DisconnectedLinearWorkspaces } from './DisconnectedLinearWorkspaces';
+import { LinearConnectButton } from './LinearConnectionControls';
 import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
@@ -25,11 +27,15 @@ import { PausedLinearWorkspace } from './PausedLinearWorkspace';
 
 export function LinearIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<LinearStatus> }) {
+  const selection = useIntakeSelection('linear');
+  const removeSources = (sourceIds: string[]) =>
+    selection.update(current => {
+      const remaining = (current.sourceIds ?? []).filter(id => !sourceIds.includes(id));
+      return { ...current, sourceIds: remaining.length ? remaining : null };
+    });
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const reconnect = useLinearReconnectResult(statusQuery);
@@ -111,21 +117,28 @@ export function LinearIntakeSection({
     return repositorySlugs.length ? [{ project, repositorySlugs }] : [];
   });
 
+  function linearConnection() {
+    if (status?.enabled === false || statusUnavailable) return null;
+    if (!listed) return <LinearConnectButton />;
+    if (reauthRequired) return <LinearConnectButton action="Reconnect" />;
+    if (!connected && paused.length === 0) return <LinearConnectButton />;
+    return null;
+  }
   return (
     <IntakeProviderCard
       name="Linear"
       icon={<SettingsIntegrationIcon provider="linear" />}
       account={status?.workspace?.name ?? undefined}
       listed={listed}
-      connectable={status?.enabled !== false}
+      connection={linearConnection()}
       description={description}
       syncControl={
         <IntakeSyncControl
           accessibleLabel="Sync Linear issues"
           description="Active issues from selected projects and teams feed your board. Whole teams include projectless issues."
           checked={config.linear.enabled}
-          disabled={busy || !connected}
-          onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
+          disabled={!connected}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -137,14 +150,7 @@ export function LinearIntakeSection({
       }
     >
       {connected && config.linear.enabled && !reauthRequired && inferredSources.disconnected.length > 0 && (
-        <DisconnectedLinearWorkspaces
-          workspaces={inferredSources.disconnected}
-          pending={busy}
-          onRemove={sourceIds => {
-            const next = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
-            void update({ ...config, linear: { ...config.linear, sourceIds: next.length ? next : null } });
-          }}
-        />
+        <DisconnectedLinearWorkspaces workspaces={inferredSources.disconnected} onRemove={removeSources} />
       )}
       {[...workspaceErrors.values()].map(error => (
         <SettingsRow
@@ -170,13 +176,9 @@ export function LinearIntakeSection({
           key={workspace.id}
           workspace={workspace}
           count={sourceIds.length}
-          pending={busy}
           reconnect={reconnect.resultFor(workspace)}
           onRetry={() => void reconnect.retry()}
-          onRemove={() => {
-            const remaining = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
-            void update({ ...config, linear: { ...config.linear, sourceIds: remaining.length ? remaining : null } });
-          }}
+          onRemove={() => removeSources(sourceIds)}
         />
       ))}
       {connected && config.linear.enabled && !reauthRequired && (
@@ -190,7 +192,7 @@ export function LinearIntakeSection({
           groups={groups}
           selectedIds={projectsQuery.isPending || teamsQuery.isPending ? [] : selectedIds}
           fallbackLabel={missingSourceLabel}
-          pending={busy}
+          saving={selection.saving}
           loading={projectsQuery.isPending}
           error={sourceError ? "Couldn't load Linear projects and teams." : undefined}
           onRetry={() => {
@@ -198,10 +200,7 @@ export function LinearIntakeSection({
             void teamsQuery.refetch();
           }}
           onToggleItem={id =>
-            update({
-              ...config,
-              linear: { ...config.linear, sourceIds: toggleSourceId(config.linear.sourceIds, id) },
-            })
+            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
           }
         />
       )}
@@ -209,9 +208,12 @@ export function LinearIntakeSection({
         <LinearRepositoryMappings
           projects={routedProjects}
           mapping={config.linear.repositoryByLinearProject}
-          pending={busy}
-          onChange={repositoryByLinearProject =>
-            update({ ...config, linear: { ...config.linear, repositoryByLinearProject } })
+          saving={selection.saving}
+          onSetRepository={(projectId, slug) =>
+            selection.update(current => {
+              const { [projectId]: _, ...others } = current.repositoryByLinearProject ?? {};
+              return { ...current, repositoryByLinearProject: slug ? { ...others, [projectId]: slug } : others };
+            })
           }
         />
       )}

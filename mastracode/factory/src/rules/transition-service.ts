@@ -58,6 +58,12 @@ export interface FactoryTransitionRequest {
   planApproved?: true;
   /** Internal: the tool whose successful result this move consumes (a tool-result rule's move). */
   completedTool?: string;
+  /**
+   * Internal: an intake route moves the card on a status event. A route is admin-authored, so it
+   * may name any phase on the card's board regardless of the board's next phases; it enters a
+   * working phase only when the route allows it.
+   */
+  eventRoute?: { routeId: string; allowWorkingPhase: boolean };
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -183,6 +189,9 @@ function consentEffect(
   working: boolean,
   humanMove: boolean,
 ): TransitionConsentOptions {
+  // A provider event (a reopen, a close) is not a person's say-so: whatever a person armed before
+  // no longer stands once a route moves the card.
+  if (request.eventRoute) return { autonomy: 'disarm' };
   const autonomy = transitionConsent(working, humanMove);
   return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
@@ -415,7 +424,7 @@ export class FactoryTransitionService {
     }
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
-      !board.allowsTransition(fromStage, request.stage)
+      (!request.eventRoute && !board.allowsTransition(fromStage, request.stage))
     ) {
       const nextStages = [...new Set((board.transitions[fromStage] ?? []).map(transition => transition.to))];
       const nextStagesReason =
@@ -433,6 +442,20 @@ export class FactoryTransitionService {
       request.board === 'work' ? workPullRequestCardRejection(isPullRequest, request.stage) : undefined;
     if (pullRequestCardRejection) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
+    }
+
+    if (
+      request.eventRoute &&
+      !request.eventRoute.allowWorkingPhase &&
+      fromStage !== request.stage &&
+      board.isWorking(request.stage)
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        `Intake route ${request.eventRoute.routeId} moves cards into ${board.phases[request.stage]?.name ?? request.stage}, a working phase, only when the route allows working phases.`,
+      );
     }
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
@@ -484,6 +507,7 @@ export class FactoryTransitionService {
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
+            !request.eventRoute &&
             exitTool &&
             board.tools[exitTool.id] &&
             fromStage !== request.stage &&

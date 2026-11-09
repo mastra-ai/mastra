@@ -132,7 +132,8 @@ describe('isTokenLimitExceeded', () => {
     expect(isTokenLimitExceeded(spanWith({}))).toBe(false);
     expect(isTokenLimitExceeded(undefined)).toBeFalsy();
     // A span may arrive with no attributes at all.
-    expect(isTokenLimitExceeded({} as SpanRecord)).toBeFalsy();
+    const spanWithoutAttributes = {} as SpanRecord;
+    expect(isTokenLimitExceeded(spanWithoutAttributes)).toBeFalsy();
   });
 });
 

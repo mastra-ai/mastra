@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { releaseBoard, workBoard } from '../../../../e2e/ui/board-catalog';
 import {
+  cardContextSessions,
+  cardThreadSession,
+  contextLabel,
   externalLinkLabel,
   isPersistedCandidate,
   itemThreadSession,
@@ -168,6 +172,101 @@ describe('itemThreadSession', () => {
     const custom = session('custom-session');
 
     expect(itemThreadSession({ release: custom })).toBe(custom);
+  });
+});
+
+describe('card sessions by context', () => {
+  const session = (id: string): WorkItemSessionRef => ({
+    sessionId: id,
+    threadId: `${id}-thread`,
+    branch: 'factory/issue-7',
+    startedBy: 'user-1',
+  });
+  const visit = (stage: string, enteredAt: string) => ({ stage, enteredAt, by: 'agent' });
+  const triage = session('triage-session');
+  const work = session('work-session');
+  const review = session('review-session');
+
+  it('names a context after its only phase, else by its well-known name, else by its key', () => {
+    expect(contextLabel('release-preparer', releaseBoard.phases)).toBe('Preparing');
+    expect(contextLabel('triage', workBoard.phases)).toBe('Triage');
+    expect(contextLabel('work', workBoard.phases)).toBe('Work');
+    expect(contextLabel('review', workBoard.phases)).toBe('Review');
+    expect(contextLabel('plan', workBoard.phases)).toBe('Planning');
+    expect(contextLabel('deploy-check', workBoard.phases)).toBe('Deploy-check');
+    expect(contextLabel('work', undefined)).toBe('Work');
+  });
+
+  it("lists the current phase's context first, then the most recently visited, then the rest", () => {
+    const item = workItem({
+      board: 'work',
+      stages: ['execute'],
+      sessions: { review, triage, work },
+      stageHistory: [
+        visit('intake', '2026-09-01T00:00:00Z'),
+        visit('triage', '2026-09-02T00:00:00Z'),
+        visit('execute', '2026-09-03T00:00:00Z'),
+      ],
+    });
+
+    expect(cardContextSessions(item, workBoard.phases, 'execute')).toEqual([
+      { context: 'work', label: 'Work', ref: work, current: true },
+      { context: 'triage', label: 'Triage', ref: triage, current: false },
+      { context: 'review', label: 'Review', ref: review, current: false },
+    ]);
+    expect(cardThreadSession(item, workBoard.phases, 'execute')).toBe(work);
+  });
+
+  it('opens the last visited context when the current phase holds no session', () => {
+    const item = workItem({
+      board: 'work',
+      stages: ['intake'],
+      sessions: { triage, work },
+      stageHistory: [
+        visit('triage', '2026-09-02T00:00:00Z'),
+        visit('planning', '2026-09-03T00:00:00Z'),
+        visit('intake', '2026-09-04T00:00:00Z'),
+      ],
+    });
+
+    expect(cardThreadSession(item, workBoard.phases, 'intake')).toBe(work);
+    expect(cardContextSessions(item, workBoard.phases, 'intake').map(entry => [entry.context, entry.current])).toEqual([
+      ['work', false],
+      ['triage', false],
+    ]);
+  });
+
+  it('lists a session filed under a legacy plan key and work once, under the current context', () => {
+    const item = workItem({ board: 'work', stages: ['planning'], sessions: { plan: work, work } });
+
+    expect(cardContextSessions(item, workBoard.phases, 'planning')).toEqual([
+      { context: 'work', label: 'Work', ref: work, current: true },
+    ]);
+  });
+
+  it("opens a Work card's planner under the legacy plan key while it is in Planning", () => {
+    const plan = session('plan-session');
+    const item = workItem({ board: 'work', stages: ['planning'], sessions: { triage, plan } });
+
+    expect(cardThreadSession(item, workBoard.phases, 'planning')).toBe(plan);
+    expect(cardContextSessions(item, workBoard.phases, 'planning')).toEqual([
+      { context: 'work', label: 'Work', ref: plan, current: true },
+      { context: 'triage', label: 'Triage', ref: triage, current: false },
+    ]);
+  });
+
+  it('keeps the lifecycle order without a board catalog', () => {
+    const item = workItem({ board: 'work', stages: ['execute'], sessions: { work, triage } });
+
+    expect(cardThreadSession(item, undefined, 'execute')).toBe(triage);
+    expect(cardContextSessions(item, undefined, 'execute').map(entry => entry.label)).toEqual(['Work', 'Triage']);
+  });
+
+  it('falls back to the lifecycle order when no visited phase holds a session', () => {
+    const plan = session('plan-session');
+    const item = workItem({ board: 'work', stages: ['planning'], sessions: { chat: work, plan } });
+
+    expect(cardThreadSession(item, workBoard.phases, 'planning')).toBe(plan);
   });
 });
 

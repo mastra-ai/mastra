@@ -40,6 +40,8 @@ export interface CachingPubSubOptions {
   source?: PubSub;
 }
 
+const EMPTY_INDICES: ReadonlySet<number> = new Set();
+
 /**
  * A PubSub decorator that adds event caching and replay capabilities.
  *
@@ -91,6 +93,14 @@ export class CachingPubSub extends PubSub {
   private readonly shouldCache?: (topic: string) => boolean;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
+
+  /**
+   * Log indices per topic that were appended to the cache but whose live
+   * publish threw. The frame stays in the log (late subscribers still replay
+   * it), but the transport never carried it, so readers must not wait for it
+   * to arrive.
+   */
+  private undeliveredIndices = new Map<string, Set<number>>();
 
   constructor(
     private readonly inner: PubSub,
@@ -195,7 +205,30 @@ export class CachingPubSub extends PubSub {
     const numbered: Event = index !== undefined ? { ...fullEvent, index } : fullEvent;
 
     // Always publish to inner PubSub — cache failure must not block live delivery.
-    await this.inner.publish(topic, numbered, options);
+    try {
+      await this.inner.publish(topic, numbered, options);
+    } catch (error) {
+      if (index !== undefined) {
+        let indices = this.undeliveredIndices.get(topic);
+        if (!indices) this.undeliveredIndices.set(topic, (indices = new Set()));
+        indices.add(index);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Log indices this instance cached for `topic` but failed to publish to the
+   * inner transport. Readers exclude them when waiting for the log to reach
+   * them: those frames are replayed to late subscribers, but the live
+   * subscription will never deliver them.
+   *
+   * Only the publishing process knows these indices. A reader in another
+   * process sharing the cache still waits out its pending-frame deadline for
+   * a frame a remote publisher could not send.
+   */
+  getUndeliveredIndices(topic: string): ReadonlySet<number> {
+    return this.undeliveredIndices.get(topic) ?? EMPTY_INDICES;
   }
 
   /**
@@ -529,6 +562,7 @@ export class CachingPubSub extends PubSub {
    * no-op and the inner stream leaks forever.
    */
   override async clearTopic(topic: string): Promise<void> {
+    this.undeliveredIndices.delete(topic);
     try {
       await Promise.all([
         this.cache.delete(this.getCacheKey(topic)),

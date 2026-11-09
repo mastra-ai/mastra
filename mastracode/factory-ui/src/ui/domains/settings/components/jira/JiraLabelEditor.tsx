@@ -10,19 +10,16 @@ import { newLabels, parseLabels } from './routing';
 export function JiraLabelEditor({
   factory,
   labels,
-  saving,
   onChange,
 }: {
   factory: string;
   labels: string[];
-  saving: boolean;
   onChange: (labels: string[]) => void;
 }) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string>();
 
   const commitDraft = () => {
-    if (saving) return;
     const parsed = parseLabels(draft);
     if ('error' in parsed) {
       setError(parsed.error);
@@ -43,7 +40,7 @@ export function JiraLabelEditor({
               <button
                 type="button"
                 aria-label={`Remove label ${label}`}
-                disabled={saving || labels.length === 1}
+                disabled={labels.length === 1}
                 onClick={() => onChange(labels.filter(existing => existing !== label))}
                 className="disabled:opacity-40"
               >
@@ -63,7 +60,7 @@ export function JiraLabelEditor({
             setError(undefined);
           }}
           onKeyDown={event => {
-            if (saving || event.nativeEvent.isComposing) return;
+            if (event.nativeEvent.isComposing) return;
             if (event.key !== 'Enter' && event.key !== ',') return;
             event.preventDefault();
             commitDraft();

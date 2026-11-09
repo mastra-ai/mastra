@@ -108,5 +108,5 @@ export const menuSearchClasses = {
     'flex items-center gap-2 border-b border-border px-[calc(var(--spacing)*3+1px)] py-1 text-menu focus-within:bg-fill-subtle',
   icon: 'size-icon-md shrink-0 text-muted-foreground',
   input:
-    'h-control-md w-full bg-transparent text-menu text-muted-foreground outline-hidden placeholder:text-muted-foreground',
+    'h-control-md w-full bg-transparent text-menu text-muted-foreground outline-hidden zoom-safe-text placeholder:text-muted-foreground',
 };
