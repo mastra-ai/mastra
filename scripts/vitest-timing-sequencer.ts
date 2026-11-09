@@ -38,9 +38,11 @@ export class TimingSequencer extends BaseSequencer {
     const { index, count } = this.ctx.config.shard ?? {};
     if (!timings || !index || !count) return super.shard(files);
 
+    // Grouped by the project's directory, not its name: a package can define several projects over
+    // the same files (schema-compat runs its tests once per Zod version), and they all stay together.
     const groups = new Map<string, string>();
     for (const spec of files) {
-      if (spec.project.config.isolate === false) groups.set(this.pathOf(spec), spec.project.name);
+      if (spec.project.config.isolate === false) groups.set(this.pathOf(spec), spec.project.config.root);
     }
     const { shards } = testShards.assignShards({
       files: files.map(spec => this.pathOf(spec)),
