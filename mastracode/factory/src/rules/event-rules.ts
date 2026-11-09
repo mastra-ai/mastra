@@ -1,5 +1,6 @@
 import type { BoardEventFacts, PullRequestEvent } from '../boards/board-events.js';
 import { closeReason, eventMovesCard, isPullRequestEvent } from '../boards/board-events.js';
+import { isPullRequestCard } from '../boards/semantics.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryRouteEventDecision, FactoryRuleHandler, FactoryTransitionDecision } from './types.js';
 
@@ -107,17 +108,39 @@ export async function routeEventDecision(
 ): Promise<FactoryRouteEventDecision | undefined> {
   const event = context.boardEvent;
   if (!context.item || !event || event.type === 'work_item.created') return undefined;
-  const decision = { type: 'routeEvent' as const, idempotencyKey: `${context.ingress.id}:event-route`, event };
+  const decision = routeEvent(context.ingress.id, event);
   // A close moves only an unfinished card and a reopen only a finished one, unless an earlier
   // status event is still queued for the card: this one overtakes it, so the last one wins.
-  const finished = context.phase?.kind === 'terminal';
-  if (isPullRequestEvent(event.type)) return eventMovesCard(event.type, finished) ? decision : undefined;
-  if (eventMovesCard(event.type, finished)) return decision;
+  if (eventMovesCard(event.type, context.phase?.kind === 'terminal')) return decision;
   const queued = await storage.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
     workItemId: context.item.id,
     statuses: QUEUED_STATUSES,
   });
   return queued.some(record => isStatusEventDecision(record.decision)) ? decision : undefined;
+}
+
+function routeEvent(ingressId: string, event: BoardEventFacts): FactoryRouteEventDecision {
+  return { type: 'routeEvent', idempotencyKey: `${ingressId}:event-route`, event };
+}
+
+/** A pull or merge request's own card on a board with no pull request loop: Factory doesn't review it there. */
+export function unreviewedPullRequestCard(context: {
+  item?: { readonly source: string };
+  flow?: { pullRequestReview?: string };
+}): boolean {
+  return context.item !== undefined && isPullRequestCard(context.item) && context.flow?.pullRequestReview === undefined;
+}
+
+/**
+ * A merge or close on a board with no pull request loop moves the card only where a route on its
+ * board says; there is no move of Factory's own to fall back on.
+ */
+export function routedOnly(
+  context: { phase?: { kind: string }; ingress: { id: string } },
+  event: 'pull_request.merged' | 'pull_request.closed',
+): FactoryRouteEventDecision | undefined {
+  if (context.phase?.kind === 'terminal') return undefined;
+  return routeEvent(context.ingress.id, { type: event });
 }
 
 /**

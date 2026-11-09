@@ -6,7 +6,13 @@ import {
   reviewsPullRequest,
   sourceExternalId,
 } from '../../boards/index.js';
-import { closedByRoutes, pullRequestMoveByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import {
+  closedByRoutes,
+  pullRequestMoveByRoutes,
+  recordExplicitRuleOverrides,
+  routedOnly,
+  unreviewedPullRequestCard,
+} from '../../rules/event-rules.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 
@@ -23,24 +29,6 @@ function actorUsername(context: Pick<FactoryGitLabRuleContext, 'actor'>): string
 
 function trustedGitLabActor(context: Pick<FactoryGitLabRuleContext, 'actor'>): boolean {
   return context.actor.type === 'gitlab' && context.actor.trusted;
-}
-
-/** A merge request's own card on a board with no pull request loop: Factory doesn't review it there. */
-function unreviewedMergeRequestCard(context: FactoryGitLabRuleContext): boolean {
-  return context.item !== undefined && isPullRequestCard(context.item) && context.flow?.pullRequestReview === undefined;
-}
-
-/**
- * A merge or close on a board with no pull request loop moves the card only where a route on its
- * board says; there is no move of Factory's own to fall back on.
- */
-function routedOnly(context: FactoryGitLabRuleContext, event: 'pull_request.merged' | 'pull_request.closed') {
-  if (context.phase?.kind === 'terminal') return;
-  return {
-    type: 'routeEvent',
-    idempotencyKey: `${context.ingress.id}:event-route`,
-    event: { type: event },
-  } as const;
 }
 
 function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {
@@ -232,7 +220,7 @@ function mergeRequestCommented(context: FactoryGitLabRuleContext) {
 
 function mergeRequestMerged(context: FactoryGitLabRuleContext) {
   if (!context.item || !context.board || !context.mergeRequest?.merged) return;
-  if (unreviewedMergeRequestCard(context)) return routedOnly(context, 'pull_request.merged');
+  if (unreviewedPullRequestCard(context)) return routedOnly(context, 'pull_request.merged');
   const done = context.boardClosure?.completed ?? context.flow?.completed;
   if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
     if (!done) return;
@@ -288,7 +276,7 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
 
 function mergeRequestClosed(context: FactoryGitLabRuleContext) {
   if (!context.item || !context.board || !context.mergeRequest || context.mergeRequest.merged) return;
-  if (unreviewedMergeRequestCard(context)) return routedOnly(context, 'pull_request.closed');
+  if (unreviewedPullRequestCard(context)) return routedOnly(context, 'pull_request.closed');
   if (!reviewsPullRequest(context)) return;
   if (!isPullRequestCard(context.item)) {
     // An issue card waiting in pull request review on its last open merge request goes back to

@@ -8,7 +8,13 @@ import {
 } from '../../boards/index.js';
 import { hasRecordedVerdict } from '../../boards/semantics.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { closedByRoutes, pullRequestMoveByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import {
+  closedByRoutes,
+  pullRequestMoveByRoutes,
+  recordExplicitRuleOverrides,
+  routedOnly,
+  unreviewedPullRequestCard,
+} from '../../rules/event-rules.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 import { isRepositoryPullRequest } from './pull-request-source.js';
@@ -66,24 +72,6 @@ function reviewsThisPullRequest(context: FactoryGithubRuleContext): boolean {
   if (isPullRequestCard(context.item)) return true;
   const reviewed = reviewedPullRequest(context.item);
   return reviewed !== undefined && isEventPullRequest(context, reviewed);
-}
-
-/** A pull request's own card on a board with no pull request loop: Factory doesn't review it there. */
-function unreviewedPullRequestCard(context: FactoryGithubRuleContext): boolean {
-  return context.item !== undefined && isPullRequestCard(context.item) && context.flow?.pullRequestReview === undefined;
-}
-
-/**
- * A merge or close on a board with no pull request loop moves the card only where a route on its
- * board says; there is no move of Factory's own to fall back on.
- */
-function routedOnly(context: FactoryGithubRuleContext, event: 'pull_request.merged' | 'pull_request.closed') {
-  if (context.phase?.kind === 'terminal') return;
-  return {
-    type: 'routeEvent',
-    idempotencyKey: `${context.ingress.id}:event-route`,
-    event: { type: event },
-  } as const;
 }
 
 function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: string): boolean {

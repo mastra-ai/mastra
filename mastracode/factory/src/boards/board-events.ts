@@ -94,18 +94,17 @@ function isStatusEvent(value: string): value is StatusEvent {
   return (STATUS_EVENTS as readonly string[]).includes(value);
 }
 
-function namesEventField(group: RuleGroup): boolean {
+function namesField(group: RuleGroup, fields: readonly string[]): boolean {
   return group.conditions.some(condition =>
-    'conditions' in condition
-      ? namesEventField(condition)
-      : (EVENT_RULE_FIELDS as readonly string[]).includes(condition.field),
+    'conditions' in condition ? namesField(condition, fields) : fields.includes(condition.field),
   );
 }
 
 /**
  * Why a route's `on` and `when` can't be saved together, or null. `on` must name at least one
  * status event, each once; `event.*` conditions need an event besides `work_item.created`, which
- * places new cards and carries no event facts.
+ * places new cards and carries no event facts, and `event.reason` needs `work_item.closed`, the
+ * only event with a reason.
  */
 export function routeEventsProblem(on: readonly string[], when: RuleGroup | null): string | null {
   if (on.length === 0) return '`on` must name at least one event.';
@@ -116,8 +115,11 @@ export function routeEventsProblem(on: readonly string[], when: RuleGroup | null
     }
     if (!isStatusEvent(event)) return `"${event}" is not a board event; use one of ${STATUS_EVENTS.join(', ')}.`;
   }
-  if (when && on.every(event => event === 'work_item.created') && namesEventField(when)) {
+  if (when && on.every(event => event === 'work_item.created') && namesField(when, EVENT_RULE_FIELDS)) {
     return '`event.type` and `event.reason` only apply to routes that handle an event besides work_item.created.';
+  }
+  if (when && !on.includes('work_item.closed') && namesField(when, ['event.reason'])) {
+    return '`event.reason` only applies to routes that handle work_item.closed: no other event carries a reason.';
   }
   return null;
 }

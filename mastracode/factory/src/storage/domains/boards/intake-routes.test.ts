@@ -560,6 +560,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       expect(await boards.getIntakeRoute(scope, closes.id)).toEqual(closes);
     });
 
+    it('refuses a close reason on a route that handles no issue close, including after a patch', async () => {
+      const { boards, scope } = await setup();
+      // Pull request events carry no reason, so the condition could never match.
+      await expect(
+        boards.createIntakeRoute(scope, route('Unmerged', { on: ['pull_request.closed'], when: CANCELED }), 'u'),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      const closes = await boards.createIntakeRoute(
+        scope,
+        route('Closes', { on: ['work_item.closed', 'pull_request.closed'], when: CANCELED }),
+        'u',
+      );
+      await expect(
+        boards.updateIntakeRoute(
+          scope,
+          closes.id,
+          { on: ['pull_request.closed'] },
+          { expectedRevision: 1, actor: 'u' },
+        ),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      expect(await boards.getIntakeRoute(scope, closes.id)).toEqual(closes);
+    });
+
     it('reads a route stored before routes named events as one that places new cards', async () => {
       const storage =
         backend === 'postgres'
