@@ -6,6 +6,7 @@ import { Checkbox } from '@/ds/components/Checkbox';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
+import { Metadata } from '@/ds/components/Metadata';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
@@ -204,12 +205,14 @@ export function CreateReplayDatasetDialog({ source, onClose }: { source: ReplayS
                         : `${preview.data.turnCount} test cases`}
                     </Txt>
                     {mode === 'turns' && (
-                      <Txt>
-                        {preview.data.turnCount} completed turns ·{' '}
-                        {preview.data.historyLimit === false
-                          ? 'All prior messages'
-                          : `${preview.data.historyLimit} prior messages per turn`}
-                      </Txt>
+                      <Metadata singleLine>
+                        <Metadata.Item>{preview.data.turnCount} completed turns</Metadata.Item>
+                        <Metadata.Item>
+                          {preview.data.historyLimit === false
+                            ? 'All prior messages'
+                            : `${preview.data.historyLimit} prior messages per turn`}
+                        </Metadata.Item>
+                      </Metadata>
                     )}
                   </div>
                 )

@@ -52,7 +52,8 @@ describe('CreateReplayDatasetDialog', () => {
   describe('when creating a replay from a recorded conversation', () => {
     it('previews the agent default, includes all history when selected, and offers to run the new dataset', async () => {
       const requests = setup();
-      await screen.findByText('10 completed turns · 10 prior messages per turn');
+      await screen.findByText('10 completed turns');
+      screen.getByText('10 prior messages per turn');
       expect(requests.previews[0]).toEqual({ agentId: 'support', threadId: 'golden', resourceId: 'customer' });
       fireEvent.click(screen.getByRole('checkbox', { name: 'Include all prior messages' }));
       await waitFor(() => expect(requests.previews.at(-1)).toMatchObject({ historyLimit: false }));
@@ -92,7 +93,8 @@ describe('CreateReplayDatasetDialog', () => {
 
     it('does not create an empty replay or submit an invalid history window', async () => {
       const requests = setup(0);
-      await screen.findByText('0 completed turns · 10 prior messages per turn');
+      await screen.findByText('0 completed turns');
+      screen.getByText('10 prior messages per turn');
       expect(screen.getByRole('button', { name: 'Create replay dataset' }).hasAttribute('disabled')).toBe(true);
       fireEvent.change(screen.getByLabelText('Prior messages per turn'), { target: { value: '-1' } });
       await screen.findByRole('alert');
