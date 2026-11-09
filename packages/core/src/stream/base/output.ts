@@ -2150,22 +2150,29 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     });
                     return;
                   }
+                  // Data parts a step processor writes for the cut-off text are held until that message is
+                  // written back: the write-back replaces it, and would drop parts merged into it.
+                  let heldDataChunks: { type: string; data?: unknown; transient?: boolean }[] | undefined;
                   const writer = {
                     custom: async (
                       data: { type: string; data?: unknown; transient?: boolean },
                       writerOptions?: { messageId?: string },
                     ) => {
-                      persistProcessorDataChunk(
-                        turn,
-                        resolveProcessorWriterMessageId(turn, self.messageId, writerOptions?.messageId),
-                        data,
-                      );
+                      if (heldDataChunks && !writerOptions?.messageId) heldDataChunks.push(data);
+                      else
+                        persistProcessorDataChunk(
+                          turn,
+                          resolveProcessorWriterMessageId(turn, self.messageId, writerOptions?.messageId),
+                          data,
+                        );
                       if (!streamOpen) return;
                       self.#emitChunk(data as ChunkType<OUTPUT>);
                       controller.enqueue(data as ChunkType<OUTPUT>);
                     },
                   };
+                  let cutOffTextDropped = false;
                   if (inFlightMessageId) {
+                    heldDataChunks = [];
                     // The cut-off text never reached the step processors (redaction, refusal handling...).
                     // Run them over that message alone: the rest of the turn already went through them.
                     try {
@@ -2201,10 +2208,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     } catch (stepError) {
                       // Fail closed: keep the completed steps rather than save unprocessed text.
                       turn.removeByIds([inFlightMessageId]);
+                      cutOffTextDropped = true;
                       self.logger?.warn('Output step processors failed on the text cut off at the total deadline', {
                         error: stepError,
                       });
                     }
+                    for (const data of heldDataChunks) {
+                      persistProcessorDataChunk(turn, resolveProcessorWriterMessageId(turn, self.messageId), data);
+                    }
+                    heldDataChunks = undefined;
                   }
                   try {
                     await self.processorRunner!.runOutputProcessors(
@@ -2214,7 +2226,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       0,
                       writer,
                       {
-                        text: self.#bufferedText.join(''),
+                        // Text the step processors blocked must not reach the result processors either.
+                        text: cutOffTextDropped
+                          ? self.#bufferedSteps.map(step => step.text).join('')
+                          : self.#bufferedText.join(''),
                         usage: self.#usageCount,
                         finishReason: 'error',
                         steps: [...self.#bufferedSteps] as LLMStepResult[],
