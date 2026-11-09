@@ -404,6 +404,13 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate({ $not: { meta: { x: 1, y: { $gt: 2 } } } })).toBe('(meta.x != 1 OR meta.y <= 2)');
     });
 
+    it('keeps the outer field path for plain keys inside a field-level $not', () => {
+      expect(translator.translate({ address: { $not: { $exists: true, city: 'Boston' } } })).toBe(
+        "(HAS NOT FIELD address OR address.city != 'Boston')",
+      );
+      expect(translator.translate({ a: { $not: { b: { $gt: 1 } } } })).toBe('a.b <= 1');
+    });
+
     it('negates $all as an OR of NOT CONTAINS', () => {
       expect(translator.translate({ $not: { a: { $all: ['x', 'y'] } } })).toBe(
         "(a NOT CONTAINS 'x' OR a NOT CONTAINS 'y')",
