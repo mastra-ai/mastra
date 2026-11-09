@@ -506,8 +506,10 @@ export class AgentControllerChannels extends AgentChannels {
           id: channelResourceId,
           ownerId: controller.id,
           // The mapped thread is authoritative: bind it at creation so a scoped
-          // session never auto-selects or creates a different thread.
-          threadId: thread.id,
+          // session never auto-selects or creates a different thread. Without
+          // binding, only resume: a session registered after the lookup above must
+          // not be switched to this thread.
+          ...(bindThread ? { threadId: thread.id } : { resumeOnly: true }),
           requestContext,
         });
     // A session may only bind threads it owns, and the mapped thread's owner is
