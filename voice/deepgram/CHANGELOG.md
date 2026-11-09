@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- Fixed `listen` sending unset options such as `diarize=undefined` to Deepgram, which made transcription requests fail. ([#29573](https://github.com/mastra-ai/mastra/pull/29573))
+
 ## 0.13.3
 
 ### Patch Changes

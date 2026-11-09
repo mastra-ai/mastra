@@ -15,7 +15,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
+import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
@@ -1617,7 +1617,7 @@ describe('OM routes with a tenant', () => {
     });
     expect(write.status).toBe(404);
     await expect(
-      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(foreign.id) }),
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryProjectSettingsUserId(foreign.id) }),
     ).resolves.toBeNull();
   });
 

@@ -94,7 +94,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
+import { resolveLegacyAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { createStepFromClassifier, createStepFromTool } from '../step-factories';
@@ -602,7 +602,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
-      const agent = resolveRegisteredAgent(params, mastra);
+      const agent = params;
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,

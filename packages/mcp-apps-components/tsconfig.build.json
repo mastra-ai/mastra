@@ -4,5 +4,5 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/dashboard-renderer.ts", "src/dashboard-data-tool.ts"]
+  "include": ["src/index.ts"]
 }

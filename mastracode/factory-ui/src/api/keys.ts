@@ -81,6 +81,7 @@ export const queryKeys = {
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
+  connectTools: () => ['connect-tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>
@@ -135,6 +136,8 @@ export const queryKeys = {
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
+  voiceSettingsAll: () => ['voice-settings'] as const,
+  voiceSettings: (factoryId: string) => [...queryKeys.voiceSettingsAll(), factoryId] as const,
   om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
     ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,
   factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,

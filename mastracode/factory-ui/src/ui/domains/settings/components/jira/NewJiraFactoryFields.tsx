@@ -17,14 +17,14 @@ export function NewJiraFactoryFields({
   factory,
   anotherTakesAll,
   error,
-  saving,
+  adding,
   onAdd,
 }: {
   project: string;
   factory: Factory;
   anotherTakesAll: boolean;
   error?: string;
-  saving: boolean;
+  adding: boolean;
   onAdd: (route: NewJiraRoute) => void;
 }) {
   const [board, setBoard] = useState<string>();
@@ -53,7 +53,7 @@ export function NewJiraFactoryFields({
           name={`${project} in ${factory.name}`}
           factoryProjectId={factory.id}
           board={board ?? null}
-          disabled={saving}
+          disabled={adding}
           onChange={next => setBoard(next ?? undefined)}
         />
         <Input
@@ -63,10 +63,11 @@ export function NewJiraFactoryFields({
           placeholder="Labels, e.g. payments, billing"
           value={labelsText}
           onChange={event => setLabelsText(event.target.value)}
+          disabled={adding}
           className="w-56 max-w-full"
         />
-        <Button size="sm" icon={<Plus />} disabled={saving || board === undefined || !labelsReady} onClick={add}>
-          Add
+        <Button size="sm" icon={<Plus />} disabled={adding || board === undefined || !labelsReady} onClick={add}>
+          {adding ? 'Adding…' : 'Add'}
         </Button>
       </div>
       <RoutingNote error={labelsError ?? refusal} hint={hint} />

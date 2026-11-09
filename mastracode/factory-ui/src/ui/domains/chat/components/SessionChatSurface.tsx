@@ -54,11 +54,16 @@ export function SessionChatSurface({
       {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
       {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
-        <ChatShell.Viewport>
-          <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
+        <ChatShell.Viewport className="transition-[var(--workspace-files-transition,padding)]">
           <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {contentOverlay}
-            <ChatShell.Content className="gap-0 pt-6">
+            <ChatShell.Content
+              role="region"
+              aria-label="Conversation"
+              aria-busy={preparing}
+              className="relative gap-0 pt-6"
+            >
+              <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
               <ChatShell.Transcript className="flex-1">
                 <TranscriptAnnotations />
                 <ChatMessageBoundary showPreparation={false}>

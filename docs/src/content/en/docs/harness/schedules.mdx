@@ -205,6 +205,8 @@ The hooks are:
 
 For a schedule with a `threadId`, the worker sends the prompt to the thread and doesn't wait for the run. Errors and aborts after the run starts surface on that thread's run, not through `onError` or `onAbort`.
 
+If you need to react to the completed run, use a threadless schedule. For lifecycle state, cleanup, retries, or multiple steps, use a [scheduled workflow](/docs/workflows/scheduled-workflows).
+
 Every hook context includes `agentId` (the agent the schedule fired for) alongside `schedule` and `trigger`.
 
 Hook exceptions are caught and logged. They never re-route the worker or trigger another hook.

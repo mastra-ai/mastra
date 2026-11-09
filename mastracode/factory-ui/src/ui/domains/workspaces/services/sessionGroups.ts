@@ -158,9 +158,12 @@ export function groupSessionRows(
   });
 }
 
-export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
-  const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[], additionalRowCount = 0): SessionListRow[] {
+  const collapsed = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
   const open = rows.find(row => row.active);
-  if (open && !visible.includes(open)) visible.push(open);
+  const openOutsideFold = open !== undefined && !collapsed.includes(open);
+  const visible = rows.slice(0, collapsed.length + Number(openOutsideFold) + additionalRowCount);
+  // The open row already occupies a slot, including when a later batch reaches it.
+  if (open && !visible.includes(open)) visible[visible.length - 1] = open;
   return visible;
 }

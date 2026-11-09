@@ -221,7 +221,7 @@ describe('McpAppViewer', () => {
       serveTools([]);
       const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
 
-      await expect(app.callServerTool({ name: 'dashboardDataTool', arguments: {} })).rejects.toMatchObject({
+      await expect(app.callServerTool({ name: 'dashboardData', arguments: {} })).rejects.toMatchObject({
         code: ErrorCode.InvalidParams,
         message: expect.stringContaining('isn\'t available to apps on MCP server "apps"'),
       });
@@ -230,7 +230,7 @@ describe('McpAppViewer', () => {
     it('refuses a tool the server keeps for the model the same way', async () => {
       serveTools([
         {
-          name: 'dashboardDataTool',
+          name: 'dashboardData',
           description: 'Reads data',
           inputSchema: { type: 'object' },
           _meta: { ui: { visibility: ['model'] } },
@@ -238,7 +238,7 @@ describe('McpAppViewer', () => {
       ]);
       const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
 
-      await expect(app.callServerTool({ name: 'dashboardDataTool', arguments: {} })).rejects.toMatchObject({
+      await expect(app.callServerTool({ name: 'dashboardData', arguments: {} })).rejects.toMatchObject({
         code: ErrorCode.InvalidParams,
       });
     });

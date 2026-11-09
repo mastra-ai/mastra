@@ -53,6 +53,7 @@ import {
   SourceControlConnectionNotFoundError,
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
@@ -75,6 +76,7 @@ import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import { VoiceRoutes } from './voice.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const MATERIALIZE_FAILURE_CODE = {
@@ -130,6 +132,7 @@ export interface FactoryApiRoutesDeps {
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
     skillOverrides: SkillOverridesStorage;
+    voiceSettings: VoiceSettingsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -484,7 +487,14 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
+      | 'projects'
+      | 'intake'
+      | 'workItems'
+      | 'channelIdentity'
+      | 'memorySettings'
+      | 'modelDefaults'
+      | 'modelCredentials'
+      | 'voiceSettings'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -517,6 +527,8 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
       modelDefaults: deps.domains.modelDefaults,
+      modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
@@ -797,6 +809,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
+    }).routes(),
+    ...new VoiceRoutes({
+      auth: deps.auth,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
+      factoryProjects: deps.domains.projects,
     }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,

@@ -1,129 +1,90 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { z } from 'zod';
 import {
-  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
-  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
-  dashboardPinnedWidgetsSchema,
-} from './apps/dashboard-renderer/pin';
+  OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY,
+  OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY,
+} from './apps/observability-widget/tool';
+import type { ObservabilityWidgetPin } from './apps/observability-widget/tool';
 
 export {
-  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
-  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
-  dashboardPinnedWidgetSchema,
-  dashboardPinnedWidgetsSchema,
-} from './apps/dashboard-renderer/pin';
+  OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY,
+  OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY,
+} from './apps/observability-widget/tool';
+export type { ObservabilityWidgetPin } from './apps/observability-widget/tool';
 
 /** The MCP App instance a host callback is about: one tool call's app. */
 export type McpAppRef = { toolName: string; toolCallId: string; resourceUri: string };
 
 /**
- * What a chat host passes to `McpAppHostProvider` from `@mastra/playground-ui/domains/mcps` to
- * extend the MCP Apps it renders. Typed here by shape, so this package doesn't depend on the
- * host's UI package.
+ * What a chat host passes to `McpAppHostProvider` from `@mastra/playground-ui/domains/mcps`. Typed
+ * here by shape, so this package doesn't depend on the host's UI package.
  */
 export type McpAppHostValue = {
-  /** Extra host-context keys for this app instance; `theme` stays the viewer's own. */
   hostContext?: (app: McpAppRef) => Record<string, unknown> | undefined;
-  /** Raw `ui/update-model-context` params from this app. Untrusted: parse before use. */
   onModelContext?: (
     app: McpAppRef,
     params: { content?: unknown[]; structuredContent?: Record<string, unknown> },
   ) => void;
 };
 
-/** A pinned widget as the host receives it, once parsed. */
-export type DashboardPinnedWidgetEntry = z.output<typeof dashboardPinnedWidgetsSchema>[number];
-
-export type DashboardPinsHostOptions = {
-  /**
-   * The ids of the widgets the host has pinned from this app instance (`[]` for none), `null` to
-   * turn pinning off for it, or `undefined` for apps that aren't dashboards. Key the ids by
-   * `app.toolCallId` when a chat can show more than one dashboard, since widget ids are only unique
-   * within one. Pass a new function when the ids change, so the apps get them.
-   */
-  pinnedIds: (app: McpAppRef) => readonly string[] | null | undefined;
-  /**
-   * Every widget the user wants pinned from `app`, after each pin or unpin. It is the full list,
-   * not a change: diff it against the host's own state. Entries without `defaults` are widgets you
-   * already pinned; keep the defaults you stored for them.
-   *
-   * Update `pinnedIds` before this returns, or before the promise it returns settles: the app then
-   * takes the ids it gets next as your answer, so ids you don't add are pins you turned down.
-   * Updates from one app instance wait for the previous one to settle, so they land in order.
-   */
-  onPinnedChange: (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) => void | Promise<void>;
+export type ObservabilityWidgetPinsOptions = {
+  /** The `ui://` URI the observability widget app is registered under; other apps are left alone. */
+  resourceUri: string;
+  /** The ids of the widgets the host has pinned. Pass new ids after `onPin`/`onUnpin` to answer. */
+  pinnedIds: readonly string[];
+  /** The user pinned `pin.widget` over `pin.datePreset`, under `pin.filters` when it has them. */
+  onPin: (pin: Omit<ObservabilityWidgetPin, 'pinned'>, app: McpAppRef) => void;
+  /** The user unpinned the widget with this id. */
+  onUnpin: (widgetId: string, app: McpAppRef) => void;
 };
 
-export type McpAppHostOptions = {
-  /** Pin widgets from the dashboard-renderer app. */
-  dashboardPins?: DashboardPinsHostOptions;
-};
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const pinRequestSchema = z.number().int();
+/** The app's pin update, checked by shape only: the widget itself is validated when it's drawn. */
+function readPin(structuredContent: Record<string, unknown> | undefined): ObservabilityWidgetPin | undefined {
+  const pin = structuredContent?.[OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY];
+  if (!isRecord(pin) || typeof pin.pinned !== 'boolean' || typeof pin.datePreset !== 'string') return undefined;
+  if (!isRecord(pin.widget) || typeof pin.widget.id !== 'string') return undefined;
+  if (pin.filters !== undefined && !Array.isArray(pin.filters)) return undefined;
+  return {
+    pinned: pin.pinned,
+    widget: { ...pin.widget, id: pin.widget.id },
+    datePreset: pin.datePreset,
+    ...(pin.filters ? { filters: pin.filters } : {}),
+  };
+}
 
 /**
- * Builds the value for `McpAppHostProvider` from the MCP Apps features a host supports.
+ * Lets the user pin observability widgets from the chat. The host owns the pinned widgets: it
+ * sends their ids to each widget app, and hears each pin and unpin.
  *
  * ```tsx
- * const host = useMcpAppHost({ dashboardPins: { pinnedIds, onPinnedChange } });
+ * const host = useMemo(
+ *   () => observabilityWidgetPins({ resourceUri: 'ui://mastra/observability-widget', pinnedIds, onPin, onUnpin }),
+ *   [pinnedIds, onPin, onUnpin],
+ * );
  * <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>
  * ```
+ *
+ * A click shows on the button right away and holds until the host's ids next change, so a host
+ * that turns a click down leaves it showing until then.
  */
-export function useMcpAppHost({ dashboardPins }: McpAppHostOptions): McpAppHostValue {
-  const pinnedIds = dashboardPins?.pinnedIds;
-  // The handler only runs on app updates, so a new one shouldn't hand the apps new host context.
-  const onPinnedChange = useRef(dashboardPins?.onPinnedChange);
-  useLayoutEffect(() => {
-    onPinnedChange.current = dashboardPins?.onPinnedChange;
-  });
-  // The last pin update handled per app instance, by tool call id, sent back so the app knows its
-  // clicks were answered even when the ids stay the same.
-  const [answeredPins, setAnsweredPins] = useState<Readonly<Record<string, number>>>({});
-  // The pin update still being handled per app instance, by tool call id.
-  const pinSaves = useRef(new Map<string, Promise<void>>());
-
-  return useMemo<McpAppHostValue>(() => {
-    if (!pinnedIds) return {};
-    return {
-      hostContext: app => {
-        const ids = pinnedIds(app);
-        if (ids === undefined) return undefined;
-        const answered = answeredPins[app.toolCallId];
-        return {
-          [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids,
-          ...(answered !== undefined && { [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: answered }),
-        };
-      },
-      onModelContext: (app, { structuredContent }) => {
-        // No key means the update carries no pin state, not that nothing is pinned.
-        if (!structuredContent || !(DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY in structuredContent)) return;
-        // Only apps the host lets pin may change its pins.
-        if (pinnedIds(app) == null) return;
-        const request = pinRequestSchema.safeParse(structuredContent[DASHBOARD_PIN_REQUEST_CONTEXT_KEY]);
-        const answer = () => {
-          if (!request.success) return;
-          const handled = request.data;
-          setAnsweredPins(answered =>
-            (answered[app.toolCallId] ?? -Infinity) >= handled ? answered : { ...answered, [app.toolCallId]: handled },
-          );
-        };
-        const parsed = dashboardPinnedWidgetsSchema.safeParse(structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]);
-        if (!parsed.success) {
-          console.error(`[Mastra dashboard] Ignored invalid pinned widgets from "${app.toolName}"`, parsed.error);
-        }
-        // A promise wrapper so a handler that throws right away still gets reported and answered.
-        const save = () =>
-          new Promise<void>(resolve => resolve(parsed.success ? onPinnedChange.current?.(parsed.data, app) : undefined))
-            .catch(error => console.error(`[Mastra dashboard] Couldn't save the pins from "${app.toolName}"`, error))
-            .finally(answer);
-        // One update at a time per app instance, so an older save can't land after a newer one.
-        const previous = pinSaves.current.get(app.toolCallId);
-        const saving = previous ? previous.then(save) : save();
-        pinSaves.current.set(app.toolCallId, saving);
-        void saving.finally(() => {
-          if (pinSaves.current.get(app.toolCallId) === saving) pinSaves.current.delete(app.toolCallId);
-        });
-      },
-    };
-  }, [pinnedIds, answeredPins]);
+export function observabilityWidgetPins({
+  resourceUri,
+  pinnedIds,
+  onPin,
+  onUnpin,
+}: ObservabilityWidgetPinsOptions): McpAppHostValue {
+  return {
+    hostContext: app =>
+      app.resourceUri === resourceUri ? { [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: pinnedIds } : undefined,
+    onModelContext: (app, params) => {
+      if (app.resourceUri !== resourceUri) return;
+      const pin = readPin(params.structuredContent);
+      if (!pin) return;
+      if (pin.pinned) {
+        const { pinned: _pinned, ...pinned } = pin;
+        onPin(pinned, app);
+      } else onUnpin(pin.widget.id, app);
+    },
+  };
 }

@@ -287,6 +287,7 @@ export function renderThread() {
           path="/away"
           element={<Link to={`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`}>go-thread</Link>}
         />
+        <Route path="/factories/:factoryId/settings/:section" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -294,6 +295,11 @@ export function renderThread() {
 
 function PathnameProbe() {
   return <output data-testid="pathname">{useLocation().pathname}</output>;
+}
+
+function LocationProbe() {
+  const { pathname, hash } = useLocation();
+  return <output data-testid="location">{`${pathname}${hash}`}</output>;
 }
 
 /** Shows the route's error notice like `NewPage`, where a failed create returns. */

@@ -45,6 +45,7 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
@@ -65,6 +66,7 @@ export type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 };
+export type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 
@@ -189,3 +191,5 @@ export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
+
+export type VoiceChoice = NonNullable<VoiceSettingsResponse['selected']>;

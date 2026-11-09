@@ -2,18 +2,16 @@ import { ChartArea } from '../../../metrics/components/chart-area';
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ChartCardError } from '../../../metrics/components/chart-card-error';
 import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
-import { bucketPlan, bucketWindow } from '../../../metrics/lib/metrics-buckets';
-import { ViewGate } from '../../components/view-gate';
+import { bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
 import { DrilldownAction } from '../../components/widget-controls';
-import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
-import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
+import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widget-views';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
 import { pinActions } from '../../lib/pin-actions';
-import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
-import { shapeTimeseries } from '../../lib/timeseries';
+import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
 import { answersById } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -30,25 +28,33 @@ type ViewProps = Props & {
 };
 
 export function TimeseriesWidget(props: Props) {
-  const menu = useViewMenu(props.widget, props.views, 0, props.expand);
+  const { gate, state, onStateChange } = props;
+  const menu = viewMenu(
+    props.widget,
+    props.views,
+    state.view ?? 0,
+    i => onStateChange({ ...state, view: i }),
+    props.expand,
+  );
   const { view } = menu;
   const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
-  return (
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
-      {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
-    </ViewGate>
-  );
+  if (gate.status === 'pending')
+    return (
+      <PendingChartCard
+        gate={gate.gate}
+        heading={pendingHeading(heading, gate.gate, props.alert, props.widget, view)}
+      />
+    );
+  return <TimeseriesView {...props} view={view} heading={heading} page={gate.page} />;
 }
 
-function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps) {
-  const { options } = view;
-  const { interval } = bucketPlan(page.window.start, page.window.end);
-  const totals = new Set(options.totals ?? []);
-  const results = useDashboardRequests(
-    view.queries.map(q =>
-      buildRequest(q, page, { interval: q.id !== undefined && totals.has(q.id) ? undefined : interval }),
-    ),
+function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, results, onRetry }: ViewProps) {
+  // Drilldown, then the alert, then the pin.
+  const heading = withAction(
+    own,
+    alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),
   );
+  const { options } = view;
   const sent = results.filter(r => r !== undefined);
   const hasTraceQueries = view.queries.some(q => q.source === 'traceAggregate' || q.source === 'spanAggregate');
   const onClick = useDrilldown(widget, view, onDrilldown);
@@ -101,11 +107,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
   if (failed.length) {
     return (
       <ChartCard {...layout}>
-        {hasTraceQueries ? (
-          <ChartCardError error={failed[0]?.error} onRetry={() => failed.forEach(r => void r.refetch())} />
-        ) : (
-          <ChartCardError />
-        )}
+        {hasTraceQueries ? <ChartCardError error={failed[0]?.error} onRetry={onRetry} /> : <ChartCardError />}
       </ChartCard>
     );
   }

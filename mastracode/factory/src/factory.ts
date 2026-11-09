@@ -19,9 +19,12 @@
  * and the storage domains those capabilities require.
  */
 
+import { existsSync } from 'node:fs';
+
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -51,7 +54,7 @@ import {
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
-import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
+import { boardForWorkItem, createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
@@ -68,11 +71,16 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import {
+  createGithubReviewStatusReporter,
+  reviewStatusAnimationFromEnv,
+} from './integrations/github/review-status-reporter.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -150,15 +158,22 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
-import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
+import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
 import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
-import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
+import {
+  createRequestTimingMiddleware,
+  factoryTimingEnabled,
+  instrumentAsyncMethods,
+  logTiming,
+  timedPhase,
+} from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import type { FactoryToolDependencies } from './tools/index.js';
@@ -172,6 +187,7 @@ import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
+import { backfillUntilDone } from './work-items/split-backfill.js';
 import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -179,6 +195,11 @@ type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage
 
 /** Constructor args for the `new Mastra(...)` literal in the deploy entry. */
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
+
+/** Tools for every Factory session, or a resolver called per run. */
+export type FactoryTools =
+  | IntegrationTools
+  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
 
 export interface MastraFactoryConfig {
   /**
@@ -272,6 +293,20 @@ export interface MastraFactoryConfig {
    * approval cannot bypass that gate.
    */
   disableBuiltinTools?: BuiltinToolId[];
+  /**
+   * Tools offered to every Factory session, such as an MCP server's tools
+   * (`await mcpClient.listTools()`) or Mastra Connect's (`tools()` from
+   * `@mastra/connect`). Credentials built into these tools are shared by every
+   * user of the instance. Pass a function to resolve tools per run instead, for
+   * example to use the run's org credentials. A name Factory already gives the
+   * session keeps Factory's tool; the configured one is skipped with a warning.
+   *
+   * Defaults, with Platform credentials and `MASTRA_PROJECT_ID`, to the Mastra
+   * Connect tools of every connection attached to the Platform project, minus
+   * tools named for deleting or archiving and GitHub or GitLab tools. Pass `{}`
+   * to offer none.
+   */
+  tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -423,6 +458,26 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   return new PlatformFactorySandbox();
 }
 
+function platformConnectProjectId(): string | undefined {
+  if (!hasPlatformCredentials()) return undefined;
+  const projectId = process.env.MASTRA_PROJECT_ID?.trim();
+  if (!projectId) {
+    console.warn(
+      'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
+    );
+    return undefined;
+  }
+  return projectId;
+}
+
+function warnIgnoredMcpConfig(): void {
+  const mcpPath = getGlobalMcpPath();
+  if (!existsSync(mcpPath)) return;
+  console.warn(
+    `MastraFactory: ${mcpPath} is ignored; Factory sessions don't load mcp.json. Pass MCP tools through the \`tools\` option or attach a Mastra Connect connection to the Platform project.`,
+  );
+}
+
 /**
  * Default auth provider — `MastraAuthStudio`, which proxies identity to the
  * shared Mastra platform API and resolves its own env (`MASTRA_SHARED_API_URL`,
@@ -515,6 +570,8 @@ export class MastraFactory {
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
+  #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
+  #prepareStartedAt: number | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -642,6 +699,8 @@ export class MastraFactory {
     // registry or double-run one-time adapter init.
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
+    this.#prepareStartedAt = performance.now();
+    warnIgnoredMcpConfig();
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
@@ -777,6 +836,7 @@ export class MastraFactory {
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
+    const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -792,6 +852,7 @@ export class MastraFactory {
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
       skillOverrides: skillOverridesStorage,
+      voiceSettings: voiceSettingsStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -880,6 +941,30 @@ export class MastraFactory {
       );
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
+
+    // Copy the legacy cards still in play before anything reads cards; done and canceled cards
+    // follow in the background. A failure fails the boot: serving without open cards would let
+    // rules file duplicates.
+    if (storage.isDomainReady('work-items') && !workItemsStorage.legacyMode) {
+      const projectBoards = this.#projectBoards;
+      const projects = projectBoards
+        ? new Set((await factoryProjectsStorage.listAll()).map(project => `${project.orgId}\u0000${project.id}`))
+        : undefined;
+      // A card whose project or board cannot be resolved counts as open, so it is copied now.
+      const isTerminal = async (card: Card) => {
+        let registry: BoardRegistry = this.#boards;
+        if (projectBoards) {
+          if (!projects!.has(`${card.orgId}\u0000${card.factoryProjectId}`)) return false;
+          try {
+            registry = await projectBoards.load(card);
+          } catch {
+            return false;
+          }
+        }
+        return registry.has(boardForWorkItem(card)) && isTerminalWorkItem(registry, card);
+      };
+      await timedPhase('prepare.migrate.workItemSplit', () => workItemsStorage.migrateOpenLegacyCards(isTerminal));
+    }
 
     // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
     // back to Intake. Move the cards the old rule left there, once.
@@ -1002,6 +1087,18 @@ export class MastraFactory {
           return false;
         }
       });
+    }
+    if (workItemsStorage.legacyBackfillPending) {
+      const controller = new AbortController();
+      this.#workItemSplitBackfill = {
+        controller,
+        promise: timedPhase('background.migrate.workItemSplit', () =>
+          backfillUntilDone(
+            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+            controller.signal,
+          ),
+        ),
+      };
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
@@ -1357,7 +1454,7 @@ export class MastraFactory {
       if (policy) {
         const orgId = tenantOrgId(policy.tenant);
         return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
-          ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
+          ? { orgId, userId: factoryProjectSettingsUserId(policy.factoryProjectId) }
           : { orgId, userId: policy.tenant.userId };
       }
       // No tenant pays: the session's Factory row applies.
@@ -1366,7 +1463,7 @@ export class MastraFactory {
       if (!factoryProjectId) return { orgId: 'local', userId: 'local' };
       return {
         orgId: binding?.orgId ?? scope?.factoryOrgId ?? 'local',
-        userId: factoryMemorySettingsUserId(factoryProjectId),
+        userId: factoryProjectSettingsUserId(factoryProjectId),
       };
     };
     const loadMemorySettings = async ({
@@ -1461,6 +1558,10 @@ export class MastraFactory {
           ]
         : [],
     );
+    const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
+    const sessionTools =
+      this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
+    const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
@@ -1500,6 +1601,8 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // Host mcp.json files never belong to a hosted session; MCP tools come through `tools`.
+        disableMcp: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
         // session's owner in its org.
@@ -1821,6 +1924,21 @@ export class MastraFactory {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
             }
           }
+          if (sessionTools) {
+            const contributed =
+              typeof sessionTools === 'function' ? await sessionTools({ requestContext }) : sessionTools;
+            for (const [name, tool] of Object.entries(contributed)) {
+              const owner = toolOwners.get(name);
+              if (!owner) {
+                tools[name] = tool;
+              } else if (!warnedConfiguredToolClashes.has(name)) {
+                warnedConfiguredToolClashes.add(name);
+                console.warn(
+                  `[factory] configured tool '${name}' is not offered to sessions: '${owner}' already provides a tool with that name.`,
+                );
+              }
+            }
+          }
           return tools;
         },
         postToolObserver: async (toolContext: IntegrationPostToolContext) => {
@@ -1950,6 +2068,13 @@ export class MastraFactory {
                             }),
                         );
                       },
+                      reportReviewStatus: createGithubReviewStatusReporter({
+                        github: githubIntegration,
+                        sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
+                        workItems: workItemsStorage,
+                        reviewerName: process.env.FACTORY_REVIEW_STATUS_NAME?.trim() || 'Factory',
+                        ...reviewStatusAnimationFromEnv(process.env),
+                      }),
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
@@ -1986,6 +2111,12 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
+          buildConnectToolsRoute(
+            routeAuth,
+            connectToolsProjectId
+              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
+              : undefined,
+          ),
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
@@ -2290,6 +2421,9 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    // Unconditional and outside the Mastra logger, which production runs at WARN.
+    if (this.#prepareStartedAt !== undefined)
+      logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
   }
 
   /** Stop Factory-owned background work and channel transports before the host process shuts down. */
@@ -2308,11 +2442,15 @@ export class MastraFactory {
             `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
           ),
         );
+      const backfill = this.#workItemSplitBackfill;
+      backfill?.controller.abort();
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
+        // Stops between cards; failures are already logged.
+        backfill?.promise ?? Promise.resolve(),
         ...channelShutdowns.map(async shutdown => shutdown()),
       ]);
-      results.slice(1).forEach((result, index) => {
+      results.slice(2).forEach((result, index) => {
         if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
       });
       const failure = results.find(result => result.status === 'rejected');

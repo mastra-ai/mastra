@@ -99,7 +99,10 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     text: executionOutput.output.text,
     content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults?.map(({ stepSpanData: _stepSpanData, ...result }) => result),
+    // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
+    toolResults: executionOutput.toolResults?.map(
+      ({ stepSpanData: _stepSpanData, tracingDelegationFailure: _tracingDelegationFailure, ...result }) => result,
+    ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
@@ -230,5 +233,8 @@ export function createBaseIterationStateUpdate(
     // The latest iteration's response, even when it has none, as in the main loop: a run
     // whose final step is aborted or rejected mid-stream ends with no response on the span.
     lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
+    // Both belong to the iteration whose lastStepResult the final step classifies.
+    tracingTermination: executionOutput.tracingTermination,
+    tracingDelegationFailure: executionOutput.tracingDelegationFailure,
   };
 }

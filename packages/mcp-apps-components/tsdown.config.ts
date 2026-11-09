@@ -5,11 +5,11 @@ import { defineConfig } from 'tsdown';
 
 const RAW = '?raw';
 
-// Builds the server-side helpers once `scripts/build-apps.ts` has built each iframe app into
-// `apps-dist/`. Each helper imports its app's page with `?raw`, which inlines the HTML as a string,
-// so the helpers carry no file reference that bundling could break.
+// Builds the package once `scripts/build-apps.ts` has built each iframe app into `apps-dist/`. The
+// package imports each app's page with `?raw`, which inlines the HTML as a string, so it carries no
+// file reference that bundling could break.
 export default defineConfig({
-  entry: ['src/dashboard-renderer.ts', 'src/dashboard-data-tool.ts', 'src/host.ts'],
+  entry: ['src/index.ts', 'src/host.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
@@ -17,9 +17,10 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
-  // Only the iframe apps import these, and `scripts/build-apps.ts` bundles them into the HTML.
+  // The entry's dashboard schemas use the kind option modules from `@mastra/playground-ui`, which
+  // stays bundled (a devDependency); `@mastra/core` is a peer, as for `@mastra/mcp`.
   deps: {
-    alwaysBundle: ['@mastra/playground-ui', '@mastra/react'],
+    alwaysBundle: ['@mastra/playground-ui'],
   },
   plugins: [
     {

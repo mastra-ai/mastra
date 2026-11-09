@@ -17,6 +17,7 @@ import type { Context } from 'hono';
 
 import { isTerminalWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
@@ -29,11 +30,6 @@ import type { LinearRulesIngress } from './rules.js';
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Linear feature gate, mirroring the

@@ -65,7 +65,44 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "ibm-granite/granite-4.2-8b": [
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
       {
         "type": "toggle"
       }
@@ -80,18 +117,7 @@
         "type": "toggle"
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "ibm-granite/granite-4.2-8b": [
       {
         "type": "toggle"
       }
@@ -101,45 +127,19 @@
         "type": "toggle"
       }
     ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.6-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

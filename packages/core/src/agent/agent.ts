@@ -239,8 +239,7 @@ import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-transport';
 import { AgentStreamBus } from './streams/bus';
-import { agentStreamsConfig, areAgentStreamsEnabled, mergeDurableStreamsConfig } from './streams/config';
-import type { AgentStreamsOption } from './streams/config';
+import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
@@ -308,26 +307,6 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
-
-// Structural shape of the lazily-built `DurableAgent` wrapper used by
-// `Agent`'s standalone-durable delegators. Declared as a concrete interface
-// (rather than `Record<string, Function>`) so that under
-// `noUncheckedIndexedAccess` each method access is a non-optional function.
-interface StandaloneDurableWrapper {
-  stream: (...args: any[]) => any;
-  generate: (...args: any[]) => any;
-  resume: (...args: any[]) => any;
-  recover: (...args: any[]) => any;
-  resumeGenerate: (...args: any[]) => any;
-  resumeStream: (...args: any[]) => any;
-  approveToolCall: (...args: any[]) => any;
-  declineToolCall: (...args: any[]) => any;
-  streamUntilIdle: (...args: any[]) => any;
-  listActiveRuns: (...args: any[]) => any;
-  recoverActiveRuns: (...args: any[]) => any;
-  observe: (...args: any[]) => any;
-  prepare: (...args: any[]) => any;
-}
 
 /**
  * Safety ceiling for {@link Agent.#validateSuspendedToolCallTarget} when waiting for
@@ -444,6 +423,13 @@ type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchem
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
+
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
 
 const RESOLVED_TOOL_INVOCATION_STATES = new Set<string>(['result', 'output-error', 'output-denied']);
 
@@ -831,8 +817,8 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
  *
- * Opt into durable execution with `durable`; attaching the agent to a `Mastra`
- * instance then wraps it with `createDurableAgent`.
+ * Configure resumable streams with `durable`. For checkpoint-backed durable
+ * execution, explicitly wrap the agent with `createDurableAgent`.
  *
  * @example
  * `yourModel` is your configured model.
@@ -978,19 +964,10 @@ export class Agent<
   #suspendedRunOutputProcessors = new Map<string, OutputProcessorOrWorkflow[]>();
   readonly #options?: AgentCreateOptions;
   readonly #durable?: AgentDurableOption;
-  readonly #streamsOption?: AgentStreamsOption;
   /** Resumable stream layer, built on first use once streams are enabled. */
   #streamBus?: AgentStreamBus;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
-  /**
-   * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
-   * when `durable: true` is set on the config but the agent is not attached
-   * to a Mastra instance (which normally auto-wraps on registration). The
-   * wrapper is created via dynamic import to avoid the ESM init cycle
-   * `agent → agent/durable → agent`.
-   */
-  #standaloneDurable?: unknown;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
@@ -1032,7 +1009,6 @@ export class Agent<
     this.#metadata = config.metadata;
     this.#options = config.options;
     this.#durable = config.durable;
-    this.#streamsOption = config.streams;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1109,6 +1085,18 @@ export class Agent<
       this.__registerPrimitives({
         logger: config.mastra.getLogger(),
       });
+    }
+
+    const durable = config.durable;
+    if (durable && typeof durable === 'object') {
+      const legacyKeys = ['maxSteps', 'shouldPersistSnapshot', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
+      if (legacyKeys.length) {
+        this.logger.warn(
+          `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
+            'Use createDurableAgent({ agent, ...executionOptions }) for checkpoint execution. ' +
+            'On plain Agent, streams configuration has moved from streams to durable and controls resumable streams only.',
+        );
+      }
     }
 
     this.#scopes = config.scopes;
@@ -1746,37 +1734,15 @@ export class Agent<
   /**
    * The `durable` option this agent was constructed with, if any.
    *
-   * Read by `Mastra.addAgent` to auto-wrap the agent with `createDurableAgent`
-   * at registration time. See {@link AgentDurableOption}.
+   * Controls resumable streams only. See {@link AgentDurableOption}.
    */
   get durable(): AgentDurableOption | undefined {
     return this.#durable;
   }
 
   /**
-   * The `streams` option this agent was constructed with, if any.
-   * See {@link AgentConfig.streams}.
-   */
-  get streams(): AgentStreamsOption | undefined {
-    return this.#streamsOption;
-  }
-
-  /**
-   * Options to wrap this agent with `createDurableAgent`: its `durable` option
-   * with the `streams` option folded in.
-   *
-   * @internal
-   */
-  __getDurableWrapOptions(): Record<string, unknown> {
-    const durable = this.#durable === true || !this.#durable ? {} : { ...(this.#durable as object) };
-    return mergeDurableStreamsConfig(durable, this.#streamsOption, message =>
-      this.logger.warn(`[Agent:${this.id}] ${message}`),
-    ) as Record<string, unknown>;
-  }
-
-  /**
    * The resumable stream layer runs of this agent publish on, or `undefined`
-   * when streams are off. See {@link AgentConfig.streams}.
+   * when streams are off. See {@link AgentConfig.durable}.
    *
    * @internal
    */
@@ -1784,14 +1750,23 @@ export class Agent<
     return this.#ownStreamBus();
   }
 
+  /**
+   * Whether runs this class executes publish through the plain Agent stream
+   * publisher. DurableAgent returns false: it publishes on its own bus, so the
+   * plain bus (and its abort requests and run records) must not exist for it.
+   * @internal
+   */
+  protected __ownsPlainStreamPublisher(): boolean {
+    return true;
+  }
+
   // Not overridable: DurableAgent exposes its own bus through __getStreamBus,
   // but runs it executes never go through this class's publisher.
   #ownStreamBus(): AgentStreamBus | undefined {
-    // A durable agent publishes through its DurableAgent wrapper.
-    if (this.#durable) return undefined;
-    if (!areAgentStreamsEnabled(this.#streamsOption, !!this.#mastra)) return undefined;
+    if (!this.__ownsPlainStreamPublisher()) return undefined;
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
-      const config = agentStreamsConfig(this.#streamsOption);
+      const config = agentStreamsConfig(this.#durable);
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
@@ -1810,7 +1785,7 @@ export class Agent<
    * Whether runs of this agent can be followed from another reader with
    * `observe()` (or the server's observe route): true when its runs publish
    * on a stream topic, which is the case for durable agents and for agents
-   * with streams on. See {@link AgentConfig.streams}.
+   * with streams on. See {@link AgentConfig.durable}.
    */
   hasResumableStreams(): boolean {
     return !!this.#durable || !!this.__getStreamBus();
@@ -1939,59 +1914,6 @@ export class Agent<
     } catch (error) {
       this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
     }
-  }
-
-  /**
-   * Self-referential `agent` accessor exposed only when this agent was
-   * constructed with `durable: true`.
-   *
-   * This lets `isDurableAgentLike()` return `true` for a standalone durable
-   * `Agent` — mirroring the duck-type shape of a real `DurableAgent` wrapper
-   * (`wrapper.agent` points to the wrapped `Agent`). External consumers can
-   * then treat a `new Agent({ durable: true })` as durable-capable without
-   * having to first register it with a Mastra instance.
-   *
-   * `Mastra.addAgent` disambiguates a self-referential placeholder from a real
-   * wrapper by checking `agent.agent === agent` and routes the placeholder
-   * through `createDurableAgent` so registration still produces a proper
-   * `DurableAgent` wrapper.
-   *
-   * Returns `undefined` when this agent is not durable so non-durable agents
-   * do not accidentally satisfy the durable duck-type.
-   */
-  get agent(): Agent<TAgentId, TTools, TOutput> | undefined {
-    return this.#durable ? (this as unknown as Agent<TAgentId, TTools, TOutput>) : undefined;
-  }
-
-  /**
-   * Resolve the DurableAgent that should handle `stream`/`generate` calls when
-   * this agent was constructed with `durable: true` but is being used
-   * standalone (i.e. no `Mastra` instance auto-wrapped it during registration).
-   *
-   * The wrapper is created lazily via a dynamic `import()` of the durable
-   * module to avoid the ESM initialization cycle
-   * `agent → agent/durable → agent` that would TDZ-break
-   * `class DurableAgent extends Agent`. The result is cached on
-   * `#standaloneDurable` so subsequent calls reuse the same wrapper.
-   *
-   * Returns `undefined` when the agent has already been registered with a
-   * Mastra instance (Mastra performs the wrapping itself) or when no
-   * `durable` config is set.
-   */
-  async #getStandaloneDurable(): Promise<StandaloneDurableWrapper | undefined> {
-    if (!this.#durable) return undefined;
-    // When attached to a Mastra instance, Mastra auto-wraps at registration
-    // and the caller is already talking to the DurableAgent — the raw
-    // `Agent` is only reached via internal delegation from the wrapper,
-    // which must not re-enter the durable path.
-    if (this.#mastra) return undefined;
-    if (this.#standaloneDurable) {
-      return this.#standaloneDurable as StandaloneDurableWrapper;
-    }
-    const { createDurableAgent } = await import('./durable/create-durable-agent');
-    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...this.__getDurableWrapOptions() });
-    this.#standaloneDurable = wrapper;
-    return wrapper as unknown as StandaloneDurableWrapper;
   }
 
   /**
@@ -4492,14 +4414,6 @@ export class Agent<
       this.#ephemeralMastra = undefined;
     }
 
-    // Drop the standalone durable wrapper (if any) — Mastra registration
-    // means the durable path is now owned by the DurableAgent that Mastra
-    // created (or was passed) and callers should be talking to that
-    // instance directly. The wrapper is only meaningful pre-registration.
-    if (this.#standaloneDurable) {
-      this.#standaloneDurable = undefined;
-    }
-
     this.#streamBus?.registerMastra(mastra.pubsub);
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
@@ -6775,7 +6689,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const streamResult = shouldResumeSubAgent
+                const subAgentStream = shouldResumeSubAgent
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -6800,22 +6714,31 @@ export class Agent<
                       context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
+                      // Durable sub-agents keep their stream open across a suspension by
+                      // default; end it so the supervisor can suspend with the worker.
+                      closeOnSuspend: true,
                       backgroundTaskPolicy: {
                         allowToolDispatch: true,
                         allowDelegationDispatch: false,
                       },
                     });
+                // Some sub-agents (e.g. durable stream()) return their MastraModelOutput nested
+                // under `output` next to fullStream/runId; others return the output itself.
+                const nestedStreamOutput = (subAgentStream as { output?: typeof subAgentStream }).output;
+                const streamResult = nestedStreamOutput ?? subAgentStream;
 
                 let requireToolApproval;
                 let suspendedPayload;
                 let resumeSchema;
                 let delegatedPause: DelegatedPauseIdentity = {};
-                for await (const chunk of streamResult.fullStream) {
+                for await (const chunk of subAgentStream.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -6852,7 +6775,9 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
-                const agentResponseMessages = streamResult.messageList.get.response.db();
+                // Every response message of the run, including ones the worker already saved to
+                // its own memory (e.g. a durable run flushes on finish), not just the unsaved ones.
+                const agentResponseMessages = streamResult.messageList.getPersisted.response.db();
                 // On resume the run continued on the thread persisted by the suspended run
                 // (backfilled from the snapshot), so target that thread for the transcript
                 // save and skip re-saving the prompt — it was already persisted (with its
@@ -6894,8 +6819,10 @@ export class Agent<
                       });
                     }
 
+                    // Apply tool transcript transforms, as the worker's own saves do, so this
+                    // same-id re-save can't overwrite redacted rows with raw tool payloads.
                     await streamMemory.saveMessages({
-                      messages: fullSubAgentMessages,
+                      messages: streamResult.messageList.transformMessagesForTranscript(fullSubAgentMessages),
                     });
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
@@ -6939,7 +6866,7 @@ export class Agent<
                   return suspend?.(suspendedPayload, {
                     resumeSchema,
                     requireToolApproval,
-                    runId: streamResult.runId,
+                    runId: subAgentStream.runId,
                     isAgentSuspend: true,
                     ...delegatedPause,
                   });
@@ -6960,8 +6887,10 @@ export class Agent<
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -10064,16 +9993,6 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path so callers using the agent outside of a
-    // `Mastra` instance still get durable execution. When attached to
-    // Mastra, the auto-wrap at registration means the caller already
-    // holds a `DurableAgent` and this branch is skipped.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.generate(messages, options) as Promise<FullOutput<OUTPUT>>;
-    }
-
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -11049,16 +10968,6 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path so callers using the agent outside of a
-    // `Mastra` instance still get durable streams. When attached to Mastra,
-    // the auto-wrap at registration means the caller already holds a
-    // `DurableAgent` and this branch is skipped.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.stream(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
-    }
-
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
@@ -11299,13 +11208,6 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.streamUntilIdle(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
-    }
-
     return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
       activeStreams: this.#activeStreamUntilIdle,
       bgManager: this.#mastra?.backgroundTaskManager,
@@ -11423,13 +11325,6 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.resumeStream(resumeData, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
-    }
-
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -11667,14 +11562,6 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path so callers using the agent outside of a
-    // `Mastra` instance still get durable execution.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.resumeGenerate(resumeData, options) as Promise<FullOutput<OUTPUT>>;
-    }
-
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -11850,13 +11737,6 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.approveToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
-    }
-
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: true }, options);
   }
@@ -12182,13 +12062,6 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path.
-    const durable = await this.#getStandaloneDurable();
-    if (durable) {
-      return durable.declineToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
-    }
-
     const { reason, ...resumeOptions } = options;
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
@@ -12433,79 +12306,54 @@ export class Agent<
   // ---------------------------------------------------------------------------
   // Durable-agent method delegators
   //
-  // These methods only make sense when the agent was constructed with
-  // `durable: true`. They mirror the public surface of `DurableAgent` (which
-  // extends `Agent`) so that a standalone `new Agent({ durable: true })` — used
-  // without being attached to a `Mastra` instance — can still drive durable
-  // execution. Each delegator resolves the lazily-built standalone
-  // `DurableAgent` wrapper via `#getStandaloneDurable()` and forwards the call.
-  //
-  // On a non-durable agent they throw `AGENT_DURABLE_METHOD_NOT_AVAILABLE` so
-  // callers get a clear error instead of a confusing "not a function" from a
-  // typo-safe method that silently does nothing.
-  //
-  // When the agent is attached to a `Mastra`, Mastra auto-wraps at
-  // registration and the caller already holds a `DurableAgent`, so the base
-  // methods below are unreachable via the wrapper — `#getStandaloneDurable()`
-  // returns `undefined` and the throw path fires. To avoid that misleading
-  // error, callers should either use the wrapper Mastra hands back or omit the
-  // `Mastra` registration and rely on the standalone wrapper.
-  // ---------------------------------------------------------------------------
-
-  async #requireStandaloneDurable(method: string): Promise<StandaloneDurableWrapper> {
-    const durable = await this.#getStandaloneDurable();
-    if (!durable) {
-      throw new MastraError({
-        id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent.${method}() is only available on agents constructed with \`durable: true\`. Configure \`new Agent({ durable: true })\` or retrieve the durable agent from a registered Mastra instance.`,
-        details: { agentId: this.id, method },
-      });
-    }
-    return durable;
+  // DurableAgent overrides these execution APIs. Plain agents only publish streams.
+  #requireDurableExecution(method: string): never {
+    throw new MastraError({
+      id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Agent.${method}() requires durable execution. Use createDurableAgent({ agent }) or new DurableAgent({ agent }); Agent.durable only enables resumable streams.`,
+      details: { agentId: this.id, method },
+    });
   }
 
-  /** Resume a suspended durable run. Only valid when `durable: true`. */
+  /** Resume a suspended durable run. Requires createDurableAgent() or DurableAgent. */
   async resume(
     runId: string,
     resumeData: unknown,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    const durable = await this.#requireStandaloneDurable('resume');
-    return durable.resume(runId, resumeData, options) as Promise<DurableAgentStreamResult<TOutput>>;
+    return this.#requireDurableExecution('resume');
   }
 
-  /** Recover a persisted durable run in a fresh process. Only valid when `durable: true`. */
+  /** Recover a persisted durable run in a fresh process. Requires createDurableAgent() or DurableAgent. */
   async recover(
     runId: string,
     options?: DurableAgentRecoverOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    const durable = await this.#requireStandaloneDurable('recover');
-    return durable.recover(runId, options) as Promise<DurableAgentStreamResult<TOutput>>;
+    return this.#requireDurableExecution('recover');
   }
 
-  /** List active durable runs. Only valid when `durable: true`. */
+  /** List active durable runs. Requires createDurableAgent() or DurableAgent. */
   async listActiveRuns(options?: DurableAgentListActiveRunsOptions): Promise<DurableAgentListActiveRunsResult> {
-    const durable = await this.#requireStandaloneDurable('listActiveRuns');
-    return durable.listActiveRuns(options) as Promise<DurableAgentListActiveRunsResult>;
+    return this.#requireDurableExecution('listActiveRuns');
   }
 
-  /** Bulk-recover active durable runs. Only valid when `durable: true`. */
+  /** Bulk-recover active durable runs. Requires createDurableAgent() or DurableAgent. */
   async recoverActiveRuns(
     options?: DurableAgentRecoverActiveRunsOptions,
   ): Promise<DurableAgentRecoverActiveRunsResult> {
-    const durable = await this.#requireStandaloneDurable('recoverActiveRuns');
-    return durable.recoverActiveRuns(options) as Promise<DurableAgentRecoverActiveRunsResult>;
+    return this.#requireDurableExecution('recoverActiveRuns');
   }
 
-  /** Observe an in-flight durable run without driving it. Only valid when `durable: true`. */
+  /** Observe a resumable run without driving it. */
   async observe(
     runId: string,
     options?: {
       /**
        * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the `index + 1` of the last chunk that has an index. Omit it to replay all available cached events. Transports
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See
@@ -12521,10 +12369,13 @@ export class Agent<
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
     const bus = this.__getStreamBus();
     if (bus) return this.#observeStream(bus, runId, options);
-    const durable = await this.#requireStandaloneDurable('observe');
-    return durable.observe(runId, options) as Promise<
-      Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }
-    >;
+    throw new MastraError({
+      id: 'AGENT_STREAMS_NOT_ENABLED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'Agent.observe() requires resumable streams. Register the agent on Mastra or set durable: true.',
+      details: { agentId: this.id },
+    });
   }
 
   /**
@@ -12596,6 +12447,27 @@ export class Agent<
       throw error;
     }
 
+    // Resuming past the run's last entry replays nothing; if that entry ended the
+    // run, nothing more will arrive, so close (matches the HTTP /observe route).
+    // Read only after subscribing so a terminal entry racing attachment is not lost.
+    // A failed read only means we can't close early.
+    // A client resuming at last index + 1 needs a one-entry read; only an offset
+    // further past the end falls back to the full log to find the true tail.
+    const offset = options?.offset;
+    if (offset !== undefined && offset > 0) {
+      const topic = AGENT_STREAM_TOPIC(runId);
+      const readTail = async () => {
+        const window = await bus.pubsub.getHistory(topic, offset - 1);
+        return window.length > 0 ? window.at(-1) : (await bus.pubsub.getHistory(topic, 0)).at(-1);
+      };
+      // Don't hold back the returned stream while the read waits on the cache.
+      void readTail()
+        .catch(() => undefined)
+        .then(last => {
+          if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) detach();
+        });
+    }
+
     return {
       output,
       get fullStream() {
@@ -12611,17 +12483,8 @@ export class Agent<
     };
   }
 
-  /** Prepare a durable execution without starting it. Only valid when `durable: true`. */
+  /** Prepare a durable execution without starting it. Requires createDurableAgent() or DurableAgent. */
   async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<unknown> {
-    const durable = await this.#requireStandaloneDurable('prepare');
-    return durable.prepare(messages, options);
+    return this.#requireDurableExecution('prepare');
   }
-
-  // Note: `getWorkflow()` and `getDurableWorkflows()` are intentionally NOT
-  // added to base `Agent`. `DurableAgent` defines them synchronously (and
-  // `getDurableWorkflows` is called by `Mastra.addAgent` at registration
-  // time), so a base async delegator would break the overridden sync
-  // signatures. Callers that need those APIs should hold a `DurableAgent`
-  // reference — either by using `createDurableAgent()` explicitly or by
-  // reading the agent back from a registered `Mastra`.
 }

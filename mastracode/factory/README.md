@@ -60,7 +60,11 @@ Each work item has one board item. Factory's card-to-card parent link is `parent
 
 #### Migration and dry run
 
-Factory migrates existing cards before the work-items storage domain becomes ready. It keeps the legacy `work_items` table, copies each card into the new tables, and checks again on every startup. Unchanged legacy rows are no-ops; newer legacy rows are recopied. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source conflicts with another card ID is skipped and logged rather than preventing startup. Review the `skipped` entries in the boot log and reconcile those card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
+Factory keeps the legacy `work_items` table and copies each card into the new tables. Before it starts serving, it copies only open cards. Done and canceled cards are copied in the background afterwards and appear on the board shortly after startup. While that runs, opening a card, or receiving a Linear, Jira, GitHub, GitLab, or incident.io event for it, copies that card on demand, so a reopened issue keeps its original card. Board lists, such as the Done column, fill in as the background copy progresses.
+
+Once the background copy finishes, Factory records it, and later startups skip the copy. A card that an older Factory version changes in the legacy table afterwards is recopied at the next startup. Unchanged legacy rows are no-ops. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source conflicts with another card ID, or that was edited on both sides, is skipped rather than preventing startup; the copy still counts as finished.
+
+Each copy pass logs one summary line with its counts and up to ten skipped card IDs with their reasons, for example `[factory] work item split (background pass): 9,837 cards checked, 0 copied, 106 recopied, 9,581 unchanged, 0 deferred, 150 skipped — <id> (Split board item changed after migration); … and 140 more`. A pass that runs longer than ten seconds also logs a progress line every ten seconds. When startup completes, Factory writes `[factory:timing] boot <n>ms` to stderr, regardless of the log level. Reconcile skipped card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
 
 For a database that has not cut over yet, inspect the migration without switching storage by setting this environment variable before starting Factory:
 
@@ -312,7 +316,7 @@ const releaseBoard = defineBoard({
 });
 ```
 
-Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`.
+Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`. When a project [intake route](#status-events-move-existing-cards) on the card's board handles `work_item.closed`, as the default close routes do on Work, the routes decide the move instead and `sourceClosed` is only the fallback.
 
 ### Board tool-result rules
 
@@ -716,9 +720,9 @@ A project's [intake routes](#intake-routes) are checked before these bindings an
 
 ### Intake routes
 
-Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. Routes place a card once, when it arrives. Nothing reads them again later.
+Each project has an ordered list of intake routes, managed through the API (there is no UI yet). A route names the board events it handles in `on`. A route on `work_item.created`, the default, decides where a new card lands: the first enabled route whose `when` matches the card names its board and phase. A route on `work_item.closed` or `work_item.reopened` decides where an existing card moves when its source closes or reopens (see [Status events](#status-events-move-existing-cards)).
 
-**The default routes.** Every project starts with two routes. The first, `Outside authors wait in Intake`:
+**The default routes.** Every project starts with five routes: two that place new cards, and three that move cards when their issue closes or reopens. The first, `Outside authors wait in Intake`:
 
 ```json
 {
@@ -735,18 +739,30 @@ Each project has an ordered list of intake routes, managed through the API (ther
 
 It files GitHub and GitLab issues and pull requests from authors outside the write-access circle in Work › Intake, ahead of any label route or binding. Intake is a resting phase, so nothing starts there on its own. Any session, a person's or an agent's, can move the card on, and that move starts the next phase's run. Pushes to a pull request resting in Intake don't re-review it, and comments and edits on an issue never re-run Triage (see GitHub event rules). Trusted authors' cards, and Linear, Jira and incident.io cards (which carry no trust stamp), land where they did before. The second, `Pull requests go to PR review`, sends every other pull request and merge request (`source.kind equals pull_request`) to Work › PR review, where the reviewer runs once a person or the project's auto-run lets it start. Because it comes second, an outside author's pull request still waits in Intake. A pull request Factory opened for one of its own cards is filed by that card's rule, which no route re-places: it waits in Intake while the authoring card goes out for review.
 
-The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. A project set up before the pull request route existed gets it this way too.
+The other three move Work cards when their issue's status changes:
+
+| Route                                         | `on`                     | `when`                          | Target          |
+| --------------------------------------------- | ------------------------ | ------------------------------- | --------------- |
+| `Closed issues go to Done`                    | `["work_item.closed"]`   | `event.reason equals completed` | Work › Done     |
+| `Issues closed as not planned go to Canceled` | `["work_item.closed"]`   | `event.reason equals canceled`  | Work › Canceled |
+| `Reopened issues go back to Intake`           | `["work_item.reopened"]` | none                            | Work › Intake   |
+
+They replace the close handlers each integration used to apply on its own, so a closed GitHub, GitLab, Linear, Jira or incident.io issue lands where it did before, but you can now edit or disable that move. To stop closes from moving Work cards, disable both close routes. Deleting them does not stop the move: with no route left that handles closes, Work's `sourceClosed` mapping moves closed cards to Done or Canceled again.
+
+The default routes are stored routes like any other: list them, edit them, disable them, reorder them or delete them through the API. Factory adds each one once, the first time the project's routes are read or written, appending it after the project's existing routes, and doesn't add it back after an admin deletes it. Deleting a default is permanent: recreate it by hand to get it back. A project set up before the pull request route or the close and reopen routes existed gets them this way too.
 
 **Trust only decides where a card arrives.** Once a card is moved out of Intake, later input on it runs like on any card: a maintainer's push re-reviews an outside author's pull request. A phase that should only auto-start for trusted authors says so in its `autoStartWhen` (`author.trusted equals true`). Runs on untrusted cards still use their own isolated memory.
 
 **Route shape.**
 
-| Field     | Meaning                                                                                                                                                                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`    | Up to 120 characters.                                                                                                                                                                                                                                                         |
-| `enabled` | Defaults to `true`. Disabled routes are skipped.                                                                                                                                                                                                                              |
-| `when`    | A rule over the card's facts (the same format as `autoStartWhen`). `null`, the default, matches every card.                                                                                                                                                                   |
-| `target`  | Required. `{ boardKey, phaseKey? }` sets where matching cards land; without `phaseKey` they land in the board's first phase. The board must be installed in the project (code or stored), and the phase can't be terminal and must be reachable from the board's first phase. |
+| Field               | Meaning                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`              | Up to 120 characters.                                                                                                                                                                                                                                                                                                                                                                              |
+| `enabled`           | Defaults to `true`. Disabled routes are skipped.                                                                                                                                                                                                                                                                                                                                                   |
+| `on`                | The board events the route handles: `work_item.created` (the default), `work_item.closed` and `work_item.reopened`. Each at most once. `work_item.commented` and `work_item.edited` are activity, which never moves a card, so a route can't name them.                                                                                                                                            |
+| `when`              | A rule over the card's facts (the same format as `autoStartWhen`). `null`, the default, matches every card. A route that handles more than `work_item.created` can also test `event.type` and `event.reason`.                                                                                                                                                                                      |
+| `target`            | Required. `{ boardKey, phaseKey? }` sets where matching cards land; without `phaseKey` they land in the board's first phase. The board must be installed in the project (code or stored). For a route on `work_item.created`, the phase can't be terminal and must be reachable from the board's first phase; a route that only moves existing cards can target any phase, terminal ones included. |
+| `allowWorkingPhase` | Defaults to `false`. A status move into a working phase (one that starts runs, such as Triage) is refused unless this is `true`, so a reopened card doesn't re-run Triage by accident.                                                                                                                                                                                                             |
 
 Routes are evaluated in `position` order (0 first). Rules can test these card facts: `item.labels`, `item.title`, `item.author`, `source.kind` (`issue`, `pull_request`, …), `source.integration` (`github`, `gitlab`, `linear`, `jira`, `incidentio`, …) and `author.trusted`. `author.trusted` is `true` when the card carries an `authorTrusted: true` or `factoryAuthored: true` stamp. GitHub and GitLab stamp `authorTrusted` from the author's repository permission, and a stamp that is missing counts as untrusted.
 
@@ -761,16 +777,46 @@ A card a route placed records the route's id in its `intakeRouteId` metadata and
 
 Not covered: a pull request routed to a board other than Work or Review no longer gets Factory review, because review requests and pushes only act on pull request cards on those boards.
 
+#### Status events move existing cards
+
+Every integration reports issue status changes with the same names: `work_item.created` when an issue is first seen, `work_item.closed` when it closes, and `work_item.reopened` when it reopens (GitHub and GitLab; Linear, Jira and incident.io report opens and closes only). A close carries `event.reason`: `canceled` for GitHub's "not planned" and "duplicate" and for Linear, Jira and incident.io canceled states, `completed` otherwise (GitLab closes are always `completed`).
+
+When one of these arrives for a card that already exists, the first enabled route on the card's board whose `on` names the event and whose `when` matches the card and the event moves the card to the route's phase:
+
+- The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route`, made by actor `intake-route:<routeId>`).
+- The move clears the card's armed autonomy. A provider event is not a person's go-ahead, so a reopened card waits for a person or the project's auto-run before a phase run starts.
+- It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
+- It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
+- A move into a working or resting phase waits for a run in flight on the card to end, then moves the card. While it waits it goes back to the queue, so it never holds a dispatch slot.
+- The source's last status wins. When an issue is closed and reopened before Factory applies the close, the close is dropped and the card stays where it was.
+- A move into a terminal phase doesn't wait: it runs terminal cleanup like any other, so a session still running on the card is aborted at once, as a close always has.
+- A close moves only an unfinished card, and a reopen only a finished one. Redelivered or reconciled webhooks move the card once.
+
+Only routes targeting the card's own board apply; a route naming another board is skipped. A route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
+
+A deployment that answers an event itself keeps routes out of it: a handler or `null` set explicitly on the integration's `rules` for `issueClosed`, `issueReopened`, `issueCommentCreated` and so on, or `null` on the card's board handlers. An override that moves nothing really moves nothing. A board handler that wraps or returns the stock close move is different: that move still goes to the routes, as the stock handler's own would.
+
+#### Activity reaches the card's session
+
+A new comment on a card's GitHub or GitLab issue, or an edit to its title or description, tells the session working the card, with pointers only:
+
+```text
+New comment by @alice on acme/repo#42: https://github.com/acme/repo/issues/42#issuecomment-100
+acme/repo#42 was edited by @bob (untrusted author): https://github.com/acme/repo/issues/42
+```
+
+The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped, and so are edits to an existing GitLab comment. An idle session is woken by GitHub activity from a trusted author. Activity from an untrusted author never wakes a session, and neither does GitLab activity: GitLab deliveries don't say whether Factory wrote a comment, so a session could otherwise wake itself with its own comments. That activity is sent as a `low` priority notification, which never starts a run: it waits in the session's notifications, and the session's next run is told it is there. Otherwise, activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
+
 **Routes.** Reading needs a signed-in user of the project's organization. Changes need an organization admin when auth is enabled. Deleting or reordering routes renumbers the routes after it and bumps their `revision`, so an update sent with an older `expectedRevision` is refused with 409 and must be retried with the current one. Changes are recorded in the audit log as `factory.intake_route.created`, `updated`, `deleted` and `reordered`.
 
-| Method   | Path                                                                  | Body                                                       | Result                                                                                                                                                                                           |
-| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`    | `/web/factory/projects/:id/intake-routes`                             | —                                                          | `intakeRoutes` in order.                                                                                                                                                                         |
-| `GET`    | `/web/factory/projects/:id/intake-routes/:routeId`                    | —                                                          | The route.                                                                                                                                                                                       |
-| `POST`   | `/web/factory/projects/:id/intake-routes`                             | The route.                                                 | `201` and the route, added at the end. `422 unknown_board`, `unknown_phase`, `terminal_phase` or `unreachable_phase` for a target cards can't land on. `409 intake_route_limit` past 100 routes. |
-| `PATCH`  | `/web/factory/projects/:id/intake-routes/:routeId`                    | The fields to change, plus `expectedRevision`.             | The route.                                                                                                                                                                                       |
-| `DELETE` | `/web/factory/projects/:id/intake-routes/:routeId?expectedRevision=n` | —                                                          | `204`.                                                                                                                                                                                           |
-| `POST`   | `/web/factory/projects/:id/intake-routes/reorder`                     | `{ "ids": [...] }`: every route of the project, once each. | The routes in their new order. `409 intake_route_set_mismatch` if the list differs from the project's routes.                                                                                    |
+| Method   | Path                                                                  | Body                                                       | Result                                                                                                                                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/web/factory/projects/:id/intake-routes`                             | —                                                          | `intakeRoutes` in order.                                                                                                                                                                                                                                                                            |
+| `GET`    | `/web/factory/projects/:id/intake-routes/:routeId`                    | —                                                          | The route.                                                                                                                                                                                                                                                                                          |
+| `POST`   | `/web/factory/projects/:id/intake-routes`                             | The route.                                                 | `201` and the route, added at the end. `422 unknown_board`, `unknown_phase`, `terminal_phase` or `unreachable_phase` for a target cards can't land on; `422 invalid_intake_route` for a bad `on` or a `when` testing `event.*` on a placement-only route. `409 intake_route_limit` past 100 routes. |
+| `PATCH`  | `/web/factory/projects/:id/intake-routes/:routeId`                    | The fields to change, plus `expectedRevision`.             | The route.                                                                                                                                                                                                                                                                                          |
+| `DELETE` | `/web/factory/projects/:id/intake-routes/:routeId?expectedRevision=n` | —                                                          | `204`.                                                                                                                                                                                                                                                                                              |
+| `POST`   | `/web/factory/projects/:id/intake-routes/reorder`                     | `{ "ids": [...] }`: every route of the project, once each. | The routes in their new order. `409 intake_route_set_mismatch` if the list differs from the project's routes.                                                                                                                                                                                       |
 
 A stale `expectedRevision` is refused with `409 revision_mismatch`. Each route reports `problems`, for example when its board has since been deleted. Such a route places no cards.
 
@@ -783,6 +829,25 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'cont
     { "field": "source.kind", "operator": "equals", "value": "issue" }
   ] },
   "target": { "boardKey": "work", "phaseKey": "triage" }
+}'
+
+# Send issues closed as not planned to Done, too, instead of Canceled.
+curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$CLOSED_CANCELED_ROUTE" -H 'content-type: application/json' -d '{
+  "target": { "boardKey": "work", "phaseKey": "done" },
+  "expectedRevision": 1
+}'
+
+# Send reopened bugs back to Triage to run again. A new route is added at the end, after the
+# default reopen route that matches every reopen, so then move it ahead of that one with
+# POST .../intake-routes/reorder.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
+  "name": "Reopened bugs re-run Triage",
+  "on": ["work_item.reopened"],
+  "when": { "operator": "AND", "conditions": [
+    { "field": "item.labels", "operator": "contains", "value": "bug" }
+  ] },
+  "target": { "boardKey": "work", "phaseKey": "triage" },
+  "allowWorkingPhase": true
 }'
 
 # Let outside authors' issues go where label routes send them, instead of Intake.
@@ -967,7 +1032,7 @@ Both integrations expose incidents and incident follow-ups as separate Intake so
 
 ### Linear workspace connections
 
-For Platform-managed Linear connections, Settings → Connections lists each workspace, including disconnected workspaces. Healthy workspaces offer **Manage**; disconnected workspaces offer **Reconnect**. To add another workspace, open **Add connection**, then choose **Add workspace**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
+For Platform-managed Linear connections, **Settings → Work Intake** connects and repairs workspaces in place. A disconnected workspace with saved sources shows **Reconnect** on the Linear card; healthy ones need no action. A disconnected workspace without saved sources has nothing paused, so it has no Reconnect; authorize it again with **Connect**. To add another workspace, choose **Connect** next to Linear under **Add a source**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
 
 Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources and polling from healthy workspaces remain available when another workspace's source request fails.
 
@@ -1095,6 +1160,54 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
+### Mastra Connect and your own tools in sessions
+
+With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of each connection attached to the Platform project. Attach and remove connections in Mastra Platform, on the project's **Connect** page. The organization's other connections reach sessions only once they're attached, and a new project has none. **Settings → Tools** lists what sessions get, read from the same Platform list. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Attach Linear, and a Slack thread, a web chat or a work item can ask about its issues.
+
+Sessions run these tools without asking while automatic approval is on, so only attach accounts whose actions sessions may take. When a person turns approval off, the tools follow the `mcp` permission category, except in Slack with `adapterOptions.toolDisplay: 'text'`, where every tool call is approved automatically. Tools with `delete` or `archive` anywhere in their name, in any case, are left out. That check goes by name only, so it can't catch every destructive action, such as a SQL tool running a `DROP`. GitHub and GitLab Connect tools are left out too: Factory's own source-control tools enforce repository scope and self-review, and Connect's would skip both. Every user and organization on the Factory shares the project's connections, and a connection attached for another app on the same project reaches Factory sessions too. `GET /web/integrations/platform/connect-tools` backs the settings page.
+
+Connect caches the connection list for 30 seconds. When a later refresh fails, sessions keep the last list it got, including a connection removed since, until a refresh succeeds. A run with no list yet waits at most 15 seconds for one, then goes on without Connect tools, and Factory logs why. If the Platform stalls instead of failing, later runs also go without them until that listing answers or fails.
+
+`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none. Factory doesn't filter the tools you pass: the example below includes `linear_delete_issue`, so narrow it with Connect's `allowTools` or `disallowTools`.
+
+```typescript
+import { tools as connectTools } from '@mastra/connect';
+import { MastraFactory } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  // ...
+  tools: connectTools({ providers: ['linear'] }),
+});
+```
+
+A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error.
+
+Factory doesn't read MCP servers from the host's `mcp.json` files, and logs a warning at startup when `~/.mastracode/mcp.json` exists. Pass MCP tools through `tools` instead:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('https://tickets.example.com/mcp') } } });
+
+const factory = new MastraFactory({
+  // ...
+  tools: await mcp.listTools(),
+});
+```
+
+### Voice input
+
+The composer mic first asks `POST /web/voice/live-session`. When the chosen model has a realtime model (Mistral Voxtral), the server mints a short-lived Mistral `rt_` token with the selected key and the browser streams 16 kHz PCM to Mistral's realtime socket, so words appear in the draft while you speak. Every other provider answers `{ mode: 'batch' }`, and so does Mistral when it won't mint a token for a key that can still transcribe (for example one without the `create_client_session` permission): the browser records a clip and posts it to `POST /web/voice/transcribe`, where the server transcribes it with a provider from the Mastra Code speech-to-text registry (`@mastra/code-sdk/voice/stt-registry`). A rejected or out-of-credit Mistral key answers 502 before anything is recorded; other providers report a bad key only when the clip is transcribed. API keys never reach the browser. Each member can start 20 live sessions or transcriptions a minute on each server process (the counters are in memory); past that both routes answer 429 `voice_rate_limited` with `Retry-After`, before anything is recorded. Only a minted live session or a transcription counts, so when Mistral won't mint a token and the browser records a clip instead, that dictation counts once.
+
+Voice input resolves its model and key the way an interactive chat in the same Factory does:
+
+- `factory` model scope: the Factory's voice model with organization keys. Only organization admins change the model.
+- `user` or `hybrid` model scope: each member's own voice model with personal keys. Organization keys are never used.
+
+Either side starts on auto, the first registry provider with a key. OAuth subscriptions are never used. With sign-in enabled, keys come only from stored credentials; in local mode the provider env var applies before a stored key. `GET`/`PUT /web/voice/settings` back **Settings → Models → Voice input**.
+
+Voice clips recorded in Slack and sent to a Factory session (a mention, a DM, or a thread the bot is in) are transcribed the same way under the thread's Factory, with the sender as the member, before the agent sees the message. A thread with no Factory session uses the sender's own voice model and key. The transcript replaces the clip. A clip that can't be transcribed is dropped from the message and the sender gets a card only they can see, with the reason and, for a missing, rejected or out-of-credit key, an **Open voice settings** button; when nothing but mentions is left in the message, the agent doesn't run. Uploaded audio files stay attachments.
+
 ### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
@@ -1103,7 +1216,7 @@ A Factory with an auth provider and an OAuth authorization server serves an MCP 
 https://<your-factory>/web/factory/projects/<projectId>/mcp
 ```
 
-Copy it from **Settings → Connections → MCP clients** in the Factory UI. The card only appears when the endpoint is served (`/web/config/features` reports `mcp: true`).
+The Factory UI does not show this URL while the MCP endpoint is being reworked. Build it from your Factory URL and project id as shown above.
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 

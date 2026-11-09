@@ -1036,6 +1036,13 @@ export const NEW_ROUTE_DEFS = {
     description: 'Returns a paginated list of feedback with optional filtering and sorting',
   },
 
+  GET_FEEDBACK: {
+    method: 'GET',
+    path: '/observability/feedback/:feedbackId',
+    summary: 'Get feedback',
+    description: 'Returns a single feedback record by feedbackId',
+  },
+
   CREATE_FEEDBACK: {
     method: 'POST',
     path: '/observability/feedback',
