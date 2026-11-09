@@ -485,7 +485,12 @@ export class Computers implements MastraComputers {
           control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
           createdAt: Date.now(),
         };
-        await stores.computers!.setComputer(record);
+        try {
+          await stores.computers!.setComputer(record);
+        } catch (error) {
+          await sandbox.destroy().catch(() => {});
+          throw error;
+        }
       }
       this.#computers.set(entry.id, entry);
       this.#attach(scope, entry);

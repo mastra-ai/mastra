@@ -10,7 +10,7 @@ function sandbox(id = 'sandbox-1'): ComputerSandbox {
   return {
     sandboxId: id,
     async start() {},
-    async destroy() {},
+    destroy: vi.fn(async () => {}),
     async captureCheckpoint() {
       return { status: 'captured' };
     },
@@ -240,6 +240,24 @@ describe('Computers', () => {
       holder: 'agent',
       revision: 2,
     });
+  });
+
+  it('destroys a provisioned sandbox when the persistent catalog write fails', async () => {
+    const storage = new InMemoryStore();
+    const computerStorage = new InMemoryComputersStorage();
+    computerStorage.setComputer = vi.fn(async () => {
+      throw new Error('catalog unavailable');
+    });
+    storage.stores.computers = computerStorage;
+    const created: ComputerSandbox[] = [];
+    const computers = new Computers({ provider: provider(created), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+
+    await expect(
+      (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context),
+    ).rejects.toThrow('catalog unavailable');
+    expect(created).toHaveLength(1);
+    expect(created[0]!.destroy).toHaveBeenCalledOnce();
   });
 
   it('fails persistent creation before provisioning when computer storage is unavailable', async () => {
