@@ -253,6 +253,76 @@ describe('Span Filtering', () => {
       expect(spanTypes).toContain(SpanType.AGENT_RUN);
     });
 
+    it('should reparent descendants of a span dropped by spanFilter so exporters see no orphans', () => {
+      // Same tree as the excludeSpanTypes case above: tool calls are children of
+      // MODEL_STEP, so dropping the step must not leave them pointing at a span
+      // exporters never received.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: (span: AnyExportedSpan) => span.type !== SpanType.MODEL_STEP,
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+      const stepSpan = modelSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'test-step',
+      });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+
+      toolSpan.end();
+      stepSpan.end();
+      modelSpan.end();
+      agentSpan.end();
+
+      const exported = testExporter.events.map(e => e.exportedSpan);
+      const byId = new Map(exported.map(s => [s.id, s]));
+      expect(exported.map(s => s.type)).not.toContain(SpanType.MODEL_STEP);
+      expect(exported.find(s => s.type === SpanType.TOOL_CALL)?.parentSpanId).toBe(modelSpan.id);
+      const orphans = exported.filter(s => s.parentSpanId && !byId.has(s.parentSpanId));
+      expect(orphans).toEqual([]);
+    });
+
+    it('should decide once at creation so a span is exported whole or not at all', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        // `success` is only set when the tool call ends
+        spanFilter: (span: AnyExportedSpan) =>
+          !(span.type === SpanType.TOOL_CALL && (span.attributes as { success?: boolean } | undefined)?.success),
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'test-tool',
+      });
+      toolSpan.end({ attributes: { success: true } });
+      agentSpan.end();
+
+      const toolEvents = testExporter.events.filter(e => e.exportedSpan.type === SpanType.TOOL_CALL).map(e => e.type);
+      expect(toolEvents).toEqual(['span_started', 'span_ended']);
+    });
+
     it('should keep spans when filter returns true', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
@@ -731,6 +801,50 @@ describe('Span Filtering', () => {
           model: 'mock-model-id',
           costUnit: 'USD',
           estimatedCost: 0.000007,
+        });
+      } finally {
+        await tracing.shutdown();
+        pricingRegistrySpy.mockRestore();
+      }
+    });
+
+    it('should emit token and cost metrics for model spans dropped by spanFilter', async () => {
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        spanFilter: (span: AnyExportedSpan) => span.type !== SpanType.MODEL_GENERATION,
+      });
+
+      try {
+        const agentSpan = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+        });
+        const modelSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: "llm: 'mock'",
+          attributes: { provider: 'mock-provider', model: 'mock-model-id' },
+        });
+        modelSpan.end({ attributes: { usage: { inputTokens: 30, outputTokens: 35 } } });
+        agentSpan.end();
+        await tracing.flush();
+
+        expect(collector.tracingEvents.map(e => e.exportedSpan.type)).not.toContain(SpanType.MODEL_GENERATION);
+
+        const inputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_input_tokens',
+        );
+        expect(inputTokenMetrics).toHaveLength(1);
+        expect(inputTokenMetrics[0]?.metric.value).toBe(30);
+        expect(inputTokenMetrics[0]?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+          estimatedCost: 0.000003,
         });
       } finally {
         await tracing.shutdown();
