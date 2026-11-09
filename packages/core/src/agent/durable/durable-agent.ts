@@ -54,7 +54,7 @@ import { AgentStreamBus } from '../streams/bus';
 import type { AgentStreamsConfig } from '../streams/types';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConfig, ToolsInput } from '../types';
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
@@ -84,6 +84,8 @@ import type { UntrackedRunLiveness } from './execution-fence';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
+import { createRunAbortController } from './run-abort';
+import { createRunCleanup } from './run-cleanup';
 import { recordRunSavedMessages } from './run-message-refs';
 import {
   deleteRunRegistryEntry,
@@ -870,8 +872,6 @@ export class DurableAgent<
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
       notifications: agent.__getNotificationConfig(),
-      // Runs publish through this wrapper's own stream bus.
-      durable: false,
     });
 
     this.#wrappedAgent = agent;
@@ -955,6 +955,16 @@ export class DurableAgent<
   /** Durable runs always publish on their stream topic. */
   override hasResumableStreams(): boolean {
     return true;
+  }
+
+  /** Runs publish through this wrapper's own stream bus, never the plain Agent publisher. @internal */
+  protected override __ownsPlainStreamPublisher(): boolean {
+    return false;
+  }
+
+  /** Kept `false`, the value this getter has always reported for durable agents. */
+  override get durable(): AgentDurableOption | undefined {
+    return false;
   }
 
   /** @internal */
@@ -3115,18 +3125,7 @@ export class DurableAgent<
     // to thread it into the model call + abort short-circuits. If the caller
     // also supplied an external signal, forward its abort to the internal
     // controller so either source can cancel the run.
-    const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
-      }
-    }
+    const { controller: abortController } = createRunAbortController(options?.abortSignal);
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -3143,9 +3142,6 @@ export class DurableAgent<
     const segment = Symbol(runId);
     this.#segmentOwner.set(runId, segment);
 
-    // Track cleanup state to avoid double cleanup
-    let cleanedUp = false;
-    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
     // Assigned once the stream is created below. Declared here so the shared
     // performCleanup() closure can unsubscribe the pubsub reader (via
     // streamCleanup) from both the auto-cleanup timer and the explicit
@@ -3158,36 +3154,29 @@ export class DurableAgent<
     // still owns — an execution that recovered the run in this process holds
     // its own. The topic stays when the run's latest execution here (this one
     // or a later resume()) lost the run: whoever took it over, in any process,
-    // writes to it. Idempotent via `cleanedUp`.
-    const performCleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (cleanedUp) return;
-
-      agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-      streamCleanup?.();
-      // A deferred cleanup must not tear down a newer segment (e.g. resume())
-      // registered under the same run id.
-      if (this.#segmentOwner.get(runId) === segment) {
-        this.#segmentOwner.delete(runId);
-        if (this.#runRegistry.get(runId) === registryEntry) {
-          this.#runRegistry.cleanup(runId);
+    // writes to it. Runs at most once.
+    const runCleanup = createRunCleanup({
+      scheduleTimer: cleanup => this.#streams.scheduleCleanup(cleanup),
+      release: () => {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
+        streamCleanup?.();
+        // A deferred cleanup must not tear down a newer segment (e.g. resume())
+        // registered under the same run id.
+        if (this.#segmentOwner.get(runId) === segment) {
+          this.#segmentOwner.delete(runId);
+          if (this.#runRegistry.get(runId) === registryEntry) {
+            this.#runRegistry.cleanup(runId);
+          }
+          if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
+            globalRunRegistry.delete(runId);
+            if (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
+          }
         }
-        if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
-          globalRunRegistry.delete(runId);
-          if (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
-        }
-      }
-      cleanedUp = true;
-    };
-
+      },
+    });
+    const performCleanup = runCleanup.run;
     // Schedule automatic registry cleanup after stream ends
-    const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
-      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
-    };
+    const scheduleAutoCleanup = runCleanup.schedule;
 
     // Whether this caller's stream closes at the suspension boundary. Defaults
     // to false (stream stays open for a same-reader resume). The same value
@@ -3325,7 +3314,7 @@ export class DurableAgent<
     // background. Tearing down the reader first would drop it, leaving the
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
-      if (cleanedUp || output.status !== 'running') return performCleanup();
+      if (runCleanup.done || output.status !== 'running') return performCleanup();
       void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.pubsub.flush())
         .then(() => waitForEventDelivery())
@@ -3828,23 +3817,9 @@ export class DurableAgent<
     // controller is gone (the stream that owned it has already settled), so
     // we overwrite the registry slot. If the caller passed an external
     // signal, forward it onto the new internal controller.
-    const abortController = new AbortController();
-    const externalAbortSignal = resolvedOptions.abortSignal;
-    const forwardExternalAbort = () => abortController.abort(externalAbortSignal?.reason);
-    let externalAbortAttached = false;
-    const detachExternalAbort = () => {
-      if (!externalAbortAttached) return;
-      externalAbortSignal?.removeEventListener('abort', forwardExternalAbort);
-      externalAbortAttached = false;
-    };
-    if (externalAbortSignal) {
-      if (externalAbortSignal.aborted) {
-        forwardExternalAbort();
-      } else {
-        externalAbortSignal.addEventListener('abort', forwardExternalAbort, { once: true });
-        externalAbortAttached = true;
-      }
-    }
+    const { controller: abortController, detach: detachExternalAbort } = createRunAbortController(
+      resolvedOptions.abortSignal,
+    );
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -3867,9 +3842,6 @@ export class DurableAgent<
     const segment = Symbol(runId);
     this.#segmentOwner.set(runId, segment);
 
-    // Track cleanup state to avoid double cleanup
-    let cleanedUp = false;
-    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
     // Assigned once the stream is created below so the shared performCleanup()
     // closure can unsubscribe the pubsub reader (via streamCleanup) from both
     // the auto-cleanup timer and the explicit cleanup() path — mirroring observe().
@@ -3883,35 +3855,28 @@ export class DurableAgent<
     // still owns — an execution that recovered the run in this process holds
     // its own. The topic stays when the run's latest execution here (this one
     // or a later resume()) lost the run: whoever took it over, in any process,
-    // writes to it. Idempotent via `cleanedUp`.
-    const performCleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (cleanedUp) return;
-
-      agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-      streamCleanup?.();
-      if (this.#segmentOwner.get(runId) === segment) {
-        this.#segmentOwner.delete(runId);
-        if (this.#runRegistry.get(runId) === entry) {
-          this.#runRegistry.cleanup(runId);
-        }
-        if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
-          globalRunRegistry.delete(runId);
-          if (!lostResumeRace && (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()) {
-            this.#clearPubsubTopic(runId);
+    // writes to it. Runs at most once.
+    const runCleanup = createRunCleanup({
+      scheduleTimer: cleanup => this.#streams.scheduleCleanup(cleanup),
+      release: () => {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
+        streamCleanup?.();
+        if (this.#segmentOwner.get(runId) === segment) {
+          this.#segmentOwner.delete(runId);
+          if (this.#runRegistry.get(runId) === entry) {
+            this.#runRegistry.cleanup(runId);
+          }
+          if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
+            globalRunRegistry.delete(runId);
+            if (!lostResumeRace && (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()) {
+              this.#clearPubsubTopic(runId);
+            }
           }
         }
-      }
-      cleanedUp = true;
-    };
-
-    const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
-      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
-    };
+      },
+    });
+    const performCleanup = runCleanup.run;
+    const scheduleAutoCleanup = runCleanup.schedule;
 
     const globalEntry = getRunRegistryEntry(runId, this.#mastra);
     const resumeModel = globalEntry?.model as any;
@@ -4315,18 +4280,7 @@ export class DurableAgent<
     //    snapshot.
     this.#assertRecoveryActive();
     const releaseLocalRecovery = this.#claimLocalRecovery(runId);
-    const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
-      }
-    }
+    const { controller: abortController } = createRunAbortController(options?.abortSignal);
 
     let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
@@ -4403,8 +4357,6 @@ export class DurableAgent<
     registryEntry.executionFence = executionFence;
 
     // 3. Cleanup plumbing (mirrors stream()/resume()).
-    let cleanedUp = false;
-    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
     // Assigned once the recovered stream is created below so the shared
     // performCleanup() closure can unsubscribe the pubsub reader (via
     // streamCleanup) from both the auto-cleanup timer and the explicit
@@ -4420,26 +4372,21 @@ export class DurableAgent<
         // later resume()) lost the run: whoever took it over writes to it.
         if (registryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
       }
-      cleanedUp = true;
     };
     // Single cleanup path for the auto-cleanup timer, the explicit cleanup(),
     // and the recovery error paths. Revokes continuation before unsubscribing
-    // the pubsub reader, then tears down the owned registry entries. Idempotent
-    // via `cleanedUp`.
-    const performCleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (cleanedUp) return;
-      agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-      streamCleanup?.();
-      cleanupOwnedRegistryState();
-    };
-    const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
-      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
-    };
+    // the pubsub reader, then tears down the owned registry entries. Runs at
+    // most once.
+    const runCleanup = createRunCleanup({
+      scheduleTimer: cleanup => this.#streams.scheduleCleanup(cleanup),
+      release: () => {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
+        streamCleanup?.();
+        cleanupOwnedRegistryState();
+      },
+    });
+    const performCleanup = runCleanup.run;
+    const scheduleAutoCleanup = runCleanup.schedule;
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
     try {
@@ -4758,18 +4705,7 @@ export class DurableAgent<
     // to thread it into the model call + abort short-circuits. If the caller
     // also supplied an external signal, forward its abort to the internal
     // controller so either source can cancel the run.
-    const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
-      }
-    }
+    const { controller: abortController } = createRunAbortController(options?.abortSignal);
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -4783,10 +4719,6 @@ export class DurableAgent<
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
-
-    // Track cleanup state to avoid double cleanup
-    let cleanedUp = false;
-    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
     // Tears down the registry entries and pubsub topic this execution still
     // owns, as stream() does: an execution that recovered the run in this
@@ -4802,17 +4734,19 @@ export class DurableAgent<
       }
     };
 
+    // The explicit cleanup() also revokes continuation and unsubscribes the
+    // pubsub reader; the auto-cleanup timer only releases the run state.
+    const runCleanup = createRunCleanup({
+      scheduleTimer: cleanup => this.#streams.scheduleCleanup(cleanup),
+      release: () => {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
+        streamCleanup();
+        releaseRunState();
+      },
+      releaseOnTimer: releaseRunState,
+    });
     // Schedule automatic registry cleanup after stream ends
-    const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
-      autoCleanupTimer =
-        this.#streams.scheduleCleanup(() => {
-          if (!cleanedUp) {
-            releaseRunState();
-            cleanedUp = true;
-          }
-        }) ?? null;
-    };
+    const scheduleAutoCleanup = runCleanup.schedule;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
@@ -4906,18 +4840,7 @@ export class DurableAgent<
     }
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-        streamCleanup();
-        releaseRunState();
-        cleanedUp = true;
-      }
-    };
+    const cleanup = runCleanup.run;
 
     let suspended = false;
     try {
@@ -5551,32 +5474,22 @@ export class DurableAgent<
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
     let memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
-    // Track cleanup state to avoid double cleanup
-    let cleanedUp = false;
     let terminalCompleted = false;
     let abortPending = false;
     let cleanupRequested = false;
-    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
     let streamCleanup: (() => void) | undefined;
 
-    const performCleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (cleanedUp) return;
-
-      streamCleanup?.();
-      this.#runRegistry.cleanup(runId);
-      deleteRunRegistryEntry(runId, this.#mastra);
-      this.#clearPubsubTopic(runId);
-      cleanedUp = true;
-    };
-
-    const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
-      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
-    };
+    const runCleanup = createRunCleanup({
+      scheduleTimer: cleanup => this.#streams.scheduleCleanup(cleanup),
+      release: () => {
+        streamCleanup?.();
+        this.#runRegistry.cleanup(runId);
+        deleteRunRegistryEntry(runId, this.#mastra);
+        this.#clearPubsubTopic(runId);
+      },
+    });
+    const performCleanup = runCleanup.run;
+    const scheduleAutoCleanup = runCleanup.schedule;
 
     const completeTerminalLifecycle = () => {
       terminalCompleted = true;

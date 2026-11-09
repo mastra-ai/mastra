@@ -3,7 +3,7 @@ import type { StatelessWidgetPin } from '@mastra/playground-ui/domains/dashboard
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY, OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY } from './tool';
-import type { ObservabilityDatePreset, ObservabilityWidgetPin } from './tool';
+import type { ObservabilityDatePreset, ObservabilityWidgetDateRange, ObservabilityWidgetPin } from './tool';
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(item => typeof item === 'string');
@@ -29,7 +29,8 @@ function useHostPinnedIds(app: App): readonly string[] | undefined {
 export function usePin(
   app: App,
   widget: DashboardWidget,
-  datePreset: ObservabilityDatePreset,
+  datePreset: ObservabilityDatePreset | 'custom',
+  customRange: ObservabilityWidgetDateRange | undefined,
   filters: readonly unknown[] | undefined,
 ): StatelessWidgetPin | undefined {
   const hostIds = useHostPinnedIds(app);
@@ -57,6 +58,7 @@ export function usePin(
         pinned,
         widget,
         datePreset,
+        ...(customRange ? { customRange } : {}),
         ...(filters?.length ? { filters: [...filters] } : {}),
       };
       app

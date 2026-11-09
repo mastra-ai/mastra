@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.83.0-alpha.2
+
+### Patch Changes
+
+- Share the run-ownership authorization policy between observe and abort routes while preserving their separate read/write permissions, thread access checks, and existing responses. ([#29600](https://github.com/mastra-ai/mastra/pull/29600))
+
+- Updated dependencies:
+  - @mastra/core@1.83.0-alpha.2
+
 ## 1.83.0-alpha.1
 
 ### Minor Changes
