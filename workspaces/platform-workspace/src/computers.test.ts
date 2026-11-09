@@ -791,6 +791,81 @@ describe('ordering through a real agent at default tool concurrency', () => {
     expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
   });
 
+  it('reuses one caller context across Agent runs with different computer identities', async () => {
+    const computers = make();
+    const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    const requestContext = new RequestContext();
+    const run = async (thread: string, resource: string) => {
+      const agent = new Agent({
+        id: `computer-${thread}`,
+        name: `computer-${thread}`,
+        instructions: 'Create and inspect the computer.',
+        model: sequentialToolCallModel([
+          { toolName: 'mastra_workspace_computer_create', input: { name: thread } },
+          { toolName: WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, input: {} },
+        ]) as any,
+        tools: computers.tools(),
+        workspace,
+      });
+      await agent.generate('go', { maxSteps: 4, memory: { thread, resource }, requestContext });
+    };
+
+    await run('t1', 'r1');
+    await run('t2', 'r2');
+
+    expect(backend.actions).toEqual(['screenshot', 'screenshot']);
+    expect((await computers.tools().mastra_workspace_computer_list.execute({}, ctx('r1', 't1'))).computers).toEqual([
+      expect.objectContaining({ name: 't1', status: 'attached' }),
+    ]);
+    expect((await computers.tools().mastra_workspace_computer_list.execute({}, ctx('r2', 't2'))).computers).toEqual([
+      expect.objectContaining({ name: 't2', status: 'attached' }),
+    ]);
+  });
+
+  it('keeps non-identity context values live across computer tools', async () => {
+    const computers = make();
+    const source = new RequestContext();
+    let scopedContext: RequestContext | undefined;
+    const sandboxResolver = computers.sandboxResolver();
+    const workspace = new Workspace({
+      sandbox: async ({ requestContext }) => {
+        if (requestContext.get(MASTRA_THREAD_ID_KEY)) {
+          scopedContext = requestContext;
+          requestContext.setRaw('computer-view-write', 'visible');
+        }
+        return sandboxResolver({ requestContext });
+      },
+      computerTools: 'resolve',
+    });
+    const setContext = createTool({
+      id: 'set-live-context',
+      description: 'Set a live request-context value.',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        context.requestContext?.setRaw('later-tool-write', 'visible');
+        return 'set';
+      },
+    });
+    await computers.tools().mastra_workspace_computer_create.execute({}, ctx('r1', 't1'));
+    const agent = new Agent({
+      id: 'computer-live-context',
+      name: 'computer-live-context',
+      instructions: 'Inspect, update context, and inspect again.',
+      model: sequentialToolCallModel([
+        { toolName: WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, input: {} },
+        { toolName: 'set-live-context', input: {} },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, input: {} },
+      ]) as any,
+      tools: { 'set-live-context': setContext },
+      workspace,
+    });
+
+    await agent.generate('go', { maxSteps: 5, memory: { thread: 't1', resource: 'r1' }, requestContext: source });
+
+    expect(source.getRaw('computer-view-write')).toBe('visible');
+    expect(scopedContext?.getRaw('later-tool-write')).toBe('visible');
+  });
+
   it('reuses one derived context for dynamic computer workspace providers in a real Agent run', async () => {
     const computers = make();
     let scopedSandboxResolutions = 0;

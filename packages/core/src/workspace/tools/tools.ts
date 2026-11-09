@@ -270,8 +270,99 @@ const COMPUTER_MUTATION_TOOLS = new Set<string>([
   WORKSPACE_TOOLS.COMPUTER.SCROLL,
 ]);
 
-const COMPUTER_REQUEST_CONTEXTS = new WeakMap<RequestContext, RequestContext>();
+const COMPUTER_REQUEST_CONTEXTS = new WeakMap<RequestContext, Map<string, RequestContext>>();
 const COMPUTER_IDENTITY_MISMATCH = 'computer identity mismatch between Agent and reserved request context';
+
+class ComputerRequestContextView extends RequestContext {
+  readonly #source: RequestContext;
+  readonly #identity: Map<string, string>;
+
+  constructor(source: RequestContext, threadId?: string, resourceId?: string) {
+    super();
+    this.#source = source;
+    this.#identity = new Map([
+      ...(threadId ? [[MASTRA_THREAD_ID_KEY, threadId] as const] : []),
+      ...(resourceId ? [[MASTRA_RESOURCE_ID_KEY, resourceId] as const] : []),
+    ]);
+    Object.defineProperty(this, REQUEST_CONTEXT_INPUT_SOURCE, { value: source });
+  }
+
+  #entries(): Map<string, unknown> {
+    const entries = new Map<string, unknown>(this.#identity);
+    for (const [key, value] of this.#source.entries()) entries.set(key, value);
+    return entries;
+  }
+
+  public override get(key: string): any {
+    return this.#source.hasRaw(key) ? this.#source.getRaw(key) : this.#identity.get(key);
+  }
+
+  public override getRaw(key: string): unknown {
+    return this.get(key);
+  }
+
+  public override set(key: string, value: any): void {
+    this.#source.setRaw(key, value);
+  }
+
+  public override setRaw(key: string, value: unknown): void {
+    this.#source.setRaw(key, value);
+  }
+
+  public override has(key: string): boolean {
+    return this.#source.hasRaw(key) || this.#identity.has(key);
+  }
+
+  public override hasRaw(key: string): boolean {
+    return this.has(key);
+  }
+
+  public override delete(key: string): boolean {
+    return this.#source.deleteRaw(key);
+  }
+
+  public override deleteRaw(key: string): boolean {
+    return this.#source.deleteRaw(key);
+  }
+
+  public override clear(): void {
+    this.#source.clear();
+  }
+
+  public override keys(): IterableIterator<string> {
+    return this.#entries().keys();
+  }
+
+  public override values(): IterableIterator<unknown> {
+    return this.#entries().values();
+  }
+
+  public override entries(): IterableIterator<[string, unknown]> {
+    return this.#entries().entries();
+  }
+
+  public override size(): number {
+    return this.#entries().size;
+  }
+
+  public override forEach<K extends string>(
+    callbackfn: (value: unknown, key: K, map: Map<string, unknown>) => void,
+  ): void {
+    this.#entries().forEach(callbackfn as (value: unknown, key: string, map: Map<string, unknown>) => void);
+  }
+
+  public override toJSON(): Record<string, any> {
+    return Object.fromEntries(this.#entries());
+  }
+
+  public override serializeForSpan(): Record<string, unknown> {
+    return this.#source.serializeForSpan();
+  }
+
+  public override get all(): Record<string, any> {
+    return Object.fromEntries(this.#entries());
+  }
+}
 
 function computerExecutionContext(context: any, workspace: Workspace): any {
   if (!workspace.resolvesComputerTools()) return context;
@@ -280,9 +371,10 @@ function computerExecutionContext(context: any, workspace: Workspace): any {
   const agentResourceId = context?.agent?.resourceId as string | undefined;
   if (!agentThreadId && !agentResourceId) return context;
 
-  const source = context.requestContext as RequestContext | undefined;
-  const reservedThreadId = source?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-  const reservedResourceId = source?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  const current = context.requestContext as RequestContext | undefined;
+  const source = getRequestContextInputSource(current) ?? current ?? new RequestContext();
+  const reservedThreadId = source.getRaw(MASTRA_THREAD_ID_KEY) as string | undefined;
+  const reservedResourceId = source.getRaw(MASTRA_RESOURCE_ID_KEY) as string | undefined;
   if (
     (reservedThreadId && agentThreadId && reservedThreadId !== agentThreadId) ||
     (reservedResourceId && agentResourceId && reservedResourceId !== agentResourceId)
@@ -290,25 +382,18 @@ function computerExecutionContext(context: any, workspace: Workspace): any {
     throw new Error(COMPUTER_IDENTITY_MISMATCH);
   }
 
-  const inputSource = getRequestContextInputSource(source);
-  let requestContext = inputSource ? COMPUTER_REQUEST_CONTEXTS.get(inputSource) : undefined;
-  if (!requestContext) {
-    requestContext = new RequestContext(source?.entries());
-    if (inputSource) {
-      Object.defineProperty(requestContext, REQUEST_CONTEXT_INPUT_SOURCE, { value: inputSource });
-      COMPUTER_REQUEST_CONTEXTS.set(inputSource, requestContext);
-    }
+  const identityKey = JSON.stringify([agentThreadId ?? '', agentResourceId ?? '']);
+  let views = COMPUTER_REQUEST_CONTEXTS.get(source);
+  if (!views) {
+    views = new Map();
+    COMPUTER_REQUEST_CONTEXTS.set(source, views);
   }
-  const derivedThreadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-  const derivedResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  if (
-    (derivedThreadId && agentThreadId && derivedThreadId !== agentThreadId) ||
-    (derivedResourceId && agentResourceId && derivedResourceId !== agentResourceId)
-  ) {
-    throw new Error(COMPUTER_IDENTITY_MISMATCH);
-  }
-  if (!derivedThreadId && agentThreadId) requestContext.set(MASTRA_THREAD_ID_KEY, agentThreadId);
-  if (!derivedResourceId && agentResourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, agentResourceId);
+  const existing = views.get(identityKey);
+  if (existing) return { ...context, requestContext: existing };
+
+  // Identity is overlaid per run while every non-identity value remains a live view of the source.
+  const requestContext = new ComputerRequestContextView(source, agentThreadId, agentResourceId);
+  views.set(identityKey, requestContext);
   return { ...context, requestContext };
 }
 
