@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-09T05:58:03.852Z",
+  "generatedAt": "2026-11-09T06:02:21.920Z",
   "validatedCommit": "ed1cecba5c26a73600640f74e9a1c9d322271b23",
   "initialCommit": "a2a03b53fe71a4587ee12cd121f2f43d9ede445d",
   "sanitization": "No real credentials found; synthetic local alice/bob bearer fixtures and test model key retained. See HANDOFF.md.",
@@ -10,7 +10,7 @@
     },
     {
       "file": "REPORT.md",
-      "sha256": "dc836877050ab51e2e89a0a9bafa32cd53bf5e3aa74b5b3cefcf114f70d6844a"
+      "sha256": "3f410ce9ab058a08c96fde648953587567e99ff5dec20849ae99ce1bdf92ea88"
     },
     {
       "file": "approval-baseline.log",
