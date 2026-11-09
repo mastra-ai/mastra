@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui/new/settings';
 import { Plus, Server } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { CustomProviderInfo } from '../../../../api/types';
 import { useCustomProvidersQuery, useRemoveCustomProvider } from '../../../../hooks/use-custom-providers';
@@ -50,15 +51,12 @@ export function CustomProvidersSection() {
 
   return (
     <>
-      {loading ? (
-        <SettingsSkeleton label="Loading custom providers" variant="item" rows={2} />
-      ) : queryError ? null : providers.length === 0 ? (
-        <SettingsEmptyRow action={addProvider}>No custom providers</SettingsEmptyRow>
-      ) : (
-        <SettingsListHeader action={addProvider}>
-          {providers.length === 1 ? '1 provider' : `${providers.length} providers`}
-        </SettingsListHeader>
-      )}
+      <CustomProvidersListTop
+        loading={loading}
+        failed={queryError !== null}
+        count={providers.length}
+        addProvider={addProvider}
+      />
 
       {(error ?? queryError) && (
         <SettingsNoticeRow>
@@ -112,5 +110,25 @@ export function CustomProvidersSection() {
           </SettingsItem>
         ))}
     </>
+  );
+}
+
+/** The list's first row: a skeleton while loading, nothing if it failed, else the count or the empty row. */
+function CustomProvidersListTop({
+  loading,
+  failed,
+  count,
+  addProvider,
+}: {
+  loading: boolean;
+  failed: boolean;
+  count: number;
+  addProvider: ReactNode;
+}) {
+  if (loading) return <SettingsSkeleton label="Loading custom providers" variant="item" rows={2} />;
+  if (failed) return null;
+  if (count === 0) return <SettingsEmptyRow action={addProvider}>No custom providers</SettingsEmptyRow>;
+  return (
+    <SettingsListHeader action={addProvider}>{count === 1 ? '1 provider' : `${count} providers`}</SettingsListHeader>
   );
 }

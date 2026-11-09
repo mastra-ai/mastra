@@ -32,17 +32,18 @@ export function IntegrationItem({
     <SettingsItem
       media={<IntegrationItemIcon provider={provider} />}
       title={name}
-      description={
-        error ? (
-          <Metadata>
-            {description != null && <Metadata.Item>{description}</Metadata.Item>}
-            <Metadata.Item className="text-destructive-foreground">{error}</Metadata.Item>
-          </Metadata>
-        ) : (
-          description
-        )
-      }
+      description={error ? <IntegrationError description={description} error={error} /> : description}
       {...props}
     />
+  );
+}
+
+/** The description followed by the error, in the destructive tone. */
+function IntegrationError({ description, error }: { description: ReactNode; error: ReactNode }) {
+  return (
+    <Metadata>
+      {description != null && <Metadata.Item>{description}</Metadata.Item>}
+      <Metadata.Item className="text-destructive-foreground">{error}</Metadata.Item>
+    </Metadata>
   );
 }

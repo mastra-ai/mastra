@@ -118,7 +118,7 @@ export function ConnectedProviderRow({
       onUpdateKey={onUpdateKey}
       onRemoveKey={removeKey}
     />
-  ) : null;
+  ) : undefined;
 
   if (variant === 'settings') {
     return (

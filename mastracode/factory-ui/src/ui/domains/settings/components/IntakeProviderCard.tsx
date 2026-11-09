@@ -35,29 +35,18 @@ export function IntakeProviderCard({
   syncControl?: ReactNode;
   children?: ReactNode;
 }) {
-  const connectionAction =
-    (listed && syncControl) || action || connection ? (
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-        {listed && syncControl}
-        {action}
-        {connection}
-      </div>
-    ) : undefined;
+  const shownSync = listed ? syncControl : undefined;
+  const hasActions = Boolean(shownSync || action || connection);
+  const hasDetails = Boolean(account || description);
   const summary = (
     <SettingsItem
       media={<SettingsItemIcon>{icon}</SettingsItemIcon>}
       title={name}
-      description={
-        account || description ? (
-          // Metadata items wrap, so long status lines aren't cut off.
-          <Metadata>
-            {account && <Metadata.Item>{account}</Metadata.Item>}
-            {description && <Metadata.Item>{description}</Metadata.Item>}
-          </Metadata>
-        ) : undefined
-      }
+      description={hasDetails ? <IntakeProviderDetails account={account} description={description} /> : undefined}
     >
-      {connectionAction}
+      {hasActions ? (
+        <IntakeProviderActions syncControl={shownSync} action={action} connection={connection} />
+      ) : undefined}
     </SettingsItem>
   );
   if (!listed) return summary;
@@ -66,5 +55,33 @@ export function IntakeProviderCard({
       {summary}
       {children}
     </SettingsContainer>
+  );
+}
+
+function IntakeProviderDetails({ account, description }: { account?: string; description?: string }) {
+  return (
+    // Metadata items wrap, so long status lines aren't cut off.
+    <Metadata>
+      {account && <Metadata.Item>{account}</Metadata.Item>}
+      {description && <Metadata.Item>{description}</Metadata.Item>}
+    </Metadata>
+  );
+}
+
+function IntakeProviderActions({
+  syncControl,
+  action,
+  connection,
+}: {
+  syncControl?: ReactNode;
+  action?: ReactNode;
+  connection?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+      {syncControl}
+      {action}
+      {connection}
+    </div>
   );
 }

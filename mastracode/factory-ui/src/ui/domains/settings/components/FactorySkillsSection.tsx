@@ -8,6 +8,7 @@ import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
 import { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
@@ -315,37 +316,70 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
           )}
         </div>
       )}
-      {boards === undefined ? (
-        <SettingsSubsection scope="factory" title="Factory skills" description={SKILLS_DESCRIPTION}>
-          <SkillCards
-            displayed={DISPLAYED_SKILLS}
-            skills={skills}
-            loading={skillsQuery.isPending || catalog.isPending}
-          />
-        </SettingsSubsection>
-      ) : boards.length === 0 ? (
-        <>
-          <SettingsSubsection scope="factory" title="Factory skills" description={SKILLS_DESCRIPTION}>
-            <SettingsContainer>
-              <SettingsEmptyRow>No boards are installed, so no board skills apply.</SettingsEmptyRow>
-            </SettingsContainer>
-          </SettingsSubsection>
-          <OtherAppSkills skills={skills} boards={boards} />
-        </>
-      ) : (
-        <>
-          {boards.map(board => (
-            <BoardGroup
-              key={board.id}
-              board={board}
-              skills={skills}
-              skillsLoaded={skillsQuery.isSuccess}
-              skillsLoading={skillsQuery.isPending}
-            />
-          ))}
-          <OtherAppSkills skills={skills} boards={boards} />
-        </>
-      )}
+      <FactorySkillGroups
+        boards={boards}
+        skills={skills}
+        skillsLoaded={skillsQuery.isSuccess}
+        skillsLoading={skillsQuery.isPending}
+        catalogLoading={catalog.isPending}
+      />
     </SkillEditingContext.Provider>
+  );
+}
+
+function FactorySkillsSubsection({ children }: { children: ReactNode }) {
+  return (
+    <SettingsSubsection scope="factory" title="Factory skills" description={SKILLS_DESCRIPTION}>
+      {children}
+    </SettingsSubsection>
+  );
+}
+
+/** Skills grouped by installed board, or ungrouped while the boards are unknown. */
+function FactorySkillGroups({
+  boards,
+  skills,
+  skillsLoaded,
+  skillsLoading,
+  catalogLoading,
+}: {
+  boards: InstalledBoardInfo[] | undefined;
+  skills: FactorySkillInfo[];
+  skillsLoaded: boolean;
+  skillsLoading: boolean;
+  catalogLoading: boolean;
+}) {
+  if (boards === undefined) {
+    return (
+      <FactorySkillsSubsection>
+        <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} loading={skillsLoading || catalogLoading} />
+      </FactorySkillsSubsection>
+    );
+  }
+  if (boards.length === 0) {
+    return (
+      <>
+        <FactorySkillsSubsection>
+          <SettingsContainer>
+            <SettingsEmptyRow>No boards are installed, so no board skills apply.</SettingsEmptyRow>
+          </SettingsContainer>
+        </FactorySkillsSubsection>
+        <OtherAppSkills skills={skills} boards={boards} />
+      </>
+    );
+  }
+  return (
+    <>
+      {boards.map(board => (
+        <BoardGroup
+          key={board.id}
+          board={board}
+          skills={skills}
+          skillsLoaded={skillsLoaded}
+          skillsLoading={skillsLoading}
+        />
+      ))}
+      <OtherAppSkills skills={skills} boards={boards} />
+    </>
   );
 }

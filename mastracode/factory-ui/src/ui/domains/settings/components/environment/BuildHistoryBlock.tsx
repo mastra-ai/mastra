@@ -24,34 +24,36 @@ export function BuildHistoryBlock({
   builds: FactoryEnvironmentBuild[] | undefined;
   error: string | undefined;
 }) {
+  // Only the loaded builds make a list; the error, skeleton and empty row are single rows of the same card.
+  const listed = !error && builds !== undefined && builds.length > 0;
+  return (
+    <SettingsContainer role={listed ? 'list' : undefined} aria-label={listed ? 'Build history' : undefined}>
+      <BuildHistoryRows builds={builds} error={error} />
+    </SettingsContainer>
+  );
+}
+
+function BuildHistoryRows({
+  builds,
+  error,
+}: {
+  builds: FactoryEnvironmentBuild[] | undefined;
+  error: string | undefined;
+}) {
   const [open, setOpen] = useState<string>();
 
   if (error) {
     return (
-      <SettingsContainer>
-        <SettingsNoticeRow>
-          <Notice variant="destructive">{error}</Notice>
-        </SettingsNoticeRow>
-      </SettingsContainer>
+      <SettingsNoticeRow>
+        <Notice variant="destructive">{error}</Notice>
+      </SettingsNoticeRow>
     );
   }
-  if (!builds) {
-    return (
-      <SettingsContainer>
-        <SettingsSkeleton label="Loading build history" rows={3} />
-      </SettingsContainer>
-    );
-  }
-  if (builds.length === 0) {
-    return (
-      <SettingsContainer>
-        <SettingsEmptyRow>No builds yet.</SettingsEmptyRow>
-      </SettingsContainer>
-    );
-  }
+  if (!builds) return <SettingsSkeleton label="Loading build history" rows={3} />;
+  if (builds.length === 0) return <SettingsEmptyRow>No builds yet.</SettingsEmptyRow>;
 
   return (
-    <SettingsContainer role="list" aria-label="Build history">
+    <>
       {builds.map(build => {
         const status = BUILD_STATUS[build.status];
         const expanded = open === build.buildId;
@@ -113,6 +115,6 @@ export function BuildHistoryBlock({
           </div>
         );
       })}
-    </SettingsContainer>
+    </>
   );
 }

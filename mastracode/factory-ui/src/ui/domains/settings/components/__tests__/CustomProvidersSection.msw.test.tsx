@@ -136,7 +136,8 @@ describe('CustomProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<CustomProvidersSection />);
 
-      const row = (await screen.findByText('my-llm')).closest('[data-slot="settings-item"]') as HTMLElement;
+      const row = (await screen.findByText('my-llm')).closest<HTMLElement>('[data-slot="settings-item"]');
+      if (!row) throw new Error('Expected the my-llm provider row');
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));
