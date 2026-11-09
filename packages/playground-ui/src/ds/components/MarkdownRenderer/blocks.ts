@@ -167,9 +167,9 @@ export function splitList(block: string): ListBlock | undefined {
     if (line.slice(0, indent).includes('\t') || DEFINITION_LABEL_END.test(line)) return undefined;
 
     let content = line.slice(width);
-    // An underline straight after a task's line makes it a heading, and the list no longer holds a task.
+    // An underline anywhere in a task's opening paragraph makes it a heading, and the list no longer holds a task.
+    // The flag holds until a blank line or the next item, so it may also catch lines past that paragraph; those lists stay whole.
     if (taskLine && indent >= width && SETEXT_UNDERLINE.test(content)) return undefined;
-    taskLine = false;
 
     if (index === 0 || indent < width) {
       const item = listItemStart(line, index === last);
