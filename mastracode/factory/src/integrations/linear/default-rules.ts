@@ -1,4 +1,4 @@
-import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type LinearRuleOverrides = Partial<
@@ -41,8 +41,9 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
 
 function linearIssueClosed(context: FactoryLinearRuleContext) {
   if (!context.item || context.item.source !== 'linear-issue') return;
-  // The card's board decides where a closed source sends it; boards that declare no
-  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
   const closure = context.boardClosure;
   if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
@@ -50,15 +51,14 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
   const target = canceled ? closure.canceled : closure.completed;
-  return {
-    type: 'transition',
+  return closedByRoutes(canceled, {
     idempotencyKey: `${context.ingress.id}:issue-closed`,
     board: context.board,
     stage: target.phase,
     message: {
       text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
-  } as const;
+  });
 }
 
 export const defaultLinearRules = Object.freeze({

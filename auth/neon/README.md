@@ -10,7 +10,7 @@ npm install @mastra/auth-neon
 
 ## Usage
 
-Set `NEON_AUTH_BASE_URL` before starting Mastra.
+Set `NEON_AUTH_BASE_URL` to the Neon Auth URL from the Neon Console (for example `https://ep-example-123456.neonauth.us-east-2.aws.neon.tech/neondb/auth`) before starting Mastra.
 
 ```typescript
 import { MastraAuthNeon } from '@mastra/auth-neon';
@@ -27,8 +27,19 @@ export const mastra = new Mastra({
 
 ## Documentation
 
+- [Neon integration guide](https://mastra.ai/integrations/auth/neon)
 - [Neon Auth reference](https://mastra.ai/reference/auth/neon)
 - [Authentication overview](https://mastra.ai/docs/auth/overview)
+
+### Testing
+
+`pnpm test` runs the end-to-end suite against a local Neon Auth stand-in. To run the same suite against a live Neon project, enable Neon Auth (with email and password sign-in, sign-up, and **Allow localhost** on) and set `NEON_AUTH_LIVE_BASE_URL`:
+
+```bash
+NEON_AUTH_LIVE_BASE_URL=https://ep-example-123456.neonauth.us-east-2.aws.neon.tech/neondb/auth pnpm test
+```
+
+The live run signs up throwaway `@example.com` users in that project.
 
 ## Changelog
 

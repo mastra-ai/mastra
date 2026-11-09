@@ -9,6 +9,7 @@
 
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
+import { PickerList } from './picker-list.js';
 
 export interface ManagedAccount {
   id: string;
@@ -28,6 +29,7 @@ type ManagerMode = 'menu' | 'account' | 'confirm-remove';
 
 export class LoginAccountManagerComponent extends Box {
   private listContainer: Container;
+  private list: PickerList<{ label: string; action: () => void }>;
   private mode: ManagerMode = 'menu';
   private accounts: ManagedAccount[];
   private selectedIndex = 0;
@@ -47,6 +49,11 @@ export class LoginAccountManagerComponent extends Box {
     this.addChild(new Spacer(1));
 
     this.listContainer = new Container();
+    this.list = new PickerList({
+      paddingX: 1,
+      paddingY: 1,
+      renderItem: (row, isSelected, index) => [this.renderRow(row.label, isSelected, index)],
+    });
     this.addChild(this.listContainer);
 
     this.addChild(new Spacer(1));
@@ -130,23 +137,18 @@ export class LoginAccountManagerComponent extends Box {
       this.listContainer.addChild(new Spacer(1));
     }
 
-    const rows = this.rows();
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row) continue;
-      const isSelected = i === this.selectedIndex;
-      const isActionRow = this.mode === 'account' || (this.mode === 'menu' && i >= this.accounts.length);
-      const text = isSelected
-        ? theme.fg('accent', `→ ${row.label}`)
-        : isActionRow
-          ? theme.fg('text', `  ${row.label}`)
-          : `  ${row.label}`;
-      this.listContainer.addChild(new Text(text));
-    }
+    this.list.setItems(this.rows(), this.selectedIndex);
+    this.listContainer.addChild(this.list);
 
     if (this.accounts.length === 0) {
       this.listContainer.addChild(new Text(theme.fg('muted', 'No accounts registered.')));
     }
+  }
+
+  private renderRow(label: string, isSelected: boolean, index: number): string {
+    if (isSelected) return theme.fg('accent', `→ ${label}`);
+    const isActionRow = this.mode === 'account' || (this.mode === 'menu' && index >= this.accounts.length);
+    return isActionRow ? theme.fg('text', `  ${label}`) : `  ${label}`;
   }
 
   handleInput(keyData: string): void {
