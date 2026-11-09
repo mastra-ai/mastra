@@ -94,15 +94,15 @@ function ruleProblem<Rule>(schema: z.ZodType<Rule>, rule: Rule | null | undefine
 /**
  * A rule, edited with the rule builder or as raw JSON. Unset means "every card".
  * Reports a rule the server would refuse, so the form can hold back the save.
- * Defaults to the card facts a phase rule tests.
+ * `facts` defaults to the card facts a phase rule tests.
  */
-export function RuleEditor<Rule = z.infer<typeof cardRuleGroupSchema>>({
+export function RuleEditor<Rule>({
   label,
   description,
   rule,
   disabled,
   facts = CARD_FACTS,
-  schema = cardRuleGroupSchema as unknown as z.ZodType<Rule>,
+  schema,
   onChange,
 }: {
   label: string;
@@ -110,7 +110,7 @@ export function RuleEditor<Rule = z.infer<typeof cardRuleGroupSchema>>({
   rule: Rule | null | undefined;
   disabled: boolean;
   facts?: Facts;
-  schema?: z.ZodType<Rule>;
+  schema: z.ZodType<Rule>;
   onChange: (rule: Rule | null, problem: string | undefined) => void;
 }) {
   const [raw, setRaw] = useState<string | undefined>(undefined);

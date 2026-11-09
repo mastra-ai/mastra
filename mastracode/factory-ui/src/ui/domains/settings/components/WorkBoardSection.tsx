@@ -16,6 +16,7 @@ import type { StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useBoardQuery, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
+import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { RuleEditor } from './RuleEditor';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -219,6 +220,7 @@ function PhaseEditor({
             </Field>
             {phase.autoStart && (
               <RuleEditor
+                schema={cardRuleGroupSchema}
                 label={`${phase.name}: start only when`}
                 description="Leave empty to start every card on its own."
                 rule={phase.autoStartWhen}
@@ -272,6 +274,7 @@ function PhaseEditor({
             )}
             {exitToolId !== '' && phase.exitTool?.autoApprove && (
               <RuleEditor
+                schema={cardRuleGroupSchema}
                 label={`${phase.name}: approve only when`}
                 description="Leave empty to approve for every card."
                 rule={phase.exitTool.autoApproveWhen}
