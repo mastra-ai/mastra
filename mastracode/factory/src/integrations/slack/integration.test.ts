@@ -318,6 +318,7 @@ describe('SlackIntegration.channels', () => {
       },
       state: { get: () => ({}), set: vi.fn(async () => {}) },
       subagents: { model: { set: vi.fn(async () => {}) } },
+      subscribe: vi.fn(() => () => {}),
     };
 
     await config.onSessionStart!({
