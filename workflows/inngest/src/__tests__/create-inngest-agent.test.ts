@@ -379,13 +379,6 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
   });
 
-  // A run whose frames cannot be published still has to outlive the durable
-  // reader's pending-frame deadline (`LOGGED_EVENT_DELIVERY_TIMEOUT_MS`, 10s in
-  // `packages/core/src/agent/durable/stream-adapter.ts`) before it closes. Keep
-  // this budget above that deadline so the assertion tests termination rather
-  // than the reader's watchdog, while still bounding a genuine hang.
-  const PUBLISH_FAILURE_TERMINATION_BUDGET_MS = 15_000;
-
   it.each(['stream', 'generate'] as const)(
     '%s terminates when the opening event and error event cannot be published',
     async method => {
@@ -431,10 +424,7 @@ describe('createInngestAgent observe-replay wiring', () => {
         await Promise.race([
           run(),
           new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error('Stream did not terminate after publish failure')),
-              PUBLISH_FAILURE_TERMINATION_BUDGET_MS,
-            );
+            timer = setTimeout(() => reject(new Error('Stream did not terminate after publish failure')), 1000);
           }),
         ]);
       } finally {
@@ -1753,8 +1743,9 @@ describe('InngestAgent parity surface', () => {
       for await (const chunk of result.fullStream) received.push(chunk);
 
       expect(received.map(withoutLogIndex)).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
-      expect(received).not.toContainEqual(originalToolCall);
-      expect(received).not.toContainEqual(originalSuspension);
+      const receivedWithoutIndex = received.map(withoutLogIndex);
+      expect(receivedWithoutIndex).not.toContainEqual(originalToolCall);
+      expect(receivedWithoutIndex).not.toContainEqual(originalSuspension);
     } finally {
       result.cleanup();
       globalRunRegistry.delete(runId);
