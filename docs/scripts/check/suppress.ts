@@ -1,4 +1,4 @@
-import { isKnownRuleId, matchesRuleFilter } from './rules'
+import { isKnownRulePattern, matchesRuleFilter } from './rules'
 import type { ContentFile } from './types'
 
 /**
@@ -15,7 +15,10 @@ const COMMENT = /\{\s*\/\*\s*lint\s+(disable|enable|ignore)\b([\s\S]*?)\*\/\s*\}
 const FENCE = /^\s*(`{3,}|~{3,})/
 
 interface Range {
+  /** Suppressed rule IDs, or `null` for every rule. */
   ids: string[] | null
+  /** With `ids: null`, rules re-enabled by a later `lint enable <ids>`. */
+  except?: string[]
   start: number
   end: number
 }
@@ -29,7 +32,7 @@ export function parseSuppressions(file: ContentFile): Suppressions {
   const lines = file.source.split('\n')
   const ranges: Range[] = []
   const invalid: Suppressions['invalid'] = []
-  const open: { ids: string[] | null; start: number }[] = []
+  const open: Omit<Range, 'end'>[] = []
   let fence: string | null = null
   let seenContent = false
 
@@ -66,8 +69,8 @@ export function parseSuppressions(file: ContentFile): Suppressions {
         .trim()
         .split(/[\s,]+/)
         .filter(Boolean)
-      for (const id of raw) if (!isKnownRuleId(id)) invalid.push({ id, line })
-      const ids = raw.length === 0 ? null : raw.filter(isKnownRuleId)
+      for (const id of raw) if (!isKnownRulePattern(id)) invalid.push({ id, line })
+      const ids = raw.length === 0 ? null : raw.filter(isKnownRulePattern)
       rest = rest.replace(match[0], '')
 
       if (kind === 'ignore') {
@@ -77,16 +80,23 @@ export function parseSuppressions(file: ContentFile): Suppressions {
       } else {
         for (let k = open.length - 1; k >= 0; k--) {
           const entry = open[k]
-          const closes = ids === null || entry.ids === null || entry.ids.some(id => ids.includes(id))
-          if (!closes) continue
-          ranges.push({ ids: entry.ids, start: entry.start, end: line })
+          if (ids !== null && entry.ids !== null && !entry.ids.some(id => ids.includes(id))) continue
+          ranges.push({ ...entry, end: line })
           open.splice(k, 1)
+          // A partial enable keeps the other rules of the disable off from here on.
+          if (ids === null) continue
+          if (entry.ids === null) {
+            open.splice(k, 0, { ids: null, except: [...(entry.except ?? []), ...ids], start: line })
+          } else {
+            const remaining = entry.ids.filter(id => !ids.includes(id))
+            if (remaining.length > 0) open.splice(k, 0, { ids: remaining, start: line })
+          }
         }
       }
     }
     if (rest.trim() !== '') seenContent = true
   }
-  for (const entry of open) ranges.push({ ids: entry.ids, start: entry.start, end: Number.POSITIVE_INFINITY })
+  for (const entry of open) ranges.push({ ...entry, end: Number.POSITIVE_INFINITY })
   return { ranges, invalid }
 }
 
@@ -97,6 +107,8 @@ export function isSuppressed(suppressions: Suppressions, ruleId: string, line?: 
       (line === undefined
         ? range.start === 1 && range.end === Number.POSITIVE_INFINITY
         : line >= range.start && line <= range.end) &&
-      (range.ids === null || range.ids.some(id => matchesRuleFilter(ruleId, id))),
+      (range.ids === null
+        ? !range.except?.some(id => matchesRuleFilter(ruleId, id))
+        : range.ids.some(id => matchesRuleFilter(ruleId, id))),
   )
 }

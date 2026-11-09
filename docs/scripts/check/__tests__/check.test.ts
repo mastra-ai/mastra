@@ -130,6 +130,39 @@ describe('inline lint comments', () => {
     expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'x.example'))).toBe(true)
   })
 
+  it('re-enables only the rules named by a partial enable', () => {
+    const file = page(
+      'docs/a.mdx',
+      [
+        '# A',
+        '{/* lint disable mastra/bare-url, mastra/code-block-lang */}',
+        'one',
+        '{/* lint enable mastra/bare-url */}',
+        'two',
+        '{/* lint disable */}',
+        'three',
+        '{/* lint enable mastra/bare-url */}',
+        'four',
+      ].join('\n\n'),
+    )
+    const s = parseSuppressions(file)
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'one'))).toBe(true)
+    expect(isSuppressed(s, 'mastra/code-block-lang', lineOf(file, 'one'))).toBe(true)
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'two'))).toBe(false)
+    expect(isSuppressed(s, 'mastra/code-block-lang', lineOf(file, 'two'))).toBe(true)
+    expect(isSuppressed(s, 'mastra/internal-link', lineOf(file, 'three'))).toBe(true)
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'four'))).toBe(false)
+    expect(isSuppressed(s, 'mastra/internal-link', lineOf(file, 'four'))).toBe(true)
+  })
+
+  it('accepts wildcard IDs that match a registered rule', () => {
+    const file = page('docs/a.mdx', '# A\n\n{/* lint disable mastra/redirect-* mastra/nope-* */}\n\nbody')
+    const s = parseSuppressions(file)
+    expect(s.invalid).toEqual([{ id: 'mastra/nope-*', line: lineOf(file, 'nope-*') }])
+    expect(isSuppressed(s, 'mastra/redirect-chain', lineOf(file, 'body'))).toBe(true)
+    expect(isSuppressed(s, 'mastra/redirected-link', lineOf(file, 'body'))).toBe(false)
+  })
+
   it('reports unknown rule IDs', () => {
     const file = page('docs/a.mdx', '# A\n\n{/* lint disable mastra/nope */}')
     expect(parseSuppressions(file).invalid).toEqual([{ id: 'mastra/nope', line: lineOf(file, 'mastra/nope') }])
@@ -344,7 +377,11 @@ describe('runChecks', () => {
   })
 
   it('filters by rule and scopes to file arguments', async () => {
-    const report = await runChecks({ rootDir, rules: ['mastra/internal-link'], files: ['src/content/en/docs/bad.mdx'] })
+    const report = await runChecks({
+      rootDir,
+      rules: ['mastra/internal-link'],
+      files: ['src/content/en/docs/bad.mdx'],
+    })
     expect(report.summary.filesChecked).toBe(1)
     expect(report.summary.status).toBe('passed')
     expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/internal-link'])

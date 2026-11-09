@@ -223,6 +223,19 @@ export function isKnownRuleId(id: string): boolean {
   return RULES_BY_ID.has(id) || RULE_FAMILIES.some(f => id.startsWith(f.id.slice(0, -1)) && id.length > f.id.length - 1)
 }
 
+/** True for a known rule ID, or a trailing-`*` pattern such as `mastra/redirect-*` that matches at least one rule. */
+export function isKnownRulePattern(pattern: string): boolean {
+  if (!pattern.endsWith('*')) return isKnownRuleId(pattern)
+  const prefix = pattern.slice(0, -1)
+  return (
+    RULES.some(rule => rule.id.startsWith(prefix)) ||
+    RULE_FAMILIES.some(f => {
+      const familyPrefix = f.id.slice(0, -1)
+      return familyPrefix.startsWith(prefix) || prefix.startsWith(familyPrefix)
+    })
+  )
+}
+
 /** Matches a rule ID against a filter: exact ID, or a trailing `*` prefix such as `mastra/sidebar-*`. */
 export function matchesRuleFilter(id: string, filter: string): boolean {
   return filter.endsWith('*') ? id.startsWith(filter.slice(0, -1)) : id === filter
