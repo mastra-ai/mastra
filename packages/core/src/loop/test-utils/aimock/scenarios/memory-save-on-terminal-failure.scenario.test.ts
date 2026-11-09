@@ -901,6 +901,15 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         id: 'deadline-tripper',
         processOutputResult: ({ abort }) => abort('blocked'),
       };
+      const store = (await memory.storage.getStore('memory'))!;
+      const saveMessages = store.saveMessages.bind(store);
+      const savedText: string[] = [];
+      vi.spyOn(store, 'saveMessages').mockImplementation(args => {
+        for (const message of args.messages) {
+          for (const part of message.content.parts ?? []) if (part.type === 'text') savedText.push(part.text);
+        }
+        return saveMessages(args);
+      });
       await runLoopScenario({
         engine,
         llm: getMock(),
@@ -908,7 +917,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
         memory,
         threadId,
         resourceId: RESOURCE,
-        agentOutputProcessors: [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! }), tripper],
+        agentOutputProcessors: [new MessageHistory({ storage: store }), tripper],
         stopWhen: stepCountIs(5),
         modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         expectStreamError: true,
@@ -928,6 +937,10 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
       // Absence can't be polled for; give a late write time to land.
       await new Promise(resolve => setTimeout(resolve, 1_000));
 
+      // The streamed text did reach storage before the trip, so the empty result below is the undo's doing.
+      if (!deadlineSavePending.includes(engine)) {
+        expect(savedText.some(text => text.includes('PARTIAL'))).toBe(true);
+      }
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
       expect(messages.map(message => message.role)).toEqual(['user']);
     },
