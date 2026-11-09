@@ -70,4 +70,31 @@ describe('when replaying a production conversation through the HTTP API', () => 
       await mastra.observability.shutdown();
     }
   }, 60000);
+
+  it('gives independent turns no history when the agent memory disables recall', async () => {
+    // Memory `lastMessages: false` is "no recall"; replay must not read it as its own `false` ("all history").
+    const { app, mastra } = await goldenThreadFixture({ replayLastMessages: false });
+    try {
+      const request = (path: string, body: unknown) =>
+        app.request(`/api${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      const source = { agentId: 'support', threadId: 'golden-thread', resourceId: 'support' };
+      const preview = await request('/datasets/replay/preview', source);
+      expect(await preview.json()).toEqual({ turnCount: 10, historyLimit: 0 });
+      const dataset = await mastra.datasets.create({ name: 'No recall', targetType: 'agent', targetIds: ['support'] });
+      const response = await request(`/datasets/${dataset.id}/items/from-thread`, source);
+      expect(response.status).toBe(200);
+      const { items } = await dataset.listItems({ perPage: 100 });
+      expect(items).toHaveLength(10);
+      // Each item carries only its own user message, matching what the production agent saw.
+      expect(items.map(item => (item.input as { role: string }[]).map(message => message.role))).toEqual(
+        Array(10).fill(['user']),
+      );
+    } finally {
+      await mastra.observability.shutdown();
+    }
+  }, 60000);
 });

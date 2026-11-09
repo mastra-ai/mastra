@@ -11,17 +11,22 @@ import { cors } from 'hono/cors';
 import { z } from 'zod/v4';
 import { MastraServer } from '../../index';
 
-/** The provider is the only fake: recording, HTTP, memory, tools, storage and scorers are real. */
-export async function goldenThreadFixture() {
+/**
+ * The provider is the only fake: recording, HTTP, memory, tools, storage and scorers are real.
+ * `replayLastMessages` serves the HTTP API from an agent whose memory recall differs from the one that recorded.
+ */
+export async function goldenThreadFixture({ replayLastMessages }: { replayLastMessages?: number | false } = {}) {
   const liveCalls: number[] = [];
   const storage = new InMemoryStore();
-  const memory = new Memory({
-    storage,
-    options: {
-      lastMessages: 10,
-      workingMemory: { enabled: true, scope: 'resource', template: '# Customer\nAda Lovelace', useStateSignals: true },
+  const memoryOptions = {
+    workingMemory: {
+      enabled: true,
+      scope: 'resource' as const,
+      template: '# Customer\nAda Lovelace',
+      useStateSignals: true,
     },
-  });
+  };
+  const memory = new Memory({ storage, options: { lastMessages: 10, ...memoryOptions } });
   const model = new MockLanguageModelV2({
     doGenerate: async ({ prompt }) => {
       const userIndex = prompt.findLastIndex(
@@ -125,16 +130,23 @@ export async function goldenThreadFixture() {
   }
   const trajectory = createTrajectoryAccuracyScorerCode({ comparisonOptions: { ordering: 'strict' } });
   const similarity = createAnswerSimilarityScorer({ model: judge });
-  const agent = new Agent({
+  const agentConfig = {
     id: 'support',
     name: 'Order support',
     instructions: 'Help Ada check her order. Look up each order and report the result.',
     model,
-    memory,
     tools: { lookupOrder },
-  });
+  };
+  const agent = new Agent({ ...agentConfig, memory });
+  const served =
+    replayLastMessages === undefined
+      ? agent
+      : new Agent({
+          ...agentConfig,
+          memory: new Memory({ storage, options: { lastMessages: replayLastMessages, ...memoryOptions } }),
+        });
   const mastra = new Mastra({
-    agents: { support: agent },
+    agents: { support: served },
     scorers: { trajectory, similarity },
     storage,
     logger: false,

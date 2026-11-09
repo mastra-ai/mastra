@@ -27,6 +27,16 @@ export type ReplayItemInput = DataItem<ReplayMessage[], string> &
 
 export const replayHistoryLimitSchema = z.union([z.number().int().nonnegative(), z.literal(false)]);
 
+/**
+ * Prior messages each independent turn receives when the caller sets no `historyLimit`.
+ * Memory `lastMessages: false` disables recall, so production saw no history: map it to 0.
+ * Replay `historyLimit: false` means "all prior messages" and is never implied by memory config.
+ */
+export function defaultReplayHistoryLimit(memory: Pick<MastraMemory, 'getMergedThreadConfig'>): number {
+  const lastMessages = memory.getMergedThreadConfig().lastMessages;
+  return lastMessages === false ? 0 : (lastMessages ?? 10);
+}
+
 export type ConversationReplayItemInput = DataItem<ConversationReplayInput, never> &
   Pick<DatasetItemPayload, 'source'> & {
     metadata: {
@@ -77,7 +87,7 @@ export async function datasetItemsFromThread({
 }: ReplayOptions): Promise<(ReplayItemInput | ConversationReplayItemInput)[]> {
   replayOptionsSchema.parse({ mode, historyLimit });
   const config = memory.getMergedThreadConfig();
-  const limit = replayHistoryLimitSchema.parse(historyLimit ?? config.lastMessages ?? 10);
+  const limit = replayHistoryLimitSchema.parse(historyLimit ?? defaultReplayHistoryLimit(memory));
   const store = await memory.storage.getStore('memory');
   if (!store) throw new Error('Memory storage is required to replay a thread.');
   const thread = await store.getThreadById({ threadId });

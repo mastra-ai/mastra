@@ -74,7 +74,10 @@ async function replaySource({
   historyLimit,
   mode,
 }: Context & { requestContext: RequestContext } & z.infer<typeof itemsFromThreadBodySchema>) {
-  if (typeof coreDatasets.datasetItemsFromThread !== 'function')
+  if (
+    typeof coreDatasets.datasetItemsFromThread !== 'function' ||
+    typeof coreDatasets.defaultReplayHistoryLimit !== 'function'
+  )
     throw new HTTPException(501, {
       message: 'Replay datasets require a newer @mastra/core with thread replay support.',
     });
@@ -96,9 +99,10 @@ async function replaySource({
   return {
     items,
     turnCount: items[0]?.metadata.replay.turnCount ?? 0,
+    // Memory `lastMessages: false` means no recall, which replay reports as 0 rather than "all".
     ...(mode === 'conversation'
       ? {}
-      : { historyLimit: historyLimit ?? memory.getMergedThreadConfig().lastMessages ?? 10 }),
+      : { historyLimit: historyLimit ?? coreDatasets.defaultReplayHistoryLimit(memory) }),
   };
 }
 

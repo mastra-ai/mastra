@@ -1,6 +1,7 @@
 export * from './experiment';
 export {
   datasetItemsFromThread,
+  defaultReplayHistoryLimit,
   replayHistoryLimitSchema,
   type ReplayItemInput,
   type ConversationReplayItemInput,
