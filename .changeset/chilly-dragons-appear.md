@@ -32,7 +32,9 @@ A board phase now does exactly what its stored fields say, so an admin who edits
 
 **Self-review off (the default) goes straight to PR review.** The builder opens the change request and moves the card to PR review. With self-review on, an approving self-review opens the change request and moves the card to PR review.
 
-**Existing projects are updated once, keeping your edits.** On its first load after the upgrade, each project's stored Work board gets the new runner, tools and auto-start fields. Only fields that still hold the old default are filled; anything you edited stays as it is. Factory logs the fields it filled.
+**Existing projects are updated once, keeping your edits.** On its first load after the upgrade, each project's stored Work board gets the new runner, tools and auto-start fields. Only fields that still hold the old default are filled, and a runner part by part, so instructions you wrote stay; anything you edited stays as it is. App boards under the `work` key are never touched. Factory logs the fields it filled.
+
+**Done no longer cleans up issue labels on its own.** Entering Done used to remove the `status:` triage labels from a GitHub issue, add `status: pending-close` and post a done comment, whoever moved the card. Now the agent that finishes the work does that before it moves the card to Done. An issue card a merge or a person moves to Done keeps its labels and gets no comment.
 
 **Runner fields are no longer locked.** On Work and app boards, `422 code_behaviour` now covers only the phases, kinds and moves Factory's code relies on. The boards API's `codeBehaviour` reports only `requiredNextPhases` per phase.
 

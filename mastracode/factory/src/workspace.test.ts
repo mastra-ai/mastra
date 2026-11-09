@@ -589,6 +589,8 @@ describe('bundled Factory skill assets', () => {
     expect(plan).toContain(
       'When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item`',
     );
+    // One instruction for an approved plan: report, then move (no "report and stop").
+    expect(plan).not.toContain('report the plan headline and stop');
 
     // Building runs as a goal: it may ask a person, but only through ask_user, and hands off by
     // the project's self-review setting.
@@ -598,6 +600,10 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('**Self-review off:** open the change request');
     expect(build).toContain('Then move the card to PR review (`stage: "pr-review"`)');
     expect(build).toContain('**Before moving to Done:**');
+    // A push to an open change request sends the card back to PR review so it is reviewed again.
+    expect(build).toContain('push to its branch, then move the card to PR review');
+    // PR review takes the card only once the change request is attached: self-review retries.
+    expect(await read('factory-self-review')).toContain('wait briefly (`sleep 20`)');
 
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');

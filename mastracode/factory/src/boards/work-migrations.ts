@@ -87,6 +87,41 @@ function stillOldDefault(phaseKey: string, field: MigratedField, stored: unknown
  * stored before is filled, so every field a person edited stays as they left it. A phase the
  * row lacks, or holds as another kind, is left alone, as is a move to a phase the row lacks.
  */
+type StoredRunner = StoredPhaseInput['runner'];
+
+/**
+ * The seed's runner parts a stored runner still lacks or holds at the old default: `context` when
+ * it is the old seed's, `skill` and `goal` when unset (the old seed set neither). Instructions and
+ * any part a person set stay as they are.
+ */
+function migrateRunner(
+  phaseKey: string,
+  stored: StoredRunner,
+  target: StoredRunner,
+): { value: NonNullable<StoredRunner>; filled: string[] } | undefined {
+  if (!target) return undefined;
+  const value: NonNullable<StoredRunner> = { ...(stored ?? {}) };
+  const filled: string[] = [];
+  const oldContexts = (OLD_WORK_SEED[phaseKey]?.runner ?? []).map(old => (old as { context?: string }).context);
+  if (
+    target.context !== undefined &&
+    value.context !== target.context &&
+    (value.context === undefined || oldContexts.includes(value.context))
+  ) {
+    value.context = target.context;
+    filled.push('context');
+  }
+  if (target.skill !== undefined && value.skill === undefined) {
+    value.skill = target.skill;
+    filled.push('skill');
+  }
+  if (target.goal !== undefined && value.goal === undefined) {
+    value.goal = target.goal;
+    filled.push('goal');
+  }
+  return filled.length > 0 ? { value, filled } : undefined;
+}
+
 export function migrateWorkPhaseRunners(
   board: StoredBoardRecord,
   seed = boardDefinitionOf(workBoard),
@@ -98,7 +133,15 @@ export function migrateWorkPhaseRunners(
     const target = seed.phases.find(candidate => candidate.key === phase.key);
     if (!target || target.kind !== phase.kind || !OLD_WORK_SEED[phase.key]) return phase;
     const next: StoredPhaseInput = { ...phase };
+    // The runner is migrated part by part: a person who only wrote instructions (the one part the
+    // old seed left editable) still gets the skill, goal and context, and keeps the instructions.
+    const runner = migrateRunner(phase.key, phase.runner, target.runner);
+    if (runner) {
+      next.runner = runner.value;
+      filled.push(...runner.filled.map(part => `${phase.key}.runner.${part}`));
+    }
     for (const field of MIGRATED_FIELDS) {
+      if (field === 'runner') continue;
       const value = target[field] ?? null;
       if (canonical(field, value) === canonical(field, phase[field])) continue;
       if (!stillOldDefault(phase.key, field, phase[field])) continue;
@@ -116,13 +159,20 @@ export function migrateWorkPhaseRunners(
     // review, say): a phase whose moves a person narrowed runs the skill without the goal, rather
     // than judging a goal it may never meet.
     const seedMoves = (target.nextPhases ?? []).filter(key => phaseKeys.has(key));
-    if (filled.includes(`${phase.key}.runner`) && next.runner?.goal && !seedMoves.every(key => moves.includes(key))) {
+    if (
+      filled.includes(`${phase.key}.runner.goal`) &&
+      next.runner?.goal &&
+      !seedMoves.every(key => moves.includes(key))
+    ) {
       const { goal: _goal, ...runner } = next.runner;
       next.runner = runner;
     }
     // Auto-start and Factory tools serve the seed's skill; a phase running another skill keeps its own.
     if (next.runner?.skill !== target.runner?.skill || next.runner?.context !== target.runner?.context) {
       for (const field of ['tools', 'autoStart', 'autoStartWhen'] as const) revert(field);
+    }
+    if (filled.includes(`${phase.key}.runner.goal`) && !next.runner?.goal) {
+      filled.splice(filled.indexOf(`${phase.key}.runner.goal`), 1);
     }
     return next;
   });

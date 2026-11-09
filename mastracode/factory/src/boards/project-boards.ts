@@ -277,7 +277,11 @@ export class ProjectBoardCache implements ProjectBoardSource {
 
   /** Runs the board migrations of the boards Factory stores here that the project hasn't had yet. */
   async #migrate(scope: StoredBoardScope): Promise<void> {
-    const migrations = BOARD_MIGRATIONS.filter(migration => this.#seeds.has(migration.boardKey));
+    // A migration rewrites Factory's own board; an app board under the same key keeps its settings.
+    const migrations = BOARD_MIGRATIONS.filter(migration => {
+      const code = this.codeRegistry.get(migration.boardKey);
+      return code !== undefined && defaultBoards.includes(code);
+    });
     const changed = await this.#storage.applyBoardMigrations(scope, migrations);
     if (changed.length === 0) return;
     const filled = changed.map(({ boardKey, filled }) => `${boardKey}: ${filled.join(', ')}`).join('; ');

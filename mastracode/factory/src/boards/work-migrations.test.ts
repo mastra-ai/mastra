@@ -9,6 +9,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from '../storage/domains/boards/base.js';
+import { defineBoard } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import { boardDefinitionOf } from './stored-board.js';
@@ -166,7 +167,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
 
     expect((await boards.get(scope, 'work'))!.revision).toBe(3);
     const triage = await phase(boards, scope, 'triage');
-    expect(triage.runner).toEqual({ context: 'triage', instructions: 'Label it first.' });
+    // The instructions stay; the skill the phase needs to start anything is still filled.
+    expect(triage.runner).toEqual({ skill: 'factory-triage', context: 'triage', instructions: 'Label it first.' });
     const planning = await phase(boards, scope, 'planning');
     expect(planning.name).toBe('Plan it');
     expect(fieldsOf(planning)).toEqual(fieldsOf(seedPhase('planning')));
@@ -179,10 +181,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     await firstLoad(boards, scope);
 
     const review = await phase(boards, scope, 'review');
-    expect(review.runner).toEqual({ context: 'qa' });
+    // The context a person chose stays; the skill the phase needs to start anything is filled.
+    expect(review.runner).toEqual({ skill: 'factory-self-review', context: 'qa' });
     // No verdict tool or automatic start for a runner that is not the self-review skill.
     expect(fieldsOf(review)).toMatchObject({ tools: null, autoStart: false, autoStartWhen: null });
     expect(fieldsOf(review).nextPhases).toEqual(fieldsOf(seedPhase('review')).nextPhases);
+  });
+
+  it('gives a Building runner a person only wrote instructions for the skill and goal, keeping the instructions', async () => {
+    const { boards, scope } = await setup(board =>
+      editPhase(board, 'execute', { runner: { context: 'work', instructions: 'Run the e2e suite too.' } }),
+    );
+
+    await firstLoad(boards, scope);
+
+    const building = await phase(boards, scope, 'execute');
+    expect(building.runner).toEqual({ ...seedPhase('execute').runner, instructions: 'Run the e2e suite too.' });
+    expect(building.runner?.goal?.maxRuns).toBe(20);
   });
 
   it('starts the Building skill without its goal when a person narrowed its moves, so no goal is judged that cannot be met', async () => {
@@ -196,6 +211,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     expect(building.runner).toEqual({ skill: 'factory-build', context: 'work' });
     expect(building.nextPhases).toEqual(['review', 'done', 'canceled']);
     expect((await phase(boards, scope, 'planning')).runner).toEqual(seedPhase('planning').runner);
+  });
+
+  it("leaves an app's own board under Work's key alone, even where it holds Work's old values", async () => {
+    const { boards, scope } = await setup();
+    const appWork = defineBoard({
+      id: 'work',
+      name: 'Work',
+      initialPhase: 'intake',
+      phases: {
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal', nextPhases: ['intake'] },
+      },
+    });
+    const cache = new ProjectBoardCache({
+      codeRegistry: createBoardRegistry({ includeDefaultBoards: false, boards: [appWork] }),
+      storage: boards,
+      warn: () => {},
+    });
+
+    await cache.load(scope);
+
+    expect((await boards.get(scope, 'work'))!.revision).toBe(1);
+    expect((await phase(boards, scope, 'triage')).runner).toEqual({ context: 'triage' });
   });
 
   it('changes nothing the second time, neither the row nor its revision nor the version', async () => {
