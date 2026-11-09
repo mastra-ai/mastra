@@ -23,7 +23,8 @@ async function callTool<T>(tools: Record<string, ConnectTool>, id: string, input
   if (!tool?.execute) return undefined;
   try {
     const result = (await tool.execute(input, { requestContext: new RequestContext() })) as
-      (T & { error?: undefined }) | { error: true; message?: string };
+      | (T & { error?: undefined })
+      | { error: true; message?: string };
     if (result?.error === true) throw new Error(result.message ?? 'unknown error');
     return result as T;
   } catch (error) {
