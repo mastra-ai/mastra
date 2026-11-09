@@ -96,7 +96,8 @@ describe('SandboxFilesystem', () => {
   it('tells agents where scratch worktrees go and how to install their dependencies', () => {
     const { fs } = makeFs();
     expect(fs.getInstructions()).toContain(`${WORKDIR}/.worktrees/`);
-    expect(fs.getInstructions()).toContain('pnpm install --offline --frozen-lockfile');
+    expect(fs.getInstructions()).toContain('pnpm install --prefer-offline --frozen-lockfile');
+    expect(fs.getInstructions()).toContain('pnpm turbo build --filter="<package>^..."');
   });
 
   it('asks the sandbox to retain all command output', async () => {

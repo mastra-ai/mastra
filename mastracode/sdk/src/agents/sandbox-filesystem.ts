@@ -1142,6 +1142,6 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   getInstructions(): string {
-    return `Files are stored in a remote sandbox at ${this.basePath}. Use absolute workspace paths like /src/index.ts. All reads, writes and commands run inside the same sandbox. Absolute paths are workspace-relative (/tmp/x resolves to ${this.basePath}/tmp/x), so file tools cannot reach files outside ${this.basePath}. Create scratch git worktrees under ${this.basePath}/.worktrees/, then run \`pnpm install --offline --frozen-lockfile\` in the worktree so its dependencies are linked from the shared store.`;
+    return `Files are stored in a remote sandbox at ${this.basePath}. Use absolute workspace paths like /src/index.ts. All reads, writes and commands run inside the same sandbox. Absolute paths are workspace-relative (/tmp/x resolves to ${this.basePath}/tmp/x), so file tools cannot reach files outside ${this.basePath}. Create scratch git worktrees under ${this.basePath}/.worktrees/, then, in a pnpm monorepo, run \`pnpm install --prefer-offline --frozen-lockfile\` in the worktree and build the workspace packages you test against (with Turborepo: \`pnpm turbo build --filter="<package>^..."\`, which reuses the build cache).`;
   }
 }
