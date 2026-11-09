@@ -250,7 +250,8 @@ const report = (ctx: z.RefinementCtx, issues: Issue[], prefix: PropertyKey[] = [
  * before storing it.
  *
  * Parsing returns the widget as given: no defaults are filled in. It's a validator, not a schema to
- * show a model: its JSON schema is empty.
+ * show a model: its JSON schema is empty. Its input type is `unknown`, so check with it where you
+ * store, not in a request schema.
  */
 export const strictDashboardWidgetSchema: z.ZodType<StrictDashboardWidget> = z.unknown().superRefine((value, ctx) => {
   const core = dashboardWidgetSchema.safeParse(value);
@@ -261,12 +262,13 @@ export const strictDashboardWidgetSchema: z.ZodType<StrictDashboardWidget> = z.u
 /**
  * A dashboard definition as the dashboard renderer draws it: core's `dashboardDefinitionSchema`,
  * then every widget as `strictDashboardWidgetSchema` checks it, paths from the definition (e.g.
- * `rows.0.widgets.1.views.0.options.series.0.value`). Check every definition with it before storing
- * it, so each stored widget renders. Widgets of a host's own kinds are rejected: check those with
- * core's schema.
+ * `rows.0.widgets.1.views.0.options.series.0.value`; problems a kind finds point at the view).
+ * Check every definition with it before storing it, so each stored widget renders. Widgets of a
+ * host's own kinds are rejected: check those with core's schema.
  *
  * Parsing returns the definition as given: no defaults are filled in. It's a validator, not a
- * schema to show a model: its JSON schema is empty.
+ * schema to show a model: its JSON schema is empty. Its input type is `unknown`, so check with it
+ * where you store, not in a request schema.
  */
 export const strictDashboardDefinitionSchema: z.ZodType<StrictDashboardDefinition> = z
   .unknown()

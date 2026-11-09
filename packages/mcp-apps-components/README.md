@@ -199,7 +199,7 @@ To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `obs
 
 ### Validating stored dashboards
 
-`dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` checks a definition's structure and queries, but not what each widget kind needs. A definition can pass it and still show an error in place of a widget. To store only dashboards that draw, check every write with `strictDashboardDefinitionSchema`:
+`dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` checks a definition's structure and queries, but not what each widget kind needs. A definition can pass it and still show an error in place of a widget. To store only dashboards that draw, check every write with `strictDashboardDefinitionSchema` in the code that stores them:
 
 ```ts
 import { strictDashboardDefinitionSchema } from '@mastra/mcp-apps-components/dashboards';
@@ -207,7 +207,7 @@ import type { StrictDashboardDefinition } from '@mastra/mcp-apps-components/dash
 
 const result = strictDashboardDefinitionSchema.safeParse(body.definition);
 if (!result.success) {
-  // Each issue has a path, such as rows.0.widgets.1.views.0.options.series.0.value
+  // Each issue has a path to the view, or into its options
   throw new BadRequestError(result.error.issues);
 }
 const definition: StrictDashboardDefinition = result.data;
@@ -220,7 +220,11 @@ On top of core's checks, the schema:
 - Runs each kind's checks, such as a KPI reading a query its view has, or a chart's series all fitting its buckets.
 - Checks the widget at both `org` and `project` scope, so a widget that only breaks on one kind of page is rejected too.
 
+Problems in a view's options point into them, such as `rows.0.widgets.1.views.0.options.series.0.value`. Problems a kind finds, such as a KPI reading a query its view doesn't have or two views with one label, point at the view, such as `rows.0.widgets.1.views.0`, with a message saying what's wrong, such as `options: reads query 'nope', which the view doesn't have`.
+
 `result.data` is the definition you passed in, unchanged; store it as sent. Definitions that core has already parsed, with its defaults filled in, also pass. Use `strictDashboardWidgetSchema` to check a single widget, such as one being added or pinned; its issue paths start at the widget. Checks across widgets, such as unique ids and the widget limit, need the full definition.
+
+Don't use these schemas in a request-body schema. Their input type is `unknown` and their JSON schema is empty, so a request type built from them would type `definition` as `unknown`, and generated API docs would describe it as anything. Keep core's `dashboardDefinitionSchema` there, and check with the strict schemas in the service before storing. Use `StrictDashboardDefinition` to type what you store and return.
 
 Dashboards with custom widget kinds should keep using core's `dashboardDefinitionSchema`.
 
