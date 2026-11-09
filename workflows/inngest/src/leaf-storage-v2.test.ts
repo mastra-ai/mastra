@@ -272,6 +272,42 @@ for (const [storeName, makeStore] of Object.entries(stores)) {
       expect(stored?.state).toEqual({ count: 7, a: 'a', b: 'b' });
     });
 
+    it('runs foreach items as leaves and retries the execution, not the item, after an adoption crash', async () => {
+      const calls: number[] = [];
+      const crashed = crashOnceAt('adoption-written');
+      const { workflow, store } = await setup(makeStore, ({ createWorkflow, createStep }) => {
+        const double = createStep({
+          id: 'double',
+          inputSchema: z.number(),
+          outputSchema: z.number(),
+          execute: async ({ inputData }) => {
+            calls.push(inputData);
+            return inputData * 2;
+          },
+        });
+        return createWorkflow({
+          id: 'leaf-counting',
+          inputSchema: z.array(z.number()),
+          outputSchema: z.array(z.number()),
+          options: { storageVersion: 2 },
+          retries: 1,
+        })
+          .foreach(double)
+          .commit();
+      });
+      const run = await workflow.createRun();
+      const result: any = await run.start({ inputData: [1, 2, 3] });
+
+      expect(crashed.count).toBe(1);
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([2, 4, 6]);
+      // Each item ran once: the crashed item's adoption was found on the retried execution.
+      expect([...calls].sort()).toEqual([1, 2, 3]);
+      const stored = await store.loadWorkflowRun({ workflowName: 'leaf-counting', runId: run.runId });
+      expect(stored?.header.status).toBe('success');
+      expect((stored?.steps.double as any).output).toEqual([2, 4, 6]);
+    });
+
     it('suspends in a leaf and resumes into a new occurrence', async () => {
       const calls: Record<string, number> = {};
       const { workflow, store } = await setup(makeStore, ({ createWorkflow, createStep }) => {

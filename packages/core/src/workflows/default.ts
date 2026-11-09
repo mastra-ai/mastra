@@ -811,6 +811,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
+   * Whether an error thrown while running a step is an infrastructure failure rather than a step
+   * failure. Handlers that turn thrown errors into failed step results rethrow these instead, so the
+   * engine can retry the execution. The default engine has none.
+   * @internal
+   */
+  isInfrastructureError(_error: unknown): boolean {
+    return false;
+  }
+
+  /**
    * Build MutableContext from current execution state.
    * This extracts only the fields that can change during step execution.
    */

@@ -1231,6 +1231,7 @@ export async function executeForeach(
   // at all times instead of waiting for an entire batch to finish.
   type ForeachTask = { item: any; k: number; resumeToUse: typeof resume };
   let errorResult: StepFailure<any, any, any, any> | null = null;
+  let infrastructureError: unknown;
   let exitResult = null as ForeachStepResult | null;
   let canceledResult: ForeachStepResult | null = null;
   let inFlight = 0;
@@ -1395,6 +1396,15 @@ export async function executeForeach(
         await handleSuccessResult(result, k);
       }
     } catch (err) {
+      if (engine.isInfrastructureError(err)) {
+        // Not a failure of this item: stop the foreach and let the engine retry the execution.
+        infrastructureError ??= err;
+        killQueue();
+        inFlight--;
+        cb(null);
+        if (inFlight === 0) resolveCompletion?.();
+        return;
+      }
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
         status: 'failed',
@@ -1479,6 +1489,7 @@ export async function executeForeach(
     });
   }
   await drainCheckpoints();
+  if (infrastructureError !== undefined) throw infrastructureError;
   // The progress checkpoints mark the foreach as active; it is not once every item has ended.
   delete executionContext.activeStepsPath[stepId];
   if (checkpointError && !errorResult && !canceledResult) {

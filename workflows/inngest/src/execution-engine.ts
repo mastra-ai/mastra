@@ -126,6 +126,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     return true;
   }
 
+  isInfrastructureError(error: unknown): boolean {
+    return isLeafInfrastructureError(error);
+  }
+
   /**
    * Execute a step with retry logic for Inngest.
    * Each attempt is its own step.run() that fails as NonRetriableError, so Inngest never
