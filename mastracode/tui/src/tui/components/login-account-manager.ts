@@ -53,6 +53,10 @@ export class LoginAccountManagerComponent extends Box {
       paddingX: 1,
       paddingY: 1,
       renderItem: (row, isSelected, index) => [this.renderRow(row.label, isSelected, index)],
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
     });
     this.addChild(this.listContainer);
 
