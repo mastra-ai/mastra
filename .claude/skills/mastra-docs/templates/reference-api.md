@@ -23,7 +23,7 @@ Don't use it for:
 
 ## Frontmatter
 
-`$OWNING_PACKAGE` is the package that exports the API, such as `@mastra/core` or `@mastra/memory`. List it so embedded docs ship the page with that package. In the skeleton, `$NAME` is the API as readers write it (`Agent.getMemory()`), and `$EXPORT` is the symbol they import (`Agent`).
+`$OWNING_PACKAGE` is the package that exports the API, such as `@mastra/core` or `@mastra/memory`. List it so embedded docs ship the page with that package. In the skeleton, `$NAME` is the API as readers write it (`Agent.getMemory()`), `$EXPORT` is the symbol they import (`Agent`), and `$IMPORT_PATH` is the full import path, which can be a subpath (`@mastra/core/agent`).
 
 ```yaml
 ---
@@ -51,7 +51,7 @@ Say what the API does and when readers use it. Link to an alternative API when c
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { $EXPORT } from '$OWNING_PACKAGE';
+import { $EXPORT } from '$IMPORT_PATH';
 
 // Minimal supported usage
 ```

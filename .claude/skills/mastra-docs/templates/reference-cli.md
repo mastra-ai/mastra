@@ -21,7 +21,7 @@ Don't use it for:
 
 ## Frontmatter
 
-In the skeleton, `$CLI_PACKAGE` is the npm package that provides the command (`create-mastra`, `mastra`), and `$SUBCOMMAND` is the rest of the command (`dev`). Leave `$SUBCOMMAND` empty for a standalone command such as `create-mastra`.
+In the skeleton, `$CLI_PACKAGE` is the npm package that provides the command (`create-mastra`, `mastra`), and `$SUBCOMMAND` is the rest of the command (`dev`). Leave `$SUBCOMMAND` empty for a standalone command such as `create-mastra`. Set `$VERSION` to `@latest` only for bootstrap commands that run before a project exists, such as `npx create-mastra@latest` or `npx mastra@latest init`. Leave it empty for project commands such as `npx mastra dev`, so they run the CLI version the project installed.
 
 ```yaml
 ---
@@ -47,7 +47,7 @@ packages:
 Say what the command does and what it creates or changes.
 
 ```bash npm2yarn
-npx $CLI_PACKAGE@latest $SUBCOMMAND
+npx $CLI_PACKAGE$VERSION $SUBCOMMAND
 ```
 
 ## $MODE_OR_BEHAVIOR
@@ -55,7 +55,7 @@ npx $CLI_PACKAGE@latest $SUBCOMMAND
 Describe each mode or major behavior, with one example command each. Remove this section for a single-purpose command.
 
 ```bash npm2yarn
-npx $CLI_PACKAGE@latest $SUBCOMMAND $ARGUMENT --$FLAG $VALUE
+npx $CLI_PACKAGE$VERSION $SUBCOMMAND $ARGUMENT --$FLAG $VALUE
 ```
 
 ## Arguments and flags
