@@ -1,28 +1,31 @@
 # Agent & Workflow Billing
 
-Turn supplied weather observations into a summary or an approved report while charging a shared workspace once for successful work. The local example includes two members sharing allowance, an outsider profile, private workflow results, and persistent approval across server restarts.
+Charge for Mastra agents and workflows through subscriptions, prepaid credits, per-task charges, or measured usage. This template shows how to integrate billing with Polar, using a simple weather agent and an approval workflow as examples. Try the billing flow locally without payment credentials, then connect Polar for purchases, subscriptions, and usage reporting.
 
 ## Why we built this
 
-Agent products need to authorize each person while charging the organization they work in. A weather summary and a report with human approval make shared credit, reservations, retries, and success-only charging easy to try through one billing gateway.
+Structuring payment logic for agents and workflows takes more than adding a checkout. You need to decide who pays, when to reserve credits, and how to handle retries, failures, and workflows that pause for approval. Few examples show how to connect these pieces specifically to agents and workflows.
+
+We built this template to provide a straightforward starting point for billing in Mastra, with configurable charging policies and a Polar integration you can adapt to your own product.
 
 ## Prerequisites
 
-- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for `openai/gpt-6-luna`. Setup itself makes no model calls.
-- Local mode needs no payment credentials or weather service. Supply observations yourself; reports describe those observations rather than fetching a forecast.
-- Polar is optional and requires trusted JWT identity, commercial mappings, and billing contacts. See [billing configuration](docs/billing.md#polar).
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the weather agent. Model usage is billed to your OpenAI account.
+- Local mode needs no payment credentials or weather service. Keep `BILLING_MODE=local` and `BILLING_PROVIDER=local`. The agent summarizes observations you supply; it does not fetch a live forecast.
+- To connect Polar, follow the [billing configuration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/billing.md#polar). It covers credentials, products, identity, and billing contacts.
 
 ## Quickstart 🚀
 
-1. **Open the template**
-   - In this source checkout, open `templates/template-agent-workflow-billing`.
-   - Once published in the template registry, scaffold with `npx create-mastra@latest billing-weather --template agent-workflow-billing`, then `cd billing-weather`.
-2. **Prepare local access**
-   - Run `npm run setup`. It installs missing dependencies, copies `.env.example` to `.env` when absent, and saves private example profiles and initial allowance.
-   - Fill in the key described under Prerequisites. Keep `BILLING_MODE=local` and `BILLING_PROVIDER=local` for this example.
-3. **Start the gateway**
-   - Run `npm run dev`. In another terminal, run the first action below. Expect a weather summary and a receipt with `billedUnits: 3`.
-   - The gateway listens at `http://127.0.0.1:4111`. Studio and native execution routes are closed; use the authenticated CLI.
+1. **Clone the template**
+   - Run `npx create-mastra@latest billing-weather --template agent-workflow-billing`.
+   - Run `cd billing-weather`, then `npm install`.
+2. **Add your API key**
+   - Run `cp .env.example .env` and fill in the key described under Prerequisites.
+3. **Prepare local billing**
+   - Run `npm run setup` to create the example profiles and shared allowance: 30 credits and 10 tasks.
+4. **Start the dev server**
+   - Run `npm run dev`. The billing API listens at `http://127.0.0.1:4111`.
+   - In another terminal, run the command below. Expect a weather summary and a billing receipt with `billedUnits: 3`. The CLI authenticates using the local profile created during setup.
 
 ```sh
 npm run weather -- generate --key first-weather --json '{"location":"Porto Alegre","observedAt":"2026-11-08T12:00:00Z","temperatureC":24,"feelsLikeC":26,"humidityPercent":70,"windKph":18,"precipitationChancePercent":60,"conditions":"Cloudy with showers possible"}'
@@ -30,25 +33,18 @@ npm run weather -- generate --key first-weather --json '{"location":"Porto Alegr
 
 ## Try it out
 
-- Repeat the same command and key to replay the saved result without another model call or charge. Change the key for new work.
-- Run `npm run weather -- account` to inspect the shared balance. Add `--profile member` to a new generation command; its successful result spends the same workspace's allowance. Add `--profile outsider` to see rejection before computation.
-- Save the observation JSON to `observations.json`, then run `npm run weather -- start --input observations.json --key report-one`. It returns a suspended execution. Restart the server, then run `npm run weather -- resume <executionId> --json '{"approved":true}' --key approve-one` to produce the final report with one task charge.
-- Run `npm run weather -- status <executionId>` for your private report, or `npm run weather -- cancel <executionId> --key cancel-one` while suspended. Cancellation releases its reservation and bills zero. Other members cannot read or resume your report.
-- Repeat `npm run setup` after spending allowance. Credentials, membership, remaining credit, and financial history are preserved.
+- Repeat the same command and key to retrieve the saved result without another model call or charge. Use a new key for new work.
+- Run `npm run weather -- account` to inspect the shared balance. Add `--profile member` to a new generation command to spend the same workspace's allowance, or `--profile outsider` to see access denied before execution.
+- Save the observation JSON to `observations.json`, then run `npm run weather -- start --input observations.json --key report-one`. The workflow drafts a report and pauses for approval. Run `npm run weather -- resume <executionId> --json '{"approved":true}' --key approve-one` to finish it for one task unit, even after restarting the server.
+- Run `npm run weather -- status <executionId>` to inspect your report, or `npm run weather -- cancel <executionId> --key cancel-one` while it is paused. Cancellation releases reserved credit without charging. Other members cannot read or resume your report.
 
 ## Customization
 
-- Ask your coding agent: “Explore the code and propose a plan to replace weather summaries with maintenance advice while preserving shared organization billing, private approval, and success-only charges.”
-- Change policies in `src/weather/configuration.ts`, or set `WEATHER_WORKFLOW_POLICY=tokens` to bill measured workflow tokens instead of one successful task. [Billing documentation](docs/billing.md) explains measurement limits, provider configuration, and production identity.
-
-## Operations
-
-Build with `npm run build`, then serve with `npm start`. Local mode remains explicit and loopback only. Keep `data/` and `.env` private and persistent. Setup refuses missing or corrupt credential state for an already provisioned identity; restore the matching private files rather than reprovisioning or resetting credit.
-
-`npm run test:unit`, `npm run test:integration`, and `npm run test:local` verify deterministic behavior without live credentials. `npm run test:openai` explicitly opts into one bounded live weather generation using `.env`; it verifies actual usage, a local debit, and replay. A missing key fails as unverified.
+- Open the project in your coding agent and ask: “Replace weather summaries with maintenance advice, keeping shared workspace billing and charging only for successful work. Explore the code and propose a plan before making changes.”
+- Adjust the [billing policies](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/configuration.ts), or set `WEATHER_WORKFLOW_POLICY=tokens` to charge measured workflow tokens instead of one task. See the [billing guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/billing.md) for policy options, Polar setup, and integration details.
 
 ## About Mastra templates
 
-Official Mastra templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synchronized to standalone repositories after publication.
+This is an official Mastra template. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra/tree/main/templates/template-agent-workflow-billing) and are synchronized to standalone repositories.
 
-[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/weather-agent/CONTRIBUTING.md)
+[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md)

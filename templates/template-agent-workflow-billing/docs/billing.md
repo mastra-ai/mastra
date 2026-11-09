@@ -1,417 +1,145 @@
-# Billing components
+# Billing guide
 
-The billing modules validate policies and persist organization accounts, commercial eligibility and immutable usage in a local libSQL file. The local provider requires no payment credentials. Initialize them separately from Mastra with `initializeBilling` from `src/billing/setup.ts`.
+Use this template to add subscription access, prepaid credits, per-task charges, or measured usage to Mastra agents and workflows. Start with the local example in the [README](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/README.md), then configure policies and connect Polar when you need payments.
 
-The configured Mastra server exposes authenticated Hono organization routes under `/billing`. It creates no anonymous identities. The lower-level commercial provider remains a trusted server API: do not expose `ensureAccount`, usage delivery or state reads without the organization service's current permission checks. Typed agent generation and persistent workflow execution use the billing gateway described below. Polar commercial services and hosted sessions are available with the explicit configuration below. Durable webhook intake and bounded delivery/recovery workers share the same SQL history and source refresh service.
+## How billing works
 
-## Weather gateway
+A workspace pays for execution. Each person authenticates separately, and workspace members share the billing allowance while keeping their execution results private.
 
-The registered resources are exactly `weather-agent` and `weather-report`. Both use the static `openai/gpt-6-luna` model through the Responses API with reasoning effort `none`, one step per nested generation, no model/processor retries, and a 400-output-token limit per call. This bounds calls and output, not total input tokens or provider cost. `OPENAI_BASE_URL` is an optional trusted server configuration for an OpenAI Responses-compatible endpoint; callers cannot select models or endpoints.
+Each request follows the same flow:
 
-The agent requires the `weather-access` subscription and charges 3 prepaid `weather-credits` per successful summary. A successful report costs 1 prepaid `weather-tasks` unit. Setup grants the shared workspace 30 credits, 10 tasks, once, plus a metered `weather-tokens` counter. It creates owner/member/outsider identities through trusted organization APIs, converts the owner's workspace, and accepts an explicit member invitation. The outsider remains in a separate personal workspace with no shared allowance.
+1. Verify the caller, workspace membership, and any required subscription or entitlement.
+2. Reserve the units required by the resource's billing policy.
+3. Execute the agent or workflow.
+4. Charge once on success. Confirmed failure or cancellation releases the reservation without charging.
+5. Report successful usage to the provider in the background.
 
-`npm run setup` works before dependencies are installed. It never overwrites `.env`, replaces identities, rotates credentials, restores revoked access, or resets allowance. Credentials are returned once, then promptly persisted with atomic private writes under an exclusive `data/setup.lock`. SQL and the filesystem are separate commits: a crash between provisioning and writing its returned credential fails safely on retry. Restore the matching private state; there is no reset command. A stale setup lock requires checking that no setup process is active before removing that lock. Preserve both databases and `data/local-profiles.json` together. Do not copy private profiles to a different database.
+An idempotency key identifies one operation. Retrying with the same key and input returns the saved result or status without executing or charging again. Reusing that key with different input returns a conflict.
 
-`BILLING_MODE=local` permits local identities only with the local provider and loopback binding, including `npm start`. `BILLING_MODE=production` and every external provider reject local identity. Without `BILLING_MODE`, production inference still follows `NODE_ENV`/`MASTRA_DEV`. Select production explicitly when integrating trusted JWT identity. Setup refuses production, Polar, JWT, or custom billing configuration so it cannot seed a paid account accidentally.
+If execution or measurement cannot be confirmed, the reservation stays held for investigation. Recovery does not automatically rerun uncertain work. A failed usage export does not rerun the agent or undo local consumption.
 
-The CLI reads private bearer credentials itself; do not paste credentials into command arguments. Its default payer is the shared owner's workspace even for `--profile member` or `--profile outsider`. `--workspace <id>` selects a different authorized workspace. `--url http://127.0.0.1:<port>` selects a local port; credentials are not sent to remote URLs or followed redirects. `--key <key>` binds retries to the same operation and input. Omitting it generates a fresh key. Use `--input <file>` or `--json '<JSON>'` for caller input.
+## Local weather example
 
-Observation input has exactly `location`, an ISO `observedAt` timestamp with timezone, `temperatureC` (-90..65), `feelsLikeC` (-100..80), `humidityPercent` (0..100), `windKph` (0..500), `precipitationChancePercent` (0..100), and `conditions`. Unknown fields and out-of-range values are rejected before model execution. Dates describe supplied observations; the template never claims they are current weather.
+`npm run setup` creates an owner, a member of the owner's shared workspace, and an outsider. It grants the shared workspace 30 credits, 10 tasks, and an active example subscription once. Repeating setup preserves credentials, membership, and remaining allowance.
 
-The workflow generates a draft, suspends at `approval`, and retains the task reservation for up to 24 hours. Resume with `{ "approved": true }` or `{ "approved": true, "observations": { ... } }` to correct the full observation object before final generation. Both nested calls belong to the workflow's one execution. Restart preserves snapshots without rerunning the draft. Resume rechecks current credential and membership; sharing a payer never grants another actor access to private reports. Failure or confirmed cancellation records zero billed units and releases its hold. Uncertain external work remains held for reconciliation.
+| Resource         | Default billing                                              | Behavior                                                             |
+| ---------------- | ------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `weather-agent`  | Active `weather-access` subscription and 3 `weather-credits` | Summarizes supplied observations                                     |
+| `weather-report` | 1 prepaid `weather-tasks` unit                               | Drafts a report, waits for approval, then generates the final report |
 
-Set `WEATHER_WORKFLOW_POLICY=tokens` before starting the server to select the alternative metered usage policy: measure actual SDK `tokens` across both nested generations and settle them only on success. Its 8192-unit policy limit rejects overflow; it is not a prepaid token or provider-cost guarantee. Canceled or failed reports still bill zero. Existing runs keep their original policy snapshot. Token observations are captured from SDK usage, but the template does not declare an enforceable total-token bound or use output limits as a prepaid token guarantee.
+The agent does not fetch weather. Both resources use the observations supplied by the caller. See the [input schemas](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/observations.ts) for required fields and accepted ranges.
 
-CLI operations map to the authenticated gateway:
+The workflow keeps its reservation while paused, including across server restarts. Resume with `{ "approved": true }`, or add a complete `observations` object to correct the input. Confirmed cancellation releases the reservation. Paused runs expire after 24 hours when recovery can confirm and cancel the persisted suspension.
 
-| Command                | Gateway operation                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `generate`             | `POST /billing/workspaces/:workspaceId/agents/weather-agent/generate` with `{ "prompt": "<JSON weather request>" }` |
-| `start`                | Create a `weather-report` run, then start it with `{ "inputData": <observations> }`                                 |
-| `status <executionId>` | Read the actor's workflow projection and receipt                                                                    |
-| `resume <executionId>` | Resume `approval` with the validated approval object                                                                |
-| `cancel <executionId>` | Cancel the actor's workflow                                                                                         |
-| `account`              | Owner-only safe confirmed meter/allowance summary                                                                   |
+The CLI reads private credentials from `data/local-profiles.json`:
 
-Raw HTTP agent requests use a JSON-encoded prompt `{ "observations": <observation object>, "purpose": "summary" }`; the gateway validates it with the same schema used by the CLI and workflow. All operations require bearer authentication; writes also require `Idempotency-Key`. Local provider balance reflection runs asynchronously through the existing recovery worker, normally within 30 seconds. Pending ledger consumption still fences admission before export. Account summaries label provider balances as `confirmedBalance`; a recent receipt may still show pending delivery. Receipts distinguish observed units, billed units, and delivery/settlement status without exposing provider identifiers or credentials.
+| Command                                                                                | Purpose                               |
+| -------------------------------------------------------------------------------------- | ------------------------------------- |
+| `npm run weather -- generate --input observations.json --key summary-one`              | Generate a summary                    |
+| `npm run weather -- start --input observations.json --key report-one`                  | Start a report and pause for approval |
+| `npm run weather -- status <executionId>`                                              | Read your report's status and receipt |
+| `npm run weather -- resume <executionId> --json '{"approved":true}' --key approve-one` | Approve and complete your report      |
+| `npm run weather -- cancel <executionId> --key cancel-one`                             | Cancel your report                    |
+| `npm run weather -- account`                                                           | Read billing information as the owner |
 
-The local proof runs actual clean-copy setup, installation, dev, build, start, controlled model HTTP and private SQL. `TEMPLATE_RUNTIME_ONLY=1` reuses dependencies and omits the clean-install/build portion while executing the same semantic journeys on another supported runtime. It never marks those journeys skipped. The explicit `npm run test:openai` command uses a disposable local account and database, the selected `OPENAI_API_KEY`, and `--live`. It makes at most one bounded generation followed by idempotent replay, rejects a missing key, and outputs only a safe proof summary. It never uses Polar credentials or an existing balance.
+Use `--profile member` or `--profile outsider` to try authorization with another identity. The default payer remains the shared workspace; `--workspace <id>` selects another workspace you can access. Omitting `--key` creates a new key for each command.
 
-## Configure an account and meter
+## Choose a billing policy
 
-Install dependencies with `npm install`. Use an absolute file URL and an existing writable parent directory. For example, create `data/` before selecting `file:///absolute/path/to/data/billing.db`.
+Edit [src/weather/configuration.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/configuration.ts). Each resource has an optional access requirement and a charging rule.
 
-```ts
-import { initializeBilling } from '../src/billing/setup.js';
+| Model               | Policy                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Free access         | `charge: { type: 'none' }` with no access requirement                                                       |
+| Subscription access | `access: { subscription: 'weather-access' }` and `charge: { type: 'none' }`                                 |
+| Prepaid credits     | `charge: { type: 'credits', meter: 'weather-credits', units: 3 }`                                           |
+| Per-task charge     | `charge: { type: 'per-task', meter: 'weather-tasks', units: 1, funding: 'prepaid' }`                        |
+| Measured usage      | `charge: { type: 'usage', meter: 'weather-tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' }` |
 
-const billing = await initializeBilling({
-  storage: { url: 'file:///absolute/path/to/data/billing.db' },
-  configuration: {
-    provider: 'local',
-    resources: [
-      {
-        id: 'assistant',
-        kind: 'agent',
-        operations: ['generate'],
-        policy: {
-          version: 'v1',
-          access: { entitlement: 'assistant-access' },
-          charge: { type: 'credits', meter: 'assistant-credits', units: 3 },
-        },
-      },
-    ],
-    mappings: {
-      entitlements: ['assistant-access'],
-      meters: [{ key: 'assistant-credits', unit: 'credits', funding: ['prepaid'] }],
-    },
-    localAccounts: [
-      {
-        workspaceId: 'team',
-        entitlements: [{ key: 'assistant-access', validFrom: '2026-01-01T00:00:00Z', validUntil: null }],
-        meters: [{ key: 'assistant-credits', funding: 'prepaid', balance: 100 }],
-      },
-    ],
-  },
-});
+Access requirements and charges can be combined. A subscription can grant access while each successful execution also consumes credits. One-time purchases fund prepaid allowances; the policy determines how executions spend those units.
 
-try {
-  const account = await billing.provider.ensureAccount({ workspaceId: 'team' });
-  const event = {
-    id: 'usage-1',
-    executionId: 'execution-1',
-    account,
-    policyVersion: 'v1',
-    meter: 'assistant-credits',
-    units: 3,
-    occurredAt: '2026-11-06T12:00:00Z',
-    metadata: { resourceId: 'assistant', resourceKind: 'agent' as const },
-  };
+Meter keys and units must match `mappings`. Quantities are integers. `prepaid` spends available units; `metered` records usage for billing without a prepaid balance. Policies also support entitlement requirements and metered per-task charges.
 
-  await billing.provider.reportUsage(event); // accepted
-  await billing.provider.reportUsage(event); // duplicate, no second debit
-  const state = await billing.provider.getState(account); // balance 97
-  const reconciliation = await billing.provider.reconcile({ account, eventIds: [event.id] });
-  // reconciliation.reflectedEventIds identifies usage proven reflected locally.
-} finally {
-  billing.close();
-}
-```
+For the included workflow, set `WEATHER_WORKFLOW_POLICY=tokens` before starting the server to measure SDK tokens across both model calls. It charges only on successful completion, up to the configured 8,192-unit limit. An output-token limit does not guarantee a total-token or monetary cost cap. Prepaid token usage and prepaid workflow usage are not supported by the supplied Mastra adapters.
 
-Only send positive billable usage after confirmed logical success. Failed, canceled and zero-charge outcomes don't produce a billable event. This primitive doesn't validate an execution outcome or policy authorization. Keep prompts, results and credentials out of usage metadata; only `resourceId` and `resourceKind` are accepted.
+Policy changes apply to new executions. Existing runs keep the policy and reservation recorded when they started.
 
-Local account seeds apply once, when `ensureAccount` first creates that workspace. Reopening or changing seed values doesn't reset balances or eligibility. Accounts without a seed start with no grants or meters. Entitlements and subscriptions have separate validity windows; snapshots include only currently active grants. Meter periods are persisted boundaries, with no automatic renewal or balance reset.
+## Connect your own agents and workflows
 
-## Policies and accounting
+The [weather resources](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/weather/resources.ts) and [application setup](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/mastra/setup.ts) provide the complete integration example:
 
-Access can require an entitlement, a subscription, or both. A `none` charge supports free or subscription-only access. Fixed `credits` use prepaid credit units. `per-task` supports agents and workflows with integer task units. `usage` requires a registered measurement with matching units and a positive `maxUnits`; prepaid measurements must declare an enforceable bound. Measurement declarations describe a resource's required capabilities, and don't themselves enforce executor limits.
+1. Register agents with `agentResource` and workflows with `workflowResource`.
+2. Pass those registrations, the matching billing configuration, and an `OrganizationService` to `initializeMastraBilling`.
+3. Attach the returned storage to the same Mastra instance. Keep both `billingOnlyServer` and `enforceBillingBoundary` so native execution routes cannot bypass billing.
+4. After attaching resources and storage, call `await runtime.startRecovery().ready`. Call `await runtime.close()` during shutdown.
 
-Every quantity must be a safe integer. Metered meters require `balance: null` and accumulate consumption without a prepaid debit. Prepaid meters reject insufficient credit. Driver mappings use logical keys; invalid keys, duplicate mappings, unsupported operations, missing capabilities and failed-charge overrides fail initialization. Parsed configuration is deeply frozen.
-
-An event ID claims one immutable payload across all accounts. An identical retry returns `duplicate`; changed contents or account return `BillingError` with code `conflict`. Local delivery acceptance and reconciliation are separate results. Reconciliation returns only the requested event IDs proven reflected in the same account's snapshot; missing events are omitted.
-
-Storage uses explicit write transactions with foreign-key enforcement checked on each connection. Write-ahead logging (WAL) is required so independent readers don't block usage commits. Each transaction attempt owns and closes a single-connection client; retries don't reuse a connection with a failed statement. Lock contention retries the complete aborted transaction for up to 50 attempts with 20 ms between attempts, then returns a safe retryable error. No provider or model calls run inside a transaction.
-
-Keep the database on persistent local disk. This component supports local files; remote URLs, sync configuration and in-memory databases are rejected. Schema history, checksums and definitions are checked transactionally. Incompatible storage stops initialization without deleting data. Preserve the database when changing application versions. No destructive reset or accounting cleanup is provided.
-
-Run `npm run test:unit` before `npm run test:integration`. The integration suite uses disposable real databases and two independent child processes, including 20 contended duplicate-event rounds and a shared-credit overspend race. Run `npm run check` for TypeScript and formatting.
-
-## Identities and workspaces
-
-`OrganizationService` separates the authenticated actor from the selected workspace payer. Trusted provisioning creates a persistent identity, personal workspace and owner membership in one SQL transaction. Explicit owner conversion changes that same workspace to `shared`; its ID and commercial history remain unchanged. Invitations cannot share a personal workspace before conversion.
-
-Local identities use generated 256-bit opaque credentials, stored only as SHA-256 hashes. Provision identities from trusted application setup, never an unauthenticated HTTP endpoint:
+From trusted server code, invoke an agent through the billing facade. Here, `runtime` is the result of `initializeMastraBilling`, `organizations` is its organization service, and `credential`, `workspaceId`, and `prompt` come from your authenticated request:
 
 ```ts
-import { OrganizationService } from '../src/billing/organizations.js';
-import { OrganizationStorage } from '../src/billing/storage/organizations.js';
-
-const storage = await OrganizationStorage.open({ url: 'file:///absolute/path/to/data/billing.db' });
-const organizations = new OrganizationService(storage, { mode: 'local', provider: 'local' });
-
-const alice = await organizations.provisionLocal({ profileId: 'alice', displayName: 'Alice' });
-const bob = await organizations.provisionLocal({ profileId: 'bob', displayName: 'Bob' });
-// Deliver each non-null credential privately to its identity. It is returned once.
-// Reprovisioning the same profile returns the same IDs and credential: null.
-
-const owner = await organizations.context({ credential: alice.credential! });
-await organizations.convert(owner, 'share-personal-workspace');
-const invitation = await organizations.invite(owner, 'invite-bob', {
-  recipientId: bob.identity.id,
-  role: 'member',
-  expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-});
-// Deliver invitation.token privately. Retrying the same key returns token: null.
-await organizations.acceptInvitation({ credential: bob.credential!, key: 'accept-alice', token: invitation.token! });
-const member = await organizations.context({ credential: bob.credential!, workspaceId: alice.workspaceId });
-// owner.actorId !== member.actorId; both select alice.workspaceId as payer.
-organizations.close();
-```
-
-Context objects are bound to their originating service; serialized copies cannot authorize operations. Every consuming operation reauthenticates credentials and checks current identity activity, membership and permissions. Revocation, membership removal and role changes invalidate old access. Store credentials in the application's secret store: there is no password, session, credential-recovery or email-delivery service. Trusted operators can revoke a local credential with `storage.revokeCredential(credential)` or deactivate an identity with `storage.setIdentityActive(id, false)`. Reprovisioning does not recover a lost secret or reactivate an identity.
-
-Invitation acceptance authenticates its existing, verified recipient identity. Tokens contain no trusted identity claims, are stored only as hashes, expire, and can add a membership once. A retry with the original key returns the existing membership only while that recipient still has access; a different acceptance key cannot reuse the token. Concurrent role changes/removals count owners within the same SQL write transaction, so at least one owner remains.
-
-| Role   | Execute permitted resources | Manage non-owner members | Billing and ownership |
-| ------ | --------------------------- | ------------------------ | --------------------- |
-| Owner  | Yes                         | Yes                      | Yes                   |
-| Admin  | Yes                         | Yes                      | No                    |
-| Member | Yes                         | No                       | No                    |
-
-Admins may manage admin/member roles and invitations, but cannot add, demote or remove owners. Registered deterministic executors use these permissions at transactional admission. Organization-management routes do not execute resources or charge an account. The configured execution routes below use the same authorization service before admission. Actor-private records remain visible only to their initiating actor with current workspace membership, including historical records created before conversion. Owners and admins cannot read another actor's projection. The bounded `seedPrivateRecord` trusted storage contract demonstrates that boundary with a `{ text }` projection; it is not an execution engine or public write endpoint.
-
-## Server configuration and HTTP API
-
-`npm run dev` constructs the Mastra instance with these custom Hono routes. Run `npm run setup` first for local example identities and allowance. The default database is `data/billing.db`, the listener is `127.0.0.1:4111`, and CORS is disabled. The default path resolves against Mastra's project root, rather than its server/public working directory. `BILLING_DATABASE_URL` can select an absolute persistent file URL; its parent directory must exist. `BILLING_PORT` changes the port. Keep the database and secrets outside any static-file root. The template does not configure a static directory for private data.
-
-Send `Authorization: Bearer <credential>` on every organization, execution and commercial request. The exact `POST /billing/webhooks/polar` endpoint uses Polar signature authentication. Use `Content-Type: application/json` and `Idempotency-Key` for every write. Workspace selection never grants membership. Mutation keys are scoped by actor, workspace and operation and retain a normalized request fingerprint; changing the input under the same key returns `409`. Invitation creation returns its token only on the first committed request, so a lost response requires a new invitation/key rather than secret recovery.
-
-| Method | Path                                                         | Input / behavior                                                      |
-| ------ | ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| GET    | `/billing/context`                                           | Resolve the actor's original personal/converted workspace             |
-| GET    | `/billing/workspaces/:workspaceId`                           | Resolve selected workspace and current role                           |
-| POST   | `/billing/workspaces/:workspaceId/convert`                   | `{}`; explicit owner conversion                                       |
-| POST   | `/billing/workspaces/:workspaceId/invitations`               | `{ recipientId, role, expiresAt }`; verified persistent recipient ID  |
-| POST   | `/billing/invitations/accept`                                | `{ token }`; recipient authentication, no prior target membership     |
-| GET    | `/billing/workspaces/:workspaceId/members`                   | Owner/admin membership list                                           |
-| PATCH  | `/billing/workspaces/:workspaceId/members`                   | `{ memberId, role }`; `role: null` removes membership                 |
-| GET    | `/billing/workspaces/:workspaceId/billing-access`            | Check owner billing-management permission; creates no payment session |
-| GET    | `/billing/workspaces/:workspaceId/private-records/:recordId` | Initiating-actor-only bounded projection                              |
-
-HTTP request bodies are limited to 16 KiB before JSON parsing; oversized requests return `413`. Schemas reject additional body fields, including actor/account/payer overrides. Safe JSON errors use `401` for invalid credentials, `403` for denied access, `400` for invalid input, `409` for conflicts and `503` for storage failure. Private records do not distinguish missing from unauthorized records. The server does not log credentials or include them in persisted replay results.
-
-The supplied entry point reserves customer access for `/billing/*`. Instance middleware closes early development/browser routes, and an earlier catch-all route closes native routes that skip user middleware. Keep both parts when registering resources. Studio and native agent/workflow, streaming, asynchronous, restart, time-travel, MCP, A2A, Responses and private-data routes cannot serve as alternative customer APIs. Keep databases and source files outside static roots.
-
-## Optional JWT identities
-
-Use `JwtIdentityAdapter` for production, with a fixed trusted public JWKS, issuer, audience and explicit asymmetric algorithms. The adapter verifies signature, `iss`, `aud`, mandatory nonempty `sub`, mandatory `exp`, and applicable `nbf`. It ignores token-supplied key URLs and email for trust decisions. Tokens cannot provision accounts: trusted setup must bind `(issuer, subject)` to an internal identity with `organizations.provisionJwt({ issuer, subject, displayName })` first.
-
-```ts
-import { JwtIdentityAdapter } from '../src/billing/identity.js';
-
-const identity = new JwtIdentityAdapter(storage, {
-  issuer: 'https://identity.example',
-  audience: 'billing-api',
-  algorithms: ['ES256'],
-  jwks: { keys: [trustedPublicJwk] },
-});
-const organizations = new OrganizationService(storage, { identity, mode: 'production', provider: 'local' });
-await organizations.provisionJwt({ issuer: 'https://identity.example', subject: 'user-123', displayName: 'Alice' });
-```
-
-For the supplied Mastra configuration, set `BILLING_JWT_CONFIGURATION` to JSON containing `issuer`, `audience`, `algorithms` and public `jwks`. Outside the Mastra development lifecycle (`MASTRA_DEV=true`), `NODE_ENV=production` rejects local identity at startup; Polar selection also rejects local identity. JWT key rotation requires updating trusted configuration/restarting; no remote discovery or account service is included. Use an external identity provider for token issuance, authentication flows and key lifecycle. Never place private signing keys in this configuration. The production identity example does not enable Polar payments.
-
-Migration v2 adds identity and organization records without changing migration v1 or commercial balances. Keep the database durable, restrict filesystem access, and back it up before upgrades. No destructive reset, automatic result sharing or cleanup is provided. The integration suite includes actual Mastra serving, real JOSE verification and 20 independent-process races each for invitation replay and competing owner removal/demotion.
-
-## Transactional execution accounting
-
-`BillingGateway` coordinates registered, trusted deterministic executors independently of a payment provider or HTTP transport. Construct it with the existing `OrganizationService`, an `AccountingStorage` opened on the same database, the billing provider, validated configuration and one executor for each configured `generate` or `start` operation. Executor code is trusted application setup; never accept executor registrations or outcome measurements from clients. `resume` and `cancel` lifecycle requests are unavailable in this layer. A trusted executor can report a confirmed canceled outcome.
-
-```ts
-import { BillingGateway } from '../src/billing/gateway.js';
-import { AccountingStorage } from '../src/billing/storage/accounting.js';
-
-const accounting = await AccountingStorage.open({ url: databaseUrl }, organizations.storage);
-const gateway = new BillingGateway(organizations, accounting, provider, configuration, [
-  {
-    resourceId: 'assistant',
-    operation: 'generate',
-    measurements: [{ key: 'token-count', maxUnits: 100 }],
-    async execute(input, budget) {
-      // Implement a bounded deterministic application operation here.
-      // Report only trusted observations after the operation has stopped.
-      return {
-        status: 'succeeded',
-        result: { text: 'Completed' },
-        measurements: [{ id: 'call-1', measure: 'token-count', units: 4 }],
-        measurementComplete: true,
-      };
-    },
-  },
-]);
-const response = await gateway.execute(context, {
-  resourceId: 'assistant',
-  operation: 'generate',
-  idempotencyKey: 'request-123',
-  input: { prompt: 'Hello' },
-});
-const receipt = await gateway.read(context, response.billing.executionId);
-```
-
-Use a resource/policy configuration whose measurement bound matches the executor. Usage registration requires a finite supported bound; prepaid configuration additionally requires an enforceable measurement declaration. The supplied executor contract is a trusted promise about application units, not a cap on model/provider costs. Use `MastraBilling` below for real Mastra resources and lifecycle handling. The lower-level deterministic executor API remains available for trusted server components. Configure the Polar provider as described below when using verified remote commercial sources.
-
-Admission atomically rechecks current identity, local credential activity or verified JWT deadline, workspace membership, commercial version, idempotency and spendable credit. Provider observations occur outside SQL transactions. Version conflicts reread at most three times; unsafe or unverified commercial state returns retryable `state_unavailable`. Free work without an access guard needs no provider access. Paid access rechecks both configured entitlement and subscription validity, meter funding and current periods.
-
-A successful invocation charges its original immutable policy once. Credit/task policies reserve their fixed units; usage reserves `maxUnits` and releases unused capacity after complete measurement. Shared prepaid allowance subtracts active reservations and settled debits until exact reflection is proven. The local provider proves immutable event payload reflection against the same versioned SQL state; reporting usage therefore never subtracts a debit twice. Reconciliation requests include at most 1,000 pending event IDs, while transactional exact-payload reflection covers older history; this request bound imposes no lifetime or pending-count limit on valid work. Metered usage reserves a bounded execution budget without subtracting prepaid credit. Ledger, reservation release, terminal state and stable outbox payload commit together. Outbox delivery remains pending; no automatic worker sends it.
-
-Confirmed failure or cancellation writes a zero-charge ledger outcome and releases its reservation. Complete zero usage charges zero and emits no usage event. Confirmed usage above the bound becomes a failed, zero-charge outcome after termination; uncertain termination retains the hold. A thrown executor, malformed completion or unknown outcome is uncertain and never automatically rerun. Successful work with incomplete measurement stays pending with its reservation held. Missing measurement is `observedUnits: null`; a partial trusted sum is shown while `billedUnits` remains null. No invented usage, automatic refunds or recovery command releases these holds.
-
-Keys are scoped by actor, workspace, resource and operation, with canonical JSON input fingerprints. The same key/input replays the saved result/status under the original policy even after configuration changes; different input conflicts. Concurrent same-process retries return the existing running status. A different process observing a running claim marks it uncertain rather than dispatching it again. Current authorization is required for every replay/read; other members, including owners, cannot read another actor's result. Operation tombstones and accounting history are immutable, with no destructive cleanup supplied.
-
-Inputs and result projections contain JSON only: at most 16 KiB UTF-8, depth 12, 2,048 nodes, 256 fields/items per container, 128-character keys and 16,384-character strings. Cycles, nonfinite numbers, accessors, symbols, sparse arrays, SDK instances and prototype-sensitive keys are rejected. Keys are bounded identifiers. Fingerprinting normalizes object key order and negative zero. Persist only the projection needed by your application; results can include private content and require appropriate database access and retention controls. Receipts expose execution/policy/state/unit fields without external account identifiers or provider details.
-
-Migration v3 appends execution claims, immutable configuration snapshots, reservations, deduplicated measurements, terminal ledger and outbox records without rewriting migrations v1/v2. All three named accounting proofs run through the public gateway with real disposable SQL, including 20 independent-process shared-credit races, rollback at outbox insertion, crash/replay uncertainty, policy/funding/outcome combinations and exact reflected-debit accounting. `npm run test:integration` includes them.
-
-## Typed Mastra execution
-
-Register real Mastra resources with `agentResource` and `workflowResource`, then construct `MastraBilling` with the same organization service and accounting provider. `initializeMastraBilling` opens the accounting components and a private persistent `workflow.db` beside `billing.db`. It rejects using the same file for accounting and Mastra snapshots. Keep both files and their WAL files on durable local disk; no transaction spans the two databases. Workflow setup creates the main file with owner-only permissions before opening SQLite and restricts existing WAL/SHM sidecars to the same mode. It accepts only regular files owned by the process user, rejects symbolic/hard links, and never changes a parent directory or the process umask. Use a trusted directory on a filesystem that enforces these permissions; startup cannot revoke another process's already-open descriptor or undo earlier disclosure.
-
-The following integration assumes you have constructed fresh `agent`, `workflow`, `organizations` and `configuration` instances for this process. Bind the returned storage to that same Mastra instance before starting recovery with `startRecovery()`; do not reuse native workflow instances tied to a closed store. A registered workflow must set `options: { autoRestartActiveRuns: false }`; the billing lifecycle owns recovery and never automatically repeats uncertain external work.
-
-```ts
-import { Mastra } from '@mastra/core/mastra';
-import { agentResource, workflowResource } from '../src/billing/mastra-resources.js';
-import { initializeMastraBilling } from '../src/billing/mastra-setup.js';
-import { billingOnlyServer, enforceBillingBoundary } from '../src/server/security.js';
-
-const execution = await initializeMastraBilling({
-  organizations,
-  configuration,
-  databaseUrl: 'file:///absolute/path/to/data/billing.db',
-  agents: {
-    assistant: agentResource(agent, {
-      version: 'assistant-v1',
-      maxSteps: 2,
-      maxOutputTokens: 512,
-    }),
-  },
-  workflows: {
-    report: workflowResource(workflow, {
-      version: 'report-v1',
-      agentDependencies: ['assistant'],
-      measurement: 'facade-calls',
-      expectedCalls: [1, 1],
-    }),
-  },
-});
-
-export const mastra = enforceBillingBoundary(
-  new Mastra({
-    agents: { assistant: agent },
-    workflows: { report: workflow },
-    storage: execution.storage,
-    server: billingOnlyServer(organizations, execution.billing.http, execution.commercial, execution.recovery),
-  }),
-);
-
-await execution.startRecovery().ready;
-// On application shutdown, await execution.close() before exiting.
-```
-
-`enforceBillingBoundary` installs middleware before early browser and development routes. `billingOnlyServer` also registers a denial route before native handlers, including framework-public routes that bypass user middleware. Removing either part weakens this boundary. All customer operations authenticate through the `/billing` application. Internal Mastra objects stay in trusted setup; facades return no raw agent executor or workflow run handle.
-
-Resource adapter versions identify executable definitions and model/tool configuration. Persisted definition signatures also bind agent execution limits and workflow measurement checkpoints; billing policies are kept separately. Keep a compatible registered definition for suspended runs; changing its version causes existing runs to fail closed instead of resuming different code. Billing policy changes apply to new executions; an admitted workflow continues under its persisted policy and reservation.
-
-Declare every agent used through a workflow's billing facade in `agentDependencies`. Only those agents' definitions affect compatibility, so adding, changing or removing an unrelated registration preserves existing runs and suspension expiry. Nested facade calls to undeclared agents are rejected. An omitted declaration conservatively includes all registered agents; use `[]` for a workflow with no agent calls. Bump the resource version when changing executable code, model, tools or schemas.
-
-Existing runs retain their original signatures and history. Legacy all-agent signatures are accepted only when recomputing the exact signature proves that the workflow settings and every declared dependency are unchanged. This works automatically when the historical registry equals either today's complete registry or the declared dependency registry. If an older registry also contained unrelated agents that have since changed or been removed, supply its full historical definition map in the trusted workflow registration:
-
-```ts
-legacyAgentDefinitions: [
-  {
-    assistant: previousAssistant.definition,
-    retiredAgent: previousRetiredAgent.definition,
-  },
-],
-```
-
-Save these maps from the prior deployment's `AgentResource.definition` values before replacing registrations. Each map must reproduce the stored legacy signature, and each declared dependency must equal its current definition. Without an explicit `agentDependencies` declaration, the historical and current registries must contain exactly the same agents and definitions. A signature alone, an incomplete map or a changed dependency cannot authorize resume or expiry. Keep the compatible prior deployment available for runs whose definitions cannot be proven; their reservations remain held for operational reconciliation.
-
-### Generate and replay
-
-```ts
-const billing = execution.billing;
 const context = await organizations.context({ credential, workspaceId });
-const response = await billing.agent('assistant').generate('Summarize the request.', {
+const response = await runtime.billing.agent('weather-agent').generate(prompt, {
   billing: context,
   idempotencyKey: 'summary-123',
-  abortSignal: AbortSignal.timeout(30_000),
-  onStepFinish: step => console.log(step.finishReason),
 });
 
-if (response.kind === 'immediate') {
-  console.log(response.result.text, response.billing.billedUnits);
-} else if (response.kind === 'replay') {
-  console.log(response.result?.text, response.billing.replayed);
-}
+console.log(response.billing.billedUnits);
 ```
 
-The facade accepts bounded text prompts and the explicit callback/abort subset. Model selection, request context, processors, persistence, token limits and required measurement callbacks remain controlled by registration. Accounting capture runs before a permitted `onStepFinish` callback. Supplying additional execution options fails validation. Structured output is configured with an `outputSchema` on `agentResource`; its type carries through the actual SDK result and replay projection.
+For the weather agent, `prompt` is JSON containing `{ observations, purpose: 'summary' }`. Use `weatherPrompt` from `src/weather/observations.ts` to construct it.
 
-`kind: 'immediate'` contains the actual `FullOutput`, plus a separately named `projection`. `kind: 'replay'` contains only a validated projection or `null` when no output is available. The projection contains `text`, `finishReason` and optional schema-validated `object`; it never pretends to contain SDK steps, callbacks, streams or instances. HTTP returns the same projection, never the full SDK result. Projection limits are the same bounded JSON limits as accounting inputs.
+Workflow access uses `runtime.billing.workflow(resourceId)`: call `createRun`, then `start`. Later, load the run with `getRun` and call `resume`, `status`, or `cancel` with a freshly authenticated billing context. Each write needs its own idempotency key.
 
-### Workflow lifecycle
+For nested agent calls, use `runtime.billing.nestedAgent(resourceId).generate(prompt)` inside the admitted workflow. These calls contribute to the parent execution without a separate charge. Declare the agent in `agentDependencies`. Measured workflows must declare `measurement: 'facade-calls'` and the expected calls per segment, such as `[1, 1]` for one call before approval and one after it. Direct model calls outside this facade are not measured by the integration.
 
-```ts
-const run = await billing.workflow('report').createRun({
-  billing: context,
-  idempotencyKey: 'create-report-123',
-});
-await run.start({
-  billing: context,
-  idempotencyKey: 'start-report-123',
-  inputData: { count: 0 },
-});
+Set workflow `autoRestartActiveRuns: false`. Increase the resource version when changing executable code, models, tools, or schemas, and retain compatible definitions for paused runs. Token streaming, time travel, and automatic retries of uncertain work are not supported.
 
-// In a later process, obtain fresh credentials/context before loading the run.
-const recovered = await billing.workflow('report').getRun({
-  executionId: run.executionId,
-  billing: freshContext,
-});
-const result = await recovered.resume({
-  billing: freshContext,
-  idempotencyKey: 'approve-report-123',
-  step: 'approval',
-  resumeData: { approved: true },
-});
-```
+## Identity and HTTP access
 
-These input/resume shapes depend on your concrete registered workflow. `createRun` records a billing-owned ID without creating a Mastra run, executing a step or reserving credit. `start` admits the execution and creates its deterministic associated Mastra run. Repeated create/start/resume keys don't dispatch work again; conflicting inputs under the same operation key return `conflict`. Resume uses its own key and retains the original policy and reservation.
+Local identities work only with the local provider and a loopback listener. Production and external billing providers require verified JWT identity.
 
-`getRun`, `status`, `resume` and `cancel` verify current credentials, membership, selected workspace and initiating actor before accessing snapshots or private results. Another member or owner cannot read or resume the initiating actor's run. Resume also rechecks current paid eligibility. `run.status(context)` returns only a projection with execution ID, lifecycle status, optional validated output, suspended step IDs and expiry. Full steps, raw snapshots and suspension payloads are excluded.
+For JWT access:
 
-Workflow replies distinguish the actual immediate SDK return from persisted replay in the same way as generation. Input schemas are checked before admission, then original JSON is forwarded so the SDK applies input transforms once. Workflow output validation/transforms run once when capturing the projection. Replay checks its bounded stored envelope and matching definition, then returns that previously validated value without running schema transforms again. An output-transforming schema can therefore produce a projection different from the immediate native SDK result. The projection carries the lifecycle status; the accounting receipt can remain `running`/`reserved` while that lifecycle is suspended. A completed workflow with incomplete billable measurements exposes `uncertain` lifecycle state and pending settlement.
+1. Set `BILLING_MODE=production`.
+2. Set `BILLING_JWT_CONFIGURATION` to JSON containing a trusted `issuer`, `audience`, explicit asymmetric `algorithms`, and public `jwks`.
+3. Provision each identity through trusted server setup using `organizations.provisionJwt({ issuer, subject, displayName })`.
+4. Establish workspace membership before allowing execution.
 
-`run.cancel({ billing: context, idempotencyKey })` cannot reverse a completed charge. Confirmed cancellation of a suspended run releases once. Cancellation of a locally active run propagates abort and waits for execution termination. A foreign active run may persist `canceled` in Mastra while external work continues; that snapshot alone never authorizes release. Its accounting outcome remains uncertain with the hold retained. Fencing versions prevent a late owner from charging after cancel/expiry has claimed the execution.
+The template verifies tokens but does not issue them or provide login flows. Tokens cannot create identities. Keep private signing keys outside the configuration.
 
-Suspensions expire after `suspendedReservationTtlMs`, defaulting to 24 hours. The recovery worker started by `initializeMastraBilling.startRecovery()` scans immediately and periodically afterward. It is the supported scheduler for suspension expiry and provider recovery; the unused standalone `MastraBilling.startExpiryWorker()` has been removed. Trusted integrations can call `billing.expireSuspensions(now)` for one expiry sweep or pass it to `BillingRecovery`. It claims the suspension against resume/cancel, checks the actual persisted Mastra state is suspended, cancels it, then releases once. Runtime/accounting disagreement or unconfirmed termination retains an uncertain hold. The worker never restarts uncertain work. Inspect and reconcile such holds operationally; no automatic repair or destructive cleanup is provided.
+Owners manage billing and ownership. Admins manage non-owner members. Members can execute permitted resources. Results belong to the initiating actor: being an owner does not grant access to another member's reports.
 
-### Measurements and supported bounds
+All customer operations use `/billing`. Send `Authorization: Bearer <credential>` on requests, plus `Content-Type: application/json` and `Idempotency-Key` on writes. The default example uses the CLI; native agent and workflow endpoints remain blocked.
 
-Configure any needed `tokens`, `input-tokens`, `output-tokens` and `model-calls` measurements with matching meter units. Framework per-step usage is captured once with stable execution, segment, call and step identities. Aggregate `usage`/`totalUsage` is never added to those observations. A partial sum remains observable when a later call fails or omits usage. Missing values remain unknown; explicit numeric zero is a complete observation. Recovered tool errors can still produce a successful logical generation; unhandled model/workflow failures and cancellation bill zero.
+| Method | Path below `/billing/workspaces/:workspaceId`     | Body                                                                                       |
+| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| POST   | `/agents/:resourceId/generate`                    | `{ "prompt": "..." }`                                                                      |
+| POST   | `/workflows/:resourceId/runs`                     | `{}`                                                                                       |
+| POST   | `/workflows/:resourceId/runs/:executionId/start`  | `{ "inputData": ... }`                                                                     |
+| POST   | `/workflows/:resourceId/runs/:executionId/resume` | `{ "step": "approval", "resumeData": ... }`                                                |
+| POST   | `/workflows/:resourceId/runs/:executionId/cancel` | `{}`                                                                                       |
+| GET    | `/workflows/:resourceId/runs/:executionId`        | No body                                                                                    |
+| GET    | `/usage`                                          | No body; owner only                                                                        |
+| POST   | `/checkout`                                       | `{ "product": "credit-pack", "returnUrl": "https://app.example.com/billing" }`; owner only |
+| POST   | `/portal`                                         | `{ "returnUrl": "https://app.example.com/billing" }`; owner only                           |
 
-| Resource and measurement                                | Supported funding  | Admission and ceiling                                                                                                                                                                                                            |
-| ------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Agent model calls                                       | Prepaid or metered | `maxSteps` with SDK/processor retries disabled bounds each invocation; prepaid rejects explicit agent retries, fallback lists and dynamic model selection; nested invocations must fit the remaining call budget before dispatch |
-| Agent input/output/total tokens                         | Metered            | Finite `maxUnits`, bounded prompts/steps/output requests, abort after confirmed overflow; overflow bills zero after termination                                                                                                  |
-| Certified workflow facade calls and tokens              | Metered            | Required per-segment invocation counts and complete captured measurements; unsupported/unknown segments cannot dispatch                                                                                                          |
-| Uncertified workflow usage or prepaid workflow usage    | Rejected           | No completeness or enforceable reservation guarantee                                                                                                                                                                             |
-| Prepaid agent token usage                               | Rejected           | Request output limits don't establish a complete input/output token reservation bound                                                                                                                                            |
-| Fixed credits/tasks and free/subscription-only policies | Supported for both | Existing atomic admission and one successful logical charge                                                                                                                                                                      |
+Bodies are limited to 16 KiB and reject unknown fields. Common responses are `400` for invalid input, `401` for invalid credentials, `403` for denied access, `409` for conflicts, and `503` for unavailable state or storage. Organization and invitation routes are defined in [src/server/billing.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/server/billing.ts).
 
-An instrumented workflow declares `measurement: 'facade-calls'` and the exact number of facade generations expected in each start/resume segment. The array `[1, 1]` certifies one invocation before the first suspension and one after resume. A trusted step calls `billing.nestedAgent('assistant').generate(prompt)`; this helper works only inside an admitted execution, inherits its identity and contributes measurements to its parent without another reservation or charge. It rechecks current authorization and persists no bearer credential in snapshots.
+## Polar
 
-Certify selected workflow code and verify its model requests against these checkpoints. Arbitrary raw agent/model calls, background model work, or uninstrumented nested calls are outside this measurement contract; declaring a resource doesn't automatically certify it. A mismatched invocation count or any missing billable observation prevents usage settlement. Do not mark arbitrary workflow code complete because one visible call reported usage. No application token budget promises a cap on provider monetary cost.
+Polar handles products, purchases, subscriptions, checkout, and the customer portal. The application ledger tracks prepaid grants, reservations, and consumption. Credits come from verified purchases or subscription periods, never from a Polar meter balance.
 
-### Execution HTTP routes
+### Configure products and allowances
 
-All routes use the authenticated workspace selection and the same facade/accounting rules. Writes require `Idempotency-Key`. Bodies reject extra fields and remain limited to 16 KiB.
+Create the products, prices, meters, and meter-credit benefits in your Polar organization. Then connect them to the template's logical configuration:
 
-| Method | Path below `/billing/workspaces/:workspaceId`     | Body                                        |
-| ------ | ------------------------------------------------- | ------------------------------------------- |
-| POST   | `/agents/:resourceId/generate`                    | `{ "prompt": "..." }`                       |
-| POST   | `/workflows/:resourceId/runs`                     | `{}`                                        |
-| POST   | `/workflows/:resourceId/runs/:executionId/start`  | `{ "inputData": ... }`                      |
-| POST   | `/workflows/:resourceId/runs/:executionId/resume` | `{ "step": "approval", "resumeData": ... }` |
-| POST   | `/workflows/:resourceId/runs/:executionId/cancel` | `{}`                                        |
-| GET    | `/workflows/:resourceId/runs/:executionId`        | No body                                     |
+- `mappings` names the meters and access keys used by policies.
+- `catalog.allowances` defines the number of units, source type, expiry, and version.
+- `catalog.offers` groups exact allowance versions under a checkout key.
+- `polar.grants` links an allowance to Polar product, price, benefit, and meter IDs.
+- `polar.products` links an offer to its checkout product.
+- `polar.meters` defines the event and unit field used to export consumption.
 
-The installed route manifest is exercised against development and built servers with registered resources, valid customer credentials and a controlled model HTTP boundary. Native execution, private run data, streaming, asynchronous, restart/time-travel and alternate protocol requests must produce no model requests or private result disclosure. Re-run these proofs whenever Mastra dependencies change. Token streaming, durable agent resume, time travel and automatic uncertain-work retries remain unsupported.
-
-## Polar configuration
-
-Polar owns products, paid orders, subscriptions and benefit eligibility. The application owns prepaid grants, allocations and successful consumption. This integration uses native fetch and the pinned `Polar-Version: 2026-10` contract. It rejects a different response version and never infers a local grant from a Polar meter balance.
-
-Set `provider: 'polar'`, omit local seeds and add a `polar` configuration to the existing resource/policy configuration:
+For example, this configuration sells a one-time pack of 100 credits and charges 3 per successful `assistant` invocation. It is an example for your own registered agent. To use the supplied weather application, configure its exact `weather-agent` and `weather-report` resources, policies, and mappings instead.
 
 ```ts
 const configuration = {
@@ -436,13 +164,7 @@ const configuration = {
         expiry: { type: 'none' },
       },
     ],
-    offers: [
-      {
-        key: 'credit-pack',
-        version: 'v1',
-        allowances: [{ key: 'prepaid-credits', version: 'credits-v1' }],
-      },
-    ],
+    offers: [{ key: 'credit-pack', version: 'v1', allowances: [{ key: 'prepaid-credits', version: 'credits-v1' }] }],
   },
   polar: {
     server: 'https://sandbox-api.polar.sh',
@@ -461,213 +183,58 @@ const configuration = {
     returnUrls: ['https://app.example.com/billing'],
   },
 };
-const commercial = await initializeBilling({
-  configuration,
-  storage: { url: databaseUrl },
-  polar: {
-    token: process.env.POLAR_ACCESS_TOKEN!,
-    webhookSecret: process.env.POLAR_WEBHOOK_SECRET,
-    contact: async workspaceId => trustedWorkspaceContacts[workspaceId],
-  },
-});
 ```
 
-`catalog` owns logical offer and allowance revisions. Allowances define application meter keys, units, source kind and expiry; offers reference exact allowance revisions and optional `entitlements`/`subscriptions` keys. Policies keep their own versions and reference the existing logical access and meter mappings. Provider grant bindings reference an allowance; checkout product bindings reference an offer. The schema rejects missing revisions and mismatched offer/grant or subscription bindings. Declared offer entitlements must be mapped and belong to the verified checkout product. External product prices remain provider authority; the catalog does not define currencies or tariffs.
+Replace the ID variables with values from your Polar organization. The benefit must grant the configured units with `rollover: false`; credit products cannot include metered overage prices. Configure the event name and unit field to match your Polar meter. Keep return URLs restricted to your application.
 
-Catalog revisions are retained in SQL and cannot be changed or deleted. To change terms, add a new version and retain old revisions/bindings needed by existing sources. Reordering offer access keys or allowance references preserves its terms. Changing provider IDs does not require rewriting logical catalog terms. A replacement driver is still required to use another payment provider.
+For recurring allowances, use `kind: 'subscription'` and `expiry: { type: 'period' }` with a matching recurring product, fixed price, subscription, and benefit. Each verified period grants units once. One-time allowances use `kind: 'order'` and either no expiry or a duration measured from the verified purchase time.
 
-Existing configurations with complete terms inside `polar.grants` and unversioned `polar.products` remain accepted without edits. Initialization normalizes them into `commercial.configuration.catalog` and reference-only Polar bindings. Compatibility allowance keys are deterministic `legacy-...` identifiers, while checkout offer keys remain unchanged. Save the complete returned configuration if adopting explicit catalog configuration; retain those keys and exact allowance versions. This preserves historical source keys, fingerprints, original/consumed units, ledger and outbox bytes. Do not combine legacy inline grant terms with an explicit catalog or rename historical revisions. Compatibility offers infer only access associations expressed by the old configuration.
+For postpaid usage, use a `metered` policy and meter mapping with `productId`, `priceId`, and `meterId`. The customer needs an active subscription with that metered price. Subscription and entitlement access checks are configured separately through `polar.subscriptions` and `polar.entitlements` and their logical mappings.
 
-Use an organization access token scoped to the configured seller. Customer and event requests rely on that token's scope; responses and stored links must still match the configured seller organization. IDs in this example are server configuration values from your own Polar account. The contact resolver returns `{ email, name? }` for that workspace from a trusted server directory. It must not use the current member's email or an unverified token claim. A stable `workspace:<workspaceId>` customer external ID resolves customer-creation conflicts and lost responses. An existing local account cannot be repurposed as a Polar account.
+Catalog revisions are immutable. Add a new version when changing allowance terms and retain revisions and bindings needed by existing purchases. Refunds, revocations, or expiry make the affected units unavailable for new work; refreshes never restore already consumed credit. Archived products can support existing purchases and subscriptions, but cannot open new checkout sessions.
 
-For recurring grants, use `kind: 'subscription'` and `expiry: { type: 'period' }`. The product must be recurring, with a matching active subscription, configured fixed price and granted, non-revoked meter-credit benefit. Each exact subscription period funds once; active free subscriptions qualify with explicit mappings even when no order exists. The provider meter cycle must match the subscription allowance cycle when a distinct cycle is configured. One-time grants require a matching paid purchase order and order-linked benefit; a zero-price paid order is valid. One-time expiry is either explicit `none` or `{ type: 'duration', milliseconds }` anchored to the verified order creation time.
+### Configure the server
 
-Archived Polar products remain valid evidence for existing paid purchases and active subscriptions, including renewals and the first connection after archival. Remaining credits retain their original source, consumption and expiry; refreshing or reopening never reissues them. New checkout sessions for archived products are blocked. Refunds, revocations and expired periods still prevent new spending. See [Polar product archival](https://polar.sh/docs/features/products#archive-a-product).
+After configuring JWT identity, set these environment variables for the supplied application:
 
-The configured units must equal the verified meter-credit benefit units, with `rollover: false`. Credit products cannot attach metered overage prices. Product, benefit, source, price or immutable mapping conflicts fail closed. Renaming a logical meter or changing a mapping version cannot reissue a purchase or period. Unsupported prorations, pending plan changes, refunds and revoked sources cannot mint credit. Complete authenticated pagination and current source links are checked on every paid admission/resume; there is no cached-eligibility fallback. This is point-in-time provider evidence, rather than a transaction across Polar endpoints.
+| Variable                    | Value                                                                                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `BILLING_MODE`              | `production`                                                                                                     |
+| `BILLING_PROVIDER`          | `polar`                                                                                                          |
+| `BILLING_CONFIGURATION`     | JSON configuration for the registered weather resources, catalog, and Polar mappings                             |
+| `BILLING_JWT_CONFIGURATION` | Trusted JWT verification configuration                                                                           |
+| `BILLING_CONTACTS`          | Trusted workspace contacts, for example `{"workspace-id":{"email":"billing@example.com","name":"Example team"}}` |
+| `POLAR_ACCESS_TOKEN`        | Organization token for the configured Polar seller and environment                                               |
+| `POLAR_WEBHOOK_SECRET`      | Signing secret for Polar notifications                                                                           |
 
-For postpaid usage, configure a logical meter with `funding: ['metered']`, and a Polar meter mapping with `funding: 'metered'`, `productId`, `priceId` and `meterId`. An active subscription must include that verified metered price. Use the existing bounded `usage` or `per-task` policy with `funding: 'metered'`. No prepaid allocations are created for that execution. Configure subscription/entitlement guards separately through `polar.subscriptions: [{ key, productId }]` and `polar.entitlements: [{ key, benefitId }]` and corresponding logical mappings.
+Use a separate persistent database for Polar when moving from the local demo. Local seeded accounts cannot become paid Polar accounts, and `npm run setup` is only for the local example. Billing contacts must come from your trusted workspace records, not the requesting member's email or an unverified token claim.
 
-`initializeMastraBilling` accepts the same `polar: { token, contact, webhookSecret? }` options and returns `commercial` alongside the typed execution facade. Pass that service and the returned recovery component to `billingOnlyServer(organizations, billing.http, commercial, recovery)` to expose commercial and webhook routes. Attach registered resources and the returned persistent storage to Mastra before awaiting `startRecovery().ready`. Await `close()` on application shutdown; it stops new sweeps and drains active work before closing stores. Instantiate `OrganizationService` with a verified JWT adapter and `provider: 'polar'`; local credentials are rejected in Polar mode.
+When constructing your own application, pass `configuration` and `polar: { token, webhookSecret, contact }` to `initializeMastraBilling`, where `contact(workspaceId)` returns the trusted contact. Keep tokens and secrets out of the public configuration.
 
-The default server can expose commercial routes using `BILLING_PROVIDER=polar`, `BILLING_CONFIGURATION` containing the JSON configuration above, `BILLING_CONTACTS` containing a trusted workspace-ID-to-contact JSON object, `BILLING_JWT_CONFIGURATION` and `POLAR_ACCESS_TOKEN`. Set `POLAR_WEBHOOK_SECRET` to enable signed notifications. Provision JWT principals through trusted setup before admitting their tokens. The entry point registers `weather-agent` and `weather-report`. Supply configuration for those exact resource IDs, operations and measurements; use `initializeMastraBilling` when replacing the resources. Local example profiles and seeds are never loaded in Polar mode. Keep configuration/contact files and the private SQL file outside static roots.
+Configure Polar notifications to reach `POST /billing/webhooks/polar` through your deployed ingress. This endpoint verifies the signature instead of using customer bearer authentication. The recovery worker refreshes verified commercial state and exports usage. An unavailable or unverifiable provider state blocks paid admission.
 
-### Allowance and hosted sessions
+Checkout accepts logical offer keys, and its return URL must exactly match `polar.returnUrls`. Completed requests replay their original hosted URL. If the provider response is uncertain, investigate before creating another checkout. Hosted URLs grant access to a session; keep them out of logs.
 
-All three routes require current workspace owner permission. Checkout/portal writes also require `Idempotency-Key`:
+### Read the balance
 
-| Method | Path below `/billing/workspaces/:workspaceId` | Body                                                                           |
-| ------ | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| GET    | `/usage`                                      | No body                                                                        |
-| POST   | `/checkout`                                   | `{ "product": "credit-pack", "returnUrl": "https://app.example.com/billing" }` |
-| POST   | `/portal`                                     | `{ "returnUrl": "https://app.example.com/billing" }`                           |
+The owner-only `/usage` response includes `granted`, `consumed`, `reserved`, `unavailable`, and `spendable` units for Polar allowances. Use `spendable` for available credit. Reserved units cannot fund another execution.
 
-Products are logical allowlisted keys and redirects must exactly match configured URLs. Admins/members cannot open billing sessions. The service checks current authorization before the provider call and before returning a new session. Checkout preparation verifies the product before dispatch; failed preparation retains the original key and input fingerprint, so the same input can retry after recovery. Changed input under that key still conflicts. The authorized SQL dispatch transition permits only one session request across concurrent preparations. Migration v9 treats older pending claims as already dispatched because their original dispatch stage is unknown. Completed session claims replay their original URL; a lost/uncertain provider response leaves a durable ambiguous claim, so the same key never blindly creates another session. Resolve such cases operationally before attempting a new operation. Session URLs are bearer credentials: keep them out of logs and receipts. Billing database files and SQLite sidecars use private `0600` permissions; initialization rejects unsafe links or later permission weakening.
+Local balance reflection is asynchronous, normally within 30 seconds. Receipts can show pending delivery after successful work, while admission already accounts for the consumed units. Provider delivery status and application consumption are separate.
 
-The usage response labels `mode` and `authority`. Polar `allowance` lists each logical meter's `granted`, `consumed`, `reserved`, `unavailable` and `spendable` units from one SQL transaction. Reserved units are not spendable. Historical invalid sources remain visible and consumed history is never reset. Snapshot `confirmedBalance` excludes committed consumption but includes outstanding reservations; use the allowance's `spendable` field for available application credit. No provider meter aggregation watermark is claimed.
+## Storage and recovery
 
-Reservations allocate earliest expiry first, with a stable grant-ID tie break. Expiry/revocation prevents new allocation while admitted work retains its reservation. Confirmed success consumes its allocation once; confirmed failure/cancellation releases unused units back to the same source, whose validity still applies. Release cannot resurrect revoked or expired capacity. Fresh verified reactivation may restore only unused capacity of the original source. Usage delivery acceptance, duplicate acknowledgement and outages never change these local totals.
+Run one Node service with persistent local disk. The template stores billing history in `data/billing.db` and workflow snapshots in `data/workflow.db`. Remote and in-memory databases are not supported; multi-host deployment is outside this template's supported setup.
 
-Paid admission freezes a versioned provider delivery binding alongside the immutable execution policy. The accounting layer stores the driver's opaque binding without interpreting Polar fields. For Polar, it captures the event name, units field, organization and server. Suspension, process restart and later configuration changes preserve that binding before the first export. Changing the server or organization blocks delivery of bound work; credential rotation on the same destination remains supported.
+Keep `.env`, both databases and their SQLite sidecars, and `data/local-profiles.json` private. Preserve matching credentials and databases together. `BILLING_DATABASE_URL` can select an absolute `file:///...` path with an existing writable parent directory; `BILLING_PORT` changes the default port of 4111.
 
-Successful executions persist immutable outbox events. Trusted server code may explicitly deliver them through `provider.reportUsage(event)`; the application service uses the admission binding and persists both the logical event and its normalized outbound request in one immutable delivery claim. The external driver validates the destination and sends that retained request. Retries reuse that request. The recovery worker exports independently of execution. Failed export never repeats compute or changes application credit. A direct trusted `reportUsage` call with no matching outbox uses the current mapping on its first attempt, then retains its normalized claim.
+Recovery retries usage exports and verified source refreshes and expires compatible suspended workflows. Uncertain execution, incomplete usage, permanent delivery failures, or mismatched workflow snapshots require investigation. No automatic refund, destructive reset, or financial repair command is provided.
 
-Migration v8 adds immutable bindings without rewriting previous migrations, outbox payloads, provider claims, grant provenance or ledger amounts. Previously normalized delivery claims retain their exact outbound request; old acknowledged logical-only claims remain acknowledged. An uncertain logical-only claim cannot be retried safely and requires operator reconciliation. A legacy pending outbox event with neither an admission binding nor a normalized claim fails closed instead of adopting today's mapping. Older normalized claims don't record the server, so operators must retain their original destination configuration when replaying them.
+Build with `npm run build` and serve with `npm start`. For development checks, run `npm run test:unit`, then `npm run test:integration`. `npm run test:local` verifies the local application flow; `npm run test:openai` explicitly performs one live model generation and replay using your OpenAI key.
 
-To restore one legacy pending outbox binding, first establish its exact original mapping and destination from trusted deployment records correlated with the execution's admission. Current configuration, a meter balance or an assumed default is insufficient evidence. Keep the event pending if the original values cannot be established. The trusted server API below accepts one event and an evidence reference of at most 2,048 characters per call. It requires an idle pending, retrying or uncertain delivery and refuses replacement of an existing binding. No HTTP route exposes it.
+## Use another billing provider
 
-```typescript
-import { UsageBindingRecovery } from './src/billing/storage/usage-bindings.js';
+Implement the [BillingDriver contract](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/billing/driver.ts) and inject the constructed driver through `initializeMastraBilling({ drivers: [...] })` or `createWeatherApplication(environment, { drivers: [...] })`. Set `configuration.provider` and `BILLING_PROVIDER` to the driver's ID. Keep credentials inside the driver and retain the same logical policies and catalog.
 
-const repair = await UsageBindingRecovery.open({ url: 'file:///absolute/path/billing.db' });
-try {
-  await repair.restore({
-    eventId: 'usage:0d769795-d67a-443f-87c7-0f4174e6fc62',
-    binding: {
-      provider: 'polar',
-      meter: 'credits',
-      version: 1,
-      data: JSON.stringify({
-        server: 'https://sandbox-api.polar.sh',
-        organizationId: '2cce6527-ab07-4e73-9bba-d1316faf0436',
-        eventName: 'work.succeeded',
-        unitsField: 'units',
-      }),
-    },
-    evidence: 'Verified deployment archive and execution admission record: incident-1842',
-  });
-} finally {
-  repair.close();
-}
-```
+Changing the selected provider does not migrate existing accounts. Trusted server code must use `BillingService.switchProvider`. Keep historical drivers, bindings, and catalog revisions available so existing grants and pending usage remain verifiable. Provider replacement does not transfer purchases, subscriptions, or invoices.
 
-Replace the sample values with the verified historical values. Restoration appends the binding and evidence; it preserves the original outbox, provider claims and financial history. It doesn't override an uncertain logical-only provider claim. Delivery continues through the normal worker. A replacement driver must implement `bindUsage(meter)`, normalize and validate usage against that binding, and send the retained request. The application service owns the shared binding lookup and fails closed for unbound historical work.
-
-### Signed notifications and recovery
-
-Configure a Polar webhook endpoint for API version `2026-10` at `POST /billing/webhooks/polar`. Set `POLAR_WEBHOOK_SECRET` in the supplied server, or pass `polar.webhookSecret` to initialization. Keep this secret separate from immutable financial mappings. An omitted secret leaves webhook verification unavailable; an empty or malformed configured secret fails startup. Local mode needs no Polar token or signing secret.
-
-The endpoint uses the pinned `@polar-sh/sdk@1.0.2` verifier from `@polar-sh/sdk/2026-10` with the original request bytes. Both modern base64 signing keys and legacy UTF-8 keys are supported by the verifier. Deliveries require `webhook-id`, `webhook-timestamp`, `webhook-signature`, `webhook-api-version: 2026-10`, and signed body `api_version: "2026-10"`. The SDK rejects signatures outside its five-minute timestamp tolerance. Bodies remain limited to 16 KiB. The exact POST path is public for signature authentication; other billing paths and methods still require bearer credentials.
-
-A successful response is `202 { "received": true }`, returned only after durable inbox insertion or an identical duplicate. Conflicting bodies under one delivery ID return `409`; signature failure returns `401`; invalid API version returns `400`; failed durable insertion returns retryable `503`. Authenticated unknown types and notifications for unlinked customers are retained as ignored hints. The next synchronous source read still verifies any subsequently linked customer before paid work.
-
-Relevant customer, order, subscription and benefit-grant hints invalidate that account's commercial revision immediately. Notifications contain no balance authority. Background refresh and synchronous admission/resume call the same authenticated source reader and idempotent grant application service. An older observation or expired worker lease cannot publish state. Successful application marks only covered notification generations complete in the same transaction as source effects. A newer hint requires another bounded refresh; unavailable evidence denies new paid admission. Reordered or duplicate notifications cannot mint another purchase/period allowance or erase consumption.
-
-`BillingRecovery.runOnce()` runs one bounded sweep. `start()` exposes startup `ready`, schedules nonoverlapping ticks and uses an unreferenced timer; `stop()` drains active work. `initializeMastraBilling.startRecovery()` composes this worker with suspension expiry. Defaults are 10 deliveries and 10 accounts per sweep, a 60-second lease, and a 30-second interval. Standalone trusted integrations can construct `BillingRecovery` with `{ batchSize, leaseMs, intervalMs }`, a `RecoveryStorage` on the same billing file and an expiry callback. Network calls run outside SQL transactions.
-
-Delivery receipts distinguish `pending`, `accepted`, `retrying`, `failed` and `uncertain`. Attempts, next-attempt time, lease ownership and safe error codes are durable; immutable outbox and original provider wire payloads stay unchanged. Retry delay grows exponentially from one second up to one hour plus bounded jitter. An uncertain response retries the original event identity. Permanent rejection stays failed for operator investigation and does not silently retry. Source fetch failures retain pending hints and a persisted retry schedule. `recovery.metrics()` exposes status counts and oldest ages without credentials, signatures or customer content.
-
-After process death, interrupted running work becomes uncertain and retains its reservation. Recovery fences late completion and never invokes generate, start or resume automatically. Durable suspended workflows remain available for authorized resume; overdue compatible suspensions are canceled only after persisted Mastra snapshots confirm suspension and termination. Expiry claims retain durable intent, a bounded lease and a checkpoint that the compatible Mastra snapshot was suspended before cancellation. A restart can finish cancellation after a committed claim or after native cancellation but before accounting settlement, with one zero-charge release. Legacy interrupted expiry claims are adopted conservatively; a canceled snapshot without prior suspension evidence cannot release credit. Missing, active or conflicting runtime snapshots retain uncertain holds and a persisted 30-second retry schedule so they cannot starve later recoverable expirations. Live process ownership, unknown legacy ownership and reused process IDs are treated conservatively. Inspect uncertain holds and permanent delivery failures through trusted operational access; automatic financial repair, refunds and destructive resets are unavailable.
-
-Use one Node service with persistent local SQL on the same host. SQL leases coordinate connections and restarted processes; this template does not certify multi-host deployment or exactly-once external side effects. Keep both billing and workflow snapshot files durable and private, and drain workers before closing storage.
-
-### Polar verification
-
-Run the deterministic integration suite with `./node_modules/.bin/vitest run tests/billing/polar.test.ts`. It uses real loopback HTTP, signed JWTs and actual libSQL, including repeated concurrent reservations, source/usage replay, invalid state and owner session boundaries. It makes no external requests. The cohesive `tests/billing/recovery.test.ts` suite additionally exercises official signature verification, HTTP intake, process death/restart, real Mastra snapshots and repeated SQL lease/source races.
-
-The optional `node scripts/test-polar-sandbox.mjs` proof requires an explicitly selected sandbox `POLAR_ACCESS_TOKEN` and `POLAR_SANDBOX_PROOF` JSON with `{ "organizationId": "...", "databaseUrl": "file:///absolute/proof/billing.db", "contactEmail": "sandbox-fixture@example.com", "country": "BR" }`. A fresh namespaced database is derived from that base path on every invocation; previous databases are retained. Use a synthetic contact supporting plus aliases; a unique alias is derived per workspace. The script provisions disposable zero-price products, benefits, meter, customer, paid purchase and recurring subscription. It uses the actual driver/gateway and retained private SQL file, discards one real usage acknowledgement through a transparent loopback proxy, verifies replay after restart and revokes its disposable subscription. It prints only a safe proof summary and the actual database location. It never targets production or supplies a payment method. Inspect and clean up disposable sandbox resources through your operator workflow; the script does not delete financial history.
-
-Set `POLAR_SANDBOX_DEBUG=1` when diagnosing the optional sandbox proof to print endpoint phases, HTTP status/version and selected field types/linkage booleans. These diagnostics omit response values, credentials and hosted URLs.
-
-## External drivers and provider replacement
-
-`BillingDriver` in `src/billing/driver.ts` performs external requests without a database argument or application-table side effects. `PolarBillingDriver` in `src/billing/providers/polar-driver.ts` implements that boundary. `PolarBillingProvider.open` remains the compatible application-service entry point for existing Polar configuration.
-
-A driver returns verified external account associations and complete source observations. Each source names an exact catalog allowance revision. The application validates its meter, kind, units, expiry and provenance hash against retained canonical terms, then applies all retained providers' observations in one fenced transaction. Missing sources become unavailable. Drivers must authenticate account ownership, purchases, source periods and revocations at the external boundary; the application does not infer purchased units from an external meter balance. Provenance must be JSON containing the normalized `kind`, `meter`, `units`, allowance `version`, `expiry` and `validFrom`, consistent with the source and allowance. Provider-specific extra fields and original serialized bytes are retained. An existing source cannot change these terms or its purchase expiry; an unchanged subscription period may refresh its verified end date.
-
-Register a constructed driver through `drivers` in either `initializeBilling` or `initializeMastraBilling`. Set `configuration.provider` to its validated identifier and retain the same logical catalog, mappings, resources and policies. Every external driver requires trusted JWT organization identity, including when the application runs in local mode. The reserved `local` provider is the credential-free simulator and cannot be supplied as an external driver.
-
-```typescript
-import { initializeMastraBilling } from '../src/billing/mastra-setup.js';
-
-// Your adapter constructor validates its own provider-specific bindings and
-// exact catalog references before returning a BillingDriver. Keep credentials
-// inside that instance, separate from public configuration and publicBindings.
-const runtime = await initializeMastraBilling({
-  organizations, // OrganizationService with a verified JwtIdentityAdapter
-  configuration: {
-    provider: externalDriver.id,
-    catalog,
-    mappings,
-    resources,
-    hosted: { returnUrls: ['https://app.example.com/billing'] },
-  },
-  drivers: [externalDriver, historicalDriver],
-  agents,
-  workflows,
-  databaseUrl,
-});
-```
-
-The registry rejects duplicate IDs, an unknown selected provider, unsupported policy capabilities, invalid usage bindings and missing hosted destinations before serving. Each adapter constructor must validate its provider-specific binding schema, exact offer/allowance references, supported logical mappings and destination restrictions. Usage bindings must name the selected driver and logical meter. A driver receives no application storage argument. Register every nonretired historical driver in the same array; the application service uses one driver map for state refresh, hosted preparation, historical delivery and webhook verification.
-
-Checkout accepts only logical offer keys from `catalog.offers`; redirect URLs must exactly match `hosted.returnUrls`. These neutral destinations must use HTTPS, or HTTP on localhost/127.0.0.1, without credentials or fragments. For shipped full Polar configuration, `polar.returnUrls` remains authoritative: the compatibility boundary derives `hosted.returnUrls` from it on every parse, including normalized configuration round trips. Editing the top-level `hosted` field does not restrict that legacy Polar allowlist. Configure the legacy field, or construct `PolarBillingDriver` yourself and inject it without a `polar` configuration field when using the neutral API.
-
-The weather composition root accepts the same constructed drivers: `createWeatherApplication(environment, { drivers })` returns the application and its async `close()`, while `configuredWeatherMastra(environment, { drivers })` returns the Mastra instance with shutdown handlers. Set `BILLING_PROVIDER` and the JSON `BILLING_CONFIGURATION` to the selected driver, and provide trusted `BILLING_JWT_CONFIGURATION`. Register adapters from `src/mastra/index.ts` or your application caller. An injected Polar instance takes precedence over the built-in Polar environment factory, so its credentials/contacts need not also be supplied through environment variables. The default call still starts the local simulator.
-
-Use `BillingService.connect` directly for trusted administrative replacement:
-
-```typescript
-import { BillingService } from '../src/billing/service.js';
-
-const provider = await BillingService.connect({
-  url: databaseUrl,
-  catalog: configuration.catalog,
-  activeProvider: replacementDriver.id,
-  drivers: [replacementDriver, originalDriver],
-});
-
-// Trusted server administration only. Provider selection alone cannot switch
-// an existing account or promote local seed credits into paid capacity.
-const account = await provider.switchProvider({
-  workspaceId,
-  expectedProvider: originalDriver.id,
-});
-```
-
-Replacement retains the account ID and every historical provider association. Freshly verified entitlements and subscriptions from retained providers continue satisfying the same logical access keys. Prepaid admission can spend remaining verified historical grants, with their original units, expiry and consumed history. Metered eligibility for new work comes from the active provider. New source keys are namespaced by provider; the Polar compatibility adapter retains its original source identities without reminting purchases. Same-source term changes and ownership conflicts fail closed.
-
-Migration 11 adds associations, source ownership and immutable admission-account evidence without rewriting migrations 1–10 or existing financial rows. An execution admitted before replacement, including a suspended workflow, settles and exports with its original provider/account and delivery binding. Pending exports route through their original driver and preserve their normalized claim bytes and event identity. A metered workflow resume revalidates the meter/funding contract of its immutable admitted account, even after replacement and restart. Shared logical access keys and prepaid grants retain their pooled behavior. Trusted `getState`/`reconcile` calls may name a retained account association; the returned metered state belongs to that named provider, with the same complete source refresh and revision/generation fences. The active provider remains unchanged. Newly admitted work binds to the selected provider. Replacement does not transfer subscriptions, purchases or provider invoices.
-
-Keep every nonretired driver available with its original account destination, source bindings and catalog revisions. Historical catalog terms remain in SQL even when current checkout offers use newer revisions. A missing driver or unavailable original source blocks paid admission until explicit retirement succeeds. Consuming a grant alone never retires its provider. Credential rotation at the same destination remains supported.
-
-### Retire a historical provider
-
-After replacing a provider, trusted server code can retire its historical association once no obligations remain. The selected `BillingService` must match the workspace's active provider. Keep the historical driver registered for the retirement call because it performs a fresh authenticated observation.
-
-```typescript
-await provider.retireProvider({
-  workspaceId,
-  provider: originalDriver.id,
-  evidence: 'operations:closed-original-sales-and-renewals',
-  externalSalesClosed: true,
-});
-```
-
-`externalSalesClosed: true` attests that an operator has stopped external purchases, renewals and outstanding checkout links for this account. Perform those external operations through your provider administration before calling retirement. The method doesn't cancel contracts, close checkout links, transfer purchases or change policies and allowances. This trusted API has no customer HTTP route.
-
-Retirement rejects the current provider, `local`, an unlinked provider or a mismatched workspace. It also rejects live or future access, subscriptions, metered contracts and unconsumed usable or future grants. A missing unexpired source with remaining units is insufficient evidence of revocation. Fresh explicit revocation or expiry can make remaining units unavailable, but consumption and original financial terms remain unchanged.
-
-Running, suspended or uncertain executions and outstanding grant reservations block retirement across the account. This includes replacement-provider work funded by historical grants. Historical exports must be acknowledged, with no active delivery lease or permanent failure. In-flight and uncertain external writes block retirement. New dispatches retain immutable ownership by the sending process. If that process dies, an exact durable usage acknowledgement allows retry, acknowledgement replay or retirement to complete its orphaned usage fence. Recovery requires the original PID to be absent on the same host; live or reused PIDs, permission failures and missing ownership remain blocked. An acknowledgement never clears a live sender. Hosted requests remain unresolved after sender death because a usage acknowledgement cannot prove their outcome. Unresolved legacy direct usage claims without a retained provider association, and legacy dispatched hosted operations without a URL, block conservatively across the workspace because their destination can't be proven. Resolve these obligations through your existing trusted operations process; retirement doesn't discard unresolved effects.
-
-The committing transaction checks the observed active provider, revision and synchronization generations, then advances the revision and generation. Concurrent hints, refreshes or provider switches invalidate stale observations. Hosted and usage writes persist a dispatch fence before network activity; a stale service or prepared hosted closure can't initiate a write after retirement. A known usage acknowledgement can replay without another request or the retired driver when its original outbox event or retained claim establishes the exact input. Legacy direct acknowledgements without that evidence still require their original driver for pure payload validation.
-
-Successful retirement keeps provider links and financial history. Only the grant availability projection becomes unavailable. Migration 13 adds immutable retirement/reactivation audit evidence, exact usage-event evidence and retained external dispatch records without rewriting migrations 1–12. Migration 14 adds immutable dispatch ownership without altering migrations 1–13 or assigning ownership to older effects. Existing pending migration13 effects without recorded owners remain blocked and require trusted operational investigation. Refresh skips only explicitly retired associations. You can subsequently reopen the active service without the retired driver, while retaining its original bindings and credentials in your operator records for any future reactivation.
-
-A new authenticated notification for a retired association appends a reactivation record and restores its verification requirement. Duplicate notifications don't reactivate again. Register the historical driver again before accepting its notifications; paid work then requires fresh observation and preserves all prior consumption. Explicitly switching back to a retired provider also requires an evidence reference:
-
-```typescript
-await originalService.switchProvider({
-  workspaceId,
-  expectedProvider: replacementDriver.id,
-  evidence: 'operations:resume-original-sales',
-});
-```
-
-Switchback reactivates verification and never remints consumed purchases. The driver must still return the original account association and retained source terms.
-
-`publicBindings` contains only credential-free JSON for immutable audit history. Keep API tokens and webhook secrets in the driver instance. Usage normalization and validation must be pure; hosted-session preparation must not create a session. The application persists the usage claim and hosted dispatch fence before the driver performs those effects. The HTTP reference driver in the tests demonstrates substitutability; the template does not include Stripe or Paddle integrations.
-
-Signed notifications use `POST /billing/webhooks/:provider`. The path must name a registered driver with webhook capability; the driver authenticates the original body bytes and headers before any account lookup or SQL change. Unknown drivers, bad signatures and webhook path lookalikes are rejected. `POST /billing/webhooks/polar` remains supported. The lower-level `recovery.intake(request)` defaults to the active provider; pass its identifier as the second argument for historical providers.
-
-Migration 12 retains each original Polar inbox row and adds a provider namespace. Duplicate detection uses `(provider, notification ID)`, so identical IDs from different drivers cannot suppress each other. Changed content under an existing provider/ID conflicts. Verified hints resolve retained associations, including providers selected before replacement. An ambiguous account reference across seller namespaces fails closed. A hint invalidates the account generation and commercial revision; existing refresh leases and paid admission checks keep their fencing behavior. Recovery refreshes all nonretired source associations through the registered drivers. Historical inbox rows, financial payloads and migration checksums 1–11 remain unchanged.
+Retire a historical provider only after closing its external sales and resolving active grants, executions, and deliveries. Use the trusted `retireProvider` API with evidence of that closure. New verified notifications can require reactivating its driver. See [src/billing/service.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/billing/service.ts) for lifecycle APIs. Polar is the included external integration; Stripe and Paddle drivers are not included.
