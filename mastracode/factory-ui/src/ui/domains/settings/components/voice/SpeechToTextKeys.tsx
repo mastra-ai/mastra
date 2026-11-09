@@ -5,6 +5,7 @@ import {
   SettingsEmptyRow,
   SettingsListHeader,
   SettingsNoticeRow,
+  SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -15,7 +16,6 @@ import type { VoiceKeyStatus } from '../../../../../hooks/use-voice-settings';
 import { AddApiKeyDialog } from '../AddApiKeyDialog';
 import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
 import type { ProviderConnection } from '../models/providers/ConnectedProviderRow';
-import { SettingsRowsSkeleton } from '../../../../ui/SettingsRowsSkeleton';
 import { CREDENTIAL_STATUS, sharedSourceStatus, useCredentialAccess } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
 
@@ -77,7 +77,6 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
         {connected.map(connection => (
           <ConnectedProviderRow
             key={connection.provider.provider}
-            variant="settings"
             connection={connection}
             requestScope={requestScope}
             disabled={actionsDisabled}
@@ -113,7 +112,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
 export function SpeechToTextKeysSkeleton() {
   return (
     <SettingsContainer>
-      <SettingsRowsSkeleton label="Loading providers" rows={2} />
+      <SettingsSkeleton variant="item" label="Loading providers" rows={2} />
     </SettingsContainer>
   );
 }

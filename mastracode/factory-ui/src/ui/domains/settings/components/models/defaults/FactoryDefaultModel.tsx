@@ -1,6 +1,7 @@
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 
 import { useAvailableModelsQuery, useFallbackModelQuery } from '../../../../../../hooks/useAvailableModels';
@@ -38,26 +39,26 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
 
   return (
     <>
-      <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <ButtonsGroup size="sm" aria-label="Factory default model and thinking" className="min-w-0 flex-1">
-            <ModelCombobox
-              models={modelsQuery.data ?? []}
-              value={defaultModelId}
-              onValueChange={saveDefaultModel}
-              fallbackModelId={fallbackModelQuery.data}
-              placeholder="Select a model"
-              aria-label="Factory default model"
-              size="sm"
-              className="min-w-0 flex-1"
-              disabled={projectQuery.isPending || setDefaultModel.isPending}
-            />
-            <FactoryThinkingControl factoryId={factoryId} />
-          </ButtonsGroup>
-          {setDefaultModel.isPending && (
-            <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
-          )}
-        </div>
+      <SettingsRow label="Model">
+        <ButtonsGroup size="sm" aria-label="Factory default model and thinking" className="min-w-0 flex-1">
+          <ModelCombobox
+            models={modelsQuery.data ?? []}
+            value={defaultModelId}
+            onValueChange={saveDefaultModel}
+            fallbackModelId={fallbackModelQuery.data}
+            placeholder="Select a model"
+            aria-label="Factory default model"
+            size="sm"
+            className="min-w-0 flex-1"
+            disabled={projectQuery.isPending || setDefaultModel.isPending}
+          />
+          <FactoryThinkingControl factoryId={factoryId} />
+        </ButtonsGroup>
+        {setDefaultModel.isPending && (
+          <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
+        )}
+      </SettingsRow>
+      <SettingsNoticeRow>
         {errorText && (
           <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
             {errorText}
@@ -65,7 +66,7 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
         )}
         <SharedCredentialNotice modelId={defaultModelId || undefined} />
         {applyToSessions.data && <AppliedSessionsSummary result={applyToSessions.data} />}
-      </div>
+      </SettingsNoticeRow>
 
       {confirmModelId && (
         <SwitchRunningSessionsDialog

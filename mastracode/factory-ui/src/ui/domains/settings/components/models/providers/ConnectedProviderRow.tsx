@@ -3,7 +3,6 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Box, MoreHorizontal } from 'lucide-react';
@@ -58,10 +57,7 @@ export function ConnectedProviderRow({
   disabled,
   onUpdateKey,
   onOAuthStarted,
-  variant = 'list',
 }: {
-  /** `list`: an `li` of a `ProviderRows` list. `settings`: a `SettingsItem` in a settings card. */
-  variant?: 'list' | 'settings';
   connection: ProviderConnection;
   requestScope: CredentialScope | undefined;
   disabled: boolean;
@@ -120,34 +116,19 @@ export function ConnectedProviderRow({
     />
   ) : null;
 
-  if (variant === 'settings') {
-    return (
-      <SettingsItem
-        media={
-          <SettingsItemIcon>
-            {/* The span keeps each brand icon's own optical size. */}
-            <span className="flex">{brandIcon}</span>
-          </SettingsItemIcon>
-        }
-        title={displayName}
-        description={statusText}
-      >
-        {menu}
-      </SettingsItem>
-    );
-  }
-
   return (
-    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      {brandIcon}
-      <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
-        {displayName}
-      </Txt>
-      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        {statusText}
-      </Txt>
-      {menu ?? <span aria-hidden="true" className="size-control-sm shrink-0" />}
-    </li>
+    <SettingsItem
+      media={
+        <SettingsItemIcon>
+          {/* The span keeps each brand icon's own optical size. */}
+          <span className="flex">{brandIcon}</span>
+        </SettingsItemIcon>
+      }
+      title={displayName}
+      description={statusText}
+    >
+      {menu}
+    </SettingsItem>
   );
 }
 

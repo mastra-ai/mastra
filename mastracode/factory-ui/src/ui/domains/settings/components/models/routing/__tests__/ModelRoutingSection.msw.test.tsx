@@ -45,6 +45,7 @@ const renderRoutingSection = (entry = '/factories/fp-1/settings/models') =>
 
 const routing = (label: string) => screen.getByRole('radio', { name: label });
 const region = (label: string) => screen.getByRole('region', { name: label });
+const lane = (label: string) => screen.getByRole('group', { name: label });
 
 async function confirmSwitch(user: ReturnType<typeof userEvent.setup>) {
   const dialog = await screen.findByRole('alertdialog');
@@ -57,8 +58,8 @@ describe('ModelRoutingSection', () => {
     renderRoutingSection();
 
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
-    expect(within(region('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
-    expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
+    expect(within(lane('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
+    expect(within(lane('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(
       await within(region('Personal defaults')).findByRole('combobox', { name: 'Personal default model' }),
     ).toBeInTheDocument();
@@ -83,7 +84,7 @@ describe('ModelRoutingSection', () => {
     expect(patchedBodies).toEqual([{ modelScope: 'factory' }]);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(routing('Factory')).toBeChecked();
-    expect(within(region('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
+    expect(within(lane('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(within(region('Personal defaults')).getByText('Not used in this scope')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Personal default model' })).not.toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
@@ -120,7 +121,7 @@ describe('ModelRoutingSection', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(patchedBodies).toEqual([]);
     expect(routing('Personal')).toBeChecked();
-    expect(within(region('Work-item runs')).getByText('Uses Personal defaults')).toBeInTheDocument();
+    expect(within(lane('Work-item runs')).getByText('Uses Personal defaults')).toBeInTheDocument();
   });
 
   it('drops an open routing request when the page moves to another Factory', async () => {

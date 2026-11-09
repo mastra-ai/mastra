@@ -1,5 +1,13 @@
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  SettingsEmptyRow,
+  SettingsListHeader,
+  SettingsNoticeRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
@@ -18,7 +26,6 @@ import type { CredentialScope } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
-import { ProviderRows, ProviderRowsSkeleton } from './ProviderRows';
 
 const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 
@@ -78,37 +85,51 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
     if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
   };
 
-  if (providersQuery.isPending) return <ProviderRowsSkeleton />;
+  if (providersQuery.isPending) return <SettingsSkeleton label="Loading providers" variant="item" rows={2} />;
 
+  const addProvider = (
+    <Button size="sm" icon={<Plus />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
+      Add provider
+    </Button>
+  );
+
+  // Rows of the defaults' settings card: the list, its notices, then the drawer and dialogs it opens.
   return (
-    <div className="flex flex-col gap-2">
-      <ProviderRows addDisabled={actionsDisabled} onAdd={() => setAddOpen(true)}>
-        {connections.map(connection => (
-          <ConnectedProviderRow
-            key={connection.provider.provider}
-            connection={connection}
-            requestScope={requestScope}
-            disabled={actionsDisabled}
-            onUpdateKey={() => setKeyDialogProvider(connection.provider)}
-            onOAuthStarted={openOAuth}
-          />
-        ))}
-      </ProviderRows>
-      {memberReason && (
-        <Txt as="p" variant="caption" tone="muted">
-          {memberReason}
-        </Txt>
+    <>
+      {connections.length === 0 ? (
+        <SettingsEmptyRow action={addProvider}>No providers</SettingsEmptyRow>
+      ) : (
+        <SettingsListHeader action={addProvider}>
+          {connections.length === 1 ? '1 provider' : `${connections.length} providers`}
+        </SettingsListHeader>
       )}
-      {requestScope === 'org' && !readOnly && (
-        <Txt as="p" variant="caption" tone="muted">
-          {ORG_SCOPE_AUDIENCE}
-        </Txt>
-      )}
-      {providersQuery.error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-          {providersQuery.error.message}
-        </Txt>
-      )}
+      {connections.map(connection => (
+        <ConnectedProviderRow
+          key={connection.provider.provider}
+          connection={connection}
+          requestScope={requestScope}
+          disabled={actionsDisabled}
+          onUpdateKey={() => setKeyDialogProvider(connection.provider)}
+          onOAuthStarted={openOAuth}
+        />
+      ))}
+      <SettingsNoticeRow>
+        {memberReason && (
+          <Txt as="p" variant="caption" tone="muted">
+            {memberReason}
+          </Txt>
+        )}
+        {requestScope === 'org' && !readOnly && (
+          <Txt as="p" variant="caption" tone="muted">
+            {ORG_SCOPE_AUDIENCE}
+          </Txt>
+        )}
+        {providersQuery.error && (
+          <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
+            {providersQuery.error.message}
+          </Txt>
+        )}
+      </SettingsNoticeRow>
 
       <AddProviderDrawer
         open={addOpen}
@@ -135,6 +156,6 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           onComplete={() => setActiveOAuth(undefined)}
         />
       )}
-    </div>
+    </>
   );
 }

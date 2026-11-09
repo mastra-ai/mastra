@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsContainer, SettingsNoticeRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 
 import {
@@ -6,12 +7,11 @@ import {
   usePendingFactoryModelScope,
   useSetFactoryModelScopeMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
-import { ModelRoutingSkeleton } from './ModelRoutingSkeleton';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
 import { SettingsSubsection } from '../../SettingsSubsection';
 import { savedModelScope } from './model-routes';
 import { ModelRoutingChangeDialog } from './ModelRoutingChangeDialog';
-import { ModelRoutingMap } from './ModelRoutingMap';
+import { ModelDefaultsSections, ModelLaneItems } from './ModelRoutingMap';
 import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 
 // Keyed by Factory so a pending request is dropped on a Factory switch and never saves or reopens elsewhere.
@@ -40,20 +40,24 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
   };
 
   return (
-    <SettingsSubsection
-      scope="factory"
-      title="Model routing"
-      description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
-      action={modelScope && <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />}
-    >
-      <div className="flex flex-col gap-6">
-        {error && (
-          <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-            {error.message}
-          </Txt>
-        )}
-        {projectQuery.isPending && <ModelRoutingSkeleton />}
-        {modelScope && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
+    <>
+      <SettingsSubsection
+        scope="factory"
+        title="Model routing"
+        description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
+        action={modelScope && <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />}
+      >
+        <SettingsContainer>
+          {projectQuery.isPending && <SettingsSkeleton label="Loading model routing" variant="item" rows={2} />}
+          {modelScope && <ModelLaneItems modelScope={modelScope} />}
+          <SettingsNoticeRow>
+            {error && (
+              <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
+                {error.message}
+              </Txt>
+            )}
+          </SettingsNoticeRow>
+        </SettingsContainer>
         {modelScope && (
           <ModelRoutingChangeDialog
             from={modelScope}
@@ -62,7 +66,15 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
             onCancel={() => setRequestedScope(undefined)}
           />
         )}
-      </div>
-    </SettingsSubsection>
+      </SettingsSubsection>
+      {projectQuery.isPending && (
+        <SettingsSubsection scope="personal" title="Personal defaults">
+          <SettingsContainer>
+            <SettingsSkeleton label="Loading model defaults" rows={2} />
+          </SettingsContainer>
+        </SettingsSubsection>
+      )}
+      {modelScope && <ModelDefaultsSections factoryId={factoryId} modelScope={modelScope} />}
+    </>
   );
 }

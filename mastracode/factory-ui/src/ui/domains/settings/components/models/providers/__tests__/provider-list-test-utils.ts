@@ -26,7 +26,7 @@ export function stubProviders(providers: ProviderInfo[], orgKeyAdmin?: boolean) 
 }
 
 export function rowFor(provider: string, container: HTMLElement = document.body): HTMLElement {
-  const row = within(container).getByText(providerDisplayName(provider)).closest('li');
+  const row = within(container).getByText(providerDisplayName(provider)).closest('[data-slot="settings-item"]');
   if (!(row instanceof HTMLElement)) throw new Error(`Provider row not found for ${provider}`);
   return row;
 }

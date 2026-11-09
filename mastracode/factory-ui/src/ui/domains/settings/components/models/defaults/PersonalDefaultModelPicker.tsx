@@ -2,6 +2,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
@@ -46,41 +47,45 @@ export function PersonalDefaultModelPicker({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-full">
-        <ModelCombobox
-          models={models ?? []}
-          value={savedModelId ?? ''}
-          onValueChange={saveDefaultModel}
-          fallbackModelId={fallbackModelId}
-          placeholder="Select a model"
-          aria-label="Personal default model"
-          size="sm"
-          className="min-w-0 flex-1"
-          disabled={busy}
-        />
-        <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
-      </ButtonsGroup>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
-          Apply to my running chats
-        </Button>
+    <>
+      <SettingsRow label="Model">
+        <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-55 max-w-full shrink-0">
+          <ModelCombobox
+            models={models ?? []}
+            value={savedModelId ?? ''}
+            onValueChange={saveDefaultModel}
+            fallbackModelId={fallbackModelId}
+            placeholder="Select a model"
+            aria-label="Personal default model"
+            size="sm"
+            className="min-w-0 flex-1"
+            disabled={busy}
+          />
+          <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
+        </ButtonsGroup>
         <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
           Clear
         </Button>
-      </div>
-      {unavailableModelId && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          None of your connected accounts can run {formatModelName(unavailableModelId)}. Choose another model or connect
-          its provider.
-        </Txt>
-      )}
-      {errorText && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-          {errorText}
-        </Txt>
-      )}
-      {applyDefaultModel.data && <AppliedSessionsSummary result={applyDefaultModel.data} />}
-    </div>
+      </SettingsRow>
+      <SettingsRow label="Running chats" description="Switch chats that are already running to this model.">
+        <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
+          Apply to my running chats
+        </Button>
+      </SettingsRow>
+      <SettingsNoticeRow>
+        {unavailableModelId && (
+          <Txt as="p" variant="caption" className="text-destructive-foreground">
+            None of your connected accounts can run {formatModelName(unavailableModelId)}. Choose another model or
+            connect its provider.
+          </Txt>
+        )}
+        {errorText && (
+          <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
+            {errorText}
+          </Txt>
+        )}
+        {applyDefaultModel.data && <AppliedSessionsSummary result={applyDefaultModel.data} />}
+      </SettingsNoticeRow>
+    </>
   );
 }
