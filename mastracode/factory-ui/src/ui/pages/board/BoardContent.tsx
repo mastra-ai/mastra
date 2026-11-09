@@ -191,6 +191,7 @@ export function BoardContent({
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
   const loadingStages = boardLoadingStages({
     stages,
+    initialPhase: definition.initialPhase,
     itemsPending: items.isPending,
     intakePending: intake.isPending,
     triagePending: intake.isTriagePending,

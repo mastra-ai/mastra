@@ -4,13 +4,16 @@ import { useMemo } from 'react';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient, requireAgentController } from '../ui/domains/chat/services/agentControllerClient';
+import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 
 interface ActiveRunResourcesOptions {
   agentControllerId: string;
   resourceIds: string[];
 }
 
-/** `/active-runs` is the controller's whole registry, so every caller shares one poll. */
+const RUNS_FALLBACK_POLL_MS = 5_000;
+
+/** `/active-runs` is the controller's whole registry, so every caller shares one read. */
 export function activeRunsQueryOptions(agentControllerId: string, baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
@@ -18,7 +21,6 @@ export function activeRunsQueryOptions(agentControllerId: string, baseUrl: strin
       const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();
     },
-    refetchInterval: 5_000,
     retry: false,
   });
 }
@@ -30,7 +32,8 @@ export function activeRunsQueryOptions(agentControllerId: string, baseUrl: strin
  */
 export function useActiveRunResourceIds(agentControllerId: string): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { data } = useQuery(activeRunsQueryOptions(agentControllerId, baseUrl));
+  const refetchInterval = useFeedPollInterval(RUNS_FALLBACK_POLL_MS);
+  const { data } = useQuery({ ...activeRunsQueryOptions(agentControllerId, baseUrl), refetchInterval });
   return useMemo(
     () =>
       new Set(

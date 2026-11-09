@@ -3,6 +3,7 @@ import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
 import { describe, expect, it } from 'vitest';
 
 import {
+  boardLoadingStages,
   boardStages,
   currentItemStageLabel,
   itemAppearsInStage,
@@ -100,5 +101,22 @@ describe('pull request cards on the Work board', () => {
     // PR review is a pull request's own lane: an issue card is self-reviewed in Review instead.
     expect(pullRequestMayEnter('work', 'github-issue', 'pr-review')).toBe(false);
     expect(pullRequestMayEnter('release', 'github-pr', 'execute')).toBe(true);
+  });
+});
+
+describe('boardLoadingStages', () => {
+  it('shows the intake feed loading in the column its candidates land in', () => {
+    const stages = [
+      { id: 'queued', label: 'Queued' },
+      { id: 'done', label: 'Done' },
+    ];
+    const loading = boardLoadingStages({
+      stages,
+      initialPhase: 'queued',
+      itemsPending: false,
+      intakePending: true,
+      triagePending: false,
+    });
+    expect([...loading]).toEqual(['queued']);
   });
 });

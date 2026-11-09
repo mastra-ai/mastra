@@ -32,10 +32,13 @@ import {
 import {
   BoardScopes,
   bumpBoardVersions,
+  CARD_TABLES,
+  DECISION_TABLES,
   FACTORY_BOARD_VERSIONS_SCHEMA,
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
+import type { BoardScope } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
@@ -1307,6 +1310,12 @@ export interface FactoryAttentionScope {
   factoryProjectId: string;
 }
 
+/** The project whose board a committed card or decision write just changed. */
+export interface FactoryBoardScope {
+  orgId: string;
+  factoryProjectId: string;
+}
+
 /** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
@@ -1321,6 +1330,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
   #isTerminal: (item: Card) => boolean = () => false;
@@ -1352,6 +1362,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
     this.#attentionChanged = listener;
+  }
+
+  /**
+   * Wired once at boot. Fires after every committed write to a card or a deferred
+   * decision, the rows a board shows, so open boards refetch instead of polling.
+   */
+  onBoardChanged(listener: (scope: FactoryBoardScope) => void): void {
+    this.#boardChanged = listener;
   }
 
   /**
@@ -1690,18 +1708,32 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
     // Outside a transaction a resolved write has committed, so its wake can go out at once.
+    const cards = trackBoardWrites(ops, CARD_TABLES, async scope => {
+      await bumpBoardVersions(ops, [scope]);
+      this.#announceBoard(scope);
+    });
     return trackClaimableWrites(
-      trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope])),
+      trackBoardWrites(cards, DECISION_TABLES, scope => this.#announceBoard(scope)),
       scope => this.#claimableWork(scope),
     );
   }
 
-  /** `storage.withTransaction`, bumping the board version of every project it wrote once it commits. */
+  /** Only legacy dry-run writes name no project, and no feed is keyed by org alone. */
+  #announceBoard(scope: BoardScope): void {
+    if (scope.factoryProjectId) this.#boardChanged({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+  }
+
+  /** `storage.withTransaction`, bumping and announcing the board of every project it wrote once it commits. */
   async #withTransaction<T>(
     fn: (ops: FactoryStorageOps) => Promise<T>,
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
+    const touched = new BoardScopes();
+    const cardWritten = (scope: BoardScope) => {
+      changed.add(scope);
+      touched.add(scope);
+    };
     let queued = new Map<string, FactoryClaimableWorkScope>();
     const run = () => {
       // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
@@ -1709,8 +1741,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return this.storage.withTransaction(
         ops =>
           fn(
-            trackClaimableWrites(trackBoardWrites(ops, changed.add), scope =>
-              queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+            trackClaimableWrites(
+              trackBoardWrites(trackBoardWrites(ops, CARD_TABLES, cardWritten), DECISION_TABLES, touched.add),
+              scope => queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
             ),
           ),
         options,
@@ -1732,6 +1765,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
       for (const scope of queued.values()) this.#claimableWork(scope);
     }
+    for (const scope of touched.values()) this.#announceBoard(scope);
     return result;
   }
 
@@ -1826,7 +1860,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     leaseExpiresAt: Date,
   ): Promise<boolean> {
     let renewed = false;
-    await this.#db.updateAtomic<GovernanceDbRow>(
+    // Untracked: a renewal only pushes the expiry out, which no board shows, every few seconds per run.
+    await super.ops.updateAtomic<GovernanceDbRow>(
       table,
       { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
       current => {

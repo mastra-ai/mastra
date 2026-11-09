@@ -1,20 +1,30 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { streamFeedEvents } from '../services/feedEvents';
 import { RequestError } from '../services/request';
 
 const RETRY_MS = 3_000;
+/** Frames this close together refresh the board once. */
+const BOARD_REFRESH_SETTLE_MS = 300;
+/** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
+const FEED_SAFETY_POLL_MS = 60_000;
 
 const FeedEventsContext = createContext(false);
 
 /** No provider means no stream, so consumers fall back to polling. */
 export function useFeedEventsConnected(): boolean {
   return useContext(FeedEventsContext);
+}
+
+/** How often a board query polls: rarely while the stream refreshes it, at `fallbackMs` without one. */
+export function useFeedPollInterval(fallbackMs: number): number {
+  return useFeedEventsConnected() ? FEED_SAFETY_POLL_MS : fallbackMs;
 }
 
 /**
@@ -30,12 +40,31 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   // A quick tab switch keeps the stream; only a tab left hidden releases it.
   const visible = useRecentlyVisible();
   const [connected, setConnected] = useState(false);
+  const streamedProject = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!visible) return;
 
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let settling: ReturnType<typeof setTimeout> | undefined;
+    let refreshing: Promise<unknown> = Promise.resolve();
+    const boardKeys = [
+      queryKeys.workItems(factoryProjectId),
+      queryKeys.factoryDecisionsRoot(factoryProjectId),
+      queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, baseUrl),
+    ];
+    // One refresh at a time: a frame cancelling a slow board read for the next would starve a busy board.
+    const refreshBoard = () => {
+      if (settling) return;
+      settling = setTimeout(() => {
+        refreshing = refreshing.then(() => {
+          settling = undefined;
+          if (abort.signal.aborted) return;
+          return Promise.all(boardKeys.map(queryKey => queryClient.invalidateQueries({ queryKey })));
+        });
+      }, BOARD_REFRESH_SETTLE_MS);
+    };
 
     const connect = () => {
       streamFeedEvents(
@@ -43,15 +72,17 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: ({ workItemId }) => {
-            // Card counts stay on the board's own 5s poll: a fetch per event
-            // would double its load to save under 5s of badge latency.
+            refreshBoard();
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
           },
           onConnected: () => {
             setConnected(true);
-            // Whatever landed while this tab held no stream was never announced.
+            // Whatever landed while this tab held no stream was never announced. A project's
+            // first stream opens right after the page read its board, so that board is current.
+            if (streamedProject.current === factoryProjectId) refreshBoard();
+            streamedProject.current = factoryProjectId;
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
           },
         },
@@ -71,7 +102,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
 
     return () => {
       abort.abort();
-      if (retry) clearTimeout(retry);
+      clearTimeout(retry);
+      clearTimeout(settling);
       setConnected(false);
     };
   }, [baseUrl, factoryProjectId, queryClient, visible]);

@@ -494,10 +494,10 @@ function buildDefaultStudioAuth(): IMastraAuthProvider {
   return new MastraAuthStudio();
 }
 
-/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
+/** A run starting, parking, being answered or ending changes what boards show, so the registry bumps the project's feed. */
 function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
   const liveSessions = new LiveSessions(controller);
-  liveSessions.onParkedChanged(session => {
+  liveSessions.onRunChanged(session => {
     const { factoryOrgId, factoryProjectId } = session.state.get();
     if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
   });
@@ -805,6 +805,7 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));

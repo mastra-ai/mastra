@@ -48,11 +48,13 @@ export function itemAppearsInStage(
 
 export function boardLoadingStages({
   stages,
+  initialPhase,
   itemsPending,
   intakePending,
   triagePending,
 }: {
   stages: ReadonlyArray<BoardStage>;
+  initialPhase: BoardStageId;
   itemsPending: boolean;
   intakePending: boolean;
   triagePending: boolean;
@@ -61,7 +63,7 @@ export function boardLoadingStages({
   if (itemsPending) {
     for (const stage of stages) loading.add(stage.id);
   }
-  if (intakePending) loading.add('intake');
+  if (intakePending) loading.add(initialPhase);
   if (triagePending) loading.add('triage');
   return loading;
 }

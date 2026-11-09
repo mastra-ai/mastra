@@ -11,6 +11,7 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
   createWorkItem,
   deleteWorkItem,
@@ -57,16 +58,14 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
+/** Cards move on their own (rules, runs, ingestion, other tabs); only polling shows it without the feed stream. */
+export const BOARD_FALLBACK_POLL_MS = 5_000;
 
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
-    // Relationships can be created by GitHub ingestion or another open tab.
-    // Keep thread-page counterpart links current without requiring a reload.
-    refetchInterval: 5_000,
-    // Cards move autonomously (rule transitions, agent runs); polling pauses
-    // while the tab is hidden, so refresh immediately on return.
+    // A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
 }
@@ -74,13 +73,19 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
 /** The org's persisted work items (kanban cards) for a project. */
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
+  const refetchInterval = useFeedPollInterval(BOARD_FALLBACK_POLL_MS);
+  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), refetchInterval, select: selectCards });
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
 export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
+  const refetchInterval = useFeedPollInterval(BOARD_FALLBACK_POLL_MS);
+  const { data } = useQuery({
+    ...boardQueryOptions(baseUrl, factoryProjectId),
+    refetchInterval,
+    select: selectParkedSessions,
+  });
   return data ?? NO_SESSIONS;
 }
 

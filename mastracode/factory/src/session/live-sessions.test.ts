@@ -45,6 +45,7 @@ function fakeSession(id: string, running: { value: boolean } = { value: false },
       pendingSuspensions.delete(toolCallId);
       emit({ type: 'tool_suspension_cancelled', toolCallId, toolName: 'ask_user', reason: 'answered' });
     },
+    start: () => emit({ type: 'agent_start' }),
     end: (reason: 'complete' | 'suspended') => {
       if (reason !== 'suspended') pendingSuspensions.clear();
       emit({ type: 'agent_end', reason });
@@ -140,24 +141,26 @@ describe('LiveSessions', () => {
     ]);
   });
 
-  it('announces every park, answer and finished turn, and stops once the session is gone', () => {
+  it('announces every run start, park, answer and finished turn, and stops once the session is gone', () => {
     const controller = fakeController();
     const registry = new LiveSessions(controller);
     const fake = fakeSession('session-1');
     controller.create(fake.session);
     const changed = vi.fn();
-    registry.onParkedChanged(changed);
+    registry.onRunChanged(changed);
 
+    fake.start();
     fake.park('call-1', 'ask_user');
     fake.end('suspended');
     fake.answer('call-1');
+    fake.start();
     fake.end('complete');
-    expect(changed).toHaveBeenCalledTimes(3);
+    expect(changed).toHaveBeenCalledTimes(5);
     expect(changed).toHaveBeenLastCalledWith(fake.session);
 
     controller.delete(fake.session);
     fake.park('call-2', 'ask_user');
-    expect(changed).toHaveBeenCalledTimes(3);
+    expect(changed).toHaveBeenCalledTimes(5);
   });
 
   it('announces a parked session going away, so the inbox drops its item', () => {
@@ -166,7 +169,7 @@ describe('LiveSessions', () => {
     const fake = fakeSession('session-1');
     controller.create(fake.session);
     const changed = vi.fn();
-    registry.onParkedChanged(changed);
+    registry.onRunChanged(changed);
 
     fake.park('call-1', 'ask_user');
     controller.delete(fake.session);
