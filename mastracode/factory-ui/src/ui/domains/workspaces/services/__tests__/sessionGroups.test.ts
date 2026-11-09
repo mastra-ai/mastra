@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import {
   collapsedRowsKeepingActive,
   customGroupOrder,
   groupSessionRows,
+  nestCardSessions,
   orderGroupHeadings,
   sessionGroupHeadings,
 } from '../sessionGroups';
@@ -206,5 +207,37 @@ describe('collapsedRowsKeepingActive', () => {
       'work-5',
       'work-7',
     ]);
+  });
+});
+
+describe('nestCardSessions', () => {
+  const card = testWorkItem({ id: 'card-1', title: 'Fix login' });
+  const cardRow = (sessionId: string, context: string) =>
+    factoryRow(testSession(sessionId), { item: card, context, boards: workBoardCatalog.boards });
+  const summary = (entries: ReturnType<typeof nestCardSessions>) =>
+    entries.map(entry =>
+      entry.kind === 'row'
+        ? entry.row.session.sessionId
+        : { card: entry.title, rows: entry.rows.map(row => row.contextLabel) },
+    );
+
+  it("gathers a card's sessions under the card at its first row, named by context", () => {
+    const rows = [userRow('user-1'), cardRow('work-1', 'work'), userRow('user-2'), cardRow('triage-1', 'triage')];
+
+    expect(summary(nestCardSessions(rows))).toEqual([
+      'user-1',
+      { card: 'Fix login', rows: ['Work', 'Triage'] },
+      'user-2',
+    ]);
+  });
+
+  it('nests a card with a single session too', () => {
+    expect(summary(nestCardSessions([cardRow('work-1', 'work')]))).toEqual([{ card: 'Fix login', rows: ['Work'] }]);
+  });
+
+  it('keeps a factory session without a known context as a flat row', () => {
+    const row = factoryRow(testSession('work-1'), { item: card });
+
+    expect(summary(nestCardSessions([row]))).toEqual(['work-1']);
   });
 });

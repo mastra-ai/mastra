@@ -197,7 +197,7 @@ describe('ThreadPage document title', () => {
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
-    expect(await screen.findByRole('link', { name: 'Fix flaky login' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Sess-1: Fix flaky login' })).toBeInTheDocument();
   });
 
   it('shows the team key for Linear issue-backed work sessions', async () => {

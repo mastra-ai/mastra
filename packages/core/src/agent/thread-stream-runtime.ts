@@ -3796,7 +3796,7 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     const abortController = new AbortController();
     const upstreamAbortSignal = options.abortSignal;
-    const abort = () => abortController.abort();
+    const abort = () => abortController.abort(upstreamAbortSignal?.reason);
     if (upstreamAbortSignal?.aborted) {
       abort();
     } else {

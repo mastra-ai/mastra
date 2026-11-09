@@ -2,6 +2,7 @@ import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { ChunkType } from '../../stream/types';
+import { createRunAbortController } from '../durable/run-abort';
 import type { AgentSuspendedEventData } from '../durable/types';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
@@ -76,13 +77,10 @@ export function createAgentStreamPublisher({
   onEnd,
   record,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
-  const controller = new AbortController();
+  const { controller, detach } = createRunAbortController(callerSignal);
   const abort = (reason?: unknown) => {
     if (!controller.signal.aborted) controller.abort(reason ?? new Error('Aborted'));
   };
-  const onCallerAbort = () => abort(callerSignal?.reason);
-  if (callerSignal?.aborted) onCallerAbort();
-  else callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
 
   let ended = false;
 
@@ -104,7 +102,7 @@ export function createAgentStreamPublisher({
       logger?.warn?.('[AgentStream:' + runId + '] failed to listen for abort requests', { error });
     });
   const stopAbortListener = async () => {
-    callerSignal?.removeEventListener('abort', onCallerAbort);
+    detach();
     const pending = listening;
     listening = undefined;
     await pending;
