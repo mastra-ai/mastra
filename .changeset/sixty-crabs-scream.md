@@ -15,4 +15,4 @@ export const supportAgent = new Agent({
 
 `user` is `undefined` for unauthenticated requests. Auth providers can override the new `toMastraUser()` method to control how their user objects are normalized.
 
-Workflow resume, restart and time travel no longer restore the authenticated user, roles and permissions saved with the run. They come from the request doing the resuming, so a resume without a signed-in user can't act as the user who started the run. Integrations that build their own resume context can use the new `withoutLiveRequestKeys()` helper from `@mastra/core/request-context` to drop the same keys.
+Workflow resume, restart and time travel, and durable agent `resume()`, no longer restore the authenticated user, roles and permissions saved with the run. They come from the request doing the resuming, so a resume without a signed-in user can't act as the user who started the run. Integrations that build their own resume context can use the new `withoutLiveRequestKeys()` helper from `@mastra/core/request-context` to drop the same keys.
