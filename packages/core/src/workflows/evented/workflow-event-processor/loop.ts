@@ -36,7 +36,6 @@ export async function evaluateLoopCondition(
     abortController: new AbortController(),
     retryCount: args.retryCount ?? 0,
     iterationCount: (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1,
-    parentWorkflow: args.parentWorkflow,
   });
 }
 

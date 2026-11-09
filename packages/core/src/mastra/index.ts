@@ -235,9 +235,6 @@ function ownerWorkflowIdForRow(rowId: string, workflowIds: Iterable<string>): st
   return undefined;
 }
 
-/** A workflow run and its `parentWorkflow` chain, as carried on workflow events. */
-type WorkflowRunAncestor = { workflowId?: string; runId?: string; parentWorkflow?: unknown };
-
 /**
  * Decodes the owning workflow id directly from a `wf_<encoded>` /
  * `wf_<encoded>__<...>` row id without needing the workflow to be in the
@@ -1110,18 +1107,33 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
-                const isOwnedHere = (guarded = false) =>
-                  self.#ownsWorkflowRun(
-                    wfId,
-                    rId,
-                    data?.parentWorkflow as WorkflowRunAncestor | undefined,
-                    topic,
-                    guarded,
-                  );
+                const isOwnedHere = (guarded = false) => {
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic, guarded)) return true;
+                  let parent = data?.parentWorkflow as
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
+                  let depth = 0;
+                  while (parent && depth < 16) {
+                    const pwfId = parent.workflowId;
+                    const prId = parent.runId;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
+                    parent = parent.parentWorkflow as typeof parent;
+                    depth++;
+                  }
+                  // Scheduler-spawned background workflows: runId carries the
+                  // schedule row id prefix — `sched_wf_<workflowId>_<timestamp>`
+                  // for declarative schedules, or the imperative notification
+                  // dispatcher row id. These ticks fire on every instance
+                  // independently — events are only meaningful to the
+                  // publishing process.
+                  if (rId && rId.startsWith('sched_wf_')) return true;
+                  if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
+                  return false;
+                };
                 if (isOwnedHere()) {
                   if (topic === 'workflows' && !isOwnedHere(true)) {
-                    return self.#unguardedWorkflowEventsStayLocal().then(localOnly =>
-                      target.publish(topic, event, { localOnly }),
+                    return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
+                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
                     );
                   }
                   // A local-only start in a process that consumes no workflow
@@ -4061,68 +4073,6 @@ export class Mastra<
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
     return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
-  }
-
-  /**
-   * Whether this process owns a workflow run's events: the run, or any ancestor
-   * in its `parentWorkflow` chain, is a process-local internal workflow, or the
-   * run was spawned by this process's scheduler.
-   */
-  #ownsWorkflowRun(
-    workflowId: string | undefined,
-    runId: string | undefined,
-    parentWorkflow: WorkflowRunAncestor | undefined,
-    topic: string,
-    guarded: boolean,
-  ): boolean {
-    if (workflowId && runId && this.#isProcessLocalInternalWorkflow(workflowId, runId, topic, guarded)) return true;
-    // Nested internal workflows (e.g. `executionWorkflow` inside `agentic-loop`)
-    // carry an immediate workflowId that isn't itself registered, but their
-    // root parent is.
-    let parent = parentWorkflow;
-    let depth = 0;
-    while (parent && depth < 16) {
-      const { workflowId: pwfId, runId: prId } = parent;
-      if (pwfId && prId && this.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
-      parent = parent.parentWorkflow as WorkflowRunAncestor | undefined;
-      depth++;
-    }
-    // Scheduler-spawned background workflows: runId carries the schedule row id
-    // prefix — `sched_wf_<workflowId>_<timestamp>` for declarative schedules, or
-    // the imperative notification dispatcher row id. These ticks fire on every
-    // instance independently — events are only meaningful to the publishing
-    // process.
-    if (runId?.startsWith('sched_wf_')) return true;
-    if (runId?.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
-    return false;
-  }
-
-  /**
-   * Unguarded `workflows` events of an owned distributed run stay in this
-   * process unless the store has atomic step guards that let workers in other
-   * processes claim them.
-   */
-  async #unguardedWorkflowEventsStayLocal(): Promise<boolean> {
-    const store = await this.getStorage()?.getStore('workflows');
-    return !store?.supportsWorkflowStepGuards();
-  }
-
-  /**
-   * Whether every step of this workflow run executes in this process, so the
-   * frames its steps publish can share this process's server-cache counter with
-   * the caller. False when workers in other processes can claim the run's
-   * `workflows` events.
-   *
-   * @internal
-   */
-  async __isWorkflowRunExecutedLocally(
-    workflowId: string,
-    runId: string,
-    parentWorkflow?: WorkflowRunAncestor,
-  ): Promise<boolean> {
-    if (!this.#ownsWorkflowRun(workflowId, runId, parentWorkflow, 'workflows', false)) return false;
-    if (this.#ownsWorkflowRun(workflowId, runId, parentWorkflow, 'workflows', true)) return true;
-    return this.#unguardedWorkflowEventsStayLocal();
   }
 
   /**

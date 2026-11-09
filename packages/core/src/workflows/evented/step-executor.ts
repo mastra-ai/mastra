@@ -1,4 +1,5 @@
 import { isExecutionFenceError, isStorageFencedExecution } from '../../agent/durable/execution-fence';
+import { AGENT_STREAM_TOPIC } from '../../agent/streams/constants';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -34,7 +35,8 @@ import {
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
-  #cachingStepPubsub?: CachingPubSub;
+  #stepPubsub?: PubSub;
+  #warnedUnnumbered = false;
   constructor({ mastra }: { mastra?: Mastra }) {
     super({ name: 'StepExecutor', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
@@ -61,35 +63,45 @@ export class StepExecutor extends MastraBase {
    * Reusing an existing `CachingPubSub`, or wrapping the bus with one that
    * shares `mastra.serverCache`, puts every frame through one append path.
    *
-   * A process-local cache only numbers frames correctly when every publisher
-   * shares it. Behind a cross-process transport that holds as long as the run
-   * cannot leave this process — true unless the store has step guards that let
-   * other workers claim its events (#28324). When it can leave, each process
-   * would number its own frames from 0 and observers would drop the worker's
-   * frames as late duplicates, so those steps publish unnumbered (live-only).
+   * A process-local cache only numbers a run's frames correctly in the process
+   * that holds the run's log. Behind a cross-process transport, a worker
+   * numbering the same run from 0 in its own cache would have observers drop
+   * its frames as late duplicates. So with a process-local cache behind a
+   * cross-process transport, steps only append to logs this process already
+   * holds — the caller writes the run's `start` frame before any step runs, so
+   * steps in the caller's process are numbered (#28324) and steps on other
+   * workers publish unnumbered (live-only).
    */
-  async #getStepPubsub(
-    workflowId: string,
-    runId: string,
-    parentWorkflow?: StepExecutionParentWorkflow,
-  ): Promise<PubSub> {
-    const mastra = this.mastra!;
-    const inner = mastra.pubsub;
-    const cache = mastra.serverCache;
-    if (inner instanceof CachingPubSub) return inner;
-    if (!cache) return inner;
-    const sharedNumbering =
-      !(cache instanceof InMemoryServerCache) ||
-      inner.__rawBus() instanceof EventEmitterPubSub ||
-      (await mastra.__isWorkflowRunExecutedLocally(workflowId, runId, parentWorkflow));
-    if (!sharedNumbering) return inner;
-    this.#cachingStepPubsub ??= new CachingPubSub(inner, cache, {
-      // Run-local watch events are per-process fan-out (often megabytes of
-      // cumulative step results) and must never land in a shared cache.
-      shouldCache: topic => !isRunLocalTopic(topic),
-      logger: this.logger,
-    });
-    return this.#cachingStepPubsub;
+  #getStepPubsub(): PubSub {
+    if (this.#stepPubsub) return this.#stepPubsub;
+    const inner = this.mastra!.pubsub;
+    const cache = this.mastra?.serverCache;
+    if (inner instanceof CachingPubSub) {
+      this.#stepPubsub = inner;
+    } else if (cache) {
+      const processLocalLogs =
+        cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub);
+      this.#stepPubsub = new CachingPubSub(inner, cache, {
+        // Run-local watch events are per-process fan-out (often megabytes of
+        // cumulative step results) and must never land in a shared cache.
+        shouldCache: topic => !isRunLocalTopic(topic),
+        extendExistingLogsOnly: processLocalLogs,
+        onUnlogged: topic => this.#warnUnnumberedAgentStream(topic),
+        logger: this.logger,
+      });
+    } else {
+      this.#stepPubsub = inner;
+    }
+    return this.#stepPubsub;
+  }
+
+  #warnUnnumberedAgentStream(topic: string): void {
+    if (this.#warnedUnnumbered || !topic.startsWith(AGENT_STREAM_TOPIC(''))) return;
+    this.#warnedUnnumbered = true;
+    this.logger.warn(
+      `Agent stream frames published from this process are not numbered: the run started in another process and the in-memory server cache is process-local, so observe(runId, { offset }) cannot skip these frames. Configure a shared server cache (e.g. RedisServerCache) on Mastra.`,
+      { topic },
+    );
   }
 
   /**
@@ -238,7 +250,6 @@ export class StepExecutor extends MastraBase {
 
       const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
-      const stepPubsub = await this.#getStepPubsub(params.workflowId, runId, params.parentWorkflow);
 
       const stepOutput = await executeWithContext({
         span: stepTracingContext.currentSpan,
@@ -314,7 +325,7 @@ export class StepExecutor extends MastraBase {
               abort: () => {
                 abortController?.abort();
               },
-              [PUBSUB_SYMBOL]: stepPubsub,
+              [PUBSUB_SYMBOL]: this.#getStepPubsub(),
               [STREAM_FORMAT_SYMBOL]: params.format,
               engine: {},
               abortSignal: abortController?.signal,
@@ -479,7 +490,6 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
-    parentWorkflow?: StepExecutionParentWorkflow;
   }): Promise<number[]> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
@@ -501,7 +511,6 @@ export class StepExecutor extends MastraBase {
             abortController,
             stepResults,
             iterationCount: 0,
-            parentWorkflow: params.parentWorkflow,
           });
         } catch (e) {
           const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
@@ -546,7 +555,6 @@ export class StepExecutor extends MastraBase {
     abortController,
     retryCount = 0,
     iterationCount,
-    parentWorkflow,
   }: {
     workflowId: string;
     condition: LoopConditionFunction<any, any, any, any, any, any>;
@@ -560,11 +568,9 @@ export class StepExecutor extends MastraBase {
     abortController: AbortController;
     retryCount?: number;
     iterationCount: number;
-    parentWorkflow?: StepExecutionParentWorkflow;
   }): Promise<boolean> {
     const callId = globalThis.crypto.randomUUID();
     const outputWriter = this.createOutputWriter(runId);
-    const stepPubsub = await this.#getStepPubsub(workflowId, runId, parentWorkflow);
 
     return condition(
       createDeprecationProxy(
@@ -594,7 +600,7 @@ export class StepExecutor extends MastraBase {
           abort: () => {
             abortController?.abort();
           },
-          [PUBSUB_SYMBOL]: stepPubsub,
+          [PUBSUB_SYMBOL]: this.#getStepPubsub(),
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
@@ -623,7 +629,6 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
-    parentWorkflow?: StepExecutionParentWorkflow;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
     const currentState = params.state ?? stepResults?.__state ?? {};
@@ -641,7 +646,6 @@ export class StepExecutor extends MastraBase {
     try {
       const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
-      const stepPubsub = await this.#getStepPubsub(params.workflowId, runId, params.parentWorkflow);
 
       return await step.fn(
         createDeprecationProxy(
@@ -679,7 +683,7 @@ export class StepExecutor extends MastraBase {
               },
               outputWriter,
             ),
-            [PUBSUB_SYMBOL]: stepPubsub,
+            [PUBSUB_SYMBOL]: this.#getStepPubsub(),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -711,7 +715,6 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
-    parentWorkflow?: StepExecutionParentWorkflow;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
     const currentState = params.state ?? stepResults?.__state ?? {};
@@ -729,7 +732,6 @@ export class StepExecutor extends MastraBase {
     try {
       const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
-      const stepPubsub = await this.#getStepPubsub(params.workflowId, runId, params.parentWorkflow);
 
       const result = await step.fn(
         createDeprecationProxy(
@@ -767,7 +769,7 @@ export class StepExecutor extends MastraBase {
               },
               outputWriter,
             ),
-            [PUBSUB_SYMBOL]: stepPubsub,
+            [PUBSUB_SYMBOL]: this.#getStepPubsub(),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,

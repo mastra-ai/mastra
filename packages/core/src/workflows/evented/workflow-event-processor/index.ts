@@ -1137,7 +1137,6 @@ export class WorkflowEventProcessor extends EventProcessor {
                   requestContext: new RequestContext(Object.entries(requestContext ?? {})),
                   actor,
                   input: completed.output,
-                  parentWorkflow,
                 }),
               }
             : undefined;

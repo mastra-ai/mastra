@@ -15,4 +15,4 @@ const mastra = new Mastra({
 await mastra.getAgent('agent').observe(runId, { offset: lastIndex + 1 });
 ```
 
-When the workflows store lets other processes run steps (PostgreSQL), events from those processes still can't be numbered by an in-memory cache. Mastra now logs a warning in that setup; configure a shared cache such as `RedisServerCache`. Fixes #28324.
+Steps that run in another process, such as a dedicated worker, still publish unnumbered events with an in-memory cache, and now log a warning. Configure a shared cache such as `RedisServerCache` for that setup or when observers reconnect through another server replica. Fixes #28324.
