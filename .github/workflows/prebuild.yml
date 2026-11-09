@@ -111,12 +111,12 @@ jobs:
 
   # Every test job builds from the Turbo cache this job fills, so they wait for it: without it,
   # a change to a widely used package (about a quarter of PRs) would be rebuilt in every test job
-  # at once. It starts with the run instead of after `changes`, and runs on 8 vCPU: a cache-missing
-  # build of @mastra/core and its dependents takes about 70 s there against 125 s on 4 vCPU, for
-  # about the same CPU-minutes. A docs-only PR builds needlessly; that costs about a cent.
+  # at once. It starts with the run instead of after `changes`. It stays on 4 vCPU: 8 vCPU builds a
+  # cache-missing @mastra/core in ~70 s instead of ~125 s, but one benchmark run waited 13 minutes
+  # for an 8 vCPU machine. A docs-only PR builds needlessly; that costs about a cent.
   prebuild:
     name: Build
-    runs-on: starsling-ubuntu-26.04-8
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     if: github.repository == 'mastra-ai/mastra'
     env:
