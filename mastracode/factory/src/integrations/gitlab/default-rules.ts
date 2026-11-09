@@ -201,14 +201,16 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
   const closure = context.boardClosure;
   const done = closure?.completed;
   if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
-    if (!done) return;
+    // A board with no `sourceClosed` (the retired Review board) finishes it in its first terminal phase.
+    const finished = done ?? context.flow?.completed;
+    if (!finished) return;
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:merge-request-merged`,
       board: context.board,
-      stage: done.phase,
+      stage: finished.phase,
       message: {
-        text: `GitLab merge request !${context.mergeRequest.number} merged; this merge request card was moved to ${done.title}.`,
+        text: `GitLab merge request !${context.mergeRequest.number} merged; this merge request card was moved to ${finished.title}.`,
       },
     } as const;
   }
@@ -273,7 +275,7 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
       },
     } as const;
   }
-  const canceled = context.boardClosure?.canceled;
+  const canceled = context.boardClosure?.canceled ?? context.flow?.canceled;
   if (!canceled) return;
   return {
     type: 'transition',

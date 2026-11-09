@@ -226,9 +226,10 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.board || !context.pullRequest?.merged) return;
   const closure = context.boardClosure;
-  if (!closure) return;
-  const done = closure.completed;
   if (isPullRequestCard(context.item) && reviewsPullRequest(context)) {
+    // A board with no `sourceClosed` (the retired Review board) finishes it in its first terminal phase.
+    const done = closure?.completed ?? context.flow?.completed;
+    if (!done) return;
     // The event is bound to the PR's own card: a merged PR is finished
     // review work, so always move the card to its board's completed phase. The
     // message only reaches an active session (if any) — cards without one just
@@ -245,7 +246,8 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
-  if (!authoringCard(context)) return;
+  if (!closure || !authoringCard(context)) return;
+  const done = closure.completed;
   // Provenance bound the event to the card that authored the pull request instead: the merge
   // is what finishes the work, so it closes that card alongside the PR's own card —
   // unless the card has since opened another pull request, which is still out.
@@ -394,7 +396,7 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
   }
   // A PR closed without merging is abandoned review work: clear the card off
   // the board instead of leaving it in review forever.
-  const canceled = context.boardClosure?.canceled;
+  const canceled = context.boardClosure?.canceled ?? context.flow?.canceled;
   if (!canceled) return;
   return {
     type: 'transition',
