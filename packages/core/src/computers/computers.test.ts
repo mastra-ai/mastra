@@ -327,6 +327,54 @@ describe('Computers', () => {
     });
   });
 
+  it('rolls back persistent creation when the attachment catalog update fails', async () => {
+    const storage = new InMemoryStore();
+    const computerStorage = new InMemoryComputersStorage();
+    const setComputer = computerStorage.setComputer.bind(computerStorage);
+    let writes = 0;
+    computerStorage.setComputer = vi.fn(async record => {
+      writes += 1;
+      if (writes === 2) throw new Error('attachment catalog unavailable');
+      await setComputer(record);
+    });
+    storage.stores.computers = computerStorage;
+    const created: ComputerSandbox[] = [];
+    const computers = new Computers({ provider: provider(created), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+
+    await expect(
+      (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context),
+    ).rejects.toThrow('attachment catalog unavailable');
+    expect(created[0]!.destroy).toHaveBeenCalledOnce();
+    await expect(computerStorage.listComputers('resource')).resolves.toEqual([]);
+    await expect((computers.tools().mastra_workspace_computer_list as any).execute({}, context)).resolves.toEqual({ computers: [] });
+    await expect(
+      storage.stores.threadState!.getState({ threadId: 'thread', type: 'mastra-computer:resource' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rolls back persistent creation when the attachment thread-state write fails', async () => {
+    const storage = new InMemoryStore();
+    const computerStorage = new InMemoryComputersStorage();
+    storage.stores.computers = computerStorage;
+    storage.stores.threadState!.setState = vi.fn(async () => {
+      throw new Error('thread state unavailable');
+    });
+    const created: ComputerSandbox[] = [];
+    const computers = new Computers({ provider: provider(created), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers });
+
+    await expect(
+      (computers.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context),
+    ).rejects.toThrow('thread state unavailable');
+    expect(created[0]!.destroy).toHaveBeenCalledOnce();
+    await expect(computerStorage.listComputers('resource')).resolves.toEqual([]);
+    await expect((computers.tools().mastra_workspace_computer_list as any).execute({}, context)).resolves.toEqual({ computers: [] });
+    await expect(
+      storage.stores.threadState!.getState({ threadId: 'thread', type: 'mastra-computer:resource' }),
+    ).resolves.toBeUndefined();
+  });
+
   it('destroys a provisioned sandbox when the persistent catalog write fails', async () => {
     const storage = new InMemoryStore();
     const computerStorage = new InMemoryComputersStorage();

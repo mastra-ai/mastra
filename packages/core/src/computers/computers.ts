@@ -518,7 +518,17 @@ export class Computers implements MastraComputers {
       }
       this.#computers.set(entry.id, entry);
       this.#attach(scope, entry);
-      await this.#persistAttachment(scope, entry);
+      try {
+        await this.#persistAttachment(scope, entry);
+      } catch (error) {
+        if (this.#attachments.get(scope.key) === entry.id) this.#attachments.delete(scope.key);
+        if (this.#computers.get(entry.id) === entry) this.#computers.delete(entry.id);
+        this.#handsExtension?.release?.(entry.id, scope.threadId);
+        await this.#deleteAttachment(scope).catch(() => {});
+        if (persistent) await stores.computers!.deleteComputer(entry.id).catch(() => {});
+        await sandbox.destroy().catch(() => {});
+        throw error;
+      }
       await this.#emit(context, entry, scope.threadId, 'attached');
       return { computer: this.#describe(entry, 'attached') };
     });
