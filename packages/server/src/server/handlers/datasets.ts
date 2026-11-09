@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import * as coreDatasets from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
@@ -6,7 +7,8 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
-import { isReservedRequestContextKey } from '../constants';
+import { isReservedRequestContextKey, MASTRA_AUTH_MODE_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import type { MastraAuthMode } from '../constants';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
@@ -81,7 +83,25 @@ async function replaySource({
     throw new HTTPException(501, {
       message: 'Replay datasets require a newer @mastra/core with thread replay support.',
     });
-  const agent = mastra.getAgent(agentId);
+  // These routes derive `datasets:write`, but they read a whole thread transcript, which the memory
+  // routes gate behind `memory:read`. Require it too when an RBAC provider is configured.
+  const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
+  const rbac = (authMode === 'studio' ? mastra.getStudio?.()?.rbac : undefined) ?? mastra.getServer()?.rbac;
+  if (rbac) {
+    const callerPermissions = (requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined) ?? [];
+    if (!hasPermission(callerPermissions, 'memory:read')) {
+      throw new HTTPException(403, { message: 'Missing required permission: memory:read' });
+    }
+  }
+  let agent: Agent;
+  try {
+    agent = mastra.getAgent(agentId);
+  } catch (error) {
+    if (error instanceof MastraError && error.id === 'MASTRA_GET_AGENT_BY_NAME_NOT_FOUND') {
+      throw new HTTPException(404, { message: `Agent "${agentId}" not found.` });
+    }
+    throw error;
+  }
   const memory = await agent.getMemory({ requestContext });
   if (!memory) throw new HTTPException(400, { message: 'This agent has no memory to replay.' });
   const effectiveThreadId = getEffectiveThreadId(requestContext, threadId)!;

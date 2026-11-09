@@ -69,6 +69,11 @@ describe('when replaying a production conversation through the HTTP API', () => 
       // Dataset errors map to HTTP statuses like the other item-writing routes.
       const missing = await request('/datasets/does-not-exist/items/from-thread', source);
       expect(missing.status).toBe(404);
+      // A mistyped agent id is a client error on both replay routes, not a 500.
+      expect((await request('/datasets/replay/preview', { ...source, agentId: 'nope' })).status).toBe(404);
+      expect((await request(`/datasets/${dataset.id}/items/from-thread`, { ...source, agentId: 'nope' })).status).toBe(
+        404,
+      );
       // Replay items are agent inputs, so a workflow dataset is rejected instead of silently filled.
       const workflowDataset = await mastra.datasets.create({
         name: 'Workflow target',
