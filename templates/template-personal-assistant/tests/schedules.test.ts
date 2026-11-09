@@ -31,6 +31,81 @@ import {
 const agent = 'personalAssistant';
 const query = `?agentId=${agent}`;
 
+test('output limits report unfinished work instead of leaving a blank answer', { timeout: 120000 }, async () => {
+  const replies: FixtureReply[] = [];
+  const fixture = await connectedFixture(() => {
+    assert.ok(replies.length, 'No automatic model continuation is allowed after an output limit.');
+    return replies.shift()!;
+  });
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-output-limit-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  const threads: string[] = [];
+  const tasks = [
+    { id: 'create', content: 'Create the schedule', activeForm: 'Creating the schedule', status: 'in_progress' },
+    { id: 'done', content: 'Inspect setup', activeForm: 'Inspecting setup', status: 'completed' },
+  ];
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    for (const mode of ['generate', 'stream']) {
+      for (const partial of ['', 'I have inspected the setup.']) {
+        const thread = `output-limit-${mode}-${partial ? 'partial' : 'blank'}`;
+        threads.push(thread);
+        replies.push(
+          { text: '', calls: [{ id: `plan-${thread}`, name: 'task_write', args: { tasks } }] },
+          { text: partial, finishReason: 'length' },
+        );
+        const before = fixture.models.length;
+        const response = await app.request(`/agents/${agent}/${mode}`, 'POST', {
+          messages: [{ role: 'user', content: 'Create my daily proposal schedule.' }],
+          memory: { thread, resource: 'local-owner' },
+          maxSteps: 6,
+        });
+        if (mode === 'generate') {
+          const body = await json(response);
+          assert.equal(body.finishReason, 'length');
+          assert.match(body.text, /output token limit/i);
+          if (partial) assert.ok(body.text.includes(partial), 'Keep useful partial text.');
+        } else {
+          const body = await response.text();
+          const chunks = body
+            .split('\n')
+            .filter(line => line.startsWith('data: {'))
+            .map(line => JSON.parse(line.slice(6)));
+          const notice = chunks.find(
+            chunk => chunk.type === 'data-signal' && chunk.data?.tagName === 'execution-status',
+          );
+          assert.match(JSON.stringify(notice) ?? '', /output token limit/i);
+          const state = chunks.findLast(
+            chunk => chunk.type === 'data-signal' && chunk.data?.tagName === 'current-task-list',
+          );
+          assert.equal(state?.data?.metadata?.value?.tasks?.[0]?.status, 'pending');
+        }
+        assert.equal(fixture.models.length - before, 2, 'Reporting the limit must not invoke the model again.');
+        assert.equal(replies.length, 0);
+        assert.deepEqual(
+          (await progressState(dataDir, thread)).tasks,
+          tasks.map(task => (task.id === 'create' ? { ...task, status: 'pending' } : task)),
+        );
+        assert.match(await history(app, thread), /output token limit/i);
+        if (partial) assert.ok((await history(app, thread)).includes(partial));
+      }
+    }
+    await app.stop();
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    for (const thread of threads) {
+      assert.match(await history(app, thread), /output token limit/i);
+      assert.equal((await progressState(dataDir, thread)).tasks[0]!.status, 'pending');
+    }
+    assert.equal(fixture.providerCalls.length, 0);
+    assert.equal((await schedules(app)).length, 0, 'An interrupted answer must not imply schedule creation.');
+    assert.equal(fixture.models.length, 8);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('daily schedules accept unambiguous timing and retain strict validation', { timeout: 120000 }, async () => {
   const fixture = await progressFixture();
   const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-timing-shape-'));

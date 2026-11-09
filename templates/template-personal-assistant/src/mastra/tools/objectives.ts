@@ -164,7 +164,8 @@ export function createProgressProtection(config: AssistantConfig, getAgent: () =
         result.finishReason === 'tool-calls' &&
         Boolean(last?.toolCalls.length) &&
         last!.toolResults.length === last!.toolCalls.length;
-      if (!failures.length && !toolOnlyStop && result.finishReason !== 'error') return messageList;
+      const outputLimit = result.finishReason === 'length';
+      if (!failures.length && !toolOnlyStop && !outputLimit && result.finishReason !== 'error') return messageList;
 
       const failedNames = [...new Set(failures.map(failure => failure.toolName))];
       let notice = failures.length
@@ -172,13 +173,18 @@ export function createProgressProtection(config: AssistantConfig, getAgent: () =
         : result.finishReason === 'error'
           ? 'The run failed and has stopped. Work remains unfinished. Inspect existing results before continuing; do not repeat uncertain writes automatically.'
           : 'This turn ended after a tool call without a final confirmation. Work remains unfinished. Inspect existing results before continuing; do not repeat completed or uncertain actions.';
+      if (outputLimit) {
+        const limitNotice =
+          'The model reached its output token limit before completing this turn. Work remains unfinished. Review the output allowance and existing results before continuing; do not repeat completed or uncertain actions automatically.';
+        notice = failures.length ? `${notice} ${limitNotice}` : limitNotice;
+      }
       if (failures.some(failure => failure.toolName === 'schedule' && failure.validation)) {
         notice +=
           ' Schedule validation failed before execution. Use timing.kind="cron" with cron and timezone, or timing.kind="once" with date and timezone. Keep the same requestId when correcting creation.';
       }
 
       // Rejected task/objective management must leave the protected plan intact.
-      // Only execution failures or a tool-only stop park active work.
+      // Execution failures and incomplete terminal turns park active work.
       const progressOnlyFailure =
         failures.length > 0 &&
         failures.every(failure => taskTools.has(failure.toolName) || failure.toolName === 'objective');

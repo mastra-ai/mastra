@@ -14,6 +14,7 @@ export const fullMessage =
 
 export type FixtureReply = {
   text: string;
+  finishReason?: 'stop' | 'length';
   calls?: { name: string; args: unknown; id?: string }[];
   status?: number;
 };
@@ -234,7 +235,9 @@ export async function connectedFixture(
         object: 'chat.completion',
         created: 1,
         model: body.model,
-        choices: [{ index: 0, message, finish_reason: calls.length ? 'tool_calls' : 'stop' }],
+        choices: [
+          { index: 0, message, finish_reason: calls.length ? 'tool_calls' : (scripted?.finishReason ?? 'stop') },
+        ],
         usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
       };
       if (!body.stream) return send(completion);
@@ -246,7 +249,7 @@ export async function connectedFixture(
         `data: ${JSON.stringify({ ...completion, object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`,
       );
       res.end(
-        `data: ${JSON.stringify({ ...completion, object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: calls.length ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`,
+        `data: ${JSON.stringify({ ...completion, object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: completion.choices[0]!.finish_reason }] })}\n\ndata: [DONE]\n\n`,
       );
       return;
     }
