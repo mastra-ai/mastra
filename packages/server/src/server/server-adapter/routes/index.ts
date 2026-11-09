@@ -230,15 +230,16 @@ export function getAllServerRoutes(options: { includeExperimentalComputers?: boo
   ];
 }
 
+const BUILT_IN_SERVER_ROUTE_SET = new Set(getAllServerRoutes({ includeExperimentalComputers: true }));
 let serverRouteExtensions: readonly ServerRoute[] | undefined;
 
 export function getServerRoutes(options: { includeExperimentalComputers?: boolean } = {}): readonly ServerRoute[] {
   const routes = getAllServerRoutes(options).filter(route => !OPT_IN_ROUTE_SET.has(route));
   if (!serverRouteExtensions) return routes;
-  const builtInRoutes = new Set(getAllServerRoutes({ includeExperimentalComputers: true }));
-  return [...routes, ...serverRouteExtensions.filter(route => !builtInRoutes.has(route))];
+  return [...routes, ...serverRouteExtensions.filter(route => !BUILT_IN_SERVER_ROUTE_SET.has(route))];
 }
 
+// These arrays snapshot the flag at import time; server instances call the getters so registration reads the current flag.
 export const ALL_SERVER_ROUTES: readonly ServerRoute[] = getAllServerRoutes();
 
 /**

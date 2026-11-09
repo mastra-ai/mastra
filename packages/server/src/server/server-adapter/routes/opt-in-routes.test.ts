@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { generateOpenAPIDocument } from '../openapi-utils';
 import { KNOWLEDGE_ROUTES } from './knowledge';
 import { getEffectivePermission } from './permissions';
 import { ALL_SERVER_ROUTES, OPT_IN_ROUTES, SERVER_ROUTES, getAllServerRoutes, getServerRoutes } from '.';
@@ -37,6 +38,12 @@ describe('opt-in routes', () => {
         expect(getServerRoutes().some(route => route.path.startsWith('/computers/'))).toBe(false);
         expect(getAllServerRoutes().some(route => route.path.startsWith('/computers/'))).toBe(false);
       }
+
+      const spec = generateOpenAPIDocument(getServerRoutes({ includeExperimentalComputers: false }), {
+        title: 'Mastra',
+        version: '1',
+      });
+      expect(Object.keys(spec.paths).some(path => path.startsWith('/computers/'))).toBe(false);
 
       process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
       expect(getServerRoutes().filter(route => route.path.startsWith('/computers/'))).toHaveLength(3);

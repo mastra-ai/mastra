@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix Workspace pixel tools to execute in model-request order.
+Fixed Workspace computer tools so they run in the order the model requested them.
