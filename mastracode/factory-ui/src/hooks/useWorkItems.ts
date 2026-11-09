@@ -11,7 +11,7 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, queryKeys } from '../api/keys';
-import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
+import { BOARD_FALLBACK_POLL_MS, useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
   createWorkItem,
   deleteWorkItem,
@@ -58,9 +58,6 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
-/** Cards move on their own (rules, runs, ingestion, other tabs); only polling shows it without the feed stream. */
-export const BOARD_FALLBACK_POLL_MS = 5_000;
-
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),

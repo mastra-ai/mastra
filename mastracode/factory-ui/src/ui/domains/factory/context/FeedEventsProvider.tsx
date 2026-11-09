@@ -12,8 +12,8 @@ import { RequestError } from '../services/request';
 const RETRY_MS = 3_000;
 /** Frames this close together refresh the board once. */
 const BOARD_REFRESH_SETTLE_MS = 300;
-/** A busy board refreshes no more often than it polls without a stream, so frames never cost more reads than polling. */
-const BOARD_REFRESH_MIN_GAP_MS = 5_000;
+/** Cards move on their own (rules, runs, ingestion, other tabs): without the stream only this poll shows it, and frames refresh a busy board no faster. */
+export const BOARD_FALLBACK_POLL_MS = 5_000;
 /** While frames refresh the board, a poll only bounds how long a write that never announced itself stays hidden. */
 const FEED_SAFETY_POLL_MS = 60_000;
 
@@ -71,7 +71,7 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     // One refresh at a time: a frame cancelling a slow board read for the next would starve a busy board.
     const refreshBoard = () => {
       if (settling) return;
-      const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_REFRESH_MIN_GAP_MS - Date.now());
+      const wait = Math.max(BOARD_REFRESH_SETTLE_MS, lastRefreshAt + BOARD_FALLBACK_POLL_MS - Date.now());
       settling = setTimeout(() => {
         refreshing = refreshing.then(cardMovesSettled).then(() => {
           settling = undefined;

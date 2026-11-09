@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
+import { BOARD_FALLBACK_POLL_MS, useFeedPollInterval } from '../ui/domains/factory/context/FeedEventsProvider';
 import type { BoardSnapshot, WorkItem } from '../ui/domains/factory/services/workItems';
-import { BOARD_FALLBACK_POLL_MS, boardQueryOptions } from './useWorkItems';
+import { boardQueryOptions } from './useWorkItems';
 
 /**
  * Threads carry no work-item ref of their own, so the card is found in the
