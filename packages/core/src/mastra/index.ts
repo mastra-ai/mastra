@@ -7968,6 +7968,14 @@ export class Mastra<
    * reach during the drain. An abandoned durable agent run then stops without
    * writing and is released. It can be recovered only if a checkpoint was
    * persisted.
+   *
+   * Agent thread runs this instance still holds are then handed back. A run
+   * still executing is aborted, and other processes watching its thread see
+   * it end; its partial response is not saved. A run parked on a tool
+   * approval or suspension stays parked and resumable. Either way the thread
+   * lease is released right away instead of at expiry, so another process
+   * can use the thread immediately. Handing runs back can take up to about
+   * 1.5 seconds past `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
