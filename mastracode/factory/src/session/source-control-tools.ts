@@ -5,7 +5,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
 import {
-  FACTORY_INTERACTIVE_KEY,
+  getFactoryActingUserId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
@@ -278,15 +278,15 @@ export async function createSourceControlTools({
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
-  // Autonomous turns run as the session owner (often whoever connected the repository),
-  // but no person drove the write, so they must not be attributed to anyone.
-  const interactive = requestContext.get(FACTORY_INTERACTIVE_KEY) === true;
+  // Who the turn's writes are for. Not `target.userId`: that is whose credentials
+  // run the turn, often whoever connected the repository.
+  const actingUserId = getFactoryActingUserId(requestContext);
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
       repositoryId: target.repository.id,
     })),
-    ...(interactive ? { actingUserId: target.userId } : {}),
+    actingUserId,
   });
 
   return {
@@ -765,9 +765,7 @@ export async function createSourceControlTools({
           );
         }
         return publishCommitCheck({
-          connection: ref.connection,
-          sourceId: ref.sourceId,
-          ...(ref.actingUserId !== undefined ? { actingUserId: ref.actingUserId } : {}),
+          ...ref,
           headSha,
           ref: pullRequest.headBranch,
           name: FACTORY_TEST_CHECK_NAME,

@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
+import { getFactoryActingUserId } from '../auth.js';
 import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
@@ -439,6 +440,11 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: expect.objectContaining({ startedBy: 'approver-2' }),
         }),
       ]);
+      // The run borrows its session owner's credentials, but what it writes is for
+      // whoever released it: naming the owner would credit someone who never asked.
+      const kickoff = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
+      expect(kickoff?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(getFactoryActingUserId(kickoff)).toBe('approver-2');
       if (reason === 'suspended') {
         expect(afterDispatch).toHaveLength(1);
         emitAgentEnd('complete');
@@ -1387,6 +1393,8 @@ describe('FactoryDecisionDispatcher', () => {
     );
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    // Nobody released this run: auto-run started it, so its writes name nobody.
+    expect(getFactoryActingUserId(requestContext)).toBeUndefined();
     expect(requestContext?.get('controller')).toMatchObject({
       sessionId: 'session-1',
       resourceId: PROJECT_ID,

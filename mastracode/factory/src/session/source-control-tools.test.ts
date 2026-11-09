@@ -6,7 +6,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { FACTORY_INTERACTIVE_KEY } from '../auth.js';
+import { FACTORY_ACTING_USER_KEY } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -14,10 +14,15 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
-function requestContext({ orgId = 'org-1', userId = 'user-1', interactive = true } = {}) {
+/** `userId` is whose credentials run the turn; `actingUserId` is the person it is for, `null` when nobody. */
+function requestContext({
+  orgId = 'org-1',
+  userId = 'user-1',
+  actingUserId = userId,
+}: { orgId?: string; userId?: string; actingUserId?: string | null } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
-  if (interactive) requestContext.set(FACTORY_INTERACTIVE_KEY, true);
+  if (actingUserId) requestContext.set(FACTORY_ACTING_USER_KEY, actingUserId);
   requestContext.set('controller', {
     // The session runs under its Factory, so only its session id names the source-control session.
     sessionId: 'session-1',
@@ -195,10 +200,16 @@ describe('createSourceControlTools', () => {
     });
   });
 
-  it('attributes no person when an autonomous turn writes as the session owner', async () => {
+  // The turn runs on the session owner's credentials (`user-1`, who also connected the
+  // repository), so naming that owner labels the write with someone who never asked for it.
+  it.each([
+    { who: 'the teammate', turn: 'they drive the session from Slack', actingUserId: 'teammate-1' },
+    { who: 'the approver', turn: 'a run they released opens it', actingUserId: 'approver-1' },
+    { who: 'nobody', turn: 'a rule-triggered run opens it', actingUserId: null },
+  ])('names $who on a change request when $turn', async ({ actingUserId }) => {
     const setup = await fixture();
     const tools = await createSourceControlTools({
-      requestContext: requestContext({ interactive: false }),
+      requestContext: requestContext({ actingUserId }),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
@@ -208,6 +219,7 @@ describe('createSourceControlTools', () => {
     expect(setup.createPullRequest).toHaveBeenCalledWith({
       connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
       sourceId: 'acme/repo',
+      ...(actingUserId ? { actingUserId } : {}),
       title: 'Ship it',
       body: 'Body',
       baseBranch: 'main',

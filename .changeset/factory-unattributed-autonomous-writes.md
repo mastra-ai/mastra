@@ -2,4 +2,9 @@
 '@mastra/factory': patch
 ---
 
-Fixed autonomous Factory runs labeling their GitHub comments, reviews, and pull requests with a person's name. Writes from rule-triggered runs, such as the review agent's verdict and test report, are no longer marked "Opened by" whoever connected the repository, and pull requests they open are no longer assigned to that person. Writes made during a turn a person started still carry that person's name.
+Fixed Factory labeling its GitHub comments, reviews, and pull requests with the wrong person's name.
+
+- Runs nobody started, such as the review agent's verdict and test report on a new pull request, are no longer marked "Opened by" whoever connected the repository, and pull requests they open are no longer assigned to that person.
+- Messages sent from Slack to a shared session now name the person who sent them instead of the session's owner.
+
+Turns a signed-in person starts, and runs a person released from the board, still carry that person's name.

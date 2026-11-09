@@ -4,6 +4,7 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
+import { FACTORY_ACTING_USER_KEY } from '../auth.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardForWorkItem,
@@ -403,10 +404,13 @@ function factoryRequestContext(input: {
   binding: FactoryRunBindingRecord;
   userId: string;
   orgId: string;
+  /** Who released the run this turn starts; only a person is recorded as acting. */
+  releasedBy?: string;
 }): RequestContext {
-  const { session, binding, userId, orgId } = input;
+  const { session, binding, userId, orgId, releasedBy } = input;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
+  if (isHumanActorId(releasedBy)) requestContext.set(FACTORY_ACTING_USER_KEY, releasedBy);
   requestContext.set('controller', {
     state: session.state.get(),
     getState: () => session.state.get(),
@@ -1293,6 +1297,7 @@ export class FactoryDecisionDispatcher {
             binding,
             userId: startedBy,
             orgId: record.orgId,
+            releasedBy: record.approvedBy ?? undefined,
           });
           const resolved =
             decision.skillName === undefined
