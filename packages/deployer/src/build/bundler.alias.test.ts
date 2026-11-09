@@ -54,8 +54,14 @@ describe('getInputOptions module aliases', () => {
 
     try {
       await Promise.all([
-        writeFile(entryFile, `import { marker } from 'aliased-package';\nexport { marker };\n`),
-        writeFile(shimFile, `exports.marker = 'MASTRA_CJS_ALIAS_SHIM';\n`),
+        writeFile(
+          entryFile,
+          `import DefaultAjv, { Ajv } from 'aliased-package';\nexport const marker = [new DefaultAjv(), new Ajv()];\n`,
+        ),
+        writeFile(
+          shimFile,
+          `class Ajv { constructor() { this.marker = 'MASTRA_CJS_ALIAS_SHIM'; } }\nexports.default = Ajv;\nexports.Ajv = Ajv;\n`,
+        ),
       ]);
 
       const inputOptions = await getInputOptions(

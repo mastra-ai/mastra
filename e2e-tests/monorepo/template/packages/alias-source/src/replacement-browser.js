@@ -1,6 +1,6 @@
-globalThis.MASTRA_BROWSER_CJS_ALIAS_SHIM = true;
+globalThis.MASTRA_BROWSER_ALIAS_SHIM = true;
 
-class Ajv {
+export class Ajv {
   compile() {
     const validate = () => true;
     validate.errors = null;
@@ -16,6 +16,4 @@ class Ajv {
   }
 }
 
-module.exports = Ajv;
-module.exports.default = Ajv;
-module.exports.Ajv = Ajv;
+export default Ajv;

@@ -47,6 +47,33 @@ describe('json-schema standard-schema adapter', () => {
       }
     });
 
+    it('should preserve AJV options for customized validation', async () => {
+      const standardSchema = toStandardSchema<{ count: number }>(
+        {
+          type: 'object',
+          properties: { count: { type: 'number' } },
+          required: ['count'],
+        },
+        { ajvOptions: { coerceTypes: true } },
+      );
+      const input = { count: '2' } as unknown as { count: number };
+
+      const result = await standardSchema['~standard'].validate(input);
+
+      expect(result).toEqual({ value: { count: 2 } });
+      expect(input.count).toBe(2);
+    });
+
+    it('should preserve AJV instance customization before validation', async () => {
+      const standardSchema = toStandardSchema<string>({ type: 'string', format: 'even-length' });
+      standardSchema.getAjv().addFormat('even-length', value => value.length % 2 === 0);
+
+      expect(await standardSchema['~standard'].validate('even')).toEqual({ value: 'even' });
+      expect(await standardSchema['~standard'].validate('odd')).toEqual({
+        issues: [{ message: 'must match format "even-length"', path: [] }],
+      });
+    });
+
     it('should have jsonSchema converter', () => {
       const jsonSchema: JSONSchema7 = {
         type: 'object',
