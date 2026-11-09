@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
 import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
-import { sessionActivityStatus, sessionBoard } from '../sessionRows';
+import { oneRowPerCard, sessionActivityStatus, sessionBoard } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
 describe('sessionBoard', () => {
@@ -100,5 +100,48 @@ describe('external links', () => {
     const row = factoryRow(testSession('s1'), { item, pullRequest: pullRequestItem });
 
     expect(row.externalLinks.map(link => [link.label, link.url])).toEqual(links);
+  });
+});
+
+describe('oneRowPerCard', () => {
+  const ref = (sessionId: string) => ({ sessionId, branch: `factory/${sessionId}`, threadId: `${sessionId}-thread` });
+  const item = testWorkItem({
+    stages: ['execute'],
+    sessions: { triage: ref('triage'), work: ref('work'), review: ref('review') },
+  });
+  const boards = workBoardCatalog.boards;
+  const cardRow = (context: string, input: Parameters<typeof factoryRow>[1] = {}) =>
+    factoryRow(testSession(context), { item, boards, context, ...input });
+
+  it("keeps the card's current session and carries what its other sessions show", () => {
+    const rows = oneRowPerCard(
+      [
+        cardRow('triage', { routeSessionId: 'triage', pinned: true }),
+        cardRow('work'),
+        cardRow('review', { running: true }),
+      ],
+      boards,
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      session: { sessionId: 'work' },
+      contextLabel: 'Work',
+      status: 'working',
+      active: true,
+      pinned: true,
+    });
+  });
+
+  it("falls back to the card's next session when its current one is not listed", () => {
+    const rows = oneRowPerCard([cardRow('review'), cardRow('triage')], boards);
+
+    expect(rows.map(row => row.session.sessionId)).toEqual(['triage']);
+  });
+
+  it('leaves sessions without a card alone', () => {
+    const rows = [factoryRow(testSession('loose')), userRow('mine')];
+
+    expect(oneRowPerCard(rows, boards)).toEqual(rows);
   });
 });
