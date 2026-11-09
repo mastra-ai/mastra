@@ -350,6 +350,27 @@ describe('semantic tools over the daemon socket', () => {
     expect(machine.actions).toEqual(['boot', 'xdotool-type']);
   });
 
+  it('queues concurrent hands actions in call order across recovered and live attachments', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = make();
+    new Mastra({ logger: false, storage, computers: first });
+    const created = await call(first, 'mastra_workspace_computer_create', { persist: true });
+
+    const restarted = make();
+    new Mastra({ logger: false, storage, computers: restarted });
+    const liveContext = ctx('live-thread');
+    await call(restarted, 'mastra_workspace_computer_attach', { id: created.computer.id }, liveContext);
+    daemon.requests.length = 0;
+
+    await Promise.all([
+      call(restarted, 'mastra_workspace_computer_semantic_set_text', { id: 'el-1', text: 'first' }),
+      call(restarted, 'mastra_workspace_computer_semantic_set_text', { id: 'el-1', text: 'second' }, liveContext),
+    ]);
+
+    expect(daemon.requests.map(request => request.params.text)).toEqual(['first', 'second']);
+  });
+
   it('recovers semantic hands after process restart without an explicit attach', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();

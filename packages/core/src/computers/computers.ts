@@ -155,6 +155,7 @@ export class Computers implements MastraComputers {
   readonly #computers = new Map<string, Entry>();
   readonly #lookups = new Map<string, Promise<Entry | undefined>>();
   readonly #attachments = new Map<string, string>();
+  readonly #handsRecovery = new Map<string, Promise<void>>();
   readonly #lifecycle = new Map<string, Promise<unknown>>();
   /** Last agent seen per thread, so a user take can notify it. */
   readonly #agents = new Map<string, AgentRef>();
@@ -380,15 +381,15 @@ export class Computers implements MastraComputers {
     return undefined;
   }
 
-  /** Runs `fn` on the computer attached to this thread, in call order. */
-  async #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>) {
-    const scope = this.#scope(context);
-    if (!scope) return MISSING_IDENTITY;
-    const entry = await this.#attachedEntry(scope);
-    const sandbox = entry?.sandbox ?? (await entry?.ready);
-    if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
+  #queueHands<T>(
+    scope: Scope,
+    entry: Entry | undefined,
+    fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>,
+  ): Promise<T | string> {
+    const sandbox = entry?.sandbox;
+    if (!entry || !sandbox || entry.ownerResourceId !== scope.resourceId) return Promise.resolve(NOT_ATTACHED);
     const refusal = this.#controlRefusal(entry);
-    if (refusal) return refusal;
+    if (refusal) return Promise.resolve(refusal);
     // Re-checked when the action runs: a take while earlier actions are in flight refuses the rest.
     const run = entry.queue.then((): T | string | Promise<T> => {
       const queuedRefusal = this.#controlRefusal(entry);
@@ -396,6 +397,36 @@ export class Computers implements MastraComputers {
     });
     entry.queue = run.catch(() => {});
     return run;
+  }
+
+  /** Runs `fn` on the computer attached to this thread, in call order. */
+  #hands<T>(context: Context, fn: (sandbox: ComputerSandbox, computer: SandboxComputer, entry: Entry) => Promise<T>) {
+    const scope = this.#scope(context);
+    if (!scope) return Promise.resolve(MISSING_IDENTITY);
+    const currentId = this.#attachments.get(scope.key);
+    const current = currentId ? this.#computers.get(currentId) : undefined;
+    const pendingRecovery = this.#handsRecovery.get(scope.resourceId);
+    if (current && !pendingRecovery) return this.#queueHands(scope, current, fn);
+    if (current) return pendingRecovery!.then(() => this.#queueHands(scope, current, fn));
+
+    const previousRecovery = pendingRecovery ?? Promise.resolve();
+    let releaseRecovery!: () => void;
+    const recovery = previousRecovery.then(() => new Promise<void>(resolve => (releaseRecovery = resolve)));
+    this.#handsRecovery.set(scope.resourceId, recovery);
+    return previousRecovery
+      .then(async () => {
+        try {
+          const entry = await this.#attachedEntry(scope);
+          const sandbox = entry?.sandbox ?? (await entry?.ready);
+          if (entry && sandbox) entry.sandbox = sandbox;
+          return this.#queueHands(scope, entry, fn);
+        } finally {
+          releaseRecovery();
+        }
+      })
+      .finally(() => {
+        if (this.#handsRecovery.get(scope.resourceId) === recovery) this.#handsRecovery.delete(scope.resourceId);
+      });
   }
 
   /** A hand action, plus a screenshot in the same slot when `screenshotAfterAction` is on and the agent still holds control. */
