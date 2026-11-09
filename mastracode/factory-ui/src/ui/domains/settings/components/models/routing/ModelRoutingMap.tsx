@@ -10,7 +10,7 @@ import type { FactoryModelScope } from '../../../../workspaces/services/github';
 import { FactoryDefaultModel } from '../defaults/FactoryDefaultModel';
 import { PersonalDefaultModel } from '../defaults/PersonalDefaultModel';
 import { ProviderList } from '../providers/ProviderList';
-import { DefaultsSection } from './DefaultsSection';
+import { DefaultsCard } from './DefaultsCard';
 import {
   MODEL_DEFAULTS_LABELS,
   MODEL_LANE_ICONS,
@@ -66,22 +66,22 @@ export function ModelLaneItems({ modelScope }: { modelScope: FactoryModelScope }
   });
 }
 
-/** Personal and Factory defaults, each its own section: the model, then the providers that can run it. */
+/** Personal and Factory defaults: the model, then the providers that can run it. */
 export function ModelDefaultsSections({ factoryId, modelScope }: { factoryId: string; modelScope: FactoryModelScope }) {
   return (
-    <>
-      <DefaultsSection
+    <div className="grid gap-3">
+      <DefaultsCard
         defaults="personal"
         inUse={defaultsInUse(modelScope, 'personal')}
         model={<PersonalDefaultModel />}
         providers={<ProviderList credentialScope="user" />}
       />
-      <DefaultsSection
+      <DefaultsCard
         defaults="factory"
         inUse={defaultsInUse(modelScope, 'factory')}
         model={<FactoryDefaultModel factoryId={factoryId} />}
         providers={<ProviderList credentialScope="org" />}
       />
-    </>
+    </div>
   );
 }

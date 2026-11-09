@@ -1,4 +1,4 @@
-import { MessagesSquare, SquareKanban } from 'lucide-react';
+import { Building2, CircleUserRound, MessagesSquare, SquareKanban } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import type { FactoryModelScope, FactoryProjectPayload } from '../../../../workspaces/services/github';
@@ -26,6 +26,11 @@ export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
 };
 
 export const MODEL_DEFAULTS_UNUSED_NOTE = 'Not used in this scope';
+
+export const MODEL_DEFAULTS_ICONS: Record<ModelDefaults, LucideIcon> = {
+  personal: CircleUserRound,
+  factory: Building2,
+};
 
 export const MODEL_DEFAULTS_TONES: Record<ModelDefaults, string> = {
   personal: 'text-chart-purple',

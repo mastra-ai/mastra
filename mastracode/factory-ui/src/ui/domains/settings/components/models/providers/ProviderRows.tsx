@@ -1,11 +1,38 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box } from 'lucide-react';
+import { Box, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 
-/** A provider in the Add provider and speech-to-text drawers' lists. */
+export function ProviderRows({
+  children,
+  addDisabled,
+  onAdd,
+}: {
+  children: ReactNode;
+  addDisabled: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <ul className="divide-border divide-y">
+      {children}
+      <li>
+        <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
+          <Plus aria-hidden="true" />
+          Add provider
+        </Button>
+      </li>
+    </ul>
+  );
+}
+
+export function ProviderRowsSkeleton() {
+  return <SettingsSkeleton label="Loading providers" variant="item" />;
+}
+
 export function ProviderOptionRow({
   provider,
   label,

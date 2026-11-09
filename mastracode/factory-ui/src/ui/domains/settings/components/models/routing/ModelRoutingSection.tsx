@@ -68,11 +68,9 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
         )}
       </SettingsSubsection>
       {projectQuery.isPending && (
-        <SettingsSubsection scope="personal" title="Personal defaults">
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading model defaults" rows={2} />
-          </SettingsContainer>
-        </SettingsSubsection>
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading model defaults" variant="item" rows={2} />
+        </SettingsContainer>
       )}
       {modelScope && <ModelDefaultsSections factoryId={factoryId} modelScope={modelScope} />}
     </>

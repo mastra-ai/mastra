@@ -77,6 +77,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
         {connected.map(connection => (
           <ConnectedProviderRow
             key={connection.provider.provider}
+            variant="settings"
             connection={connection}
             requestScope={requestScope}
             disabled={actionsDisabled}
