@@ -350,7 +350,8 @@ export class LibSQLStore extends MastraCompositeStore {
 
   private getStoresToInit() {
     return Object.entries(this.stores)
-      .filter(([name]) => name !== 'knowledge')
+      // Experimental computers are initialized on first use so disabled features add no startup writer.
+      .filter(([name]) => name !== 'knowledge' && name !== 'computers')
       .map(([, store]) => store)
       .filter(Boolean);
   }

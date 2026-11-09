@@ -24,7 +24,6 @@ describe('ComputersLibSQL', () => {
   beforeEach(async () => {
     client = createClient({ url: 'file::memory:?cache=shared' });
     store = new ComputersLibSQL({ client, maxRetries: 1, initialBackoffMs: 10 });
-    await store.init();
     await store.dangerouslyClearAll();
   });
 
@@ -40,7 +39,6 @@ describe('ComputersLibSQL', () => {
   it('survives a fresh store instance and deletes idempotently', async () => {
     await store.setComputer(record);
     const reopened = new ComputersLibSQL({ client, maxRetries: 1, initialBackoffMs: 10 });
-    await reopened.init();
     await expect(reopened.getComputer(record.id)).resolves.toEqual(record);
     await reopened.deleteComputer(record.id);
     await reopened.deleteComputer(record.id);
