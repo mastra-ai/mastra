@@ -209,6 +209,8 @@ describe('Opt-in storage export on Platform', () => {
       vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
       const mirror = new TestExporter();
       const storage = new InMemoryStore();
+      // Model a remote adapter while exercising real persistence.
+      Object.defineProperty((await storage.getStore('observability'))!, 'persistenceLocation', { value: 'remote' });
       const observability = new Observability({
         configs: {
           default: {
@@ -260,6 +262,8 @@ describe('Opt-in storage export on Platform', () => {
       enabled.registerExporter(exporter);
       disabled.registerExporter(new Exporter());
       const storage = new InMemoryStore();
+      // Model a remote adapter while exercising real persistence.
+      Object.defineProperty((await storage.getStore('observability'))!, 'persistenceLocation', { value: 'remote' });
       const observability = new Observability({ configs: { enabled, disabled }, configSelector: () => 'enabled' });
       const mastra = new Mastra({ storage, observability, logger: false });
       try {
@@ -283,52 +287,63 @@ describe.each([{ name: 'MastraStorageExporter', Exporter: MastraStorageExporter 
   ({ Exporter }) => {
     it.each([
       { deploymentId: 'deployment-id', location: 'local', blocked: true },
+      { deploymentId: 'deployment-id', location: undefined, fallback: false, blocked: true },
+      { deploymentId: 'deployment-id', location: undefined, fallback: true, blocked: true },
+      { deploymentId: undefined, location: undefined, fallback: false, blocked: false },
+      { deploymentId: undefined, location: undefined, fallback: true, blocked: false },
       { deploymentId: 'deployment-id', location: 'remote', blocked: false },
       { deploymentId: undefined, location: 'local', blocked: false },
-    ])('persists only to permitted storage ($deploymentId, $location)', async ({ deploymentId, location, blocked }) => {
-      vi.stubEnv('MASTRA_DEPLOYMENT_ID', deploymentId);
-      const storage = new InMemoryStore();
-      const store = (await storage.getStore('observability'))!;
-      // Exercise each adapter capability with real in-memory persistence; adapter
-      // tests separately verify how libSQL and DuckDB report their location.
-      Object.defineProperty(store, 'persistenceLocation', { value: location });
-      const exporter = new Exporter();
-      const mirror = new TestExporter();
-      const observability = new Observability({
-        configs: {
-          default: {
-            serviceName: 'customer-app',
-            retainStorageExporterOnPlatform: true,
-            exporters: [exporter, mirror],
-          },
-        },
-      });
-      const mastra = new Mastra({ storage, observability, logger: false });
-      const warn = vi.spyOn(observability.getDefaultInstance()!.getLogger(), 'warn');
-      try {
-        // Wait for exporter initialization, without sending any events.
-        await observability.getDefaultInstance()!.flush();
-        expect(warn).toHaveBeenCalledTimes(blocked ? 1 : 0);
-        if (blocked) expect(warn).toHaveBeenCalledWith(expect.stringContaining('local observability storage'));
-        const instance = observability.getDefaultInstance()!;
-        for (let i = 0; i < 2; i++) {
-          const span = instance.startSpan({ type: SpanType.GENERIC, name: 'customer operation' });
-          instance.getLoggerContext?.(span).warn('customer log');
-          span.end();
-          await instance.flush();
-          const result = await store.getSpan({ traceId: span.traceId, spanId: span.id });
-          const logs = await store.listLogs({ filters: { traceId: span.traceId } });
-          expect(Boolean(result?.span)).toBe(!blocked);
-          expect(logs.logs).toHaveLength(blocked ? 0 : 1);
-          expect(mirror.getLogsByTraceId(span.traceId)).toHaveLength(1);
+    ])(
+      'persists only to permitted storage ($deploymentId, $location, fallback=$fallback)',
+      async ({ deploymentId, location, fallback, blocked }) => {
+        vi.stubEnv('MASTRA_DEPLOYMENT_ID', deploymentId);
+        const storage = fallback ? undefined : new InMemoryStore();
+        // Exercise each adapter capability with real in-memory persistence; adapter
+        // tests separately verify how libSQL and DuckDB report their location.
+        if (location) {
+          Object.defineProperty((await storage!.getStore('observability'))!, 'persistenceLocation', {
+            value: location,
+          });
         }
-        // Blocked storage stays disabled without repeating warnings per event.
-        expect(warn).toHaveBeenCalledTimes(blocked ? 1 : 0);
-      } finally {
-        warn.mockRestore();
-        await mastra.shutdown();
-      }
-    });
+        const exporter = new Exporter();
+        const mirror = new TestExporter();
+        const observability = new Observability({
+          configs: {
+            default: {
+              serviceName: 'customer-app',
+              retainStorageExporterOnPlatform: true,
+              exporters: [exporter, mirror],
+            },
+          },
+        });
+        const mastra = new Mastra({ storage, observability, logger: false });
+        const warn = vi.spyOn(observability.getDefaultInstance()!.getLogger(), 'warn');
+        try {
+          const store = (await mastra.getStorage()!.getStore('observability'))!;
+          // Wait for exporter initialization, without sending any events.
+          await observability.getDefaultInstance()!.flush();
+          expect(warn).toHaveBeenCalledTimes(blocked ? 1 : 0);
+          const instance = observability.getDefaultInstance()!;
+          for (let i = 0; i < 2; i++) {
+            const span = instance.startSpan({ type: SpanType.GENERIC, name: 'customer operation' });
+            instance.getLoggerContext?.(span).warn('customer log');
+            span.end();
+            await instance.flush();
+            const result = await store.getSpan({ traceId: span.traceId, spanId: span.id });
+            const logs = await store.listLogs({ filters: { traceId: span.traceId } });
+            expect(Boolean(result?.span)).toBe(!blocked);
+            expect(logs.logs).toHaveLength(blocked ? 0 : 1);
+            expect(mirror.getLogsByTraceId(span.traceId)).toHaveLength(1);
+          }
+          if (blocked) expect(warn).toHaveBeenCalledWith(expect.stringContaining('local observability storage'));
+          // Blocked storage stays disabled without repeating warnings per event.
+          expect(warn).toHaveBeenCalledTimes(blocked ? 1 : 0);
+        } finally {
+          warn.mockRestore();
+          await mastra.shutdown();
+        }
+      },
+    );
   },
 );
 
