@@ -24,6 +24,7 @@ import { getNeedsApprovalFn } from '../../tools/toolchecks';
 import type { IdGeneratorContext } from '../../types';
 import { safeStringify } from '../../utils/safe-stringify';
 import { createWorkflow } from '../../workflows/create';
+import { loadStepResults } from '../../workflows/run-journal';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
@@ -1323,7 +1324,21 @@ export async function createNetworkLoop({
 
       let runSuccess = true;
 
-      const workflowState = await stream.result;
+      const runResult = await stream.result;
+      // Aborted runs do not need their step history or a result saved to memory.
+      if (workflowCancelled && abortSignal?.aborted) {
+        return handleAbort({
+          writer,
+          eventType: 'workflow-execution-abort',
+          primitiveType: 'workflow',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+          task: inputData.task,
+        });
+      }
+
+      // The whole run result goes to memory and the stream, so a storage v2 result's steps are loaded back.
+      const workflowState = runResult && { ...runResult, steps: await loadStepResults(runResult.steps) };
 
       if (!workflowState?.status || workflowState?.status === 'failed') {
         runSuccess = false;
@@ -1373,18 +1388,6 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
-
-      // When the workflow was cancelled due to abort, skip saving results to memory
-      if (workflowCancelled && abortSignal?.aborted) {
-        return handleAbort({
-          writer,
-          eventType: 'workflow-execution-abort',
-          primitiveType: 'workflow',
-          primitiveId: inputData.primitiveId,
-          iteration: inputData.iteration,
-          task: inputData.task,
-        });
-      }
 
       await saveMessagesWithProcessors(
         memory,

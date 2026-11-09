@@ -26,10 +26,10 @@ import {
 import { createTestServerContext } from './test-utils';
 
 vi.mock('@mastra/agent-builder', () => ({
-  agentBuilderWorkflows: {
+  createAgentBuilderWorkflows: () => ({
     'merge-template': vi.fn(),
     'workflow-builder': vi.fn(),
-  },
+  }),
 }));
 
 function createMockWorkflow(name: string) {

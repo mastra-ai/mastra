@@ -1,12 +1,12 @@
 import { NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { Card } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';
 
 export interface ReconcileAcceptanceLabelsInput {
   orgId: string;
   factoryProjectId: string;
-  item: WorkItemRow;
+  item: Card;
 }
 
 /**
@@ -22,8 +22,8 @@ export async function reconcileGithubAcceptanceLabels(
 ): Promise<void> {
   const { item } = input;
   if (item.externalSource?.integrationId !== 'github' || item.externalSource.type !== 'issue') return;
-  const repositoryId = item.metadata?.githubRepositoryId;
-  const issueNumber = item.metadata?.githubIssueNumber;
+  const repositoryId = item.workItem.metadata?.githubRepositoryId;
+  const issueNumber = item.workItem.metadata?.githubIssueNumber;
   if (typeof repositoryId !== 'number' || typeof issueNumber !== 'number' || issueNumber < 1) return;
 
   try {
@@ -37,7 +37,7 @@ export async function reconcileGithubAcceptanceLabels(
   }
 }
 
-async function resolveRepository(
+export async function resolveRepository(
   sourceControl: SourceControlStorageHandle,
   orgId: string,
   factoryProjectId: string,

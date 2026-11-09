@@ -20,7 +20,8 @@ export interface KnowledgeConfig {
   /**
    * Vector store and embedder for semantic search. With both, `knowledge_search` blends keyword and
    * semantic results, and page and note writes made through the tools are embedded. Without them,
-   * search is keyword only. Content written straight to the store is embedded by `reindex()`.
+   * search is keyword only. Writes through `upsertPage`, `removePage` and the note methods are embedded
+   * too; content written straight to the store is not.
    */
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
@@ -29,12 +30,16 @@ export interface KnowledgeConfig {
    * Tools an attached agent gets: `true` for read and write (`knowledge_search`, `knowledge_read`,
    * `knowledge_page`, `knowledge_note`), `{ read: true }` for `knowledge_search` and `knowledge_read`,
    * `{ write: true }` for `knowledge_page` and `knowledge_note`. Off by default.
+   *
+   * `{ read: { maxTokens } }` turns read on and caps each `knowledge_read` body window or match
+   * result and each `knowledge_list` result (estimated tokens, default 1,000, at least 100); the
+   * tools say in `more` how to read on, and line-range writes accept at most one read's worth.
+   * Raise it for large-context models or pages with long sections, lower it for small ones.
    */
-  tools?: boolean | { read?: boolean; write?: boolean };
+  tools?: boolean | { read?: boolean | { maxTokens?: number }; write?: boolean };
   /**
    * Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs
-   * Memory. Off by default. `maxPins` defaults to 20, `maxTokens` (estimated, whole set) to 500, at
-   * most 2000.
+   * Memory. Off by default. `maxPins` defaults to 20, `maxTokens` (estimated, whole set) to 500.
    */
   pinnedContext?: boolean | { maxPins?: number; maxTokens?: number };
   /** Usage instructions added whenever Knowledge attaches tools. */

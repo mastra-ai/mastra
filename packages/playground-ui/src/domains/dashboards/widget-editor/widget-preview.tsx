@@ -1,5 +1,6 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import { ChartCard } from '../../metrics/components/chart-card';
+import { ConnectedWidget } from '../components/connected-widget';
 import { WidgetError } from '../components/widget-error';
 import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope } from '../lib/definition';
@@ -40,7 +41,7 @@ export function WidgetPreview({ widget, view, issue, scope }: WidgetPreviewProps
       fallback={({ error }) => <WidgetError widget={stored} message={error.message} />}
     >
       {prepared.ok ? (
-        <prepared.kind.component widget={prepared.widget} views={prepared.views} scope={scope} />
+        <ConnectedWidget prepared={prepared} scope={scope} />
       ) : (
         <WidgetError widget={stored} message={prepared.message} />
       )}

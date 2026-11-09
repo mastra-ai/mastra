@@ -37,7 +37,7 @@ export const WithPlaceholder: Story = {
     const [value, setValue] = useState<Date | undefined>();
     return (
       <div className="w-70">
-        <DateTimePicker value={value} onValueChange={setValue} placeholder="Select date and time..." />
+        <DateTimePicker value={value} onValueChange={setValue} placeholder="Select date and time" />
       </div>
     );
   },

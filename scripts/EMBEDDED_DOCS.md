@@ -28,31 +28,26 @@ The entries inside `packages` should match the package names in their `package.j
 
 ## How to generate embedded docs for a package
 
-Add a `build:docs` script to the package's `package.json`:
+Add a `prepack` script and the `tsx` dev dependency to the package's `package.json`. Docs generate only when the package is packed or published, not during regular builds:
 
 ```json
 {
   "scripts": {
-    "build": "your-existing-build-command",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts"
+    "prepack": "tsx ../../scripts/generate-package-docs.ts"
+  },
+  "devDependencies": {
+    "tsx": "catalog:"
   }
 }
 ```
 
-Add the `build:docs` script to the package's `turbo.json` file so that it runs during the build phase:
+Exclude generated docs from the build outputs in the package's `turbo.json` so cached builds don't restore stale docs:
 
 ```json
 {
-  "$schema": "https://turbo.build/schema.json",
-  "extends": ["//"],
   "tasks": {
-    "build:docs": {
-      "inputs": ["src/**", "package.json", "!**/*.md"],
-      "outputs": ["dist/docs/**"]
-    },
     "build": {
-      "dependsOn": ["build:docs"],
-      "inputs": ["package.json"]
+      "outputs": ["dist/**", "!dist/docs/**"]
     }
   }
 }

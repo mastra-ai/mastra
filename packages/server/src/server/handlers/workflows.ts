@@ -52,6 +52,15 @@ import { getEffectiveResourceId, getHandlerFGAProvider, getPublicWorkflowById, v
 const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
 
 /**
+ * A run's result with its step results read: a storage v2 result's `steps` is a loader that
+ * reads them from storage, which a response can't carry, so it answers with them as for v1.
+ */
+async function withLoadedSteps<T extends { steps?: unknown }>(result: T): Promise<T> {
+  const steps: unknown = result.steps;
+  return typeof steps === 'function' ? { ...result, steps: await steps() } : result;
+}
+
+/**
  * Runs whose chunks are already being written to the cache in this process,
  * keyed by runId. A run has exactly one writer: without this, two concurrent
  * requests for the same runId each cache every chunk and the replayed history
@@ -122,7 +131,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   let workflow;
 
   // First check registry for temporary workflows
-  workflow = WorkflowRegistry.getWorkflow(workflowId);
+  workflow = WorkflowRegistry.getWorkflow(workflowId, mastra);
 
   if (!workflow) {
     workflow = getPublicWorkflowById(mastra, workflowId);
@@ -735,7 +744,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         );
       }
       const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
-      const result = await _run.start({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.start({ ...params, requestContext }));
       return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
@@ -898,7 +907,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.resume({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1058,7 +1067,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.restart({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.restart({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1237,7 +1246,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.timeTravel({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.timeTravel({ ...params, requestContext }));
 
       return result;
     } catch (error) {

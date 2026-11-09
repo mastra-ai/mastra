@@ -131,9 +131,9 @@ test.describe('Messages trace column', () => {
     test('keeps feedback submission in the dedicated Feedback tab', async ({ page }) => {
       await openPartialThread(page);
 
-      await expect(page.getByPlaceholder('Leave feedback...')).toHaveCount(0);
+      await expect(page.getByPlaceholder('Leave feedback')).toHaveCount(0);
       await page.getByRole('tab', { name: /^Feedback/ }).click();
-      await page.getByPlaceholder('Leave feedback...').fill(COMMENT);
+      await page.getByPlaceholder('Leave feedback').fill(COMMENT);
       await page.getByRole('button', { name: 'Send feedback' }).click();
 
       await expect(page.getByText(COMMENT)).toBeVisible();

@@ -6,7 +6,7 @@ import { Check, ChevronDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { ButtonChevron, ButtonIcon, TriggerChevron, isIconButtonSize } from '@/ds/components/Button/Button';
+import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -72,7 +72,7 @@ const chipsFieldStyle: React.CSSProperties = {
 // `w-0` + `flex-1`: an input's default width (about 20 characters) would otherwise set the field's
 // minimum width, so it couldn't shrink into a narrow column.
 const inputClass =
-  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground';
+  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none zoom-safe-text placeholder:text-muted-foreground';
 
 /** Caret at the end of the value instead of selecting it, the way a text field behaves. */
 function moveCaretToEnd(event: React.FocusEvent<HTMLInputElement>) {
@@ -149,7 +149,7 @@ function ComboboxTrigger({
           <span className="min-w-0 flex-1 truncate text-left">{children}</span>
         </>
       )}
-      {showChevron && (iconOnly ? <TriggerChevron /> : <ButtonChevron size={size} />)}
+      {showChevron && <ButtonChevron size={size} />}
     </BaseCombobox.Trigger>
   );
 }
@@ -242,7 +242,8 @@ type ComboboxContentProps = BaseCombobox.Popup.Props &
 /**
  * The popup. Under a field (ComboboxInput or ComboboxChips) it opens at the field's width; under a
  * compact ComboboxTrigger it takes the trigger's width, at least 11rem. Either way the width never
- * follows the filtered items, so it holds still while you type; long labels truncate.
+ * follows the filtered items, so it holds still while you type. (`Combobox`'s `popupWidth` picks a
+ * fixed, wider width for long options instead.)
  */
 function ComboboxContent({
   className,
@@ -295,7 +296,7 @@ function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
 function ComboboxItem({ className, children, ref, ...props }: BaseCombobox.Item.Props) {
   return (
     <BaseCombobox.Item ref={ref} data-slot="combobox-item" className={cn(comboboxItemClass({}), className)} {...props}>
-      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+      <span className={comboboxStyles.itemContent}>{children}</span>
       <span className={comboboxStyles.checkContainer}>
         <BaseCombobox.ItemIndicator>
           <Check className={comboboxStyles.checkIcon} />

@@ -8,6 +8,7 @@ const BOARD_STAGE_LABELS = {
   planning: 'Planning',
   execute: 'Building',
   review: 'Review',
+  'pr-review': 'PR review',
   done: 'Done',
   canceled: 'Canceled',
 } satisfies Record<FactoryRuleStage, string>;
@@ -53,6 +54,7 @@ const STAGE_TONES = {
   planning: 'cyan',
   execute: 'info',
   review: 'green',
+  'pr-review': 'green',
   done: 'purple',
   canceled: 'destructive',
 } as const satisfies Record<BuiltinStageId, BadgeVariant>;

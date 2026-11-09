@@ -984,6 +984,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
         ...traceQueryOps.timingFeatures,
         ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
@@ -1013,6 +1014,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
       ...traceQueryOps.timingFeatures,
       ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
@@ -1502,6 +1504,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    try {
+      return await feedbackOps.getFeedbackById(this.#client, feedbackId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_FEEDBACK_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId },
         },
         error,
       );

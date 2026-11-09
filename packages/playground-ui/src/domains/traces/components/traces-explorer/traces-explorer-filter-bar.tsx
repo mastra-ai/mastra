@@ -52,7 +52,7 @@ export function TracesExplorerFilterBar({ children }: TracesExplorerFilterBarPro
       {children ?? (
         <>
           <TracesExplorerFilterChips />
-          <FilterBar.Input placeholder="Filter traces…" />
+          <FilterBar.Input placeholder="Filter traces" />
         </>
       )}
     </FilterBar>

@@ -223,8 +223,8 @@ export function TraceColumnsMenu({
                       setMetadataError(undefined);
                     }}
                     allowCustomValue
-                    placeholder="Select a metadata key…"
-                    searchPlaceholder="Search metadata keys…"
+                    placeholder="Select a metadata key"
+                    searchPlaceholder="Search metadata keys"
                     emptyText="No metadata keys observed. Type one to add it."
                   />
                   <FieldError>{metadataError}</FieldError>

@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../../domains/workspaces/services/user-sessions';
@@ -93,7 +94,17 @@ export function stubDraftRoute({
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [
+              listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
+            ],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
       await modelDefaultsGate;
@@ -107,24 +118,6 @@ export function stubDraftRoute({
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'connection-1',
-            installationId: 'installation-1',
-            repositories: [
-              {
-                id: REPOSITORY_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/acme',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),

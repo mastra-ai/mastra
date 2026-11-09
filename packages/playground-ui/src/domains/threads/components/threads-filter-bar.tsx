@@ -77,7 +77,7 @@ export function ThreadsFilterBar({
           )
         }
       />
-      <FilterBar.Input placeholder="Filter threads…" />
+      <FilterBar.Input placeholder="Filter threads" />
     </FilterBar>
   );
 }

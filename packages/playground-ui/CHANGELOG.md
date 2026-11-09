@@ -1,5 +1,1110 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.83.0-alpha.2
+  - @mastra/client-js@1.60.0-alpha.2
+  - @mastra/react@1.15.0-alpha.2
+
+## 69.0.0-alpha.2
+
+### Patch Changes
+
+- Fixed phones zooming the page when you tap a text field. On a touch screen, every design system text field now shows its text at 16px, which is the size iOS Safari needs to skip the zoom. That covers Input, InputGroup, InputNumber, SearchInput, ListSearch, Textarea, the Combobox field and its popup search, Command, Composer, the comment editor, Tree rename, saved-view rename and the FilterBar input. Desktop sizes are unchanged. ([#29662](https://github.com/mastra-ai/mastra/pull/29662))
+
+## 69.0.0-alpha.1
+
+### Minor Changes
+
+- Dashboard cards can now offer a Create alert button. Pass the new optional `alert` prop to `DashboardRenderer` to turn it on. ([#29533](https://github.com/mastra-ai/mastra/pull/29533))
+
+  For each card, `alert.action` gets the widget, the open view, that view's queries with the page's filters applied, and its `sources`: each distinct number the view shows, read from one query. A source has a `label` (the series, column or KPI), its `query` and a `ref` (`measure`, `field`, `percentile`, `groups` or `notGroups`). A value that combines several queries, such as a ratio or a sum, is listed as one source per part.
+
+  `alert.action` returns one of:
+
+  - `{ href }`: the button links there, through `alert.LinkComponent`, so your router handles it.
+  - `{ disabled }`: the button is disabled and shows this reason.
+  - An array aligned with `sources`, one `{ href }`, `{ disabled }` or `undefined` (left out) per source. A card with several sources you can link opens a menu of them, each disabled one showing its reason. With one to link, the button links straight to it. With none, the button is disabled with their reasons.
+  - `undefined`: the card shows no button.
+
+  When the page's filters block a card, or exclude everything it shows, its button is disabled and says why. A source whose own query the page's filters exclude is disabled in the menu, and isn't passed to `alert.action`.
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    alert={{
+      action: ({ sources }) =>
+        sources.map(source =>
+          source.ref.percentile === undefined
+            ? { href: `/alerts/new?query=${encodeURIComponent(JSON.stringify(source.query))}` }
+            : { disabled: 'Percentile alerts are not supported yet.' },
+        ),
+      LinkComponent: RouterLink,
+    }}
+  />
+  ```
+
+  `pageQuery(query, page)` is also exported. It applies the page's filters to a dashboard query the same way the cards' requests do, without the time window.
+
+  `DropdownMenu.LinkItem` is a new menu row that navigates; pass `render` to route it through your framework's link.
+
+- Improved the Knowledge explorer. The graph now fills the explorer, with the page tree and the selected page's details in panels that slide in over its edges instead of squeezing it. Graph and Page switch with tabs, the graph's controls use the shared button group, and fits, the legend and the zoom controls stay clear of both panels. Narrow screens keep the stacked layout. ([#29495](https://github.com/mastra-ai/mastra/pull/29495))
+
+  `KnowledgePageExplorer` also takes two optional props. `toolbarEnd` adds your own actions to the end of the toolbar, and `flush` drops the graph's border when the page around it already frames it.
+
+  ```tsx
+  <KnowledgePageExplorer
+    graph={graph}
+    source={source}
+    selectedPageId={selectedPageId}
+    onSelect={setSelectedPageId}
+    view={view}
+    onViewChange={setView}
+    toolbarEnd={<Button>Importers</Button>}
+    flush
+  />
+  ```
+
+- Added host feedback options to trace, span, and thread composers so integrations can select context and hide unsupported delete or review actions. ([#29528](https://github.com/mastra-ai/mastra/pull/29528))
+
+  ```tsx
+  <TracesExplorer
+    {...explorerProps}
+    feedbackOptions={{ contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false }}
+  >
+    {children}
+  </TracesExplorer>
+  ```
+
+  The same options are available on standalone feedback tabs and thread panels. Omitted options preserve existing behavior. Failed submissions now show an error while preserving the draft.
+
+- Added `StatelessWidget` and `planWidget` so a dashboard widget can be rendered by a host that does its own fetching, such as an MCP App. ([#29545](https://github.com/mastra-ai/mastra/pull/29545))
+
+  **Why:** every built-in widget used to fetch its data and hold its view, sort, and compared column internally, so it only worked inside Studio's React Query and client providers. Widgets now split into a pure plan (which requests to send) and a component that renders the answers it is given. `DashboardRenderer` works as before.
+
+  **Rendering a widget from your own data**
+
+  ```tsx
+  import {
+    BUILT_IN_WIDGET_KINDS,
+    StatelessWidget,
+    planWidget,
+    prepareWidget,
+    sendRequest,
+  } from '@mastra/playground-ui/domains/dashboards';
+
+  const registry = new Map(BUILT_IN_WIDGET_KINDS.map(kind => [kind.kind, kind]));
+  const prepared = prepareWidget(widget, registry, 'project');
+
+  // `env` is plain data the host provides: { window, filters, comparisonLabel, gates }.
+  // Plan once, send `plan.discover`, then plan again with those answers and send `plan.requests`.
+  const plan = planWidget(prepared, env, state, discovered);
+  if (plan.status === 'ready') {
+    const answers = await Promise.all(plan.requests.map(request => request && sendRequest(client, request)));
+  }
+
+  // `results` must answer `plan.requests` from the planWidget call made with this same `state` and
+  // `discovered`, in the same order. Re-plan and re-send when either changes.
+
+  <StatelessWidget
+    prepared={prepared}
+    env={env}
+    state={state}
+    onStateChange={setState}
+    discovered={discovered}
+    results={results}
+    onRetry={retryFailed}
+    scope="project"
+  />;
+  ```
+
+  **Custom widget kinds** can add optional `discover` and `requests` planners and read `gate`, `state`, `onStateChange`, `results`, and `onRetry` from their props. A kind whose views read different sources can add `gatedQueries` so only the views it shows are checked against the server's capabilities and filters. Kinds that keep fetching with hooks inside `component` keep working in `DashboardRenderer`.
+
+  **Breaking for code that renders `kind.component` directly:** `WidgetKindProps` now requires `gate`, `state`, `onStateChange`, `results`, and `onRetry`. Render through `DashboardRenderer` or `StatelessWidget`, which pass them, instead.
+
+- Added `McpAppHostProvider` to `@mastra/playground-ui/domains/mcps`, so a chat can extend the MCP Apps shown in its tool cards. Its value can send extra host context to each app and receive every `ui/update-model-context` the app sends. `McpAppViewer` also accepts the matching `hostContext` and `onModelContext` props directly. ([#29557](https://github.com/mastra-ai/mastra/pull/29557))
+
+### Patch Changes
+
+- `StatelessWidget` now passes the widget definition to `pin.onPin`, the same way `DashboardRenderer` does, so a host can save which chart or widget was pinned or unpinned. ([#29587](https://github.com/mastra-ai/mastra/pull/29587))
+
+  ```tsx
+  <StatelessWidget
+    prepared={prepared}
+    pin={{
+      name: 'Agent runs',
+      isPinned,
+      onPin: (widget, isPinned) => savePin(widget, isPinned),
+    }}
+    {...props}
+  />
+  ```
+
+- Polished the Knowledge explorer. ([#29505](https://github.com/mastra-ai/mastra/pull/29505))
+
+  - Imported scopes show their source and icon, such as Linear, instead of a raw connection id.
+  - Page headers show a version chip and relative timestamps. Hover a timestamp for the exact time.
+  - A page's child pages open in place as a tree.
+  - Loading states show skeletons shaped like the content.
+  - Graph and page controls have tooltips.
+  - Search results float over the layout and fade when they scroll.
+
+- Fixed chat messages showing raw MCP App context. When a user interacted with an MCP App (for example, drilling into a dashboard chart), the context the app sent to the model appeared in the user's message bubble, the conversation timeline, and copied text. It is now hidden from the UI and still sent to the model. ([#29500](https://github.com/mastra-ai/mastra/pull/29500))
+
+- The Knowledge explorer now names Notion, Confluence, Zendesk and Fireflies imported scopes by their source, with an icon for each source that has one, instead of showing the raw scope address. ([#29556](https://github.com/mastra-ai/mastra/pull/29556))
+
+- Improved Knowledge explorer notes. A note now shows a linked page's title instead of its `[[scope#path]]` ref, with the ref on hover. This applies to a page's Notes and Mentioned in lists and the graph's mention popup. ([#29580](https://github.com/mastra-ai/mastra/pull/29580))
+
+  Fixed links to pages under parents the explorer hasn't loaded, such as imported Notion pages. Mentions and body links to these pages now link correctly.
+
+  Fixed long refs, page names and scope addresses running past their note card. They now wrap or truncate inside it.
+
+- MCP Apps in Studio now get a JSON-RPC invalid-params error (`-32602`) when they call a tool the app's MCP server doesn't have or keeps for the model. That's the same error an MCP server gives for an unknown tool, so apps can spot a missing tool the same way whichever host they run in. Before, Studio threw a generic internal error. ([#29491](https://github.com/mastra-ai/mastra/pull/29491))
+
+- The tripwire notice now shows its metadata with the read-only code view instead of the code editor. A chat view that uses no other code editor no longer downloads it. ([#29554](https://github.com/mastra-ai/mastra/pull/29554))
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`ea37ef0`](https://github.com/mastra-ai/mastra/commit/ea37ef03867044002e532fc423c382c34ea17db3), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`8d07b0b`](https://github.com/mastra-ai/mastra/commit/8d07b0b293812d84c3f45c2806eb53ed45f58324), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`2572609`](https://github.com/mastra-ai/mastra/commit/25726091b3bfd6bd08df3cb6b501ab0c49c5571a), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+  - @mastra/client-js@1.60.0-alpha.1
+  - @mastra/react@1.15.0-alpha.1
+
+## 69.0.0-alpha.0
+
+### Minor Changes
+
+- Added `Metadata` and `Metadata.Item` for compact UI fields. Fields wrap as space narrows; pass `singleLine` to keep them on one line with truncation in cards, menu options, and titles. Replaced decorative copy separators with structured fields and natural sentences. Added copy lint rules for separators and layout whitespace. ([#29312](https://github.com/mastra-ai/mastra/pull/29312))
+
+  The `recommended` Oxlint preset now enables `playground-ui/no-text-separators` and `playground-ui/no-text-layout-spacing` as errors. Add `copyRuleExclusions` to skip tests, stories, fixtures, and generated files. Set either rule to `'off'` in your rules or overrides to disable it.
+
+  ```ts
+  import { defineConfig } from 'oxlint';
+  import { copyRuleExclusions, recommended } from '@mastra/playground-ui/oxlint';
+
+  export default defineConfig({
+    jsPlugins: ['@mastra/playground-ui/oxlint'],
+    rules: recommended,
+    overrides: [copyRuleExclusions],
+  });
+  ```
+
+  ```tsx
+  import { Metadata } from '@mastra/playground-ui/components/Metadata';
+
+  <Metadata>
+    <Metadata.Item>v8</Metadata.Item>
+    <Metadata.Item>(current)</Metadata.Item>
+  </Metadata>;
+  ```
+
+- Improved MCP Apps support in Studio: ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+  - Studio now tells apps that it can run server tools and post chat messages, so apps that check host capabilities before using these features (for example, a chart's "View in traces" button) now show them.
+  - MCP App views now accept context updates from the app (`ui/update-model-context`) through a new `onUpdateModelContext` callback, and only advertise that capability when the callback is provided.
+  - An app can call any tool on its own server from the MCP tool playground (previously every call ran the tool being viewed).
+  - Apps can no longer call tools their server keeps for the model only (`_meta.ui.visibility: ['model']`); those calls are refused without running the tool.
+  - Apps now receive object tool outputs as `structuredContent`, with the JSON text kept alongside it, so apps that render from structured data work in Studio.
+  - Links an app asks Studio to open must be `http` or `https`; others (such as `javascript:` or `file:`) are refused.
+  - Apps follow Studio's light or dark theme.
+
+  ```tsx
+  import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
+
+  <McpAppViewer
+    html={html}
+    toolName="showObservabilityDashboard"
+    onToolCall={(name, args) => callServerTool(name, args)}
+    onUpdateModelContext={context => setNextTurnContext(context)}
+  />;
+  ```
+
+- Studio now shows how a sandbox command ended. Before, chat messages never handed a command's streamed output, exit code or workspace link to its tool call, so a command that failed after printing something looked like a success. Now a non-zero exit marks the call failed, on its own row and in its tool group's failure count, next to a chip saying how it ended: `exit N`, `killed`, `timed out`, or `error` when the sandbox could not run it. Opening it shows what the command printed, followed by its exit code and the full error, even one that spans several paragraphs. While it runs, you can scroll up through its output without it jumping back to the latest line on every update. ([#29314](https://github.com/mastra-ai/mastra/pull/29314))
+
+  `ToolCallOutput` no longer takes `maxLength`: a long result shows in full, scrolling inside its box, and still copies whole.
+
+  Added the pieces Studio uses to draw a tool call, so other chat UIs can show tool calls and their failures the same way:
+
+  ```tsx
+  import {
+    exitedWithFailure,
+    ToolCallBody,
+    ToolCallExitStatus,
+    toolCallHasBody,
+  } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const view = {
+    toolName,
+    args,
+    status: exitedWithFailure(toolName, exit?.exitCode) ? 'error' : status,
+    output,
+    result,
+    exit, // { exitCode, killed, timedOut, error }
+  };
+
+  {
+    exit && <ToolCallExitStatus exit={exit} />;
+  }
+  {
+    toolCallHasBody(view) && <ToolCallBody {...view} />;
+  }
+  ```
+
+- Added a series palette for charts that break down by model, provider or key: eleven `--chart-series-*` hues at one lightness and chroma per theme, plus `--chart-series-neutral`. `seriesColors(items)` colors a page's series from it: each lab reserves one hue (Anthropic orange, OpenAI green, Google indigo, Jev pink, DeepSeek blue, xAI neutral, and others), its next two models take shifted shades of that hue (a lab's other models, or every model when the page shows one lab, take hues of their own), and series with no lab take the hues left over. Call it once per page so a model keeps its color on every chart. ([#29212](https://github.com/mastra-ai/mastra/pull/29212))
+
+  ```ts
+  import { seriesColors } from '@mastra/playground-ui/domains/metrics';
+
+  // Ranked largest first.
+  const colors = seriesColors([
+    { key: 'claude-opus-5-5', provider: 'anthropic', model: 'claude-opus-5-5' },
+    { key: 'gpt-5-mini', provider: 'openai', model: 'gpt-5-mini' },
+    { key: 'claude-sonnet-5-5', provider: 'anthropic', model: 'claude-sonnet-5-5' },
+  ]);
+  colors.get('claude-opus-5-5'); // 'var(--chart-series-orange)'
+  colors.get('claude-sonnet-5-5'); // a shifted shade of orange
+  ```
+
+- Added optional `onPin` and `isPinned` props to `DashboardRenderer` for pinning single widgets. Pass both together: each widget card then shows a pin button named after the widget, such as "Pin Agent runs". `isPinned` tells the renderer which widgets are pinned, by id, and `onPin` is called with the widget and the state the user asked for, so your app keeps the pinned widgets. A pinned widget keeps its unpin button in view; an unpinned one shows its pin button on hover. ([#29443](https://github.com/mastra-ai/mastra/pull/29443))
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    isPinned={id => pinnedIds.includes(id)}
+    onPin={(widget, isPinned) =>
+      setPinnedIds(ids =>
+        isPinned ? (ids.includes(widget.id) ? ids : [...ids, widget.id]) : ids.filter(id => id !== widget.id),
+      )
+    }
+  />
+  ```
+
+- Removed `callPose` from `@mastra/playground-ui/domains/chat/activity`. Use `presentTool(toolName, args).pose` so the icon reflects the call's operation, including Knowledge moves, merges and deletions. ([#29309](https://github.com/mastra-ai/mastra/pull/29309))
+
+  **Before**
+
+  ```ts
+  import { callPose } from '@mastra/playground-ui/domains/chat/activity';
+
+  const pose = callPose(call.toolName);
+  ```
+
+  **After**
+
+  ```ts
+  import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const pose = presentTool(call.toolName, call.args).pose;
+  ```
+
+- `MessageTimestamp` now says how long ago a message was sent ("just now", "7 minutes ago", "yesterday") and keeps that label current. Hovering or focusing it shows the full date and time, such as "Nov 3, 2026, 10:24 PM". ([#29373](https://github.com/mastra-ai/mastra/pull/29373))
+
+  Tool call lines no longer show when they started on hover, so the time appears only in the message's action bar. Removed `ActivityTimedTrigger` from `@mastra/playground-ui/domains/chat/activity`; use `ActivityTrigger` instead. `ActivityCall` and `ActivityCallState` no longer take `startedAt`.
+
+  **Before**
+
+  ```tsx
+  import { ActivityTimedTrigger } from '@mastra/playground-ui/domains/chat/activity';
+
+  <ActivityTimedTrigger at={startedAt}>{headline}</ActivityTimedTrigger>;
+  ```
+
+  **After**
+
+  ```tsx
+  import { ActivityTrigger } from '@mastra/playground-ui/components/ai/activity';
+
+  <ActivityTrigger>{headline}</ActivityTrigger>;
+  ```
+
+- Added distinct chat icons for Knowledge, files, terminal, browser, delegation, workflows, schedules, notifications, source control and skills. Running calls animate to show their action. Icons are clearer at small sizes. ([#29309](https://github.com/mastra-ai/mastra/pull/29309))
+
+  `presentTool` reads a call's arguments, so the same tool can show a different icon per operation. For example, deleting a Knowledge page no longer looks like editing one:
+
+  ```tsx
+  import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+  import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+  const { pose, icon: Icon, label } = presentTool('knowledge_page', { op: 'delete', page: 'Refund policy' });
+
+  <AgentIndicator state={pose} />; // live, while the call runs
+  <Icon aria-hidden />; // still, on the settled row; label is "Delete page"
+  ```
+
+- Redesigned the calendar and the custom date range picker. Picking a custom range now takes one two-month calendar: click the start day, then the end day, and set each end's time underneath. `DateTimePicker` uses the same time field instead of hour, minute and AM/PM dropdowns. Selected days are round, and the days in between read as one continuous band. ([#29195](https://github.com/mastra-ai/mastra/pull/29195))
+
+  `DatePicker` now uses react-day-picker v9. If you pass react-day-picker props through it, rename them to their v9 equivalents:
+
+  - `fromMonth` / `toMonth` → `startMonth` / `endMonth`
+  - `fromDate={date}` → `startMonth={date}` plus `disabled={{ before: date }}` (or `hidden={{ before: date }}` to hide those days)
+  - `toDate={date}` → `endMonth={date}` plus `disabled={{ after: date }}` (or `hidden={{ after: date }}`)
+
+  ```tsx
+  // Before
+  <DatePicker mode="single" selected={day} onSelect={setDay} fromDate={minDay} />
+
+  // After
+  <DatePicker mode="single" selected={day} onSelect={setDay} startMonth={minDay} disabled={{ before: minDay }} />
+  ```
+
+  `TimePicker` is removed. Use `<Input type="time" />`, which reads and writes `HH:mm`.
+
+- Added `Steps`, a numbered vertical rail for setup guides, like the steps in docs. Each `Steps.Step` takes a title, an optional description and action, and a `done` flag that swaps its number for a check. Steps number themselves in render order, so they can be rendered conditionally or composed from several components. ([#29272](https://github.com/mastra-ai/mastra/pull/29272))
+
+  ```tsx
+  import { Steps } from '@mastra/playground-ui/components/Steps';
+
+  <Steps>
+    <Steps.Step title="Create an API key" done>
+      …
+    </Steps.Step>
+    <Steps.Step title="Send your first request" />
+  </Steps>;
+  ```
+
+  `PageHeader.Description` now wraps with `text-pretty`, so a long description no longer leaves a single word on its last line.
+
+- Added chat annotations, so a person can point the agent at parts of the transcript and comment on them. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+  - Select text in a message and choose **Add to chat**, or press Tab to reach it.
+  - The passage gets a numbered comment bubble that stays with the text as you scroll. Selecting the bubble opens a card to comment on the passage or remove it.
+  - The composer counts what is waiting.
+  - The agent receives a numbered Markdown list, each passage quoted with its comment, ahead of the typed text.
+
+  Added `ChatShell.Transcript`, the conversation's reading column. It is positioned, so overlays such as annotation bubbles travel with the text.
+
+  **Usage**
+
+  Mount `ChatAnnotationsProvider` once per conversation, below whatever remounts when the thread changes. Render `TranscriptAnnotations` in `ChatShell.Transcript` and `ComposerAnnotations` in the composer inside `ChatShell.Dock`; adding an annotation focuses that composer's `ComposerInput`. Format the outgoing message with `takeAnnotations()`, and count waiting `annotations` as content when enabling Send, so they can go out without typed text.
+
+  ```tsx
+  import { useState } from 'react';
+  import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
+  import { ComposerBox, ComposerInput } from '@mastra/playground-ui/components/Composer';
+  import {
+    ChatAnnotationsProvider,
+    ComposerAnnotations,
+    formatAnnotatedMessage,
+    TranscriptAnnotations,
+    useChatAnnotations,
+  } from '@mastra/playground-ui/components/ai/annotations';
+
+  function Thread({ messages }) {
+    return (
+      <ChatAnnotationsProvider>
+        <ChatShell>
+          <ChatShell.Stage>
+            <ChatShell.Viewport>
+              <ChatShell.Content>
+                <ChatShell.Transcript>
+                  <TranscriptAnnotations />
+                  {messages}
+                </ChatShell.Transcript>
+              </ChatShell.Content>
+              <ChatShell.Dock>
+                <MessageComposer />
+              </ChatShell.Dock>
+            </ChatShell.Viewport>
+          </ChatShell.Stage>
+        </ChatShell>
+      </ChatAnnotationsProvider>
+    );
+  }
+
+  function MessageComposer() {
+    const [draft, setDraft] = useState('');
+    const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
+
+    const submit = () => {
+      const taken = takeAnnotations();
+      send(formatAnnotatedMessage(draft, taken)).catch(() => restoreAnnotations(taken));
+    };
+
+    return (
+      <ComposerBox>
+        <ComposerAnnotations />
+        <ComposerInput value={draft} onChange={event => setDraft(event.target.value)} />
+        <button type="button" disabled={!draft.trim() && annotations.length === 0} onClick={submit}>
+          Send
+        </button>
+      </ComposerBox>
+    );
+  }
+  ```
+
+### Patch Changes
+
+- Fixed button labels wrapping onto a second line inside their pill when space is tight. Labels now stay on one line. ([#29444](https://github.com/mastra-ai/mastra/pull/29444))
+
+- Dashboard widgets now keep their saved widths on any screen wide enough for the 12-column grid, so a row of three or four cards no longer wraps onto a second line below 1280px. Cards in a row now share one height, so a card whose title wraps no longer stands taller than its neighbours. Narrow screens still stack every widget. ([#29337](https://github.com/mastra-ai/mastra/pull/29337))
+
+  `DashboardRenderer` accepts an optional `dragHandle` prop that returns the drag props for each widget id. When a widget has them, a grip appears left of its title, including on cards that failed to render and beside KPI groups. Widget kinds receive the same props as `dragHandle`, and `ChartCard` and the new `MetricsCard.DragHandle` render the grip.
+
+- Improved markdown chat tables in Factory and Studio with highlighted headers, softly faded row dividers, and rounded hover backgrounds. Added a small gap below the header and hide adjacent dividers while a row is hovered or focused. ([#29300](https://github.com/mastra-ai/mastra/pull/29300))
+
+- Fixed the `panelRef` type on `CollapsiblePanel`: it now requires an object ref (for example from `useRef` or `usePanelRef`), since the panel reads `.current` to collapse and expand. Passing a callback ref was accepted by the types but did not work. ([#29341](https://github.com/mastra-ai/mastra/pull/29341))
+
+- Fixed `MessageScroller` losing the end of the thread when its last row is hidden: "jump to latest" now appears when you scroll up and brings you back to the last visible message. ([#29241](https://github.com/mastra-ai/mastra/pull/29241))
+
+- Improved scrolling performance of `MessageScroller` and `ThreadRail` on long threads with thousands of messages. ([#28713](https://github.com/mastra-ai/mastra/pull/28713))
+
+- `ProviderLogo` now shows a real brand mark or a neutral monogram for every vendor in the Gateway model catalog. Vendors without a logo no longer render the generic models.dev placeholder. ([#29448](https://github.com/mastra-ai/mastra/pull/29448))
+
+  - Added colored bundled marks for Tencent, ByteDance (including `bytedance-seed`), Sakana, Microsoft, Amazon (Nova), Cohere, Perplexity, Fireworks, StepFun, Meituan (LongCat), Upstage, Morph, and a Nous Research mark.
+  - Only models.dev logos verified to be real are requested. Any other provider shows a monogram sized by the same icon tokens.
+
+  ```tsx
+  <ProviderLogo providerId="tencent" size="md" />
+  <ProviderLogo providerId="aion-labs" size="md" />
+  ```
+
+- Fixed task list scroll fades so they start at the card edge. Rows now scroll gradually out of view through the padding instead of disappearing into a blank band. ([#29315](https://github.com/mastra-ai/mastra/pull/29315))
+
+- Fixed long option labels being cut off in `Combobox`. Labels and descriptions now wrap and stop at two lines instead of truncating on one. A new `popupWidth` prop (`sm`, `md`, `lg`, `xl`) gives a compact trigger a wider, fixed popup for long options such as model ids. Without it the popup keeps the trigger's width. ([#28851](https://github.com/mastra-ai/mastra/pull/28851))
+
+  ```tsx
+  <Combobox options={modelOptions} popupWidth="lg" />
+  ```
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`314e6bc`](https://github.com/mastra-ai/mastra/commit/314e6bca2523f46fdb35a051b1d1d671fd9038ec), [`b28ed08`](https://github.com/mastra-ai/mastra/commit/b28ed08077f4b4649d863f7671fb9eff7d920651), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`b28ed08`](https://github.com/mastra-ai/mastra/commit/b28ed08077f4b4649d863f7671fb9eff7d920651), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+  - @mastra/client-js@1.60.0-alpha.0
+  - @mastra/memory@1.41.1-alpha.0
+  - @mastra/react@1.15.0-alpha.0
+  - @mastra/ai-sdk@1.11.3
+
+## 68.0.0
+
+### Minor Changes
+
+- Added `canCreate` to `SavedViewsProvider` so hosts can hide view creation for users who may only read saved views. When `false`, the observability saved views picker hides "Save as new view" and "Duplicate"; views can still be applied. Combine it with `canEdit` for a picker that only applies views. ([#29067](https://github.com/mastra-ai/mastra/pull/29067))
+
+  ```tsx
+  <SavedViewsProvider source={source} canCreate={false} canEdit={() => false}>
+    {children}
+  </SavedViewsProvider>
+  ```
+
+- Added answering an MCP server's input request from agent chat in Studio. When a tool backed by an MCP task needs input (a question, a form, or a link to open), the tool call now shows the server's request with Accept, Decline, and Cancel, and the task carries on once you answer. This works for tool calls that run in the background too, including after reloading the thread, and the chat stays free to send messages while the request is open. The task chip shows "input required" while it waits. If an answer doesn't go through, the request says why so you can answer again. A request with more than 20 questions or very large content shows a short notice with a single Cancel instead of the questions. In a network run, the request is shown but can't be answered from Studio yet. ([#29032](https://github.com/mastra-ai/mastra/pull/29032))
+
+- Toolbar and filter bar controls now share one look: the same paddings, icon gaps, chevron and spacing between controls. ([#28818](https://github.com/mastra-ai/mastra/pull/28818))
+
+  **Time range.** A filter bar's time range is now the `DateTimeRangePicker` itself, so it looks and behaves the same on every page: a calendar icon, the range and a chevron, with no separate "Time" label. Pass `defaultPreset` to show a × that resets a custom range; it replaces the chevron while a custom range is applied.
+
+  Added `FilterBar.TimeRange` with `FILTER_BAR_TIME_RANGE_FIELD`, `FILTER_BAR_TIME_RANGE_ITEM` and `FILTER_BAR_TIME_RANGE_FIELD_ID`. They replace `TraceTimeRangeChip` and the `TRACE_TIME_RANGE_*` names from `domains/traces/components/trace-time-range-chip`, which are removed.
+
+  ```tsx
+  import {
+    FilterBar,
+    FILTER_BAR_TIME_RANGE_FIELD,
+    FILTER_BAR_TIME_RANGE_FIELD_ID,
+    FILTER_BAR_TIME_RANGE_ITEM,
+  } from '@mastra/playground-ui/components/FilterBar';
+
+  <FilterBar
+    fields={[FILTER_BAR_TIME_RANGE_FIELD, ...fields]}
+    operators={operators}
+    value={[FILTER_BAR_TIME_RANGE_ITEM, ...items]}
+    // The time range item is synthetic: keep it out of the stored filters.
+    onValueChange={next => setItems(next.filter(item => item.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID))}
+  >
+    <FilterBar.Chips
+      renderChip={item =>
+        item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+          <FilterBar.TimeRange
+            preset={preset}
+            // A preset, including the × reset, drops the applied custom dates.
+            onPresetChange={next => {
+              setPreset(next);
+              if (next !== 'custom') setRange({});
+            }}
+            dateFrom={range.from}
+            dateTo={range.to}
+            onDateRangeChange={(from, to) => setRange({ from, to })}
+            defaultPreset="last-7d"
+          />
+        ) : (
+          <FilterBar.Chip item={item} />
+        )
+      }
+    />
+    <FilterBar.Input />
+  </FilterBar>;
+  ```
+
+  `DateTimeRangePicker` gains `size`, `defaultPreset` and `ref` (the trigger button).
+
+  **Migrating removed APIs.**
+
+  - `TraceTimeRangeChip` → `FilterBar.TimeRange` (same props), and `TRACE_TIME_RANGE_FIELD` / `_ITEM` / `_FIELD_ID` → `FILTER_BAR_TIME_RANGE_FIELD` / `_ITEM` / `_FIELD_ID`, imported from `@mastra/playground-ui/components/FilterBar`.
+
+    ```tsx
+    // Before
+    import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD_ID } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
+    item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? <TraceTimeRangeChip preset={preset} onPresetChange={setPreset} /> : …
+
+    // After
+    import { FilterBar, FILTER_BAR_TIME_RANGE_FIELD_ID } from '@mastra/playground-ui/components/FilterBar';
+    item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? <FilterBar.TimeRange preset={preset} onPresetChange={setPreset} /> : …
+    ```
+
+  - `DateTimeRangePicker`'s `renderTrigger` → remove it: the trigger is always the shared calendar button. Pass `size` for another rung and `ref` to reach the trigger.
+  - `comboboxStyles.chevron` on a hand-built trigger → `<ButtonChevron size={size} />` from `@mastra/playground-ui/components/Button`.
+
+  **Other controls.**
+
+  - Added `ClearFiltersButton`, a round reset icon button with a tooltip, used for every toolbar's "clear filters".
+  - Added `TriggerChevron` and `ButtonChevron`, the one chevron every dropdown trigger (`Select`, `Combobox`, the date picker) shows.
+  - `ComboboxTrigger` uses that chevron instead of the up-down one.
+  - Icons in every interactive control (buttons, fields, search inputs, filter chips, menu and command rows) follow one rule: muted at rest, brighter on hover. Two new theme tokens, `--control-icon-rest` and `--control-icon-hover`, set those colours; menus retune them, and icon-only controls always brighten. Search fields and combobox fields now brighten their icons on hover like buttons do.
+  - Icons take their size from the control they sit in, as in a Button: filter chips and search inputs no longer size their own icons.
+  - `ListSearch` defaults to the `sm` toolbar size, and `SearchInput`'s icon sits at the same inset as a button's.
+  - `ActionRow` and `FilterBar` space their controls 6px apart.
+
+- `SkillSimpleForm` now accepts `nameReadOnly` to lock only the name field while the description and instructions stay editable. ([#29042](https://github.com/mastra-ai/mastra/pull/29042))
+
+  ```tsx
+  import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
+
+  <SkillSimpleForm
+    nameReadOnly
+    name={name}
+    onNameChange={setName}
+    description={description}
+    onDescriptionChange={setDescription}
+    instructions={instructions}
+    onInstructionsChange={setInstructions}
+  />;
+  ```
+
+- Dashboard chart cards can now link to a fuller view, and line charts can mark points in time. ([#29266](https://github.com/mastra-ai/mastra/pull/29266))
+
+  - `DashboardRenderer` takes an `expand` option. When `expand.href(widget)` returns a URL, the card shows its title as a link with an expand icon, in place of its views menu.
+  - `MetricsLineChart` takes `markers`: dashed vertical lines at buckets, for example where a billing period starts. Each marker's `x` must match a bucket's `xKey` value.
+  - `DateTimeRangePicker` (and `FilterBar.TimeRange`) take `namedRanges`: fixed ranges such as the current billing period, listed above the presets and named on the trigger while applied.
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    expand={{ href: widget => `/query?widget=${widget.id}`, LinkComponent: RouterLink }}
+  />
+
+  <MetricsLineChart data={data} series={series} markers={[{ x: "2026-11-01", label: "Period starts" }]} />
+  ```
+
+  Metrics charts now use thin lines, and the large card header no longer shifts when its value finishes loading.
+
+### Patch Changes
+
+- Fixed the Studio tab freezing when you select a workflow step in the trace details drawer. ([#29181](https://github.com/mastra-ai/mastra/pull/29181))
+
+- Sidebar hover is now instant, like menu and list rows. Nav rows, section header links, "Show more", the usage meter, the resize handle and the collapsed logo/toggle swap no longer fade on hover. ([#29244](https://github.com/mastra-ai/mastra/pull/29244))
+
+- The Knowledge explorer now turns `[[links]]` in page bodies into links. A link such as `[[docs:mastra#workflows/suspend-and-resume]]` shows the target page's name and opens that page when clicked; a link to a page that isn't loaded shows as quiet, unlinked text. Links inside code are left as written. ([#29214](https://github.com/mastra-ai/mastra/pull/29214))
+
+  The graph also draws these body links as thin green lines between pages, with a "Linked in page body" legend row, so you can see how pages reference each other alongside parent → child lines and note mentions.
+
+  `MarkdownRenderer` accepts optional `remarkPlugins` and `components` props, added after its built-in ones, so a host can render custom syntax without losing the renderer's escaping.
+
+  A host supplies the span: `remarkKnowledgeLinks` marks each `[[ref]]` as a span carrying the ref under `KNOWLEDGE_REF_PROPERTY`, and `knowledgePageRefIndex(pages)` resolves it against the pages the host has loaded.
+
+  ```tsx
+  import { knowledgePageRefIndex } from '@mastra/playground-ui/domains/knowledge/lib/pageRefs';
+  import {
+    KNOWLEDGE_REF_PROPERTY,
+    remarkKnowledgeLinks,
+  } from '@mastra/playground-ui/domains/knowledge/lib/remarkKnowledgeLinks';
+
+  const index = knowledgePageRefIndex(pages);
+  const RefSpan = ({ node, children }) => {
+    const ref = node?.properties?.[KNOWLEDGE_REF_PROPERTY];
+    const target = typeof ref === 'string' ? index.resolve(ref) : undefined;
+    return target ? <a href={`#${target.id}`}>{target.name}</a> : <span>{children}</span>;
+  };
+
+  <MarkdownRenderer remarkPlugins={[remarkKnowledgeLinks]} components={{ span: RefSpan }}>
+    {page.body}
+  </MarkdownRenderer>;
+  ```
+
+- Knowledge tool cards in chat now show `[[scope#path]]` links in a page body as links to the page, instead of the raw `[[...]]` text. A link opens when the tool result resolves it (the page itself, or a ref a note in the result mentions); any other ref shows as plain text. ([#29214](https://github.com/mastra-ai/mastra/pull/29214))
+
+- Knowledge page references in Studio chat (`[[ref]]` and addresses like `docs:mastra#guides/memory`) are now links, and hovering one shows the page's name, address and child count. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Pinned Knowledge now shows in chat as a card instead of raw `{id: …}` text. A snapshot reads "Pinned knowledge · N pages" and lists each pinned page by name and scope, with the text the agent was given behind a toggle. A delta lists the pages added (+), changed (~) and removed (−) since. A `[[Page Name]]` in a Knowledge note links to that page; a name that no longer resolves shows as plain text. ([#28942](https://github.com/mastra-ai/mastra/pull/28942))
+
+  Knowledge page links go to Studio's Knowledge page by default. A host with its own Knowledge route wraps chat in `KnowledgeLinksProvider` to point them there:
+
+  ```tsx
+  import { KnowledgeLinksProvider } from '@mastra/playground-ui/domains/chat/knowledge';
+
+  <KnowledgeLinksProvider pageHref={pageId => `/my-app/knowledge?page=${encodeURIComponent(pageId)}`}>
+    <Chat />
+  </KnowledgeLinksProvider>;
+  ```
+
+- The Knowledge explorer no longer lays its graph out again each time it re-renders: pages built from the tree's query results are kept while they hold the same pages. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Failed Knowledge tool calls now draw as Knowledge cards that say what failed ("Couldn't read site:mastra#pricing-tiers") and show the error when opened, instead of a bare failed row. Knowledge result rows also show a page's full readable ref (`docs:mastra#observability/logging`) when the server sends one. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- The Knowledge graph draws every child of the focused page as a labelled circle again, up to 48, and staggers them over a few rows so they all sit within reach of the centre at a readable zoom. When the graph is too big to fit, the view stays centred on the focused page and crops the edge. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's Back button is now a floating icon button in the graph's top right corner, with a solid background, a pointer cursor and a hover state, and shows disabled when there is nothing to go back to. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer has a Back button that returns to the page you focused before, one step at a time through the pages you clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph dots are larger (20px, 28px with a link count) and have an 8px hover and click margin around them, so far pages are easier to see and hit. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph circles now fit their text: smaller type and two lines in a crowded circle, words are never broken mid-way (a word too wide for the circle ends in an ellipsis, and the full name stays in the tooltip), circles at one level share a size, the kind label stays on one line beside its icon ("Parent" in full), and the link and child-count badges sit outside the circle instead of covering the label. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A "Link counts" toggle in the Knowledge explorer writes each graph dot's total links in and out inside it. It is off by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pages linked to the focused Knowledge page draw as the legend's "Page in another branch" grey, grown into a named circle, with no "Page" caption and a name that reads on the fill. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend lists "Page in another branch" whenever a page is drawn in that grey, including the link-end circles around a focused page, not only far dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's Fit view button now animates over the same 700ms as a refocus, and jumps instantly under reduced motion. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Refocusing the Knowledge graph now zooms to fit the focus, its children and the outer ring of linked pages, in the same animation as the layout change. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph view now loads its children into the graph, linked to it, including children the initial graph didn't load. Up to 24 are added for each focused page. The rest are counted in a "+N more pages … not drawn" line. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now draws every page the focused page links to, and every page whose notes mention it, even when those pages aren't loaded yet. They are fetched by id or `[[ref]]` (up to 20 each way) and drawn as dots close around the focus with the green and orange link lines; only links past that cap are counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The focused page in the Knowledge graph is drawn larger with a heavier border and a halo, and the legend explains it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pointing at a page in the Knowledge graph no longer rebuilds every circle and line: fading the pages that aren't connected to it is a CSS rule driven by one attribute on the graph and a mark on the few neighbours. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in the Knowledge graph now draws its own content links and notes, fades everything it isn't connected to, and, for a dot, shows its kind, address and how many links go in and out. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in a large Knowledge graph no longer lays the whole graph out again: links fetched for a hover are drawn but not counted, and a page's links are found through an index built once. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- With nothing selected, the Knowledge graph now draws its first root scope exactly like a focused scope: every child is a labelled circle (up to 48, shrinking when crowded) with its own children as dots around it, a "+N more" circle past the cap, and the other root scopes beside it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's first view now fits every drawn page, outer ring included, with a margin and clear of the legend, and never zooms in past what fits. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph legend now explains every line style on screen (including hover and direction lines and the faint line to a child dot) and hides the rest; link badges read `→4 14→` (links in, links out) with a spoken label; with link counts on, only dots that have a count grow. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now names what each dot colour means: the circle the dot hangs under. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph scopes and the pages above the focus stay drawn as labelled circles (at most ten far ones), marked with a layers or up-arrow icon that the legend explains. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages the focused page links to, and the pages that link to it, as named circles like its children instead of bare numbered dots. They sit on a ring close around the focus, kept clear of the lines to its parent and children, with the first ring moved out to make room; links past the cap are still counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- On the Knowledge graph, pages in other branches that the focused page links to now sit on a ring beyond its children and their dots, as smaller named circles, instead of crowding in next to the focus. A focused page with no children keeps them close around it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph can show exact link counts from the store for every visible page, and hovering a page fetches its real links, saying how many go to pages that aren't drawn. Hosts without the link routes keep the counts taken from loaded pages. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Clicking a "+N more" circle in the Knowledge graph now draws the next batch of that page's children, counting down until every child is drawn. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads the children of the pages it draws as circles, so their children show as small dots around them instead of dashed placeholders (up to 12 circles; the rest keep the placeholders). ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Refocusing a page in the Knowledge graph no longer moves the view. The pan and zoom stay where you left them, and the view only moves, by just enough, when the page would land off screen. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Knowledge graph tooltips and count badges now have a solid background so they read against the graph, and each tooltip has a tail pointing at its dot. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph keeps the other root pages one link from the centre when the first root's parent is not loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now makes the focused page's parent obvious: its circle is labelled "Parent" with the up icon, a solid cyan line joins it to the focus, and the legend has a row for it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now opens at a zoom where circle names can be read. It draws up to 16 children as full-size circles and counts the rest in a "+N more" circle, and framing never zooms out past 0.7. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads like the tree instead of drawing the first 250 pages at once. It starts from the scopes and their first level, lays pages out in rings around the focused page, and draws pages more than one step away as small dots you can hover to name and click to focus. Parents show how many children they have ("281", "1000+") and dots standing in for unloaded children load them on hover or click, with a "+N more" line when not all fit. Runs of three or more memory scopes of the same kind (such as thread scopes) collapse into one dot until clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  Lines between pages from notes and page bodies are off by default: the focused page shows its own links, out and in drawn differently, and each circle counts its hidden links ("↓3 ↑5"). An "All links" button draws every link between the pages shown.
+
+- Refocusing the Knowledge graph on a page now only pans to it and keeps your zoom. The Fit view button is the one control that changes zoom, and it zooms out far enough to show a page's whole outer ring of linked pages. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph keeps the current layout while the pages it needs load (with a "Loading pages…" note after 150ms), then moves to the new layout once, so the transition shows instead of animating on stale data. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's view transition now takes 700ms on an ease-in-out curve so the move can be followed (still off under reduced motion), and "Link counts" is on by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph hands React Flow the same event handlers on every render, so pointing at a page no longer re-renders every node and line wrapper because of a new function identity. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph's All links and Link counts toggles are now icon buttons floating over the graph beside Back, and the pressed state of them and of the Graph | Page switch is a solid fill with full-strength text. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph tooltip now steers clear of neighbouring dots as well as circles, so it no longer covers the pages around the one you hover. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips now open on the side of the dot that covers the least: not the focused page, the highlighted lines, the legend or the Back button, and always inside the graph. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips stay readable when the graph is zoomed out, the legend names at most four dot branches, and Back no longer swallows the next selection if the host ignores it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages around a childless focus, and the first children of each root scope when nothing is focused, as labelled circles with their own children as dots, instead of a ring of bare dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now glides between views: pages in both the old and new view move and resize into place over 300ms, pages leaving fade out and new ones fade in. People who prefer reduced motion get an instant change. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- In the Knowledge graph view, clicking a page in the sidebar now focuses it in the graph first. Clicking the same page again opens it, the same way clicking a graph node does. The other views still open the page on the first click. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now reads "Under parent page" or "Under parent scope" for each dot colour, instead of naming the parent; hovering the row names it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- When the Knowledge graph's dots hang under several parent groups, each legend row now names its parent ("Under Deployment") so the colours can be told apart. One parent group still reads "Under parent page" or "Under parent scope". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Each entry in the `knowledge_list` chat card now links to its page in Studio's Knowledge view, like the `knowledge_search` card does. Scope roots open their scope page, and nested pages open at any depth. Hosts that open pages only by id can leave out the new `refHref` on `KnowledgeLinksProvider`, and the entries stay plain text. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Studio chat now draws `knowledge_list` tool calls as a Knowledge card instead of raw JSON. The card shows the listed scopes or pages as an indented tree, with each entry's ref, child count and description, and says when more entries were left out. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Added `KnowledgePageExplorer`, a Knowledge browser any host can use: search, a page tree, a graph of scopes and pages, and a page view, all on one selection. ([#28361](https://github.com/mastra-ai/mastra/pull/28361))
+
+  - **Graph:** shows parent → child links, mentions between pages, pinned pages and, when the host passes `grants`, which scopes can reach which (role named on hover). The first click selects a page; a second click opens it. A click on empty canvas clears the selection, and dragging the canvas doesn't. Pages already on screen stay put when data refreshes.
+  - **Page view:** the body as markdown (raw HTML is escaped), notes with links for resolved `[[mentions]]`, child pages, the notes that mention the page, and recent activity.
+  - **Tree:** clicking a scope narrows the tree and graph to it; a page selected elsewhere opens its path.
+
+  The host owns the selection and view state and reads through its own routes:
+
+  ```tsx
+  import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+
+  <KnowledgePageExplorer
+    graph={graph} // { pages, edges, pinnedIds, truncated, grants? }
+    source={{ usePage, useSearch, useTreeLevels, useActivity }}
+    selectedPageId={pageId}
+    onSelect={id => setPageId(id)} // null when the selection is cleared
+    view={view}
+    onViewChange={setView}
+  />;
+  ```
+
+  `KnowledgePageTree`, `KnowledgePageDetail` and `KnowledgePageGraph` are exported for hosts that lay these out themselves.
+
+- Knowledge tool cards in Studio chat now show which part of a page was read or written: lines, matches and their context, an overview, or the whole page. ([#29259](https://github.com/mastra-ai/mastra/pull/29259))
+
+- Picking a search result while the Knowledge graph is showing now focuses that page in the graph instead of switching to the page view. Picking the focused page again opens it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge tree child counts now say when they were capped. If a scope has more child scopes than the 1,000 the tree looks through for each level, the page gets `childCountCapped: true` and its `childCount` is a lower bound. The Knowledge explorer then shows the count as "1000+" in the tree and in the graph's "pages under" line, instead of a number that's too low. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A parent in the Knowledge tree now stays collapsed when you collapse it over the selected page. It used to spring back open on the next refresh, so there was no way to close it. Selecting another page under it still opens the path to that page. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer tree is easier to use on large knowledge bases: ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  - Each page with children shows how many sit under it, and only those pages show an expand arrow. Pages with no children no longer show an arrow that vanishes when clicked.
+  - Clicking a page with children opens it, loading its children, and highlights it.
+  - Clicking a page the graph didn't load opens it as a page, instead of selecting it in a graph that can't show it.
+
+- When the Knowledge graph focuses a deep page, the page tree keeps scrolling to its row as the levels above it finish loading, so the row ends up in view instead of below the fold. Scrolling the tree yourself stops it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- When the Knowledge tree follows a page focused in the graph, the row now lands a third of the way down the sidebar instead of against its bottom edge. A row already comfortably in view stays put. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph now scrolls the page tree to its row (opening its ancestors first), instead of leaving the highlighted row out of sight. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge tree's follow-the-focus scroll now checks the element that actually scrolls, so a deep page's row ends up in view once its levels have loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Placeholders in Studio and Factory now read the same everywhere: sentence case with no trailing ellipsis ("Search agents", "Filter traces"). Added a `playground-ui/placeholder-text` lint rule to `@mastra/playground-ui/oxlint` that keeps placeholders this way; it is part of the `recommended` preset. ([#29188](https://github.com/mastra-ai/mastra/pull/29188))
+
+- Fixed Studio forms that would not submit when left blank after the zod 4 upgrade. Resuming a suspended step with no resume schema, and running a workflow that has a state schema but no input schema, failed with "Required" instead of submitting. ([#29072](https://github.com/mastra-ai/mastra/pull/29072))
+
+- Icons in labelled controls (the time range, selects, the filter input, search fields, filter chips) now stay muted on hover; the label and background show the hover. Icon-only buttons (columns, reset, ×) and highlighted menu and command rows still brighten their icon. ([#29191](https://github.com/mastra-ai/mastra/pull/29191))
+
+  Fixed the chevron in icon-size comboboxes (breadcrumb switchers) rendering at 24px; it's back to the icon size of the other icon buttons.
+
+- Fixed Studio's MCP input request card so questions keyed `constructor` or `__proto__` can be answered and their answers are sent. ([#29306](https://github.com/mastra-ai/mastra/pull/29306))
+
+- Knowledge tool calls in chat now draw as readable cards instead of raw JSON. `knowledge_search` lists its hits, `knowledge_read` shows the page with its markdown body, notes, child pages and the notes that mention it, `knowledge_page` says whether it created, updated, moved or merged a page and shows the new body and version, `knowledge_note` shows the note it added, and `knowledge_pin` names the audience. Each page name links to that page in Studio's Knowledge viewer (`/knowledge?page=<id>&view=page`). Running and failed calls keep the plain tool badge. ([#28931](https://github.com/mastra-ai/mastra/pull/28931))
+
+- Studio chat shows a pinned Knowledge listing (the `list:<pageId>` entry) as a Listing row that links to the page it lists, with its lines on demand, in snapshots and in added, changed and removed updates. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Improved the connect card that `request_connection` renders in chat: ([#29210](https://github.com/mastra-ai/mastra/pull/29210))
+
+  - **Resumes the agent:** the card now appears while the run is paused on `request_connection`. Once the user's connection settles, the card resumes the paused tool, so the agent continues from the tool result. If the connection fails, the tool result includes the same reason the card shows. No message is added to the chat.
+  - **Shows the new tools right away:** agent and tool lists refresh as soon as a connection activates or is disconnected.
+  - **Loading state on the Connections page:** the connections table shows skeleton rows while it loads, instead of a bare spinner.
+
+- Fixed metrics charts stretching past their cards in Safari when the page is zoomed in or out. ([#29203](https://github.com/mastra-ai/mastra/pull/29203))
+
+- Pagination in paged metrics tables, such as the Metrics Breakdown card, no longer jumps when a page has fewer rows. The table now reserves a full page of rows, so the last page, a single short page, or an empty result keep the same table height and Prev/Next stays where you clicked it. The Breakdown card shows 10 rows per page instead of 13. ([#29185](https://github.com/mastra-ai/mastra/pull/29185))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`489d829`](https://github.com/mastra-ai/mastra/commit/489d8295c83520cf9b8f74333e551e4951328a8e), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`7c242c5`](https://github.com/mastra-ai/mastra/commit/7c242c55c565e9c447ab74a6f529612f0030f061), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`d7d1807`](https://github.com/mastra-ai/mastra/commit/d7d18072ba5b5e316b5ec78ec10ce13507701567), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`ea8fefc`](https://github.com/mastra-ai/mastra/commit/ea8fefcd83bcffe1d14a0a22aae2ea84df4ec134), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`35ab0c8`](https://github.com/mastra-ai/mastra/commit/35ab0c807b23cf5af39689366941aeb3fe59f6f5), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`e1e64f0`](https://github.com/mastra-ai/mastra/commit/e1e64f072cb20ea1b21ddbf5d5458fd441ed8c7d), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`3975787`](https://github.com/mastra-ai/mastra/commit/3975787ca30d9bd8bf7e2f36ecf471bcb2b31c0f), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`ba602f5`](https://github.com/mastra-ai/mastra/commit/ba602f5f4622d6a3e6beb6d2741e3d19efe57ca9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0
+  - @mastra/memory@1.41.0
+  - @mastra/client-js@1.59.0
+  - @mastra/react@1.14.1
+  - @mastra/ai-sdk@1.11.3
+
+## 68.0.0-alpha.3
+
+### Minor Changes
+
+- Added answering an MCP server's input request from agent chat in Studio. When a tool backed by an MCP task needs input (a question, a form, or a link to open), the tool call now shows the server's request with Accept, Decline, and Cancel, and the task carries on once you answer. This works for tool calls that run in the background too, including after reloading the thread, and the chat stays free to send messages while the request is open. The task chip shows "input required" while it waits. If an answer doesn't go through, the request says why so you can answer again. A request with more than 20 questions or very large content shows a short notice with a single Cancel instead of the questions. In a network run, the request is shown but can't be answered from Studio yet. ([#29032](https://github.com/mastra-ai/mastra/pull/29032))
+
+### Patch Changes
+
+- Fixed the Studio tab freezing when you select a workflow step in the trace details drawer. ([#29181](https://github.com/mastra-ai/mastra/pull/29181))
+
+- The Knowledge explorer now turns `[[links]]` in page bodies into links. A link such as `[[docs:mastra#workflows/suspend-and-resume]]` shows the target page's name and opens that page when clicked; a link to a page that isn't loaded shows as quiet, unlinked text. Links inside code are left as written. ([#29214](https://github.com/mastra-ai/mastra/pull/29214))
+
+  The graph also draws these body links as thin green lines between pages, with a "Linked in page body" legend row, so you can see how pages reference each other alongside parent → child lines and note mentions.
+
+  `MarkdownRenderer` accepts optional `remarkPlugins` and `components` props, added after its built-in ones, so a host can render custom syntax without losing the renderer's escaping.
+
+  A host supplies the span: `remarkKnowledgeLinks` marks each `[[ref]]` as a span carrying the ref under `KNOWLEDGE_REF_PROPERTY`, and `knowledgePageRefIndex(pages)` resolves it against the pages the host has loaded.
+
+  ```tsx
+  import { knowledgePageRefIndex } from '@mastra/playground-ui/domains/knowledge/lib/pageRefs';
+  import {
+    KNOWLEDGE_REF_PROPERTY,
+    remarkKnowledgeLinks,
+  } from '@mastra/playground-ui/domains/knowledge/lib/remarkKnowledgeLinks';
+
+  const index = knowledgePageRefIndex(pages);
+  const RefSpan = ({ node, children }) => {
+    const ref = node?.properties?.[KNOWLEDGE_REF_PROPERTY];
+    const target = typeof ref === 'string' ? index.resolve(ref) : undefined;
+    return target ? <a href={`#${target.id}`}>{target.name}</a> : <span>{children}</span>;
+  };
+
+  <MarkdownRenderer remarkPlugins={[remarkKnowledgeLinks]} components={{ span: RefSpan }}>
+    {page.body}
+  </MarkdownRenderer>;
+  ```
+
+- Knowledge tool cards in chat now show `[[scope#path]]` links in a page body as links to the page, instead of the raw `[[...]]` text. A link opens when the tool result resolves it (the page itself, or a ref a note in the result mentions); any other ref shows as plain text. ([#29214](https://github.com/mastra-ai/mastra/pull/29214))
+
+- Knowledge page references in Studio chat (`[[ref]]` and addresses like `docs:mastra#guides/memory`) are now links, and hovering one shows the page's name, address and child count. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge explorer no longer lays its graph out again each time it re-renders: pages built from the tree's query results are kept while they hold the same pages. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Failed Knowledge tool calls now draw as Knowledge cards that say what failed ("Couldn't read site:mastra#pricing-tiers") and show the error when opened, instead of a bare failed row. Knowledge result rows also show a page's full readable ref (`docs:mastra#observability/logging`) when the server sends one. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- The Knowledge graph draws every child of the focused page as a labelled circle again, up to 48, and staggers them over a few rows so they all sit within reach of the centre at a readable zoom. When the graph is too big to fit, the view stays centred on the focused page and crops the edge. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's Back button is now a floating icon button in the graph's top right corner, with a solid background, a pointer cursor and a hover state, and shows disabled when there is nothing to go back to. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer has a Back button that returns to the page you focused before, one step at a time through the pages you clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph dots are larger (20px, 28px with a link count) and have an 8px hover and click margin around them, so far pages are easier to see and hit. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph circles now fit their text: smaller type and two lines in a crowded circle, words are never broken mid-way (a word too wide for the circle ends in an ellipsis, and the full name stays in the tooltip), circles at one level share a size, the kind label stays on one line beside its icon ("Parent" in full), and the link and child-count badges sit outside the circle instead of covering the label. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A "Link counts" toggle in the Knowledge explorer writes each graph dot's total links in and out inside it. It is off by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pages linked to the focused Knowledge page draw as the legend's "Page in another branch" grey, grown into a named circle, with no "Page" caption and a name that reads on the fill. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend lists "Page in another branch" whenever a page is drawn in that grey, including the link-end circles around a focused page, not only far dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's Fit view button now animates over the same 700ms as a refocus, and jumps instantly under reduced motion. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Refocusing the Knowledge graph now zooms to fit the focus, its children and the outer ring of linked pages, in the same animation as the layout change. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph view now loads its children into the graph, linked to it, including children the initial graph didn't load. Up to 24 are added for each focused page. The rest are counted in a "+N more pages … not drawn" line. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now draws every page the focused page links to, and every page whose notes mention it, even when those pages aren't loaded yet. They are fetched by id or `[[ref]]` (up to 20 each way) and drawn as dots close around the focus with the green and orange link lines; only links past that cap are counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The focused page in the Knowledge graph is drawn larger with a heavier border and a halo, and the legend explains it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Pointing at a page in the Knowledge graph no longer rebuilds every circle and line: fading the pages that aren't connected to it is a CSS rule driven by one attribute on the graph and a mark on the few neighbours. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in the Knowledge graph now draws its own content links and notes, fades everything it isn't connected to, and, for a dot, shows its kind, address and how many links go in and out. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Hovering a page in a large Knowledge graph no longer lays the whole graph out again: links fetched for a hover are drawn but not counted, and a page's links are found through an index built once. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- With nothing selected, the Knowledge graph now draws its first root scope exactly like a focused scope: every child is a labelled circle (up to 48, shrinking when crowded) with its own children as dots around it, a "+N more" circle past the cap, and the other root scopes beside it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's first view now fits every drawn page, outer ring included, with a margin and clear of the legend, and never zooms in past what fits. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph legend now explains every line style on screen (including hover and direction lines and the faint line to a child dot) and hides the rest; link badges read `→4 14→` (links in, links out) with a spoken label; with link counts on, only dots that have a count grow. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now names what each dot colour means: the circle the dot hangs under. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph scopes and the pages above the focus stay drawn as labelled circles (at most ten far ones), marked with a layers or up-arrow icon that the legend explains. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages the focused page links to, and the pages that link to it, as named circles like its children instead of bare numbered dots. They sit on a ring close around the focus, kept clear of the lines to its parent and children, with the first ring moved out to make room; links past the cap are still counted as "more". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- On the Knowledge graph, pages in other branches that the focused page links to now sit on a ring beyond its children and their dots, as smaller named circles, instead of crowding in next to the focus. A focused page with no children keeps them close around it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph can show exact link counts from the store for every visible page, and hovering a page fetches its real links, saying how many go to pages that aren't drawn. Hosts without the link routes keep the counts taken from loaded pages. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Clicking a "+N more" circle in the Knowledge graph now draws the next batch of that page's children, counting down until every child is drawn. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads the children of the pages it draws as circles, so their children show as small dots around them instead of dashed placeholders (up to 12 circles; the rest keep the placeholders). ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Refocusing a page in the Knowledge graph no longer moves the view. The pan and zoom stay where you left them, and the view only moves, by just enough, when the page would land off screen. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Knowledge graph tooltips and count badges now have a solid background so they read against the graph, and each tooltip has a tail pointing at its dot. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph keeps the other root pages one link from the centre when the first root's parent is not loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now makes the focused page's parent obvious: its circle is labelled "Parent" with the up icon, a solid cyan line joins it to the focus, and the legend has a row for it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now opens at a zoom where circle names can be read. It draws up to 16 children as full-size circles and counts the rest in a "+N more" circle, and framing never zooms out past 0.7. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now loads like the tree instead of drawing the first 250 pages at once. It starts from the scopes and their first level, lays pages out in rings around the focused page, and draws pages more than one step away as small dots you can hover to name and click to focus. Parents show how many children they have ("281", "1000+") and dots standing in for unloaded children load them on hover or click, with a "+N more" line when not all fit. Runs of three or more memory scopes of the same kind (such as thread scopes) collapse into one dot until clicked. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  Lines between pages from notes and page bodies are off by default: the focused page shows its own links, out and in drawn differently, and each circle counts its hidden links ("↓3 ↑5"). An "All links" button draws every link between the pages shown.
+
+- Refocusing the Knowledge graph on a page now only pans to it and keeps your zoom. The Fit view button is the one control that changes zoom, and it zooms out far enough to show a page's whole outer ring of linked pages. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph keeps the current layout while the pages it needs load (with a "Loading pages…" note after 150ms), then moves to the new layout once, so the transition shows instead of animating on stale data. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph's view transition now takes 700ms on an ease-in-out curve so the move can be followed (still off under reduced motion), and "Link counts" is on by default. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph hands React Flow the same event handlers on every render, so pointing at a page no longer re-renders every node and line wrapper because of a new function identity. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- The Knowledge graph's All links and Link counts toggles are now icon buttons floating over the graph beside Back, and the pressed state of them and of the Graph | Page switch is a solid fill with full-strength text. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph tooltip now steers clear of neighbouring dots as well as circles, so it no longer covers the pages around the one you hover. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips now open on the side of the dot that covers the least: not the focused page, the highlighted lines, the legend or the Back button, and always inside the graph. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge graph tooltips stay readable when the graph is zoomed out, the legend names at most four dot branches, and Back no longer swallows the next selection if the host ignores it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph draws the pages around a childless focus, and the first children of each root scope when nothing is focused, as labelled circles with their own children as dots, instead of a ring of bare dots. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph now glides between views: pages in both the old and new view move and resize into place over 300ms, pages leaving fade out and new ones fade in. People who prefer reduced motion get an instant change. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- In the Knowledge graph view, clicking a page in the sidebar now focuses it in the graph first. Clicking the same page again opens it, the same way clicking a graph node does. The other views still open the page on the first click. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge graph legend now reads "Under parent page" or "Under parent scope" for each dot colour, instead of naming the parent; hovering the row names it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- When the Knowledge graph's dots hang under several parent groups, each legend row now names its parent ("Under Deployment") so the colours can be told apart. One parent group still reads "Under parent page" or "Under parent scope". ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Each entry in the `knowledge_list` chat card now links to its page in Studio's Knowledge view, like the `knowledge_search` card does. Scope roots open their scope page, and nested pages open at any depth. Hosts that open pages only by id can leave out the new `refHref` on `KnowledgeLinksProvider`, and the entries stay plain text. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Studio chat now draws `knowledge_list` tool calls as a Knowledge card instead of raw JSON. The card shows the listed scopes or pages as an indented tree, with each entry's ref, child count and description, and says when more entries were left out. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Knowledge tool cards in Studio chat now show which part of a page was read or written: lines, matches and their context, an overview, or the whole page. ([#29259](https://github.com/mastra-ai/mastra/pull/29259))
+
+- Picking a search result while the Knowledge graph is showing now focuses that page in the graph instead of switching to the page view. Picking the focused page again opens it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Knowledge tree child counts now say when they were capped. If a scope has more child scopes than the 1,000 the tree looks through for each level, the page gets `childCountCapped: true` and its `childCount` is a lower bound. The Knowledge explorer then shows the count as "1000+" in the tree and in the graph's "pages under" line, instead of a number that's too low. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- A parent in the Knowledge tree now stays collapsed when you collapse it over the selected page. It used to spring back open on the next refresh, so there was no way to close it. Selecting another page under it still opens the path to that page. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge explorer tree is easier to use on large knowledge bases: ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  - Each page with children shows how many sit under it, and only those pages show an expand arrow. Pages with no children no longer show an arrow that vanishes when clicked.
+  - Clicking a page with children opens it, loading its children, and highlights it.
+  - Clicking a page the graph didn't load opens it as a page, instead of selecting it in a graph that can't show it.
+
+- When the Knowledge graph focuses a deep page, the page tree keeps scrolling to its row as the levels above it finish loading, so the row ends up in view instead of below the fold. Scrolling the tree yourself stops it. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- When the Knowledge tree follows a page focused in the graph, the row now lands a third of the way down the sidebar instead of against its bottom edge. A row already comfortably in view stays put. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Focusing a page in the Knowledge graph now scrolls the page tree to its row (opening its ancestors first), instead of leaving the highlighted row out of sight. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- The Knowledge tree's follow-the-focus scroll now checks the element that actually scrolls, so a deep page's row ends up in view once its levels have loaded. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Studio chat shows a pinned Knowledge listing (the `list:<pageId>` entry) as a Listing row that links to the page it lists, with its lines on demand, in snapshots and in added, changed and removed updates. ([#29264](https://github.com/mastra-ai/mastra/pull/29264))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`d7d1807`](https://github.com/mastra-ai/mastra/commit/d7d18072ba5b5e316b5ec78ec10ce13507701567), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`35ab0c8`](https://github.com/mastra-ai/mastra/commit/35ab0c807b23cf5af39689366941aeb3fe59f6f5), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+  - @mastra/memory@1.41.0-alpha.3
+  - @mastra/client-js@1.59.0-alpha.3
+  - @mastra/react@1.14.1-alpha.3
+  - @mastra/ai-sdk@1.11.3
+
+## 68.0.0-alpha.2
+
+### Patch Changes
+
+- Sidebar hover is now instant, like menu and list rows. Nav rows, section header links, "Show more", the usage meter, the resize handle and the collapsed logo/toggle swap no longer fade on hover. ([#29244](https://github.com/mastra-ai/mastra/pull/29244))
+
+- Placeholders in Studio and Factory now read the same everywhere: sentence case with no trailing ellipsis ("Search agents", "Filter traces"). Added a `playground-ui/placeholder-text` lint rule to `@mastra/playground-ui/oxlint` that keeps placeholders this way; it is part of the `recommended` preset. ([#29188](https://github.com/mastra-ai/mastra/pull/29188))
+
+- Icons in labelled controls (the time range, selects, the filter input, search fields, filter chips) now stay muted on hover; the label and background show the hover. Icon-only buttons (columns, reset, ×) and highlighted menu and command rows still brighten their icon. ([#29191](https://github.com/mastra-ai/mastra/pull/29191))
+
+  Fixed the chevron in icon-size comboboxes (breadcrumb switchers) rendering at 24px; it's back to the icon size of the other icon buttons.
+
+- Fixed metrics charts stretching past their cards in Safari when the page is zoomed in or out. ([#29203](https://github.com/mastra-ai/mastra/pull/29203))
+
+- Pagination in paged metrics tables, such as the Metrics Breakdown card, no longer jumps when a page has fewer rows. The table now reserves a full page of rows, so the last page, a single short page, or an empty result keep the same table height and Prev/Next stays where you clicked it. The Breakdown card shows 10 rows per page instead of 13. ([#29185](https://github.com/mastra-ai/mastra/pull/29185))
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`ea8fefc`](https://github.com/mastra-ai/mastra/commit/ea8fefcd83bcffe1d14a0a22aae2ea84df4ec134), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/client-js@1.59.0-alpha.2
+  - @mastra/core@1.82.0-alpha.2
+  - @mastra/memory@1.41.0-alpha.2
+  - @mastra/react@1.14.1-alpha.2
+  - @mastra/ai-sdk@1.11.3
+
+## 68.0.0-alpha.1
+
+### Minor Changes
+
+- Toolbar and filter bar controls now share one look: the same paddings, icon gaps, chevron and spacing between controls. ([#28818](https://github.com/mastra-ai/mastra/pull/28818))
+
+  **Time range.** A filter bar's time range is now the `DateTimeRangePicker` itself, so it looks and behaves the same on every page: a calendar icon, the range and a chevron, with no separate "Time" label. Pass `defaultPreset` to show a × that resets a custom range; it replaces the chevron while a custom range is applied.
+
+  Added `FilterBar.TimeRange` with `FILTER_BAR_TIME_RANGE_FIELD`, `FILTER_BAR_TIME_RANGE_ITEM` and `FILTER_BAR_TIME_RANGE_FIELD_ID`. They replace `TraceTimeRangeChip` and the `TRACE_TIME_RANGE_*` names from `domains/traces/components/trace-time-range-chip`, which are removed.
+
+  ```tsx
+  import {
+    FilterBar,
+    FILTER_BAR_TIME_RANGE_FIELD,
+    FILTER_BAR_TIME_RANGE_FIELD_ID,
+    FILTER_BAR_TIME_RANGE_ITEM,
+  } from '@mastra/playground-ui/components/FilterBar';
+
+  <FilterBar
+    fields={[FILTER_BAR_TIME_RANGE_FIELD, ...fields]}
+    operators={operators}
+    value={[FILTER_BAR_TIME_RANGE_ITEM, ...items]}
+    // The time range item is synthetic: keep it out of the stored filters.
+    onValueChange={next => setItems(next.filter(item => item.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID))}
+  >
+    <FilterBar.Chips
+      renderChip={item =>
+        item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+          <FilterBar.TimeRange
+            preset={preset}
+            // A preset, including the × reset, drops the applied custom dates.
+            onPresetChange={next => {
+              setPreset(next);
+              if (next !== 'custom') setRange({});
+            }}
+            dateFrom={range.from}
+            dateTo={range.to}
+            onDateRangeChange={(from, to) => setRange({ from, to })}
+            defaultPreset="last-7d"
+          />
+        ) : (
+          <FilterBar.Chip item={item} />
+        )
+      }
+    />
+    <FilterBar.Input />
+  </FilterBar>;
+  ```
+
+  `DateTimeRangePicker` gains `size`, `defaultPreset` and `ref` (the trigger button).
+
+  **Migrating removed APIs.**
+
+  - `TraceTimeRangeChip` → `FilterBar.TimeRange` (same props), and `TRACE_TIME_RANGE_FIELD` / `_ITEM` / `_FIELD_ID` → `FILTER_BAR_TIME_RANGE_FIELD` / `_ITEM` / `_FIELD_ID`, imported from `@mastra/playground-ui/components/FilterBar`.
+
+    ```tsx
+    // Before
+    import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD_ID } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
+    item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? <TraceTimeRangeChip preset={preset} onPresetChange={setPreset} /> : …
+
+    // After
+    import { FilterBar, FILTER_BAR_TIME_RANGE_FIELD_ID } from '@mastra/playground-ui/components/FilterBar';
+    item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? <FilterBar.TimeRange preset={preset} onPresetChange={setPreset} /> : …
+    ```
+
+  - `DateTimeRangePicker`'s `renderTrigger` → remove it: the trigger is always the shared calendar button. Pass `size` for another rung and `ref` to reach the trigger.
+  - `comboboxStyles.chevron` on a hand-built trigger → `<ButtonChevron size={size} />` from `@mastra/playground-ui/components/Button`.
+
+  **Other controls.**
+
+  - Added `ClearFiltersButton`, a round reset icon button with a tooltip, used for every toolbar's "clear filters".
+  - Added `TriggerChevron` and `ButtonChevron`, the one chevron every dropdown trigger (`Select`, `Combobox`, the date picker) shows.
+  - `ComboboxTrigger` uses that chevron instead of the up-down one.
+  - Icons in every interactive control (buttons, fields, search inputs, filter chips, menu and command rows) follow one rule: muted at rest, brighter on hover. Two new theme tokens, `--control-icon-rest` and `--control-icon-hover`, set those colours; menus retune them, and icon-only controls always brighten. Search fields and combobox fields now brighten their icons on hover like buttons do.
+  - Icons take their size from the control they sit in, as in a Button: filter chips and search inputs no longer size their own icons.
+  - `ListSearch` defaults to the `sm` toolbar size, and `SearchInput`'s icon sits at the same inset as a button's.
+  - `ActionRow` and `FilterBar` space their controls 6px apart.
+
+### Patch Changes
+
+- Updated dependencies [[`489d829`](https://github.com/mastra-ai/mastra/commit/489d8295c83520cf9b8f74333e551e4951328a8e), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`e1e64f0`](https://github.com/mastra-ai/mastra/commit/e1e64f072cb20ea1b21ddbf5d5458fd441ed8c7d), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff)]:
+  - @mastra/memory@1.41.0-alpha.1
+  - @mastra/client-js@1.59.0-alpha.1
+  - @mastra/core@1.82.0-alpha.1
+  - @mastra/ai-sdk@1.11.3
+  - @mastra/react@1.14.1-alpha.1
+
 ## 68.0.0-alpha.0
 
 ### Minor Changes

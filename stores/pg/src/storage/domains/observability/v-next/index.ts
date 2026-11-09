@@ -434,6 +434,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
         ...traceQueryOps.timingFeatures,
         ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
@@ -462,6 +463,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
       ...traceQueryOps.timingFeatures,
       ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
@@ -704,6 +706,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#readClient, this.#schema, scoreId), {
       scoreId,
     });
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.#run(
+      'GET_FEEDBACK_BY_ID',
+      () => feedbackOps.getFeedbackById(this.#readClient, this.#schema, feedbackId),
+      {
+        feedbackId,
+      },
+    );
   }
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {

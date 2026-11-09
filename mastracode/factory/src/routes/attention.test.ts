@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { ParkedRun } from '../session/live-sessions.js';
-import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { FactoryDeferredDecisionRecord, Card } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -53,7 +53,7 @@ function request(method: string, path: string, user: typeof orgUser | null = org
   return buildApp(user).request(path, { method });
 }
 
-async function seedWorkItem(title = 'Fix login'): Promise<WorkItemRow> {
+async function seedWorkItem(title = 'Fix login'): Promise<Card> {
   const { item } = await seed.workItems.upsert({
     orgId: 'org1',
     userId: 'u1',
@@ -87,7 +87,7 @@ async function seedMention({
   });
 }
 
-async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDeferredDecisionRecord> {
+async function seedFailure(workItem: Card, now: Date): Promise<FactoryDeferredDecisionRecord> {
   await seed.workItems.commitRuleEvaluation({
     orgId: 'org1',
     factoryProjectId: PROJECT_ID,
@@ -542,7 +542,7 @@ describe('mention attention items', () => {
 const PROPOSED_TRIAGE = { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' } as const;
 
 async function seedProposal(
-  workItem: WorkItemRow,
+  workItem: Card,
   now: Date,
   decision: Record<string, unknown> = PROPOSED_TRIAGE,
 ): Promise<FactoryDeferredDecisionRecord> {
@@ -805,7 +805,7 @@ describe('activity attention items', () => {
 });
 
 describe('attention links open the board the card is on', () => {
-  async function seedCard(input: Pick<WorkItemRow, 'board' | 'externalSource'>): Promise<WorkItemRow> {
+  async function seedCard(input: Pick<Card, 'board' | 'externalSource'>): Promise<Card> {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',
       userId: 'u1',
@@ -823,7 +823,7 @@ describe('attention links open the board the card is on', () => {
   }
 
   /** One item of every work-item-targeted kind on `item`, keyed by kind to the board its link opens. */
-  async function targetBoards(item: WorkItemRow): Promise<Record<string, unknown>> {
+  async function targetBoards(item: Card): Promise<Record<string, unknown>> {
     await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
     await seedFailure(item, new Date('2030-01-01T00:01:00.000Z'));
     await seedMention({ workItemId: item.id, body: 'Look @you', occurredAt: new Date('2030-01-01T00:02:00.000Z') });

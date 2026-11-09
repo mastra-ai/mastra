@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 // The one rule for the icons inside an interactive control (a Button, a field, a chip segment,
 // a menu row): `--control-icon-rest` at rest, `--control-icon-hover` while hovered, back to rest
-// when disabled. A control only ever chooses the two colours (theme.css sets the defaults),
+// when disabled. By default the two match, so a labelled control's icons stay muted on hover. A control only ever chooses the two colours (theme.css sets the defaults),
 // never its own hover rule, so every control answers hover the same way by construction.
 // An icon on a neutral surface steps back with a colour token rather than opacity: opacity dims
 // against whatever sits behind the control, so the same glyph would clear contrast on one

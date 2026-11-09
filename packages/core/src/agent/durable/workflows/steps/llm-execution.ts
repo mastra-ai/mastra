@@ -87,6 +87,7 @@ import { createStepStartChunk, emitChunkEvent, publishStepStartChunk } from '../
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
+import { readAccumulatedSteps } from '../shared/accumulated-steps';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
@@ -237,6 +238,8 @@ const durableLLMOutputSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Provider id and serving model of the response, only when the provider sent one
   response: responseRecordSchema.optional(),
+  // Outcome of a step that ended the run itself, carried to the final step through the state
+  tracingTermination: z.custom<SpanTermination>().optional(),
 });
 
 /**
@@ -384,6 +387,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // emits a deferred error chunk rather than crashing the loop. Used by
       // the exhausted-models path and by run-level timeout expiry (#21724).
       let terminateAttemptSpans: ((termination: SpanTermination) => void) | undefined;
+      let tracingTermination: SpanTermination | undefined;
+      const recordTermination = (termination: SpanTermination) => {
+        tracingTermination = termination;
+        // The registry copy keeps older @mastra/inngest finalizers working in-process.
+        const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        if (registry) registry.tracingTermination = termination;
+      };
       const emitFatalErrorBail = async (
         fatalError: Error,
         modelId: string,
@@ -400,8 +410,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         // This bail returns a finish result. Record the failure now, but let finalization
         // end the roots with accumulated usage and output, including on evented workers.
         const termination = executionFailureTermination(fatalError);
-        const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        if (registry) registry.tracingTermination = termination;
+        recordTermination(termination);
         terminateAttemptSpans?.(termination);
         // A total timeout can tear down the workflow before its finish mapping runs.
         endRunSpansWithError(runId, fatalError, {
@@ -448,6 +457,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           },
           metadata: { modelId },
           state: typedInput.state,
+          tracingTermination,
         } satisfies DurableLLMStepOutput;
       };
 
@@ -498,10 +508,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
         // happen since the loop will stop, but belt-and-suspenders).
         const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        if (entry) {
-          entry.tripwire = undefined;
-          entry.tracingTermination = agentLoopTermination({ tripwire: registryTripwire });
-        }
+        if (entry) entry.tripwire = undefined;
+        recordTermination(agentLoopTermination({ tripwire: registryTripwire }));
 
         logger?.warn?.('Input processor tripwire triggered (from preparation)', {
           agent: agentId,
@@ -535,6 +543,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           },
           metadata: {},
           state: typedInput.state,
+          tracingTermination,
         } satisfies DurableLLMStepOutput;
       }
 
@@ -655,7 +664,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Processor retries are read from the step history: each rejected step is recorded with
       // finishReason 'retry' and the tripwire that rejected it. Only consecutive retries count.
       // API-error retries happen inside this step and add to the same count, as in Agent.
-      const previousSteps = inputData.accumulatedSteps ?? [];
+      const previousSteps = readAccumulatedSteps(params.state, inputData);
       let processorRetryCount = 0;
       for (let i = previousSteps.length - 1; i >= 0 && previousSteps[i]?.finishReason === 'retry'; i--) {
         processorRetryCount++;
@@ -916,8 +925,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       }
                     : cause,
               });
-              const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-              if (registry) registry.tracingTermination = termination;
+              recordTermination(termination);
               endAttempt(termination);
             };
 
@@ -1004,7 +1012,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   llmRequestProcessorIds: ProcessorRunner.getLLMRequestProcessorIds(llmRequestInputProcessors),
                   messageList,
                   stepNumber: stepIndex,
-                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
+                  steps: expandDurableSteps(previousSteps),
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   requestContext,
                   memory: registryEntry?.memory,
@@ -1169,6 +1177,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       modelId: currentModel.modelId,
                     },
                     state: typedInput.state,
+                    tracingTermination,
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processInputStep processors:', error);
@@ -1277,7 +1286,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   workspace: registryEntry?.workspace,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
+                  steps: expandDurableSteps(previousSteps),
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
@@ -1324,6 +1333,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       modelId: currentModel.modelId,
                     },
                     state: typedInput.state,
+                    tracingTermination,
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMRequest processors:', error);
@@ -1990,10 +2000,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (effectiveOutputProcessors.length > 0) {
                     try {
                       await getToolResultRunner().runProcessToolResult({
-                        steps: expandDurableSteps((inputData as any).accumulatedSteps ?? []),
+                        steps: expandDurableSteps(previousSteps),
                         messages: messageList.get.all.db(),
                         messageList,
-                        stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                        stepNumber: previousSteps.length,
                         toolName: resultPayload.toolName,
                         toolCallId: resultPayload.toolCallId,
                         toolArgs: resultPayload.args,
@@ -2648,7 +2658,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     messageId: currentMessageId,
                     rotateResponseMessageId,
                     stepNumber: inputData.stepIndex ?? 0,
-                    steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
+                    steps: expandDurableSteps(previousSteps),
                     retryCount: processorRetryCount,
                     requestContext,
                   });
@@ -2758,6 +2768,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   isContinued: false,
                 }),
                 ...recordClocks(),
+                tracingTermination,
               } satisfies DurableLLMStepOutput;
             }
 
@@ -2773,7 +2784,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   chunks: collectedChunks,
                   model: currentModel,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
+                  steps: expandDurableSteps(previousSteps),
                   warnings,
                   request,
                   rawResponse,
@@ -2825,6 +2836,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       isContinued: false,
                     }),
                     ...recordClocks(),
+                    tracingTermination,
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMResponse processors:', error);
@@ -2901,7 +2913,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               try {
                 await outputStepRunner.runProcessOutputStep({
-                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
+                  steps: expandDurableSteps(previousSteps),
                   messages: messageList.get.all.db(),
                   messageList,
                   stepNumber: inputData.stepIndex ?? 0,
@@ -3022,6 +3034,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
               ...recordClocks(),
               ...(releasedToolResultIds.length ? { releasedToolResultIds } : {}),
+              tracingTermination,
             };
 
             // 16. End step span only if there are NO tool calls
@@ -3155,7 +3168,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageId: currentMessageId,
                   rotateResponseMessageId,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
+                  steps: expandDurableSteps(previousSteps),
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext,

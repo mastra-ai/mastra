@@ -31,7 +31,6 @@ const item: WorkItem = {
   triageType: null,
   acceptedAt: null,
   commentCount: 0,
-  feedActivityAt: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -108,16 +107,21 @@ describe('custom-board card menu', () => {
 });
 
 describe('held card menu', () => {
-  const held: WorkItem = { ...item, board: 'work', stages: ['triage'], triageType: 'feature request' };
+  const held: WorkItem = {
+    ...item,
+    board: 'work',
+    stages: ['intake'],
+    sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+  };
   const proposal = { id: 'd-1', role: 'plan' } as NonNullable<WorkItemMenuProps['proposal']>;
-  const choices = ['Accept and plan', 'Accept and build', 'Close', 'Dismiss suggested run', 'Remove'];
+  const choices = ['Accept and plan', 'Close', 'Dismiss suggested run', 'Remove'];
 
   it.each<[string, BoardCardOwner, boolean[]]>([
-    ['a parked session', { kind: 'session', status: 'ready' }, [true, true, false, false, false]],
-    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, true, false, false, false]],
-    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true, true]],
+    ['a parked session', { kind: 'session', status: 'ready' }, [true, false, false, false]],
+    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, false, false, false]],
+    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true]],
   ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {
-    const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner, proposal });
+    const { client } = renderMenu('intake', builtinBoardCatalog.boards, { item: held, owner, proposal });
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(
       choices.map(name => screen.getByRole('menuitem', { name }).getAttribute('aria-disabled') === 'true'),

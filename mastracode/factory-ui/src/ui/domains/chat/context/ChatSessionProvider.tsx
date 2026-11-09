@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ChatAnnotationsProvider } from '@mastra/playground-ui/components/ai/annotations';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
@@ -8,8 +9,9 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { opensWithPrompt } from '../hooks/useHandoffPrompt';
@@ -105,9 +107,8 @@ export function ChatSessionConfigProvider({
   // server materializes sandboxes lazily on first use (and revives dead ones),
   // so nothing here waits on a sandbox existing.
   const sandboxReady = addressOverride ? Boolean(addressOverride) : Boolean(storedSession) && !resolvingSession;
-  // A denied or missing session (404 from the session query) is fatal and must
-  // surface the error state, not the eternal preparing loader.
-  const sessionError = sessionQuery.error ?? undefined;
+  // An unreadable session must surface its error, not the eternal preparing loader.
+  const sessionError = sessionUnavailableError(sessionQuery);
   // `resourceReady` — safe to address the agent-controller session by its
   // session id for reads/streaming as soon as server-side session metadata
   // resolves (that is when its memory resource is known). The endpoints are
@@ -221,7 +222,10 @@ export function ChatSessionBoundary({
         <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
           <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
             <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-              <ComposerImagesProvider initialImages={failedDraft?.files}>{children}</ComposerImagesProvider>
+              <ComposerImagesProvider initialImages={failedDraft?.files}>
+                {/* Below the keyed transcript, so each thread starts with no annotations. */}
+                <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
+              </ComposerImagesProvider>
             </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>
@@ -258,9 +262,7 @@ export function ChatMessageBoundary({
 
 function ChatMessageFeedback({ error }: { error: Error }) {
   const { retrySession } = useChatSessionContext();
-  // The server intentionally returns the same 404 for a missing session and a
-  // private one owned by someone else, so the message covers both.
-  const notFound = (error as { status?: number }).status === 404;
+  const notFound = isSessionNotFound(error);
   return (
     <div className="flex flex-col items-stretch gap-4">
       <Notice variant="destructive">

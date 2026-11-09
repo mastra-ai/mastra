@@ -473,7 +473,7 @@ function FieldEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change field…" />
+      <SegmentSearchInput placeholder="Change field" />
       <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
@@ -515,7 +515,7 @@ function OperatorEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change operator…" />
+      <SegmentSearchInput placeholder="Change operator" />
       <FilterBarOptionList<FilterBarOperator>
         aria-label="Operators"
         getKey={o => o.id}
@@ -595,7 +595,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
-          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
+          emptyText={step.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'}
         />
       )}
       {step.isMany && (

@@ -1245,9 +1245,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     let settingsChanged = false;
     // Persist the resolved preview line limit under its current key. Legacy quiet-mode keys are
     // left untouched so older Mastra Code instances that are still running keep working.
-    if (!isFiniteNumber(raw.preferences?.previewLines)) {
-      settingsChanged = true;
-    }
+    const persistPreviewLines = !isFiniteNumber(raw.preferences?.previewLines);
     // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
@@ -1260,6 +1258,22 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 
     if (settingsChanged) {
       saveSettings(settings, filePath);
+    } else if (persistPreviewLines) {
+      // Add only the preview key so a sparse settings file isn't expanded with every default.
+      // Best effort: an unwritable file still loads with the resolved value in memory.
+      const rawPreferences = raw.preferences && typeof raw.preferences === 'object' ? raw.preferences : {};
+      try {
+        writeFileAtomically(
+          filePath,
+          JSON.stringify(
+            { ...raw, preferences: { ...rawPreferences, previewLines: settings.preferences.previewLines } },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        // Keep the loaded settings.
+      }
     }
 
     return rememberLoadedSettings(settings);

@@ -85,7 +85,7 @@ export function SpansFilterBar({
           )
         }
       />
-      <FilterBar.Input placeholder="Filter spans…" />
+      <FilterBar.Input placeholder="Filter spans" />
     </FilterBar>
   );
 }

@@ -2165,6 +2165,43 @@ describe('agent-controller routes', () => {
       expect(thread?.tags).toEqual({ projectPath: '/repo' });
     });
 
+    it.each([
+      { key: 'projectPath', storageFilter: { resourceId: 'user-tags', metadata: { projectPath: '/repo/a' } } },
+      { key: 'project-path', storageFilter: { resourceId: 'user-tags' } },
+    ])(
+      'lists only the threads tagged $key, filtering in storage when it accepts the key',
+      async ({ key, storageFilter }) => {
+        const memory = (await mastra.getStorage()!.getStore('memory'))!;
+        const now = new Date();
+        for (const [id, path] of [
+          ['a1', '/repo/a'],
+          ['b1', '/repo/b'],
+        ] as const) {
+          await memory.saveThread({
+            thread: {
+              id,
+              resourceId: 'user-tags',
+              title: id,
+              metadata: { [key]: path },
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+        }
+        const listThreads = vi.spyOn(memory, 'listThreads');
+
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-tags',
+          tags: { [key]: '/repo/a' },
+        } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+
+        expect(listThreads).toHaveBeenCalledWith(expect.objectContaining({ filter: storageFilter }));
+        expect(res.threads).toEqual([expect.objectContaining({ title: 'a1', tags: { [key]: '/repo/a' } })]);
+      },
+    );
+
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
       // Thread state comes from the agent thread-stream runtime — the same
       // per-thread active/idle tracking the signals `ifIdle` path uses.

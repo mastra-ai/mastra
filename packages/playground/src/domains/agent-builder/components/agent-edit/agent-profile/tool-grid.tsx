@@ -49,7 +49,7 @@ export const ToolGrid = ({
           size="md"
           className="max-w-[30ch] flex-1"
           data-testid="tools-card-picker-search"
-          placeholder="Search tools..."
+          placeholder="Search tools"
           value={search}
           onValueChange={onSearch}
         />

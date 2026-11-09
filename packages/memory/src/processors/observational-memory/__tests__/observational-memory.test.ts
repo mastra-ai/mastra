@@ -5811,6 +5811,8 @@ describe('ObservationalMemory Integration', () => {
       expect(text).toContain('## Recall — looking up source messages');
       expect(text).toContain('mode: "threads"');
       expect(text).toContain('Avoid historical tool calls.');
+      expect(text).not.toContain('<observations>');
+      expect(text).not.toContain('</observations>');
     });
 
     it('returns recall guidance without observations for thread-scoped retrieval', async () => {

@@ -17,6 +17,7 @@ import type {
 } from './domains/observability/index';
 import {
   aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
   outcomeFeatures,
   spanAggregateFeatures,
   spanQueryFeatures,
@@ -48,6 +49,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...contextFieldFeatures,
   ...timingFeatures,
   ...outcomeFeatures,
   'trace-query-root-span-fields',
@@ -75,6 +77,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...contextFieldFeatures,
   ...timingFeatures,
   ...outcomeFeatures,
   'trace-query-root-span-fields',
@@ -524,6 +527,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['getScoreById']> {
     const delegate = await this.requireDelegate();
     return delegate.getScoreById(...args);
+  }
+
+  async getFeedbackById(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackById']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackById(...args);
   }
 
   async getScoreAggregate(

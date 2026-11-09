@@ -26,6 +26,24 @@ vi.mock('../prompts/agent-instructions.js', () => ({
 import { getDynamicInstructions } from '../instructions.js';
 
 describe('getDynamicInstructions', () => {
+  it('omits web_search guidance when the agent tool is disabled', async () => {
+    const requestContext = {
+      get: vi.fn(key =>
+        key === 'controller'
+          ? {
+              getState: () => ({ projectPath: '/tmp/project', projectName: 'test-project' }),
+              session: { modeId: 'build', modelId: 'openai/gpt-5.5', state: { get: () => ({}) } },
+            }
+          : undefined,
+      ),
+    };
+
+    expect(await getDynamicInstructions({ requestContext })).toContain('**web_search**');
+    expect(await getDynamicInstructions({ requestContext, disabledTools: ['web_search'] })).not.toContain(
+      '**web_search**',
+    );
+  });
+
   it('builds commit attribution guidance from restored controller model state', async () => {
     const prompt = await getDynamicInstructions({
       requestContext: {

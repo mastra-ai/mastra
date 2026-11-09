@@ -41,6 +41,9 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryContextIds: z
     .boolean()
     .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
+  traceQueryContextFields: z
+    .boolean()
+    .describe('`requestId`, `serviceName` and `experimentId` predicates in trace and thread queries'),
   traceQueryTimeToFirstChunk: z
     .boolean()
     .describe(

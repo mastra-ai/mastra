@@ -413,7 +413,8 @@ When using the `headers` option, the markdown strategy ignores all general optio
     name: 'minSize',
     type: 'number',
     isOptional: true,
-    description: 'Minimum size of each chunk',
+    description:
+      'Accepted for compatibility. Has no effect on JSON chunking: chunks smaller than this are kept, so no data is discarded.',
   },
   {
     name: 'ensureAscii',

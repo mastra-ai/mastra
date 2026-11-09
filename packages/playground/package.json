@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.38.0-alpha.0",
+  "version": "1.39.0-alpha.2",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -100,6 +100,9 @@
     "@internal/lint": "workspace:*",
     "@mastra/livekit": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
     "@playwright/test": "^1.64.1",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",

@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
@@ -15,6 +18,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import {
@@ -27,9 +31,11 @@ import {
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { MCPClient, MCPServer } from '@mastra/mcp';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
 import { defineBoard } from './boards/index.js';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
@@ -51,9 +57,9 @@ import { FactoryEnvironmentStateProcessor } from './session/environment-state-pr
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
-import { factoryMemorySettingsUserId } from './storage/domains/memory-settings/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type * as reportsModule from './tools/reports.js';
@@ -379,7 +385,7 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
   const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
   await memorySettings.patch({
     orgId: 'org-1',
-    userId: factoryMemorySettingsUserId(project.id),
+    userId: factoryProjectSettingsUserId(project.id),
     patch: { observerModelId: 'anthropic/factory-observer' },
   });
   await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { observerModelId: 'openai/my-observer' } });
@@ -948,6 +954,7 @@ describe('MastraFactory.prepare', () => {
       'channel-identity',
       'work-item-comments',
       'skill-overrides',
+      'voice-settings',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -1362,6 +1369,216 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
 
+  describe('configured tools', () => {
+    type ExtraTools = (args: { requestContext: RequestContext }) => Promise<Record<string, any>>;
+
+    /** A real MCP server over HTTP that requires a bearer token, like a hosted one. */
+    async function serveMcp(token: string): Promise<URL> {
+      const server = new MCPServer({
+        name: 'Tickets',
+        version: '1.0.0',
+        tools: {
+          lookup_ticket: createTool({
+            id: 'lookup_ticket',
+            description: 'Look up a ticket',
+            inputSchema: z.object({ id: z.string() }),
+            execute: async ({ id }) => ({ id, title: `Ticket ${id}` }),
+          }),
+        },
+      });
+      const httpServer = createServer(async (req, res) => {
+        if (req.headers.authorization !== `Bearer ${token}`) {
+          res.writeHead(401).end();
+          return;
+        }
+        await server.startHTTP({ url: new URL(req.url ?? '', 'http://localhost'), httpPath: '/mcp', req, res });
+      });
+      await new Promise<void>(resolve => httpServer.listen(0, '127.0.0.1', resolve));
+      onTestFinished(() => new Promise<void>(resolve => httpServer.close(() => resolve())));
+      return new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`);
+    }
+
+    async function mcpTools(url: URL, token: string) {
+      const mcp = new MCPClient({
+        id: `factory-tools-test-${Math.random()}`,
+        servers: { tickets: { url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } },
+      });
+      onTestFinished(() => mcp.disconnect());
+      return mcp.listTools();
+    }
+
+    it('offers MCP tools connected before the factory to every run, and they call the server', async () => {
+      const url = await serveMcp('secret');
+      const config = await prepareFactory({ storage: fakeStorage(), tools: await mcpTools(url, 'secret') });
+
+      const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+      expect(Object.keys(tools)).toEqual(['tickets_lookup_ticket']);
+      const result = await tools.tickets_lookup_ticket.execute({ id: '42' }, { requestContext: new RequestContext() });
+      expect(result.structuredContent ?? JSON.parse(result.content[0].text)).toEqual({ id: '42', title: 'Ticket 42' });
+    });
+
+    it('resolves tools per run when given a function', async () => {
+      const resolver = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => ({
+        [`whoami_${requestContext.get('org')}`]: createTool({
+          id: 'whoami',
+          description: 'Who am I',
+          execute: async () => ({}),
+        }),
+      }));
+      const config = await prepareFactory({ storage: fakeStorage(), tools: resolver });
+      const extraTools = config.extraTools as ExtraTools;
+
+      for (const org of ['org-a', 'org-b']) {
+        const requestContext = new RequestContext();
+        requestContext.set('org', org);
+        expect(Object.keys(await extraTools({ requestContext }))).toEqual([`whoami_${org}`]);
+      }
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps Factory's own tool when a configured tool reuses its name, and still offers the others", async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      const storage = fakeStorage();
+      const config = await prepareFactory({
+        storage,
+        tools: {
+          factory_transition_work_item: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
+          tickets_lookup: createTool({ id: 'tickets_lookup', description: 'y', execute: async () => ({}) }),
+        },
+      });
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'findActiveRunBinding').mockResolvedValue({
+        id: 'binding-1',
+        orgId: 'org-1',
+        factoryProjectId: '11111111-2222-4333-8444-555555555555',
+        workItemId: 'item-1',
+        role: 'work',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        branch: 'factory/item',
+        status: 'active',
+        createdAt: new Date(),
+        revokedAt: null,
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('controller', {
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({ factoryProjectId: '11111111-2222-4333-8444-555555555555' }),
+      });
+
+      const resolveTurn = () => (config.extraTools as ExtraTools)({ requestContext });
+      for (const tools of [await resolveTurn(), await resolveTurn()]) {
+        expect(tools.factory_transition_work_item.id).not.toBe('impostor');
+        expect(tools.tickets_lookup.id).toBe('tickets_lookup');
+      }
+      const clashWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes("configured tool 'factory_transition_work_item'"),
+      );
+      expect(clashWarnings).toHaveLength(1);
+    });
+
+    it("never loads the host process's own MCP servers", async () => {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      expect(config.disableMcp).toBe(true);
+    });
+
+    describe("from the Platform project's Mastra Connect connections", () => {
+      afterEach(() => {
+        vi.unstubAllEnvs();
+      });
+
+      async function servePlatform({ listing }: { listing: 'linear' | 'down' }) {
+        const requests: Array<{ method?: string; url?: string; authorization?: string }> = [];
+        const httpServer = createServer((req, res) => {
+          requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+          const json = (body: unknown) =>
+            res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+          if (req.url?.startsWith('/v2/connections?providerKey=')) {
+            json({ connections: [] });
+          } else if (req.url?.startsWith('/v2/projects/')) {
+            if (listing === 'down') res.writeHead(503).end();
+            else
+              json({
+                connections: [
+                  { id: 'conn-linear', integrationId: 'linear', status: 'active' },
+                  { id: 'conn-github', integrationId: 'github', status: 'active' },
+                ],
+              });
+          } else if (req.url === '/v2/integrations') {
+            json({ integrations: [] });
+          } else if (req.method === 'POST' && req.url === '/v2/connections/conn-linear/proxy/graphql') {
+            json({
+              data: {
+                teams: { nodes: [{ id: 'team-1', name: 'Factory', key: 'FACT' }], pageInfo: { hasNextPage: false } },
+              },
+            });
+          } else {
+            res.writeHead(404).end();
+          }
+        });
+        httpServer.listen(0, '127.0.0.1');
+        await once(httpServer, 'listening');
+        onTestFinished(async () => {
+          httpServer.close();
+          await once(httpServer, 'close');
+        });
+        const address = httpServer.address();
+        if (!address || typeof address === 'string') throw new Error('The Platform stand-in has no TCP port.');
+        return { url: `http://127.0.0.1:${address.port}`, requests };
+      }
+
+      function stubPlatform(url: string, projectId: string) {
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-jwt');
+        vi.stubEnv('MASTRA_PROJECT_ID', projectId);
+        vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', url);
+      }
+
+      it('gives every session the Linear tools without destructive or GitHub ones, acting with the deploy token', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-linear');
+        const config = await prepareFactory({ storage: fakeStorage() });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(['linear_list_teams', 'linear_list_issues']));
+        expect(Object.keys(tools).filter(name => /delete|archive/i.test(name))).toEqual([]);
+        expect(Object.keys(tools).filter(name => name.startsWith('github_'))).toEqual([]);
+        const teams = await tools.linear_list_teams.execute({}, { requestContext: new RequestContext() });
+        expect(teams).toEqual({ items: [{ id: 'team-1', name: 'Factory', key: 'FACT' }] });
+        const proxied = platform.requests.find(request => request.url === '/v2/connections/conn-linear/proxy/graphql');
+        expect(proxied?.authorization).toBe('Bearer platform-jwt');
+      });
+
+      it("keeps the run going without Connect tools when the Platform can't list the connections", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        onTestFinished(() => warn.mockRestore());
+        const platform = await servePlatform({ listing: 'down' });
+        stubPlatform(platform.url, 'project-down');
+        const config = await prepareFactory({ storage: fakeStorage() });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+      });
+
+      it("offers the host's own tools instead of the project's connections", async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-host-tools');
+        const config = await prepareFactory({ storage: fakeStorage(), tools: {} });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+      });
+    });
+  });
+
   describe('Factory tools in user sessions', () => {
     async function seedUserSession(
       storage: ReturnType<typeof fakeStorage>,
@@ -1456,6 +1673,7 @@ describe('MastraFactory.prepare', () => {
       'factory_subscribe_session',
       'factory_unsubscribe_session',
       'factory_recreate_sandbox',
+      'factory_sandbox_port_url',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1503,6 +1721,7 @@ describe('MastraFactory.prepare', () => {
       };
 
       expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('platform')).toHaveProperty('factory_sandbox_port_url');
       expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
@@ -3046,6 +3265,20 @@ describe('MastraFactory.finalize', () => {
   it('throws before prepare()', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await expect(factory.finalize()).rejects.toThrow(/before prepare/);
+  });
+
+  it('reports the boot time once, on the timing channel, when finalize() finishes', async () => {
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await factory.prepare();
+      await factory.finalize();
+      const boot = write.mock.calls.map(([line]) => String(line)).filter(line => / boot \d+ms/.test(line));
+      expect(boot).toHaveLength(1);
+      expect(boot[0]).toMatch(/^\[factory:timing\] boot \d+ms\n$/);
+    } finally {
+      write.mockRestore();
+    }
   });
 
   it('runs the prepared finalize after prepare()', async () => {

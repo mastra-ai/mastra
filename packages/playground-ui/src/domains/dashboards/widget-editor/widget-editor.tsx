@@ -6,8 +6,9 @@ import type { ReactNode } from 'react';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { ChartCard, ChartCardHeaderProvider } from '../../metrics/components/chart-card';
 import { useMetricsFilters } from '../../metrics/hooks/use-metrics-filters';
-import { useScorers } from '../hooks/use-scorers';
+import { useDashboardResults } from '../hooks/use-dashboard-requests';
 import type { DashboardScope } from '../lib/definition';
+import { scorerDiscoveryRequest, scorersOf } from '../lib/scores';
 import type { Scorer } from '../lib/scores';
 import { WidgetDragHandle } from '../widget-layout/drag-handle';
 import type { WidgetDragHandleProps } from '../widget-layout/widget-layout';
@@ -123,7 +124,8 @@ const DISCOVER_SCORERS: DashboardQuery[] = [{ source: 'scores', request: 'aggreg
 
 function useEditorScorers(): Scorer[] {
   const { filters, timestamp } = useMetricsFilters();
-  return useScorers(DISCOVER_SCORERS, { window: timestamp, filters }).scorers;
+  const { results } = useDashboardResults([scorerDiscoveryRequest(DISCOVER_SCORERS, { window: timestamp, filters })]);
+  return scorersOf(DISCOVER_SCORERS, results[0]?.data);
 }
 
 type WidgetEditorCardProps = {

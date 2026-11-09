@@ -23,3 +23,8 @@ export {
   consumeSSEStream,
 } from './test-helpers';
 export { createKnowledgeRoutesTestSuite, type KnowledgeRoutesTestSuiteConfig } from './knowledge-routes-test-suite';
+
+export {
+  createObservabilitySignalWriteTestSuite,
+  type ObservabilitySignalWriteTestConfig,
+} from './observability-signal-write-test-suite';

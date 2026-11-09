@@ -19,7 +19,7 @@ const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 // The row's details and actions buttons swap in for its timestamp on a mouse hover, keyboard focus anywhere in the
 // row, an open menu, or the selected row; touch always shows them.
 const REVEAL_ROW_CONTROLS =
-  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover/data-list-row:pointer-events-auto pointer-fine:group-hover/data-list-row:opacity-100 pointer-fine:group-has-[:focus-visible]/data-list-row:pointer-events-auto pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-100 pointer-fine:group-has-[[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-100';
+  'pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover/data-list-row:pointer-events-auto pointer-fine:group-hover/data-list-row:opacity-100 pointer-fine:group-has-[:focus-visible]/data-list-row:pointer-events-auto pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-100 pointer-fine:group-has-[[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-100';
 const HIDE_WHILE_ROW_CONTROLS_SHOW =
   'pointer-fine:group-hover/data-list-row:opacity-0 pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-0 pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-0';
 
@@ -128,7 +128,7 @@ export function BoardListRow({
             variant="meta"
             tone="muted"
             className={cn(
-              'pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden',
+              'pointer-events-none col-start-1 row-start-1 tabular-nums max-sm:hidden pointer-coarse:hidden',
               HIDE_WHILE_ROW_CONTROLS_SHOW,
             )}
           >

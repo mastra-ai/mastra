@@ -1,6 +1,7 @@
 import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import type { FeedbackOptions } from './feedback-options';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
@@ -60,6 +61,7 @@ export interface TraceSpanPanelProps {
   withQueryTrace: boolean;
   /** Full-thread view: shows the per-trace Feedback tab. */
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   /** Full-thread view: opens a score of one of the thread's traces (the app owns routing). */
   onOpenScore: (traceId: string, scoreId: string) => void;
   scoresTabBadge?: ReactNode;
@@ -115,6 +117,7 @@ export function TraceSpanPanel({
   onFullThreadOpenChange,
   withQueryTrace,
   withFeedback,
+  feedbackOptions,
   onOpenScore,
   scoresTabBadge,
   scoresTabSlot,
@@ -232,6 +235,7 @@ export function TraceSpanPanel({
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
         onClose={() => onFullThreadOpenChange?.(false)}
       />
     </>

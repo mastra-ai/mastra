@@ -42,16 +42,13 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
-    "claude-opus-5-fast": [
+    "claude-opus-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-sonnet-5": [
-      {
-        "type": "toggle"
-      },
+    "claude-fable-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -69,19 +66,13 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "gpt-5.6-sol": [
+    "gpt-5.6-luna": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-5": [
+    "claude-opus-5-fast": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -93,10 +84,28 @@
         "min": 1024
       }
     ],
-    "gpt-5.6-luna": [
+    "gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshotai/Kimi-K3-Fast": [
@@ -120,22 +129,13 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4": [
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]

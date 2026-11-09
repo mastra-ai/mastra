@@ -59,7 +59,7 @@ export function ExperimentCombobox({
       value={value ?? (allOption ? ALL_EXPERIMENTS : '')}
       onValueChange={onValueChange}
       placeholder={isLoading ? 'Loading experiments...' : isError ? 'Failed to load experiments' : 'Select experiment'}
-      searchPlaceholder="Search experiments..."
+      searchPlaceholder="Search experiments"
       emptyText="No experiments found."
       className={className}
       disabled={isLoading || isError}
