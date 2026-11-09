@@ -53,7 +53,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
-The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`.
 
 ## Usage
 
@@ -425,7 +425,7 @@ A long-running process's output stream reconnects periodically, and the process 
     name: 'publicPorts',
     type: 'boolean',
     description:
-      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. Fixed when the sandbox is created.",
+      "Let anyone with a port's URL reach it without signing in. E2B sandboxes only. Defaults to `false`. Fixed when the sandbox is created.",
     isOptional: true,
   },
   {
@@ -484,7 +484,7 @@ const url = await sandbox.networking?.getPortUrl(3000)
 // https://3000-<sandbox id>.sandbox.us.mastra.cloud/
 ```
 
-Ports are private: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. You can share it, since it never expires, and opening it wakes a paused sandbox.
+Ports are private by default: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. With [`publicPorts: true`](#public-ports), anyone with the URL can open it without signing in. You can share it, since it never expires, and opening it wakes a paused sandbox.
 
 `networking` is `undefined` on a sandbox whose ports can't be opened. `getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, for a port that isn't a whole number from 1 to 65535, and for the sandbox's reserved control port. Other platform errors, such as an invalid access token, are thrown.
 
@@ -530,7 +530,7 @@ if (cookie) await browserContext.addCookies([cookie])
     name: 'networking',
     type: 'SandboxNetworking | undefined',
     description:
-      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra, or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
+      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra (or for anyone, with `publicPorts: true`), or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
   },
   {
     name: 'filesystem',

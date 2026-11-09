@@ -102,7 +102,7 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   /**
    * Let anyone with a port's URL reach it, without signing in. Off by default:
    * ports are private and open through a signed-in preview link. The URL is
-   * the same either way. Fixed when the sandbox is created.
+   * the same either way. E2B sandboxes only. Fixed when the sandbox is created.
    */
   publicPorts?: boolean;
   env?: Record<string, string>;
