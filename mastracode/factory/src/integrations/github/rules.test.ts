@@ -349,6 +349,193 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
   });
 });
 
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  "Factory's commented review verdict on %s",
+  backend => {
+    // GitHub will not let Factory's app request changes on a pull request it
+    // authored, so the reviewer's verdict lands as a COMMENTED review whose first
+    // line (after the proxy's attribution) asks for changes. That review is the
+    // only hand-off the builder gets.
+    const requestChanges = '> Opened by @someone\n\nVerdict: request changes\nReviewed head: ' + 'a'.repeat(40);
+
+    async function ingestReview(input: {
+      body: string;
+      sender?: string;
+      state?: string;
+      factoryPullRequest?: boolean;
+      pullRequest?: { state?: string; merged?: boolean };
+      deliveries?: number;
+    }) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(
+        'read',
+        undefined,
+        backend === 'postgres'
+          ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+          : new LibSQLFactoryStorage({ id: 'github-commented-verdict', url: ':memory:' }),
+      );
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      });
+      if (input.factoryPullRequest === false) {
+        // Not Factory's pull request: no provenance, a person's login, and a PR
+        // card that names the issue card as its author.
+        await workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: {
+              integrationId: 'github',
+              type: 'pull-request',
+              externalId: 'github:10:pull-request:17',
+              url: 'https://github.com/acme/repo/pull/17',
+            },
+            parentWorkItemId: work.item.id,
+            title: 'PR 17',
+            stages: ['review'],
+            sessions: {},
+            metadata: {},
+          },
+        });
+      } else {
+        await integrationStorage.subscriptions.create({
+          orgId: 'org-1',
+          targetKey: 'factory-pr-provenance:10:17',
+          threadId: 'thread-1',
+          status: 'active',
+          data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+        });
+      }
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const sender = input.sender ?? 'factory-app[bot]';
+      const delivery = {
+        event: 'pull_request_review',
+        deliveryId: 'delivery-commented-verdict',
+        payload: {
+          action: 'submitted',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: sender },
+          review: {
+            id: 99,
+            state: input.state ?? 'commented',
+            body: input.body,
+            html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+            user: { login: sender },
+          },
+          pull_request: {
+            number: 17,
+            title: 'PR 17',
+            html_url: 'https://github.com/acme/repo/pull/17',
+            state: input.pullRequest?.state ?? 'open',
+            merged: input.pullRequest?.merged ?? false,
+            user: { login: input.factoryPullRequest === false ? 'contributor' : 'factory-app[bot]' },
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      };
+      const results = [];
+      for (let delivered = 0; delivered < (input.deliveries ?? 1); delivered++) {
+        results.push(await service.ingest(delivery));
+      }
+      const messages = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.decision.type === 'sendMessage',
+      );
+      return { results, messages, workItemId: work.item.id };
+    }
+
+    it('wakes the builder on a Factory-sent commented review that requests changes on its pull request', async () => {
+      const { messages, workItemId } = await ingestReview({ body: requestChanges });
+      expect(messages).toEqual([
+        expect.objectContaining({
+          workItemId,
+          decision: expect.objectContaining({
+            type: 'sendMessage',
+            role: 'work',
+            priority: 'high',
+            idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
+            message: expect.stringContaining('#pullrequestreview-99'),
+          }),
+        }),
+      ]);
+    });
+
+    it('wakes the builder once when the same review is delivered twice', async () => {
+      const { results, messages } = await ingestReview({ body: requestChanges, deliveries: 2 });
+      expect(results.at(-1)).toEqual({ status: 'replayed' });
+      expect(messages).toHaveLength(1);
+    });
+
+    it("ignores the same commented review from a person: a person's notes do not block", async () => {
+      const { messages } = await ingestReview({ body: requestChanges, sender: 'maintainer' });
+      expect(messages).toEqual([]);
+    });
+
+    it.each([
+      ['an approval', 'Verdict: approve\nReviewed head: ' + 'a'.repeat(40)],
+      ['plain notes', '> Opened by @someone\n\nA few notes on naming.'],
+      ['a verdict quoted on a later line', 'Some notes first.\n\nVerdict: request changes'],
+    ])('ignores a Factory-sent commented review carrying %s', async (_label, body) => {
+      const { messages } = await ingestReview({ body });
+      expect(messages).toEqual([]);
+    });
+
+    it("ignores a Factory-sent commented verdict on a pull request Factory did not author", async () => {
+      const { messages } = await ingestReview({ body: requestChanges, factoryPullRequest: false });
+      expect(messages).toEqual([]);
+    });
+
+    it.each([{ state: 'closed' }, { state: 'closed', merged: true }])(
+      'ignores a Factory-sent commented verdict on a %o pull request',
+      async pullRequest => {
+        const { messages } = await ingestReview({ body: requestChanges, pullRequest });
+        expect(messages).toEqual([]);
+      },
+    );
+
+    it('still wakes the builder on a native changes-requested review, from a person or on any pull request', async () => {
+      for (const input of [
+        { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested' },
+        { body: 'Please rename this.', sender: 'maintainer', state: 'changes_requested', factoryPullRequest: false },
+      ]) {
+        const { messages } = await ingestReview(input);
+        expect(messages).toEqual([
+          expect.objectContaining({
+            decision: expect.objectContaining({
+              type: 'sendMessage',
+              role: 'work',
+              idempotencyKey: expect.stringMatching(/:address-review-feedback$/),
+            }),
+          }),
+        ]);
+      }
+    });
+  },
+);
+
 describe('GithubRules', () => {
   it('accepts a linked target on another installed board and preserves committed ingress after uninstall', async () => {
     const decision = {
