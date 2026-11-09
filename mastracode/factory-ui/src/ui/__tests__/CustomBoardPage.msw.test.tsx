@@ -12,7 +12,12 @@ import type { BoardCatalogResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
 import { saveKanbanView, stageToggle } from './boardLayoutQueries';
 
-function renderBoard(board = 'boards/release', workItems: unknown[] = [], boards = [releaseBoard]) {
+function renderBoard(
+  board = 'boards/release',
+  workItems: unknown[] = [],
+  boards = [releaseBoard],
+  githubSourceIds: string[] = ['acme/app'],
+) {
   const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
   server.use(
     http.get('*/api/agent-controller/code/sessions/:id/permissions', () => HttpResponse.json({ permissions: [] })),
@@ -34,7 +39,7 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = [], boards
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
       HttpResponse.json({
-        config: { github: { enabled: true, sourceIds: ['acme/app'] }, linear: { enabled: false, sourceIds: null } },
+        config: { github: { enabled: true, sourceIds: githubSourceIds }, linear: { enabled: false, sourceIds: null } },
       }),
     ),
     http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false, workspace: null })),
@@ -51,23 +56,46 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = [], boards
 }
 
 describe('custom-only board routing', () => {
-  it.each(['list', 'board'])('offers intake setup in a custom initial phase in the %s layout', async layout => {
-    const { client } = renderBoard();
-    const user = userEvent.setup();
-    if (layout === 'board') await saveKanbanView(user);
-    await waitForMutationsIdle(client);
+  // Its cards come from the project's intake routes, not from a feed it browses: a connected
+  // source is all it takes.
+  it.each(['list', 'board'])(
+    'says intake is clear in a custom initial phase while the project has a connected source, in the %s layout',
+    async layout => {
+      const { client } = renderBoard();
+      const user = userEvent.setup();
+      if (layout === 'board') await saveKanbanView(user);
+      await waitForMutationsIdle(client);
 
-    const queued = await screen.findByTestId('board-column-queued');
-    expect(within(queued).getByText(/No intake sources/)).toBeVisible();
-    expect(within(queued).getByRole('link', { name: 'Connect issue source' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/intake',
-    );
-    expect(screen.getAllByRole('link', { name: 'Connect issue source' })).toHaveLength(1);
+      const queued = await screen.findByTestId('board-column-queued');
+      expect(await within(queued).findByText('Intake is clear')).toBeVisible();
+      expect(within(queued).queryByText(/No intake sources/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
 
-    await user.click(within(queued).getByRole('button', { name: 'Create card' }));
-    expect(await screen.findByRole('textbox', { name: 'Work item title' })).toHaveFocus();
-  });
+      await user.click(within(queued).getByRole('button', { name: 'Create card' }));
+      expect(await screen.findByRole('textbox', { name: 'Work item title' })).toHaveFocus();
+    },
+  );
+
+  it.each(['list', 'board'])(
+    'offers intake setup in a custom initial phase in the %s layout when nothing is connected',
+    async layout => {
+      const { client } = renderBoard(undefined, undefined, undefined, []);
+      const user = userEvent.setup();
+      if (layout === 'board') await saveKanbanView(user);
+      await waitForMutationsIdle(client);
+
+      const queued = await screen.findByTestId('board-column-queued');
+      expect(within(queued).getByText(/No intake sources/)).toBeVisible();
+      expect(within(queued).getByRole('link', { name: 'Connect issue source' })).toHaveAttribute(
+        'href',
+        '/factories/fp-1/settings/intake',
+      );
+      expect(screen.getAllByRole('link', { name: 'Connect issue source' })).toHaveLength(1);
+
+      await user.click(within(queued).getByRole('button', { name: 'Create card' }));
+      expect(await screen.findByRole('textbox', { name: 'Work item title' })).toHaveFocus();
+    },
+  );
 
   it('renders declaration-ordered custom groups without built-in intake or automation', async () => {
     const { intakeRequest, client } = renderBoard();

@@ -152,7 +152,13 @@ function pullRequest(action: 'opened' | 'synchronize' | 'closed', deliveryId: st
   };
 }
 
-async function harness(backend: string, loop: Loop) {
+async function harness(
+  backend: string,
+  loop: Loop,
+  ship: StoredBoardInput = shipBoard,
+  /** The phase the project's route files issues in; the board's initial phase when unset. */
+  issuePhase?: string,
+) {
   const storage: FactoryStorage =
     backend === 'postgres'
       ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
@@ -198,13 +204,13 @@ async function harness(backend: string, loop: Loop) {
   if (loop.board === 'ship') {
     // The board goes in through the same write path the API and the UI use, and the
     // project's routes send its issues and pull requests there, ahead of Work's defaults.
-    await seeded.boards.create(scope, shipBoard, 'admin');
+    await seeded.boards.create(scope, ship, 'admin');
     const issues = await seeded.boards.createIntakeRoute(
       scope,
       {
         name: 'Issues go to Ship',
         when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'issue' }] },
-        target: { boardKey: 'ship' },
+        target: { boardKey: 'ship', ...(issuePhase ? { phaseKey: issuePhase } : {}) },
       },
       'admin',
     );
@@ -315,11 +321,20 @@ async function harness(backend: string, loop: Loop) {
       getState: () => ({ factoryProjectId: project.id }),
     });
     const tools = await createFactoryTransitionTools({ requestContext, storage: workItems, transitionService, boards });
+    const transition = tools.factory_transition_work_item as unknown as {
+      execute: (input: unknown, context: unknown) => Promise<unknown>;
+    };
     const verdict = tools.factory_record_review_verdict as
       | { execute: (input: unknown, context: unknown) => Promise<unknown> }
       | undefined;
     return {
       tools,
+      /** The agent's own move, through the tool it is given. */
+      transition: async (stage: string) =>
+        transition.execute(
+          { stage, expectedRevision: (await card(id)).revision, rationale: 'Maintenance: ready to plan.' },
+          { requestContext, agent: { toolCallId: `transition-${sessions}` } },
+        ),
       verdict: (input: { verdict: 'approve' | 'request changes'; findings?: string }) =>
         verdict!.execute(
           { reviewedHeadSha: SHA, ...input },
@@ -337,7 +352,14 @@ async function harness(backend: string, loop: Loop) {
       data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId },
     });
   const phases = async () => (await seeded.boards.get(scope, loop.board))!.phases.map(phase => phase.key);
-  return { deliver, card, cards, runs, move, agent, authored, phases };
+  /** Lets the dispatcher work through what is queued. */
+  const settle = async () => {
+    for (let pass = 0; pass < 3; pass++) {
+      await dispatcher.runOnce(new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * tick++));
+    }
+  };
+  const decisions = () => workItems.listDeferredDecisions('org-1', project.id);
+  return { decisions, deliver, settle, card, cards, runs, move, agent, authored, phases };
 }
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull request loop on %s', backend => {
@@ -425,4 +447,60 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       expect(await h.card(card!.id)).toMatchObject({ board: loop.board, stages: [loop.canceled] });
     });
   });
+});
+
+/**
+ * A board meant to run without approval gates: its triage agent moves a card straight on to
+ * planning, a phase of another context. That move is the agent's say-so, so the planning run it
+ * queues starts without a person, whether or not planning starts on its own: neither the move
+ * nor its run is held for approval, and nothing about it is Work's.
+ */
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])("a triage agent's move to planning on %s", backend => {
+  function autonomousShip(planAutoStart: boolean): StoredBoardInput {
+    return {
+      ...shipBoard,
+      phases: [
+        ...shipBoard.phases.map(phase =>
+          phase.key === 'think'
+            ? { ...phase, autoStart: true, nextPhases: ['inbox', 'plan', 'make', 'dropped'] }
+            : phase,
+        ),
+        {
+          key: 'plan',
+          name: 'Plan',
+          kind: 'working' as const,
+          runner: { context: 'work', skill: 'factory-plan' },
+          autoStart: planAutoStart,
+          nextPhases: ['make', 'think', 'inbox', 'dropped'],
+        },
+      ],
+    };
+  }
+
+  it.each([true, false])(
+    'is accepted, and starts the planning run without a person (planning autoStart: %s)',
+    async planAutoStart => {
+      // The project's route files the issue in triage itself, as Ship's did; no person moves it.
+      const h = await harness(backend, LOOPS[0]!, autonomousShip(planAutoStart), 'think');
+      await h.deliver(issueOpened());
+      const [issue] = await h.cards();
+      expect(issue).toMatchObject({ board: 'ship', stages: ['think'], autonomyArmedAt: null });
+
+      const triage = await h.agent(issue!.id, 'triage');
+      await expect(triage.transition('plan')).resolves.toMatchObject({ status: 'accepted' });
+      await h.settle();
+
+      expect(await h.card(issue!.id)).toMatchObject({ board: 'ship', stages: ['plan'] });
+      const [plan, ...others] = (await h.decisions()).filter(
+        entry =>
+          entry.workItemId === issue!.id &&
+          entry.decision.type === 'invokeSkill' &&
+          (entry.decision as { skillName: string }).skillName === 'factory-plan',
+      );
+      expect(others).toEqual([]);
+      // Started (it only waits for the session this test never opens), never parked for a person.
+      expect(plan!.status).not.toBe('proposed');
+      expect(plan!.approvedBy).toMatch(/^agent:/);
+    },
+  );
 });
