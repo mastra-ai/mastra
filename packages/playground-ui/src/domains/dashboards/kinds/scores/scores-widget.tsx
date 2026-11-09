@@ -35,6 +35,7 @@ export function ScoresWidget({
   onRetry,
   expand,
   dragHandle,
+  onTitleChange,
   pin,
   alert,
 }: WidgetKindProps<ScoresOptions>) {
@@ -43,6 +44,7 @@ export function ScoresWidget({
   const heading = {
     ...viewTitle(widget, [view], 0, () => {}, expand),
     dragHandle,
+    onTitleChange,
     ...pinActions(pin),
   };
   // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
