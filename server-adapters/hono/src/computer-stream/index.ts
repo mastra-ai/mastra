@@ -23,19 +23,6 @@ export type ComputerViewerSource = (
   scope: { threadId: string; resourceId: string },
 ) => Promise<{ url: string; headers: Record<string, string> } | null>;
 
-/** Lease holder for a computer's input, as reported by `mastra.getComputers().controlState`. @experimental */
-export type ComputerControlSource = (
-  computerId: string,
-  scope: { threadId: string; resourceId: string },
-) => Promise<{ holder: 'agent' | 'human'; reason?: string }>;
-
-/** Hands a computer to the user or back to the agent; matches `mastra.getComputers().control`. @experimental */
-export type ComputerControlSetter = (
-  computerId: string,
-  scope: { threadId: string; resourceId: string },
-  change: { action: 'take' | 'release'; note?: string },
-) => Promise<{ holder: 'agent' | 'human'; notified: boolean; reason?: string }>;
-
 /** @experimental */
 export interface HonoComputerStreamConfig {
   mastra: Mastra;
@@ -99,37 +86,15 @@ function canonicalOrigin(origin: string): string | undefined {
   }
 }
 
-function serverOrigin(c: Context): string {
-  const forwarded = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
-  const https = forwarded === 'https' || new URL(c.req.url).protocol === 'https:';
-  const host = (requestHost(c)?.split(',')[0] ?? '').trim();
-  return `${https ? 'https' : 'http'}://${host}`;
-}
-
-function statusError(error: unknown): number | undefined {
-  const status = (error as { status?: unknown })?.status;
-  return typeof status === 'number' ? status : undefined;
-}
-
 /**
  * WebSocket proxy that streams a computer's live desktop (RFB) to Studio's own
  * noVNC viewer. No sandbox HTTP content is ever served on this origin: the
  * desktop is agent-writable, so its viewer page and scripts are untrusted.
  *
- * - `POST {apiPrefix}/computers/:computerId/session` — authenticated; checks the
- *   caller may write the thread in the memory store (403 when no memory store
- *   is configured or the thread is unknown) and that the computer is attached
- *   to it, then mints a 30 s single-use ticket.
- * - `GET /computer/:computerId/websockify?ticket=` — WebSocket upgrade from the
- *   same origin that minted the ticket; relays binary RFB frames only (a text
- *   frame from either side closes the socket with 1003).
- * - `GET|POST {apiPrefix}/computers/:computerId/control` — authenticated; reads
- *   (`memory:read`) or changes (`memory:write`, `{ action: 'take'|'release', note? }`)
- *   who holds the computer's input. Mounted only when `getControl` and
- *   `setControl` are given. POST requires a JSON body and, when the browser sends
- *   an `Origin`, a same-origin or allowed one, so a cross-site form can't hand the
- *   desktop over.
- * - Every other `/computer/:computerId/*` request is 404.
+ * The authenticated JSON session and control routes live in `@mastra/server`.
+ * This adapter mounts only `GET /computer/:computerId/websockify?ticket=`: a
+ * WebSocket upgrade from the origin bound into the single-use ticket, relaying
+ * binary RFB frames only. Every other `/computer/:computerId/*` request is 404.
  *
  * The upstream auth (the sandbox preview cookie) is added server-side and never
  * reaches the browser. Live sockets are revalidated every 15 s, so releasing a

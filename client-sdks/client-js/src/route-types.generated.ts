@@ -8819,6 +8819,7 @@ export type GetComputersComputerIdControl_Response = {
   holder: 'agent' | 'human';
   reason?: string | undefined;
   revision: number;
+  enforced?: boolean | undefined;
 };
 
 export type GetComputersComputerIdControl_Request = Simplify<

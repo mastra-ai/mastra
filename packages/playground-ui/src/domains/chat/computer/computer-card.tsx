@@ -173,6 +173,7 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   const control = effectiveHolder(entry, live.get(computerId));
   const [attempt, setAttempt] = useState(0);
   const [connection, setConnection] = useState<ConnectionState>({ phase: 'connecting' });
+  const [controlEnforced, setControlEnforced] = useState(true);
   const { change, pending, failed } = useControlActions(computerId, threadId, resourceId);
   const screenRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -260,7 +261,10 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
         signal: controller.signal,
       }).catch(() => undefined);
       if (controller.signal.aborted) return;
-      if (result?.state === 'ok') reportControl(computerId, { holder: result.holder }, started);
+      if (result?.state === 'ok') {
+        reportControl(computerId, { holder: result.holder }, started);
+        setControlEnforced(result.enforced !== false);
+      }
       timer = setTimeout(() => void poll(), CONTROL_POLL_MS);
     };
     void poll();
@@ -280,7 +284,13 @@ function LiveComputer({ computerId, threadId, resourceId }: LiveComputerProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        {human ? <Badge variant="warning">You have control</Badge> : <Badge>Agent has control</Badge>}
+        {!controlEnforced ? (
+          <Badge variant="warning">Control change pending</Badge>
+        ) : human ? (
+          <Badge variant="warning">You have control</Badge>
+        ) : (
+          <Badge>Agent has control</Badge>
+        )}
         {canTake && !human && (
           <Button size="sm" disabled={pending} onClick={() => void change('take')}>
             Take control

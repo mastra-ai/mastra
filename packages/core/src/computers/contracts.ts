@@ -23,6 +23,8 @@ export interface MastraComputerControl {
   holder: 'agent' | 'human';
   reason?: string;
   revision: number;
+  /** Whether every required external control boundary has applied this revision. */
+  enforced?: boolean;
 }
 
 /** Result of a control change. @experimental */

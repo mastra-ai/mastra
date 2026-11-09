@@ -8,7 +8,6 @@ import {
   SESSION_MAX_LIFETIME_MS,
 } from '../sessions.js';
 import type { NewComputerSession } from '../sessions.js';
-import { ComputerTicketStore } from '../tickets.js';
 
 const input = (computerId: string): NewComputerSession => ({
   computerId,
@@ -90,30 +89,5 @@ describe('ComputerSessionStore', () => {
     }
     now = SESSION_IDLE_TTL_MS;
     expect(store.get(session.id, 'c1')).toBeUndefined();
-  });
-});
-
-describe('ComputerTicketStore', () => {
-  const payload = {
-    computerId: 'c1',
-    threadId: 't',
-    resourceId: 'r',
-    mode: 'control' as const,
-    studioOrigin: 'http://s',
-  };
-
-  it('is single-use, computer-bound and expires', () => {
-    const t = clock();
-    const store = new ComputerTicketStore(t.now);
-    const a = store.issue(payload);
-    if (!a.ok) throw new Error('expected ticket');
-    expect(store.consume(a.ticket, 'c2')).toBeUndefined();
-    expect(store.consume(a.ticket, 'c1')).toEqual(payload);
-    expect(store.consume(a.ticket, 'c1')).toBeUndefined();
-
-    const b = store.issue(payload);
-    if (!b.ok) throw new Error('expected ticket');
-    t.advance(30_000);
-    expect(store.consume(b.ticket, 'c1')).toBeUndefined();
   });
 });

@@ -1,5 +1,14 @@
-import { randomId } from './tickets';
-import type { ComputerViewMode } from './tickets';
+export type ComputerViewMode = 'watch' | 'control';
+
+/** 256 bits of base64url, so a session id cannot be guessed. */
+function randomId(): string {
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
 
 export const SESSION_IDLE_TTL_MS = 15 * 60_000;
 export const SESSION_MAX_LIFETIME_MS = 60 * 60_000;

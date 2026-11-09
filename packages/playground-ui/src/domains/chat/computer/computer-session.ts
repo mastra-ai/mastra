@@ -59,7 +59,7 @@ export async function requestComputerSession({
 export type ComputerHolder = 'agent' | 'human';
 
 export type ComputerControlResult =
-  | { state: 'ok'; holder: ComputerHolder; revision: number; notified?: boolean; reason?: string }
+  | { state: 'ok'; holder: ComputerHolder; revision: number; enforced?: boolean; notified?: boolean; reason?: string }
   | { state: 'missing' | 'forbidden' | 'error' };
 
 export interface ComputerControlRequestOptions {

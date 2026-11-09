@@ -11,6 +11,7 @@ import type { SandboxComputer, WorkspaceSandbox, WorkspaceSandboxResolver } from
 import { WORKSPACE_TOOLS } from '../workspace/constants';
 import type {
   ComputerActionInput,
+  ComputerControlEnforcementResult,
   ComputerControlSubscriber,
   MastraComputerControl,
   MastraComputerControlResult,
@@ -20,7 +21,8 @@ import type {
 } from './contracts.js';
 import type { ComputerHandsExtension, ComputerHandsHost } from './hands-extension.js';
 
-export const NOT_ATTACHED = 'no computer attached — call computer_attach or computer_create';
+export const NOT_ATTACHED =
+  'no computer attached — call mastra_workspace_computer_attach or mastra_workspace_computer_create';
 export const NOT_FOUND = 'computer not found';
 export const UNAVAILABLE = 'computer unavailable, try again';
 export const DESTROY_FAILED = 'computer destroy failed';
@@ -29,6 +31,7 @@ export const MISSING_IDENTITY = 'missing thread or resource id';
 export const HUMAN_HAS_CONTROL = 'the user has control of this computer; wait for them to hand it back';
 export const CONTROL_NOT_ENFORCED = 'computer control change is still being enforced; try again';
 const NOTE_MAX = 500;
+const CONTROL_ENFORCEMENT_TIMEOUT_MS = 10_000;
 
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
 const PERSISTENT_ID_PATTERN = /^cmp_p2_([0-9a-f]{32})_([A-Za-z0-9_-]{22})$/;
@@ -245,15 +248,26 @@ export class Computers implements MastraComputers {
       holder: entry.control.holder,
       ...(entry.control.reason ? { reason: entry.control.reason } : {}),
       revision: entry.control.revision,
+      enforced: entry.control.enforcedRevision >= entry.control.revision,
     } satisfies MastraComputerControl;
     const identity = { providerId: this.#provider.id, sandboxId: entry.sandbox?.sandboxId };
     const results = await Promise.all(
-      required.map(({ subscriber }) =>
-        subscriber.enforce({ computerId: entry.id, scope, identity, control, signal }).catch(error => ({
-          status: 'retryable' as const,
-          error: String((error as Error)?.message ?? error),
-        })),
-      ),
+      required.map(async ({ subscriber }) => {
+        const aborted = new Promise<ComputerControlEnforcementResult>(resolve => {
+          signal.addEventListener(
+            'abort',
+            () => resolve({ status: 'retryable', error: 'computer control enforcement timed out' }),
+            { once: true },
+          );
+        });
+        return Promise.race([
+          subscriber.enforce({ computerId: entry.id, scope, identity, control, signal }).catch(error => ({
+            status: 'retryable' as const,
+            error: String((error as Error)?.message ?? error),
+          })),
+          aborted,
+        ]);
+      }),
     );
     const enforced = results.every(
       result => result.status === 'enforced' && result.enforcedRevision >= entry.control.revision,
@@ -295,12 +309,13 @@ export class Computers implements MastraComputers {
     const match = ID_PATTERN.exec(id);
     if (!match) return undefined;
     const [, flag, sandboxId, mac] = match as unknown as [string, 'p' | 'e', string, string];
+    if (flag === 'p') return undefined;
     const given = Buffer.from(mac, 'base64url');
     const expected = this.#mac(flag, sandboxId, ownerResourceId);
     // 22 base64url chars carry 132 bits; reject non-canonical aliases of the same 16 bytes.
     if (given.length !== expected.length || given.toString('base64url') !== mac) return undefined;
     if (!timingSafeEqual(given, expected)) return undefined;
-    return { persistent: flag === 'p', sandboxId };
+    return { persistent: false, sandboxId };
   }
 
   #scope(context: Context): Scope | undefined {
@@ -879,6 +894,7 @@ export class Computers implements MastraComputers {
       holder: control.holder,
       ...(control.reason !== undefined && { reason: control.reason }),
       revision: control.revision,
+      enforced: control.enforcedRevision >= control.revision,
     };
   }
 
@@ -911,7 +927,9 @@ export class Computers implements MastraComputers {
       revision: entry.control.revision + 1,
       enforcedRevision: entry.control.enforcedRevision,
     };
-    const enforced = await this.#enforce(entry, scope, new AbortController().signal);
+    const enforcement = new AbortController();
+    const enforcementTimer = setTimeout(() => enforcement.abort(), CONTROL_ENFORCEMENT_TIMEOUT_MS);
+    const enforced = await this.#enforce(entry, scope, enforcement.signal).finally(() => clearTimeout(enforcementTimer));
     await this.#persistAttachment({ ...scope, key }, entry);
     if (!enforced) return { holder, revision: entry.control.revision, notified: false, reason: 'not-delivered' };
     return { holder, revision: entry.control.revision, ...(await this.#notify(entry, holder, target, note)) };

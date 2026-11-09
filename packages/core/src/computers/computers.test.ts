@@ -200,6 +200,32 @@ describe('Computers', () => {
     ).rejects.toThrow('still being enforced');
   });
 
+  it('bounds control enforcement and reports pending state when a subscriber hangs', async () => {
+    vi.useFakeTimers();
+    try {
+      const computers = new Computers({ provider: provider(), secret: 'secret' });
+      const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, context);
+      computers.registerControlSubscriber({
+        id: 'hung-relay',
+        required: true,
+        enforce: async () => new Promise(() => {}),
+      });
+
+      const change = computers.control(
+        created.computer.id,
+        { resourceId: 'resource', threadId: 'thread' },
+        { action: 'take' },
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(change).resolves.toMatchObject({ holder: 'human', notified: false, reason: 'not-delivered' });
+      await expect(
+        computers.controlState(created.computer.id, { resourceId: 'resource', threadId: 'thread' }),
+      ).resolves.toMatchObject({ holder: 'human', enforced: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('restores persistent control when attaching after restart', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();

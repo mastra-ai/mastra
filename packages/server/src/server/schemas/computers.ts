@@ -24,6 +24,7 @@ export const computerControlSchema = z.object({
   holder: z.enum(['agent', 'human']),
   reason: z.string().optional(),
   revision: z.number().int().nonnegative(),
+  enforced: z.boolean().optional(),
 });
 
 export const changeComputerControlBodySchema = computerScopeSchema.extend({

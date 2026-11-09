@@ -130,6 +130,7 @@ function renderThread(messages: MastraDBMessage[], threadScope: ComputerThreadSc
 interface ControlServer {
   holder: 'agent' | 'human';
   notified: boolean;
+  enforced?: boolean;
   status?: number;
   gets: number;
   posts: { action: string; note?: string; threadId: string; resourceId: string }[];
@@ -147,7 +148,7 @@ function serveControl() {
       if (lease.status) return new HttpResponse(null, { status: lease.status });
       const seen = lease.holder;
       await lease.hold;
-      return HttpResponse.json({ holder: seen });
+      return HttpResponse.json({ holder: seen, enforced: lease.enforced });
     }),
     http.post(CONTROL_URL, async ({ request }) => {
       const body = (await request.json()) as ControlServer['posts'][number];
@@ -413,6 +414,14 @@ describe('ComputerCard', () => {
     expect(requests).toHaveLength(1);
     expect(live()).toEqual([client]);
     expect(rfb.FakeRFB.instances).toHaveLength(1);
+  });
+
+  it('shows pending instead of claiming a control change is complete', async () => {
+    lease.enforced = false;
+    serveSession();
+    renderThread([message('m1', [computerPart('attached')])]);
+    await waitFor(() => expect(screen.getByText('Control change pending')).toBeTruthy());
+    expect(screen.queryByText('Agent has control')).toBeNull();
   });
 
   it('follows a lease change made elsewhere through the control poll, without reconnecting', async () => {
