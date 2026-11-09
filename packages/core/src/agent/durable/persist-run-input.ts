@@ -56,7 +56,9 @@ export async function persistDurableRunInput(
       }),
   });
   // The save embedded the input on the copy. Carry that onto the live list so the finalize step
-  // (the SemanticRecall processor, then the final flush) does not embed it again.
+  // (the SemanticRecall processor, then the final flush) does not embed it again. A finalize on
+  // another worker (evented, Inngest) never sees this list; it embeds the input once more into
+  // the same rows, because row ids come from the message id.
   const embedded = entry.messageList.getEmbeddedMessages();
   for (const [messageId, textHash] of inputCopy.getEmbeddedMessages()) {
     embedded.set(messageId, textHash);

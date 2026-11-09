@@ -1,24 +1,23 @@
-import { embedMany as embedManyV1 } from '@internal/ai-sdk-v4';
-import { embedMany as embedManyV2 } from '@internal/ai-sdk-v5';
-import { embedMany as embedManyV3 } from '@internal/ai-v6';
-import { embedMany as embedManyV4 } from '@internal/ai-v7';
 import xxhash from 'xxhash-wasm';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { isTransientSignalMessage } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import { globalEmbeddingCache } from '../processors/memory/embedding-cache';
-import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+import type { MastraVector } from '../vector';
 import { removeWorkingMemoryTags } from './working-memory-utils';
 
 /**
  * Average characters per English token. Chunking measures characters because no single
  * tokenizer matches every embedder, so token limits are converted with this ratio.
+ *
+ * @internal
  */
 export const MESSAGE_EMBEDDING_CHARS_PER_TOKEN = 4;
 
 /**
  * Default ceiling, in characters, for one chunk of message text sent to the embedder.
  * About 4096 English tokens, which fits `openai/text-embedding-3-small` (8191 tokens).
+ *
+ * @internal
  */
 export const DEFAULT_MESSAGE_EMBEDDING_MAX_CHUNK_CHARS = 4096 * MESSAGE_EMBEDDING_CHARS_PER_TOKEN;
 
@@ -40,6 +39,8 @@ export interface MessageEmbeddingModelLimits {
 /**
  * Metadata stored on every message vector row. Recall resolves rows back to messages through
  * `message_id`, and edits and deletes find rows through it, so it is always set.
+ *
+ * @internal
  */
 export type MessageVectorMetadata = Record<string, unknown> & {
   message_id: string;
@@ -51,7 +52,11 @@ export type MessageVectorMetadata = Record<string, unknown> & {
   created_at: string;
 };
 
-/** One message to embed. */
+/**
+ * One message to embed.
+ *
+ * @internal
+ */
 export interface MessageEmbeddingItem {
   message: MastraDBMessage;
   /**
@@ -62,22 +67,37 @@ export interface MessageEmbeddingItem {
   text?: string | null;
 }
 
-/** Options for {@link buildMessageEmbeddingRows}. */
+/**
+ * Embeds chunk texts, one embedding per chunk in the same order. Each writer passes its own, so
+ * embedding keeps its existing call path, retries and cache.
+ *
+ * @internal
+ */
+export type MessageChunkEmbedder = (chunks: string[]) => Promise<{
+  embeddings: number[][];
+  usage?: { tokens?: number };
+}>;
+
+/**
+ * Options for {@link buildMessageEmbeddingRows}.
+ *
+ * @internal
+ */
 export interface BuildMessageEmbeddingRowsOptions {
   items: MessageEmbeddingItem[];
   /**
-   * Client-side embedder. When omitted the rows carry `documents` instead of `vectors`, for
-   * vector stores that embed text themselves.
+   * Produces the vectors. When omitted the rows carry `documents` instead, for vector stores that
+   * embed text themselves.
    */
-  embedder?: MastraEmbeddingModel<string>;
-  embedderOptions?: MastraEmbeddingOptions;
+  embed?: MessageChunkEmbedder;
   /** Character ceiling per chunk. Resolve it with {@link resolveMaxChunkChars}. */
   maxChunkChars: number;
   /**
-   * Metadata of each message's thread, spread under the fixed fields so `semanticRecall.filter`
-   * can match thread attributes. Keyed by thread id.
+   * Loads the metadata of the given threads, spread under the fixed fields so
+   * `semanticRecall.filter` can match thread attributes. Called only when at least one message
+   * still needs rows, so a write that skips everything costs no storage read.
    */
-  threadMetadata?: Map<string, Record<string, unknown>>;
+  loadThreadMetadata?: (threadIds: string[]) => Promise<Map<string, Record<string, unknown>>>;
   /**
    * Thread and resource used when a message does not carry its own. Agent runs pass the run's
    * thread and resource, because resource-scoped recall filters rows by `resource_id`.
@@ -85,12 +105,22 @@ export interface BuildMessageEmbeddingRowsOptions {
   defaults?: { threadId?: string; resourceId?: string };
   /**
    * The run's record of messages already embedded, from `MessageList.getEmbeddedMessages()`.
-   * Messages recorded with the same text are skipped.
+   * Messages recorded for the same index with the same text are skipped.
    */
   embeddedMessages?: Map<string, string>;
+  /**
+   * Index the rows are written to. Required with `embeddedMessages`: the record is kept per
+   * index, because the `SemanticRecall` processor and `Memory` can write to different indexes
+   * (a custom `semanticRecall.indexName`) and each must still receive every message.
+   */
+  indexName?: string;
 }
 
-/** Rows ready for {@link upsertMessageVectors}. Every array lines up index by index. */
+/**
+ * Rows ready for {@link upsertMessageVectors}. Every array lines up index by index.
+ *
+ * @internal
+ */
 export interface MessageEmbeddingRows {
   /** Row ids from {@link messageVectorId}. Always set, so a repeated write replaces the same rows. */
   ids: string[];
@@ -101,10 +131,10 @@ export interface MessageEmbeddingRows {
   metadata: MessageVectorMetadata[];
   /** Embedding length, set when an embedder was given and at least one row was produced. */
   dimension?: number;
-  /** Tokens billed by the embedder for chunks that were not cached. */
+  /** Tokens the embedder reported for these rows. */
   usage?: { tokens: number };
   /**
-   * `[messageId, textHash]` pairs for the messages these rows embed. {@link upsertMessageVectors}
+   * `[recordKey, textHash]` pairs for the messages these rows embed. {@link upsertMessageVectors}
    * adds them to the run's record only after the write succeeds.
    */
   embeddedEntries: Array<[string, string]>;
@@ -124,13 +154,19 @@ async function hash64(text: string): Promise<string> {
   return (await hasherPromise).h64(text).toString(16);
 }
 
+function isEmbeddable(message: MastraDBMessage): boolean {
+  return message.role !== 'system' && !isTransientSignalMessage(message);
+}
+
 /**
  * Text of a message as semantic recall embeds it, or `null` when the message is not embedded.
  * System messages and transient signals are never stored, working-memory tags are removed,
  * and text parts are joined with a space.
+ *
+ * @internal
  */
 export function extractMessageEmbeddingText(message: MastraDBMessage): string | null {
-  if (message.role === 'system' || isTransientSignalMessage(message)) return null;
+  if (!isEmbeddable(message)) return null;
 
   const content = message.content as MastraDBMessage['content'] | string | undefined;
   if (typeof content === 'string') {
@@ -159,6 +195,8 @@ export function extractMessageEmbeddingText(message: MastraDBMessage): string | 
  * Splits text into chunks of at most `maxChars` characters, breaking on whitespace where it can.
  * A single word longer than the ceiling (base64, minified code, unbroken CJK text) is split by
  * character count, so every chunk fits.
+ *
+ * @internal
  */
 export function chunkMessageText(text: string, maxChars: number): string[] {
   const chunks: string[] = [];
@@ -193,6 +231,8 @@ export function chunkMessageText(text: string, maxChars: number): string[] {
 /**
  * Character ceiling per chunk: the explicit `maxChunkChars` option, else the embedder's declared
  * `maxInputTokens` converted to characters, else {@link DEFAULT_MESSAGE_EMBEDDING_MAX_CHUNK_CHARS}.
+ *
+ * @internal
  */
 export function resolveMaxChunkChars({
   maxChunkChars,
@@ -226,6 +266,8 @@ export function resolveMaxChunkChars({
  * `SemanticRecall` processor has always written, so existing rows are replaced instead of
  * duplicated. Later chunks get a UUIDv8 derived from the message id and chunk index: stable
  * across writers and retries, and a UUID because some stores (Qdrant) reject other string ids.
+ *
+ * @internal
  */
 export async function messageVectorId(messageId: string, chunkIndex: number): Promise<string> {
   if (chunkIndex === 0) return messageId;
@@ -241,133 +283,38 @@ export async function messageVectorId(messageId: string, chunkIndex: number): Pr
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// fastembed downloads its model on first use, and concurrent first calls fail while the
-// download runs, so later calls on the same model wait for the first one.
-const firstFastEmbedCall = new WeakMap<object, Promise<unknown>>();
-
-function callEmbedMany(
-  model: MastraEmbeddingModel<string>,
-  values: string[],
-  embedderOptions: MastraEmbeddingOptions | undefined,
-): Promise<{ embeddings: number[][]; usage?: { tokens?: number } }> {
-  const options = { values, maxRetries: 3 };
-  // Options share a public union; select the SDK-specific options alongside the model version.
-  switch (model.specificationVersion) {
-    case 'v4':
-      return embedManyV4({
-        ...options,
-        ...(embedderOptions as Omit<Parameters<typeof embedManyV4>[0], 'model' | 'values'>),
-        model,
-      });
-    case 'v3':
-      return embedManyV3({
-        ...options,
-        ...(embedderOptions as Omit<Parameters<typeof embedManyV3>[0], 'model' | 'values'>),
-        model,
-      });
-    case 'v2':
-      return embedManyV2({
-        ...options,
-        ...(embedderOptions as Omit<Parameters<typeof embedManyV2>[0], 'model' | 'values'>),
-        model,
-      });
-    default:
-      return embedManyV1({
-        ...options,
-        ...(embedderOptions as Omit<Parameters<typeof embedManyV1>[0], 'model' | 'values'>),
-        model,
-      });
-  }
-}
-
-// Cache keys use the embedder object's identity, not its model id: two model objects with the same
-// id can still return different vectors (for example AI SDK settings such as `dimensions`). The
-// SemanticRecall processor and Memory share one object, so their writes still share entries.
-const embedderCacheIds = new WeakMap<object, number>();
-let nextEmbedderCacheId = 0;
-
-function embedderCacheId(embedder: object): number {
-  let id = embedderCacheIds.get(embedder);
-  if (id === undefined) {
-    id = nextEmbedderCacheId++;
-    embedderCacheIds.set(embedder, id);
-  }
-  return id;
-}
-
 /**
- * Embeds each text, reusing {@link globalEmbeddingCache} so a text this embedder already embedded
- * in this process is not sent again. Keys include the embedder object and its provider options,
- * because those decide the vector.
+ * Builds the vector rows for messages. The `SemanticRecall` processor and `Memory` both write
+ * through it, so a message gets the same rows whichever writer reaches it.
  *
- * @returns One embedding per input text, in order, plus the tokens billed for uncached texts.
- */
-export async function embedTexts(
-  embedder: MastraEmbeddingModel<string>,
-  texts: string[],
-  embedderOptions?: MastraEmbeddingOptions,
-): Promise<{ embeddings: number[][]; usage?: { tokens: number }; dimension?: number }> {
-  const embedderKey = `${embedderCacheId(embedder)}:${embedder.modelId}:${await hash64(
-    JSON.stringify(embedderOptions?.providerOptions ?? {}),
-  )}`;
-  const keys = await Promise.all(texts.map(async text => `${embedderKey}:${await hash64(text)}`));
-  const embeddings: (number[] | undefined)[] = keys.map(key => globalEmbeddingCache.get(key));
-
-  const missing = [...new Set(keys.filter((_, i) => !embeddings[i]))];
-  let usage: { tokens: number } | undefined;
-  if (missing.length > 0) {
-    const missingTexts = missing.map(key => texts[keys.indexOf(key)]!);
-    const pending = firstFastEmbedCall.get(embedder);
-    if (embedder.provider === 'fastembed' && pending) await pending.catch(() => undefined);
-
-    const call = callEmbedMany(embedder, missingTexts, embedderOptions);
-    if (embedder.provider === 'fastembed' && !pending) firstFastEmbedCall.set(embedder, call);
-    const result = await call;
-
-    missing.forEach((key, i) => {
-      const embedding = result.embeddings[i];
-      if (embedding) globalEmbeddingCache.set(key, embedding);
-    });
-    if (typeof result.usage?.tokens === 'number') usage = { tokens: result.usage.tokens };
-    keys.forEach((key, i) => {
-      embeddings[i] ??= globalEmbeddingCache.get(key);
-    });
-  }
-
-  if (embeddings.some(embedding => !embedding)) {
-    throw new MastraError({
-      id: 'MASTRA_MEMORY_EMBEDDER_MISSING_EMBEDDINGS',
-      domain: ErrorDomain.MASTRA_MEMORY,
-      category: ErrorCategory.THIRD_PARTY,
-      text: `The embedder returned fewer embeddings than texts it was given (${texts.length}).`,
-    });
-  }
-
-  const complete = embeddings as number[][];
-  return { embeddings: complete, usage, dimension: complete[0]?.length };
-}
-
-/**
- * Builds the vector rows for messages, the one place that decides what a message vector row
- * contains. Both the `SemanticRecall` processor and `Memory` write through it, so a message gets
- * the same rows whichever writer reaches it.
- *
- * Messages with no embeddable text, and messages already in `embeddedMessages` with the same
- * text, produce no rows.
+ * Messages with no embeddable text, and messages already in `embeddedMessages` for this index with
+ * the same text, produce no rows. When a message is written again with fewer chunks, rows for the
+ * extra chunks stay until the message is updated or deleted, both of which remove rows by
+ * `message_id`.
  *
  * @throws When a message has no id. Ids are assigned when messages enter a `MessageList`, so a
  * missing id means a caller skipped that step; a row without `message_id` could never be
  * recalled or deleted.
+ * @internal
  */
 export async function buildMessageEmbeddingRows({
   items,
-  embedder,
-  embedderOptions,
+  embed,
   maxChunkChars,
-  threadMetadata,
+  loadThreadMetadata,
   defaults,
   embeddedMessages,
+  indexName,
 }: BuildMessageEmbeddingRowsOptions): Promise<MessageEmbeddingRows> {
+  if (embeddedMessages && indexName === undefined) {
+    throw new MastraError({
+      id: 'MASTRA_MEMORY_EMBEDDED_MESSAGES_WITHOUT_INDEX',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.SYSTEM,
+      text: 'buildMessageEmbeddingRows needs indexName when embeddedMessages is given.',
+    });
+  }
+
   // A batch can name the same message twice (a save that repeats an id); only the last entry is
   // embedded, since both would write the same row ids.
   const latestById = new Map<string, MessageEmbeddingItem>();
@@ -386,26 +333,43 @@ export async function buildMessageEmbeddingRows({
     latestById.set(message.id, item);
   }
 
-  const pending: Array<{ message: MastraDBMessage; text: string; textHash: string; chunks: string[] }> = [];
-  for (const { message, text: overrideText } of latestById.values()) {
-    const text = overrideText === undefined ? extractMessageEmbeddingText(message) : overrideText?.trim() || null;
+  const pending: Array<{ message: MastraDBMessage; text: string; recordEntry: [string, string]; chunks: string[] }> =
+    [];
+  for (const { message, text: givenText } of latestById.values()) {
+    const text =
+      givenText === undefined
+        ? extractMessageEmbeddingText(message)
+        : isEmbeddable(message)
+          ? removeWorkingMemoryTags(givenText ?? '').trim() || null
+          : null;
     if (!text) continue;
 
+    const recordKey = `${indexName ?? ''}\u0000${message.id}`;
     const textHash = await hash64(text);
-    if (embeddedMessages?.get(message.id) === textHash) continue;
+    if (embeddedMessages?.get(recordKey) === textHash) continue;
 
     const chunks = chunkMessageText(text, maxChunkChars);
     if (chunks.length === 0) continue;
-    pending.push({ message, text, textHash, chunks });
+    pending.push({ message, text, recordEntry: [recordKey, textHash], chunks });
   }
 
   const rows: MessageEmbeddingRows = { ids: [], metadata: [], embeddedEntries: [] };
   if (pending.length === 0) return rows;
 
-  if (embedder) {
+  if (embed) {
     // One embedder call per message, as both writers made before, so a request never carries
     // more than one message's chunks.
-    const embedded = await Promise.all(pending.map(entry => embedTexts(embedder, entry.chunks, embedderOptions)));
+    const embedded = await Promise.all(pending.map(entry => embed(entry.chunks)));
+    embedded.forEach((result, i) => {
+      if (result.embeddings.length !== pending[i]!.chunks.length) {
+        throw new MastraError({
+          id: 'MASTRA_MEMORY_EMBEDDER_MISSING_EMBEDDINGS',
+          domain: ErrorDomain.MASTRA_MEMORY,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `The embedder returned ${result.embeddings.length} embeddings for ${pending[i]!.chunks.length} chunks.`,
+        });
+      }
+    });
     rows.vectors = embedded.flatMap(result => result.embeddings);
     rows.dimension = rows.vectors[0]?.length;
     const tokens = embedded.reduce((sum, result) => sum + (result.usage?.tokens ?? 0), 0);
@@ -414,7 +378,12 @@ export async function buildMessageEmbeddingRows({
     rows.documents = pending.flatMap(entry => entry.chunks);
   }
 
-  for (const { message, text, textHash, chunks } of pending) {
+  const threadIds = [
+    ...new Set(pending.map(({ message }) => message.threadId ?? defaults?.threadId).filter(id => id !== undefined)),
+  ];
+  const threadMetadata = loadThreadMetadata && threadIds.length > 0 ? await loadThreadMetadata(threadIds) : undefined;
+
+  for (const { message, text, recordEntry, chunks } of pending) {
     const threadId = message.threadId ?? defaults?.threadId;
     const createdAt = message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt);
     for (const [chunkIndex] of chunks.entries()) {
@@ -429,7 +398,7 @@ export async function buildMessageEmbeddingRows({
         created_at: createdAt,
       });
     }
-    rows.embeddedEntries.push([message.id, textHash]);
+    rows.embeddedEntries.push(recordEntry);
   }
 
   return rows;
@@ -439,6 +408,8 @@ export async function buildMessageEmbeddingRows({
  * Writes message rows built by {@link buildMessageEmbeddingRows}, always with their ids, then
  * records the embedded messages in `embeddedMessages`. Recording happens only after the write
  * succeeds, so a writer that fails leaves the message for the next writer to embed.
+ *
+ * @internal
  */
 export async function upsertMessageVectors(
   vector: MastraVector,
@@ -466,7 +437,7 @@ export async function upsertMessageVectors(
     await vector.upsert({ indexName, ids: rows.ids, documents: rows.documents, metadata: rows.metadata } as never);
   }
 
-  for (const [messageId, textHash] of rows.embeddedEntries) {
-    embeddedMessages?.set(messageId, textHash);
+  for (const [recordKey, textHash] of rows.embeddedEntries) {
+    embeddedMessages?.set(recordKey, textHash);
   }
 }

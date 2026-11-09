@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
-import { globalEmbeddingCache } from '../processors/memory/embedding-cache';
 import type { MastraVector } from '../vector';
 import {
   DEFAULT_MESSAGE_EMBEDDING_MAX_CHUNK_CHARS,
@@ -27,26 +26,7 @@ function message(overrides: Partial<MastraDBMessage> & { text?: string } = {}): 
   };
 }
 
-function createEmbedder() {
-  const doEmbed = vi.fn(async ({ values }: { values: string[] }) => ({
-    embeddings: values.map(value => [value.length, 1, 0]),
-  }));
-  return {
-    embedder: {
-      specificationVersion: 'v2' as const,
-      provider: 'test',
-      modelId: `model-${Math.random()}`,
-      maxEmbeddingsPerCall: 100,
-      supportsParallelCalls: true,
-      doEmbed,
-    },
-    doEmbed,
-  };
-}
-
-beforeEach(() => {
-  globalEmbeddingCache.clear();
-});
+const embed = vi.fn(async (chunks: string[]) => ({ embeddings: chunks.map(chunk => [chunk.length, 1, 0]) }));
 
 describe('messageVectorId', () => {
   it('keeps the message id for the first chunk, so rows written before chunk ids existed are replaced', async () => {
@@ -125,10 +105,9 @@ describe('resolveMaxChunkChars', () => {
 
 describe('buildMessageEmbeddingRows', () => {
   it('writes one row per chunk with stable ids, so saving a long message again replaces its rows', async () => {
-    const { embedder } = createEmbedder();
     const long = message({ text: 'lorem ipsum '.repeat(40) });
-    const first = await buildMessageEmbeddingRows({ items: [{ message: long }], embedder, maxChunkChars: 100 });
-    const second = await buildMessageEmbeddingRows({ items: [{ message: long }], embedder, maxChunkChars: 100 });
+    const first = await buildMessageEmbeddingRows({ items: [{ message: long }], embed, maxChunkChars: 100 });
+    const second = await buildMessageEmbeddingRows({ items: [{ message: long }], embed, maxChunkChars: 100 });
 
     expect(first.ids.length).toBeGreaterThan(1);
     expect(first.ids[0]).toBe('msg-1');
@@ -138,39 +117,61 @@ describe('buildMessageEmbeddingRows', () => {
     expect(first.metadata.every(row => row.message_id === 'msg-1')).toBe(true);
   });
 
-  it('skips a message the run already embedded, and embeds it again once its text changes', async () => {
-    const { embedder, doEmbed } = createEmbedder();
+  it('skips a message the run already embedded into the same index, and embeds it again once its text changes', async () => {
     const embeddedMessages = new Map<string, string>();
     const vector = { upsert: vi.fn() } as unknown as MastraVector;
+    const options = { embed, maxChunkChars: 100, embeddedMessages, indexName: 'memory_messages' };
 
-    const rows = await buildMessageEmbeddingRows({ items: [{ message: message() }], embedder, maxChunkChars: 100 });
-    await upsertMessageVectors(vector, 'index', rows, embeddedMessages);
-    expect(embeddedMessages.has('msg-1')).toBe(true);
+    const rows = await buildMessageEmbeddingRows({ ...options, items: [{ message: message() }] });
+    await upsertMessageVectors(vector, 'memory_messages', rows, embeddedMessages);
 
-    const repeat = await buildMessageEmbeddingRows({
-      items: [{ message: message() }],
-      embedder,
-      maxChunkChars: 100,
-      embeddedMessages,
-    });
+    const repeat = await buildMessageEmbeddingRows({ ...options, items: [{ message: message() }] });
     expect(repeat.ids).toEqual([]);
 
     const edited = await buildMessageEmbeddingRows({
+      ...options,
       items: [{ message: message({ text: 'rewritten by a later processor' }) }],
-      embedder,
-      maxChunkChars: 100,
-      embeddedMessages,
     });
     expect(edited.ids).toEqual(['msg-1']);
     expect(edited.metadata[0]!.content).toBe('rewritten by a later processor');
-    expect(doEmbed).toHaveBeenCalledTimes(2);
   });
 
-  it('reuses embeddings across writers instead of calling the embedder again', async () => {
-    const { embedder, doEmbed } = createEmbedder();
-    await buildMessageEmbeddingRows({ items: [{ message: message() }], embedder, maxChunkChars: 100 });
-    await buildMessageEmbeddingRows({ items: [{ message: message() }], embedder, maxChunkChars: 100 });
-    expect(doEmbed).toHaveBeenCalledTimes(1);
+  it('still embeds a recorded message for a writer that targets another index', async () => {
+    const embeddedMessages = new Map<string, string>();
+    const vector = { upsert: vi.fn() } as unknown as MastraVector;
+    const items = [{ message: message() }];
+
+    const custom = await buildMessageEmbeddingRows({
+      items,
+      embed,
+      maxChunkChars: 100,
+      embeddedMessages,
+      indexName: 'custom',
+    });
+    await upsertMessageVectors(vector, 'custom', custom, embeddedMessages);
+
+    const memoryIndex = await buildMessageEmbeddingRows({
+      items,
+      embed,
+      maxChunkChars: 100,
+      embeddedMessages,
+      indexName: 'memory_messages',
+    });
+    expect(memoryIndex.ids).toEqual(['msg-1']);
+  });
+
+  it('reads thread metadata only when something will be written', async () => {
+    const loadThreadMetadata = vi.fn(async () => new Map([['thread-1', { projectId: 'p1' }]]));
+    const embeddedMessages = new Map<string, string>();
+    const vector = { upsert: vi.fn() } as unknown as MastraVector;
+    const options = { embed, maxChunkChars: 100, embeddedMessages, indexName: 'i', loadThreadMetadata };
+
+    const rows = await buildMessageEmbeddingRows({ ...options, items: [{ message: message() }] });
+    await upsertMessageVectors(vector, 'i', rows, embeddedMessages);
+    await buildMessageEmbeddingRows({ ...options, items: [{ message: message() }] });
+
+    expect(loadThreadMetadata).toHaveBeenCalledTimes(1);
+    expect(rows.metadata[0]).toMatchObject({ projectId: 'p1' });
   });
 
   it('fills thread and resource from the run when the message has none, and keeps fixed fields over thread metadata', async () => {
@@ -178,7 +179,7 @@ describe('buildMessageEmbeddingRows', () => {
       items: [{ message: message({ threadId: undefined, resourceId: undefined }) }],
       maxChunkChars: 100,
       defaults: { threadId: 'thread-run', resourceId: 'resource-run' },
-      threadMetadata: new Map([['thread-run', { projectId: 'p1', message_id: 'spoofed' }]]),
+      loadThreadMetadata: async () => new Map([['thread-run', { projectId: 'p1', message_id: 'spoofed' }]]),
     });
 
     expect(rows.documents).toEqual(['hello there']);
@@ -191,6 +192,20 @@ describe('buildMessageEmbeddingRows', () => {
       content: 'hello there',
       created_at: '2026-01-01T00:00:00.000Z',
     });
+  });
+
+  it('applies the text rules to text passed in by an edit', async () => {
+    const edited = await buildMessageEmbeddingRows({
+      items: [{ message: message(), text: 'kept <working_memory>hidden</working_memory>' }],
+      maxChunkChars: 100,
+    });
+    const system = await buildMessageEmbeddingRows({
+      items: [{ message: message({ role: 'system' }), text: 'instructions' }],
+      maxChunkChars: 100,
+    });
+
+    expect(edited.documents).toEqual(['kept']);
+    expect(system.ids).toEqual([]);
   });
 
   it('embeds a repeated message once, using its last entry', async () => {
@@ -213,7 +228,12 @@ describe('upsertMessageVectors', () => {
   it('leaves the message unrecorded when the write fails, so the next writer embeds it', async () => {
     const embeddedMessages = new Map<string, string>();
     const vector = { upsert: vi.fn().mockRejectedValue(new Error('store down')) } as unknown as MastraVector;
-    const rows = await buildMessageEmbeddingRows({ items: [{ message: message() }], maxChunkChars: 100 });
+    const rows = await buildMessageEmbeddingRows({
+      items: [{ message: message() }],
+      maxChunkChars: 100,
+      embeddedMessages,
+      indexName: 'index',
+    });
 
     await expect(upsertMessageVectors(vector, 'index', rows, embeddedMessages)).rejects.toThrow('store down');
     expect(embeddedMessages.size).toBe(0);

@@ -63,8 +63,6 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
 
     // Mock embedder
     mockEmbedder = {
-      specificationVersion: 'v2',
-      provider: 'test',
       doEmbed: vi.fn().mockResolvedValue({
         embeddings: [[0.1, 0.2, 0.3]],
       }),
