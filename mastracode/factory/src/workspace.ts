@@ -836,8 +836,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         registration.tokenIssuedAt = Date.now();
         return false;
       }
+      const { ghToken, generation } = registration;
       const token = await getRepositoryToken();
-      if (githubTokenInjectors.get(workspaceId) !== registration) return false;
+      // A reconcile during the mint may have switched role or installed a PAT.
+      if (
+        githubTokenInjectors.get(workspaceId) !== registration ||
+        registration.generation !== generation ||
+        registration.ghToken !== ghToken
+      ) {
+        return false;
+      }
       registration.inject(token);
       return true;
     };
@@ -999,11 +1007,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           );
           // A turn can outlive the token installed when the workspace was
           // resolved, so check its age before every command. Best-effort: a
-          // failed re-mint leaves the current token in place.
+          // failed re-mint leaves the current token in place. Concurrent
+          // commands share one refresh.
           const executeCommand = sandbox.executeCommand?.bind(sandbox);
           if (executeCommand) {
+            let commandRefresh: Promise<unknown> | undefined;
             sandbox.executeCommand = async (...args) => {
-              await refreshStaleGithubToken().catch(() => {});
+              commandRefresh ??= refreshStaleGithubToken()
+                .catch(() => {})
+                .finally(() => {
+                  commandRefresh = undefined;
+                });
+              await commandRefresh;
               return executeCommand(...args);
             };
           }

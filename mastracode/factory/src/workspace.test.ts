@@ -2658,6 +2658,37 @@ describe('GitHub session workspace preparation', () => {
       expect(lastGhToken()).not.toBe(installed);
     });
 
+    it('shares one re-mint between concurrent commands', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const sandbox = (resolved as any).sandbox;
+
+      vi.advanceTimersByTime(46 * 60_000);
+      const before = minted;
+      await Promise.all([sandbox.executeCommand('gh', ['pr', 'list']), sandbox.executeCommand('git', ['push'])]);
+      expect(minted).toBe(before + 1);
+    });
+
+    it('does not overwrite a PAT installed while a command re-mint is in flight', async () => {
+      const { reuse } = await startSession();
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+
+      vi.advanceTimersByTime(46 * 60_000);
+      mocks.getRepositoryAccess.mockImplementationOnce(async () => {
+        mocks.githubPat = 'ghp_org_pat';
+        await reuse();
+        return {
+          cloneUrl: 'https://github.com/octocat/hello.git',
+          authorization: { scheme: 'bearer' as const, token: 'minted-late' },
+        };
+      });
+      await sandbox.executeCommand('gh', ['pr', 'list']);
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
     it('installs a fresh token instead of the expired one on sandbox reconnect', async () => {
       const { installed } = await startSession();
 
