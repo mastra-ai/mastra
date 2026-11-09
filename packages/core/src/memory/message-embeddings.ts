@@ -110,9 +110,17 @@ export interface MessageEmbeddingRows {
   embeddedEntries: Array<[string, string]>;
 }
 
-const hasherPromise = xxhash();
+// Created on first use rather than at import: compiling the WASM module costs startup CPU
+// (Cloudflare Workers enforce a startup limit) in every app that imports @mastra/core/memory,
+// including apps that never embed anything.
+let hasherPromise: ReturnType<typeof xxhash> | undefined;
 
 async function hash64(text: string): Promise<string> {
+  hasherPromise ??= xxhash().catch(error => {
+    // Let the next call try again instead of caching the failure.
+    hasherPromise = undefined;
+    throw error;
+  });
   return (await hasherPromise).h64(text).toString(16);
 }
 
@@ -272,10 +280,25 @@ function callEmbedMany(
   }
 }
 
+// Cache keys use the embedder object's identity, not its model id: two model objects with the same
+// id can still return different vectors (for example AI SDK settings such as `dimensions`). The
+// SemanticRecall processor and Memory share one object, so their writes still share entries.
+const embedderCacheIds = new WeakMap<object, number>();
+let nextEmbedderCacheId = 0;
+
+function embedderCacheId(embedder: object): number {
+  let id = embedderCacheIds.get(embedder);
+  if (id === undefined) {
+    id = nextEmbedderCacheId++;
+    embedderCacheIds.set(embedder, id);
+  }
+  return id;
+}
+
 /**
- * Embeds each text, reusing {@link globalEmbeddingCache} so a text embedded by any writer in
- * this process is not sent to the embedder again. Cache keys include the embedder and its
- * provider options, because those decide the vector.
+ * Embeds each text, reusing {@link globalEmbeddingCache} so a text this embedder already embedded
+ * in this process is not sent again. Keys include the embedder object and its provider options,
+ * because those decide the vector.
  *
  * @returns One embedding per input text, in order, plus the tokens billed for uncached texts.
  */
@@ -284,7 +307,7 @@ export async function embedTexts(
   texts: string[],
   embedderOptions?: MastraEmbeddingOptions,
 ): Promise<{ embeddings: number[][]; usage?: { tokens: number }; dimension?: number }> {
-  const embedderKey = `${embedder.provider}:${embedder.modelId}:${await hash64(
+  const embedderKey = `${embedderCacheId(embedder)}:${embedder.modelId}:${await hash64(
     JSON.stringify(embedderOptions?.providerOptions ?? {}),
   )}`;
   const keys = await Promise.all(texts.map(async text => `${embedderKey}:${await hash64(text)}`));

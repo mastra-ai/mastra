@@ -1,3 +1,4 @@
+import { globalEmbeddingCache } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 import { Memory } from './index';
@@ -133,14 +134,14 @@ describe('observation indexing IDs', () => {
 });
 
 describe('embedMessageContent caching', () => {
-  it('reuses cached embeddings for repeated content (cache hit)', async () => {
+  it('does not call the embedder again for repeated content (cache hit)', async () => {
     const memory = createMemory() as any;
 
-    const a = await memory.embedMessageContent('hello world');
-    const b = await memory.embedMessageContent('hello world');
+    const a = await memory.embedMessageContent('hello world, cached');
+    const b = await memory.embedMessageContent('hello world, cached');
 
-    // Same content returns the same cached object reference.
-    expect(b).toBe(a);
+    expect(b.embeddings).toEqual(a.embeddings);
+    expect(memory.embedder.doEmbed).toHaveBeenCalledTimes(1);
   });
 
   it('bounds the cache via LRU eviction instead of growing unboundedly', async () => {
@@ -152,9 +153,9 @@ describe('embedMessageContent caching', () => {
     }
 
     // Without eviction the cache would hold all N entries. The LRU caps it well
-    // below N, so a long-running instance can't accumulate every embedded content.
-    expect(memory.embeddingCache.size).toBeLessThan(N);
-    expect(memory.embeddingCache.size).toBeLessThanOrEqual(1000);
+    // below N, so a long-running process can't accumulate every embedded content.
+    expect(globalEmbeddingCache.size).toBeLessThan(N);
+    expect(globalEmbeddingCache.size).toBeLessThanOrEqual(1000);
   });
 
   it('does not return the wrong cached embeddings for h32-colliding content', async () => {

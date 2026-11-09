@@ -7,7 +7,7 @@ const DEFAULT_CACHE_MAX_SIZE = 1000;
  * When both write the same message in one run, the second writer reuses the first one's
  * embedding instead of calling the embedder again.
  *
- * Cache key format: `${provider}:${modelId}:${providerOptionsHash}:${textHash}`
+ * Cache key format: `${embedderObjectId}:${modelId}:${providerOptionsHash}:${textHash}`
  * Cache value: embedding vector (number[])
  */
 export const globalEmbeddingCache = new LRUCache<string, number[]>({
