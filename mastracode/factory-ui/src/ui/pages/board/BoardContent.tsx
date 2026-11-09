@@ -94,7 +94,8 @@ export function BoardContent({
   const currentUserId = auth.data?.user?.userId;
   const githubStatus = useGithubStatusQuery();
   const personId = boardPersonIdentity(currentUserId, githubStatus.data?.userGithubUsername);
-  const view = useBoardView({ factoryProjectId, kind, currentUserId, personId });
+  const reviewsPullRequests = boardLoop(definition)?.pullRequestReview !== undefined;
+  const view = useBoardView({ factoryProjectId, kind, reviewsPullRequests, currentUserId, personId });
   const { searchParams, filters, sort, layout } = view;
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
@@ -415,7 +416,7 @@ export function BoardContent({
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls
-            kind={kind}
+            reviewsPullRequests={reviewsPullRequests}
             view={view}
             participants={participants}
             availableLabels={availableLabels}

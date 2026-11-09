@@ -16,7 +16,6 @@ import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
 import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
-import type { BoardKind } from '../boardStages';
 import { BOARD_SOURCE_OPTIONS, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
 import { BoardSourceIcon } from './BoardSourceIcon';
@@ -56,7 +55,7 @@ function peopleOptions(
 }
 
 interface BoardFilterFieldsOptions {
-  kind: BoardKind;
+  reviewsPullRequests: boolean;
   filters: BoardFilterState;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -66,7 +65,7 @@ interface BoardFilterFieldsOptions {
 }
 
 export function boardFilterFields({
-  kind,
+  reviewsPullRequests,
   filters,
   participants,
   availableLabels,
@@ -99,7 +98,7 @@ export function boardFilterFields({
   };
   const linearProjectOffered = filters.source.has('linear') || filters.linearProject.size > 0;
 
-  return boardFilterFieldIds(kind).map(fieldId => ({
+  return boardFilterFieldIds(reviewsPullRequests).map(fieldId => ({
     id: fieldId,
     ...FIELD_PRESENTATION[fieldId],
     operators: ['in'],
