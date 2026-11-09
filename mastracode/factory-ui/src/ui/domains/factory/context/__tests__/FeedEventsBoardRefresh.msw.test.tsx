@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -136,29 +136,35 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
-  it('polls nothing while the stream is up, then polls again once it drops', { timeout: 30_000 }, async () => {
+  it('polls nothing while the stream is up, then polls again once it drops', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
-    const rendered = await renderConnectedBoard();
-    const connected = { ...requests };
+    // Before the mount, so the query intervals run on the fake clock.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
 
-    await delay(PAST_ONE_FALLBACK_POLL_MS);
-    expect(requests).toEqual(connected);
+    try {
+      const rendered = await renderConnectedBoard();
+      const connected = { ...requests };
 
-    server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 503 })));
-    stream.close();
-    await waitFor(() => expect(rendered.result.current.connected).toBe(false));
-    const dropped = { ...requests };
+      act(() => vi.advanceTimersByTime(PAST_ONE_FALLBACK_POLL_MS));
+      await delay(50);
+      expect(requests).toEqual(connected);
 
-    await waitFor(
-      () => {
+      server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 503 })));
+      stream.close();
+      await waitFor(() => expect(rendered.result.current.connected).toBe(false));
+      const dropped = { ...requests };
+
+      act(() => vi.advanceTimersByTime(PAST_ONE_FALLBACK_POLL_MS));
+      await waitFor(() => {
         expect(requests.cards).toBeGreaterThan(dropped.cards);
         expect(requests.decisions).toBeGreaterThan(dropped.decisions);
         expect(requests.runs).toBeGreaterThan(dropped.runs);
-      },
-      { timeout: PAST_ONE_FALLBACK_POLL_MS },
-    );
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('catches the board up when the stream comes back after a drop', async () => {
