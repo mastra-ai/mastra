@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
 `DatePicker` now fills the width of its container. Before, it kept its content width and left an empty strip inside a wider popover. Popovers that size to their content look the same. A width class passed through `className` (for example `w-fit`) still replaces the default.
