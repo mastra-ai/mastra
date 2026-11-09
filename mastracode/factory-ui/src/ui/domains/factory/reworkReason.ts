@@ -6,9 +6,9 @@ import type { AuditEvent } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
 const STAGE_MOVED_ACTION = 'factory.work_item.stage_moved';
-/** Where a self-review that asked for changes sends the card: back to Building, or parked in Intake. */
 /** Actor id prefix of a session agent moving the card through Factory's tools, not the bound transition tool. */
 const SESSION_AGENT_PREFIX = 'agent:session:';
+/** Where a self-review that asked for changes sends the card: back to Building, or parked in Intake. */
 const SELF_REVIEW_RETURN_STAGES = new Set(['execute', 'intake']);
 
 export type ReworkPhase = Pick<InstalledPhaseInfo, 'id' | 'title' | 'name' | 'kind'>;
