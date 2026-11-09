@@ -10,7 +10,7 @@ import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
 import { extractUsageMetrics } from '../../../../observability/usage';
-import { persistProcessorDataChunk } from '../../../../stream/base/output';
+import { persistProcessorDataChunk } from '../../../../processors/persist-data-chunk';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';

@@ -2325,7 +2325,10 @@ describe('ProcessorRunner', () => {
       const mockWriter = { custom: vi.fn() };
       await runner.runOutputProcessors(messageList, undefined, undefined, 0, mockWriter);
 
-      expect(receivedWriter).toBe(mockWriter);
+      // The runner wraps the writer to track persisted data parts (#29822); it must still forward to the original.
+      const chunk = { type: 'data-test', data: { ok: true } };
+      await (receivedWriter as typeof mockWriter).custom(chunk, { messageId: 'msg-1' });
+      expect(mockWriter.custom).toHaveBeenCalledWith(chunk, { messageId: 'msg-1' });
     });
 
     it('should pass writer to processOutputStream when provided', async () => {

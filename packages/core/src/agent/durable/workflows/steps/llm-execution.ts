@@ -50,6 +50,7 @@ import type { SpanTermination } from '../../../../observability/types/outcome';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
+import { persistProcessorDataChunk } from '../../../../processors/persist-data-chunk';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import type { ProcessorState } from '../../../../processors/runner';
@@ -61,7 +62,7 @@ import {
 } from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
-import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
+import { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';

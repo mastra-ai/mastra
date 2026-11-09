@@ -14,6 +14,7 @@ import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
 // barrel and creates an ESM init-time cycle.
 const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
+import { persistProcessorDataChunk } from '../../processors/persist-data-chunk';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import { isFailedStreamChunk } from '../../processors/stream-reprocess';
 import type { WorkflowRunStatus } from '../../workflows';
@@ -113,35 +114,6 @@ export function createDestructurableOutput<OUTPUT = undefined>(
       return originalValue;
     },
   }) as MastraModelOutput<OUTPUT>;
-}
-
-/**
- * Persist a non-transient `data-*` chunk emitted by an output processor's
- * `writer.custom()` onto the assistant message, so the chunk survives in
- * thread history instead of being stream-only (#19375). Transient chunks
- * and non-data chunks are left untouched.
- *
- * Exported for the durable engine, whose producer-side processor writers
- * persist into the workflow-side MessageList (the one serialized into
- * `messageListState` and flushed to memory at finalize).
- */
-export function persistProcessorDataChunk(
-  messageList: MessageList,
-  messageId: string,
-  chunk: { type: string; data?: unknown; transient?: boolean },
-): void {
-  if (!isDataChunk(chunk) || chunk.transient) return;
-
-  const message: MastraDBMessage = {
-    id: messageId,
-    role: 'assistant',
-    content: {
-      format: 2,
-      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data }],
-    },
-    createdAt: new Date(),
-  };
-  messageList.add(message, 'response');
 }
 
 type ToolCallStreamingMeta = {

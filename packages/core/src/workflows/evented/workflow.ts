@@ -39,6 +39,7 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
+import { trackProcessorDataWrites } from '../../processors/persist-data-chunk';
 import {
   OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
   endOutputStreamSpanAtStepEnd,
@@ -1104,6 +1105,7 @@ function createStepFromProcessor<TProcessorId extends string>(
             },
           }
         : undefined;
+      const dataWrites = trackProcessorDataWrites(processorWriter);
       const processorMessageList =
         messageList ??
         (Array.isArray(messages)
@@ -1118,7 +1120,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         requestContext,
         ...processorObservabilityContext,
         state: processorState,
-        writer: processorWriter,
+        writer: dataWrites.writer,
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
@@ -1515,6 +1517,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   idsBeforeProcessing,
                   check,
                   'response',
+                  dataWrites,
                 );
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
@@ -1526,6 +1529,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   idsBeforeProcessing,
                   check,
                   'response',
+                  dataWrites,
                 );
                 passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
@@ -1596,6 +1600,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   idsBeforeProcessing,
                   check,
                   'response',
+                  dataWrites,
                 );
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
@@ -1607,6 +1612,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   idsBeforeProcessing,
                   check,
                   'response',
+                  dataWrites,
                 );
                 passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
@@ -1669,6 +1675,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   idsBeforeProcessing,
                   check,
                   'response',
+                  dataWrites,
                 );
                 return { ...passThrough, messages: result };
               } else if (result && 'messages' in result && 'systemMessages' in result) {
@@ -1679,6 +1686,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   idsBeforeProcessing,
                   check,
                   'response',
+                  dataWrites,
                 );
                 passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {

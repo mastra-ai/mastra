@@ -706,3 +706,185 @@ describe('Output Processor Data Chunks (#13341)', () => {
     expect(dataChunks[0].data).toEqual({ value: 1, seen: true });
   });
 });
+
+describe('data parts survive returned replacement messages (#29822)', () => {
+  function createTextModel(text = 'DONE') {
+    return new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+        ]),
+        rawCall: { rawPrompt: [], rawSettings: {} },
+        warnings: [],
+      }),
+    });
+  }
+
+  async function runWithProcessor(
+    processor: Processor,
+    threadId: string,
+    options: { model?: MockLanguageModelV2; tools?: Record<string, ReturnType<typeof createTool>> } = {},
+  ) {
+    const memory = new MockMemory();
+    const resourceId = `${threadId}-resource`;
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: (options.model ?? createTextModel()) as any,
+      memory,
+      tools: options.tools,
+      outputProcessors: [processor],
+    });
+
+    const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId }, maxSteps: 5 });
+    const streamedTypes: string[] = [];
+    for await (const chunk of stream.fullStream) {
+      streamedTypes.push(chunk.type);
+    }
+
+    const recalled = await memory.recall({ threadId, resourceId });
+    const assistantParts = recalled.messages
+      .filter(message => message.role === 'assistant')
+      .flatMap(message => message.content.parts);
+    return { streamedTypes, assistantParts, recalled };
+  }
+
+  const dataParts = (parts: Array<{ type: string }>) => parts.filter(part => part.type.startsWith('data-'));
+
+  it('keeps a part written in processOutputResult after the processor copied the messages', async () => {
+    const processor: Processor = {
+      id: 'copy-then-write-result',
+      async processOutputResult({ messages, writer }) {
+        const copies = structuredClone(messages);
+        await writer?.custom({ type: 'data-probe', data: { phase: 'result' } });
+        return copies;
+      },
+    };
+
+    const { streamedTypes, assistantParts } = await runWithProcessor(processor, 'copy-write-result');
+
+    expect(streamedTypes).toContain('data-probe');
+    expect(dataParts(assistantParts)).toMatchObject([{ type: 'data-probe', data: { phase: 'result' } }]);
+    expect(assistantParts).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'DONE' })]));
+  });
+
+  it('keeps a part written in processOutputStep after the processor copied the messages', async () => {
+    const processor: Processor = {
+      id: 'copy-then-write-step',
+      async processOutputStep({ messages, writer }) {
+        const copies = structuredClone(messages);
+        await writer?.custom({ type: 'data-probe', data: { phase: 'step' } });
+        return copies;
+      },
+    };
+
+    const { streamedTypes, assistantParts } = await runWithProcessor(processor, 'copy-write-step');
+
+    expect(streamedTypes).toContain('data-probe');
+    expect(dataParts(assistantParts)).toMatchObject([{ type: 'data-probe', data: { phase: 'step' } }]);
+  });
+
+  it('keeps a part written in processToolResult after the processor copied the messages', async () => {
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'Echoes text',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => `Echo: ${text}`,
+    });
+    const processor: Processor = {
+      id: 'copy-then-write-tool-result',
+      async processToolResult({ messages, writer }) {
+        const copies = structuredClone(messages);
+        await writer?.custom({ type: 'data-probe', data: { phase: 'tool-result' } });
+        return copies;
+      },
+    };
+
+    const { streamedTypes, assistantParts } = await runWithProcessor(processor, 'copy-write-tool-result', {
+      model: createToolCallingModel('echoTool'),
+      tools: { echoTool },
+    });
+
+    expect(streamedTypes).toContain('data-probe');
+    expect(dataParts(assistantParts)).toMatchObject([{ type: 'data-probe', data: { phase: 'tool-result' } }]);
+  });
+
+  it('does not duplicate a part the returned copy already contains', async () => {
+    const processor: Processor = {
+      id: 'write-then-copy',
+      async processOutputResult({ messageList, writer }) {
+        await writer?.custom({ type: 'data-probe', data: { phase: 'result' } });
+        return structuredClone(messageList.get.response.db());
+      },
+    };
+
+    const { assistantParts } = await runWithProcessor(processor, 'write-copy');
+
+    expect(dataParts(assistantParts)).toMatchObject([{ type: 'data-probe', data: { phase: 'result' } }]);
+  });
+
+  it('keeps the processor edits alongside the restored part', async () => {
+    const processor: Processor = {
+      id: 'redact-then-write',
+      async processOutputResult({ messages, writer }) {
+        const copies = structuredClone(messages).map(message =>
+          message.role === 'assistant'
+            ? {
+                ...message,
+                content: {
+                  ...message.content,
+                  parts: message.content.parts.map(part =>
+                    part.type === 'text' ? { ...part, text: 'REDACTED' } : part,
+                  ),
+                },
+              }
+            : message,
+        );
+        await writer?.custom({ type: 'data-probe', data: { phase: 'result' } });
+        return copies;
+      },
+    };
+
+    const { assistantParts } = await runWithProcessor(processor, 'redact-write');
+
+    const textParts = assistantParts.filter(part => part.type === 'text');
+    expect(textParts).toMatchObject([{ type: 'text', text: 'REDACTED' }]);
+    expect(dataParts(assistantParts)).toMatchObject([{ type: 'data-probe', data: { phase: 'result' } }]);
+  });
+
+  it('does not restore a part onto a message the processor removed', async () => {
+    const processor: Processor = {
+      id: 'write-then-drop-assistant',
+      async processOutputResult({ messages, writer }) {
+        await writer?.custom({ type: 'data-probe', data: { phase: 'result' } });
+        return messages.filter(message => message.role !== 'assistant');
+      },
+    };
+
+    const { assistantParts } = await runWithProcessor(processor, 'drop-assistant');
+
+    expect(dataParts(assistantParts)).toEqual([]);
+  });
+
+  it('does not persist transient parts when restoring', async () => {
+    const processor: Processor = {
+      id: 'copy-then-write-transient',
+      async processOutputResult({ messages, writer }) {
+        const copies = structuredClone(messages);
+        await writer?.custom({ type: 'data-status', data: { busy: true }, transient: true });
+        return copies;
+      },
+    };
+
+    const { streamedTypes, assistantParts } = await runWithProcessor(processor, 'copy-write-transient');
+
+    expect(streamedTypes).toContain('data-status');
+    expect(dataParts(assistantParts)).toEqual([]);
+  });
+});

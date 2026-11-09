@@ -31,6 +31,8 @@ import { residentStepResults } from '../workflows/run-journal';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
+import { trackProcessorDataWrites } from './persist-data-chunk';
+import type { ProcessorDataWrites } from './persist-data-chunk';
 import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from './send-signal';
 import type { ProcessorLateSignalSink } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
@@ -885,6 +887,7 @@ export class ProcessorRunner {
       try {
         // Get per-processor state that persists across all method calls within this request
         const processorState = this.getProcessorState(processor.id);
+        const dataWrites = trackProcessorDataWrites(writer);
 
         const processResult = await processMethod({
           messages: processableMessages,
@@ -896,7 +899,7 @@ export class ProcessorRunner {
           ...createObservabilityContext({ currentSpan: processorSpan }),
           requestContext,
           retryCount,
-          writer,
+          writer: dataWrites.writer,
           sendSignal: createProcessorSendSignal({ messageList, writer, lateSink: this.lateSignalSink }),
         });
 
@@ -917,6 +920,7 @@ export class ProcessorRunner {
             processableMessages = getProcessableResponseMessages(processResult);
           }
         } else if (processResult) {
+          dataWrites.captureHolders(messageList);
           const deletedIds = idsBeforeProcessing.filter(
             (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
           );
@@ -928,6 +932,7 @@ export class ProcessorRunner {
             messageList.removeByIds([message.id]);
             messageList.add(message, check.getSource(message) || 'response', { merge: false });
           }
+          dataWrites.restore(messageList);
         }
 
         processorSpan?.end({
@@ -2508,6 +2513,7 @@ export class ProcessorRunner {
 
       // Get or create processor state (persists across steps within a request)
       const processorState = this.getProcessorState(processor.id);
+      const dataWrites = trackProcessorDataWrites(writer);
 
       try {
         const result = await processMethod({
@@ -2527,7 +2533,7 @@ export class ProcessorRunner {
           requestContext,
           agent: this.agent,
           retryCount,
-          writer,
+          writer: dataWrites.writer,
           sendSignal: createProcessorSendSignal({ messageList, writer, lateSink: this.lateSignalSink }),
         });
 
@@ -2547,6 +2553,7 @@ export class ProcessorRunner {
           // Processor returned the same messageList - mutations have been applied
         } else if (result) {
           // Processor returned an array - apply changes to messageList
+          dataWrites.captureHolders(messageList);
           const deletedIds = idsBeforeProcessing.filter(
             (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
           );
@@ -2567,6 +2574,7 @@ export class ProcessorRunner {
               messageList.add(message, check.getSource(message) || 'response', { merge: false });
             }
           }
+          dataWrites.restore(messageList);
         }
 
         processorSpan?.end({
@@ -2992,7 +3000,9 @@ export class ProcessorRunner {
     idsBeforeProcessing: string[],
     check: ReturnType<MessageList['makeMessageSourceChecker']>,
     defaultSource: 'input' | 'response' = 'input',
+    dataWrites?: ProcessorDataWrites,
   ) {
+    dataWrites?.captureHolders(messageList);
     const deletedIds = idsBeforeProcessing.filter(i => !messages.some(m => m.id === i));
     if (deletedIds.length) {
       messageList.removeByIds(deletedIds);
@@ -3017,6 +3027,7 @@ export class ProcessorRunner {
         messageList.add(message, check.getSource(message) || defaultSource, { merge: false });
       }
     }
+    dataWrites?.restore(messageList);
   }
 
   static async validateAndFormatProcessInputStepResult(
