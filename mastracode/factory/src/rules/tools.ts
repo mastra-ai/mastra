@@ -183,7 +183,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. In the phase that reviews pull requests it records the published PR verdict and the card stays put. In a self-review phase with no change request open yet, approve keeps the card in place and wakes the builder to open the change request; request changes sends it back to the build phase with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. In the phase that reviews pull requests it records the published PR verdict and the card stays put. In a self-review phase with no change request open yet, approve keeps the card in place for you to open the change request from the approved head; once a GitHub pull request opens from that head, Factory moves the card to pull request review itself (elsewhere, move it with factory_transition_work_item). Request changes sends it back to the build phase with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, findings }, execution) => {

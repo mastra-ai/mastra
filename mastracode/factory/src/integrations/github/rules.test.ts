@@ -6361,3 +6361,112 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
   },
 );
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'a pull request opened from the head self-review approved, on %s',
+  backend => {
+    const APPROVED_HEAD = 'a'.repeat(40);
+
+    /** `permission` is what GitHub answers for the PR's author; `provenance` marks the PR Factory-authored. */
+    async function harness({ permission, provenance }: { permission: string; provenance: boolean }) {
+      const seeded = await setup(
+        permission,
+        undefined,
+        backend === 'postgres'
+          ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+          : new LibSQLFactoryStorage({ id: 'github-self-review-handoff', url: ':memory:' }),
+      );
+      // Work as a project stored it with its self-review phase: execute -> review (self-review) -> pr-review.
+      const boards = olderWork();
+      const configVersion = 'self-review-handoff';
+      const card = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: seeded.project.id,
+          input: {
+            board: 'work',
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId: 'github:10:issue:42',
+              url: 'https://github.com/acme/repo/issues/42',
+            },
+            title: 'Issue 42',
+            stages: ['review'],
+            sessions: {
+              work: { sessionId: 'session-work', branch: 'feature', threadId: 'thread-work', startedBy: 'user-1' },
+            },
+            metadata: {
+              authorTrusted: true,
+              state: 'open',
+              selfReviewVerdict: 'approve',
+              selfReviewedHeadSha: APPROVED_HEAD,
+            },
+          },
+        })
+      ).item;
+      if (provenance) {
+        await seeded.integrationStorage.subscriptions.create({
+          orgId: 'org-1',
+          targetKey: 'factory-pr-provenance:10:17',
+          threadId: 'thread-work',
+          status: 'active',
+          data: { kind: 'factory-pr-provenance', factoryProjectId: seeded.project.id, workItemId: card.id },
+        });
+      }
+      const service = new GithubRules({
+        github: seeded.github,
+        sourceControl: seeded.sourceControl,
+        integrationStorage: seeded.integrationStorage,
+        projects: seeded.projects,
+        storage: seeded.workItems,
+        boards,
+        configVersion,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({ storage: seeded.workItems, configVersion, boards }),
+        storage: seeded.workItems,
+        boards,
+        intakeRoutes: seeded.boards,
+        isAutoRunEnabled: async () => true,
+        ownerId: 'worker-1',
+      });
+      const openPullRequest = async (headSha: string) => {
+        const delivery = pullRequest('opened', `delivery-open-${headSha.slice(0, 4)}`);
+        delivery.payload.pull_request.head = { ref: 'feature', sha: headSha.toUpperCase() } as never;
+        await service.ingest(delivery);
+        for (let pass = 0; pass < 3; pass++) {
+          await dispatcher.runOnce(new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * pass));
+        }
+      };
+      const stages = async () => (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.stages;
+      const moves = async () =>
+        (await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id)).filter(
+          entry => entry.workItemId === card.id && entry.decision.type === 'transition',
+        );
+      return { openPullRequest, stages, moves };
+    }
+
+    it('moves the card from self-review to PR review without the agent moving it', async () => {
+      const h = await harness({ permission: 'read', provenance: true });
+      await h.openPullRequest(APPROVED_HEAD);
+      expect(await h.stages()).toEqual(['pr-review']);
+    });
+
+    it('leaves the card in self-review when the pull request opens from a head it never approved', async () => {
+      const h = await harness({ permission: 'read', provenance: true });
+      await h.openPullRequest('b'.repeat(40));
+      expect(await h.stages()).toEqual(['review']);
+    });
+
+    it("leaves the card in self-review for an outsider's pull request on its branch, even at the approved head", async () => {
+      const h = await harness({ permission: 'read', provenance: false });
+      await h.openPullRequest(APPROVED_HEAD);
+      // The branch alone matches the card, so the rule itself must refuse to move it.
+      expect(await h.moves()).toEqual([]);
+      expect(await h.stages()).toEqual(['review']);
+    });
+  },
+);
