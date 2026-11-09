@@ -717,11 +717,12 @@ describe('input box mouse mode', () => {
     expect(h.editor.getText()).toMatch(/^X\[paste #1 [^\]]+\]$/);
   });
 
-  it('a click on a wrapped row ending in an emoji never splits the emoji', async () => {
+  // `!` is drawn in the prompt chrome and hidden from the text layout, which shifts columns by one.
+  it.each(['', '!'])('a click on a wrapped row ending in an emoji never splits the emoji (prefix %j)', async prefix => {
     harness = createHarness({ inputMouseModeEnabled: true, cols: 30 });
     const h = harness;
     for (let n = 10; n < 30; n++) {
-      h.editor.setText(`${'a'.repeat(n)}😀tail`);
+      h.editor.setText(`${prefix}${'a'.repeat(n)}😀tail`);
       await h.render();
       const emoji = h.find('😀');
       // Wait for the width where the emoji is the last thing on its row.
@@ -737,7 +738,7 @@ describe('input box mouse mode', () => {
       await h.click(emoji.row, emoji.col + 1);
       await h.release(emoji.row, emoji.col + 1);
       h.send('X');
-      expect(h.editor.getText()).toBe(`${'a'.repeat(n)}X😀tail`);
+      expect(h.editor.getText()).toBe(`${prefix}${'a'.repeat(n)}X😀tail`);
       return;
     }
     throw new Error('never found a row ending in the emoji');
