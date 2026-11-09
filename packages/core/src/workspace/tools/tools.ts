@@ -11,6 +11,7 @@ import { posix as posixPath } from 'node:path';
 import { z } from 'zod/v4';
 import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../../request-context/input-source';
 import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../../tools/ordered-tools';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -269,21 +270,35 @@ const COMPUTER_MUTATION_TOOLS = new Set<string>([
   WORKSPACE_TOOLS.COMPUTER.SCROLL,
 ]);
 
+const COMPUTER_REQUEST_CONTEXTS = new WeakMap<RequestContext, RequestContext>();
+
+function computerExecutionContext(context: any, workspace: Workspace): any {
+  if (!workspace.resolvesComputerTools()) return context;
+
+  const threadId = context?.agent?.threadId;
+  const resourceId = context?.agent?.resourceId;
+  if (!threadId && !resourceId) return context;
+
+  const source = context.requestContext as RequestContext | undefined;
+  const inputSource = getRequestContextInputSource(source);
+  let requestContext = inputSource ? COMPUTER_REQUEST_CONTEXTS.get(inputSource) : undefined;
+  if (!requestContext) {
+    requestContext = new RequestContext(source?.entries());
+    if (inputSource) {
+      Object.defineProperty(requestContext, REQUEST_CONTEXT_INPUT_SOURCE, { value: inputSource });
+      COMPUTER_REQUEST_CONTEXTS.set(inputSource, requestContext);
+    }
+  }
+  if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+  if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  return { ...context, requestContext };
+}
+
 function wrapTool(tool: any, workspace: Workspace, targets: ResolveTargets): any {
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      const threadId = context?.agent?.threadId;
-      const resourceId = context?.agent?.resourceId;
-      const executionContext =
-        threadId || resourceId
-          ? {
-              ...context,
-              requestContext: new RequestContext(context.requestContext?.entries?.()),
-            }
-          : context;
-      if (threadId) executionContext.requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
-      if (resourceId) executionContext.requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      const executionContext = computerExecutionContext(context, workspace);
       const effectiveWorkspace = await resolveEffectiveWorkspace(
         executionContext?.workspace ?? workspace,
         executionContext,

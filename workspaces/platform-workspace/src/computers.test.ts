@@ -4,8 +4,8 @@ import { Mastra } from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryComputersStorage, InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { LocalFilesystem, WORKSPACE_TOOLS, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { DESKTOP_PACKAGES } from './computer.js';
 import type { ComputerSandbox } from './computers.js';
@@ -786,6 +786,74 @@ describe('ordering through a real agent at default tool concurrency', () => {
     });
 
     expect(backend.actions).toEqual(['screenshot', 'click', 'screenshot']);
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+  });
+
+  it('reuses one derived context for dynamic computer workspace providers in a real Agent run', async () => {
+    const computers = make();
+    let scopedSandboxResolutions = 0;
+    let scopedFilesystemResolutions = 0;
+    const sandboxResolver = computers.sandboxResolver();
+    const resolveSandbox = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => {
+      if (requestContext.get(MASTRA_THREAD_ID_KEY)) scopedSandboxResolutions++;
+      return sandboxResolver({ requestContext });
+    });
+    const resolveFilesystem = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => {
+      if (requestContext.get(MASTRA_THREAD_ID_KEY)) scopedFilesystemResolutions++;
+      return new LocalFilesystem({ basePath: '/tmp' });
+    });
+    const workspace = new Workspace({
+      filesystem: resolveFilesystem,
+      sandbox: resolveSandbox,
+      computerTools: 'resolve',
+    });
+    const agent = new Agent({
+      id: 'computer-provider-context',
+      name: 'computer-provider-context',
+      instructions: 'Create and inspect the computer workspace.',
+      model: sequentialToolCallModel([
+        { toolName: 'mastra_workspace_computer_create', input: { name: 'box' } },
+        { toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, input: { path: '.' } },
+        { toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, input: { path: '.' } },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, input: {} },
+        { toolName: WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, input: {} },
+      ]) as any,
+      tools: computers.tools(),
+      workspace,
+    });
+    resolveFilesystem.mockClear();
+    resolveSandbox.mockClear();
+
+    await agent.generate('go', { maxSteps: 7, memory: { thread: 't1', resource: 'r1' }, requestContext: new RequestContext() });
+
+    expect(scopedFilesystemResolutions).toBe(1);
+    expect(scopedSandboxResolutions).toBe(1);
+  });
+
+  it('passes the caller context unchanged to non-computer workspace providers', async () => {
+    const seen: RequestContext[] = [];
+    const resolveFilesystem = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => {
+      seen.push(requestContext);
+      return new LocalFilesystem({ basePath: '/tmp' });
+    });
+    const workspace = new Workspace({ filesystem: resolveFilesystem });
+    const agent = new Agent({
+      id: 'filesystem-provider-context',
+      name: 'filesystem-provider-context',
+      instructions: 'Inspect the filesystem.',
+      model: sequentialToolCallModel([
+        { toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, input: { path: '.' } },
+        { toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, input: { path: '.' } },
+      ]) as any,
+      workspace,
+    });
+    const requestContext = new RequestContext();
+
+    await agent.generate('go', { maxSteps: 4, memory: { thread: 't1', resource: 'r1' }, requestContext });
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(context => context === requestContext)).toBe(true);
     expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
     expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
   });
