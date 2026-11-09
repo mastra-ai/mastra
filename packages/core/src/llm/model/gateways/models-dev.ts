@@ -26,6 +26,7 @@ import type {
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { interpolateUrlTemplate } from './url-template.js';
 
 interface ModelsDevModelInfo {
   id: string;
@@ -96,19 +97,6 @@ function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; provi
   }
 
   return envVars[0] || fallbackEnvVar;
-}
-
-function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
-  return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
-    const key = envVarName.trim();
-    const value = envVars?.[key] ?? process.env[key];
-
-    if (value === undefined || value === null) {
-      throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
-    }
-
-    return value;
-  });
 }
 
 function resolveApiKeyFromEnv(apiKeyEnvVar: ProviderConfig['apiKeyEnvVar']): string | undefined {
