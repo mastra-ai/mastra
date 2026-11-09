@@ -185,19 +185,13 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     }
     case 'display_state_changed': {
       // Snapshots arrive many times a second and mostly repeat what is shown; the same state lets React skip the chat.
-      const omProgress = replaceEqualDeep(state.omProgress, event.displayState.omProgress ?? state.omProgress);
-      const usage = replaceEqualDeep(state.usage, event.displayState.tokenUsage ?? state.usage);
-      const bufferingMessages = event.displayState.bufferingMessages ?? false;
-      const bufferingObservations = event.displayState.bufferingObservations ?? false;
-      if (
-        omProgress === state.omProgress &&
-        usage === state.usage &&
-        bufferingMessages === state.bufferingMessages &&
-        bufferingObservations === state.bufferingObservations
-      ) {
-        return state;
-      }
-      return { ...state, omProgress, usage, bufferingMessages, bufferingObservations };
+      return replaceEqualDeep(state, {
+        ...state,
+        omProgress: event.displayState.omProgress ?? state.omProgress,
+        usage: event.displayState.tokenUsage ?? state.usage,
+        bufferingMessages: event.displayState.bufferingMessages ?? false,
+        bufferingObservations: event.displayState.bufferingObservations ?? false,
+      });
     }
     case 'goal_evaluation':
       return { ...state, goal: event.payload };
