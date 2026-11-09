@@ -14,8 +14,8 @@
 //   re-imports can evaluate a module before the class it extends ("Class extends value undefined").
 // - heap: asserts on process.memoryUsage() deltas, which work left running by earlier files in
 //   the same worker allocates into.
-// - timers: asserts vi.getTimerCount() is 0, which a timer scheduled by work an earlier file
-//   left running in the same worker breaks.
+// - timers: asserts vi.getTimerCount() is 0, or runs every fake timer (runAllTimersAsync), which
+//   a timer scheduled by work an earlier file left running in the same worker breaks.
 //
 // The list comes from scanning test sources for those patterns, then checking the rest
 // with a leak probe that diffs worker state between files.
@@ -46,6 +46,7 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/durable-agent-parallel-tool-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts', // reset-modules
+  'src/agent/durable/__tests__/evented-tool-roundtrip-redelivery.test.ts', // timers
   'src/agent/durable/__tests__/evented-workflow-agent-step-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-agent-suspend-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-sleep-restart.test.ts', // reset-modules
