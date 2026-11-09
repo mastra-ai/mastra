@@ -6,10 +6,9 @@
  * run must deliver nothing.
  *
  * Covers both engines with both a Redis server cache and the default in-memory
- * server cache. With the in-memory cache every frame must come from this
- * process: the durable engine always runs here, and the evented engine's steps
- * stay here because LibSQL has no step guards, so its runs cannot be claimed by
- * other processes and step frames share the caller's counter.
+ * server cache. With the in-memory cache, both engines run every step in this
+ * process. Evented step frames are numbered because they extend the run log
+ * the caller started with its `start` frame.
  *
  * Requires a Redis server at REDIS_URL; the model is served by AIMock.
  */
