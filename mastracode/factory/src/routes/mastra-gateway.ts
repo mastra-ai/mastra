@@ -8,7 +8,11 @@ const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects
 /** The Starter plan's gateway credit pool, used when the customer names none. */
 const STARTER_CREDIT_POOL = 'gateway_credits';
 
-const GATEWAY_KEYS_PATH = '/gateway/organization/v2/keys';
+/**
+ * Provisions a Gateway project with a v1 key, which the live gateway accepts. Organization (v2) keys
+ * aren't released yet, so Factory doesn't ask for one (the CLI does the same).
+ */
+const GATEWAY_PROVISION_PATH = '/gateway/projects/provision';
 
 const PLATFORM_TIMEOUT_MS = 15_000;
 
@@ -81,10 +85,11 @@ const CreatedGatewayKey = z.object({ apiKey: z.string().min(1) });
 
 export async function createGatewayKey(auth: RouteAuth, c: Context, orgId: string, scope: 'org' | 'user') {
   const { email } = await platformMember(auth, c, orgId);
-  const res = await platformFetch(auth, c, GATEWAY_KEYS_PATH, {
+  const label = scope === 'org' ? 'Factory · Shared' : `Factory · ${email ?? 'Personal'}`;
+  const res = await platformFetch(auth, c, GATEWAY_PROVISION_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label: scope === 'org' ? 'Factory · Shared' : `Factory · ${email ?? 'Personal'}` }),
+    body: JSON.stringify({ name: label, keyLabel: label }),
   });
   if (res.status === 403) {
     throw new MastraGatewayError(

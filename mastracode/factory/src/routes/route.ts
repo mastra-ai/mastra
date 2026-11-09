@@ -31,7 +31,7 @@ export interface RouteAuth {
   isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
   /**
    * Call the Mastra platform API as the signed-in user (`path` like
-   * `/gateway/organization/v2/keys`). Present only with Mastra platform auth
+   * `/gateway/projects/provision`). Present only with Mastra platform auth
    * (`MastraAuthStudio`); `null` when the request has no session.
    */
   fetchPlatformAsUser?(c: Context, path: string, init?: RequestInit): Promise<Response | null>;

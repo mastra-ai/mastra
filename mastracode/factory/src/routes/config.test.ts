@@ -610,7 +610,7 @@ describe('Mastra Gateway routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
   const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: false }]);
   const user = { workosId: 'user-a', organizationId: 'org1', email: 'user-a@example.com' };
-  const KEYS = '/gateway/organization/v2/keys';
+  const KEYS = '/gateway/projects/provision';
 
   interface FakePlatform {
     requests: Array<{ method: string; path: string; body?: unknown }>;
@@ -675,7 +675,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(platform.requests).toContainEqual({
       method: 'POST',
       path: KEYS,
-      body: { label: 'Factory · user-a@example.com' },
+      body: { name: 'Factory · user-a@example.com', keyLabel: 'Factory · user-a@example.com' },
     });
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway')).toEqual({
       type: 'api_key',

@@ -1195,7 +1195,7 @@ describe('MastraAuthStudio', () => {
       const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
 
       await auth.authenticateToken('', req);
-      await auth.fetchAsRequestUser(req, '/gateway/organization/v2/keys', { method: 'POST' });
+      await auth.fetchAsRequestUser(req, '/gateway/projects/provision', { method: 'POST' });
 
       const sentCookies = fetchSpy.mock.calls.map(([, init]) =>
         new Headers((init as RequestInit | undefined)?.headers).get('Cookie'),
