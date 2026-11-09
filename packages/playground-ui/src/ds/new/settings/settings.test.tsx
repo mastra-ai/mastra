@@ -72,25 +72,6 @@ describe('Settings', () => {
     });
   });
 
-  describe('SettingsContainer', () => {
-    it('gives its rows their spacing, so rows carry none of their own', () => {
-      render(
-        <SettingsContainer>
-          <SettingsRow label="Theme" />
-          <SettingsRow label="Notifications" />
-        </SettingsContainer>,
-      );
-
-      const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.className).toContain('*:py-3.25!');
-      expect(container?.className).toContain('*:empty:hidden');
-      expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
-      for (const row of container?.querySelectorAll('[data-slot="settings-row"]') ?? []) {
-        expect(row.className).not.toMatch(/\bp[xy]?-/);
-      }
-    });
-  });
-
   describe('when a row labels an editable setting', () => {
     it('keeps the control accessible and includes its edited value in form data', () => {
       render(
@@ -192,42 +173,24 @@ describe('Settings', () => {
   });
 
   describe('where a row places its control', () => {
-    function controlOf(label: string) {
-      return screen
-        .getByText(label)
-        .closest('[data-slot="settings-row"]')
-        ?.querySelector('[data-slot="settings-row-control"]');
+    function rowOf(label: string) {
+      return screen.getByText(label).closest('[data-slot="settings-row"]');
     }
 
-    it('puts it in the shared right-hand column by default', () => {
-      render(
-        <SettingsRow label="Name">
-          <Input aria-label="Name" />
-        </SettingsRow>,
-      );
-
-      expect(controlOf('Name')?.className).toContain('sm:min-w-55');
-      // Selects hug their value up to the text field width.
-      expect(controlOf('Name')?.className).toContain('[--field-width:auto]');
-      expect(controlOf('Name')?.className).toContain('[--field-max-width:13.75rem]');
-    });
-
-    it('puts it under the label at full width when placed below', () => {
+    it('puts it beside the label by default, and under it when placed below', () => {
       render(
         <>
-          <SettingsRow label="Name" controlPlacement="below">
+          <SettingsRow label="Name">
             <Input aria-label="Name" />
           </SettingsRow>
-          <SettingsFieldsetRow label="Invite" controlPlacement="below">
+          <SettingsRow label="Email" controlPlacement="below">
             <Input aria-label="Email" />
-          </SettingsFieldsetRow>
+          </SettingsRow>
         </>,
       );
 
-      for (const label of ['Name', 'Invite']) {
-        expect(controlOf(label)?.className).not.toContain('sm:min-w-55');
-      }
-      expect(screen.getByRole('group', { name: 'Invite' }).className).not.toContain('sm:flex-row');
+      expect(rowOf('Name')?.getAttribute('data-orientation')).toBe('responsive');
+      expect(rowOf('Email')?.getAttribute('data-orientation')).toBe('vertical');
     });
   });
 

@@ -51,35 +51,39 @@ export function SettingsTitle({
   info?: ReactNode;
 }) {
   const titleId = useContext(SettingsTitleIdContext);
-  const infoId = useId();
 
   return (
     // Inset by 10px, so the title sits a little inside the card's edge below it.
     <div className="flex min-w-0 flex-wrap items-center gap-2 ps-2.5">
       <Txt as="h2" id={titleId} variant="subheading" tone="muted" className={className} {...props}>
-        {info == null ? (
-          children
-        ) : (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  tabIndex={0}
-                  aria-describedby={infoId}
-                  className="cursor-help underline decoration-transparent decoration-dotted underline-offset-4 hover:decoration-current focus-visible:decoration-current focus-visible:outline-none"
-                />
-              }
-            >
-              {children}
-            </TooltipTrigger>
-            <TooltipContent id={infoId} keepMounted className="max-w-64">
-              {info}
-            </TooltipContent>
-          </Tooltip>
-        )}
+        {info == null ? children : <SettingsTitleInfo info={info}>{children}</SettingsTitleInfo>}
       </Txt>
       {accessory}
     </div>
+  );
+}
+
+/** The title's text as a tooltip trigger, described by `info`. */
+function SettingsTitleInfo({ info, children }: { info: ReactNode; children: ReactNode }) {
+  const infoId = useId();
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            aria-describedby={infoId}
+            className="cursor-help underline decoration-transparent decoration-dotted underline-offset-4 hover:decoration-current focus-visible:decoration-current focus-visible:outline-none"
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent id={infoId} keepMounted className="max-w-64">
+        {info}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -27,6 +27,8 @@ export type SettingsSkeletonProps = {
  * ```
  */
 export function SettingsSkeleton({ label, rows = 2, variant = 'row', className }: SettingsSkeletonProps) {
+  const Placeholder = variant === 'item' ? ItemPlaceholder : RowPlaceholder;
+
   return (
     // One child of the card, so it takes the card's row padding; inside, rows repeat that rhythm with hairlines.
     <div
@@ -35,26 +37,32 @@ export function SettingsSkeleton({ label, rows = 2, variant = 'row', className }
       data-slot="settings-skeleton"
       className={cn('grid divide-y divide-border *:py-3.25 *:first:pt-0 *:last:pb-0', className)}
     >
-      {Array.from({ length: rows }, (_, index) =>
-        variant === 'item' ? (
-          <SettingsItem
-            key={index}
-            aria-hidden
-            media={<Skeleton className={cn('size-avatar-md shrink-0 rounded-lg', bar)} />}
-            title={<SkeletonText line="text-label" className={cn('w-32', bar)} />}
-            description={<SkeletonText line="text-caption" className={cn('w-48 max-w-full', bar)} />}
-          />
-        ) : (
-          <SettingsRow
-            key={index}
-            aria-hidden
-            label={<SkeletonText line="text-label" className={cn('w-28', bar)} />}
-            description={<SkeletonText line="text-caption" className={cn('w-48 max-w-full', bar)} />}
-          >
-            <Skeleton className={cn('h-control-sm w-28 max-w-full rounded-full', bar)} />
-          </SettingsRow>
-        ),
-      )}
+      {Array.from({ length: rows }, (_, index) => (
+        <Placeholder key={index} />
+      ))}
     </div>
+  );
+}
+
+function ItemPlaceholder() {
+  return (
+    <SettingsItem
+      aria-hidden
+      media={<Skeleton className={cn('size-avatar-md shrink-0 rounded-lg', bar)} />}
+      title={<SkeletonText line="text-label" className={cn('w-32', bar)} />}
+      description={<SkeletonText line="text-caption" className={cn('w-48 max-w-full', bar)} />}
+    />
+  );
+}
+
+function RowPlaceholder() {
+  return (
+    <SettingsRow
+      aria-hidden
+      label={<SkeletonText line="text-label" className={cn('w-28', bar)} />}
+      description={<SkeletonText line="text-caption" className={cn('w-48 max-w-full', bar)} />}
+    >
+      <Skeleton className={cn('h-control-sm w-28 max-w-full rounded-full', bar)} />
+    </SettingsRow>
   );
 }
