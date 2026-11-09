@@ -4,7 +4,11 @@ import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
-import { DEFAULT_INTAKE_ROUTE, PULL_REQUEST_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
+import {
+  CATCH_ALL_INTAKE_ROUTE,
+  DEFAULT_INTAKE_ROUTE,
+  PULL_REQUEST_INTAKE_ROUTE,
+} from '../storage/domains/boards/base.js';
 import type { StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
@@ -247,9 +251,18 @@ describe('intake routes placing linked cards', () => {
     });
   });
 
-  it('leaves every arrival where its decision says when the project has no routes', async () => {
+  it("files every arrival in the default board's first phase when the project has no routes", async () => {
     const { deliver } = await setup();
-    expect(placed(await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } }))).toEqual({
+    expect(
+      placed(
+        await deliver({
+          sourceKey: 'github-issue:1',
+          board: 'docs',
+          stage: 'inbox',
+          metadata: { authorTrusted: true },
+        }),
+      ),
+    ).toEqual({
       board: 'work',
       stages: ['intake'],
     });
@@ -305,16 +318,52 @@ describe('intake routes placing linked cards', () => {
       expect(await runs(card!.id)).toEqual([]);
     }
 
-    // Trusted authors, and integrations without a trust stamp, land where they did before.
+    // Trusted authors, and integrations without a trust stamp, fall to the catch-all: the default
+    // board's first phase, whatever board the integration's rule named.
+    const catchAll = (await boards.listIntakeRoutes(scope)).find(route => route.name === CATCH_ALL_INTAKE_ROUTE.name)!;
     for (const arrival of [
       { sourceKey: 'github-issue:4', metadata: { authorTrusted: true } },
       { sourceKey: 'github-issue:5', metadata: { factoryAuthored: true } },
       { sourceKey: 'linear-issue:ENG-6', source: 'linear-issue' as const, metadata: {} },
     ]) {
       const card = await deliver({ ...arrival, board: 'docs', stage: 'inbox' });
-      expect(placed(card), arrival.sourceKey).toEqual({ board: 'docs', stages: ['inbox'] });
-      expect(card?.metadata).not.toHaveProperty('intakeRouteId');
+      expect(placed(card), arrival.sourceKey).toEqual({ board: 'work', stages: ['intake'] });
+      expect(card?.metadata).toMatchObject({ intakeRouteId: catchAll.id });
     }
+  });
+
+  it('sends the issues and pull requests no other route takes to the board an admin points the catch-all at', async () => {
+    const { boards, scope, deliver } = await setup({ withDefaultRoute: true });
+    await boards.create(scope, docsBoard, 'admin');
+    const routes = await boards.listIntakeRoutes(scope);
+    const catchAll = routes.find(route => route.name === CATCH_ALL_INTAKE_ROUTE.name)!;
+    const pullRequests = routes.find(route => route.name === PULL_REQUEST_INTAKE_ROUTE.name)!;
+    await boards.updateIntakeRoute(
+      scope,
+      catchAll.id,
+      { target: { boardKey: 'docs' } },
+      { expectedRevision: catchAll.revision, actor: 'admin' },
+    );
+    await boards.updateIntakeRoute(
+      scope,
+      pullRequests.id,
+      { enabled: false },
+      { expectedRevision: pullRequests.revision, actor: 'admin' },
+    );
+
+    for (const arrival of [
+      { sourceKey: 'github-issue:1', metadata: { authorTrusted: true } },
+      { sourceKey: 'github-pr:2', source: 'github-pr' as const, metadata: { authorTrusted: true, state: 'open' } },
+      { sourceKey: 'linear-issue:ENG-3', source: 'linear-issue' as const, metadata: {} },
+    ]) {
+      // The integration's rule files on Work; the catch-all decides.
+      const card = await deliver({ ...arrival, board: 'work', stage: 'intake' });
+      expect(placed(card), arrival.sourceKey).toEqual({ board: 'docs', stages: ['inbox'] });
+      expect(card?.metadata).toMatchObject({ intakeRouteId: catchAll.id });
+    }
+    // Outside authors still meet their own route first.
+    const outside = await deliver({ sourceKey: 'github-issue:4', metadata: { authorTrusted: false } });
+    expect(placed(outside)).toEqual({ board: 'work', stages: ['intake'] });
   });
 
   it("files trusted pull requests in Work › PR review by the default route, and outside authors' in Intake", async () => {
@@ -349,7 +398,7 @@ describe('intake routes placing linked cards', () => {
     expect(await runs(outside!.id)).toEqual([]);
   });
 
-  it('places outside work wherever an admin edits the default route to send it, and nowhere once it is disabled', async () => {
+  it('places outside work wherever an admin edits the default route to send it, and on Work once it is disabled', async () => {
     const { boards, scope, defaultRoute, deliver } = await setup({ withDefaultRoute: true });
     await boards.create(scope, docsBoard, 'admin');
     const edited = await boards.updateIntakeRoute(
@@ -384,7 +433,7 @@ describe('intake routes placing linked cards', () => {
           metadata: { authorTrusted: false },
         }),
       ),
-    ).toEqual({ board: 'docs', stages: ['inbox'] });
+    ).toEqual({ board: 'work', stages: ['intake'] });
   });
 
   it("leaves a child card where its parent's board rule files it", async () => {
@@ -453,21 +502,34 @@ describe('intake routes placing linked cards', () => {
     });
   });
 
-  it("does not re-route a decision that names a later phase, such as a maintainer's review request", async () => {
+  it("routes a decision that names a later phase, as a host's rule overriding the default would", async () => {
     const { boards, scope, route, deliver } = await setup();
     await boards.create(scope, docsBoard, 'admin');
     await route({ name: 'Everything to Docs', target: { boardKey: 'docs', phaseKey: 'writing' } });
 
+    // The rule's board and phase don't place the card: the project's routes do.
     const requested = await deliver({
       sourceKey: 'github-pr:7',
       source: 'github-pr',
       stage: 'pr-review',
       metadata: { authorTrusted: true },
     });
-    expect(placed(requested)).toEqual({ board: 'work', stages: ['pr-review'] });
-    // The same route does place an arrival.
-    const arrival = await deliver({ sourceKey: 'github-pr:8', source: 'github-pr' });
-    expect(placed(arrival)).toEqual({ board: 'docs', stages: ['writing'] });
+    expect(placed(requested)).toEqual({ board: 'docs', stages: ['writing'] });
+
+    // With no route matching, it lands on the default board's first phase, not the phase the rule named.
+    const { route: onlyLinear, deliver: deliverUnmatched } = await setup();
+    await onlyLinear({
+      name: 'Linear to planning',
+      when: { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'linear' }] },
+      target: { boardKey: 'work', phaseKey: 'planning' },
+    });
+    const unmatched = await deliverUnmatched({
+      sourceKey: 'github-pr:8',
+      source: 'github-pr',
+      stage: 'pr-review',
+      metadata: { authorTrusted: true },
+    });
+    expect(placed(unmatched)).toEqual({ board: 'work', stages: ['intake'] });
   });
 
   it('does not re-route a decision that places the card outright (skipRules)', async () => {
@@ -909,6 +971,7 @@ describe('intake routes moving existing cards on pull request events', () => {
   it('moves a pull request card on a board with no pull request loop only where a route naming the event says', async () => {
     const harness = await setup();
     await harness.boards.create(harness.scope, docsBoard, 'admin');
+    await harness.route({ name: 'Pull requests to Docs', target: { boardKey: 'docs' } });
     const card = await pullRequestCard(harness, 'docs', 'inbox');
     expect(placed(card)).toEqual({ board: 'docs', stages: ['inbox'] });
 

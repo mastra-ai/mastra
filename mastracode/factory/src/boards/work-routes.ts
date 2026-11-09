@@ -120,10 +120,20 @@ export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
+ * Every new card no route before it placed lands in Work › Intake. It is the project's default
+ * board as a stored route: point it at another board to send new cards there instead.
+ */
+export const CATCH_ALL_INTAKE_ROUTE: StoredIntakeRouteInput = {
+  name: 'Everything else goes to Work › Intake',
+  when: null,
+  target: { boardKey: 'work', phaseKey: 'intake' },
+};
+
+/**
  * The routes Factory adds to a project, in order, each under a key that never changes. A project
  * gets each one once: a new project gets them all, a project set up earlier gets a route added
  * since at the end of its list (or at the start, for a `first` one), and a route an admin deleted
- * stays deleted.
+ * stays deleted. The catch-all stays last: a default added after it would never place a new card.
  */
 export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput; first?: true }[] = [
   { key: 'closes-issue', route: CLOSES_ISSUE_INTAKE_ROUTE, first: true },
@@ -137,4 +147,5 @@ export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeR
   { key: 'pull-request-closed-issue', route: PULL_REQUEST_CLOSED_ISSUE_ROUTE },
   { key: 'pull-request-updated', route: PULL_REQUEST_UPDATED_ROUTE },
   { key: 'pull-request-review-requested', route: PULL_REQUEST_REVIEW_REQUESTED_ROUTE },
+  { key: 'everything-else', route: CATCH_ALL_INTAKE_ROUTE },
 ];

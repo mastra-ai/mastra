@@ -14,6 +14,7 @@ import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import {
+  CATCH_ALL_INTAKE_ROUTE,
   CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
@@ -156,7 +157,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [closesIssue, route, pullRequests, ...events] = await list(replicaA.send, base, MEMBER);
+    const [closesIssue, route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
+    const events = rest.slice(0, -1);
+    // Whatever no other route takes lands on Work's first phase, as it did before routes existed.
+    expect(rest.at(-1)).toMatchObject({
+      name: CATCH_ALL_INTAKE_ROUTE.name,
+      position: 11,
+      on: ['work_item.created'],
+      when: null,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      createdBy: 'factory',
+      problems: [],
+    });
     // Close, reopen and pull request routes target Work's phases, and none has a problem to report.
     expect(events).toMatchObject([
       { name: 'Closed issues go to Done', on: ['work_item.closed'], target: { phaseKey: 'done' }, problems: [] },

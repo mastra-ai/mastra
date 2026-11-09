@@ -100,7 +100,6 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
     integrationId: 'gitlab',
     sourceId: SOURCE_ID,
     factoryProjectId: project.id,
-    board: 'review',
   });
   const item = await seeded.workItems.upsert({
     orgId: project.orgId,

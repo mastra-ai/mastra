@@ -13,6 +13,7 @@ import {
   cardBoardFlow,
   cardRuleFacts,
   hasPullRequest,
+  intakeTarget,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
@@ -2068,7 +2069,6 @@ export class FactoryDecisionDispatcher {
     if (!authorTrusted(decision.metadata) || !this.#intakeRoutes || decision.skipRules === true) return false;
     if (record.workItemId !== null) return false;
     const boards = await this.#boards.load(record);
-    if (decision.stage !== boards.get(decision.board)?.initialPhase) return false;
     const routes = await this.#intakeRoutes.listIntakeRoutes({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -2086,9 +2086,9 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Applies the project's intake routes to an arrival: a decision filing the card at its
-   * board's initial phase. A decision naming a later phase (a maintainer's review request)
-   * or placing the card outright (`skipRules`) already chose where the card goes.
+   * Places an arrival where the project's intake routes say: the first enabled route matching it,
+   * else the default board's first phase. The board and phase an integration's rule named don't
+   * count; only a decision placing the card outright (`skipRules`) keeps its own.
    */
   async #routeArrival(
     record: FactoryDeferredDecisionRecord,
@@ -2096,7 +2096,6 @@ export class FactoryDecisionDispatcher {
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
-    if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
@@ -2104,7 +2103,6 @@ export class FactoryDecisionDispatcher {
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
     });
-    if (routes.length === 0) return decision;
     // A route can also test the issue a pull request closes, as it is now.
     const closedIssue = decision.closesIssue
       ? await this.#storage.get({ orgId: record.orgId, id: decision.closesIssue.workItemId })
@@ -2126,7 +2124,10 @@ export class FactoryDecisionDispatcher {
         : {}),
     };
     const placement = resolveIntakePlacement(routes, facts, boards);
-    if (!placement) return decision;
+    if (!placement) {
+      const fallback = intakeTarget(boards);
+      return fallback ? { ...decision, board: fallback.board, stage: fallback.initialPhase } : decision;
+    }
     return {
       ...decision,
       board: placement.board,

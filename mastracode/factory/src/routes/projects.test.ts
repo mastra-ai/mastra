@@ -88,7 +88,6 @@ describe('ProjectRoutes', () => {
         integrationId: 'jira',
         sourceId: '10000',
         factoryProjectId,
-        board: 'work',
         labels,
       });
     await bind(platform.id, null);

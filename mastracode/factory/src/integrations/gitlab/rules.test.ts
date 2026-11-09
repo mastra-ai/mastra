@@ -175,7 +175,6 @@ async function setup(
     integrationId: 'gitlab',
     sourceId: SOURCE_ID,
     factoryProjectId: project.id,
-    board: 'work',
     userId: 'user-1',
   });
 
