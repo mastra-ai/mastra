@@ -239,7 +239,6 @@ import {
   toObservabilityDashboard,
   toObservabilityWidget,
 } from '@mastra/mcp-apps-components/dashboards';
-import { z } from 'zod';
 
 const schemas = createObservabilityDraftSchemas(
   { metricNames: await listMetricNames() },
@@ -248,23 +247,23 @@ const schemas = createObservabilityDraftSchemas(
 
 const addWidget = createTool({
   id: 'addWidget',
-  description: 'Adds a widget to a dashboard',
-  inputSchema: z.object({ dashboardId: z.string(), widget: schemas.widget }),
-  execute: async ({ dashboardId, widget }) => saveWidget(dashboardId, toObservabilityWidget(widget)),
+  description: 'Adds a widget to the dashboard',
+  inputSchema: schemas.widget,
+  execute: async widget => saveWidget(toObservabilityWidget(widget)),
 });
 
 const createDashboard = createTool({
   id: 'createDashboard',
   description: 'Creates a dashboard',
-  inputSchema: z.object({ name: z.string(), dashboard: schemas.dashboard }),
-  execute: async ({ name, dashboard }) => saveDashboard(name, toObservabilityDashboard({ dashboard }).dashboard),
+  inputSchema: schemas.dashboard,
+  execute: async dashboard => saveDashboard(toObservabilityDashboard({ dashboard }).dashboard),
 });
 ```
 
 - **Options:** `kinds` lists the widget kinds a model can write, and `dashboardFilters: false` limits a dashboard's `defaults` to `datePreset`. What you leave out is missing from the JSON schema the model sees, and rejected when a model writes it anyway. Narrowing `kinds` doesn't narrow the TypeScript types.
 - **One call per catalog:** Build both tools' schemas from one call. Building takes about a millisecond, so it's fine to build them per request.
 - **Ids:** `toObservabilityWidget` keeps a widget's `id` when the model gives one, so a widget can be pinned or replaced by it, and assigns a fresh UUID otherwise. `toObservabilityDashboard` does the same for each widget.
-- **Errors:** As tool input schemas, the schemas reject a draft before `execute` runs, with paths into what the model wrote, such as `widget.timeseries.series.1.value`. `toObservabilityWidget` throws a `ZodError` with paths into the draft, such as `timeseries.series.1.value`. Checks across widgets, such as unique ids and the widget limit, need the whole dashboard.
+- **Errors:** As tool input schemas, the schemas reject a draft before `execute` runs, with paths into what the model wrote, such as `timeseries.series.1.value` for a widget or `rows.0.widgets.0.timeseries.series.1.value` for a dashboard. Nested under a field of a larger input, paths start with that field's name. `toObservabilityWidget` throws a `ZodError` with the same paths. Checks across widgets, such as unique ids and the widget limit, need the whole dashboard.
 
 A draft that passes converts to a widget that passes `strictDashboardWidgetSchema`. Keep checking with the strict schemas where you store dashboards, since they also cover writes that don't come from a draft.
 

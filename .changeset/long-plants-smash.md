@@ -25,12 +25,12 @@ const schemas = createObservabilityDraftSchemas({ metricNames }, { kinds: ['kpis
 
 const addWidget = createTool({
   id: 'addWidget',
-  inputSchema: z.object({ widget: schemas.widget }),
+  inputSchema: schemas.widget,
   // Keeps the widget's id when the model gives one
-  execute: async ({ widget }) => saveWidget(toObservabilityWidget(widget)),
+  execute: async widget => saveWidget(toObservabilityWidget(widget)),
 });
 ```
 
-Invalid widgets are rejected with paths into what the model wrote, such as `widget.timeseries.series.1.value`. Converted widgets pass `strictDashboardWidgetSchema`.
+Invalid widgets are rejected with paths into what the model wrote, such as `timeseries.series.1.value`. Converted widgets pass `strictDashboardWidgetSchema`.
 
 The dashboard tool's input schema is now about 28% smaller, because metric and score filters are written out once instead of at every read. The tool also now rejects a widget whose tabs share a label, which used to open as an error card.

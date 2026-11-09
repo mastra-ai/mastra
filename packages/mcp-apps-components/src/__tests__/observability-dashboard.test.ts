@@ -452,16 +452,16 @@ function saveServer() {
       addWidgetToDashboard: createTool({
         id: 'addWidgetToDashboard',
         description: 'Adds a widget to a dashboard',
-        inputSchema: z.object({ widget: schemas.widget }),
+        inputSchema: schemas.widget,
         outputSchema: stored,
-        execute: async ({ widget }) => ({ stored: toObservabilityWidget(widget) }),
+        execute: async widget => ({ stored: toObservabilityWidget(widget) }),
       }),
       createDashboard: createTool({
         id: 'createDashboard',
         description: 'Creates a dashboard',
-        inputSchema: z.object({ dashboard: schemas.dashboard }),
+        inputSchema: schemas.dashboard,
         outputSchema: stored,
-        execute: async ({ dashboard }) => ({ stored: toObservabilityDashboard({ dashboard }).dashboard }),
+        execute: async dashboard => ({ stored: toObservabilityDashboard({ dashboard }).dashboard }),
       }),
     },
   });
@@ -475,16 +475,8 @@ it('offers the model only the kinds and defaults a service stores', async () => 
   const widget = schemaOf('addWidgetToDashboard');
   const dashboard = schemaOf('createDashboard');
 
-  expect(Object.keys(widget.properties.widget.properties)).toEqual([
-    'id',
-    'span',
-    'title',
-    'description',
-    'kpis',
-    'timeseries',
-    'table',
-  ]);
-  expect(Object.keys(dashboard.properties.dashboard.properties.defaults.properties)).toEqual(['datePreset']);
+  expect(Object.keys(widget.properties)).toEqual(['id', 'span', 'title', 'description', 'kpis', 'timeseries', 'table']);
+  expect(Object.keys(dashboard.properties.defaults.properties)).toEqual(['datePreset']);
   expect(JSON.stringify(widget)).not.toContain('MastraScore');
   expect(JSON.stringify(widget).match(/"MastraMetricFilters":/g)).toHaveLength(1);
 });
@@ -493,39 +485,43 @@ const scoresDraft = {
   span: 12,
   scores: { average: { scorerId: ['relevance'] }, series: { scorerId: ['relevance'] } },
 };
+const [runsSeries] = chartDraft.timeseries.series;
+const brokenChart = {
+  ...chartDraft,
+  timeseries: {
+    ...chartDraft.timeseries,
+    series: [runsSeries!, { ...runsSeries!, value: { metricTimeSeries: { name: ['x'] } } }],
+  },
+};
 
 it.each<[string, string, Record<string, unknown>, string]>([
-  ['a kind the service leaves out', 'addWidgetToDashboard', { widget: scoresDraft }, 'not `scores`'],
+  ['a kind the service leaves out', 'addWidgetToDashboard', scoresDraft, 'not `scores`'],
   [
     'dashboard-wide filters',
     'createDashboard',
-    { dashboard: { defaults: { filters: { entityName: 'agent' } }, rows: [{ widgets: [kpiDraft] }] } },
+    { defaults: { filters: { entityName: 'agent' } }, rows: [{ widgets: [kpiDraft] }] },
     'Unrecognized key',
   ],
   [
-    'a value with a broken read, pointing at it in the draft',
+    'a widget with a broken read, at its path in the draft',
     'addWidgetToDashboard',
-    {
-      widget: {
-        ...chartDraft,
-        timeseries: {
-          ...chartDraft.timeseries,
-          series: [{ ...chartDraft.timeseries.series[0], value: { metricTimeSeries: { name: ['x'] } } }],
-        },
-      },
-    },
-    'widget.timeseries.series.0.value',
+    brokenChart,
+    '- timeseries.series.1.value',
   ],
   [
-    'a dashboard with a broken widget, pointing at it in the draft',
+    'a dashboard with a broken read, at its path in the draft',
     'createDashboard',
-    {
-      dashboard: dashboardOf({
-        ...kpiDraft,
-        kpis: { ...kpiDraft.kpis, label: 'Runs', tabs: [{ ...kpiDraft.kpis, label: 'Runs' }] },
-      }),
-    },
-    "dashboard.rows.0.widgets.0.kpis.tabs.0: another view is already labelled 'Runs'",
+    dashboardOf(brokenChart),
+    '- rows.0.widgets.0.timeseries.series.1.value',
+  ],
+  [
+    'a widget whose tabs share a label, at the tab',
+    'createDashboard',
+    dashboardOf({
+      ...kpiDraft,
+      kpis: { ...kpiDraft.kpis, label: 'Runs', tabs: [{ ...kpiDraft.kpis, label: 'Runs' }] },
+    }),
+    "- rows.0.widgets.0.kpis.tabs.0: another view is already labelled 'Runs'",
   ],
 ])('rejects %s before saving', async (_, name, args, message) => {
   const client = await connect(saveServer());
@@ -541,7 +537,7 @@ it('saves a widget with the id the model gave it, as a widget that renders', asy
 
   const result = await client.callTool({
     name: 'addWidgetToDashboard',
-    arguments: { widget: { ...kpiDraft, id: 'pinned-1' } },
+    arguments: { ...kpiDraft, id: 'pinned-1' },
   });
 
   expect(result.isError).toBeFalsy();
