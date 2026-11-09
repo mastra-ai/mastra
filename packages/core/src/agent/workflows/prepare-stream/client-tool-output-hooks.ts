@@ -2,6 +2,7 @@ import type { IMastraLogger } from '../../../logger';
 import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList, MessageListInput } from '../../message-list';
+import { serverComputedParts } from '../../message-list/utils/server-computed-parts';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
 type ToolCall = { toolCallId: string; toolName: string };
@@ -125,13 +126,6 @@ export async function fireClientToolOutputHooks({
     }
   }
 }
-
-/**
- * Parts whose `mastra.modelOutput` markers were written by THIS process.
- * Identity-based so metadata arriving over the wire (new objects) is never
- * trusted, while in-process re-runs stay idempotent.
- */
-const serverComputedParts = new WeakSet<object>();
 
 /**
  * Apply a server-defined `toModelOutput` to client-supplied tool results.

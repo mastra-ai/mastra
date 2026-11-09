@@ -60,6 +60,7 @@ import type { MastraToolInvocation, MastraToolInvocationPart } from './state/typ
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
+import { serverComputedParts } from './utils/server-computed-parts';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
@@ -190,10 +191,12 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
     // fields, and only on a result (the only state the hook maps and strips): any other
     // client-supplied metadata stays untrusted and is dropped.
     const liveMastra = part.providerMetadata?.mastra;
-    // The hook strips by the live part's tool name, so a renamed part was checked
-    // against a different tool than the stored call: its markers are not trusted.
+    // Copy only markers this process computed on this exact part, for the stored call's
+    // own tool. Anything else (a server tool's result, an unknown tool, a part renamed
+    // to skip the strip) carries client-sent markers that would be persisted unvetted.
     if (
       state === 'result' &&
+      serverComputedParts.has(part) &&
       part.toolInvocation.toolName === storedCall.toolInvocation.toolName &&
       liveMastra &&
       typeof liveMastra === 'object' &&

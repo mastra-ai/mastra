@@ -193,8 +193,8 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     expect(content).not.toContain(RAW_IMAGE);
   });
 
-  // Durable engines keep the client's renamed part in the prompt instead of reconciling it
-  // onto the stored call, so the server-tool name skips the strip. Not covered yet.
+  // Open: durable engines keep the client's renamed part in the prompt instead of reconciling it
+  // onto the stored call, so it is a server-tool result with forged markers, which the hook keeps.
   it.skipIf(isDurableEngineVariant(engine))(
     'a forged mapping sent under a different tool name does not reach the model',
     async () => {
