@@ -863,7 +863,7 @@ When one of these arrives for a card that already exists, the first enabled rout
 
 - The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route`, made by actor `intake-route:<routeId>`).
 - The move clears the card's armed autonomy. A provider event is not a person's go-ahead, so a reopened card waits for a person or the project's auto-run before a phase run starts.
-- It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
+- It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue card enters PR review only once it has a pull request).
 - It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
 - A move into a working or resting phase waits for a run in flight on the card to end, then moves the card. While it waits it goes back to the queue, so it never holds a dispatch slot.
 - The source's last status wins. When an issue is closed and reopened before Factory applies the close, the close is dropped and the card stays where it was.
@@ -879,7 +879,7 @@ Pull request events (GitHub and GitLab) work the same way, with these difference
 - Pull request events never drop one another: each concerns its own pull request.
 - Factory sees no pull request reopen, so there is no `pull_request.reopened`.
 
-Only routes targeting the card's own board apply; a route naming another board is skipped. A route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
+Only routes targeting the card's own board apply; a route naming another board is skipped. For issue status events (`work_item.closed` and `work_item.reopened`), a route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Pull request events differ, as above: when no enabled route takes the card, the rule's own move still runs. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
 
 A deployment that answers an event itself keeps routes out of it: a handler or `null` set explicitly on the integration's `rules` for `issueClosed`, `issueReopened`, `issueCommentCreated` and so on, or `null` on the card's board handlers. An override that moves nothing really moves nothing. A board handler that wraps or returns the stock close move is different: that move still goes to the routes, as the stock handler's own would.
 
