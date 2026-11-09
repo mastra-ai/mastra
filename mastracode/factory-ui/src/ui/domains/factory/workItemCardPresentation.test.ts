@@ -4,8 +4,8 @@ import type { WorkItemSessionRef } from './services/workItems';
 import { primaryCardMove } from './workItemCardPresentation';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
-const build: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
-const moves = [investigate, build];
+const plan: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };
+const moves = [investigate, plan];
 
 function sessionRef(role: string): WorkItemSessionRef {
   return { sessionId: `session-${role}`, branch: 'factory/issue-1', threadId: `thread-${role}`, startedBy: 'user-1' };
@@ -17,7 +17,7 @@ function history(...stages: string[]) {
 
 describe('primaryCardMove', () => {
   it("leads with the move of the lane the card's column is", () => {
-    expect(primaryCardMove(moves, 'execute', { sessions: {} })).toBe(build);
+    expect(primaryCardMove(moves, 'planning', { sessions: {} })).toBe(plan);
   });
 
   it('skips a lane the card already had a run in', () => {
@@ -26,29 +26,23 @@ describe('primaryCardMove', () => {
         sessions: { triage: sessionRef('triage') },
         stageHistory: history('intake', 'triage', 'intake'),
       }),
-    ).toBe(build);
+    ).toBe(plan);
   });
 
-  it('still offers Build to a card that was only planned, though Planning left a work session', () => {
+  it('offers Investigate to a card that was planned but never triaged', () => {
     expect(
-      primaryCardMove([build], 'intake', {
+      primaryCardMove(moves, 'intake', {
         sessions: { work: sessionRef('work') },
         stageHistory: history('intake', 'planning', 'intake'),
       }),
-    ).toBe(build);
-    expect(
-      primaryCardMove([investigate, build], 'intake', {
-        sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
-        stageHistory: history('intake', 'triage', 'planning', 'intake'),
-      }),
-    ).toBe(build);
+    ).toBe(investigate);
   });
 
   it('falls back to the first move once every lane has had a run', () => {
     expect(
       primaryCardMove(moves, 'intake', {
         sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
-        stageHistory: history('intake', 'triage', 'execute', 'intake'),
+        stageHistory: history('intake', 'triage', 'planning', 'intake'),
       }),
     ).toBe(investigate);
   });

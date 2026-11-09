@@ -390,7 +390,8 @@ export abstract class Bundler extends MastraBase implements IBundler {
 
       return bundlerOptions ?? defaultBundlerOptions;
     } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to load the bundler options, using the defaults instead: ${message}`, { error });
     }
 
     return defaultBundlerOptions;
@@ -699,8 +700,10 @@ export abstract class Bundler extends MastraBase implements IBundler {
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
 
+    // Workspace packages in `analyzedBundleInfo.dependencies` are compiled into the bundle, so only
+    // the ones still imported at runtime need a tarball and an install (#28303).
     const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
+    for (const dep of analyzedBundleInfo.externalDependencies.keys()) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
         initialWorkspaceDependencies.add(pkgName);

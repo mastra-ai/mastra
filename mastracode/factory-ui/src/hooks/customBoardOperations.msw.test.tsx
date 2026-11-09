@@ -28,7 +28,6 @@ const item: WorkItem = {
   triageType: null,
   acceptedAt: null,
   commentCount: 0,
-  feedActivityAt: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',

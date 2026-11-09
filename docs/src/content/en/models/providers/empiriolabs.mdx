@@ -7,7 +7,7 @@ description: "Browse EmpirioLabs AI model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/empiriolabs.svg" alt="EmpirioLabs AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />EmpirioLabs AI
 
-Access 63 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
+Access 64 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
 
 Learn more in the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai).
 
@@ -54,8 +54,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 393216,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.2,
+    "outputCost": 0.8
   },
   {
     "model": "empiriolabs/deepseek-v4-flash-0731",
@@ -142,18 +142,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 30
   },
   {
-    "model": "empiriolabs/gemma-3-27b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "empiriolabs/gemma-4-26b-a4b",
     "imageInput": true,
     "audioInput": false,
@@ -172,7 +160,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 131072,
     "maxOutput": 98304,
     "inputCost": null,
     "outputCost": null
@@ -196,7 +184,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 202752,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
@@ -208,7 +196,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 202752,
     "maxOutput": 131072,
     "inputCost": 0.07,
     "outputCost": 0.4
@@ -232,7 +220,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
@@ -244,7 +232,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
@@ -256,7 +244,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 0.075,
     "outputCost": 0.25
@@ -310,6 +298,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "empiriolabs/kimi-k3-1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "empiriolabs/mimo-v2-6-flash",
     "imageInput": true,
     "audioInput": true,
@@ -352,7 +352,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 524288,
     "inputCost": 0.225,
     "outputCost": 0.9
@@ -364,7 +364,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 524288,
     "inputCost": 0.1125,
     "outputCost": 0.45
@@ -532,7 +532,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 983616,
     "maxOutput": 65536,
     "inputCost": 0.25,
     "outputCost": 1.5
@@ -652,7 +652,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 229096,
     "maxOutput": 128000,
     "inputCost": 0.4,
     "outputCost": 2.4
@@ -664,7 +664,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 229096,
     "maxOutput": 128000,
     "inputCost": 0.31,
     "outputCost": 2.5
@@ -676,7 +676,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 229156,
     "maxOutput": 128000,
     "inputCost": 0.12,
     "outputCost": 0.5
@@ -688,7 +688,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 229096,
     "maxOutput": 128000,
     "inputCost": 0.63,
     "outputCost": 3.79
@@ -700,7 +700,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256000,
+    "contextWindow": 229093,
     "maxOutput": 65536,
     "inputCost": 0.63,
     "outputCost": 3.13

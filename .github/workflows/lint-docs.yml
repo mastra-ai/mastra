@@ -126,6 +126,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -195,6 +199,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: starsling-ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
 
     steps:
       - name: Checkout repository

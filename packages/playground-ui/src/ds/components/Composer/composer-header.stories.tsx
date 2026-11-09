@@ -36,7 +36,7 @@ export const ConnectionStatus: Story = {
       </ComposerHeader>
       <ComposerRing>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Write a message…" disabled />
+          <ComposerInput aria-label="Message" placeholder="Write a message" disabled />
           <ComposerActions />
         </ComposerBox>
       </ComposerRing>
@@ -93,7 +93,7 @@ export const OwnershipAndTasks: Story = {
       </ComposerHeader>
       <ComposerRing>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Steer the agent…" />
+          <ComposerInput aria-label="Message" placeholder="Steer the agent" />
           <ComposerActions>
             <Button type="submit" size="sm">
               Send message
@@ -126,7 +126,7 @@ function ToggleHeaderPreview() {
           <OptionalContext />
         </ComposerHeader>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes…" />
+          <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes" />
           <ComposerActions />
         </ComposerBox>
       </Composer>

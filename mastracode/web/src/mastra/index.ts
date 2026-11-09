@@ -417,7 +417,8 @@ export const factory = new MastraFactory({
   integrations,
   configVersion: factoryConfigVersion,
   // Providers every signed-in account may run on this server's own credentials,
-  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
+  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION, or `google-vertex`
+  // with Application Default Credentials + GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
   browser,

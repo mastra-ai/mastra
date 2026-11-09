@@ -6,7 +6,8 @@ import {
   ActivityLabel,
 } from '@mastra/playground-ui/components/ai/activity';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
-import { callPose, liveWords } from '@mastra/playground-ui/domains/chat/activity';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+import { liveWords } from '@mastra/playground-ui/domains/chat/activity';
 import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
 import type { AgentIndicatorState } from '@mastra/playground-ui/components/AgentIndicator';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
@@ -25,7 +26,7 @@ interface LineLook {
 function lineLook(state: LineState): LineLook {
   if (typeof state === 'string') return { pose: state, label: LABELS[state], status: STATUS[state] };
   const { label, detail } = liveWords([{ ...state, status: 'running' }]);
-  return { pose: callPose(state.toolName), label, detail, status: 'running' };
+  return { pose: presentTool(state.toolName, state.args).pose, label, detail, status: 'running' };
 }
 
 export function RunLine({ state, live, onSettled }: { state: LineState; live: boolean; onSettled: () => void }) {

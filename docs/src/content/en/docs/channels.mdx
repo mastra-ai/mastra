@@ -30,7 +30,7 @@ Use channels when an agent needs to:
 
 ## Configure channels faster with Mastra Connect
 
-If you don't want to configure a bot or app for each channel and maintain the credentials yourself, you can use [Mastra Connect](/docs/mastra-platform/connect/channels). It manages credentials for you, simplifying channel setup and maintenance.
+If you don't want to configure a bot or app for each channel and maintain the credentials yourself, you can use [Mastra Connect](/docs/mastra-platform/connect#add-channels). It manages credentials for you, simplifying channel setup and maintenance.
 
 ## Configure an agent
 
@@ -308,6 +308,43 @@ Platform retries sometimes deliver an event more than once. Adapters use channel
 ### Batched messages
 
 When a `chatOptions.concurrency` strategy (`burst`, `debounce`, or `queue`) batches several messages into one dispatch, Mastra splits the batch into one turn per sender: consecutive messages from the same sender form one turn, oldest first. Your handler runs once per turn with its own `ctx.requestContext`, `ctx.signalMetadata`, and `ctx.skipped` (that turn's earlier messages), so authorization and context apply to every sender. Await `defaultHandler` inside your handler, otherwise senders' turns can overlap. A handler that throws for one turn is logged, the remaining turns still run, and the first error is re-thrown afterwards. In a batch routed to `onMention` because one message mentions the bot, other senders' non-mention messages also reach `onMention` with `message.isMention` set to `false`.
+
+## Logging
+
+Chat SDK logs use the [logger](/docs/observability/logging) on your Mastra instance by default, so they follow its format, level, and `redact` setting. Each record has a `component` field set to `chat-sdk`. With `PinoLogger`, Mastra's own channel logs have `component` set to `CHANNEL`, so you can filter the two apart. To send them elsewhere, set `chatOptions.logger`, which overrides this default.
+
+Adapters have their own logger, and it defaults to the console. Your app creates each adapter before the Mastra instance exists, so Mastra can't set that logger for you. Pass [`toChatLogger()`](/reference/agents/channels#tochatlogger) when you create the adapter:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { toChatLogger } from '@mastra/core/channels'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+import { logger } from '../logger'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      discord: createDiscordAdapter({
+        logger: toChatLogger(logger, { component: 'discord', minLevel: 'warn' }),
+      }),
+    },
+  },
+})
+```
+
+The `logger` here is the same one you pass to `new Mastra({ logger })`. Export it from its own file, such as `src/mastra/logger.ts`, so the agent file and `src/mastra/index.ts` can both import it. State adapters such as `createRedisState()` also default to the console and take the same `logger` option.
+
+The Discord adapter's Gateway path logs the first 100 characters of each message at `info`, and `minLevel: 'warn'` keeps that text out of your logs. The Chat SDK itself logs message text at `debug`. If your Mastra logger runs at `debug`, set `chatOptions.logger` with a higher `minLevel` to keep that text out.
+
+:::warning
+
+A logger's `redact` setting doesn't apply to logs exported to [observability](/docs/observability/logging), and `warn` and `error` records export by default. When an `onSlashCommand` handler throws, the Chat SDK's `error` record includes the command's text, so catch errors in that handler to keep the text out of your logs and the export. If you set the observability `logging.level` to `info` or lower, use `minLevel` to keep other message text out of the export.
+
+:::
 
 ## Multimodal content
 

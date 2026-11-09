@@ -29,6 +29,37 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+### Metadata
+
+Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
+
+Rows that must keep one line, such as cards, menu options, and truncated titles, pass `singleLine`: fields stay on one line and each shrinks with an ellipsis. Give a short field `className="shrink-0"` to keep it whole while a longer one truncates.
+
+```tsx
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+
+<Metadata>
+  <Metadata.Item>
+    <Txt as="span" variant="label">
+      v8
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      Nov 3, 2026, 10:24 AM
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      (current)
+    </Txt>
+  </Metadata.Item>
+</Metadata>;
+```
+
+Use normal sentences in tooltips, accessible names, and other plain-text APIs. Parentheses such as `(current)` and missing-value placeholders remain useful; avoid decorative separators or repeated spaces as a substitute for layout. Browser tab titles set through `document.title` keep the `Page | Product` convention.
+
 ### Data sizes
 
 Import `formatBytes` from the number utility:
@@ -60,6 +91,30 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
   My PRs
 </Button>
 ```
+
+### Tool icons
+
+`presentTool` from `@mastra/playground-ui/components/ai/tool-call` gives a tool call its label,
+detail, static icon, and animated `AgentIndicator` pose. Use it wherever a tool call is shown, so a
+running call and its finished card look the same.
+
+```tsx
+import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+const { pose, label, detail } = presentTool(call.toolName, call.args);
+
+<AgentIndicator state={pose} />;
+```
+
+Always pass the call's arguments. Tools such as `knowledge_page` take an operation (`op` or
+`action`), and the icon and label follow it, so deleting a page does not look like editing one.
+Workspace prefixes (`mastra_workspace_`), MCP names (`mcp__server__tool`), `namespace.tool` names,
+and known aliases resolve to the tool they wrap. Unknown tools and ambiguous names such as
+`mcp__catalog__search` keep the generic tool icon.
+
+The **AI / Activity / Tool Icon Families** Storybook story shows every family and lets you switch
+actions to watch the morph.
 
 ### Tool approvals
 
@@ -507,24 +562,41 @@ See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s R
 The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
 
 ```ts
-import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 
 export default defineConfig({
   jsPlugins: ['@mastra/playground-ui/oxlint'],
   rules: { ...playgroundUiRules },
+  overrides: [copyRuleExclusions],
 });
 ```
 
-| Rule                              | Flags                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `playground-ui/icon-button-size`  | A `<Button>` holding only an icon without an `icon-*` size                                       |
-| `playground-ui/text-role`         | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
-| `playground-ui/txt-tone`          | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
-| `playground-ui/font-mono`         | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
-| `playground-ui/no-barrel-imports` | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+| Rule                                   | Flags                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+| `playground-ui/no-text-separators`     | Decorative pipes, middots, bullets, spaced or double hyphens, and em dashes in authored UI copy  |
+| `playground-ui/no-text-layout-spacing` | Repeated spaces, tabs, or nonbreaking spaces used to lay out UI copy                             |
 
 Turn rules off per glob in `overrides`, for example for tests and stories.
+
+#### Copy rules
+
+Use separate elements for metadata fields and normal punctuation for sentences. Parentheses such as `(current)` and standalone missing-value placeholders such as `—` are allowed.
+
+The copy rules inspect JSX text, copy props, copy-named fields and helpers such as `label`, `title`, `description`, and `meta`, toast messages, and assignments to copy fields such as `element.title`. They follow local bindings and helper returns within the same file. Imported helper implementations and dynamic user content are not inspected.
+
+Code, preformatted content, Markdown sources, agent prompts, tool descriptions, browser tab titles assigned to `document.title`, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
+
+In this workspace, the copy rules apply only to the `src` trees in Playground, Playground UI, and Factory UI. Tests, stories, fixtures, and generated source are excluded.
+
+Both rules are part of `recommended`. Consumers that need only these rules can use `copyRules`. Put `copyRuleExclusions` after the rule-enabling override to keep authored UI copy separate from test and story content.
+
+The root `pnpm lint` command includes Playground, Playground UI, and Factory UI in regular CI linting. Run `pnpm turbo lint --filter=@internal/playground` to build its required dependency types and check Playground on its own. Documentation prose keeps its existing Vale and Remark checks.
 
 ## Documentation
 

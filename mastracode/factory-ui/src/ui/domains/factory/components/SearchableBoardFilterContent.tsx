@@ -53,7 +53,7 @@ export function SearchableBoardFilterContent({
             type="text"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Search…"
+            placeholder="Search"
             aria-label={`Search ${label.toLowerCase()}`}
             className={menuSearchClasses.input}
             autoFocus

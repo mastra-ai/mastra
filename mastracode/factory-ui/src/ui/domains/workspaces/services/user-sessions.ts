@@ -4,6 +4,7 @@
  * which resolves its source-control provider; individual-session routes resolve
  * the provider from the durable session row.
  */
+import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
@@ -69,6 +70,23 @@ export type CreateUserSessionOptions = (
   visibility?: 'private' | 'org';
 };
 
+/**
+ * A draft's session failed to start after its thread opened. The thread route
+ * sends the person back to the draft with what they had picked; the draft's
+ * images stay stashed under its id.
+ */
+export class DraftSessionCreateError extends Error {
+  constructor(
+    message: string,
+    readonly draft: FailedDraft,
+    readonly draftPath: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'DraftSessionCreateError';
+  }
+}
+
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
@@ -90,6 +108,11 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
   });
   const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
   return normalizeUserSession(body.session);
+}
+
+/** The server answers a missing session and a teammate's private one with the same 404. */
+export function isSessionNotFound(error: Error): boolean {
+  return 'status' in error && error.status === 404;
 }
 
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {

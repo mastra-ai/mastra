@@ -1,0 +1,207 @@
+---
+title: 'Connect | Mastra platform'
+description: 'Use Mastra Connect to manage provider connections on Mastra platform and make them available to your app as agent tools, chat channels, or raw credentials.'
+packages:
+  - '@mastra/connect'
+---
+
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { getIntegrationItems } from '@site/src/components/integrations/data';
+
+# Connect
+
+:::beta Public Beta
+
+Mastra Connect is free to use on Mastra platform while in beta.
+
+:::
+
+Connect manages connections to services such as GitHub, Slack, and Linear in your [Mastra platform](/docs/mastra-platform/overview) project. The `@mastra/connect` package makes those connections available to your application in three ways:
+
+- **Tools** let agents call a provider's API. Connect supplies ready-made tools and sends their requests through a platform proxy. The proxy adds credentials and refreshes OAuth tokens.
+- **Channels** let people talk to agents through Slack, Telegram, Discord, or Microsoft Teams. Connect supplies credentials to Mastra's [channel](/docs/channels) providers.
+- **Raw credentials** let your code call a provider's SDK directly when the tools don't cover what you need.
+
+This page covers setup shared by every provider. Each provider's [integration page](#providers) covers its connection steps and capabilities.
+
+## When to use Connect
+
+Use Connect when you want the platform to manage provider accounts, so your application doesn't store credentials or refresh OAuth tokens. You can add or replace connections without changing your agent code. Tool resolvers pick up connection changes as their caches refresh, without a redeploy.
+
+Connect requires a platform project, but your application can run locally or on your own infrastructure. You can use Connect tools and channels alongside your own [custom tools](/docs/agents/tools) and [self-managed channels](/docs/channels).
+
+## How connections work
+
+A **provider** is a service you can connect, identified by a provider ID such as `linear` or `google-mail`. A **connection** authorizes one account on that provider. Connections belong to your organization, and you can link one connection to more than one project without authorizing again.
+
+A project can have more than one connection for the same provider, such as accounts in different Slack workspaces. Give each connection a distinct display name so agents can choose the right account.
+
+Providers differ in what they offer and how they authorize. Some use OAuth, others need an API key, and channels can require a bot or app in the vendor's console. The provider's integration page lists these requirements.
+
+## Get started
+
+You need a Mastra platform project and the [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
+
+### Install the package
+
+```bash npm2yarn
+npm install @mastra/connect
+```
+
+### Configure the environment
+
+Your app authenticates to the platform with an access token. Create one for the app:
+
+```bash
+mastra auth tokens create my-app
+```
+
+Save the token as `MASTRA_PLATFORM_ACCESS_TOKEN`, which is the name `@mastra/connect` reads. The CLI suggests `MASTRA_API_TOKEN`, but `@mastra/connect` ignores that name. Add the token and your project ID to the app's environment:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=your-token
+MASTRA_PROJECT_ID=your-project-id
+```
+
+See [environment variables](/reference/connect/tools#environment-variables) for regions and other optional variables.
+
+### Connect an account
+
+Find the provider ID on the provider's [integration page](#providers), then run `mastra connect add` with that ID. For example, to authorize a Linear account:
+
+```bash
+mastra connect add linear
+```
+
+Run the command from the directory that contains your `.env` file. The CLI guides you through the provider's authorization flow. Run [`mastra connect list`](/reference/cli/mastra#mastra-connect-list) to see the providers available to your project and their connection status. The [`mastra connect` reference](/reference/cli/mastra#mastra-connect) covers naming, removing, and replacing connections.
+
+## Add tools to an agent
+
+Pass [`tools()`](/reference/connect/tools) to the agent's `tools` option:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: tools(),
+})
+```
+
+With no options, the agent gets tools for every connected provider that has a toolset. Each tool key starts with a provider prefix, such as `linear_list_issues`. The prefix can differ from the provider ID: `google-calendar` tools start with `google_calendar_`. The [provider toolsets reference](/reference/connect/providers) lists every key. Some providers serve their tools from a hosted Model Context Protocol (MCP) server instead. You use the same `tools()` API for them, but their tools are discovered at runtime.
+
+To keep your own tools as well, spread the resolver's result in a `tools` function. Your tools win when a key collides:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+import { weatherTool } from '../tools/weather'
+
+const connectTools = tools()
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool }),
+})
+```
+
+## Choose tools and require approval
+
+Give an agent only the tools it needs. Use `providers` to select providers, `allowTools` to allow specific tool keys, and `requireApproval` to pause before selected tools run:
+
+```typescript
+tools({
+  providers: {
+    linear: {
+      allowTools: ['linear_list_issues', 'linear_create_issue'],
+      requireApproval: ['linear_create_issue'],
+    },
+  },
+})
+```
+
+Tools run without approval by default. Pass `requireApproval: true` to require approval for every tool from a provider. Approval works for toolsets and MCP providers. Follow the [human-in-the-loop guide](/docs/agents/human-in-the-loop) to handle approval requests.
+
+For a provider with more than one connection, the toolset adds a `<provider>__list_connections` tool. Every other tool from that provider takes a `connection_name` input that selects the account. To always use one connection, set `connectionId` for that provider.
+
+The [`tools()` reference](/reference/connect/tools#parameters) covers exclusion filters, wildcard patterns, options that vary per request, and caching.
+
+## Add channels
+
+Pass [`channels()`](/reference/connect/channels) to the `Mastra` constructor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+import { assistant } from './agents/assistant'
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  channels: await channels(),
+})
+```
+
+This registers the channel providers and their webhook routes. Making a channel work takes two separate steps:
+
+1. **Connect the provider.** The platform connection stores the bot or app credentials. Each provider's integration page describes this step: [Slack](/integrations/channels/slack#agent-chat), [Discord](/integrations/channels/discord#agent-chat), [Telegram](/integrations/channels/telegram#connect), and [Microsoft Teams](/integrations/channels/teams#agent-chat).
+1. **Install the channel on an agent.** In Studio, connect the channel to an agent so people can message that agent.
+
+For webhook delivery and OAuth callbacks, the provider must reach your server at a public URL. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
+
+The [`channels()` reference](/reference/connect/channels) covers selecting providers, startup errors, and connection refresh. It also shows how to [combine Connect channels with self-managed channels](/reference/connect/channels#combine-with-self-managed-channels) and [vary tools by channel](/reference/connect/channels#vary-tools-by-channel).
+
+## Use a raw credential
+
+Call [`credential()`](/reference/connect/credential) with a connection ID to get the connection's credential for your own code. Use this when you need a provider SDK or an API the tools don't cover.
+
+## Security model
+
+For tool calls, the platform adds credentials to requests on the server. Your application never receives them. The platform records each proxied call so you can audit and count tool use. It doesn't log tool arguments or results.
+
+Proxied requests can only reach the provider's API hosts. Some connections allow extra hosts, such as a Supabase project URL. Your code controls which tools an agent gets and which calls need approval.
+
+A raw credential is different. `credential()` returns the secret to your application, and requests you make with it bypass the proxy. They skip its host restrictions and call records. Don't log the credential or return it in agent output.
+
+## Providers
+
+Each integration page shows the provider ID, what the provider offers, and its setup steps. Some pages also cover setup without Connect.
+
+<IntegrationGrid
+  section="Email / Calendar"
+  additionalItems={[
+  ...getIntegrationItems('Documents'),
+  ...getIntegrationItems('Project management'),
+  ...getIntegrationItems('CRM'),
+  ...getIntegrationItems('Other providers'),
+  ...getIntegrationItems('Channels', [
+    'channels/discord',
+    'channels/github',
+    'channels/teams',
+    'channels/slack',
+    'channels/telegram',
+  ]),
+  ...getIntegrationItems('Auth', ['auth/clerk', 'auth/supabase', 'auth/workos']),
+  ...getIntegrationItems('Databases', ['databases/neon']),
+  ...getIntegrationItems('Deploy', ['deploy/render']),
+  ...getIntegrationItems('File storage', ['file-storage/google-drive']),
+  ...getIntegrationItems('Observability', ['observability/posthog']),
+  ...getIntegrationItems('Voice', ['voice/openai']),
+]}
+/>
+
+## Troubleshooting
+
+Most failed provider calls come from the connection's credential or configuration. A `proxy_error` includes the provider's response in its `status` and `detail` properties.
+
+- **Status `401`:** The credential may have expired or been revoked or rotated. [Reauthorize the connection](/reference/cli/mastra#replace-a-connection-that-needs-reauthorization) if it needs replacing.
+- **Status `403`:** Check the provider's response for missing scopes, resource restrictions, or account requirements. Filtering tools with `allowTools` doesn't change what the credential can do.
+- **No tools from a provider:** Run `mastra connect list` to check the project and the connection's status. Check your provider selection and tool filters. Confirm that your installed `@mastra/connect` version includes the toolset. Look in your app logs for `[@mastra/connect] Skipping` warnings, which mean a connection couldn't be resolved.
+
+See [errors](/reference/connect/tools#errors) for every error code.

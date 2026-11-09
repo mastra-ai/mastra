@@ -20,6 +20,7 @@ const AGGREGATE_STORE_FEATURES = [
   'trace-query-tenant-scope',
   'span-query-model-fields',
   'span-aggregate-model-dimensions',
+  'aggregate-time-to-first-measures',
 ];
 
 // `organizationId` is a reserved request-context key, so clients cannot self-assert it. Server

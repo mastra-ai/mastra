@@ -1,5 +1,4 @@
 import type { Agent } from '../agent';
-import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
@@ -102,6 +101,13 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire } from '../workflows/scheduler/cron';
@@ -2830,26 +2836,6 @@ export class Mastra<
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
 
-    // Auto-wrap regular Agents that opted in via AgentConfig.durable.
-    // The wrapped agent then flows into the isDurableAgentLike branch below,
-    // which handles __setMastra, workflow registration, and channel routes.
-    //
-    // Statically importing `createDurableAgent` here is safe because `agent.ts`
-    // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
-    // to close the init cycle. See the import note in `agent/agent.ts`.
-    //
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter (see `Agent#agent`), so we must
-    // discriminate against a real wrapper by checking `agent.agent !== agent`.
-    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
-    // distinct inner `Agent`; the standalone placeholder points at itself.
-    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
-    if (!isRealDurableWrapper && (agent as Agent).durable) {
-      const durableOption = (agent as Agent).durable;
-      const opts = durableOption === true ? {} : { ...(durableOption as object) };
-      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
-    }
-
     // Handle durable agent wrappers (e.g., InngestAgent)
     // These wrap a regular Agent with execution engine-specific capabilities
     if (isDurableAgentLike(agent)) {
@@ -4324,7 +4310,54 @@ export class Mastra<
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    const runs = activeRuns.runs;
+    const workflowsStore = await this.#storage?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const runs: WorkflowRuns['runs'] = [];
+    for (const run of activeRuns.runs) {
+      const parent = nestedRunParentOf(run.snapshot);
+      if (!parent) {
+        runs.push(run);
+        continue;
+      }
+      // A nested run is collected by its parent's step, so the parent's stored status decides what
+      // restarting it standalone would do: run it twice while the parent drives it, or re-run the
+      // item after the parent already finished it.
+      try {
+        const parentStatus = await parentStatusOf(parent);
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(run);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: run.workflowName,
+            runId: run.runId,
+            expectedStatus: nestedRunStatusOf(run.snapshot),
+            logger: this.#logger,
+          });
+        } else if (recovery === 'skip') {
+          // Nothing is wrong here: the parent can still drive this run. Logged because a nested
+          // run left waiting on a parent that never restarts is otherwise only visible in the
+          // nested workflow's own active runs.
+          this.#logger.debug('Left a nested workflow run for its parent to drive', {
+            workflow: run.workflowName,
+            runId: run.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.#logger.error('Failed to recover nested workflow run', {
+          workflow: run.workflowName,
+          runId: run.runId,
+          error,
+        });
+      }
+    }
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
@@ -6541,8 +6574,11 @@ export class Mastra<
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
+        this.#agents?.[key]?.getChannels()?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#harnesses ?? {}).forEach(controller => controller.getChannels()?.__setLogger(this.#logger));
 
     if (this.#deployer) {
       this.#deployer.__setLogger(this.#logger);

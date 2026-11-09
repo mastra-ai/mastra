@@ -155,20 +155,7 @@ describe('PlatformJiraIntegration discovery', () => {
 
     await expect(reconcile?.()).resolves.toMatchObject({ projects: 1, checked: 1, updated: 1, failed: 0 });
     const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-    expect(item?.metadata).toMatchObject({
-      identifier: 'ENG-42',
-      issueRef: reference,
-      autoStartCandidate: true,
-      state: 'To Do',
-      stateType: 'unstarted',
-      priority: 'High',
-      project: 'ENG',
-      assignee: 'Ada',
-      author: 'Grace',
-      labels: ['bug'],
-      createdAt: '2026-07-01T00:00:00Z',
-      updatedAt: '2026-07-02T00:00:00Z',
-    });
+    expect((item)).toMatchObject({ metadata: {autoStartCandidate: true}, workItem: { metadata: {identifier: 'ENG-42', issueRef: reference, state: 'To Do', stateType: 'unstarted', priority: 'High', project: 'ENG', assignee: 'Ada', author: 'Grace', labels: ['bug'], createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-02T00:00:00Z'} } });
   });
 
   it('constructs without a connection ID and logs initialization without connection details', async () => {

@@ -11,6 +11,44 @@ async function makeStore() {
 }
 
 describe('KnowledgeLibSQL schema 4 wiring', () => {
+  it('keeps pins from before pin kinds as page pins and then takes a list pin on the same page', async () => {
+    const client = createClient({ url: ':memory:' });
+    const store = new KnowledgeLibSQL({ client });
+    await store.init();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance: who,
+    });
+    const page = await store.createPage({ parentId: scope.id, name: 'Policy', body: 'Be kind.', provenance: who });
+    // The pins table as it shipped before kinds: one pin per page.
+    await client.execute('DROP TABLE mastra_knowledge_pins');
+    await client.execute(`CREATE TABLE mastra_knowledge_pins (
+      id TEXT PRIMARY KEY, pageId TEXT NOT NULL UNIQUE, audience TEXT NOT NULL,
+      createdBy TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL)`);
+    const at = new Date().toISOString();
+    await client.execute({
+      sql: 'INSERT INTO mastra_knowledge_pins VALUES (?, ?, ?, ?, ?, ?)',
+      args: ['pin-old', page.id, '["org:acme"]', 'agent:alex', at, at],
+    });
+
+    const upgraded = new KnowledgeLibSQL({ client });
+    await upgraded.init();
+    await upgraded.init();
+    const { pins } = await upgraded.listPins({ audience: ['org:acme'], read: 'all' });
+    expect(pins).toMatchObject([{ id: 'pin-old', pageId: page.id, kind: 'page', audience: ['org:acme'] }]);
+    await upgraded.addPinAudience({ pageId: page.id, kind: 'list', depth: 2, audience: ['org:acme'], createdBy: 'a' });
+    const kinds = (await upgraded.listPins({ audience: ['org:acme'], read: 'all' })).pins.map(pin => [
+      pin.kind,
+      pin.depth,
+    ]);
+    expect(kinds.sort()).toEqual([
+      ['list', 2],
+      ['page', undefined],
+    ]);
+  });
+
   it('inits, serves pages, and resets', async () => {
     const store = new KnowledgeLibSQL({ client: createClient({ url: ':memory:' }) });
     await store.init();

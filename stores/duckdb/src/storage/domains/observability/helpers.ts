@@ -37,6 +37,18 @@ export function payloadColumnSql(column: string): string {
 }
 
 /**
+ * The inclusive range of `dates`, used to bound lookups that find a page's rows by their keys.
+ *
+ * DuckDB cannot push an OR of key tuples (or a tuple semi-join) into the table scan, so without a
+ * range it decompresses the payload columns of the whole table. A range reaches the scan as a plain
+ * filter that zone maps can prune on, and it cannot change the result: it covers every looked-up row.
+ */
+export function timeRangeOf(dates: Date[]): [Date, Date] {
+  const times = dates.map(date => date.getTime());
+  return [new Date(Math.min(...times)), new Date(Math.max(...times))];
+}
+
+/**
  * Trim, drop blank, and dedupe tags before they are written, matching the
  * PostgreSQL and ClickHouse stores so tag predicates and discovery agree.
  */

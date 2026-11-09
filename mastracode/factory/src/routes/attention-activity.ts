@@ -9,7 +9,7 @@ import type {
 import type {
   FactoryAttentionIdentity,
   FactoryAttentionReceiptRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryActivityAttentionIdentity, factoryAttentionKey } from '../storage/domains/work-items/base.js';
@@ -34,7 +34,7 @@ import {
 
 interface ResolvedActivity {
   activity: WorkItemActivityRow;
-  item: WorkItemRow;
+  item: Card;
   comment: WorkItemCommentRow | undefined;
   identity: FactoryAttentionIdentity;
   receipt: FactoryAttentionReceiptRecord | undefined;

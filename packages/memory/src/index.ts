@@ -604,9 +604,9 @@ export class Memory extends MastraMemory {
           '`retrieval: { vector: true }` requires a vector store. Pass a `vector` option to your Memory instance.',
         );
       }
-      if (!this.embedder) {
+      if (!this.embedder && !this.isSelfEmbedding) {
         throw new Error(
-          '`retrieval: { vector: true }` requires an embedder. Pass an `embedder` option to your Memory instance.',
+          '`retrieval: { vector: true }` requires an embedder, or a vector store that generates embeddings itself. Pass an `embedder` option to your Memory instance.',
         );
       }
     }
@@ -2522,9 +2522,13 @@ Notes:
   }
 
   private getObservationEmbeddingIndexName(dimensions?: number): string {
+    const separator = this.vector?.indexSeparator ?? '_';
+    // A self-embedding store picks its own dimension, so this name is keyed on the mode.
+    if (this.isSelfEmbedding) {
+      return `${this.observationIndexPrefix}${separator}selfembed`;
+    }
     const defaultDimensions = 384;
     const usedDimensions = dimensions ?? defaultDimensions;
-    const separator = this.vector?.indexSeparator ?? '_';
     return `${this.observationIndexPrefix}${separator}${usedDimensions}`;
   }
 
@@ -2541,7 +2545,8 @@ Notes:
 
     await this.vector.createIndex({
       indexName,
-      dimension: usedDimensions,
+      // A self-embedding store derives the dimension from its own model configuration.
+      ...(this.isSelfEmbedding ? {} : { dimension: usedDimensions }),
       // Observation search filters by these fields. Semantic recall indexes the same ones.
       metadataIndexes: ['resource_id', 'thread_id'],
     } as any);
@@ -2582,7 +2587,17 @@ Notes:
       throw new Error('searchMessages requires a vector store. Configure vector and embedder on your Memory instance.');
     }
 
-    const { embeddings, dimension } = await this.embedMessageContent(query);
+    // A self-embedding store takes the search string itself and embeds it with the model that
+    // embedded the observations.
+    const queries: Array<{ queryVector: number[] } | { queryText: string }> = [];
+    let dimension: number | undefined;
+    if (this.isSelfEmbedding) {
+      queries.push({ queryText: query });
+    } else {
+      const embedResult = await this.embedMessageContent(query);
+      dimension = embedResult.dimension;
+      queries.push(...embedResult.embeddings.map(queryVector => ({ queryVector })));
+    }
     const { indexName } = await this.createObservationEmbeddingIndex(dimension);
 
     const vectorFilter: VectorFilter = { resource_id: resourceId };
@@ -2607,13 +2622,15 @@ Notes:
     }> = [];
 
     await Promise.all(
-      embeddings.map(async embedding => {
+      queries.map(async params => {
+        // `queryText` is accepted only by self-embedding stores, so it is not on the shared
+        // QueryVectorParams.
         const results = await this.vector!.query({
           indexName,
-          queryVector: embedding,
+          ...params,
           topK,
           filter: vectorFilter,
-        });
+        } as never);
         for (const r of results) {
           if (!r.metadata?.thread_id) {
             continue;
@@ -2678,18 +2695,31 @@ Notes:
     /** Observational memory record holding the group, so paging can read it directly. */
     recordId?: string;
   }): Promise<void> {
-    if (!this.vector || !this.embedder) return;
+    if (!this.vector || (!this.embedder && !this.isSelfEmbedding)) return;
 
-    const embedResult = await this.embedMessageContent(text);
-    if (embedResult.embeddings.length === 0 || embedResult.dimension === undefined) {
-      return;
+    // The store embeds these itself, so it receives the chunk texts. Chunking matches the
+    // client-side path so one metadata entry lines up with one stored row.
+    let chunks: string[];
+    let embeddings: number[][] = [];
+    let dimension: number | undefined;
+    if (this.isSelfEmbedding) {
+      chunks = this.chunkText(text);
+      if (chunks.length === 0) {
+        return;
+      }
+    } else {
+      const embedResult = await this.embedMessageContent(text);
+      ({ chunks, embeddings, dimension } = embedResult);
+      if (embeddings.length === 0 || dimension === undefined) {
+        return;
+      }
     }
 
-    const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
+    const { indexName } = await this.createObservationEmbeddingIndex(dimension);
     // Stable UUIDv8 IDs make retries safe even when a write succeeds but its acknowledgement is lost.
     // UUID formatting also supports vector stores that reject arbitrary string IDs.
     const ids: string[] = [];
-    for (const [chunkIndex] of embedResult.chunks.entries()) {
+    for (const [chunkIndex] of chunks.entries()) {
       const hash = Buffer.from(
         await globalThis.crypto.subtle.digest(
           'SHA-256',
@@ -2702,20 +2732,23 @@ Notes:
       ids.push(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
     }
 
-    await this.vector.upsert({
-      indexName,
-      ids,
-      vectors: embedResult.embeddings,
-      metadata: embedResult.chunks.map(chunk => ({
-        group_id: groupId,
-        range,
-        thread_id: threadId,
-        resource_id: resourceId,
-        observed_at: observedAt?.toISOString(),
-        ...(recordId ? { record_id: recordId } : {}),
-        text: chunk,
-      })),
-    });
+    const metadata = chunks.map(chunk => ({
+      group_id: groupId,
+      range,
+      thread_id: threadId,
+      resource_id: resourceId,
+      observed_at: observedAt?.toISOString(),
+      ...(recordId ? { record_id: recordId } : {}),
+      text: chunk,
+    }));
+
+    if (this.isSelfEmbedding) {
+      // `documents` is accepted only by self-embedding stores, so it is not on the shared
+      // UpsertVectorParams.
+      await this.vector.upsert({ indexName, ids, documents: chunks, metadata } as never);
+    } else {
+      await this.vector.upsert({ indexName, ids, vectors: embeddings, metadata });
+    }
   }
 
   /**
@@ -2959,11 +2992,12 @@ Notes:
 
   /**
    * Check whether retrieval search (vector-based) is enabled.
-   * Returns true when `retrieval: { vector: true }` and Memory has vector + embedder configured.
+   * Returns true when `retrieval: { vector: true }` and Memory has a vector store plus either an
+   * embedder or a store that generates embeddings itself.
    */
   hasRetrievalSearch(retrieval: ObservationalMemoryOptions['retrieval']): boolean {
     if (!retrieval || retrieval === true) return false;
-    return !!retrieval.vector && !!this.vector && !!this.embedder;
+    return !!retrieval.vector && !!this.vector && (!!this.embedder || this.isSelfEmbedding);
   }
 
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
@@ -3655,19 +3689,32 @@ Notes:
     const vector = this.vector!;
     const indexes = await this.getMemoryVectorIndexes([this.observationIndexPrefix]);
     for (const indexName of indexes) {
-      const { dimension } = await vector.describeIndex({ indexName });
-      // Most stores need a query vector even for a metadata-filtered read; any unit vector will do.
-      const queryVector = Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : 0));
+      // A self-embedding store keeps its vectors itself and does not return them, so its rows are
+      // read by text and re-tagged by metadata alone.
+      const selfEmbedded = this.isSelfEmbedding && indexName === this.getObservationEmbeddingIndexName();
+      let readParams: Record<string, unknown>;
+      if (selfEmbedded) {
+        // Any text works: the filter picks the rows and the ranking is not used.
+        readParams = { queryText: 'observations' };
+      } else {
+        const { dimension } = await vector.describeIndex({ indexName });
+        // Most stores need a query vector even for a metadata-filtered read; any unit vector will do.
+        readParams = {
+          queryVector: Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : 0)),
+          includeVector: true,
+        };
+      }
       const moved = new Set<string>();
       for (;;) {
+        // `queryText` is accepted only by self-embedding stores, so it is not on the shared
+        // QueryVectorParams.
         const stale = await vector.query({
           indexName,
-          queryVector,
+          ...readParams,
           // Vectorize caps topK at 20 when values and metadata are returned.
           topK: 20,
-          includeVector: true,
           filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
-        });
+        } as never);
         const pending = stale.filter(result => !moved.has(result.id));
         if (pending.length === 0) break;
         for (const result of pending) {

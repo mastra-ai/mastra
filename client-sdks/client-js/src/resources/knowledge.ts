@@ -16,6 +16,16 @@ export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph> & {
   /** Declared access grants onto the scopes shown; absent from servers on an older core. */
   grants?: Array<KnowledgeGraphScopeGrant & { principalLabel?: string }>;
 };
+/** How many other pages link to each page (`in`) and each page links to (`out`), by `[[ref]]` or note mention. */
+export interface KnowledgeLinkCountsResponse {
+  counts: Record<string, { in: number; out: number }>;
+}
+export interface KnowledgePageLinksResponse {
+  edges: Array<{ fromPageId: string; toPageId: string; kind: 'body' | 'note'; count: number }>;
+  /** The readable pages at the other ends of `edges`. */
+  pages: Serialized<KnowledgePageView['page']>[];
+  truncated: boolean;
+}
 export interface KnowledgeSearchResponse {
   results: Serialized<KnowledgePageSearchHit>[];
 }
@@ -79,6 +89,16 @@ export class Knowledge extends BaseResource {
   /** A bounded page graph under `rootId`, or across every root scope. */
   graph(params: { rootId?: string; maxPages?: number } = {}): Promise<KnowledgeGraphResponse> {
     return this.request(`${this.base}/graph${query(params)}`);
+  }
+
+  /** Exact link counts for up to 200 pages, over the whole store. Rejects with 501 where there is no link index. */
+  linkCounts(pageIds: string[]): Promise<KnowledgeLinkCountsResponse> {
+    return this.request(`${this.base}/link-counts${query({ pageId: pageIds })}`);
+  }
+
+  /** One page's links, bounded, with the pages at their other ends. Rejects with 501 where there is no link index. */
+  pageLinks(pageId: string, params: { direction?: 'in' | 'out' | 'both' } = {}): Promise<KnowledgePageLinksResponse> {
+    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/links${query(params)}`);
   }
 
   /** Pages and notes matching `searchQuery`, optionally only within the given scope page ids. */

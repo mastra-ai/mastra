@@ -7,6 +7,7 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
@@ -27,8 +28,9 @@ import type {
 import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import type { ProjectListRepository } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
@@ -37,10 +39,6 @@ const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
-
-function loose(context: unknown): Context {
-  return context as Context;
-}
 
 async function readJson(context: Context): Promise<unknown | undefined> {
   try {
@@ -201,6 +199,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   environmentBuilds?: EnvironmentBuildRunner;
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
+  /** The per-project boards; loading a new project stores its copies of the code boards. */
+  boards?: Pick<ProjectBoardCache, 'describe'>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -322,6 +322,36 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       if (connection?.factoryProjectId === projectId) return { handle, connection, projectRepository };
     }
     return null;
+  }
+
+  async #connectionsWithRepositories(orgId: string, factoryProjectIds: string[]) {
+    if (factoryProjectIds.length === 0 || this.#versionControlIntegrationIds.size === 0) return [];
+    const perIntegration = await Promise.all(
+      (await this.#handles()).map(handle => handle.connections.listWithRepositories({ orgId, factoryProjectIds })),
+    );
+    return perIntegration.flat();
+  }
+
+  async #linkedRepositoriesByProject(orgId: string, factoryProjectIds: string[]) {
+    const byProject = new Map<string, ProjectListRepository[]>();
+    for (const connection of await this.#connectionsWithRepositories(orgId, factoryProjectIds)) {
+      const repositories = byProject.get(connection.factoryProjectId) ?? [];
+      for (const link of connection.repositories) {
+        repositories.push({
+          projectRepositoryId: link.id,
+          connectionId: connection.id,
+          integrationId: connection.integrationId,
+          repositoryId: link.repositoryId,
+          externalId: link.repository?.externalId ?? null,
+          slug: link.repository?.slug ?? null,
+          defaultBranch: link.repository?.defaultBranch ?? null,
+          branch: link.branch,
+          sandboxWorkdir: link.sandboxWorkdir,
+        });
+      }
+      byProject.set(connection.factoryProjectId, repositories);
+    }
+    return byProject;
   }
 
   async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
@@ -537,7 +567,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          return context.json({ projects: await (await this.#projects()).list({ orgId: tenant.orgId }) });
+          const projects = await (await this.#projects()).list({ orgId: tenant.orgId });
+          const repositories = await this.#linkedRepositoriesByProject(
+            tenant.orgId,
+            projects.map(project => project.id),
+          );
+          return context.json({
+            projects: projects.map(project => ({ ...project, repositories: repositories.get(project.id) ?? [] })),
+          });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectCreate.path, {
@@ -552,6 +589,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          // The project's first board load retries anything this misses.
+          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+            console.warn('[factory] could not store the boards of a new project:', error);
+          });
           return context.json({ project }, 201);
         },
       }),
@@ -605,9 +646,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               403,
             );
           }
-          const project = await (
-            await this.#projects()
-          ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
+          // Plans are approved per board (`exitTool.autoApprove`); the old project switch is ignored.
+          const { autoApprovePlans: _ignored, ...input } = parsedBody.data;
+          const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),
@@ -743,33 +784,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const projectId = context.req.param('id');
           if (!projectId || !UUID_RE.test(projectId) || !(await this.#project(tenant.orgId, projectId)))
             return context.json({ error: 'Project not found' }, 404);
-          const connections = [];
-          for (const handle of await this.#handles()) {
-            for (const connection of await handle.connections.list({
-              orgId: tenant.orgId,
-              factoryProjectId: projectId,
-            })) {
-              const installation = await handle.installations.get({
-                orgId: tenant.orgId,
-                id: connection.installationId,
-              });
-              // Skip orphaned connections whose installation was pruned (e.g.
-              // the user uninstalled the GitHub App). Otherwise
-              // `projectRepositories.list` throws `requireConnection` and the
-              // whole endpoint 500s, which hangs the web UI on the page
-              // loader for every project. New code cascade-deletes these on
-              // installation removal, but this defensive skip lets already-
-              // orphaned rows in existing databases self-heal on read.
-              if (!installation) continue;
-              const links = await handle.projectRepositories.list({ orgId: tenant.orgId, connectionId: connection.id });
-              connections.push({
-                ...connection,
-                installation,
-                repositories: await Promise.all(links.map(link => this.#repositoryPayload(handle, tenant.orgId, link))),
-              });
-            }
-          }
-          return context.json({ connections });
+          return context.json({ connections: await this.#connectionsWithRepositories(tenant.orgId, [projectId]) });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections', {

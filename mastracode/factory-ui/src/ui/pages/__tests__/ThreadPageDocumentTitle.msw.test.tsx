@@ -11,6 +11,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
@@ -42,31 +43,23 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/local/acme/app' }),
+            ],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
       HttpResponse.json({ modelId: null, thinkingLevel: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/local/acme/app',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
@@ -204,7 +197,7 @@ describe('ThreadPage document title', () => {
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
-    expect(await screen.findByRole('link', { name: 'Fix flaky login' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Sess-1: Fix flaky login' })).toBeInTheDocument();
   });
 
   it('shows the team key for Linear issue-backed work sessions', async () => {

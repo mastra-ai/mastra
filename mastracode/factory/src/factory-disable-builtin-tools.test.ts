@@ -32,4 +32,11 @@ describe('MastraFactory disableBuiltinTools', () => {
     expect(prepareMock).toHaveBeenCalledOnce();
     expect(prepareMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
   });
+
+  it('points every session at the plans directory the Factory UI renders', async () => {
+    const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'plans-dir-test' });
+    await new MastraFactory({ storage }).prepare();
+
+    expect(prepareMock.mock.calls[0]![0].plansDir).toBe('.artifacts/plans');
+  });
 });

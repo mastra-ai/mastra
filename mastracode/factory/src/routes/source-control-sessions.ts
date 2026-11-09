@@ -32,14 +32,11 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
-
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).

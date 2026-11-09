@@ -11,6 +11,7 @@ interface ValidationConfig {
   sourceDir: string
   skipPaths: string[]
   packagePattern: RegExp
+  maxPackages: number
   concurrency: number
 }
 
@@ -25,9 +26,13 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'docs/index.mdx',
     'models/',
     'docs/studio/cloud.mdx',
+    // Migration guides aren't embedded in package docs; they stay on the site and in the MCP docs server.
+    'reference/migrations/',
   ],
   // Allow for @mastra/* packages + mastra + create-mastra + mastracode
   packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,
+  // Each listed package embeds a full copy of the page, so long lists bloat package docs.
+  maxPackages: 4,
   concurrency: 50,
 }
 
@@ -41,6 +46,7 @@ interface FileValidationResult {
   file: string
   passed: boolean
   errors: ValidationError[]
+  warnings: string[]
 }
 
 interface ValidationSummary {
@@ -48,6 +54,7 @@ interface ValidationSummary {
   passed: number
   failed: number
   results: FileValidationResult[]
+  warnings: string[]
 }
 
 function shouldSkipPath(relativePath: string, skipPaths: string[]): boolean {
@@ -108,16 +115,26 @@ function validateFileContent(content: string, relativePath: string, config: Vali
           lineNumber: 1,
         },
       ],
+      warnings: [],
     }
   }
 
   const parsed = parseFrontMatterYAML(bounds.rawContent, bounds.contentStartLine)
   const errors = validatePackagesField(parsed.packages, parsed.packagesFieldLine, config)
+  const warnings: string[] = []
+
+  if (parsed.packages && parsed.packages.length > config.maxPackages) {
+    const location = parsed.packagesFieldLine ? `${relativePath}:${parsed.packagesFieldLine}` : relativePath
+    warnings.push(
+      `  ${location}: lists ${parsed.packages.length} packages (max ${config.maxPackages}); keep only packages whose users need this page`,
+    )
+  }
 
   return {
     file: relativePath,
     passed: errors.length === 0,
     errors,
+    warnings,
   }
 }
 
@@ -176,6 +193,7 @@ async function validateAllFiles(sourceDir: string, config: ValidationConfig): Pr
                 message: `failed to read file: ${error instanceof Error ? error.message : String(error)}`,
               },
             ],
+            warnings: [],
           }
         }
       }),
@@ -191,6 +209,7 @@ async function validateAllFiles(sourceDir: string, config: ValidationConfig): Pr
     passed: results.length - failed.length,
     failed: failed.length,
     results: failed,
+    warnings: results.flatMap(r => r.warnings),
   }
 }
 
@@ -236,6 +255,12 @@ function printResults(summary: ValidationSummary): void {
     for (const result of parseErrors) {
       console.log(formatError(result).join('\n'))
     }
+    console.log()
+  }
+
+  if (summary.warnings.length > 0) {
+    console.log('Warning: too many packages (each package embeds its own copy of the page):')
+    console.log(summary.warnings.join('\n'))
     console.log()
   }
 

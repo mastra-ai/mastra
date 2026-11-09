@@ -180,7 +180,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             {...commands.inputProps}
             ref={messageInput}
             aria-label="Message"
-            placeholder="Ask a follow-up, or / for commands…"
+            placeholder="Ask a follow-up, or / for commands"
             onKeyDown={handleComposerKeyDown}
           />
           <ComposerActions>

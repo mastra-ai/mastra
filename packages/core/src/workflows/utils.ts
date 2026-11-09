@@ -7,6 +7,7 @@ import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import { waitMs } from '../utils/test-waits';
 import type { ExecutionGraph } from './execution-engine';
+import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
 import { getEntryId } from './step-entry';
 import type {
@@ -712,6 +713,8 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
+  let cleaned: Record<string, unknown> = rest;
+
   // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
     const {
@@ -720,11 +723,11 @@ function cleanSingleResult(result: Record<string, unknown>): Record<string, unkn
       ...userMetadata
     } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
-      return { ...rest, metadata: userMetadata };
+      cleaned = { ...rest, metadata: userMetadata };
     }
   }
 
-  return rest;
+  return withoutNestedRunStartState(cleaned);
 }
 
 /**

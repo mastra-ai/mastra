@@ -111,7 +111,7 @@ describe('Composer steering', () => {
     await session.emit({ type: 'agent_start' });
 
     const composer = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent'));
     await user.type(composer, MESSAGE);
     await user.keyboard('{Enter}');
 
@@ -158,7 +158,7 @@ describe('Composer steering', () => {
     await session.emit({ type: 'agent_start' });
 
     const composer = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent'));
     await user.type(composer, MESSAGE);
     await user.keyboard('{Enter}');
 
@@ -216,7 +216,7 @@ describe('Composer steering scroll', () => {
     await session.emit({ type: 'agent_start' });
 
     const composer = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent'));
 
     const viewport = screen.getByTestId('steer-viewport');
     const scrollTo = vi.fn((options?: ScrollToOptions | number) => {

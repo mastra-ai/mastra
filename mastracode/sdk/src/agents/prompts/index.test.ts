@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+const searchConfig = vi.hoisted(() => ({ parallel: false, tavily: false }));
+
 // Keep prompt tests independent from optional web-search package artifacts.
 vi.mock('../../tools/index.js', () => ({
-  hasParallelKey: () => false,
-  hasTavilyKey: () => false,
+  hasParallelKey: () => searchConfig.parallel,
+  hasTavilyKey: () => searchConfig.tavily,
 }));
 
 const mocks = vi.hoisted(() => ({ home: '' }));
@@ -277,5 +279,63 @@ describe('buildFullPrompt instruction roots', () => {
     expect(prompt).toContain('API: run pnpm test in api (trusted)');
     expect(prompt).not.toContain('(working tree)');
     expect(prompt).not.toContain('WEB:');
+  });
+});
+
+describe('web search guidance for model aliases', () => {
+  const context = {
+    projectPath: '/tmp/project',
+    projectName: 'test-project',
+    modeId: 'build',
+    currentDate: '2026-03-23',
+    workingDir: '/tmp/project',
+    platform: 'linux',
+    date: '2026-03-23',
+    mode: 'build',
+  };
+
+  it.each(['openai/gpt-5.5', 'anthropic/claude-sonnet-4-5'])(
+    'advertises provider search for %s and its gateway alias',
+    modelId => {
+      for (const id of [modelId, `mastra/${modelId}`]) {
+        const prompt = buildFullPrompt({ ...context, modelId: id });
+        expect(prompt).toContain('**web_search** — Search the web');
+        // Provider search registers no extract tool, so none is advertised.
+        expect(prompt).not.toContain('**web_extract**');
+        expect(
+          buildFullPrompt({ ...context, modelId: id, state: { permissionRules: { tools: { web_search: 'deny' } } } }),
+        ).not.toContain('**web_search**');
+      }
+    },
+  );
+
+  it.each(['parallel', 'tavily'] as const)('advertises configured %s search for other providers', backend => {
+    searchConfig[backend] = true;
+    try {
+      expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).toContain(
+        '**web_search** / **web_extract** — Search the web / extract page content',
+      );
+    } finally {
+      searchConfig[backend] = false;
+    }
+  });
+
+  it('omits web tool guidance for tools removed via disabledTools', () => {
+    expect(
+      buildFullPrompt({ ...context, modelId: 'mastra/openai/gpt-5.5', disabledTools: ['web_search'] }),
+    ).not.toContain('**web_search**');
+
+    searchConfig.parallel = true;
+    try {
+      const prompt = buildFullPrompt({ ...context, modelId: 'openai/gpt-5.5', disabledTools: ['web_extract'] });
+      expect(prompt).toContain('**web_search** — Search the web');
+      expect(prompt).not.toContain('**web_extract**');
+    } finally {
+      searchConfig.parallel = false;
+    }
+  });
+
+  it('does not advertise absent search for other providers', () => {
+    expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).not.toContain('**web_search**');
   });
 });

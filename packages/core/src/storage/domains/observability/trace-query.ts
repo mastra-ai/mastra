@@ -273,8 +273,8 @@ export const traceAggregateDimensionDescriptorSchema = z
 export const traceAggregateMeasureDescriptorSchema = z
   .object({
     name: z.string(),
-    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
-    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost', 'timeToFirstToken', 'timeToFirstChunk']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum', 'count']).optional(),
     unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
     approximate: z.boolean(),
   })
@@ -621,6 +621,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     sessionId: stringField(false),
     userId: stringField(false),
     organizationId: stringField(false),
+    requestId: stringField(false),
+    serviceName: stringField(false),
+    experimentId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
@@ -661,6 +664,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     sessionId: stringField(false),
     userId: stringField(false),
     organizationId: stringField(false),
+    requestId: stringField(false),
+    serviceName: stringField(false),
+    experimentId: stringField(false),
   },
   scores: {
     scorerId: stringField(true),
