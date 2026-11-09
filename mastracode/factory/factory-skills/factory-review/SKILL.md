@@ -5,7 +5,7 @@ description: Review a pull request for a Factory work item — history and conte
 
 # Factory Review
 
-**Guard:** only run this skill when the `factory-phase` signal shows this session works the card in its current phase and `factory_record_review_verdict` is among your tools (the PR review phase grants it to the reviewing session). Otherwise stop immediately: do not review, comment, label, approve, or transition the work item, and report that review is not this session's part.
+**Guard:** only run this skill when the `factory-phase` signal shows this session works the card in its current phase and `factory_record_review_verdict` is among your tools (the pull request review phase grants it to the reviewing session). Otherwise stop immediately: do not review, comment, label, approve, or transition the work item, and report that review is not this session's part.
 
 ## Choose the procedure
 

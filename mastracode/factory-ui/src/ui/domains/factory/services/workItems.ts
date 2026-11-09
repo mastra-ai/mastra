@@ -45,7 +45,7 @@ function openPullRequestSource(source: CardPullRequestSource): boolean {
 }
 
 /**
- * The pull request attached to an issue card that PR review looks at: the one the card points
+ * The pull request attached to an issue card that Review (`pr-review`) looks at: the one the card points
  * at, else the newest open one, else the newest. Mirrors the server's `reviewedPullRequest`.
  */
 export function attachedPullRequestSource(

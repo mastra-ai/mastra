@@ -68,7 +68,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId, board: B
   if (kind === 'terminal') {
     return openPullRequestInCompleted(item, columnStage, loop) ? reviewMove(loop, 'Re-review') : [];
   }
-  // A card carrying a pull request, its own or one attached to its issue, sends it to PR review.
+  // A card carrying a pull request, its own or one attached to its issue, sends it to the board's pull request review phase (Review, `pr-review`, on Work).
   const reviewing = columnStage === loop.pullRequestReview || columnStage === loop.selfReview;
   if (reviewing && cardHasPullRequest(item)) return reviewMove(loop, 'Review');
   if (columnStage === loop.selfReview) return [];
