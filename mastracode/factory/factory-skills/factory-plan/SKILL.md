@@ -57,11 +57,9 @@ The plan must be executable by someone with no access to this conversation beyon
 
 Submit the plan with a single `submit_plan` call carrying the plan file. Planning holds the card until `submit_plan` comes back with an approved plan: a person approves it unless the card's Planning phase auto-approves it, and while it waits the run is parked and the plan shows in Factory's attention list. Moving the card before then is refused.
 
-When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item` to the next working phase listed under "Next phases" in the `factory-work-item` signal (Building, `execute`, on the Work board), using the revision the `factory-phase` signal shows. That move ends your run. If the plan is rejected or comes back with feedback, address it and submit again; do not move the card.
+When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item` to the next working phase listed under "Next phases" in the `factory-work-item` signal (Building, `execute`, on the Work board), using the revision the `factory-phase` signal shows. Report the plan headline, then make that move: it ends your run. If the plan is rejected or comes back with feedback, address it and submit again; do not move the card.
 
 The builder implements the plan and pushes the branch, then opens the pull or merge request directly or sends the branch to self-review first, depending on the project's self-review setting; do not plan a PR-opening step.
-
-If the plan is rejected or comes back with feedback, address it, rework the plan, and submit again. Once it is approved, report the plan headline and stop.
 
 ## Behavior Rules
 

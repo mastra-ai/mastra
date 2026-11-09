@@ -108,8 +108,9 @@ describe('the Work board seed', () => {
   it("states the build goal's done, continue and waiting criteria in the stored objective the judge reads", () => {
     expect(BUILD_OBJECTIVE).toContain('plan approved in Planning');
     expect(BUILD_OBJECTIVE).toContain('pushed');
-    expect(BUILD_OBJECTIVE).toMatch(/Review when self-review is on/);
-    expect(BUILD_OBJECTIVE).toMatch(/PR review after opening the change request when it is off/);
+    // The judge cannot see the project's self-review setting: the objective never asks it to.
+    expect(BUILD_OBJECTIVE).not.toMatch(/self-review/);
+    expect(BUILD_OBJECTIVE).toMatch(/out of Building/);
     expect(BUILD_OBJECTIVE).toMatch(/[Ww]aiting/);
     expect(BUILD_OBJECTIVE.length).toBeLessThanOrEqual(2_000);
   });

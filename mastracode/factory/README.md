@@ -146,7 +146,7 @@ Creating a board under a built-in or app board's key is refused with `409 code_b
 
 A release that changes what Factory's own boards need can carry a board migration: a one-time change to the project's stored copy that fills only fields still holding the value Factory stored before, so every field a person edited stays as they left it. Each project gets each migration once, on its first load after the upgrade; the keys applied are recorded on the project's board version row in the same transaction as the write, so concurrent replicas apply it once, and a field a person later sets back to an old default is never rewritten. A migration writes the board at the next revision as `factory` and logs one line per project naming the fields it filled. A fresh project is stored with the current board and records the migration without a change.
 
-`work-phase-runners-v1` gives a project's Work board the runners of this release, field by field per phase: `runner`, `exitTool` (Planning's `next`), `tools`, `autoStart`, `autoStartWhen` and `nextPhases`. A field is filled only while it equals what earlier releases stored (for example Triage's runner `{ context: 'triage' }`); `nextPhases` only when the stored list is the old one exactly and every added phase is on the board; and Planning's exit tool keeps no `next` when Building is no longer one of Planning's moves. A phase the board no longer has, or holds as another kind, is left alone.
+`work-phase-runners-v1` gives a project's Work board the runners of this release, field by field per phase: `runner`, `exitTool`, `tools`, `autoStart`, `autoStartWhen` and `nextPhases`. A field is filled only while it equals what earlier releases stored (for example Triage's runner `{ context: 'triage' }`); `nextPhases` only when the stored list is the old one exactly and every added phase is on the board; a runner is filled part by part (its `skill` and `goal` when unset, its `context` while it is the old default), so instructions a person wrote stay. A Building runner whose moves a person narrowed gets the skill without the goal. The migration runs only on Factory's own Work board, never on an app board under the `work` key. A phase the board no longer has, or holds as another kind, is left alone.
 
 #### Writing a board into projects
 
@@ -480,7 +480,7 @@ Work declares `intake` resting; `triage`, `planning`, `execute`, `review`, and `
 | Review    | `factory-self-review` in `review`                    | Starts on its own while the card has no open pull request (`autoStartWhen` `item.pullRequest not_exists`). Grants `factory_record_review_verdict`. Approving opens the change request from the approved head and moves the card to PR review; requesting changes sends it back to Building. |
 | PR review | `factory-review` in `review`                         | Grants `factory_record_review_verdict` and `factory_review_source`.                                                                                                                                                                                                                         |
 
-The agent that finishes a card's work cleans up the source issue's status labels before moving the card to Done; a merged pull request that closes the issue moves the card there through the intake routes. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+The agent that finishes a card's work cleans up the source issue's status labels (removes `status: needs triage`, `status: auto-triaged` and `status: needs approval`, adds `status: pending-close` and posts a done comment) before it moves the card to Done; a merged pull request that closes the issue moves the card there through the intake routes. Done itself starts nothing: earlier releases ran that cleanup on every entry into Done, so an issue card a merge or a person moves to Done now keeps its labels and gets no comment. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
 A new pull request or merge request that belongs to a card already on Work is attached to that card (see below). One with no such card gets its own card in Work Intake or PR review, as the intake routes decide. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` in the card's `review` session; the skill follows the GitLab or re-review procedure the `factory-work-item` signal names for the card. Work's Review phase is the builder's self-review of its own work, so a pull request's own card never enters it. A pull request's own card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled.
 
@@ -560,7 +560,7 @@ const releaseBoard = defineBoard({
       runner: { context: 'build', skill: 'factory-plan' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
-      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT, next: 'build' },
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
       nextPhases: ['build', 'canceled'],
     },
     build: { name: 'Build', kind: 'working', runner: { context: 'build' }, nextPhases: ['done'] },

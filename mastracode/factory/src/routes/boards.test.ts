@@ -512,18 +512,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
   it("lets an admin change Work's runners and exit tools, which no code handler holds any more", async () => {
     const { a, scope, base, replicaA } = await setup();
-    const work = await getBoard(replicaA.send, base, 'work');
-    const edits = [
-      editPhase(work, 'triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })),
-      editPhase(work, 'planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })),
-      editPhase(work, 'execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })),
+    const edits: Array<[string, (phase: StoredPhaseInput) => StoredPhaseInput]> = [
+      ['triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })],
+      ['planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })],
+      ['execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })],
     ];
-    for (const [index, body] of edits.entries()) {
-      const saved = await replicaA.send('PATCH', `${base}/work`, { ...body, expectedRevision: index + 1 });
+    for (const [index, [key, edit]] of edits.entries()) {
+      // Each edit starts from the board as the previous one saved it.
+      const work = await getBoard(replicaA.send, base, 'work');
+      const saved = await replicaA.send('PATCH', `${base}/work`, {
+        ...editPhase(work, key, edit),
+        expectedRevision: index + 1,
+      });
       expect(saved.status, JSON.stringify(saved.body)).toBe(200);
     }
     const stored = (await a.boards.get(scope, 'work'))!;
     expect(stored.revision).toBe(edits.length + 1);
+    expect(stored.phases.find(phase => phase.key === 'triage')!.runner).toMatchObject({ context: 'work' });
+    expect(stored.phases.find(phase => phase.key === 'planning')!.exitTool).toMatchObject({ id: 'finish_plan' });
     expect(stored.phases.find(phase => phase.key === 'execute')!.exitTool).toMatchObject({ id: 'finish_build' });
   });
 

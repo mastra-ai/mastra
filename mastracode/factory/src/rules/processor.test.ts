@@ -865,6 +865,55 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(signal?.contents).toContain('Then move the card with factory_transition_work_item to one of:');
   });
 
+  it('still records an approved plan when an unrelated write to the card lands first', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'plan');
+    const boards = createBoardRegistry();
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const update = storage.update.bind(storage);
+    let raced = false;
+    vi.spyOn(storage, 'update').mockImplementation(async args => {
+      if (!raced && args.patch.metadata && 'phaseExit' in args.patch.metadata) {
+        raced = true;
+        // A webhook updates the card between the processor's read and its stamp.
+        await update({
+          orgId: 'org-1',
+          id: prepared.item.id,
+          userId: 'webhook',
+          patch: { metadata: { lastWebhookAt: '2026-11-09T10:00:00.000Z' } },
+        });
+      }
+      return update(args);
+    });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
+      ]),
+    );
+
+    expect(raced).toBe(true);
+    const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+    expect(card).toMatchObject({
+      stages: ['planning'],
+      metadata: { lastWebhookAt: '2026-11-09T10:00:00.000Z', phaseExit: { phase: 'planning', tool: 'submit_plan' } },
+    });
+    await expect(
+      transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: prepared.item.id,
+        board: 'work',
+        stage: 'execute',
+        expectedRevision: card!.revision,
+        actor: { type: 'agent', bindingId: prepared.binding.id, role: 'plan' },
+        ingress: { type: 'agent', identity: 'plan-move-after-race' },
+        cause: 'test',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
   it('emits the persisted custom board and phase in the state signal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const releaseBoard = defineBoard({
@@ -1456,6 +1505,20 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(moved?.contents).toContain(
       'This card is now in Review, which runs in the review context in another session. Your part is done',
     );
+  });
+
+  it('keeps a plan session that still works a Planning card planned before Planning ran in work', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'plan');
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+    });
+    const planning = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(planning?.contents).toContain('Factory work phase: Planning (planning)');
+    expect(planning?.contents).toContain('This phase ends when submit_plan succeeds');
+    expect(planning?.contents).not.toContain('Your part is done');
   });
 
   it('preserves the cacheable phase history and appends an empty snapshot on revocation', async () => {

@@ -80,6 +80,14 @@ function isApprovedPlanResult(result: CompletedToolResult): boolean {
  * The phase this result finishes: the card's phase whose exit tool succeeded (for `submit_plan`,
  * with an approved plan) in the session that works the card there. Undefined otherwise.
  */
+const STAMP_ATTEMPTS = 3;
+
+/** When the card's current visit to `stage` began, if it is in `stage` alone. */
+function openEntry(item: Card, stage: string): string | undefined {
+  if (item.stages.length !== 1 || item.stages[0] !== stage) return undefined;
+  return item.stageHistory?.findLast(entry => entry.stage === stage && entry.exitedAt === undefined)?.enteredAt;
+}
+
 function finishedPhase(
   boards: BoardRegistry,
   board: string,
@@ -523,7 +531,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         : '';
     // The card moved to a phase another context works; this session's tools for it are gone.
     const handedOnText =
-      phase?.kind === 'working' && phase.runner.context !== binding.role
+      phase?.kind === 'working' &&
+      phase.runner.context !== binding.role &&
+      // A Work card planned before Planning ran in `work` keeps its `plan` session there.
+      workStageCarries(definition, stage, binding.role, undefined) !== true
         ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions, and move the card only if it must come back to you.\n`
         : '';
     const runtime =
@@ -653,29 +664,38 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       stampedCall !== toolResult.toolCallId &&
       !exitToolSucceeded(item, finished, toolResult.toolName)
     ) {
-      try {
-        const stamped = await this.options.storage.update({
-          orgId: binding.orgId,
-          id: item.id,
-          userId: `agent:${binding.id}`,
-          patch: {
-            metadata: {
-              [PHASE_EXIT_METADATA_KEY]: {
-                phase: finished,
-                tool: toolResult.toolName,
-                toolCallId: toolResult.toolCallId,
-                at,
+      const entry = openEntry(item, finished);
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const stamped = await this.options.storage.update({
+            orgId: binding.orgId,
+            id: item.id,
+            userId: `agent:${binding.id}`,
+            patch: {
+              metadata: {
+                [PHASE_EXIT_METADATA_KEY]: {
+                  phase: finished,
+                  tool: toolResult.toolName,
+                  toolCallId: toolResult.toolCallId,
+                  at,
+                },
+                ...(toolResult.toolName === 'submit_plan' ? { planApprovedAt: at } : {}),
               },
-              ...(toolResult.toolName === 'submit_plan' ? { planApprovedAt: at } : {}),
             },
-          },
-          expectedRevision: item.revision,
-        });
-        if (stamped) item = stamped.item;
-      } catch (error) {
-        // The card moved on meanwhile; it no longer needs the phase finished.
-        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
-        return;
+            expectedRevision: item.revision,
+          });
+          if (stamped) item = stamped.item;
+          break;
+        } catch (error) {
+          if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+          // Another write landed first. While the card is still in the same visit to the phase,
+          // the result still finishes it; once the card moved on, it no longer needs finishing.
+          const current = await this.options.storage.get({ orgId: binding.orgId, id: item.id });
+          if (!current || attempt >= STAMP_ATTEMPTS || openEntry(current, finished) !== entry || entry === undefined) {
+            return;
+          }
+          item = current;
+        }
       }
     }
     const rule = resolveBoardToolRule(boards, board, toolResult.toolName);
