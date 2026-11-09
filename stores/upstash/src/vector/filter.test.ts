@@ -397,6 +397,12 @@ describe('UpstashFilterTranslator', () => {
       expect(translator.translate({ $not: { a: 1, $or: [{ b: 2 }] } })).toBe('(a != 1 OR (b != 2))');
       expect(translator.translate({ $not: { $and: [{ b: 2 }], a: 1 } })).toBe('((b != 2) OR a != 1)');
     });
+
+    it('negates array and nested object fields of a top-level $not', () => {
+      expect(translator.translate({ $not: { a: 1, tags: ['x', 'y'] } })).toBe("(a != 1 OR tags NOT IN ('x', 'y'))");
+      expect(translator.translate({ $not: { tags: [] } })).toBe('(HAS FIELD empty OR HAS NOT FIELD empty)');
+      expect(translator.translate({ $not: { meta: { x: 1, y: { $gt: 2 } } } })).toBe('(meta.x != 1 OR meta.y <= 2)');
+    });
   });
 
   describe('array access', () => {

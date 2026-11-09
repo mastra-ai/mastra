@@ -141,13 +141,17 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
   }
 
   private negateField(fieldName: string, fieldValue: any): string {
-    if (
-      typeof fieldValue === 'object' &&
-      fieldValue !== null &&
-      !Array.isArray(fieldValue) &&
-      Object.keys(fieldValue).some(k => k.startsWith('$'))
-    ) {
-      return this.formatNot(fieldName, fieldValue);
+    if (Array.isArray(fieldValue)) {
+      // The positive form of an empty array never matches, so its negation always does
+      return fieldValue.length === 0
+        ? '(HAS FIELD empty OR HAS NOT FIELD empty)'
+        : `${fieldName} NOT IN (${this.formatArray(fieldValue)})`;
+    }
+    if (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue).length > 0) {
+      const negated = Object.entries(fieldValue).map(([key, val]) =>
+        key.startsWith('$') ? this.negateOperator(fieldName, key, val) : this.negateField(`${fieldName}.${key}`, val),
+      );
+      return negated.length > 1 ? `(${negated.join(' OR ')})` : negated[0]!;
     }
     return `${fieldName} != ${this.formatValue(fieldValue)}`;
   }
