@@ -49,14 +49,14 @@ Because nested directories aren't discovered as tools, group related tools with 
 
 ## Tool options
 
-The file-based convention only controls where the tool lives and how it's registered. The tool API still comes from `createTool()`:
+The file-based convention only controls where the tool lives and how it's registered. Options come from the tool itself. For tools built with `createTool()`:
 
 - Use `description` to tell the model when to call the tool.
 - Use `inputSchema` and `outputSchema` for structured inputs and outputs.
 - Use `toModelOutput` when the model should see a different shape than the raw value returned from `execute`.
 - Use `requireApproval` when a tool needs human confirmation before execution.
 
-See the [`createTool()` reference](/reference/tools/create-tool) for all options and [tool approval](/docs/harness/agent-controller#approve-tools-and-resume-suspensions) for the approval flow.
+See the [`createTool()` reference](/reference/tools/create-tool) for all options and [tool approval](/docs/harness/agent-controller#approve-tools-and-resume-suspensions) for the approval flow. Vercel AI SDK tools use the [AI SDK `tool()` API](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool) instead.
 
 ## Runtime boundary
 
