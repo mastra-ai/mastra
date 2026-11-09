@@ -121,10 +121,68 @@ describe('evented time travel into a nested workflow step', () => {
       await mastra.stopWorkers();
     }
   });
+
+  it('replays each foreach iteration of a nested workflow from its own recorded run', async () => {
+    const item = z.object({ n: z.number() });
+    const tagged = z.object({ n: z.number(), tag: z.string() });
+    const inputs: unknown[] = [];
+    let failed = false;
+    const prepare = createStep({
+      id: 'prepare',
+      inputSchema: item,
+      outputSchema: tagged,
+      execute: async ({ inputData }) => ({ ...inputData, tag: `t${inputData.n}` }),
+    });
+    const charge = createStep({
+      id: 'charge',
+      inputSchema: tagged,
+      outputSchema: tagged,
+      execute: async ({ inputData }) => {
+        inputs.push(inputData);
+        if (inputData.n === 0 && !failed) {
+          failed = true;
+          throw new Error('boom');
+        }
+        return inputData;
+      },
+    });
+    const inner = createWorkflow({ id: 'inner', inputSchema: item, outputSchema: tagged })
+      .then(prepare)
+      .then(charge)
+      .commit();
+    // With concurrency, a later iteration starts last, so the step-level nestedRunId is not iteration 0's run.
+    const outer = createWorkflow({ id: 'outer', inputSchema: z.array(item), outputSchema: z.array(tagged) })
+      .foreach(inner, { concurrency: 3 })
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      pubsub: new EventEmitterPubSub(),
+      workflows: { outer, inner },
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await mastra.getWorkflow('outer').createRun();
+      expect((await withTimeout(run.start({ inputData: [{ n: 0 }, { n: 1 }, { n: 2 }] }))).status).toBe('failed');
+      inputs.length = 0;
+
+      const result = await withTimeout(run.timeTravel({ step: ['inner', 'charge'] }));
+
+      expect(result.status).toBe('success');
+      expect(inputs).toEqual([{ n: 0, tag: 't0' }]);
+      expect(result.status === 'success' && result.result).toEqual([
+        { n: 0, tag: 't0' },
+        { n: 1, tag: 't1' },
+        { n: 2, tag: 't2' },
+      ]);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
 });
 
 describe('createTimeTravelExecutionParams', () => {
-  it('carries only the recorded nested run id into rebuilt step results', () => {
+  it('carries only the recorded nested run ids into rebuilt step results', () => {
     const step = (id: string) =>
       createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async ({ inputData }) => inputData });
     const inner = createWorkflow({ id: 'inner', inputSchema: z.any(), outputSchema: z.any() })
@@ -158,7 +216,11 @@ describe('createTimeTravelExecutionParams', () => {
             payload: {},
             startedAt: now,
             endedAt: now,
-            metadata: { nestedRunId: 'child-1', iterationCount: 3 },
+            metadata: {
+              nestedRunId: 'child-1',
+              foreachNestedRunIds: { 0: 'child-0', 1: 'child-1' },
+              iterationCount: 3,
+            },
           },
         } as any,
         serializedStepGraph: [],
@@ -171,8 +233,11 @@ describe('createTimeTravelExecutionParams', () => {
       },
     });
 
-    expect(params.stepResults.inner).toMatchObject({ status: 'running', metadata: { nestedRunId: 'child-1' } });
-    expect((params.stepResults.inner as any).metadata).toEqual({ nestedRunId: 'child-1' });
+    expect(params.stepResults.inner).toMatchObject({ status: 'running' });
+    expect((params.stepResults.inner as any).metadata).toEqual({
+      nestedRunId: 'child-1',
+      foreachNestedRunIds: { 0: 'child-0', 1: 'child-1' },
+    });
     expect(params.stepResults.first).not.toHaveProperty('metadata');
   });
 });
