@@ -27,6 +27,8 @@ Update `docs/src/content/en/integrations/sidebars.js` when adding or renaming an
 
 ## Choose the page structure
 
+Scaffold the page from `.claude/skills/mastra-docs/templates/integration.md`, then adapt it to the category below.
+
 Integration pages do not share one mandatory section order. Use a feature-oriented structure for independent capabilities and the task sequence in `STYLEGUIDE.md` when actions depend on earlier setup.
 
 Integration tasks commonly add external-service setup, Mastra registration, production constraints, and verification in the destination product. Use only the sections the page needs.
