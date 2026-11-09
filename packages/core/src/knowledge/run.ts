@@ -30,8 +30,6 @@ export class KnowledgeNotFoundError extends Error {
 
 const NAME_CANDIDATES = 5;
 const CLOSE_MATCHES = 3;
-/** Most scopes open to every run that a run lists at its root. */
-const OPEN_ROOT_SCOPES = 100;
 
 /**
  * One call's view of Knowledge: the run's principals, its read scope and its provenance. Built per
@@ -45,8 +43,6 @@ export class KnowledgeRun {
     readonly principals: string[],
     readonly read: Exclude<KnowledgeReadScope, 'all'>,
     readonly provenance: KnowledgeProvenance,
-    /** What `*` rules give every run; part of {@link read}. */
-    readonly open: Exclude<KnowledgeReadScope, 'all'>,
   ) {}
 
   static async start(
@@ -67,26 +63,8 @@ export class KnowledgeRun {
     if (options.write) {
       for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
     }
-    const [read, open] = await Promise.all([runtime.readScopeFor(principals), runtime.readScopeFor([])]);
-    return new KnowledgeRun(runtime, storage, principals, read, provenance, open);
-  }
-
-  /**
-   * The scopes at the root of the run's listings: its own held scopes, in principal order, then up to
-   * {@link OPEN_ROOT_SCOPES} root scopes that `*` rules open to every run.
-   */
-  async rootScopes(): Promise<KnowledgePage[]> {
-    const held = await this.storage.getScopesByAddress(this.principals);
-    const order = (scope: KnowledgePage) => this.principals.indexOf(scope.address ?? '');
-    const own = held.filter(scope => knowledgeScopeReadable(scope, this.read)).sort((a, b) => order(a) - order(b));
-    if (!this.open.addresses.length && !this.open.prefixes.length) return own;
-    const { pages } = await this.storage.listChildScopes({ parentId: null, read: this.open, limit: OPEN_ROOT_SCOPES });
-    const seen = new Set(own.map(scope => scope.id));
-    // Checked again so a custom store that ignores `read` can't list private scopes to every run.
-    return [
-      ...own,
-      ...pages.filter(scope => !scope.deletedAt && !seen.has(scope.id) && knowledgeScopeReadable(scope, this.open)),
-    ];
+    const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
+    return new KnowledgeRun(runtime, storage, principals, read, provenance);
   }
 
   /** The strongest role on a scope page, or null. */

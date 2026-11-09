@@ -41,7 +41,8 @@ describe.runIf(apiUrl && databaseUrl && instanceId && token)('Postgres and Platf
   it('matches host writes, discovery, search, reads, and agent scope denial', async () => {
     const directStore = new PostgresStore({ id: `direct-knowledge-${runId}`, connectionString: databaseUrl! });
     const direct = new Knowledge({ scopes, storage: directStore, tools: true });
-    const remote = new PlatformKnowledge({ scopes, tools: true, apiUrl, instanceId, accessToken: token });
+    // The instance serves the declarations, Memory's among them; PlatformKnowledge declares none.
+    const remote = new PlatformKnowledge({ tools: true, apiUrl, instanceId, accessToken: token });
     try {
       for (const knowledge of [direct, remote]) {
         const rootScope = `org:${randomUUID()}`;

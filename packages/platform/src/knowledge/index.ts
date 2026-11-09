@@ -1,4 +1,4 @@
-import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
 import {
   MastraCompositeStore,
@@ -14,7 +14,6 @@ export interface PlatformKnowledgeOptions extends Omit<
   KnowledgeConfig,
   'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'
 > {
-  scopes?: KnowledgeConfig['scopes'];
   accessToken?: string;
   projectId?: string;
   instanceId?: string;
@@ -213,7 +212,11 @@ export class PlatformKnowledge extends Knowledge {
     super({
       ...config,
       tools: config.tools ?? { read: true },
-      scopes: config.scopes ?? knowledgeMemoryScopes(),
+      // Platform owns every scope declaration and access grant: the instance serves them all through
+      // `getScopeDeclarations`, so there is one place to change who reads what. Declaring scopes here
+      // too would conflict with the instance's (a key both declare silently takes the code's rules,
+      // and overlapping patterns break every call), so PlatformKnowledge takes no `scopes` option.
+      scopes: {},
       storage,
     });
   }

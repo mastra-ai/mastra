@@ -169,7 +169,7 @@ export class Knowledge extends MastraBase {
 
   /**
    * Who the declared rules give a role on one scope: each principal scope address (bound for this
-   * scope's params) with its strongest role, `self` and `*` rules left out. `parentAddress` is the
+   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the
    * address of the scope page's tree parent, needed for rules that bind through `belongsTo`. Reads the
    * declarations as last resolved, not storage. For browsing UIs that draw access between scopes.
    *
@@ -178,7 +178,7 @@ export class Knowledge extends MastraBase {
   scopeGrants(scope: { address: string; parentAddress?: string | null }): KnowledgeScopeGrant[] {
     const strongest = new Map<string, KnowledgeRole>();
     for (const grant of knowledgeAccessGrants(this.#runtime.compiled, 'any', scope)) {
-      if (grant.via === 'self' || grant.via === 'everyone') continue;
+      if (grant.via === 'self') continue;
       strongest.set(grant.principal, strongerKnowledgeRole(strongest.get(grant.principal) ?? null, grant.role));
     }
     return [...strongest].map(([principal, role]) => ({ principal, role }));

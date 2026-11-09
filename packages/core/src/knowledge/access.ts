@@ -44,8 +44,7 @@ function* ruleSources(
 
 /**
  * The scopes a caller holding `principals` can read: every scope a declared rule gives one of them a
- * role on, and every scope a `*` rule gives every run. Undeclared principals add nothing, and with no
- * `*` rules no principals read nothing (never `'all'`).
+ * role on. Undeclared principals add nothing, and no principals read nothing (never `'all'`).
  * `lookupScopes` resolves `belongsTo` parents to page ids; parents not materialized yet reach nothing.
  *
  * @experimental
@@ -59,21 +58,10 @@ export async function knowledgeReadScopeFor(
   const prefixes = new Map<string, { declaration: string; prefix: string }>();
   const parents = new Map<string, Set<string>>();
 
-  for (const { declaration, rules, address } of ruleSources(compiled)) {
-    if (!rules.some(rule => rule.reach.kind === 'everyone')) continue;
-    const target = address ?? bindDeclaration(declaration, {});
-    if (target !== null) addresses.add(target);
-    else {
-      const prefix = knowledgePatternPrefix(declaration.pattern, {})!;
-      prefixes.set(`${declaration.key}\n${prefix}`, { declaration: declaration.key, prefix });
-    }
-  }
-
   for (const principal of new Set(principals)) {
     const held = compiled.match(principal);
     for (const { declaration, rules, address } of ruleSources(compiled)) {
       for (const rule of rules) {
-        if (rule.reach.kind === 'everyone') continue;
         if (rule.reach.kind === 'self') {
           if (held && held.compiled === declaration && (!address || address === principal)) addresses.add(principal);
           continue;
@@ -113,13 +101,13 @@ export async function knowledgeReadScopeFor(
 
 /** One rule giving a held principal a role on a scope. @experimental */
 export interface KnowledgeAccessGrant {
-  /** The held principal the rule names (the scope itself for `self`, `*` for every run). */
+  /** The held principal the rule names (the scope itself for `self`). */
   principal: string;
   role: KnowledgeRole;
   /** The declaration key, or the concrete address whose own rules gave it. */
   rule: string;
   /** How the rule binds: the scope itself, its params, or its `belongsTo` parent. */
-  via: 'self' | 'everyone' | 'rule' | 'belongsTo';
+  via: 'self' | 'rule' | 'belongsTo';
 }
 
 /**
@@ -154,9 +142,6 @@ export function knowledgeAccessGrants(
       if (rule.reach.kind === 'self') {
         principal = scope.address;
         via = 'self';
-      } else if (rule.reach.kind === 'everyone') {
-        grants.push({ principal: '*', role: rule.role, rule: label, via: 'everyone' });
-        continue;
       } else if (rule.reach.kind === 'belongsTo') {
         principal = belongsToParams ? bindKnowledgePattern(rule.principal!, belongsToParams) : null;
         via = 'belongsTo';

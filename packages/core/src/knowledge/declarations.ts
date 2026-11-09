@@ -28,13 +28,13 @@ export function strongerKnowledgeRole(a: KnowledgeRole | null | undefined, b: Kn
 }
 
 /**
- * Runs holding `principal` get `role` on the declared scope. `self` is the scope itself and `*` is
- * every run; `$params` in the principal are bound from the scope's address, or through its `belongsTo`.
+ * Runs holding `principal` get `role` on the declared scope. `self` is the scope itself; `$params` in
+ * the principal are bound from the scope's address, or through its `belongsTo`.
  *
  * @experimental
  */
 export interface KnowledgeAccessRule {
-  principal: 'self' | '*' | (string & {});
+  principal: 'self' | (string & {});
   role: KnowledgeRole;
 }
 
@@ -170,8 +170,6 @@ export interface KnowledgeScopePattern {
 export type KnowledgeRuleReach =
   /** The principal is the scope itself. */
   | { kind: 'self' }
-  /** Every run, whatever it holds: every scope of the declaration. */
-  | { kind: 'everyone' }
   /** The target's params bound from the principal give an exact address (concrete target or every param bound). */
   | { kind: 'exact' }
   /** The principal binds a leading run of the target's params: every target address with that prefix. */
@@ -180,7 +178,7 @@ export type KnowledgeRuleReach =
   | { kind: 'belongsTo' };
 
 export interface CompiledKnowledgeRule {
-  /** Null for `self` and `*`. */
+  /** Null for `self`. */
   principal: KnowledgeScopePattern | null;
   role: KnowledgeRole;
   reach: KnowledgeRuleReach;
@@ -509,7 +507,14 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
         throw new KnowledgeDeclarationError(`Knowledge rule on "${target}" has unknown role "${rule.role}".`);
       }
       if (rule.principal === 'self') return { principal: null, role: rule.role, reach: { kind: 'self' } };
-      if (rule.principal === '*') return { principal: null, role: rule.role, reach: { kind: 'everyone' } };
+      // There is deliberately no wildcard principal: a rule giving every run a role makes it too easy
+      // to leak a scope by accident. Grant a declared principal scope instead and have the runs that
+      // should read it hold that scope.
+      if (rule.principal === '*') {
+        throw new KnowledgeDeclarationError(
+          `Knowledge rule on "${target}" uses principal "*"; grant a declared principal scope instead.`,
+        );
+      }
       const principal = principalPattern(rule.principal, target);
       const bound = principal.params;
       const unbindable = bound.filter(param => !targetParams.includes(param) && !belongsTo?.params.includes(param));

@@ -7,18 +7,23 @@ import type { KnowledgeScopeDeclarations } from '../declarations';
 import { Knowledge } from '../index';
 
 const host = { author: 'host' };
-const everyone = [{ principal: '*', role: 'viewer' as const }];
-/** What a hosted store's Linear importer declares: every run reads its scopes. */
+const imports = [{ principal: 'imports:all', role: 'viewer' as const }];
+/** What a hosted store's Linear importer declares: runs holding `imports:all` read its scopes. */
 const LINEAR: KnowledgeScopeDeclarations = {
+  'imports:$name': {},
   'linear:$account:$connection': {
     displayLabel: 'Linear',
-    access: everyone,
-    children: [{ name: 'archive', access: everyone }],
+    access: imports,
+    children: [{ name: 'archive', access: imports }],
   },
 };
 
 /** A store that declares Linear scopes it imported, next to a project's own `docs` scopes. */
-async function setup(stored: KnowledgeScopeDeclarations = LINEAR, config: KnowledgeScopeDeclarations = {}) {
+async function setup(
+  stored: KnowledgeScopeDeclarations = LINEAR,
+  config: KnowledgeScopeDeclarations = {},
+  held: string[] = ['docs:eng', 'imports:all'],
+) {
   const store = new InMemoryStore();
   const knowledge = new Knowledge({
     storage: store,
@@ -40,7 +45,7 @@ async function setup(stored: KnowledgeScopeDeclarations = LINEAR, config: Knowle
   const tools = knowledge.createTools({ write: true });
   const call = (tool: string, input: Record<string, unknown>) => {
     const requestContext = new RequestContext();
-    setRunAgentScopes(requestContext, ['docs:eng']);
+    setRunAgentScopes(requestContext, held);
     return tools[tool]!.execute!(input as never, { requestContext, agent: { agentId: 'a' } } as never) as Promise<any>;
   };
   return { knowledge, storage, call, declaring };
@@ -49,7 +54,7 @@ async function setup(stored: KnowledgeScopeDeclarations = LINEAR, config: Knowle
 const names = (result: any) => result.results.map((hit: any) => hit.page.name);
 
 describe('Knowledge scope declarations a store supplies', () => {
-  it("gives every run a `*` rule's role: search, read by ref and address, narrow and list", async () => {
+  it("gives a run holding a rule's principal its role: search, read by ref and address, narrow and list", async () => {
     const { call } = await setup();
     const [hit] = (await call('knowledge_search', { query: 'Roadmap' })).results;
     expect(hit.page.ref).toBe('linear:acme:conn_1#roadmap');
@@ -65,24 +70,19 @@ describe('Knowledge scope declarations a store supplies', () => {
     );
   });
 
-  it('lists the root scopes `*` rules open after the held ones', async () => {
-    const { call } = await setup();
+  it("gives a run that doesn't hold the principal nothing, and lists only held scopes at the root", async () => {
+    const { call } = await setup(LINEAR, {}, ['docs:eng']);
     await call('knowledge_page', { op: 'write', scope: 'docs:eng', name: 'Plan', body: 'x' });
-    expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).toEqual([
-      'docs:eng',
-      'linear:acme:conn_1',
-    ]);
-    expect((await call('knowledge_read', {})).scopes.map((scope: any) => scope.address)).toEqual([
-      'docs:eng',
-      'linear:acme:conn_1',
-    ]);
+    expect((await call('knowledge_search', { query: 'Roadmap' })).results).toEqual([]);
+    expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).toEqual(['docs:eng']);
+    expect((await call('knowledge_read', {})).scopes.map((scope: any) => scope.address)).toEqual(['docs:eng']);
   });
 
   it('reads the store on every call, so a declaration it adds later applies on the next', async () => {
     const { storage, call, declaring } = await setup();
     expect((await call('knowledge_search', { query: 'Spec' })).results).toEqual([]);
     // An importer added after the project started: declared on the store, then written.
-    declaring.mockResolvedValue({ ...LINEAR, 'notion:$account:$connection': { access: everyone } });
+    declaring.mockResolvedValue({ ...LINEAR, 'notion:$account:$connection': { access: imports } });
     const { scope } = await storage.materializeScope({
       address: 'notion:acme:conn_2',
       declaration: 'notion:$account:$connection',
@@ -93,16 +93,16 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect((await call('knowledge_search', { query: 'Spec' })).results.map((hit: any) => hit.page.ref)).toEqual([
       'notion:acme:conn_2#spec',
     ]);
-    expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).toContain('notion:acme:conn_2');
   });
 
   it('keeps a store declaration whose rule names a type the store declares after it', async () => {
     const { knowledge, call } = await setup({
       'linear:$account:$connection': {
-        access: [{ principal: 'crew:$account', role: 'viewer' }, ...everyone],
-        children: [{ name: 'archive', access: everyone }],
+        access: [{ principal: 'crew:$account', role: 'viewer' }, ...imports],
+        children: [{ name: 'archive', access: imports }],
       },
       'crew:$account': {},
+      'imports:$name': {},
     });
     const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
     expect(names(await call('knowledge_search', { query: 'Roadmap' }))).toEqual(['Roadmap']);
@@ -112,12 +112,13 @@ describe('Knowledge scope declarations a store supplies', () => {
   it('keeps store declarations that only compile together, next to one that never does', async () => {
     const { knowledge, call } = await setup({
       'linear:$account:$connection': {
-        access: [{ principal: 'crew:$account', role: 'viewer' }, ...everyone],
-        children: [{ name: 'archive', access: everyone }],
+        access: [{ principal: 'crew:$account', role: 'viewer' }, ...imports],
+        children: [{ name: 'archive', access: imports }],
       },
       'crew:$account': { access: [{ principal: 'team:$account', role: 'viewer' }] },
       'team:$account': { access: [{ principal: 'crew:$account', role: 'viewer' }] },
       'ticket:$id': { access: [{ principal: 'nowhere:$id', role: 'viewer' }] },
+      'imports:$name': {},
     });
     const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
     expect(names(await call('knowledge_search', { query: 'Roadmap' }))).toEqual(['Roadmap']);
@@ -137,21 +138,8 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("lists no open root scope a store returns that the run can't read", async () => {
-    const { storage, call } = await setup();
-    const { scope: secret } = await storage.materializeScope({
-      address: 'docs:secret',
-      declaration: 'docs:$team',
-      name: 'Secret',
-      provenance: host,
-    });
-    // A custom store that ignores `read` and returns every root scope.
-    vi.spyOn(storage, 'listChildScopes').mockResolvedValue({ pages: [secret], nextCursor: null } as never);
-    expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).not.toContain('docs:secret');
-  });
-
   it('passes the declaration check for stored scopes the store declares, and only those', async () => {
-    await expect((await setup()).knowledge.readScopeFor(['docs:eng'])).resolves.toMatchObject({
+    await expect((await setup()).knowledge.readScopeFor(['docs:eng', 'imports:all'])).resolves.toMatchObject({
       addresses: ['docs:eng'],
       prefixes: [
         { declaration: 'linear:$account:$connection', prefix: 'linear:' },
@@ -162,7 +150,10 @@ describe('Knowledge scope declarations a store supplies', () => {
   });
 
   it('reads nothing a store declaration gives no rule, and writes only with the role a rule gives', async () => {
-    const closed = await setup({ 'linear:$account:$connection': { children: [{ name: 'archive' }] } });
+    const closed = await setup({
+      'imports:$name': {},
+      'linear:$account:$connection': { children: [{ name: 'archive' }] },
+    });
     expect((await closed.call('knowledge_search', { query: 'Roadmap' })).results).toEqual([]);
 
     const viewer = await setup();
@@ -171,8 +162,9 @@ describe('Knowledge scope declarations a store supplies', () => {
     );
 
     const editor = await setup({
+      'imports:$name': {},
       'linear:$account:$connection': {
-        access: [{ principal: '*', role: 'editor' }],
+        access: [{ principal: 'imports:all', role: 'editor' }],
         children: [{ name: 'archive' }],
       },
     });
@@ -195,27 +187,39 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('"ticket:$id"'));
   });
 
-  it('explains a `*` grant and leaves it out of scope grants', async () => {
+  it('explains a grant and lists it in scope grants', async () => {
     const { knowledge } = await setup();
-    const explained = await knowledge.explainAccess(['docs:eng'], { page: 'linear:acme:conn_1#roadmap' });
+    const explained = await knowledge.explainAccess(['docs:eng', 'imports:all'], {
+      page: 'linear:acme:conn_1#roadmap',
+    });
     expect(explained).toMatchObject({
       role: 'viewer',
-      reasons: [{ principal: '*', role: 'viewer', rule: 'linear:$account:$connection', via: 'everyone' }],
+      reasons: [{ principal: 'imports:all', role: 'viewer', rule: 'linear:$account:$connection', via: 'rule' }],
     });
-    expect(knowledge.scopeGrants({ address: 'linear:acme:conn_1' })).toEqual([]);
+    expect(knowledge.scopeGrants({ address: 'linear:acme:conn_1' })).toEqual([
+      { principal: 'imports:all', role: 'viewer' },
+    ]);
   });
 });
 
-describe("the '*' principal in config", () => {
-  it('gives every run, whatever it holds, the role on every scope of the declaration', async () => {
-    const knowledge = new Knowledge({
-      storage: new InMemoryStore(),
-      scopes: { ...knowledgeMemoryScopes(), 'policy:$name': { access: [{ principal: '*', role: 'viewer' }] } },
+describe("a '*' principal", () => {
+  it('is refused in config, so no rule can give every run a role', () => {
+    expect(
+      () =>
+        new Knowledge({
+          storage: new InMemoryStore(),
+          scopes: { ...knowledgeMemoryScopes(), 'policy:$name': { access: [{ principal: '*', role: 'viewer' }] } },
+        }),
+    ).toThrow(/uses principal "\*"; grant a declared principal scope instead/);
+  });
+
+  it('is refused in a store declaration, which is skipped with a warning', async () => {
+    const { knowledge, call } = await setup({
+      ...LINEAR,
+      'policy:$name': { access: [{ principal: '*', role: 'viewer' }] },
     });
-    await expect(knowledge.readScopeFor([])).resolves.toEqual({
-      addresses: [],
-      prefixes: [{ declaration: 'policy:$name', prefix: 'policy:' }],
-      children: [],
-    });
+    const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
+    expect(names(await call('knowledge_search', { query: 'Roadmap' }))).toEqual(['Roadmap']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"policy:$name"'));
   });
 });
