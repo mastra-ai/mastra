@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -277,22 +278,6 @@ function createDatastreamBody(
       upstream.cancel(reason);
     },
   });
-}
-
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/elysia] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
 }
 
 // Export type definitions for Elysia app configuration
@@ -751,16 +736,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       // Check if any auth is configured (studio or server) for RBAC
       const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
       if (hasAuth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
-          if (permissionError) {
-            return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
-              status: permissionError.status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
+        const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
+        if (permissionError) {
+          return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+            status: permissionError.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
       }
 
@@ -1027,24 +1009,21 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             // Check if any auth is configured (studio or server) for RBAC
             const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
             if (hasAuth) {
-              const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
-                const permissionError = this.checkRoutePermission(
-                  serverRoute,
-                  userPermissions,
-                  hasPermission,
-                  ctx.requestContext,
+              const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
+              const permissionError = this.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission,
+                ctx.requestContext,
+              );
+              if (permissionError) {
+                return new Response(
+                  JSON.stringify({ error: permissionError.error, message: permissionError.message }),
+                  {
+                    status: permissionError.status,
+                    headers: { 'Content-Type': 'application/json' },
+                  },
                 );
-                if (permissionError) {
-                  return new Response(
-                    JSON.stringify({ error: permissionError.error, message: permissionError.message }),
-                    {
-                      status: permissionError.status,
-                      headers: { 'Content-Type': 'application/json' },
-                    },
-                  );
-                }
               }
             }
           }

@@ -1,5 +1,6 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -30,22 +31,7 @@ class BodyLimitExceededError extends Error {
   }
 }
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Convert Express request to Web API Request for cookie-based auth providers.
@@ -626,22 +612,19 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         // Check if any auth is configured (studio or server) for RBAC
         const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
         if (hasAuth) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              route,
-              userPermissions,
-              hasPermission,
-              res.locals.requestContext,
-            );
+          const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(
+            route,
+            userPermissions,
+            hasPermission,
+            res.locals.requestContext,
+          );
 
-            if (permissionError) {
-              return res.status(permissionError.status).json({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
+          if (permissionError) {
+            return res.status(permissionError.status).json({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
           }
         }
 
@@ -738,21 +721,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           // Check if any auth is configured (studio or server) for RBAC
           const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
           if (hasAuth) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                res.locals.requestContext,
-              );
-              if (permissionError) {
-                return res.status(permissionError.status).json({
-                  error: permissionError.error,
-                  message: permissionError.message,
-                });
-              }
+            const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(
+              serverRoute,
+              userPermissions,
+              hasPermission,
+              res.locals.requestContext,
+            );
+            if (permissionError) {
+              return res.status(permissionError.status).json({
+                error: permissionError.error,
+                message: permissionError.message,
+              });
             }
           }
         }

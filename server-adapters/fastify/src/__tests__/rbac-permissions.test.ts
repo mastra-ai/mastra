@@ -9,6 +9,7 @@
  * - Wildcard (*) permissions grant access to all routes
  */
 
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
@@ -453,6 +454,41 @@ describe('Fastify RBAC Permission Enforcement', () => {
         headers: { Authorization: 'Bearer _default' },
       });
       expect(defaultStatus).toBe(403);
+    });
+  });
+
+  describe('Custom API Routes', () => {
+    it('should enforce requiresPermission on registerApiRoute routes', async () => {
+      const setup = await setupAuthAdapter(context);
+      app = setup.app;
+      const { adapter } = setup;
+
+      const withRbac = context.mastra.getServer;
+      context.mastra.getServer = () =>
+        ({
+          ...withRbac(),
+          apiRoutes: [
+            registerApiRoute('/custom/secure', {
+              method: 'GET',
+              requiresPermission: 'agents:read',
+              handler: async c => c.json({ success: true }),
+            }),
+          ],
+        }) as any;
+      await adapter.registerCustomApiRoutes();
+
+      const address = await app.listen({ port: 0 });
+
+      const { status: viewerStatus } = await makeRequest(address, '/custom/secure', {
+        headers: { Authorization: 'Bearer viewer' },
+      });
+      expect(viewerStatus).toBe(200);
+
+      const { status: defaultStatus, data } = await makeRequest(address, '/custom/secure', {
+        headers: { Authorization: 'Bearer _default' },
+      });
+      expect(defaultStatus).toBe(403);
+      expect(data).toEqual({ error: 'Forbidden', message: 'Missing required permission: agents:read' });
     });
   });
 });

@@ -1,6 +1,7 @@
 import { errorMonitor } from 'node:events';
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -26,7 +27,6 @@ import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type RegisteredKoaRoute = {
   route: ServerRoute;
   prefix: string;
@@ -38,20 +38,6 @@ type RouteDispatcherGroup = {
   routes: RegisteredKoaRoute[];
   stackLengthAfterRegistration: number;
 };
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Once the adapter writes a streaming response itself, a client that leaves while a write is still pending makes the
@@ -518,19 +504,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Check if any auth is configured (studio or server) for RBAC
     const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
     if (hasAuth) {
-      const hasPermission = await loadHasPermission();
-      if (hasPermission) {
-        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
+      const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+      const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
-        if (permissionError) {
-          ctx.status = permissionError.status;
-          ctx.body = {
-            error: permissionError.error,
-            message: permissionError.message,
-          };
-          return;
-        }
+      if (permissionError) {
+        ctx.status = permissionError.status;
+        ctx.body = {
+          error: permissionError.error,
+          message: permissionError.message,
+        };
+        return;
       }
     }
 
@@ -1022,23 +1005,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           // Check if any auth is configured (studio or server) for RBAC
           const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
           if (hasAuth) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = server.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                requestContext,
-              );
-              if (permissionError) {
-                ctx.status = permissionError.status;
-                ctx.body = {
-                  error: permissionError.error,
-                  message: permissionError.message,
-                };
-                return;
-              }
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = server.checkRoutePermission(
+              serverRoute,
+              userPermissions,
+              hasPermission,
+              requestContext,
+            );
+            if (permissionError) {
+              ctx.status = permissionError.status;
+              ctx.body = {
+                error: permissionError.error,
+                message: permissionError.message,
+              };
+              return;
             }
           }
 
