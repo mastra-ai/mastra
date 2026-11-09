@@ -1,6 +1,8 @@
 import { SPEC_DATA_PART_TYPE } from '@json-render/core';
 import { JSONUIProvider } from '@json-render/react';
 import type { EventHandle } from '@json-render/react';
+import { normalizeToolPart, partialArgsOf, validate, validateModelInput } from '@mastra/client-js/gen-ui';
+import type { NormalizedToolCall } from '@mastra/client-js/gen-ui';
 import type { ReactNode } from 'react';
 import type { z } from 'zod/v4';
 import type { DataPart, DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
@@ -8,9 +10,6 @@ import { GenUIProvider, GenUIToolCallScope, useGenUIController, useGenUIToolAppr
 import type { GenUIController } from './controller';
 import type { GenUIToolCallProps, GenUIToolPhase } from './registry';
 import { GenUIDataSpecView, GenUIErrorBoundary, GenUISpecView, resolveFallbacks } from './spec-view';
-import { normalizeToolPart, partialArgsOf } from './tool-parts';
-import type { NormalizedToolCall } from './tool-parts';
-import { validate, validateModelInput } from './validate';
 
 function resolvePhase(call: NormalizedToolCall, approvalKind: 'approval' | 'suspended' | undefined): GenUIToolPhase {
   // A finished call wins over approval metadata that may linger in hydrated history.

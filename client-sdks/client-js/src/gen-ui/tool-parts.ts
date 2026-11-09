@@ -1,8 +1,8 @@
-import { parsePartialJson } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { parsePartialJson } from '../utils/ai-sdk-v4/parse-partial-json';
+import type { GenUIToolPhase } from './definition';
 import { isJSONObject } from './json';
 import type { JSONObject } from './json';
-import type { GenUIToolPhase } from './registry';
 
 /**
  * Tool call fields shared by the `tool-invocation` and `dynamic-tool` / `tool-${name}` part shapes.

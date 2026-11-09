@@ -9,7 +9,7 @@ import type {
   VisibilityCondition,
 } from '@json-render/core';
 import { getByPath, resolveRepeatItemStatePath, resolveRepeatStatePath, validateSpec } from '@json-render/core';
-import type { GenUIComponentEntry } from './registry';
+import type { GenUIComponentEntry } from './definition';
 import type { NormalizedToolCall } from './tool-parts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

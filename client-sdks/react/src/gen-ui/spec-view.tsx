@@ -3,13 +3,12 @@ import type { Spec, StateModel, StateStore } from '@json-render/core';
 import { flattenToPointers } from '@json-render/core/store-utils';
 import { JSONUIProvider, Renderer } from '@json-render/react';
 import type { ComponentRegistry, ComponentRenderProps } from '@json-render/react';
+import { specStatus } from '@mastra/client-js/gen-ui';
+import type { GenUISpecStatus, NormalizedToolCall } from '@mastra/client-js/gen-ui';
 import { Component, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { useGenUIController } from './context';
 import type { GenUIFallbackProps, GenUIFallbacks, GenUIRegistry, GenUISpecStatusProps } from './registry';
-import { specStatus } from './spec';
-import type { GenUISpecStatus } from './spec';
-import type { NormalizedToolCall } from './tool-parts';
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export function DefaultGenUIFallback({ reason }: GenUIFallbackProps) {

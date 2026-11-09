@@ -1,11 +1,11 @@
 import type { Catalog } from '@json-render/core';
+import { formatGenUIContext } from '@mastra/client-js/gen-ui';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '../agent/hooks';
 import type { MastraChatProps, SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
 import type { MessageRenderers, TextPart } from '../ui/MessageFactory/types';
-import { formatGenUIContext } from './context-store';
 import { createGenUIController } from './controller';
 import type { GenUIActionHandlers, GenUIController } from './controller';
 import { isMcpAppContextText, renderMcpApp, useMcpAppHost } from './mcp-apps';
@@ -64,6 +64,9 @@ function createController(
 /**
  * `useChat` with Generative UI. Registers the registry's frontend tools, renders their calls in the
  * chat's messages, and attaches published app context to outgoing messages. Plain `useChat` is untouched.
+ *
+ * Passing saved thread messages as `initialMessages` rebuilds specs, tool UIs, and pending approvals. A reply
+ * stopped while the model was still writing a spec is not saved, so its partial interface is gone after a reload.
  *
  * @experimental Generative UI is in beta and may change without notice.
  */

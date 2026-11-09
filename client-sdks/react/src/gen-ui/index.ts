@@ -33,8 +33,8 @@ export {
   useGenUIToolResponse,
 } from './context';
 export type { GenUIToolResponse } from './context';
-export type { GenUIContextEntry, GenUIContextStore } from './context-store';
-export type { JSONObject, JSONValue } from './json';
+export type { GenUIContextEntry, GenUIContextStore } from '@mastra/client-js/gen-ui';
+export type { JSONObject, JSONValue } from '@mastra/client-js/gen-ui';
 export {
   DefaultGenUIFallback,
   DefaultGenUILoading,
@@ -44,12 +44,12 @@ export {
   GenUISpecView,
 } from './spec-view';
 export type { GenUIDataSpecViewProps, GenUISpecViewProps } from './spec-view';
-export type { GenUISpecStatus } from './spec';
-export type { GenUIValidationResult } from './validate';
+export type { GenUISpecStatus } from '@mastra/client-js/gen-ui';
+export type { GenUIValidationResult } from '@mastra/client-js/gen-ui';
 export { createGenUIRenderers } from './renderers';
 export { useGenUIChat } from './chat';
 export type { GenUIChatHandle, UseGenUIChatProps } from './chat';
 export { isMcpAppContextText } from './mcp-apps';
 export type { GenUIMcpAppsOptions, GenUIMcpAppViewProps } from './mcp-apps';
-export { normalizeToolPart } from './tool-parts';
-export type { NormalizedToolCall } from './tool-parts';
+export { normalizeToolPart } from '@mastra/client-js/gen-ui';
+export type { NormalizedToolCall } from '@mastra/client-js/gen-ui';

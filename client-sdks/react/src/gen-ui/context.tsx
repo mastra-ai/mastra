@@ -1,10 +1,8 @@
+import type { GenUIContextEntry, GenUIValidationResult, JSONValue } from '@mastra/client-js/gen-ui';
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import type { GenUIContextEntry } from './context-store';
 import type { GenUIController } from './controller';
-import type { JSONValue } from './json';
 import type { GenUIToolApproval } from './registry';
-import type { GenUIValidationResult } from './validate';
 
 const ControllerContext = createContext<GenUIController | undefined>(undefined);
 const ToolCallContext = createContext<string | undefined>(undefined);

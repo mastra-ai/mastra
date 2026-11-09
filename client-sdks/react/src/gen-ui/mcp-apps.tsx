@@ -1,3 +1,5 @@
+import { normalizeToolPart } from '@mastra/client-js/gen-ui';
+import type { NormalizedToolCall } from '@mastra/client-js/gen-ui';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
@@ -8,8 +10,6 @@ import { useGenUIController } from './context';
 import type { GenUIController } from './controller';
 import { frame } from './renderers';
 import { resolveFallbacks } from './spec-view';
-import { normalizeToolPart } from './tool-parts';
-import type { NormalizedToolCall } from './tool-parts';
 
 /**
  * Props GenUI hands the view that hosts an MCP App. `McpAppView` from `@mastra/react/mcp-apps`
