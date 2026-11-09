@@ -1,10 +1,10 @@
 import { serve } from '@hono/node-server';
-import { MastraServer } from '@mastra/hono';
-import { Hono } from 'hono';
 import type { CreateAgentScheduleInput } from '@mastra/core/schedules';
 import type { ScheduleUpdate } from '@mastra/core/storage';
-import { createAssistant } from '../src/mastra/assistant';
+import { MastraServer } from '@mastra/hono';
+import { Hono } from 'hono';
 import { loadConfig } from '../src/mastra/config';
+import { createAssistant } from '../src/mastra/runtime';
 
 // Only the paid model endpoint is replaced. The Agent, server, tools, and storage remain native.
 const config = loadConfig();

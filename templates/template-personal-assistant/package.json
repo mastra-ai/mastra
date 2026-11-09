@@ -16,7 +16,7 @@
     "format:check": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --import tsx --test tests/config.test.ts",
-    "test:integration": "node --import tsx --test tests/assistant.test.ts",
+    "test:integration": "node --import tsx --test tests/assistant.test.ts tests/connections.test.ts tests/progress.test.ts tests/schedules.test.ts",
     "test:runtime": "node --import tsx --test tests/runtime.test.ts",
     "postinstall": "node scripts/apply-libsql-patch.mjs"
   },

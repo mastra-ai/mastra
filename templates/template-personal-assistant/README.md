@@ -37,7 +37,7 @@ Keep the server running for scheduled checks. Busy or approval-blocked conversat
 ## Customization
 
 - Open the project in your coding agent and describe a change, such as “Adapt the assistant to help me prepare weekly learning plans. Explore the code and propose a plan before making changes.”
-- Edit instructions and the working-memory template in `src/mastra/assistant.ts`. Set `ASSISTANT_JUDGE_MODEL` to choose an OpenAI judge and `ASSISTANT_MAX_GOAL_EVALUATIONS` (1–20, default 5) to bound each requested allowance. The judge uses at most three steps per evaluation. These execution limits are not a monetary cap. An exhausted objective pauses; resuming extends its budget without resetting prior usage. No objective starts on boot. Optional `.env` settings include `ASSISTANT_OWNER_ID` (default `local-owner`), `ASSISTANT_MAX_STEPS` (1–20, default 20), and `ASSISTANT_TIMEZONE` (an IANA timezone). Keep the owner ID stable to retain access to existing context.
+- Edit instructions and native agent behavior in `src/mastra/agents/personal-assistant.ts`, and the working-memory template in `src/mastra/runtime.ts`. Set `ASSISTANT_JUDGE_MODEL` to choose an OpenAI judge and `ASSISTANT_MAX_GOAL_EVALUATIONS` (1–20, default 5) to bound each requested allowance. The judge uses at most three steps per evaluation. These execution limits are not a monetary cap. An exhausted objective pauses; resuming extends its budget without resetting prior usage. No objective starts on boot. Optional `.env` settings include `ASSISTANT_OWNER_ID` (default `local-owner`), `ASSISTANT_MAX_STEPS` (1–20, default 20), and `ASSISTANT_TIMEZONE` (an IANA timezone). Keep the owner ID stable to retain access to existing context.
 
 Optional `ASSISTANT_MAX_OUTPUT_TOKENS` (1–32768) sets the default output limit for assistant responses, including scheduled checks. `ASSISTANT_MODEL_MAX_RETRIES` (0–5) sets each native model/provider and processor retry limit; zero disables both, while positive limits can compound. For a bounded scheduled analysis that needs a read and a later answer step, set `ASSISTANT_MAX_STEPS=6`, `ASSISTANT_MAX_OUTPUT_TOKENS=1024`, and `ASSISTANT_MODEL_MAX_RETRIES=0`. The ordinary step default remains 20. When output and retry settings are unset, native defaults remain in effect. Connect's own HTTP read retries are separate. These settings do not bound the separate goal judge or total spending; explicit request options can override defaults.
 
@@ -66,4 +66,4 @@ Before using a hosted installation, verify unauthenticated requests are rejected
 
 This template is being developed in the [Mastra monorepo](https://github.com/mastra-ai/mastra). It is currently available from this local checkout.
 
-[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md)
+[Want to contribute?](./CONTRIBUTING.md)

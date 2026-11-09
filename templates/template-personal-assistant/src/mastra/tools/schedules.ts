@@ -6,21 +6,9 @@ import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { computeNextFireAt, validateCron } from '@mastra/core/workflows';
 import { z } from 'zod';
-import type { AssistantConfig } from './config';
-
-const timezone = z
-  .string()
-  .trim()
-  .min(1)
-  .refine(value => {
-    try {
-      if (/^[+-]/.test(value)) return false;
-      new Intl.DateTimeFormat('en', { timeZone: value });
-      return true;
-    } catch {
-      return false;
-    }
-  }, 'Provide an explicit IANA timezone.');
+import { explicitTimezone as timezone } from '../config';
+import type { AssistantConfig } from '../config';
+import { findOwnerThread } from '../context';
 
 const timingInput = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cron'), cron: z.string().trim().min(1).max(200), timezone }).strict(),
@@ -156,27 +144,32 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
     return instance;
   };
   async function findThread(threadId?: string, resourceId?: string) {
-    if (!threadId || resourceId !== config.ownerId) return null;
-    const memory = await getAgent().getMemory();
-    if (!memory) throw new Error('Schedule memory is unavailable.');
-    const stored = await memory.getThreadById({ threadId });
-    if (!stored || stored.resourceId !== config.ownerId) return null;
-    return threadId;
+    const stored = await findOwnerThread(getAgent(), config.ownerId, threadId, resourceId);
+    return stored?.id ?? null;
   }
   async function thread(threadId?: string, resourceId?: string) {
     const value = await findThread(threadId, resourceId);
     if (!value) throw new Error('Schedules require an owner-backed conversation.');
     return value;
   }
-  async function owned(schedule: AnySchedule | null): Promise<AgentSchedule | null> {
+  async function owned(
+    schedule: AnySchedule | null,
+    threads?: Map<string, Promise<string | null>>,
+  ): Promise<AgentSchedule | null> {
     if (
       !schedule ||
       schedule.agentId !== getAgent().id ||
       schedule.resourceId !== config.ownerId ||
-      schedule.metadata?.personalAssistant !== true
+      schedule.metadata?.personalAssistant !== true ||
+      !schedule.threadId
     )
       return null;
-    if (!(await findThread(schedule.threadId, schedule.resourceId))) return null;
+    let thread = threads?.get(schedule.threadId);
+    if (!thread) {
+      thread = findThread(schedule.threadId, schedule.resourceId);
+      threads?.set(schedule.threadId, thread);
+    }
+    if (!(await thread)) return null;
     return schedule as AgentSchedule;
   }
   async function requireOwned(schedule: AnySchedule | null) {
@@ -248,18 +241,27 @@ export function createScheduleOperations(config: AssistantConfig, getAgent: () =
       const currentThread = await thread(context?.agent?.threadId, context?.agent?.resourceId);
       const service = mastra().schedules;
       if (input.action === 'list') {
-        const all = await Promise.all(
-          ['active', 'paused', 'completed'].map(status =>
-            service.list({
-              agentId: getAgent().id,
-              resourceId: config.ownerId,
-              status: status as AgentSchedule['status'],
-            }),
-          ),
-        );
-        const schedules: AgentSchedule[] = [];
-        for (const value of all.flat()) if (await canRead(value.id)) schedules.push(await requireOwned(value));
-        return { schedules, detail };
+        try {
+          const all = await Promise.all(
+            ['active', 'paused', 'completed'].map(status =>
+              service.list({
+                agentId: getAgent().id,
+                resourceId: config.ownerId,
+                status: status as AgentSchedule['status'],
+              }),
+            ),
+          );
+          const schedules: AgentSchedule[] = [];
+          const threads = new Map<string, Promise<string | null>>();
+          threads.set(currentThread, Promise.resolve(currentThread));
+          for (const value of all.flat()) {
+            const visible = await owned(value, threads);
+            if (visible) schedules.push(visible);
+          }
+          return { schedules, detail };
+        } catch {
+          throw new Error('Schedule storage is unavailable.');
+        }
       }
       if (input.action === 'create') {
         const scheduleId = `agent_${createHash('sha256')

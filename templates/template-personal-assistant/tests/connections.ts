@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { modelToolSchemaError } from './helpers';
 
 export const connectedKeys = [

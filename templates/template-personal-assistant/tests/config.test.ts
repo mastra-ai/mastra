@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../src/mastra/config';
-import { createAssistant } from '../src/mastra/assistant';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { createAssistant } from '../src/mastra/runtime';
 
 test('local configuration requires only an OpenAI key and applies bounded defaults', () => {
   const config = loadConfig({ OPENAI_API_KEY: 'example-key' });
@@ -148,7 +148,7 @@ test('Connect configuration rejects partial credentials and exact-key policy nev
 });
 
 test('bounded MIME decoding rejects malformed oversized and unsupported source content', async () => {
-  const { normalizeMail } = await import('../src/mastra/connect');
+  const { normalizeMail } = await import('../src/mastra/processors/connected-content');
   const message = (data: string, mimeType = 'text/plain') => ({
     id: 'source-id',
     payload: { mimeType, body: { data } },
@@ -211,7 +211,7 @@ test('bounded MIME decoding rejects malformed oversized and unsupported source c
 });
 
 test('email metadata normalization preserves selected bounded source headers', async () => {
-  const { normalizeMail } = await import('../src/mastra/connect');
+  const { normalizeMail } = await import('../src/mastra/processors/connected-content');
   const mail = (headers?: unknown, extra: Record<string, unknown> = {}) => ({
     id: 'metadata-message',
     threadId: 'provider-thread',
@@ -333,7 +333,7 @@ test('email metadata normalization preserves selected bounded source headers', a
 });
 
 test('schedule timing preserves explicit timezone dates and rejects calendar or DST shifts', async () => {
-  const { scheduleTiming } = await import('../src/mastra/schedules');
+  const { scheduleTiming } = await import('../src/mastra/tools/schedules');
   const { computeNextFireAt } = await import('@mastra/core/workflows');
   const year = new Date().getUTCFullYear() + 2;
   const gapDay = 8 + ((7 - new Date(Date.UTC(year, 2, 1)).getUTCDay()) % 7);

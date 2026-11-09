@@ -1,50 +1,20 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig } from '@mastra/core/agent';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { createObjectiveTool, createProgressProtection, goalGuidance } from './objectives';
-import type { JudgeModel } from './objectives';
-import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
-import { AssistantLogger, createObservability } from './observability';
-import type { AssistantConfig } from './config';
-import { createConnections, connectedContentProcessor } from './connect';
-import { createScheduleOperations } from './schedules';
-import { createAssistantServer } from './server';
+import type { Memory } from '@mastra/memory';
+import type { AssistantConfig } from '../config';
+import { createConnections } from '../connect';
+import { createObjectiveTool, createProgressProtection, goalGuidance } from '../tools/objectives';
+import type { JudgeModel } from '../tools/objectives';
+import { createScheduleOperations } from '../tools/schedules';
+import { connectedContentProcessor } from '../processors/connected-content';
 
-export function createAssistant(
+export function createPersonalAssistant(
   config: AssistantConfig,
-  model: AgentConfig['model'] = { id: config.model },
-  judge: JudgeModel = { id: config.judgeModel },
+  memory: Memory,
+  model: AgentConfig['model'],
+  judge: JudgeModel,
 ) {
-  let storage: LibSQLStore;
-  try {
-    if (config.runtime.mode === 'local') mkdirSync(dirname(config.runtime.databasePath), { recursive: true });
-    storage = new LibSQLStore({
-      id: 'personal-assistant-storage',
-      ...(config.runtime.mode === 'local'
-        ? { url: `file:${config.runtime.databasePath}` }
-        : { url: config.runtime.databaseUrl, authToken: config.runtime.databaseToken }),
-    });
-  } catch {
-    throw new Error('Could not prepare assistant storage. Check ASSISTANT_DATA_DIR or hosted Turso configuration.');
-  }
-  const memory = new Memory({
-    storage,
-    options: {
-      lastMessages: 40,
-      semanticRecall: false,
-      observationalMemory: false,
-      generateTitle: false,
-      workingMemory: {
-        enabled: true,
-        scope: 'resource',
-        template: '# Owner profile\n\n## Preferences\n\n## Relevant long-term context\n',
-      },
-    },
-  });
   const connections = createConnections(config);
   const progress = createProgressProtection(config, () => personalAssistant);
   const objective = createObjectiveTool(config, () => personalAssistant);
@@ -84,8 +54,8 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
     maxProcessorRetries: config.modelMaxRetries,
     scopes: [`resource:${config.ownerId}`],
     memory,
-    tools: async context => ({
-      ...(await connections.tools(context)),
+    tools: async () => ({
+      ...(await connections.tools()),
       objective,
       schedule: schedules.tool,
     }),
@@ -101,12 +71,5 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
       eagerToolExecution: false,
     },
   });
-  return new Mastra({
-    logger: new AssistantLogger(),
-    agents: { personalAssistant },
-    storage,
-    schedules: schedules.hooks,
-    server: createAssistantServer(config, schedules),
-    observability: createObservability(config),
-  });
+  return { personalAssistant, schedules };
 }

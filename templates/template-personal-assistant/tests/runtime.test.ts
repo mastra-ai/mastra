@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   readlink,
-  readdir,
   rename,
   rm,
   stat,
@@ -19,8 +18,9 @@ import {
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { isolatedEnv, json } from './helpers';
 
 const root = fileURLToPath(new URL('..', import.meta.url));

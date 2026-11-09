@@ -1,5 +1,5 @@
-import { LibSQLStore } from '@mastra/libsql';
 import type { GoalObjectiveRecord, TaskRecord } from '@mastra/core/storage';
+import { LibSQLStore } from '@mastra/libsql';
 import { join } from 'node:path';
 import { connectedFixture } from './connections';
 import { json, startAssistant } from './helpers';

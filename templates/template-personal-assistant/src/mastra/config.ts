@@ -1,6 +1,20 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
+export const explicitTimezone = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(value => {
+    try {
+      if (/^[+-]/.test(value)) return false;
+      new Intl.DateTimeFormat('en', { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Provide an explicit IANA timezone.');
+
 const configuration = z.object({
   OPENAI_API_KEY: z.string().trim().min(1),
   ASSISTANT_OWNER_ID: z
@@ -19,17 +33,7 @@ const configuration = z.object({
   ASSISTANT_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(20),
   ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(32768).optional(),
   ASSISTANT_MODEL_MAX_RETRIES: z.coerce.number().int().min(0).max(5).optional(),
-  ASSISTANT_TIMEZONE: z
-    .string()
-    .refine(value => {
-      try {
-        new Intl.DateTimeFormat('en', { timeZone: value });
-        return true;
-      } catch {
-        return false;
-      }
-    })
-    .optional(),
+  ASSISTANT_TIMEZONE: explicitTimezone.optional(),
   ASSISTANT_DATA_DIR: z.string().trim().min(1).optional(),
   ASSISTANT_RUNTIME: z.enum(['local', 'hosted']).default('local'),
   TURSO_DATABASE_URL: z.string().optional(),

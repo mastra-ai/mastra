@@ -4,7 +4,8 @@ import type { TaskRecord } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { z } from 'zod';
-import type { AssistantConfig } from './config';
+import type { AssistantConfig } from '../config';
+import { findOwnerThread } from '../context';
 
 export const goalGuidance = `Judge completion using concrete results, not plans, promises, or claims of success.
 Choose done only when every requirement is supported by the actual work described in the conversation.
@@ -16,9 +17,8 @@ Give a specific reason identifying completed evidence or the remaining work/chec
 async function ownedThread(agent: Agent, ownerId: string, threadId?: string, resourceId?: string) {
   if (!threadId || resourceId !== ownerId)
     throw new Error('Objective and task operations require an owner-backed conversation.');
-  const memory = await agent.getMemory();
-  const thread = await memory?.getThreadById({ threadId });
-  if (!thread || thread.resourceId !== ownerId) throw new Error('The conversation does not belong to this owner.');
+  const thread = await findOwnerThread(agent, ownerId, threadId, resourceId);
+  if (!thread) throw new Error('The conversation does not belong to this owner.');
   const store = await agent.getMastraInstance()?.getStorage()?.getStore('threadState');
   if (!store) throw new Error('Objective and task operations require persistent thread storage.');
   return { threadId, resourceId: ownerId, store };

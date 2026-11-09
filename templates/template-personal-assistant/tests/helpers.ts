@@ -1,7 +1,11 @@
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 export function isolatedEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
@@ -196,4 +200,50 @@ export async function json(response: Response, expectedStatus = 200) {
   const body = await response.text();
   assert.equal(response.status, expectedStatus, body);
   return JSON.parse(body);
+}
+
+export async function readState(dataDir: string) {
+  const storage = new LibSQLStore({
+    id: 'test-state-reader',
+    url: `file:${join(dataDir, 'assistant.db')}`,
+  });
+  await storage.init();
+  const memory = new Memory({
+    storage,
+    options: { workingMemory: { enabled: true, scope: 'resource' } },
+  });
+  try {
+    const state = {} as Record<string, unknown>;
+    for (const [threadId, resourceId] of [
+      ['owner-thread', 'local-owner'],
+      ['foreign-thread', 'foreign-owner'],
+    ]) {
+      state[threadId] = {
+        thread: await memory.getThreadById({ threadId: threadId! }),
+        messages: await memory.recall({ threadId: threadId!, resourceId: resourceId! }),
+        workingMemory: await memory.getWorkingMemory({
+          threadId: threadId!,
+          resourceId: resourceId!,
+        }),
+      };
+    }
+    return JSON.parse(JSON.stringify(state));
+  } finally {
+    await storage.close();
+  }
+}
+
+export async function pending(app: Awaited<ReturnType<typeof startAssistant>>, threadId: string) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const result = await json(
+      await app.request(`/agents/personalAssistant/suspended-runs?threadId=${threadId}&resourceId=local-owner`),
+    );
+    if (result.runs.length)
+      return result.runs[0] as {
+        runId: string;
+        toolCalls: { toolCallId: string; toolName: string; args: unknown }[];
+      };
+    await delay(25);
+  }
+  assert.fail(`No persisted pending approval for ${threadId}.`);
 }
