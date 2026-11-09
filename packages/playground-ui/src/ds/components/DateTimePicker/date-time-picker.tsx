@@ -8,7 +8,7 @@ import { DatePicker } from './date-picker';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
+import { Input, TimeInput } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
@@ -244,13 +244,12 @@ export const DateTimePickerContent = ({
         {...props}
       />
 
-      <Input
-        type="time"
+      <TimeInput
         size="sm"
         aria-label="Time"
         value={timeStrValue}
         onChange={e => handleTimeStrChange(e.target.value)}
-        className="m-4 mt-0 w-auto [&::-webkit-calendar-picker-indicator]:hidden"
+        className="m-4 mt-0 w-auto"
       />
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">

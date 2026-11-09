@@ -5,7 +5,7 @@ import type { DateRange } from 'react-day-picker';
 import { Button } from '@/ds/components/Button/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Field, FieldError } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
+import { TimeInput } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 
 function formatDays(ms: number): string {
@@ -175,14 +175,13 @@ function RangeEnd({
         <Txt as="span" variant="label" tone={date ? undefined : 'muted'} className="min-w-0 flex-1 truncate px-1">
           {date ? format(date, 'MMM d, yyyy') : 'Select a day'}
         </Txt>
-        <Input
-          type="time"
+        <TimeInput
           size="sm"
           aria-label={`${label} time`}
           value={time}
           onChange={e => onTimeChange(e.target.value)}
           disabled={disabled}
-          className="w-24 shrink-0 [&::-webkit-calendar-picker-indicator]:hidden"
+          className="w-24 shrink-0"
         />
       </div>
     </div>
