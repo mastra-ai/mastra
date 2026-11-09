@@ -95,7 +95,16 @@ export function ChartCard<V extends string = string>({
   const hero = variant === 'hero';
   const chart = !hero && bodyHeight === 'fixed';
   return (
-    <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', className)}>
+    <MetricsCard
+      className={cn(
+        'min-h-0! min-w-0! grid-cols-1',
+        // No legend over a chart that is loading or has nothing to show; it keeps its room.
+        '[&:has([data-slot=chart-skeleton])_[data-slot=chart-legend]]:invisible',
+        '[&:has([data-chart-empty])_[data-slot=chart-legend]]:invisible',
+        compact && 'h-84',
+        className,
+      )}
+    >
       <MetricsCard.TopBar>
         {hero ? (
           <MetricsCard.Headline
