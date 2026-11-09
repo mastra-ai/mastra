@@ -1,5 +1,32 @@
 # @mastra/auth-neon
 
+## 0.3.6-alpha.0
+
+### Patch Changes
+
+- Fixed `@mastra/auth-neon` so it works with hosted Neon Auth projects. Before this fix, requests failed to authenticate against a Neon Auth URL: JWT verification, session cookies, Studio sign-in and sign-up, and organization roles all called endpoints or cookie names that Neon Auth doesn't use. ([#29633](https://github.com/mastra-ai/mastra/pull/29633))
+
+  **What changed**
+
+  - JWTs are verified with `<NEON_AUTH_BASE_URL>/.well-known/jwks.json`, and their issuer and audience are checked.
+  - Session cookies use Neon Auth's `__Secure-neon-auth.session_token` name, so Studio stays signed in after sign-in.
+  - Studio sign-in and sign-up send the Origin header that Neon Auth requires. The `token` returned by `POST /api/auth/credentials/sign-in` is now a Neon Auth JWT that you can send as a bearer token.
+  - Signing out revokes the session in Neon Auth.
+  - `signUpEnabled: false` now rejects sign-up requests to the Mastra API, not only the Studio form.
+  - An expired bearer JWT no longer causes a 401 when the request also carries a valid session cookie.
+  - `MastraRBACNeon` reads the user's role in the active organization (or `organizationId`). Permissions now apply to requests, and the JWT `role` claim (`authenticated`) is no longer treated as a Mastra role.
+
+  Use the Neon Auth URL exactly as the Neon Console shows it:
+
+  ```typescript
+  new MastraAuthNeon({
+    baseUrl: 'https://ep-example-123456.neonauth.us-east-2.aws.neon.tech/neondb/auth',
+  });
+  ```
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+
 ## 0.3.5
 
 ### Patch Changes
