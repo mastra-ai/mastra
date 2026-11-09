@@ -2,23 +2,7 @@
 title: "Storing embeddings in a vector database | RAG"
 description: "After generating embeddings, you need to store them in a database that supports vector similarity search."
 packages:
-  - "@mastra/astra"
-  - "@mastra/azure-ai-search"
-  - "@mastra/chroma"
   - "@mastra/core"
-  - "@mastra/couchbase"
-  - "@mastra/elasticsearch"
-  - "@mastra/lance"
-  - "@mastra/mongodb"
-  - "@mastra/opensearch"
-  - "@mastra/oracledb"
-  - "@mastra/pg"
-  - "@mastra/pinecone"
-  - "@mastra/qdrant"
-  - "@mastra/s3vectors"
-  - "@mastra/upstash"
-  - "@mastra/vectorize"
-  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -59,7 +43,7 @@ After generating embeddings, you need to store them in a database that supports 
 
     <h3>Using VoyageAI with MongoDB</h3>
 
-    MongoDB works directly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/reference/vectors/mongodb).
+    MongoDB works directly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/integrations/vectors/mongodb).
 
     <h3>Hybrid Search (Vector + Full-Text)</h3>
 
@@ -76,7 +60,30 @@ After generating embeddings, you need to store them in a database that supports 
     })
     ```
 
-    See the [MongoDB vector reference](/reference/vectors/mongodb) for details on `createSearchIndex()`, `textQuery()`, and `hybridQuery()`.
+    See the [MongoDB vector reference](/integrations/vectors/mongodb) for details on `createSearchIndex()`, `textQuery()`, and `hybridQuery()`.
+
+    <h3>Automated Embedding</h3>
+
+    MongoDB can generate the embeddings itself, so you don't need an embedding provider in your application. Create the index with `autoEmbed` and a Voyage AI model, write plain text, and search with a query string:
+
+    ```ts
+    await store.createIndex({
+      indexName: 'myCollection',
+      autoEmbed: { model: 'voyage-4' },
+    })
+    await store.upsert({
+      indexName: 'myCollection',
+      documents: chunks.map(chunk => chunk.text),
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    const results = await store.query({
+      indexName: 'myCollection',
+      queryText: 'search terms',
+      topK: 10,
+    })
+    ```
+
+    Automated Embedding is a MongoDB Preview feature and needs a deployment where it's available. See the [MongoDB vector reference](/integrations/vectors/mongodb#automated-embedding) for the supported options and requirements.
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
@@ -232,7 +239,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   <TabItem value="libsql" label="libSQL">
     ```ts title="vector-store.ts"
-    import { LibSQLVector } from '@mastra/core/vector/libsql'
+    import { LibSQLVector } from '@mastra/libsql'
 
     const store = new LibSQLVector({
       id: 'libsql-vector',

@@ -87,6 +87,7 @@ export class AgentsMySQL extends AgentsStorage {
    * Currently no default indexes are defined for agents.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for agents domain
   }
@@ -112,7 +113,15 @@ export class AgentsMySQL extends AgentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: AGENT_VERSIONS_SCHEMA,
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'durable'],
+      ifNotExists: [
+        'modelList',
+        'mcpClients',
+        'requestContextSchema',
+        'workspace',
+        'skills',
+        'skillsFormat',
+        'durable',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -495,8 +504,9 @@ export class AgentsMySQL extends AgentsStorage {
           versionNumber: input.versionNumber,
           name: input.name ?? null,
           description: input.description ?? null,
-          instructions: this.serializeInstructions(input.instructions),
-          model: input.model,
+          instructions: this.serializeInstructions(input.instructions ?? ''),
+          model: input.model ?? {},
+          modelList: input.modelList ?? null,
           tools: input.tools ?? null,
           defaultOptions: input.defaultOptions ?? null,
           workflows: input.workflows ?? null,
@@ -768,6 +778,7 @@ export class AgentsMySQL extends AgentsStorage {
       description: (row.description as string) ?? undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
       model: this.safeParseJSON(row.model) as AgentVersion['model'],
+      modelList: this.safeParseJSON(row.modelList) as AgentVersion['modelList'],
       tools: this.safeParseJSON(row.tools) as AgentVersion['tools'],
       defaultOptions: this.safeParseJSON(row.defaultOptions) as AgentVersion['defaultOptions'],
       workflows: this.safeParseJSON(row.workflows) as AgentVersion['workflows'],

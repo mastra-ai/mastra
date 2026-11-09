@@ -1,3 +1,7 @@
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { capture, flush, PostHog } = vi.hoisted(() => {
@@ -10,12 +14,19 @@ const { capture, flush, PostHog } = vi.hoisted(() => {
 });
 
 vi.mock('posthog-node', () => ({ PostHog }));
+vi.mock('node:child_process', { spy: true });
 
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage/mock';
+import { getServerTelemetryContext, resetProjectId2CacheForTests } from './context';
 import { FEATURE_USAGE_EVENT, syncFeatureUsageTelemetry, trackFeatureUsage } from './feature-telemetry';
 import { hashTelemetryValue, resetEETelemetryForTests } from './posthog';
+
+// Unique and intentionally never created: a nonexistent project root makes the
+// git-remote fallback fail deterministically, no matter what repositories exist
+// on the machine running the tests.
+const projectRoot = path.join(os.tmpdir(), `feature-telemetry-project-${randomUUID()}`);
 
 class UnknownStore {
   stores = {};
@@ -67,6 +78,7 @@ function makeMastra(overrides: Partial<Record<keyof Mastra, unknown>> = {}): Mas
 describe('feature usage telemetry', () => {
   let originalTelemetryDisabled: string | undefined;
   let originalProjectRoot: string | undefined;
+  let originalProjectId: string | undefined;
   let originalDistinctId: string | undefined;
   let originalCommand: string | undefined;
   let originalNodeEnv: string | undefined;
@@ -74,20 +86,24 @@ describe('feature usage telemetry', () => {
   beforeEach(() => {
     originalTelemetryDisabled = process.env.MASTRA_TELEMETRY_DISABLED;
     originalProjectRoot = process.env.MASTRA_PROJECT_ROOT;
+    originalProjectId = process.env.MASTRA_PROJECT_ID;
     originalDistinctId = process.env.MASTRA_CLI_DISTINCT_ID;
     originalCommand = process.env.MASTRA_TELEMETRY_COMMAND;
     originalNodeEnv = process.env.NODE_ENV;
 
     delete process.env.MASTRA_TELEMETRY_DISABLED;
-    process.env.MASTRA_PROJECT_ROOT = '/tmp/feature-telemetry-project';
+    process.env.MASTRA_PROJECT_ROOT = projectRoot;
+    process.env.MASTRA_PROJECT_ID = '550e8400-e29b-41d4-a716-446655440000';
     process.env.MASTRA_CLI_DISTINCT_ID = 'cli-distinct-id';
     process.env.MASTRA_TELEMETRY_COMMAND = 'dev';
     process.env.NODE_ENV = 'test';
 
+    vi.mocked(execFile).mockClear();
     capture.mockClear();
     flush.mockClear();
     PostHog.mockClear();
     resetEETelemetryForTests();
+    resetProjectId2CacheForTests();
   });
 
   afterEach(() => {
@@ -95,6 +111,8 @@ describe('feature usage telemetry', () => {
     else delete process.env.MASTRA_TELEMETRY_DISABLED;
     if (originalProjectRoot !== undefined) process.env.MASTRA_PROJECT_ROOT = originalProjectRoot;
     else delete process.env.MASTRA_PROJECT_ROOT;
+    if (originalProjectId !== undefined) process.env.MASTRA_PROJECT_ID = originalProjectId;
+    else delete process.env.MASTRA_PROJECT_ID;
     if (originalDistinctId !== undefined) process.env.MASTRA_CLI_DISTINCT_ID = originalDistinctId;
     else delete process.env.MASTRA_CLI_DISTINCT_ID;
     if (originalCommand !== undefined) process.env.MASTRA_TELEMETRY_COMMAND = originalCommand;
@@ -102,18 +120,20 @@ describe('feature usage telemetry', () => {
     if (originalNodeEnv !== undefined) process.env.NODE_ENV = originalNodeEnv;
     else delete process.env.NODE_ENV;
     resetEETelemetryForTests();
+    resetProjectId2CacheForTests();
   });
 
-  it('tracks a named feature with server telemetry context and metadata', () => {
+  it('tracks a named feature with server telemetry context and metadata', async () => {
     trackFeatureUsage('agent_builder', { action: 'open', count: 2 });
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture.mock.calls[0]![0]).toMatchObject({
       distinctId: 'cli-distinct-id',
       event: FEATURE_USAGE_EVENT,
       properties: {
         feature_name: 'agent_builder',
-        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id: hashTelemetryValue(projectRoot).slice(0, 16),
+        project_id2: 'mp_550e8400-e29b-41d4-a716-446655440000',
         command: 'dev',
         node_env: 'test',
         action: 'open',
@@ -122,27 +142,86 @@ describe('feature usage telemetry', () => {
     });
   });
 
-  it('does not track feature usage when telemetry is disabled', () => {
-    process.env.MASTRA_TELEMETRY_DISABLED = 'true';
+  it('omits project_id2 when no platform id or git remote is available', async () => {
+    // MASTRA_PROJECT_ROOT points at a nonexistent directory, so the git fallback fails.
+    delete process.env.MASTRA_PROJECT_ID;
 
     trackFeatureUsage('agent_builder');
 
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    expect(capture.mock.calls[0]![0].properties).not.toHaveProperty('project_id2');
+  });
+
+  it('drops caller-supplied project_id2 metadata when no identifier resolves', async () => {
+    // MASTRA_PROJECT_ROOT points at a nonexistent directory, so the git fallback fails.
+    delete process.env.MASTRA_PROJECT_ID;
+
+    trackFeatureUsage('agent_builder', { project_id2: 'spoofed', action: 'open' });
+
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    const properties = capture.mock.calls[0]![0].properties;
+    expect(properties).not.toHaveProperty('project_id2');
+    expect(properties.action).toBe('open');
+  });
+
+  it.each(['1', 'true', 'yes'])('skips Git discovery and feature telemetry when disabled with %s', async value => {
+    process.env.MASTRA_TELEMETRY_DISABLED = value;
+    delete process.env.MASTRA_PROJECT_ID;
+
+    trackFeatureUsage('agent_builder');
+    syncFeatureUsageTelemetry(makeMastra());
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(execFile).not.toHaveBeenCalled();
     expect(PostHog).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
   });
 
-  it('tracks file-based agent usage when an agent is registered', () => {
+  it('does not capture if telemetry is disabled while Git discovery is pending', async () => {
+    delete process.env.MASTRA_PROJECT_ID;
+    trackFeatureUsage('agent_builder');
+    process.env.MASTRA_TELEMETRY_DISABLED = '1';
+
+    await getServerTelemetryContext();
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(execFile).toHaveBeenCalledTimes(1);
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it('prevents metadata from overriding telemetry-controlled fields', async () => {
+    trackFeatureUsage('agent_builder', {
+      feature_name: 'spoofed',
+      project_id: 'spoofed',
+      project_id2: 'spoofed',
+      command: 'spoofed',
+      node_env: 'spoofed',
+    });
+
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    expect(capture.mock.calls[0]![0].properties).toMatchObject({
+      feature_name: 'agent_builder',
+      project_id: hashTelemetryValue(projectRoot).slice(0, 16),
+      project_id2: 'mp_550e8400-e29b-41d4-a716-446655440000',
+      command: 'dev',
+      node_env: 'test',
+    });
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('tracks file-based agent usage when an agent is registered', async () => {
     const mastra = new Mastra({});
 
     mastra.__registerFsAgents({ weather: makeAgent('weather') });
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture.mock.calls[0]![0]).toMatchObject({
       distinctId: 'cli-distinct-id',
       event: FEATURE_USAGE_EVENT,
       properties: {
         feature_name: 'file_based_agents',
-        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id: hashTelemetryValue(projectRoot).slice(0, 16),
         command: 'dev',
         node_env: 'test',
         fs_agent_count: 1,
@@ -150,17 +229,17 @@ describe('feature usage telemetry', () => {
     });
   });
 
-  it('tracks file-based agent usage only once per Mastra instance', () => {
+  it('tracks file-based agent usage only once per Mastra instance', async () => {
     const mastra = new Mastra({});
 
     mastra.__registerFsAgents({ weather: makeAgent('weather') });
     mastra.__registerFsAgents({ support: makeAgent('support') });
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture.mock.calls[0]![0].properties.fs_agent_count).toBe(1);
   });
 
-  it('counts only file-based agents that are actually registered', () => {
+  it('counts only file-based agents that are actually registered', async () => {
     const mastra = new Mastra({ agents: { weather: makeAgent('weather') } });
 
     mastra.__registerFsAgents({
@@ -169,7 +248,7 @@ describe('feature usage telemetry', () => {
       support: makeAgent('support'),
     });
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture.mock.calls[0]![0].properties.fs_agent_count).toBe(1);
   });
 
@@ -181,21 +260,38 @@ describe('feature usage telemetry', () => {
     expect(capture).not.toHaveBeenCalled();
   });
 
-  it('does not track file-based agent usage when telemetry is disabled', () => {
+  it('does not track file-based agent usage when telemetry is disabled', async () => {
     process.env.MASTRA_TELEMETRY_DISABLED = 'true';
+    delete process.env.MASTRA_PROJECT_ID;
     const mastra = new Mastra({});
 
     mastra.__registerFsAgents({ weather: makeAgent('weather') });
+    await new Promise(resolve => setImmediate(resolve));
 
+    expect(execFile).not.toHaveBeenCalled();
     expect(PostHog).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
   });
 
-  it('never throws when metadata is malformed', () => {
-    expect(() => trackFeatureUsage('bad-metadata', null as unknown as Record<string, unknown>)).not.toThrow();
+  it('registers file-based agents without waiting for Git discovery', async () => {
+    delete process.env.MASTRA_PROJECT_ID;
+    const mastra = new Mastra({});
+
+    expect(mastra.__registerFsAgents({ weather: makeAgent('weather') })).toBeUndefined();
+    expect(mastra.listAgents()).toHaveProperty('weather');
+    expect(capture).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    expect(capture.mock.calls[0]![0].properties).not.toHaveProperty('project_id2');
+    expect(execFile).toHaveBeenCalledTimes(1);
   });
 
-  it('tracks a project surface snapshot without names or identifiers', () => {
+  it('never throws when metadata is malformed', async () => {
+    expect(() => trackFeatureUsage('bad-metadata', null as unknown as Record<string, unknown>)).not.toThrow();
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+  });
+
+  it('tracks a project surface snapshot without component names or identifiers', async () => {
     const store = new InMemoryStore();
     const mastra = makeMastra({
       listAgents: () => ({ weatherAgent: { hasOwnMemory: () => true }, supportAgent: { hasOwnMemory: () => false } }),
@@ -230,14 +326,15 @@ describe('feature usage telemetry', () => {
 
     syncFeatureUsageTelemetry(mastra);
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     const event = capture.mock.calls[0]![0];
     expect(event).toMatchObject({
       distinctId: 'cli-distinct-id',
       event: FEATURE_USAGE_EVENT,
       properties: {
         feature_name: 'mastra_instance_summary',
-        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id: hashTelemetryValue(projectRoot).slice(0, 16),
+        project_id2: 'mp_550e8400-e29b-41d4-a716-446655440000',
         command: 'dev',
         node_env: 'test',
         agent_count: 2,
@@ -274,14 +371,14 @@ describe('feature usage telemetry', () => {
     expect(Object.keys(event.properties).some(key => key.toLowerCase().includes('skill'))).toBe(false);
   });
 
-  it('uses safe defaults for missing registries', () => {
+  it('uses safe defaults for missing registries', async () => {
     const mastra = {
       getStorage: () => undefined,
     } as unknown as Mastra;
 
     expect(() => syncFeatureUsageTelemetry(mastra)).not.toThrow();
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture.mock.calls[0]![0].properties).toMatchObject({
       feature_name: 'mastra_instance_summary',
       agent_count: 0,
@@ -309,9 +406,10 @@ describe('feature usage telemetry', () => {
     });
   });
 
-  it('buckets unrecognized storage constructors as unknown', () => {
+  it('buckets unrecognized storage constructors as unknown', async () => {
     syncFeatureUsageTelemetry(makeMastra({ getStorage: () => new UnknownStore() }));
 
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect(capture.mock.calls[0]![0].properties.storage_type).toBe('unknown');
   });
 });

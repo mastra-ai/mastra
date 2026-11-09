@@ -2,10 +2,10 @@
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useEffect } from 'react';
-import { useDatasets } from '../hooks/use-datasets';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetComboboxProps {
   value?: string;
@@ -17,6 +17,7 @@ export interface DatasetComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
   container?: ComboboxProps['container'];
@@ -25,13 +26,14 @@ export interface DatasetComboboxProps {
 export function DatasetCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a dataset...',
-  searchPlaceholder = 'Search datasets...',
+  placeholder = 'Select a dataset',
+  searchPlaceholder = 'Search datasets',
   emptyText = 'No datasets found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
   container,
@@ -72,6 +74,7 @@ export function DatasetCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
       container={container}

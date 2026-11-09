@@ -209,19 +209,12 @@ test.describe('Viewer Role', () => {
 
     test('viewer cannot access tool execution', async ({ page }) => {
       await setupViewerAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
-      // Viewer has no tools:read or tools:execute permission
-      // Wait for page to load
-      await page.waitForLoadState('domcontentloaded');
-
-      // The tool page might load but viewer may have restricted access
-      // Check that the page loads and URL is correct
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
-
-      // Page should load - even if viewer doesn't have full tool access,
-      // they might see the tool details without execution capability
-      // The specific behavior depends on how the app handles no tools:execute permission
+      // Viewer has no tools:read permission. The old tool URL now lands on the Tools page
+      // (`/tools?tool=weatherInfo`), which RoutePermissionGuard sends to the first accessible route.
+      await page.waitForURL(/\/agents(\/|$)/);
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
   });
 
@@ -332,7 +325,7 @@ test.describe('Viewer Role', () => {
     test('viewer has fewer permissions than member for tools', async ({ page }) => {
       // Viewer has no tools permission at all
       await setupViewerAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Wait for page to load
       await page.waitForLoadState('domcontentloaded');
@@ -343,9 +336,11 @@ test.describe('Viewer Role', () => {
         permissions: ['agents:read', 'workflows:*', 'tools:read', 'tools:execute'],
       });
 
-      await page.reload();
+      // Go back to the tool: the viewer was sent away from it, so a reload would stay on that page.
+      await page.goto('/tools?tool=weatherInfo');
 
-      // Member should see tool execution panel
+      // Member should see tool execution panel on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
     });
   });

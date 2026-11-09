@@ -4,6 +4,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "systemMessage": "You are Mastra Code",
         "userMessage": "Please observe this pasted attachment in OM",
         "hasToolResult": false
       },
@@ -13,6 +14,7 @@
             "id": "call_om_attachment_step",
             "name": "execute_command",
             "arguments": {
+              "description": "Running the observation check command",
               "command": "printf 'OM_ATTACHMENT_STEP_DONE\\n'",
               "timeout": 5,
               "cwd": null,

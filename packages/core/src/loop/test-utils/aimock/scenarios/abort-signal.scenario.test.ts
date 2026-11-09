@@ -10,13 +10,20 @@
  * - abortSignal is respected and the loop stops after abort
  * - no additional model requests are made after abort is triggered
  * - finishReason indicates the run was aborted
+ * - a pre-aborted signal fires onAbort without any model request
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 describeForAllEngines(
   'AIMock loop scenario: abort signal mid-stream',
@@ -93,6 +100,30 @@ describeForAllEngines(
       // The output stream should indicate it was aborted/terminated
       const finishReason = await output.finishReason;
       expect(finishReason).toMatch(/abort|cancelled|error|tripwire/i);
+    });
+
+    it('a pre-aborted signal fires onAbort and skips onFinish without calling the model', async () => {
+      const llm = getMock();
+      llm.on({ endpoint: 'chat' }, { content: 'This should not appear.' });
+      // runLoopScenario does not forward onAbort, so stream directly.
+      const { agent } = await createSharedAgent(llm, { engine });
+      const abortController = new AbortController();
+      abortController.abort();
+      const onAbort = vi.fn();
+      const onFinish = vi.fn();
+
+      const result = await agent.stream('This should not execute.', {
+        abortSignal: abortController.signal,
+        onAbort,
+        onFinish,
+      });
+      const output = isDurableEngineVariant(engine) ? result.output : result;
+      await output.consumeStream().catch(() => undefined);
+      result.cleanup?.();
+
+      await vi.waitFor(() => expect(onAbort).toHaveBeenCalledTimes(1));
+      expect(onFinish).not.toHaveBeenCalled();
+      expect(llm.getRequests()).toHaveLength(0);
     });
   },
   {},

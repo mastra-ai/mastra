@@ -1,3 +1,5 @@
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Pencil, Check, X } from 'lucide-react';
@@ -34,7 +36,8 @@ export function ProposalTag({
   if (isEditing) {
     return (
       <span className="inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1">
-        <input
+        <Input
+          variant="unstyled"
           ref={inputRef}
           value={editValue}
           onChange={e => setEditValue(e.target.value)}
@@ -49,7 +52,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="w-20 bg-transparent py-0.5 text-caption text-muted-foreground outline-hidden"
+          className="h-auto w-20 bg-transparent px-0 py-0.5 text-caption text-muted-foreground outline-hidden"
         />
         <button
           type="button"
@@ -57,7 +60,7 @@ export function ProposalTag({
             e.preventDefault();
             handleConfirm();
           }}
-          className="hover:text-positive2 p-0.5 text-positive1"
+          className={cn(quietTextHover, 'p-0.5')}
         >
           <Check className="h-3 w-3" />
         </button>
@@ -66,8 +69,10 @@ export function ProposalTag({
   }
 
   return (
-    <span className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-caption text-muted-foreground">
-      {tag}
+    <span className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+      <Txt as="span" variant="caption">
+        {tag}
+      </Txt>
       <button
         type="button"
         onClick={() => {
@@ -82,7 +87,7 @@ export function ProposalTag({
       <button
         type="button"
         onClick={onRemove}
-        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-negative1"
+        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
         <X className="h-3 w-3" />

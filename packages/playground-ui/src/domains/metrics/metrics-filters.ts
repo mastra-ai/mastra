@@ -1,4 +1,14 @@
 import type { EntityType } from '@mastra/core/observability';
+import type { MetricsDimensionalFilter } from '@mastra/react/hooks/metrics';
+import { CloudIcon, CpuIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { traceFilterFieldColor, traceFilterFieldIcon } from '../traces/trace-filters';
+import type {
+  FilterBarField,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarOption,
+} from '@/ds/components/FilterBar/types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 type EntityTypeValue = `${EntityType}`;
@@ -9,6 +19,7 @@ export const METRICS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: 'workflow_run' },
   { label: 'Scorer', entityType: 'scorer' },
   { label: 'Ingest', entityType: 'rag_ingestion' },
+  { label: 'Classifier', entityType: 'classifier' },
 ] as const satisfies readonly { label: string; entityType: EntityTypeValue }[];
 
 /** Field IDs that live in dedicated URL params (not the generic `filterX` set). */
@@ -21,7 +32,6 @@ export const METRICS_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
  *  equivalent dimensions into metrics). */
 export const METRICS_PROPERTY_FILTER_PARAM_BY_FIELD = {
   tags: 'filterTags',
-  entityId: 'filterEntityId',
   entityName: 'filterEntityName',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
@@ -88,7 +98,9 @@ export function hasAnyMetricsFilterParams(params: URLSearchParams): boolean {
  *  The field order is curated for OLAP efficiency: columnar/LowCardinality
  *  dimensions first, then bloom_filter-indexed high-cardinality IDs as
  *  free-text. Fields that are expensive to filter without an index are
- *  intentionally omitted from this dashboard surface. */
+ *  intentionally omitted from this dashboard surface.
+ *
+ *  @deprecated The metrics dashboard filters through `FilterBar`. Use `createMetricsFilterBarFields`. */
 export function createMetricsPropertyFilterFields({
   availableTags,
   availableEntityNames,
@@ -110,7 +122,7 @@ export function createMetricsPropertyFilterFields({
   const fields: PropertyFilterField[] = [
     {
       id: 'rootEntityType',
-      label: 'Primitive Type',
+      label: 'Primitive type',
       kind: 'pick-multi',
       searchable: false,
       options: METRICS_ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ label: o.label, value: o.entityType })),
@@ -119,14 +131,13 @@ export function createMetricsPropertyFilterFields({
     },
     {
       id: 'entityName',
-      label: 'Primitive Name',
+      label: 'Primitive name',
       kind: 'pick-multi',
       options: availableEntityNames.map(name => ({ label: name, value: name })),
       placeholder: 'Choose entity names',
       emptyText: 'No entity names found.',
       isLoading: loading?.entityNames,
     },
-    { id: 'entityId', label: 'Primitive ID', kind: 'text' },
     {
       id: 'tags',
       label: 'Tags',
@@ -172,6 +183,124 @@ export function createMetricsPropertyFilterFields({
   const pickMulti = fields.filter(f => f.kind === 'pick-multi').sort(byLabel);
   const text = fields.filter(f => f.kind === 'text').sort(byLabel);
   return [...pickMulti, ...text];
+}
+
+type MetricsFilterBarFieldId = MetricsPropertyFilterFieldId | 'rootEntityType';
+
+const METRICS_TAGS_OPERATOR_ID = 'hasAll';
+
+/** Operators of the metrics filter bar. The metrics API matches one value per dimension, so `is`
+ *  never widens to "is any of", and it requires every listed tag. */
+export const METRICS_FILTER_BAR_OPERATORS: FilterBarOperator[] = [
+  { id: 'is', label: 'is' },
+  { id: METRICS_TAGS_OPERATOR_ID, label: 'has all of', arity: 'many' },
+];
+
+/** Same labels as the trace filters, so a dimension reads the same on Metrics and Traces. */
+const METRICS_FILTER_BAR_LABELS: Record<MetricsFilterBarFieldId, string> = {
+  rootEntityType: 'Primitive type',
+  entityName: 'Primitive name',
+  tags: 'Tags',
+  serviceName: 'Service Name',
+  environment: 'Environment',
+  threadId: 'Thread ID',
+  resourceId: 'Resource ID',
+  userId: 'User ID',
+  organizationId: 'Organization ID',
+  runId: 'Run ID',
+  sessionId: 'Session ID',
+  requestId: 'Request ID',
+  experimentId: 'Experiment ID',
+  provider: 'Provider',
+  model: 'Model',
+};
+
+/** Icons for the dimensions the trace filters key differently (`spans.provider`, `spans.model`). */
+const METRICS_FILTER_BAR_ICONS: Partial<Record<MetricsFilterBarFieldId, LucideIcon>> = {
+  provider: CloudIcon,
+  model: CpuIcon,
+};
+
+const METRICS_FILTER_BAR_TEXT_FIELD_IDS = [
+  'threadId',
+  'resourceId',
+  'userId',
+  'organizationId',
+  'runId',
+  'sessionId',
+  'requestId',
+  'experimentId',
+] as const satisfies readonly MetricsFilterBarFieldId[];
+
+const metricsFieldBase = (id: MetricsFilterBarFieldId) => ({
+  id,
+  label: METRICS_FILTER_BAR_LABELS[id],
+  icon: METRICS_FILTER_BAR_ICONS[id] ?? traceFilterFieldIcon(id),
+  color: traceFilterFieldColor(id),
+});
+
+const byFieldLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
+
+/** FilterBar fields for the metrics dashboard, in the same order as before: discovered
+ *  dimensions first, then the high-cardinality IDs as free text. Provider and model are
+ *  never offered (there is no discovery endpoint for them yet) but still label the chips
+ *  that links bring in through `filterProvider` / `filterModel`. */
+export function createMetricsFilterBarFields({
+  availableTags,
+  availableEntityNames,
+  availableServiceNames,
+  availableEnvironments,
+}: {
+  availableTags: string[];
+  availableEntityNames: string[];
+  availableServiceNames: string[];
+  availableEnvironments: string[];
+}): FilterBarField[] {
+  const pick = (id: MetricsFilterBarFieldId, suggestions: FilterBarOption[]): FilterBarField => ({
+    ...metricsFieldBase(id),
+    operators: ['is'],
+    strict: true,
+    suggestions,
+  });
+  const text = (id: MetricsFilterBarFieldId): FilterBarField => ({ ...metricsFieldBase(id), operators: ['is'] });
+  const options = (values: string[]) => values.map(value => ({ value }));
+
+  const pickFields: FilterBarField[] = [
+    pick(
+      'rootEntityType',
+      METRICS_ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ value: o.entityType, label: o.label })),
+    ),
+    pick('entityName', options(availableEntityNames)),
+    { ...pick('tags', options(availableTags)), operators: [METRICS_TAGS_OPERATOR_ID] },
+    pick('serviceName', options(availableServiceNames)),
+    pick('environment', options(availableEnvironments)),
+  ];
+  const textFields = METRICS_FILTER_BAR_TEXT_FIELD_IDS.map(text);
+  const urlOnlyFields = (['provider', 'model'] as const).map(id => ({ ...text(id), hidden: true }));
+
+  return [...pickFields.toSorted(byFieldLabel), ...textFields.toSorted(byFieldLabel), ...urlOnlyFields];
+}
+
+/** One FilterBar item per token, keyed by field id so chip order == URL order. Empty values
+ *  are kept: they are chips whose value hasn't been picked yet. The legacy 'Any' sentinel
+ *  reads as empty, and a repeated single-value param keeps its first value, which is the one
+ *  the metrics API applies. */
+export function metricsTokensToFilterBarItems(tokens: PropertyFilterToken[]): FilterBarItem[] {
+  return tokens.map(token => {
+    if (token.fieldId === 'tags') {
+      const value = [token.value].flat().filter(tag => tag !== '');
+      return { id: token.fieldId, fieldId: token.fieldId, operatorId: METRICS_TAGS_OPERATOR_ID, value };
+    }
+    const value = Array.isArray(token.value) ? (token.value[0] ?? '') : token.value;
+    return { id: token.fieldId, fieldId: token.fieldId, operatorId: 'is', value: isNeutralValue(value) ? '' : value };
+  });
+}
+
+export function filterBarItemsToMetricsTokens(items: FilterBarItem[]): PropertyFilterToken[] {
+  return items.map(item => ({
+    fieldId: item.fieldId,
+    value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
+  }));
 }
 
 /** Parse filter tokens from URL params, preserving insertion order. */
@@ -271,24 +400,7 @@ export function applyMetricsPropertyFilterTokens(params: URLSearchParams, tokens
  *  calls. Kept compatible with `metricsFilterSchema` in @internal/core — every
  *  scalar field maps to a single-string column filter, and `tags` is the only
  *  array field (matched via `has()` / equivalent on backends). */
-export type MetricsDimensionalFilter = {
-  rootEntityType?: EntityType;
-  entityName?: string;
-  entityId?: string;
-  tags?: string[];
-  serviceName?: string;
-  environment?: string;
-  provider?: string;
-  model?: string;
-  threadId?: string;
-  resourceId?: string;
-  userId?: string;
-  organizationId?: string;
-  runId?: string;
-  sessionId?: string;
-  requestId?: string;
-  experimentId?: string;
-};
+export type { MetricsDimensionalFilter } from '@mastra/react/hooks/metrics';
 
 /** Convert the active token list into a `MetricsFilter`-compatible object.
  *

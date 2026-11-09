@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -35,6 +33,7 @@ const SNAPSHOT_FIELDS = [
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -244,7 +243,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       // Extract config fields from the flat input
       const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const versionDoc: Record<string, any> = {
         id: versionId,
         agentId: agent.id,

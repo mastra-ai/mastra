@@ -13,13 +13,15 @@ npm install @mastra/mesa
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
-import { MesaFilesystem } from '@mastra/mesa';
+import { MesaFilesystem, repo } from '@mastra/mesa';
 
 const workspace = new Workspace({
   filesystem: new MesaFilesystem({
-    apiKey: process.env.MESA_API_KEY,
-    org: 'acme',
-    repos: [{ name: 'docs', bookmark: 'main' }],
+    privateKey: process.env.MESA_PRIVATE_KEY,
+    authors: [{ name: 'My Agent', email: 'agent@example.com' }],
+    layout: {
+      '/docs': repo('docs', { mode: 'rw', at: { bookmark: 'main' } }),
+    },
   }),
 });
 

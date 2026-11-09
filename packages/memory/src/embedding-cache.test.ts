@@ -97,6 +97,32 @@ describe('observation indexing IDs', () => {
     expect(rows.size).toBe(ids.length);
   });
 
+  it('stores the record ID with each chunk without changing the vector IDs', async () => {
+    const memory = createMemory();
+    await memory.indexObservation({ ...observation, recordId: 'record-1' });
+    await memory.indexObservation({ ...observation, recordId: 'record-2' });
+    const calls = vi.mocked(memory.vector!.upsert).mock.calls;
+    expect(calls[0]![0].metadata![0]).toMatchObject({ group_id: 'group-1', record_id: 'record-1' });
+    expect(calls[1]![0].ids).toEqual(calls[0]![0].ids);
+  });
+
+  it('returns the stored record ID with search results', async () => {
+    const memory = createMemory();
+    vi.mocked(memory.vector!.query).mockResolvedValue([
+      {
+        id: 'v1',
+        score: 0.9,
+        metadata: { group_id: 'group-1', thread_id: 'thread-1', record_id: 'record-1', text: 'x' },
+      },
+      { id: 'v2', score: 0.8, metadata: { group_id: 'group-2', thread_id: 'thread-1', text: 'y' } },
+    ]);
+    const { results } = await memory.searchMessages({ query: 'x', resourceId: 'resource-1' });
+    expect(results.map(r => [r.groupId, r.recordId])).toEqual([
+      ['group-1', 'record-1'],
+      ['group-2', undefined],
+    ]);
+  });
+
   it.each(['groupId', 'threadId', 'resourceId'] as const)('isolates IDs by %s', async key => {
     const memory = createMemory();
     await memory.indexObservation(observation);

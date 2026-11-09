@@ -13,7 +13,9 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io';
+export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
+
+export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
@@ -27,6 +29,7 @@ export interface PlatformConnectProviderMeta {
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
+  gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
 };
 
 export interface PlatformProviderConnection {
@@ -109,6 +112,27 @@ export async function listPlatformConnections(
   const { connections } = await requestJson<{ connections: PlatformProviderConnection[] }>(
     baseUrl,
     `/web/integrations/platform/${provider}/connections`,
+  );
+  return connections;
+}
+
+export interface ConnectToolConnection {
+  id: string;
+  integrationId: string;
+  providerName: string;
+  logoUrl: string | null;
+  accountLabel: string | null;
+  status: string;
+}
+
+export function isConnectToolsOffError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'connect_tools_off';
+}
+
+export async function listConnectTools(baseUrl: string): Promise<ConnectToolConnection[]> {
+  const { connections } = await requestJson<{ connections: ConnectToolConnection[] }>(
+    baseUrl,
+    '/web/integrations/platform/connect-tools',
   );
   return connections;
 }

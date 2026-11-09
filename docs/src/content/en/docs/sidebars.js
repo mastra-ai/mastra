@@ -61,6 +61,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/resumable-streams',
+              label: 'Resumable Streams',
+            },
+            {
+              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -172,16 +177,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'harness/signals',
-              label: 'Signals',
-            },
-            {
-              type: 'doc',
-              id: 'harness/signal-providers',
-              label: 'Signal Providers',
-            },
-            {
-              type: 'doc',
               id: 'harness/agent-controller',
               label: 'Agent Controller',
             },
@@ -230,6 +225,55 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: {
+            type: 'doc',
+            id: 'knowledge/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+            tags: ['alpha'],
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/scopes-and-access',
+              label: 'Scopes and access',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/pinned-context',
+              label: 'Pinned context',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/search',
+              label: 'Search',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/load-your-content',
+              label: 'Load your content',
+            },
+            {
+              type: 'link',
+              label: 'Studio',
+              href: '/docs/studio/knowledge',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/patterns',
+              label: 'Patterns',
+            },
+          ],
+        },
       ],
     },
     {
@@ -253,6 +297,49 @@ const sidebars = {
           type: 'doc',
           id: 'channels',
           label: 'Channels',
+        },
+        {
+          type: 'category',
+          label: 'Signals',
+          link: {
+            type: 'doc',
+            id: 'signals/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'signals/thread-streams',
+              label: 'Thread streams',
+            },
+            {
+              type: 'doc',
+              id: 'signals/sending-signals',
+              label: 'Sending signals',
+            },
+            {
+              type: 'doc',
+              id: 'signals/state-signals',
+              label: 'State signals',
+            },
+            {
+              type: 'doc',
+              id: 'signals/notifications',
+              label: 'Notifications',
+            },
+            {
+              type: 'doc',
+              id: 'signals/signal-providers',
+              label: 'Signal providers',
+            },
+            {
+              type: 'doc',
+              id: 'signals/running-across-processes',
+              label: 'Running across processes',
+            },
+          ],
         },
         {
           type: 'category',
@@ -296,6 +383,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser',
           label: 'Browser',
+        },
+        {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
         },
         {
           type: 'category',
@@ -412,6 +504,11 @@ const sidebars = {
               type: 'doc',
               id: 'studio/auth',
               label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/knowledge',
+              label: 'Knowledge',
             },
             {
               type: 'doc',
@@ -640,37 +737,38 @@ const sidebars = {
           label: 'Guides',
           link: {
             type: 'doc',
-            id: 'guides/multi-agent-systems',
+            id: 'guides/overview',
           },
           collapsed: true,
           customProps: {
             contextualSidebar: true,
-            contextualSidebarLabel: 'Multi-agent systems',
+            contextualSidebarLabel: 'Guides',
           },
           items: [
             {
               type: 'doc',
+              id: 'guides/multi-agent-systems',
+              label: 'Multi-agent systems',
+            },
+            {
+              type: 'doc',
               id: 'guides/context-engineering',
               label: 'Context engineering',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
               id: 'guides/agent-lifecycle',
               label: 'Agent lifecycle',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
               id: 'guides/authentication-identity',
               label: 'Authentication',
-              customProps: {
-                tags: ['new'],
-              },
+            },
+            {
+              type: 'doc',
+              id: 'guides/mcp-authentication-authorization',
+              label: 'MCP authentication',
             },
             {
               type: 'doc',
@@ -681,9 +779,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/build-an-eval-loop',
               label: 'Build an eval loop',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -718,6 +813,14 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/connect',
+      label: 'Connect',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/observability',
       label: 'Observability',
     },
@@ -725,9 +828,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/alerts',
       label: 'Alerts',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

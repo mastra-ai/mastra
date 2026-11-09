@@ -8,25 +8,29 @@
  *
  * @example
  * ```typescript
- * import { Workspace } from '@mastra/core';
- * import { LocalFilesystem } from '@mastra/workspace-fs-local';
- * import { AgentFS } from '@mastra/workspace-fs-agentfs';
- * import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+ * import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+ * import { E2BSandbox } from '@mastra/e2b';
+ * import { S3Filesystem } from '@mastra/s3';
  *
- * // Simple workspace with local filesystem
- * const workspace = new Workspace({
+ * // Local filesystems use paths relative to their base directory.
+ * const localWorkspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './workspace' }),
  * });
  *
- * // Full workspace with AgentFS and cloud sandbox
- * const fullWorkspace = new Workspace({
- *   filesystem: new AgentFS({ path: './agent.db' }),
- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+ * await localWorkspace.init();
+ * await localWorkspace.filesystem?.writeFile('app.py', 'print("Hello locally!")');
+ *
+ * // Mounted cloud filesystems use their absolute mount paths.
+ * const cloudWorkspace = new Workspace({
+ *   mounts: {
+ *     '/code': new S3Filesystem({ bucket: 'my-code', region: 'us-east-1' }),
+ *   },
+ *   sandbox: new E2BSandbox(),
  * });
  *
- * await fullWorkspace.init();
- * await fullWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello!")');
- * const result = await fullWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
+ * await cloudWorkspace.init();
+ * await cloudWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello from E2B!")');
+ * const result = await cloudWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
  * ```
  */
 
@@ -279,13 +283,14 @@ export interface WorkspaceConfig<
 
   /**
    * Vector store for semantic search.
-   * When provided along with embedder, enables vector and hybrid search.
+   * When provided along with embedder, enables vector and hybrid search. A store that generates
+   * embeddings itself, such as `MongoDBVector` with `autoEmbed`, needs no embedder.
    */
   vectorStore?: MastraVector;
 
   /**
    * Embedder function for generating vectors.
-   * Required when vectorStore is provided.
+   * Required when vectorStore is provided, unless the store generates embeddings itself.
    */
   embedder?: Embedder;
 
@@ -693,16 +698,18 @@ export class Workspace<
       this._browser = config.browser;
     }
 
-    // Validate vector search config - embedder is required with vectorStore
-    if (config.vectorStore && !config.embedder) {
+    // Validate vector search config - a vectorStore needs an embedder unless it embeds server-side
+    const embedsServerSide = !config.embedder && config.vectorStore?.isSelfEmbedding === true;
+    if (config.vectorStore && !config.embedder && !embedsServerSide) {
       throw new WorkspaceError('vectorStore requires an embedder', 'INVALID_SEARCH_CONFIG');
     }
 
     // Create search engine if search is configured
-    if (config.bm25 || (config.vectorStore && config.embedder)) {
+    if (config.bm25 || (config.vectorStore && (config.embedder || embedsServerSide))) {
       const buildIndexName = (): string => {
-        // Sanitize default name: replace all non-alphanumeric chars with underscores
-        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        // Sanitize default name: replace all non-alphanumeric chars with underscores.
+        // A store that embeds server-side keeps its index apart from one holding client-supplied vectors.
+        const defaultName = `${this.id}_search${embedsServerSide ? '_selfembed' : ''}`.replace(/[^a-zA-Z0-9_]/g, '_');
         const indexName = config.searchIndexName ?? defaultName;
 
         // Validate SQL identifier format
@@ -726,7 +733,7 @@ export class Workspace<
       this._searchEngine = new SearchEngine({
         bm25: config.bm25 ? parseBM25Config(config.bm25) : undefined,
         vector:
-          config.vectorStore && config.embedder
+          config.vectorStore && (config.embedder || embedsServerSide)
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
@@ -781,6 +788,14 @@ export class Workspace<
 
   get status(): WorkspaceStatus {
     return this._status;
+  }
+
+  /**
+   * Compact span representation. Without it, the trace serializer would walk the
+   * workspace's config and its filesystem/sandbox providers, which can hold credentials.
+   */
+  serializeForSpan(): { id: string; name: string; status: WorkspaceStatus } {
+    return { id: this.id, name: this.name, status: this._status };
   }
 
   /**

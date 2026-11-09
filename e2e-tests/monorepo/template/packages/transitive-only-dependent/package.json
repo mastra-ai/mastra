@@ -1,0 +1,11 @@
+{
+  "name": "@inner/transitive-only-dependent",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@inner/transitive-only-leaf": "workspace:*"
+  }
+}

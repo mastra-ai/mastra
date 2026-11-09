@@ -1132,6 +1132,57 @@ describe('Memory Handlers', () => {
   });
 
   describe('searchMemoryHandler', () => {
+    it.each([
+      { range: 0, before: [], after: [] },
+      { range: 1, before: ['m2'], after: ['m4'] },
+      { range: { before: 0, after: 0 }, before: [], after: [] },
+      { range: { before: 1, after: 0 }, before: ['m2'], after: [] },
+      { range: { before: 0, after: 1 }, before: [], after: ['m4'] },
+      { range: undefined, before: ['m1', 'm2'], after: ['m4', 'm5'] },
+    ])(
+      'returns the configured context around a search result with messageRange $range (#28500)',
+      async ({ range, before, after }) => {
+        await mockMemory.createThread({ threadId: 'search-thread', resourceId: 'test-resource' });
+        await mockMemory.saveMessages({
+          messages: Array.from({ length: 5 }, (_, index) => ({
+            id: `m${index + 1}`,
+            content: `message ${index + 1}`,
+            role: 'user',
+            type: 'text',
+            createdAt: new Date(2026, 0, 1, 0, 0, index),
+            threadId: 'search-thread',
+            resourceId: 'test-resource',
+          })) as MastraDBMessage[],
+        });
+        const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent }, storage });
+        const recall = vi.spyOn(mockMemory, 'recall');
+
+        const result = await SEARCH_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: 'search-thread',
+          searchQuery: 'message 3',
+          memoryConfig: {
+            semanticRecall: range === undefined ? { topK: 1, scope: 'thread' } : { messageRange: range },
+          },
+        });
+
+        expect(recall).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: 'search-thread',
+            resourceId: 'test-resource',
+            threadConfig: expect.objectContaining({
+              semanticRecall: range === undefined ? { topK: 1, scope: 'thread' } : { messageRange: 0 },
+            }),
+          }),
+        );
+        const match = result.results.find(message => message.id === 'm3');
+        expect(match?.context?.before.map(message => message.id)).toEqual(before);
+        expect(match?.context?.after.map(message => message.id)).toEqual(after);
+      },
+    );
+
     it('should filter resource-scoped search results to FGA-accessible threads', async () => {
       await mockMemory.createThread({ threadId: 'allowed-thread', resourceId: 'test-resource', title: 'Allowed' });
       await mockMemory.createThread({ threadId: 'blocked-thread', resourceId: 'test-resource', title: 'Blocked' });
@@ -2214,6 +2265,51 @@ describe('Memory Handlers', () => {
             resourceId: 'user-a',
           }),
         );
+      });
+
+      it('should return 403 when creating a thread with an id owned by a different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({
+          threadId: 'support',
+          resourceId: 'user-b',
+          title: 'User B thread',
+          metadata: { plan: 'pro' },
+        });
+        const spy = vi.spyOn(mockMemory, 'createThread');
+
+        await expect(
+          CREATE_THREAD_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'support',
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+
+        expect(spy).not.toHaveBeenCalled();
+        const thread = await mockMemory.getThreadById({ threadId: 'support' });
+        expect(thread).toMatchObject({ resourceId: 'user-b', title: 'User B thread', metadata: { plan: 'pro' } });
+      });
+
+      it('should allow re-creating a thread with an id owned by the same resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'support', resourceId: 'user-a', title: 'Old title' });
+
+        const result = await CREATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          threadId: 'support',
+          title: 'New title',
+        });
+
+        expect(result).toMatchObject({ id: 'support', resourceId: 'user-a', title: 'New title' });
       });
     });
 

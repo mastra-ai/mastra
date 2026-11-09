@@ -117,12 +117,12 @@ describe('ChatShell', () => {
     expect(dock.className).toContain('mt-(--chat-fade)');
     expect(dock.className).toContain('before:-top-(--chat-fade)');
     expect(dock.className).toContain(
-      'before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_calc(var(--chat-fade)*3))]',
+      'before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
     );
     expect(dock.className).toContain('pb-(--chat-gutter)');
     expect(screen.getByTestId('content').className).not.toContain('pb-');
-    expect(screen.getByTestId('shell').className).toContain('[--chat-fade:1.5rem]');
-    expect(screen.getByTestId('shell').className).toContain('[--chat-veil:70%]');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-fade:2rem]');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-veil:100%]');
   });
 
   it('anchors the scroll button on the dock, not the page', () => {
@@ -139,11 +139,24 @@ describe('ChatShell', () => {
   it('pads its own scroller by the end inset so the column re-centres', () => {
     renderShell();
 
-    expect(screen.getByTestId('viewport').className).toContain('pe-(--chat-inset-end)');
+    expect(screen.getByTestId('viewport').className).toContain('pe-[calc(var(--chat-edge)+var(--chat-inset-end))]');
     expect(screen.getByTestId('shell').className).toContain('[--chat-inset-end:0px]');
     // The panel floats inside the stage, below the bars: insetting a bar only
     // notches the top edge of the page.
     expect(screen.getByTestId('bar').className).not.toContain('pe-(--chat-inset-end)');
+  });
+});
+
+describe('ChatShell scrollbar room', () => {
+  afterEach(cleanup);
+
+  it('keeps the same edge room on both sides, so the scrollbar clears the composer', () => {
+    renderShell();
+
+    const viewport = screen.getByTestId('viewport').className;
+    expect(viewport).toContain('ps-(--chat-edge)');
+    expect(viewport).toContain('[scrollbar-gutter:stable_both-edges]');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-edge:0.5rem]');
   });
 });
 

@@ -5,8 +5,23 @@ import stripAnsi from 'strip-ansi';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
+let restartApp: (() => Promise<void>) | undefined;
+
 const OBJECTIVE = 'Complete the max-runs goal e2e objective.';
 const FOLLOW_UP = 'Looks good, please keep going.';
+const PAUSED_REASON = 'Ran out of evaluation budget (1 runs) before reaching the goal — raise maxRuns to resume.';
+
+function readGoal(dbPath: string): { status?: string; pausedReason?: string } {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const row = db.prepare(`select value from mastra_thread_state where type = 'goal'`).get() as
+      | { value: string }
+      | undefined;
+    return row ? JSON.parse(row.value) : {};
+  } finally {
+    db.close();
+  }
+}
 
 /**
  * Regression: once a goal has consumed its full run budget while still
@@ -36,6 +51,18 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
+  async inProcessApp({ startMastraCodeApp }) {
+    let currentStop: (() => Promise<void> | void) | undefined;
+    const start = async () => {
+      currentStop = (await startMastraCodeApp()).stop;
+    };
+    restartApp = async () => {
+      await currentStop?.();
+      await start();
+    };
+    await start();
+    return { stop: async () => currentStop?.() };
+  },
   async run({ terminal, runtime, dbPath }) {
     runtime.startLiveOutput(terminal);
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
@@ -54,6 +81,8 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(/Goal \((\w+)\): "Complete the max-runs goal e2e objective\."/i, terminal, 8_000);
+    // The pause cause travels with the paused goal and is shown in /goal status.
+    await runtime.waitForScreenText(/— paused: Ran\s+out\s+of\s+evaluation\s+budget\s+\(1\s+runs\)/i, terminal, 8_000);
 
     const view = stripAnsi(terminal.serialize().view);
     const continueBoxes = view.match(/Goal\s+○\s+continue\s+\(1\/1\)/g)?.length ?? 0;
@@ -70,6 +99,33 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
       );
     }
 
+    // Restart on the same app data: the pause cause must come back from
+    // storage, not from the previous process's in-memory goal.
+    const stored = readGoal(dbPath);
+    if (stored.status !== 'paused' || stored.pausedReason !== PAUSED_REASON) {
+      throw new Error(
+        `Expected the stored goal paused with ${JSON.stringify(PAUSED_REASON)} before restart, found ${JSON.stringify(stored)}`,
+      );
+    }
+    // The status line wraps, so collapse whitespace before counting the cause. Count over the whole
+    // scrollback: the pre-restart copy can still be on screen, and only a new copy proves the reload.
+    const pauseLines = () =>
+      stripAnsi(terminal.serializeHistory?.().output ?? terminal.serialize().view)
+        .replace(/\s+/g, ' ')
+        .split('— paused: ' + PAUSED_REASON).length - 1;
+    await restartApp?.();
+    await runtime.waitForScreenText(/Project:/i, terminal, 30_000);
+    await runtime.sleep(500);
+    const before = pauseLines();
+    terminal.submit('/goal status');
+    const deadline = Date.now() + 10_000;
+    while (pauseLines() <= before) {
+      if (Date.now() > deadline) {
+        throw new Error(`Expected /goal status after restart to show the pause cause:\n${terminal.serialize().view}`);
+      }
+      await runtime.sleep(200);
+    }
+
     terminal.keyCtrlC();
     await runtime.stopApp?.();
 
@@ -84,7 +140,12 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
       if (rows.length !== 1) {
         throw new Error(`Expected exactly one persisted goal record, found ${rows.length}`);
       }
-      const record = JSON.parse(rows[0]!.value) as { objective?: string; status?: string; runsUsed?: number };
+      const record = JSON.parse(rows[0]!.value) as {
+        objective?: string;
+        status?: string;
+        runsUsed?: number;
+        pausedReason?: string;
+      };
       if (record.objective !== OBJECTIVE) {
         throw new Error(
           `Expected persisted objective ${JSON.stringify(OBJECTIVE)}, found ${JSON.stringify(record.objective)}`,
@@ -94,6 +155,9 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
         throw new Error(
           `Expected the persisted goal to be paused after reaching max runs, found ${JSON.stringify(record.status)}`,
         );
+      }
+      if (record.pausedReason !== PAUSED_REASON) {
+        throw new Error(`Expected the persisted pause cause, found ${JSON.stringify(record.pausedReason)}`);
       }
       if (record.runsUsed !== 1) {
         throw new Error(`Expected 1 persisted run, found ${JSON.stringify(record.runsUsed)}`);

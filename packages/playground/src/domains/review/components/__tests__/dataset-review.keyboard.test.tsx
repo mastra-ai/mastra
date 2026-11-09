@@ -78,7 +78,7 @@ const setupHandlers = (reviewResults = results) => {
 
 const renderReview = async () => {
   setupHandlers();
-  const utils = renderWithProviders(<DatasetReview datasetId="ds-1" />);
+  const utils = renderWithProviders(<DatasetReview withQueryTrace withFeedback datasetId="ds-1" />);
 
   await waitFor(() => expect(screen.getByText(/first input/)).toBeTruthy());
   return utils;
@@ -102,7 +102,7 @@ describe('DatasetReview keyboard navigation', () => {
   describe('when the review queue is empty', () => {
     it('keeps the status filter but hides the tag filter', async () => {
       setupHandlers([]);
-      renderWithProviders(<DatasetReview datasetId="ds-1" />);
+      renderWithProviders(<DatasetReview withQueryTrace withFeedback datasetId="ds-1" />);
 
       expect(await screen.findByText('No items to review')).toBeTruthy();
       // Only the status select remains; the tag select needs tags to filter by.

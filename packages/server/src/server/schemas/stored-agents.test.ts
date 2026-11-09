@@ -1,5 +1,62 @@
 import { describe, expect, it } from 'vitest';
-import { createStoredAgentBodySchema, updateStoredAgentBodySchema, storedAgentSchema } from './stored-agents';
+import {
+  createStoredAgentBodySchema,
+  updateStoredAgentBodySchema,
+  storedAgentSchema,
+  getStoredAgentResponseSchema,
+  createStoredAgentResponseSchema,
+  listStoredAgentsResponseSchema,
+} from './stored-agents';
+
+describe('stored-agent durable migration', () => {
+  it.each([true, false, {}, { cleanupTimeoutMs: 0 }, { maxSteps: 50, cleanupTimeoutMs: 0 }])(
+    'preserves persisted durable configuration %j in stored-agent responses',
+    durable => {
+      const agent = {
+        id: 'legacy-agent',
+        status: 'published',
+        name: 'Legacy Agent',
+        instructions: 'Hello',
+        model: { provider: 'openai', name: 'gpt-4' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        durable,
+      };
+      for (const schema of [getStoredAgentResponseSchema, createStoredAgentResponseSchema]) {
+        expect(schema.parse(agent).durable).toEqual(durable);
+      }
+      const list = listStoredAgentsResponseSchema.parse({
+        agents: [agent],
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      });
+      expect(list.agents[0]?.durable).toEqual(durable);
+    },
+  );
+
+  it.each([createStoredAgentBodySchema, updateStoredAgentBodySchema])(
+    'rejects legacy execution options instead of silently stripping them',
+    schema => {
+      for (const legacy of [{ maxSteps: 50 }, { shouldPersistSnapshot: true }, { id: 'old' }, { name: 'Old' }]) {
+        const result = schema.safeParse({
+          name: 'Test Agent',
+          instructions: 'Hello',
+          model: { provider: 'openai', name: 'gpt-4' },
+          durable: { cleanupTimeoutMs: 0, ...legacy },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('createDurableAgent');
+      }
+    },
+  );
+
+  it.each([true, false, {}, { cleanupTimeoutMs: 0 }])('preserves supported durable configuration %j', durable => {
+    const result = updateStoredAgentBodySchema.parse({ durable });
+    expect(result.durable).toEqual(durable);
+  });
+});
 
 describe('stored-agents schemas – conditional fields & requestContextSchema', () => {
   // ---------------------------------------------------------------------------
@@ -300,5 +357,85 @@ describe('stored-agents schemas – conditional fields & requestContextSchema', 
       });
       expect(result.success).toBe(true);
     });
+  });
+});
+
+describe('stored-agents schemas – memory references', () => {
+  const base = { name: 'Support Agent', instructions: 'Help', model: { provider: 'openai', name: 'gpt-4o' } };
+  const parseMemory = (memory: unknown) => createStoredAgentBodySchema.safeParse({ ...base, memory });
+
+  it('accepts a registered memory reference', () => {
+    const result = parseMemory({ type: 'id', memoryId: 'chat' });
+    expect(result.success).toBe(true);
+    expect(result.data?.memory).toEqual({ type: 'id', memoryId: 'chat' });
+  });
+
+  it('accepts a tagged inline config', () => {
+    const result = parseMemory({ type: 'inline', config: { options: { lastMessages: 10 } } });
+    expect(result.success).toBe(true);
+    expect(result.data?.memory).toEqual({ type: 'inline', config: { options: { lastMessages: 10 } } });
+  });
+
+  it('accepts a legacy untagged inline config', () => {
+    const result = parseMemory({ options: { lastMessages: 10 }, observationalMemory: true });
+    expect(result.success).toBe(true);
+    expect(result.data?.memory).toEqual({ options: { lastMessages: 10 }, observationalMemory: true });
+  });
+
+  it('accepts references and inline configs in conditional variants', () => {
+    const result = parseMemory([
+      { value: { options: { lastMessages: 5 } } },
+      {
+        value: { type: 'id', memoryId: 'premium' },
+        rules: { operator: 'AND', conditions: [{ field: 'tier', operator: 'equals', value: 'premium' }] },
+      },
+    ]);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a reference without a memoryId instead of treating it as empty inline config', () => {
+    expect(parseMemory({ type: 'id' }).success).toBe(false);
+    expect(parseMemory({ type: 'id', memoryId: '' }).success).toBe(false);
+  });
+
+  it('rejects unknown memory types', () => {
+    expect(parseMemory({ type: 'memory_ref', key: 'chat' }).success).toBe(false);
+  });
+
+  it('still enforces semantic recall dependencies on legacy and tagged inline configs', () => {
+    const config = { options: { semanticRecall: true } };
+    expect(parseMemory(config).success).toBe(false);
+    expect(parseMemory({ type: 'inline', config }).success).toBe(false);
+  });
+
+  it('accepts references on update and in the response schema', () => {
+    expect(updateStoredAgentBodySchema.safeParse({ memory: { type: 'id', memoryId: 'chat' } }).success).toBe(true);
+    const response = storedAgentSchema.safeParse({
+      id: 'support',
+      status: 'published',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...base,
+      memory: { type: 'id', memoryId: 'chat' },
+    });
+    expect(response.success).toBe(true);
+    expect(response.data?.memory).toEqual({ type: 'id', memoryId: 'chat' });
+  });
+});
+
+describe('stored-agents schemas – instruction blocks', () => {
+  it('preserves per-usage rules on prompt_block_ref blocks', () => {
+    const refBlock = {
+      type: 'prompt_block_ref',
+      id: 'shared-default-user-prompt',
+      rules: { operator: 'AND', conditions: [{ field: 'userPrompt', operator: 'not_exists' }] },
+    };
+    const result = createStoredAgentBodySchema.safeParse({
+      name: 'Test Agent',
+      instructions: [refBlock],
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.instructions).toEqual([refBlock]);
   });
 });

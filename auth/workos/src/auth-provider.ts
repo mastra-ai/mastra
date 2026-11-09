@@ -208,9 +208,11 @@ export class MastraAuthWorkos
         // Skipping this call avoids an extra network round-trip on every
         // authenticated request when FGA is not in use.
         let memberships: OrganizationMembership[] | undefined;
+        let organizationId = auth.organizationId;
         if (this.fetchMemberships) {
           try {
             memberships = await this.getMemberships(auth.user.id);
+            organizationId ??= this.getSingleMembershipOrganizationId(memberships);
           } catch {
             // Ignore membership fetch errors — FGA will gracefully degrade
           }
@@ -219,7 +221,7 @@ export class MastraAuthWorkos
         return {
           ...mapWorkOSUserToEEUser(auth.user),
           workosId: auth.user.id,
-          organizationId: auth.organizationId,
+          organizationId,
           memberships,
         };
       }

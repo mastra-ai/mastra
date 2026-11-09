@@ -116,7 +116,18 @@ const result = await run.start({
             type: 'string',
             isOptional: true,
             description:
-              'Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.',
+              'Parent span ID to use for this execution (1-16 hexadecimal characters). Used to correlate with an external tracing system. Mastra does not treat it as a parent within Mastra storage unless `nestUnderParent` is `true` and a valid `traceId` is also set.',
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
+            name: 'nestUnderParent',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
           },
         ],
       },
@@ -159,7 +170,7 @@ const result = await run.start({
   content={[
   {
     name: 'result',
-    type: 'Promise<WorkflowResult<TState, TOutput, TSteps>>',
+    type: 'Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>',
     description: 'A promise that resolves to the workflow execution result containing step outputs and status',
   },
   {

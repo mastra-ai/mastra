@@ -1,10 +1,12 @@
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
 
-import admin from 'firebase-admin';
+import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
-type FirebaseUser = admin.auth.DecodedIdToken;
+type FirebaseUser = DecodedIdToken;
 
 interface MastraAuthFirebaseOptions extends MastraAuthProviderOptions<FirebaseUser> {
   databaseId?: string;
@@ -21,11 +23,9 @@ export class MastraAuthFirebase extends MastraAuthProvider<FirebaseUser> {
     this.serviceAccount = options?.serviceAccount ?? process.env.FIREBASE_SERVICE_ACCOUNT;
     this.databaseId = options?.databaseId ?? process.env.FIRESTORE_DATABASE_ID ?? process.env.FIREBASE_DATABASE_ID;
 
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: this.serviceAccount
-          ? admin.credential.cert(this.serviceAccount)
-          : admin.credential.applicationDefault(),
+    if (!getApps().length) {
+      initializeApp({
+        credential: this.serviceAccount ? cert(this.serviceAccount) : applicationDefault(),
       });
     }
 
@@ -33,7 +33,7 @@ export class MastraAuthFirebase extends MastraAuthProvider<FirebaseUser> {
   }
 
   async authenticateToken(token: string): Promise<FirebaseUser | null> {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await getAuth().verifyIdToken(token);
     return decoded;
   }
 

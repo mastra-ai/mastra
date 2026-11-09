@@ -1,25 +1,67 @@
-import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
-import { useParams } from 'react-router';
+import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { useDataset } from '@mastra/react/hooks/datasets';
+import { useParams, useSearchParams } from 'react-router';
 import { DatasetCombobox } from './components/dataset-combobox';
-import { useDatasets } from './hooks/use-datasets';
+import { DatasetVersions } from './components/dataset-versions';
+import { useDatasetItemsUrlState } from './hooks/use-dataset-items-url-state';
 
-/**
- * Dataset breadcrumb label. The route `to` makes it a link on nested routes;
- * the switcher lives in `DatasetSwitcherAction` (crumb `action` slot).
- */
 export function DatasetCrumb() {
   const { datasetId } = useParams<{ datasetId: string }>();
-  const { data, isLoading } = useDatasets();
+  // Fetch the dataset itself: the paginated list may not contain it.
+  const { data: dataset, isLoading } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
 
   if (!datasetId) return null;
   if (isLoading) return <CrumbSkeleton />;
 
-  return data?.datasets?.find(d => d.id === datasetId)?.name ?? datasetId;
+  return dataset?.name ?? datasetId;
 }
 
-export function DatasetSwitcherAction() {
+export function DatasetSwitcher() {
   const { datasetId } = useParams<{ datasetId: string }>();
   if (!datasetId) return null;
 
-  return <DatasetCombobox value={datasetId} variant="ghost" size="icon-sm" align="end" aria-label="Switch dataset" />;
+  return <DatasetCombobox value={datasetId} {...crumbSwitcherTriggerProps} aria-label="Switch dataset" />;
+}
+
+export function DatasetVersionCrumb() {
+  const { datasetId } = useParams<{ datasetId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { activeVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
+  const { data: dataset, isLoading } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+
+  if (isLoading) return <CrumbSkeleton />;
+  if (!dataset) return null;
+
+  const latestVersion = dataset.version;
+  return activeVersion == null || activeVersion === latestVersion ? `Latest (v${latestVersion})` : `v${activeVersion}`;
+}
+
+export function DatasetVersionSwitcher() {
+  const { datasetId } = useParams<{ datasetId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { activeVersion, handleVersionChange } = useDatasetItemsUrlState(searchParams, setSearchParams);
+  const { data: dataset } = useDataset({
+    datasetId: datasetId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+
+  if (!datasetId) return null;
+
+  return (
+    <DatasetVersions
+      datasetId={datasetId}
+      value={activeVersion}
+      onValueChange={handleVersionChange}
+      currentVersion={dataset?.version}
+      datasetCreatedAt={dataset?.createdAt}
+      {...crumbSwitcherTriggerProps}
+      aria-label="Switch dataset version"
+    />
+  );
 }

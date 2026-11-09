@@ -1,3 +1,4 @@
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
 import type { ReactNode } from 'react';
 import { AgentSettingsContext } from './agent-context';
@@ -6,7 +7,6 @@ import { threadPreferencesSchema, serializeThreadPreferences } from './thread-pr
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { defaultSettings as fallbackSettings } from '@/domains/agents/hooks/use-agent-settings-state';
-import { cleanProviderId } from '@/domains/llm';
 import type { AgentSettingsType } from '@/types';
 
 export interface ThreadPreferencesProviderProps {

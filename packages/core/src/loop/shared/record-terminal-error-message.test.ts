@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MastraDBMessage, MastraErrorPart } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
+import { MAX_PERSISTED_RESPONSE_BODY_LENGTH } from './provider-error-details';
 import { recordTerminalErrorMessage, toPersistedErrorIdentity } from './record-terminal-error-message';
 
 function errorPartsOf(message: MastraDBMessage | undefined): MastraErrorPart[] {
@@ -29,14 +30,49 @@ function makeListWithPartialAttempt(attemptId: string, parts: MastraDBMessage['c
 }
 
 describe('toPersistedErrorIdentity', () => {
-  it('keeps only name and message', () => {
+  it('keeps name, message, provider HTTP details, the requested model and provider facts, nothing else', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
+      responseBody: '{"error":{"code":"insufficient_quota"}}',
       cause: new Error('inner'),
+      url: 'https://api.example.com/v1?key=secret',
+      requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'my secret prompt' }] },
     });
 
-    expect(toPersistedErrorIdentity(error)).toEqual({ name: 'TypeError', message: 'boom' });
-    expect(Object.keys(toPersistedErrorIdentity(error))).toEqual(['name', 'message']);
+    expect(toPersistedErrorIdentity(error)).toEqual({
+      name: 'TypeError',
+      message: 'boom',
+      statusCode: 429,
+      responseBody: '{"error":{"code":"insufficient_quota"}}',
+      modelId: 'claude-opus-4-5',
+      codes: ['insufficient_quota'],
+    });
+    expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
+    expect(
+      toPersistedErrorIdentity(
+        Object.assign(new Error('Bad Request'), {
+          statusCode: 400,
+          responseBody: '{"error":{"message":"prompt is too long"}}',
+        }),
+      ),
+    ).toMatchObject({ statusCode: 400, reason: 'prompt is too long' });
+  });
+
+  it('keeps a bounded response body and the provider request id', () => {
+    const error = Object.assign(new Error('Bad Request'), {
+      statusCode: 400,
+      responseBody: 'x'.repeat(MAX_PERSISTED_RESPONSE_BODY_LENGTH + 50),
+      responseHeaders: { 'request-id': 'req_123', 'set-cookie': 'secret' },
+    });
+
+    const identity = toPersistedErrorIdentity(error);
+    expect(identity).toEqual({
+      name: 'Error',
+      message: 'Bad Request',
+      statusCode: 400,
+      responseBody: `${'x'.repeat(MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`,
+      requestId: 'req_123',
+    });
   });
 
   it('does not mutate the supplied error or invoke toJSON', () => {
@@ -152,6 +188,13 @@ describe('recordTerminalErrorMessage', () => {
       { type: 'error', error: { name: 'Error', message: 'model exploded' }, createdAt: expect.any(Number) },
     ]);
     expect(recorded).toBe(all[1]);
+  });
+
+  it('generates a synchronous UUID when neither response id is available', () => {
+    const messageList = makeList();
+    const recorded = recordTerminalErrorMessage({ messageList, error: new Error('model exploded') });
+
+    expect(recorded?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it('appends the error part after existing partial parts on the same record', () => {
@@ -330,7 +373,7 @@ describe('recordTerminalErrorMessage', () => {
     expect(errorPartsOf(all[1])).toHaveLength(1);
   });
 
-  it('stores only a JSON-safe name/message payload', () => {
+  it('stores only a JSON-safe name/message/status payload', () => {
     const messageList = makeListWithPartialAttempt('attempt-1', []);
     const error = Object.assign(new Error('boom'), {
       statusCode: 500,
@@ -350,9 +393,9 @@ describe('recordTerminalErrorMessage', () => {
       .filter(part => part?.type === 'error') as MastraErrorPart[];
 
     expect(storedParts).toHaveLength(1);
-    expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom' });
-    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message']);
+    expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom', statusCode: 500 });
+    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message', 'statusCode']);
     expect(serialized).not.toContain('LIED');
-    expect(serialized).not.toContain('statusCode');
+    expect(serialized).not.toContain('inner');
   });
 });

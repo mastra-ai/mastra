@@ -1,3 +1,4 @@
+import { getEntityTypeForSpan } from '@mastra/core/observability';
 import type { TraceImportProvider, TraceImportReadContext } from '../../provider.js';
 import type {
   SkippedTrace,
@@ -8,7 +9,8 @@ import type {
 } from '../../types.js';
 import type { LangfuseClientDependencies, LangfuseClientOptions } from './client.js';
 import { createLangfuseSpanImportId, createLangfuseTraceImportId, LANGFUSE_ID_ALGORITHM_VERSION } from './ids.js';
-import { LangfuseObservationsReader, type LangfuseReadWindow, type LangfuseTraceReadOptions } from './reader.js';
+import { LangfuseObservationsReader } from './reader.js';
+import type { LangfuseReadWindow, LangfuseTraceReadOptions } from './reader.js';
 import type { LangfuseObservation, LangfuseSourceTrace } from './types.js';
 
 const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {
@@ -22,6 +24,33 @@ const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {
   RETRIEVER: 'generic',
   SPAN: 'generic',
   TOOL: 'tool_call',
+};
+
+/**
+ * OpenTelemetry GenAI semantic-convention operations. Langfuse keeps OTEL
+ * attributes in observation metadata, so spans that arrive from other OTEL
+ * instrumentations as plain `SPAN` (including the virtual trace root Langfuse
+ * creates for them) still say what they were.
+ */
+const GEN_AI_OPERATION_SPAN_TYPES: Record<string, TraceImportSpan['spanType']> = {
+  invoke_agent: 'agent_run',
+  execute_tool: 'tool_call',
+  chat: 'model_generation',
+  generate_content: 'model_generation',
+  text_completion: 'model_generation',
+  embeddings: 'rag_embedding',
+};
+
+/** Metadata keys that name the owning primitive, in priority order per entity type. */
+const ENTITY_NAME_KEYS: Record<string, readonly string[]> = {
+  agent: ['attributes.gen_ai.agent.name', 'agentName'],
+  workflow_run: ['workflowName'],
+  tool: ['attributes.gen_ai.tool.name'],
+};
+const ENTITY_ID_KEYS: Record<string, readonly string[]> = {
+  agent: ['attributes.gen_ai.agent.id', 'agentId'],
+  workflow_run: ['workflowId'],
+  tool: ['attributes.gen_ai.tool.name'],
 };
 
 const INPUT_TOKEN_KEYS = ['input', 'inputTokens', 'input_tokens'] as const;
@@ -131,6 +160,7 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
       provider: 'langfuse',
       baseUrl: this.reader.baseUrl,
       projectId: project.id,
+      projectName: project.name,
       idAlgorithmVersion: LANGFUSE_ID_ALGORITHM_VERSION,
     };
   }
@@ -185,14 +215,15 @@ export function mapLangfuseSourceTrace(
   if ('skipped' in ordered) return { kind: 'skipped', skipped: ordered.skipped };
 
   const unknownTypes = new Set<string>();
-  const trace: TraceImportTrace = {
-    sourceTraceId: ordered.trace.sourceTraceId,
-    spans: ordered.trace.observations.map((observation, index) => {
-      const mappedType = restoredMastraSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
-      if (mappedType === undefined) unknownTypes.add(observation.type);
-      return mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
-    }),
-  };
+  const spans = ordered.trace.observations.map((observation, index) => {
+    const mappedType =
+      restoredMastraSpanType(observation) ?? genAiSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
+    if (mappedType === undefined) unknownTypes.add(observation.type);
+    return mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
+  });
+  promoteVirtualRootEntity(spans, ordered.trace);
+  inheritOwningEntity(spans);
+  const trace: TraceImportTrace = { sourceTraceId: ordered.trace.sourceTraceId, spans };
 
   const warnings = [...unknownTypes].sort().map(type => `Unknown Langfuse observation type: ${type}`);
   return warnings.length > 0 ? { kind: 'trace', trace, warnings } : { kind: 'trace', trace };
@@ -360,6 +391,7 @@ function mapObservationToSpan(
         : null,
     name: observation.name?.trim() || `langfuse:${observation.type.toLowerCase()}`,
     spanType,
+    ...buildEntity(observation, spanType),
     startedAt: observation.startTime,
     endedAt: isEvent ? observation.startTime : observation.endTime!,
     isEvent,
@@ -453,6 +485,17 @@ function parseIo(value: unknown): unknown {
   }
 }
 
+/**
+ * Langfuse labels every observation without an explicit environment `default`.
+ * That placeholder is not a user choice, and Platform scopes Studio reads to
+ * the serving environment while keeping unlabelled spans visible, so leave it
+ * empty and copy only environments the user actually set.
+ */
+function sourceEnvironment(observation: LangfuseObservation): string | undefined {
+  const environment = observation.environment?.trim();
+  return environment && environment !== 'default' ? environment : undefined;
+}
+
 function definedRecord(record: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
 }
@@ -488,6 +531,81 @@ function restoredMastraSpanType(observation: LangfuseObservation): TraceImportSp
   return typeof spanType === 'string' && MASTRA_SPAN_TYPES.has(spanType as TraceImportSpan['spanType'])
     ? (spanType as TraceImportSpan['spanType'])
     : undefined;
+}
+
+/**
+ * Langfuse stores OTEL attributes either flat (`attributes.gen_ai.agent.name`,
+ * seen on @mastra/langfuse exports) or nested (`attributes: { 'gen_ai.agent.name' }`,
+ * seen on OTLP ingestion). Accept both.
+ */
+function metadataValue(metadata: Record<string, unknown>, key: string): unknown {
+  if (metadata[key] !== undefined) return metadata[key];
+  if (!key.startsWith('attributes.')) return undefined;
+  const nested = metadata.attributes;
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? (nested as Record<string, unknown>)[key.slice('attributes.'.length)]
+    : undefined;
+}
+
+/** Plain Langfuse spans keep their OTEL GenAI operation; use it to recover the Mastra span type. */
+function genAiSpanType(observation: LangfuseObservation): TraceImportSpan['spanType'] | undefined {
+  if (observation.type !== 'SPAN') return undefined;
+  const metadata = wrapSourceMetadata(observation.metadata);
+  const operation = metadata ? metadataValue(metadata, 'attributes.gen_ai.operation.name') : undefined;
+  return typeof operation === 'string' ? GEN_AI_OPERATION_SPAN_TYPES[operation] : undefined;
+}
+
+/**
+ * Platform lists and filters traces by the owning primitive, not the span type,
+ * so name it the same way core does for native spans.
+ */
+function buildEntity(
+  observation: LangfuseObservation,
+  spanType: TraceImportSpan['spanType'],
+): Pick<TraceImportSpan, 'entityType' | 'entityId' | 'entityName'> {
+  const entityType = getEntityTypeForSpan({ spanType });
+  if (!entityType) return {};
+  const metadata = wrapSourceMetadata(observation.metadata) ?? {};
+  const firstString = (keys: readonly string[] = []) =>
+    keys
+      .map(key => metadataValue(metadata, key))
+      .find((value): value is string => typeof value === 'string' && value.trim() !== '');
+  const entityId = firstString(ENTITY_ID_KEYS[entityType]);
+  const entityName = firstString(ENTITY_NAME_KEYS[entityType]) ?? (observation.name?.trim() || undefined);
+  return {
+    entityType,
+    ...(entityId ? { entityId } : {}),
+    ...(entityName ? { entityName } : {}),
+  };
+}
+
+/**
+ * Langfuse exposes a trace as a virtual root span `t-<traceId>` above the real
+ * root. Platform lists a trace by its root's primitive, so the virtual root
+ * takes the primitive of the one real root beneath it.
+ */
+function promoteVirtualRootEntity(spans: TraceImportSpan[], trace: OrderedLangfuseTrace): void {
+  const root = spans[0];
+  if (!root || root.entityType || trace.observations[0]?.id !== `t-${trace.sourceTraceId}`) return;
+  const children = spans.filter(span => span.parentSpanId === root.spanId);
+  const child = children.length === 1 ? children[0] : undefined;
+  if (!child?.entityType) return;
+  root.entityType = child.entityType;
+  if (child.entityId) root.entityId = child.entityId;
+  if (child.entityName) root.entityName = child.entityName;
+}
+
+/** Native spans carry the primitive that owns them, so spans without one take their parent's. */
+function inheritOwningEntity(spans: TraceImportSpan[]): void {
+  const byId = new Map(spans.map(span => [span.spanId, span]));
+  for (const span of spans) {
+    if (span.entityType || !span.parentSpanId) continue;
+    const parent = byId.get(span.parentSpanId);
+    if (!parent?.entityType) continue;
+    span.entityType = parent.entityType;
+    if (parent.entityId) span.entityId = parent.entityId;
+    if (parent.entityName) span.entityName = parent.entityName;
+  }
 }
 
 function buildAttributes(
@@ -597,7 +715,7 @@ function buildMetadata(
     langfuseTraceId: trace.sourceTraceId,
     langfuseObservationId: observation.id,
     langfuseProjectId: trace.projectId,
-    environment: observation.environment ?? undefined,
+    environment: sourceEnvironment(observation),
     userId: observation.userId ?? undefined,
     sessionId: observation.sessionId ?? undefined,
     langfuseType: observation.type,

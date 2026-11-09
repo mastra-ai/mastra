@@ -106,18 +106,18 @@ export function areValidComponents(values: string[]): values is Component[] {
 }
 
 export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
-  let model: ModelRouterModelId = 'openai/gpt-5-mini';
+  let model: ModelRouterModelId = 'openai/gpt-6.1-sol';
 
   if (llmProvider === 'anthropic') {
-    model = 'anthropic/claude-sonnet-4-5';
+    model = 'anthropic/claude-sonnet-5-5';
   } else if (llmProvider === 'groq') {
     model = 'groq/llama-3.3-70b-versatile';
   } else if (llmProvider === 'google') {
-    model = 'google/gemini-2.5-pro';
+    model = 'google/gemini-3.8-flash';
   } else if (llmProvider === 'cerebras') {
     model = 'cerebras/llama-3.3-70b';
   } else if (llmProvider === 'mistral') {
-    model = 'mistral/mistral-medium-2508';
+    model = 'mistral/mistral-medium-2604';
   }
 
   return model;
@@ -517,28 +517,27 @@ export const writeIndexFile = async ({
 }) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
-  try {
-    await fs.writeFile(destPath, '');
-    const filteredExports = [
-      addWorkflow ? `workflows: { weatherWorkflow },` : '',
-      addAgent ? `agents: { weatherAgent },` : '',
-      addScorers ? `scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },` : '',
-    ].filter(Boolean);
-    if (!addExample) {
-      await fs.writeFile(
-        destPath,
-        `
+  await fs.writeFile(destPath, '');
+  const filteredExports = [
+    addWorkflow ? `workflows: { weatherWorkflow },` : '',
+    addAgent ? `agents: { weatherAgent },` : '',
+    addScorers ? `scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },` : '',
+  ].filter(Boolean);
+  if (!addExample) {
+    await fs.writeFile(
+      destPath,
+      `
 import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
-      );
+    );
 
-      return;
-    }
-    await fs.writeFile(
-      destPath,
-      `
+    return;
+  }
+  await fs.writeFile(
+    destPath,
+    `
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -584,10 +583,7 @@ export const mastra = new Mastra({
   }),
 });
 `,
-    );
-  } catch (err) {
-    throw err;
-  }
+  );
 };
 
 export const checkInitialization = async (dirPath: string) => {
@@ -670,7 +666,7 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   /**
    * If people skip entering an API key (because they e.g. have it in their environment already), we write to .env.example instead of .env so that they can immediately run Mastra without having to delete an .env file with an invalid key.
    */
-  const envFileName = apiKey ? '.env' : '.env.example';
+  const envFileName = path.join(process.cwd(), apiKey ? '.env' : '.env.example');
 
   const key = await getAPIKey(provider);
   await fs.appendFile(
@@ -787,11 +783,7 @@ export const writeCodeSample = async (
 ) => {
   const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
-  try {
-    await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
-  } catch (err) {
-    throw err;
-  }
+  await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
 };
 
 export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [

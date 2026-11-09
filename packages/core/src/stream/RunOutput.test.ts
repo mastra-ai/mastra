@@ -147,6 +147,31 @@ describe('WorkflowRunOutput', () => {
     expect((usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens).toBe(5268);
   });
 
+  it('keeps omitted primary workflow usage unknown while preserving reported details', async () => {
+    const output = new WorkflowRunOutput({
+      runId: 'run-1',
+      workflowId: 'workflow-1',
+      stream: createWorkflowStream([
+        createWorkflowStepOutput({
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+          reasoningTokens: 4,
+          cachedInputTokens: 3,
+        }),
+        createWorkflowStepOutput({ outputTokens: 5 }),
+      ]),
+    });
+
+    await expect(output.usage).resolves.toMatchObject({
+      inputTokens: undefined,
+      outputTokens: 25,
+      totalTokens: undefined,
+      reasoningTokens: 4,
+      cachedInputTokens: 3,
+    });
+  });
+
   it('cancelling one fullStream consumer does not detach the others', async () => {
     const { stream, controller } = createControlledStream();
     const output = new WorkflowRunOutput({ runId: 'run-1', workflowId: 'workflow-1', stream });

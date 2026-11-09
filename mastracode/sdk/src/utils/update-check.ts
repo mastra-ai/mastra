@@ -142,9 +142,12 @@ export async function fetchLatestVersion(): Promise<string | null> {
   }
 }
 
+const isPrerelease = (v: string) => v.includes('-');
+
 /**
  * Simple semver comparison: returns true if `latest` is newer than `current`.
- * Handles standard x.y.z versions. Ignores pre-release tags.
+ * Handles standard x.y.z versions. Pre-release tags only matter against the
+ * matching release; two pre-releases of the same version compare equal.
  */
 export function isNewerVersion(current: string, latest: string): boolean {
   const parse = (v: string) =>
@@ -160,7 +163,9 @@ export function isNewerVersion(current: string, latest: string): boolean {
   const [lMajor = 0, lMinor = 0, lPatch = 0] = parse(latest);
   if (lMajor !== cMajor) return lMajor > cMajor;
   if (lMinor !== cMinor) return lMinor > cMinor;
-  return lPatch > cPatch;
+  if (lPatch !== cPatch) return lPatch > cPatch;
+  // Same x.y.z: a release is newer than its own prerelease (1.2.0 > 1.2.0-rc.1).
+  return isPrerelease(current) && !isPrerelease(latest);
 }
 
 /** Max entries to show in the changelog summary. */
@@ -334,10 +339,39 @@ export function locateOwnInstall(): { dir: string; version: string | null } | nu
   return null;
 }
 
+/**
+ * Result of an update attempt. `message` is a ready-made sentence; the other
+ * fields let callers lay the result out themselves.
+ */
 export type UpdateOutcome =
-  | { status: 'updated'; message: string }
-  | { status: 'unchanged'; message: string }
-  | { status: 'failed'; message: string };
+  | {
+      status: 'updated';
+      message: string;
+      /** The package manager or tool that installed the update. */
+      via: string;
+    }
+  | {
+      status: 'unchanged';
+      message: string;
+      /** Command the user can run to update the install they're running. */
+      command: string;
+      /** Where the running install lives, when known. */
+      installDir?: string;
+      /** Version still on disk after the update ran, when the update ran at all. */
+      runningVersion?: string;
+      /** Tool that ran the update (when it ran but didn't change the running install). */
+      ranWith?: string;
+      /** Tool that owns the install when we only suggest its command (e.g. Homebrew). */
+      managedBy?: string;
+    }
+  | {
+      status: 'failed';
+      message: string;
+      /** Command the user can run instead, when there is one. */
+      command?: string;
+      /** Why it failed: the tail of the package manager's stderr, or our own reason. */
+      details?: string;
+    };
 
 /**
  * Decide what to tell the user after {@link runUpdate}: `updated` when the
@@ -352,15 +386,18 @@ export function resolveUpdateOutcome(opts: {
   install: { dir: string; version: string | null } | null;
   /** Overrides the suggested manual command, e.g. when the update was delegated to the owning tool. */
   manualCommand?: string;
+  /** Tool that ran the update when it wasn't `pm`, e.g. vite-plus. */
+  via?: string;
 }): UpdateOutcome {
   const { pm, targetVersion, result, install } = opts;
   const cmd = opts.manualCommand ?? getInstallCommand(pm, targetVersion);
+  const via = opts.via ?? pm;
 
   if (!result.ok) {
-    const details = formatUpdaterError(result.stderr);
+    const details = formatUpdaterError(result.stderr) ?? undefined;
     let message = `Auto-update failed. Run \`${cmd}\` manually.`;
     if (details) message += `\n\n${details}`;
-    return { status: 'failed', message };
+    return { status: 'failed', message, command: cmd, ...(details ? { details } : {}) };
   }
 
   if (install?.version != null && install.version !== targetVersion) {
@@ -370,10 +407,17 @@ export function resolveUpdateOutcome(opts: {
       : `The update installed, but the Mastra Code you are running (at ${install.dir}) is still ` +
         `v${install.version} — it looks like it is managed by another tool. Update it with that tool, ` +
         `or try \`${cmd}\`.`;
-    return { status: 'unchanged', message };
+    return {
+      status: 'unchanged',
+      message,
+      command: cmd,
+      installDir: install.dir,
+      runningVersion: install.version,
+      ranWith: via,
+    };
   }
 
-  return { status: 'updated', message: `Updated to v${targetVersion}. Please restart Mastra Code.` };
+  return { status: 'updated', message: `Updated to v${targetVersion}. Please restart Mastra Code.`, via };
 }
 
 /** Global node_modules directory the package manager installs into, or null when unknown. */
@@ -430,15 +474,38 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
 }
 
 /**
- * Update mastracode and verify the result: delegates to the tool that owns the
- * running install when we recognize it, skips the install when it isn't
- * managed by `pm`, otherwise runs the package manager. Every executed update
- * is verified against the on-disk version.
+ * What an update will do for the running install: run an install (with the
+ * tool and command it will use), or nothing, with the result to show instead.
  */
-export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
+export type UpdatePlan =
+  | {
+      willInstall: true;
+      /** The package manager or tool that will run the install. */
+      via: string;
+      /** The install command, as the user would type it. */
+      command: string;
+      exec: { cmd: string; args: string[] };
+    }
+  | { willInstall: false; outcome: Extract<UpdateOutcome, { status: 'unchanged' | 'failed' }> };
+
+/**
+ * Decide how to update the running install, without changing anything:
+ * delegate to the tool that owns it when we recognize it, only suggest a
+ * command when that tool can't be run for the user (Homebrew) or `pm` doesn't
+ * manage it, otherwise run `pm`. {@link performUpdate} carries out this plan,
+ * so callers can show what will happen before it starts.
+ */
+export async function planUpdate(pm: PackageManager, targetVersion: string): Promise<UpdatePlan> {
   // The registry-provided version reaches shell commands on Windows — accept only version tokens.
   if (!/^[\w.+-]+$/.test(targetVersion)) {
-    return { status: 'failed', message: `Auto-update aborted: unexpected version "${targetVersion}".` };
+    return {
+      willInstall: false,
+      outcome: {
+        status: 'failed',
+        message: `Auto-update aborted: unexpected version "${targetVersion}".`,
+        details: `The npm registry returned an unexpected version: "${targetVersion}".`,
+      },
+    };
   }
 
   const install = locateOwnInstall();
@@ -449,26 +516,52 @@ export async function performUpdate(pm: PackageManager, targetVersion: string): 
       const message =
         `Your Mastra Code install (at ${install!.dir}) is managed by ${owner.name}. ` +
         `Update it with \`${owner.command}\`.`;
-      return { status: 'unchanged', message };
+      return {
+        willInstall: false,
+        outcome: {
+          status: 'unchanged',
+          message,
+          command: owner.command,
+          installDir: install!.dir,
+          managedBy: owner.name,
+        },
+      };
     }
-    const result = await execUpdate(owner.exec.cmd, owner.exec.args);
-    return resolveUpdateOutcome({
-      pm,
-      targetVersion,
-      result,
-      install: locateOwnInstall(),
-      manualCommand: owner.command,
-    });
+    return { willInstall: true, via: owner.name, command: owner.command, exec: owner.exec };
   }
 
+  const command = getInstallCommand(pm, targetVersion);
   if (!(await isOwnInstallManagedBy(pm, install))) {
     const message =
       `Your Mastra Code install (at ${install!.dir}) is not managed by ${pm} — it looks like it was ` +
-      `installed by another tool. Update it with that tool, or try \`${getInstallCommand(pm, targetVersion)}\`.`;
-    return { status: 'unchanged', message };
+      `installed by another tool. Update it with that tool, or try \`${command}\`.`;
+    return { willInstall: false, outcome: { status: 'unchanged', message, command, installDir: install!.dir } };
   }
 
-  const result = await runUpdate(pm, targetVersion);
+  return { willInstall: true, via: pm, command, exec: { cmd: pm, args: buildInstallArgs(pm, targetVersion) } };
+}
+
+/**
+ * Update mastracode following {@link planUpdate} (pass a plan already shown to
+ * the user, or let this make one), then verify the result against the version
+ * on disk.
+ */
+export async function performUpdate(
+  pm: PackageManager,
+  targetVersion: string,
+  plan?: UpdatePlan,
+): Promise<UpdateOutcome> {
+  plan ??= await planUpdate(pm, targetVersion);
+  if (!plan.willInstall) return plan.outcome;
+
+  const result = await execUpdate(plan.exec.cmd, plan.exec.args);
   // Re-locate so the version reflects what the install just wrote to disk.
-  return resolveUpdateOutcome({ pm, targetVersion, result, install: locateOwnInstall() });
+  return resolveUpdateOutcome({
+    pm,
+    targetVersion,
+    result,
+    install: locateOwnInstall(),
+    // A delegated update keeps the owning tool's command; `pm` updates keep the default wording.
+    ...(plan.via === pm ? {} : { manualCommand: plan.command, via: plan.via }),
+  });
 }

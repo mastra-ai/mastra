@@ -7,6 +7,8 @@ export type ModalQuestionOption = { label: string; description?: string };
 
 export type ModalQuestionOptions = {
   question: string;
+  /** Dialog heading. Defaults to "Question". */
+  title?: string;
   options?: ModalQuestionOption[];
   defaultValue?: string;
   allowEmptyInput?: boolean;
@@ -23,6 +25,7 @@ export function askModalQuestion(tui: TUI, options: ModalQuestionOptions): Promi
   return new Promise(resolve => {
     const question = new AskQuestionDialogComponent({
       question: options.question,
+      title: options.title,
       options: options.options,
       multiline: options.multiline,
       tui,

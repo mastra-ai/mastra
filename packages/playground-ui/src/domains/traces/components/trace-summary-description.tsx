@@ -6,18 +6,15 @@ import {
   TimerIcon,
 } from 'lucide-react';
 import type { TraceUsageSummary } from '../trace-list-columns';
-import {
-  formatSpanDuration,
-  formatSpanDurationExact,
-  formatSpanTimestamp,
-  formatSpanTimestampExact,
-} from '../utils/span-utils';
+import { getSpanDurationMs } from '../utils/span-utils';
 import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
-import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { formatCompactNumber, formatCost } from '@/lib/cost';
+import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
+import { formatDuration, formatDurationPrecise } from '@/utils/duration';
 
 function formatEntityType(entityType: string): string {
   return entityType
@@ -42,48 +39,81 @@ type RootSpanSummary = {
   error?: unknown;
 };
 
-export interface TraceSummaryDescriptionProps {
-  rootSpan: RootSpanSummary;
-  usage?: TraceUsageSummary;
+export interface TraceEntityMetaProps {
+  rootSpan: Pick<RootSpanSummary, 'entityId' | 'entityName' | 'entityType'>;
   /** When provided (with `LinkComponent`), the entity name links to the entity's page. */
   entityHref?: string;
   LinkComponent?: LinkComponent;
 }
 
-/** Compact trace metadata shown under the trace side-panel heading. */
-export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkComponent }: TraceSummaryDescriptionProps) {
-  const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
-  const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
-  const duration = formatSpanDuration(startedAt, endedAt);
-  const exactDuration = formatSpanDurationExact(startedAt, endedAt);
-  const startedAtTimestamp = formatSpanTimestamp(startedAt);
-  const exactStartedAtTimestamp = formatSpanTimestampExact(startedAt);
-
+/** The trace's root entity (agent, workflow…) as a `DataPanel.Meta` pill; renders nothing without a name or id. */
+export function TraceEntityMeta({ rootSpan, entityHref, LinkComponent }: TraceEntityMetaProps) {
   const entityName = rootSpan.entityName || rootSpan.entityId;
+  if (!entityName) return null;
+
   const entityType = rootSpan.entityType;
   const formattedEntityType = entityType ? formatEntityType(entityType) : 'Entity';
   const EntityIcon = entityType?.includes('workflow') ? WorkflowIcon : AgentIcon;
 
+  return entityHref ? (
+    <DataPanel.Meta
+      as={LinkComponent ?? 'a'}
+      href={entityHref}
+      icon={<EntityIcon />}
+      tooltip={`See ${formattedEntityType.toLowerCase()}`}
+    >
+      {entityName}
+    </DataPanel.Meta>
+  ) : (
+    <DataPanel.Meta icon={<EntityIcon />} tooltip={formattedEntityType}>
+      {entityName}
+    </DataPanel.Meta>
+  );
+}
+
+export interface TraceStatusMetaProps {
+  rootSpan: Pick<RootSpanSummary, 'endedAt' | 'error'>;
+}
+
+/** The trace's status badge as a `DataPanel.Meta` item. */
+export function TraceStatusMeta({ rootSpan }: TraceStatusMetaProps) {
+  return (
+    // `px-0`: the badge is already a pill, so it sits flush with the panel's content edge.
+    <DataPanel.Meta tooltip="Trace status" className="px-0">
+      <TraceStatusValue status={computeTraceStatus(rootSpan)} />
+    </DataPanel.Meta>
+  );
+}
+
+export interface TraceSummaryDescriptionProps extends TraceEntityMetaProps {
+  rootSpan: RootSpanSummary;
+  usage?: TraceUsageSummary;
+  /** Leave the entity out when the caller renders `TraceEntityMeta` elsewhere. Defaults to `true`. */
+  showEntity?: boolean;
+  /** Leave the status out when the caller renders `TraceStatusMeta` elsewhere. Defaults to `true`. */
+  showStatus?: boolean;
+}
+
+/** Compact trace metadata shown in the trace panel header. */
+export function TraceSummaryDescription({
+  rootSpan,
+  usage,
+  entityHref,
+  LinkComponent,
+  showEntity = true,
+  showStatus = true,
+}: TraceSummaryDescriptionProps) {
+  const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
+  const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
+  const duration = formatDuration(getSpanDurationMs(startedAt, endedAt));
+  const exactDuration = formatDurationPrecise(getSpanDurationMs(startedAt, endedAt));
+  const startedAtTimestamp = formatDate(startedAt, 'time');
+  const exactStartedAtTimestamp = formatTimestampPrecise(startedAt);
+
   return (
     <DataPanel.Metadata>
-      {entityName &&
-        (entityHref ? (
-          <DataPanel.Meta
-            as={LinkComponent ?? 'a'}
-            href={entityHref}
-            icon={<EntityIcon />}
-            tooltip={`See ${formattedEntityType.toLowerCase()}`}
-          >
-            {entityName}
-          </DataPanel.Meta>
-        ) : (
-          <DataPanel.Meta icon={<EntityIcon />} tooltip={formattedEntityType}>
-            {entityName}
-          </DataPanel.Meta>
-        ))}
-      <DataPanel.Meta tooltip="Trace status">
-        <TraceStatusValue status={computeTraceStatus(rootSpan)} />
-      </DataPanel.Meta>
+      {showEntity && <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />}
+      {showStatus && <TraceStatusMeta rootSpan={rootSpan} />}
       {startedAtTimestamp && exactStartedAtTimestamp && (
         <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
           {startedAtTimestamp}
@@ -97,10 +127,10 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
       {usage && (
         <>
           <DataPanel.Meta icon={<ArrowDownToLineIcon />} tooltip="Input tokens">
-            {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
+            {usage.inputTokens === undefined ? '—' : formatCompactNumber(usage.inputTokens)}
           </DataPanel.Meta>
           <DataPanel.Meta icon={<ArrowUpFromLineIcon />} tooltip="Output tokens">
-            {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
+            {usage.outputTokens === undefined ? '—' : formatCompactNumber(usage.outputTokens)}
           </DataPanel.Meta>
           <DataPanel.Meta icon={<CircleDollarSignIcon />} tooltip="Estimated cost">
             {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}

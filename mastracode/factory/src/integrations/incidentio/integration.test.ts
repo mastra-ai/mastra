@@ -9,10 +9,7 @@ vi.mock('../issue-reconcile-worker.js', () => ({
 }));
 
 import { createBoardRegistry } from '../../boards/index.js';
-import {
-  INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-  INCIDENTIO_INCIDENTS_SOURCE_ID,
-} from './intake.js';
+import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID, INCIDENTIO_INCIDENTS_SOURCE_ID } from './intake.js';
 import { IncidentioIntegration } from './integration.js';
 import { incidentioReconciliationInterval } from './reconciliation-config.js';
 
@@ -117,7 +114,11 @@ describe('IncidentioIntegration', () => {
         return json({
           incidents: [
             incident,
-            { ...incident, id: 'incident-closed', incident_status: { id: 'closed', name: 'Closed', category: 'closed' } },
+            {
+              ...incident,
+              id: 'incident-closed',
+              incident_status: { id: 'closed', name: 'Closed', category: 'closed' },
+            },
           ],
           pagination_meta: {},
         });

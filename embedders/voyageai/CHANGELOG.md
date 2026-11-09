@@ -1,5 +1,51 @@
 # @mastra/voyageai
 
+## 0.4.3
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.4.2
+
+### Patch Changes
+
+- Added support for the `voyage-code-4` code embedding model. It defaults to 1024 dimensions and also supports 256, 512 and 2048. ([#27761](https://github.com/mastra-ai/mastra/pull/27761))
+
+  ```typescript
+  import { createVoyageTextEmbedding } from '@mastra/voyageai';
+
+  const embedder = createVoyageTextEmbedding({ model: 'voyage-code-4', inputType: 'document' });
+  ```
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- Added support for the `voyage-code-4` code embedding model. It defaults to 1024 dimensions and also supports 256, 512 and 2048. ([#27761](https://github.com/mastra-ai/mastra/pull/27761))
+
+  ```typescript
+  import { createVoyageTextEmbedding } from '@mastra/voyageai';
+
+  const embedder = createVoyageTextEmbedding({ model: 'voyage-code-4', inputType: 'document' });
+  ```
+
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.4.1
 
 ### Patch Changes

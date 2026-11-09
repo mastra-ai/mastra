@@ -1,5 +1,6 @@
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { reviewCommands } from './commands';
 import type { ChatFile, Phase } from './data';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
@@ -179,7 +180,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             {...commands.inputProps}
             ref={messageInput}
             aria-label="Message"
-            placeholder="Ask a follow-up, or / for commands…"
+            placeholder="Ask a follow-up, or / for commands"
             onKeyDown={handleComposerKeyDown}
           />
           <ComposerActions>

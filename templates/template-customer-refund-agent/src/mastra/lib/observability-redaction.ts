@@ -88,7 +88,7 @@ function isContentKey(key: string) {
 
 function containsSensitiveText(value: string) {
   return (
-    /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value) ||
+    /(?<![\w.+-])[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value) ||
     /\b(?:api[_ -]?key|authorization|bearer|password|secret|token)\b/i.test(value)
   );
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -12,7 +13,6 @@ import { WORKFLOW_ID, noSchedules, packagesWithObservability, weatherWorkflow } 
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { WorkflowLayout } from '@/domains/workflows/workflow-layout';
 import { paths } from '@/lib/app-routing';
-import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
 

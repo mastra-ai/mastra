@@ -288,11 +288,13 @@ describe('createNodeServer graceful shutdown', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it('force-exits when any second shutdown signal arrives', async () => {
+  it('force-exits when a second shutdown signal arrives after the first', async () => {
+    vi.useFakeTimers();
     await createNodeServer(mockMastra, { tools: {} });
 
     process.emit('SIGINT', 'SIGINT');
     await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(250);
     process.emit('SIGTERM', 'SIGTERM');
     await flushMicrotasks();
 
@@ -300,6 +302,25 @@ describe('createNodeServer graceful shutdown', () => {
     expect(logger.info).not.toHaveBeenCalledWith('Shutting down Mastra server', { signal: 'SIGTERM' });
     expect(fakeServer.close).toHaveBeenCalledOnce();
     expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('keeps shutting down gracefully when Ctrl-C reaches it twice, from the terminal and a forwarding parent', async () => {
+    vi.useFakeTimers();
+    await createNodeServer(mockMastra, { tools: {} });
+
+    process.emit('SIGINT', 'SIGINT');
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(5);
+    process.emit('SIGTERM', 'SIGTERM');
+    await flushMicrotasks();
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    closeCallbacks.forEach(cb => cb());
+    await flushMicrotasks();
+
+    expect(fakeServer.close).toHaveBeenCalledOnce();
+    expect(shutdownMock).toHaveBeenCalledOnce();
+    expect(exitSpy).toHaveBeenCalledExactlyOnceWith(0);
   });
 
   it('skips waiting for in-flight requests when server.drainTimeout is zero', async () => {

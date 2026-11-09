@@ -7,6 +7,7 @@ import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 
+import type { GoalState } from '../goal-manager.js';
 import type { NotificationReason } from '../notify.js';
 import type { TUIState } from '../state.js';
 
@@ -24,7 +25,8 @@ export interface EventHandlerContext {
   addUserMessage: (message: MastraDBMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;
   fireMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => void;
-  startGoal: (objective: string, cancelMessage?: string) => Promise<void>;
+  setGoal: (objective: string, cancelMessage?: string) => Promise<GoalState | null>;
+  sendGoalReminder: (goal: GoalState, options?: { persistIfIdle?: boolean }) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
   renderExistingMessages: (isCurrent?: () => boolean) => Promise<void>;
   renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;

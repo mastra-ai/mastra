@@ -27,9 +27,9 @@ workflow.dountil(step1, async ({ inputData }) => true)
   },
   {
     name: 'condition',
-    type: '(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>',
+    type: '((params: ConditionFunctionParams & { iterationCount: number }) => Promise<boolean>) | { predicate: Predicate }',
     description:
-      'A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.',
+      'A function that returns a boolean indicating whether the loop is done. When it returns true the loop ends; when it returns false the step runs again. The function receives the execution parameters (excluding setState and suspend) and the iteration count. A declarative { predicate } object is also accepted.',
     isOptional: false,
   },
   {

@@ -5,6 +5,7 @@ import { createBoardRegistry } from './registry.js';
 import {
   boardForWorkItem,
   isTerminalWorkItem,
+  resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
   workItemPhaseSemantics,
@@ -40,7 +41,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'release', 'queued')).toEqual({ kind: 'resting' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipping')).toEqual({ kind: 'working', role: 'release' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipped')).toEqual({ kind: 'terminal' });
-    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'plan' });
+    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'work' });
     expect(resolvePhaseSemantics(boards, 'work', 'done')).toEqual({ kind: 'terminal' });
   });
 
@@ -106,6 +107,7 @@ describe('resolveBoardToolRule', () => {
     });
     const boards = createBoardRegistry({ boards: [release] });
     expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
+    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeTypeOf('function');
     expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeTypeOf('function');
     expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();
@@ -133,5 +135,53 @@ describe('isTerminalWorkItem', () => {
     expect(isTerminalWorkItem(none, { board: null, externalSource: null, stages: ['canceled'] })).toBe(true);
     expect(isTerminalWorkItem(none, { board: 'ghost', externalSource: null, stages: ['done'] })).toBe(false);
     expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done', 'intake'] })).toBe(false);
+  });
+});
+
+describe('resolveBoardClosure', () => {
+  const release = createTestBoard();
+  const closingRelease = defineBoard({
+    id: 'closing',
+    title: 'Closing release',
+    initialPhase: 'queued',
+    sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+    phases: {
+      queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+      shipped: { title: 'Shipped', kind: 'terminal' },
+      dropped: { title: 'Dropped', kind: 'terminal' },
+    },
+  });
+  const boards = createBoardRegistry({ boards: [release, closingRelease] });
+
+  it('reads Work’s mapping for legacy and persisted Work rows', () => {
+    expect(resolveBoardClosure(boards, { board: null, externalSource: null, stages: ['execute'] })).toEqual({
+      boardTitle: 'Work',
+      completed: { phase: 'done', title: 'Done' },
+      canceled: { phase: 'canceled', title: 'Canceled' },
+      itemTerminal: false,
+    });
+    expect(resolveBoardClosure(boards, { board: 'work', externalSource: null, stages: ['canceled'] })).toEqual({
+      boardTitle: 'Work',
+      completed: { phase: 'done', title: 'Done' },
+      canceled: { phase: 'canceled', title: 'Canceled' },
+      itemTerminal: true,
+    });
+  });
+
+  it('reads a custom board’s mapping and judges terminal phases by kind', () => {
+    expect(resolveBoardClosure(boards, { board: 'closing', externalSource: null, stages: ['queued'] })).toEqual({
+      boardTitle: 'Closing release',
+      completed: { phase: 'shipped', title: 'Shipped' },
+      canceled: { phase: 'dropped', title: 'Dropped' },
+      itemTerminal: false,
+    });
+    expect(
+      resolveBoardClosure(boards, { board: 'closing', externalSource: null, stages: ['dropped'] })?.itemTerminal,
+    ).toBe(true);
+  });
+
+  it('is undefined for boards that declare no mapping or are not installed', () => {
+    expect(resolveBoardClosure(boards, { board: 'release', externalSource: null, stages: ['queued'] })).toBeUndefined();
+    expect(resolveBoardClosure(boards, { board: 'gone', externalSource: null, stages: ['queued'] })).toBeUndefined();
   });
 });

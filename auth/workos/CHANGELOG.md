@@ -1,5 +1,55 @@
 # @mastra/auth-workos
 
+## 1.6.8
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/auth@1.1.5
+
+## 1.6.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/auth@1.1.5-alpha.0
+
+## 1.6.7
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4
+
+## 1.6.7-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4-alpha.0
+
+## 1.6.6
+
+### Patch Changes
+
+- Fixed cookie sessions losing their organization on re-authentication. With `fetchMemberships: true`, a cookie session that has no selected organization now keeps the organization of the user's only membership. A selected session organization still takes precedence, and users with no memberships or several stay without an organization. ([#25264](https://github.com/mastra-ai/mastra/pull/25264))
+
+## 1.6.6-alpha.0
+
+### Patch Changes
+
+- Fixed cookie sessions losing their organization on re-authentication. With `fetchMemberships: true`, a cookie session that has no selected organization now keeps the organization of the user's only membership. A selected session organization still takes precedence, and users with no memberships or several stay without an organization. ([#25264](https://github.com/mastra-ai/mastra/pull/25264))
+
 ## 1.6.5
 
 ### Patch Changes

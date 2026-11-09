@@ -266,6 +266,14 @@ describe('codec', () => {
       expect(out[1]).toBe(2);
       expect(out[2]).toBeNull();
     });
+
+    it('encodes a shared non-cyclic reference at every occurrence', () => {
+      const shared = { status: 'success', output: { a: 1 } };
+      const out = roundTrip({ stepResults: { s: shared }, prevResult: shared, list: [shared, shared] }) as any;
+      expect(out.stepResults.s).toEqual(shared);
+      expect(out.prevResult).toEqual(shared);
+      expect(out.list).toEqual([shared, shared]);
+    });
   });
 
   describe('toJSON', () => {

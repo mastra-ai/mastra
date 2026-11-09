@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultMountableTemplate, DEFAULT_NODE_VERSION } from './template';
+import { createDefaultMountableTemplate, DEFAULT_NODE_VERSION, MOUNTABLE_TEMPLATE_VERSION } from './template';
 
 describe('createDefaultMountableTemplate', () => {
+  it('is on v4 so templates cached before the stale-npm cleanup rebuild', () => {
+    expect(MOUNTABLE_TEMPLATE_VERSION).toBe('v4');
+  });
+
   it('keys the id off machine resources — a resize is a new template, never a reuse', () => {
     const plain = createDefaultMountableTemplate();
     expect(createDefaultMountableTemplate({ memoryMB: 2048 }).id).not.toBe(plain.id);
@@ -21,6 +25,12 @@ describe('createDefaultMountableTemplate', () => {
     expect(createDefaultMountableTemplate({ nodeVersion: '22.23.2' }).id).not.toBe(plain.id);
     // Absent and explicitly-default are the same template.
     expect(createDefaultMountableTemplate({ nodeVersion: DEFAULT_NODE_VERSION }).id).toBe(plain.id);
+  });
+
+  it('uses the patched Node runtime without reusing the previous default template', () => {
+    const current = createDefaultMountableTemplate();
+    expect(current.id).toBe(createDefaultMountableTemplate({ nodeVersion: '24.22.1' }).id);
+    expect(current.id).not.toBe(createDefaultMountableTemplate({ nodeVersion: '24.20.0' }).id);
   });
 
   it('rejects a node version that is not an exact MAJOR.MINOR.PATCH', () => {

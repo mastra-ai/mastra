@@ -1,15 +1,17 @@
 import { Pause, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
 const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
-  selected: 'bg-accent1 border-accent1',
-  'compare-point': 'bg-accent1 border-accent1',
+  selected: 'bg-foreground border-border-strong',
+  'compare-point': 'bg-foreground border-border-strong',
 };
 
 /**
@@ -48,8 +50,8 @@ export function TimelineTrack({
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-accent1/60'
-            } ${grabbed ? 'ring-2 ring-accent1/70' : ''}`}
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-muted-foreground'
+            } ${grabbed ? 'ring-2 ring-foreground' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}
@@ -59,14 +61,18 @@ export function TimelineTrack({
       })}
       {snapshots.map((snapshot, index) =>
         dayLabels[index] ? (
-          <span
+          <Txt
+            as="span"
+            variant="meta"
+            tone="muted"
+
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="absolute top-7 -translate-x-1/2 font-mono text-meta text-muted-foreground tabular-nums"
+            className="absolute top-7 -translate-x-1/2 tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
-          </span>
+          </Txt>
         ) : null,
       )}
     </div>
@@ -85,7 +91,7 @@ export function SnapshotTimeline({
   snapshots: ThemeSnapshot[];
   selectedIndex: number;
   totalSnapshots?: number;
-  summary: string;
+  summary: ReactNode;
   isPlaying: boolean;
   onPlayingChange: (isPlaying: boolean) => void;
   onSnapshotChange: (index: number) => void;
@@ -101,7 +107,7 @@ export function SnapshotTimeline({
   const statusParts = [
     `Snapshot ${snapshot.ordinal}/${totalCount}`,
     ...(snapshot.cutoffAt
-      ? [`as of ${selectedDate}`, `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
+      ? [`As of ${selectedDate}`, `Window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
       : [selectedDate]),
     traceLabel(snapshot.traceCount),
   ];
@@ -130,13 +136,13 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="font-mono text-caption text-muted-foreground tabular-nums" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" className="tabular-nums" data-testid="snapshot-summary">
           {summary}
-        </p>
+        </Txt>
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
-        {statusParts.join(' · ')}
+        {statusParts.join('. ')}
       </p>
     </section>
   );

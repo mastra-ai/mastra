@@ -2,8 +2,8 @@ import {
   AgenticRetrieveStreamCommand,
   BedrockAgentRuntimeClient,
   RetrieveCommand,
-  type RetrievalResultLocation,
 } from '@aws-sdk/client-bedrock-agent-runtime';
+import type { RetrievalResultLocation } from '@aws-sdk/client-bedrock-agent-runtime';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 

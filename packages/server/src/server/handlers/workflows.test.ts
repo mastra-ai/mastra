@@ -1,13 +1,21 @@
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
+import {
+  createStep as createEventedStep,
+  createWorkflow as createEventedWorkflow,
+} from '@mastra/core/workflows/evented';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { listWorkflowRunsQuerySchema } from '../schemas/workflows';
 import { checkRouteFGA } from '../server-adapter';
 import { WORKFLOWS_ROUTES } from '../server-adapter/routes/workflows';
 import { getWorkflowInfo } from '../utils';
@@ -30,6 +38,7 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
+  EXECUTE_WORKFLOW_STEP_ROUTE,
 } from './workflows';
 
 function createMockWorkflow(name: string) {
@@ -1261,6 +1270,32 @@ describe('vNext Workflow Handlers', () => {
 
       expect(result.total).toEqual(1);
     });
+
+    it('should reduce snapshots to status and timestamp in summary mode', async () => {
+      const run = await mockWorkflow.createRun({ runId: 'test-run-summary' });
+      await run.start({ inputData: {} });
+
+      const summary = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        summary: true,
+      } as any);
+      expect(summary.total).toEqual(1);
+      expect(summary.runs[0]!.runId).toBe('test-run-summary');
+      expect(summary.runs[0]!.snapshot).toEqual({ status: 'success', timestamp: expect.any(Number) });
+
+      const full = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+      } as any);
+      expect(full.runs[0]!.snapshot).toMatchObject({ status: 'success', context: expect.any(Object) });
+    });
+
+    it('should parse the summary query param without treating "false" as true', () => {
+      expect(listWorkflowRunsQuerySchema.parse({ summary: 'false' }).summary).toBe(false);
+      expect(listWorkflowRunsQuerySchema.parse({ summary: 'true' }).summary).toBe(true);
+      expect(listWorkflowRunsQuerySchema.parse({}).summary).toBeUndefined();
+    });
   });
 
   describe('OBSERVE_STREAM_WORKFLOW_ROUTE', () => {
@@ -1335,6 +1370,74 @@ describe('vNext Workflow Handlers', () => {
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
     });
+
+    it('should settle an evented run owned by another instance as canceled', async () => {
+      const storage = new MockStore();
+      const pubsub = new EventEmitterPubSub();
+      let markEntered!: () => void;
+      const entered = new Promise<void>(resolve => (markEntered = resolve));
+
+      const buildEventedWorkflow = () =>
+        createEventedWorkflow({ id: 'evented-cancel', inputSchema: z.object({}), outputSchema: z.object({}) })
+          .then(
+            createEventedStep({
+              id: 'blocking',
+              inputSchema: z.object({}),
+              outputSchema: z.object({}),
+              execute: async ({ abortSignal }) => {
+                markEntered();
+                await new Promise<void>(resolve => {
+                  const timer = setTimeout(resolve, 10_000);
+                  abortSignal.addEventListener('abort', () => {
+                    clearTimeout(timer);
+                    resolve();
+                  });
+                });
+                return {};
+              },
+            }),
+          )
+          .commit();
+
+      // Two replicas sharing storage and pubsub, both running workers; the cancel request lands on the one
+      // that does not own the run.
+      const ownerMastra = new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workflows: { 'evented-cancel': buildEventedWorkflow() },
+      });
+      const otherMastra = new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workflows: { 'evented-cancel': buildEventedWorkflow() },
+      });
+      await ownerMastra.startWorkers();
+      await otherMastra.startWorkers();
+
+      try {
+        const run = await ownerMastra.getWorkflow('evented-cancel').createRun({ runId: 'evented-remote-cancel' });
+        const resultPromise = run.start({ inputData: {} });
+        await entered;
+
+        const response = await CANCEL_WORKFLOW_RUN_ROUTE.handler({
+          ...createTestServerContext({ mastra: otherMastra }),
+          workflowId: 'evented-cancel',
+          runId: 'evented-remote-cancel',
+        });
+        expect(response).toEqual({ message: 'Workflow run cancelled' });
+
+        const result = await Promise.race([
+          resultPromise,
+          new Promise<{ status: string }>(resolve => setTimeout(() => resolve({ status: 'timed out' }), 5_000)),
+        ]);
+        expect(result.status).toBe('canceled');
+      } finally {
+        await otherMastra.stopWorkers();
+        await ownerMastra.stopWorkers();
+      }
+    }, 15_000);
   });
 
   describe('STREAM_WORKFLOW_ROUTE', () => {
@@ -1528,5 +1631,138 @@ describe('vNext Workflow Handlers', () => {
 
       expect(capturedOptions.forEachIndex).toBe(2);
     });
+  });
+
+  describe('EXECUTE_WORKFLOW_STEP_ROUTE', () => {
+    it('executes a nested workflow step resolved through its parent workflow', async () => {
+      const double = createStep({
+        id: 'double',
+        inputSchema: z.object({ n: z.number() }),
+        outputSchema: z.object({ n: z.number() }),
+        execute: async ({ inputData }) => ({ n: inputData.n * 2 }),
+      });
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: z.object({ n: z.number() }),
+        outputSchema: z.object({ n: z.number() }),
+      })
+        .then(double)
+        .commit();
+      const outer = createWorkflow({
+        id: 'outer',
+        inputSchema: z.object({ n: z.number() }),
+        outputSchema: z.object({ n: z.number() }),
+      })
+        .then(inner)
+        .commit();
+      const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+      const body = EXECUTE_WORKFLOW_STEP_ROUTE.bodySchema!.parse({
+        stepId: 'double',
+        executionPath: [0],
+        parentWorkflow: { workflowId: 'outer', runId: 'run-1', executionPath: [0] },
+        stepResults: {},
+        state: {},
+        requestContext: {},
+        input: { n: 2 },
+      });
+
+      const result = await EXECUTE_WORKFLOW_STEP_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: 'inner',
+        runId: 'run-1',
+        ...body,
+      } as any);
+
+      expect(result).toMatchObject({ status: 'success', output: { n: 4 } });
+    });
+
+    it('validates the nested parent workflow chain', () => {
+      const parse = (parentWorkflow: unknown) =>
+        EXECUTE_WORKFLOW_STEP_ROUTE.bodySchema!.safeParse({
+          stepId: 'double',
+          executionPath: [0],
+          parentWorkflow,
+          stepResults: {},
+          state: {},
+          requestContext: {},
+        }).success;
+
+      expect(
+        parse({
+          workflowId: 'inner',
+          runId: 'run-1',
+          executionPath: [1],
+          parentWorkflow: { workflowId: 'outer', runId: 'run-1', executionPath: [0] },
+        }),
+      ).toBe(true);
+      expect(parse({ workflowId: 'outer', runId: 'run-1', executionPath: [-1] })).toBe(false);
+      expect(
+        parse({ workflowId: 'inner', runId: 'run-1', executionPath: [0], parentWorkflow: { workflowId: 'outer' } }),
+      ).toBe(false);
+    });
+  });
+});
+
+describe('hidden internal workflows', () => {
+  const LOOP_ID = 'durable-agentic-loop';
+  const NOTIFICATION_DISPATCH_ID = '__mastra_notification_dispatcher';
+
+  function createMastraWithDurableAgent(workflows: Record<string, Workflow<any, any, any, any, any, any>> = {}) {
+    const agent = new Agent({ id: 'durable', name: 'durable', instructions: 'test', model: 'openai/gpt-4o-mini' });
+    return new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows,
+      agents: { durable: createDurableAgent({ agent }) as unknown as Agent },
+    });
+  }
+
+  const executionRoutes = [
+    ['GET_WORKFLOW_BY_ID_ROUTE', GET_WORKFLOW_BY_ID_ROUTE, {}],
+    ['CREATE_WORKFLOW_RUN_ROUTE', CREATE_WORKFLOW_RUN_ROUTE, { runId: 'run-1' }],
+    ['START_ASYNC_WORKFLOW_ROUTE', START_ASYNC_WORKFLOW_ROUTE, { inputData: {} }],
+    ['START_WORKFLOW_RUN_ROUTE', START_WORKFLOW_RUN_ROUTE, { runId: 'run-1', inputData: {} }],
+    ['STREAM_WORKFLOW_ROUTE', STREAM_WORKFLOW_ROUTE, { runId: 'run-1', inputData: {} }],
+    ['RESUME_ASYNC_WORKFLOW_ROUTE', RESUME_ASYNC_WORKFLOW_ROUTE, { runId: 'run-1', step: 'x', resumeData: {} }],
+    ['RESUME_WORKFLOW_ROUTE', RESUME_WORKFLOW_ROUTE, { runId: 'run-1', step: 'x', resumeData: {} }],
+  ] as const;
+
+  it('core still resolves the hidden loop workflow internally', () => {
+    const mastra = createMastraWithDurableAgent();
+    expect(mastra.getWorkflowById(LOOP_ID)).toBeDefined();
+    expect(mastra.getWorkflowById(NOTIFICATION_DISPATCH_ID)).toBeDefined();
+    expect(Object.keys(mastra.listWorkflows())).not.toContain(LOOP_ID);
+  });
+
+  for (const workflowId of [LOOP_ID, NOTIFICATION_DISPATCH_ID]) {
+    for (const [name, route, params] of executionRoutes) {
+      it(`${name} returns 404 for hidden workflow "${workflowId}"`, async () => {
+        const mastra = createMastraWithDurableAgent();
+        await expect(
+          (route.handler as any)({ ...createTestServerContext({ mastra }), workflowId, ...params }),
+        ).rejects.toMatchObject({ status: 404, message: 'Workflow not found' });
+      });
+    }
+  }
+
+  it('still resolves user workflows alongside a durable agent', async () => {
+    const mastra = createMastraWithDurableAgent({ 'user-workflow': createMockWorkflow('user-workflow') });
+    const result = await CREATE_WORKFLOW_RUN_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      workflowId: 'user-workflow',
+      runId: 'run-1',
+    } as any);
+    expect(result).toEqual({ runId: 'run-1' });
+  });
+
+  it('keeps a user workflow registered under the loop id resolvable', async () => {
+    const userWorkflow = createMockWorkflow(LOOP_ID);
+    const mastra = createMastraWithDurableAgent({ [LOOP_ID]: userWorkflow });
+    const result = await CREATE_WORKFLOW_RUN_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      workflowId: LOOP_ID,
+      runId: 'run-1',
+    } as any);
+    expect(result).toEqual({ runId: 'run-1' });
   });
 });

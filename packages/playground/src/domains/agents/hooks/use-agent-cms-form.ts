@@ -1,7 +1,9 @@
-import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-js';
+import { MastraClientError } from '@mastra/client-js';
+import type { CreateStoredAgentParams } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -24,11 +26,17 @@ import {
   formatUnknownPromptBlocksMessage,
   formatUnresolvedPromptBlocksMessage,
   instructionsResolveEmptyDueToDrafts,
-  type PromptBlockPublicationStatus,
-  type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
-import { useStoredAgentMutations } from './use-stored-agents';
-import { usePlaygroundStore } from '@/store/playground-store';
+import type { PromptBlockPublicationStatus, UnresolvedPromptBlock } from '../utils/instruction-blocks-runtime';
+
+const mapModelListToApi = (modelList: AgentFormValues['modelList']) =>
+  modelList?.map(({ id, model, enabled, maxRetries }) => ({
+    id,
+    provider: model.provider,
+    modelId: model.modelId,
+    enabled,
+    maxRetries,
+  }));
 
 type CreateOptions = {
   mode: 'create';
@@ -51,10 +59,9 @@ type EditOptions = {
 
 export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 
-export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
+export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?: Record<string, any>) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
@@ -66,14 +73,17 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   // Derive which fields are owned by the user (vs by code). See getEditorOwnership for the rules —
   // they mirror the server's getCodeAgentOwnership, which strips unowned fields on save.
-  const { ownsInstructions, ownsTools, ownsToolDescriptions } = getEditorOwnership(isCodeAgentOverride, editorConfig);
+  const { ownsInstructions, ownsTools, ownsToolDescriptions, ownsModel } = getEditorOwnership(
+    isCodeAgentOverride,
+    editorConfig,
+  );
 
   // Track whether we've already created a stored override for a code agent in this session
   const [overrideCreated, setOverrideCreated] = useState(false);
   const needsCreate = isCodeAgentOverride && !hasStoredOverride && !overrideCreated;
 
   const { createStoredAgent } = useStoredAgentMutations();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const initialValues = useMemo(
     () => (isEdit ? computeAgentInitialValues(options.dataSource) : undefined),
@@ -182,6 +192,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
                 mcpClients: mcpClientsParam,
               }
             : {}),
+          ...(ownsModel ? { modelList: mapModelListToApi(values.modelList) } : {}),
         };
       }
 
@@ -221,6 +232,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         description: values.description || undefined,
         instructions: mapInstructionBlocksToApi(values.instructionBlocks),
         model: values.model,
+        modelList: mapModelListToApi(values.modelList),
         tools: Object.keys(registryTools).length > 0 ? registryTools : {},
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
@@ -232,7 +244,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
     },
-    [isEdit, isCodeAgentOverride, ownsInstructions, ownsTools, ownsToolDescriptions, client],
+    [isEdit, isCodeAgentOverride, ownsInstructions, ownsTools, ownsToolDescriptions, ownsModel, client],
   );
 
   const buildMemoryParams = useCallback((values: AgentFormValues) => {
@@ -338,7 +350,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         if (await blocksWouldPreventSave(values)) return;
 
         const sharedParams = await buildSharedParams(values);
-        const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+        const editMemory = isCodeAgentOverride ? undefined : (values.memoryRef ?? buildMemoryParams(values));
 
         if (needsCreate) {
           // First save for a code agent — create the stored override.
@@ -430,7 +442,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           } else if (needsCreate) {
             // First publish for a code agent — create and immediately publish
             const sharedParams = await buildSharedParams(values);
-            const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+            const editMemory = isCodeAgentOverride ? undefined : (values.memoryRef ?? buildMemoryParams(values));
             const createParams: CreateStoredAgentParams = {
               id: options.agentId,
               ...sharedParams,

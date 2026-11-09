@@ -24,12 +24,12 @@ describe('GitLabApiClient', () => {
     expect(() => new GitLabApiClient({ baseUrl: 'http://localhost:8080', accessToken: 'token' })).not.toThrow();
     expect(() => new GitLabApiClient({ baseUrl: 'http://127.0.0.1:8080', accessToken: 'token' })).not.toThrow();
     expect(() => new GitLabApiClient({ baseUrl: 'http://[::1]:8080', accessToken: 'token' })).not.toThrow();
-    expect(() => new GitLabApiClient({ baseUrl: 'https://user:secret@gitlab.example.com', accessToken: 'token' })).toThrow(
-      /credentials, query, or fragment/,
-    );
-    expect(() => new GitLabApiClient({ baseUrl: 'https://gitlab.example.com/?key=secret', accessToken: 'token' })).toThrow(
-      /credentials, query, or fragment/,
-    );
+    expect(
+      () => new GitLabApiClient({ baseUrl: 'https://user:secret@gitlab.example.com', accessToken: 'token' }),
+    ).toThrow(/credentials, query, or fragment/);
+    expect(
+      () => new GitLabApiClient({ baseUrl: 'https://gitlab.example.com/?key=secret', accessToken: 'token' }),
+    ).toThrow(/credentials, query, or fragment/);
   });
 
   it('checks the current identity without listing projects', async () => {
@@ -57,6 +57,23 @@ describe('GitLabApiClient', () => {
 
     await client.getCurrentUser();
     expect(requestOf(fetchMock).url).toBe('https://gitlab.example.com/gitlab/api/v4/user');
+  });
+
+  it('posts commit statuses to the project statuses endpoint', async () => {
+    const fetchMock = vi.fn(async () => json({ id: 5, sha: 'abc', name: 'n', status: 'running', target_url: null }));
+    const api = new GitLabApiClient({ baseUrl: 'https://gitlab.com', accessToken: 'token', fetchImpl: fetchMock });
+
+    await api.setCommitStatus('acme/app', 'abc', { state: 'running', name: 'Factory Review / tests', ref: 'feature', description: 'd' });
+
+    const { url, init } = requestOf(fetchMock);
+    expect(url).toBe('https://gitlab.com/api/v4/projects/acme%2Fapp/statuses/abc');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      state: 'running',
+      name: 'Factory Review / tests',
+      ref: 'feature',
+      description: 'd',
+    });
   });
 
   it('lists projects directly with a private token', async () => {

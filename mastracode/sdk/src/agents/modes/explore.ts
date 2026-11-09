@@ -1,9 +1,9 @@
 /**
- * Explore subagent — read-only codebase exploration.
+ * Explore mode — interactive, read-only codebase exploration.
  *
- * This subagent is given a focused task (e.g., "find all usages of X",
- * "understand how module Y works") and uses read-only tools to explore
- * the codebase, then returns a concise summary of its findings.
+ * The top-level mode for questions like "find all usages of X" or "how
+ * does module Y work". Read-only; answers the user directly in
+ * conversation rather than reporting back to a parent agent.
  */
 import type { AgentControllerMode } from '@mastra/core/agent-controller';
 import { EXPLORE_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
@@ -26,20 +26,6 @@ export const fastMode: AgentControllerMode = {
 - **Search smart**: Use search_content (grep) with specific patterns — avoid overly broad searches
 - **Read efficiently**: Use view with view_range for large files — don't read entire files if you only need a section
 - **Parallelize**: Make multiple independent tool calls in one round when exploring different areas
-
-## Efficiency
-Your output returns to the parent agent. Be concise:
-- Don't include raw file contents in your response — summarize what you found
-- Reference files by path and line number, not by copying code
-- If a search returns many results, report the count and key examples, not every match
-
-## Output Format
-End with a structured summary:
-. **Answer**: Direct answer to the question (1-2 sentences)
-. **Key Files**: Most relevant files with line numbers
-. **Details**: Additional context if needed
-
-Keep your summary under 300 words.
 
 ## Workflows
 - You can use \`list-workflows\` and \`get-workflow\` to inspect saved workflows. You cannot create, run, or delete in this mode.`,

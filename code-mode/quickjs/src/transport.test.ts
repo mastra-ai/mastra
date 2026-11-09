@@ -242,6 +242,46 @@ describe('QuickJsCodeModeTransport', () => {
     expect(result.error?.message).toMatch(/out of memory/i);
   });
 
+  it('returns an error instead of aborting when memory runs out with external_* calls in flight', async () => {
+    // Retaining host results while exhausting the heap used to abort the WASM
+    // module in JS_FreeRuntime, killing the host process.
+    const result = await run(
+      `
+      const kept = [];
+      const pending = [];
+      while (true) {
+        kept.push(await external_payload({}));
+        pending.push(external_payload({}));
+        kept.push(new Array(64 * 1024).fill('x'));
+      }
+      `,
+      {
+        transport: new QuickJsCodeModeTransport({ memoryLimitMb: 8 }),
+        toolIds: ['payload'],
+        dispatch: async () => ({ data: 'y'.repeat(64 * 1024) }),
+        timeout: 30_000,
+      },
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/out of memory/i);
+
+    // The shared WASM module must still be usable afterwards.
+    expect((await run(`return 1 + 1;`)).result).toBe(2);
+  });
+
+  it('returns a catchable stack overflow error for deep recursion after an await', async () => {
+    const result = await run(
+      `
+      await external_ping({});
+      function recurse(n) { return recurse(n + 1) + 1; }
+      return recurse(0);
+      `,
+      { toolIds: ['ping'], dispatch: async () => ({}) },
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/stack overflow/i);
+  });
+
   it('preserves logs captured before a failure', async () => {
     const result = await run(`
       console.log('step 1 done');

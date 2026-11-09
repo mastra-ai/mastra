@@ -38,6 +38,20 @@ describe('OMMarkerComponent activation rendering', () => {
     expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens (5m idle timeout)');
   });
 
+  it('renders the 1h Anthropic idle timeout suffix', () => {
+    const activationMarker = new OMMarkerComponent({
+      type: 'om_activation',
+      operationType: 'observation',
+      tokensActivated: 7300,
+      observationTokens: 400,
+      activateAfterIdle: 3_600_000,
+    });
+
+    const activationText = stripAnsi(activationMarker.render(120).join('\n'));
+
+    expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens (1h idle timeout)');
+  });
+
   it('renders activation without idle timeout suffix when not TTL-triggered', () => {
     const activationMarker = new OMMarkerComponent({
       type: 'om_activation',

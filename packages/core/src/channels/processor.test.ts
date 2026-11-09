@@ -1,9 +1,10 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
 import type { ProcessInputStepArgs } from '../processors/index';
 import { RequestContext } from '../request-context';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import type { ChannelContext } from './types';
 
@@ -11,6 +12,7 @@ function createArgs(opts: {
   channel?: ChannelContext;
   messageList?: MessageList;
   systemMessages?: CoreMessageV4[];
+  tools?: Record<string, unknown>;
 }): ProcessInputStepArgs {
   const requestContext = new RequestContext();
   if (opts.channel) {
@@ -26,6 +28,7 @@ function createArgs(opts: {
     stepNumber: 0,
     steps: [],
     systemMessages: opts.systemMessages ?? [],
+    tools: opts.tools,
     state: {},
     retryCount: 0,
     model: {} as any,
@@ -36,13 +39,13 @@ function createArgs(opts: {
 }
 
 describe('ChatChannelProcessor', () => {
-  it('returns undefined when no channel context is set', () => {
+  it('returns undefined when no channel context is set', async () => {
     const processor = new ChatChannelProcessor();
-    const result = processor.processInputStep(createArgs({}));
+    const result = await processor.processInputStep(createArgs({}));
     expect(result).toBeUndefined();
   });
 
-  it('preserves tagged system messages added by other processors', () => {
+  it('preserves tagged system messages added by other processors', async () => {
     // Simulate ObservationalMemory (or any other processor) having added a
     // tagged system message to the messageList before ChatChannelProcessor runs.
     const messageList = new MessageList({});
@@ -58,7 +61,7 @@ describe('ChatChannelProcessor', () => {
       systemMessages: messageList.getSystemMessages(),
     });
 
-    processor.processInputStep(args);
+    await processor.processInputStep(args);
 
     // The tagged messages must still be retrievable by tag after processing.
     const omAfter = args.messageList.getSystemMessages('om');
@@ -72,24 +75,133 @@ describe('ChatChannelProcessor', () => {
     // And the channel system message must be present under its own tag.
     const channelAfter = args.messageList.getSystemMessages('chat-channel-context');
     expect(channelAfter).toHaveLength(1);
-    expect(channelAfter[0]!.content).toContain('communicating via slack');
+    expect(channelAfter[0]!.content).toContain('connected to a slack direct message');
   });
 
-  it('does not re-add a duplicate channel system message across steps', () => {
+  it('does not re-add a duplicate channel system message across steps', async () => {
     const messageList = new MessageList({});
     const processor = new ChatChannelProcessor();
     const channel: ChannelContext = { platform: 'slack', isDM: true, userName: 'caleb' } as ChannelContext;
 
     // Step 1
     const args1 = createArgs({ channel, messageList, systemMessages: messageList.getSystemMessages() });
-    processor.processInputStep(args1);
+    await processor.processInputStep(args1);
 
     // Step 2 — same channel context, system messages list is re-derived
     const args2 = createArgs({ channel, messageList, systemMessages: messageList.getSystemMessages() });
-    processor.processInputStep(args2);
+    await processor.processInputStep(args2);
 
     const channelMessages = messageList.getSystemMessages('chat-channel-context');
     expect(channelMessages).toHaveLength(1);
-    expect(channelMessages[0]!.content).toContain('communicating via slack');
+    expect(channelMessages[0]!.content).toContain('connected to a slack direct message');
+  });
+
+  it('says which platform the conversation is connected to', async () => {
+    const firstLine = async (isDM: boolean) => {
+      const args = createArgs({ channel: { platform: 'slack', isDM } as ChannelContext });
+      await new ChatChannelProcessor().processInputStep(args);
+      return String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content).split('\n')[0];
+    };
+    expect(await firstLine(false)).toBe('This conversation is connected to a slack thread.');
+    expect(await firstLine(true)).toBe('This conversation is connected to a slack direct message.');
+  });
+
+  describe('bot identity', () => {
+    async function identityLine(channel: Partial<ChannelContext>): Promise<string | undefined> {
+      const args = createArgs({ channel: { platform: 'slack', isDM: false, ...channel } as ChannelContext });
+      await new ChatChannelProcessor().processInputStep(args);
+      const content = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      return content.split('\n').find(line => line.startsWith('Your identity'));
+    }
+
+    it('lists the original username, current display name, and mention', async () => {
+      expect(await identityLine({ botUserName: 'acme-bot', botDisplayName: 'helper', botMention: '<@UBOT>' })).toBe(
+        'Your identity on this platform is "acme-bot" / "helper" / <@UBOT>. Messages containing these references are directed at you.',
+      );
+    });
+
+    it('keeps the existing line when no display name is set', async () => {
+      expect(await identityLine({ botUserName: 'acme-bot', botMention: '<@UBOT>' })).toBe(
+        'Your identity on this platform is "acme-bot" / <@UBOT>. Messages containing these references are directed at you.',
+      );
+    });
+
+    it('uses the display name when no username is set', async () => {
+      expect(await identityLine({ botDisplayName: 'helper', botMention: '<@UBOT>' })).toBe(
+        'Your identity on this platform is "helper" / <@UBOT>. Messages containing these references are directed at you.',
+      );
+    });
+  });
+
+  describe('reaction guidance', () => {
+    async function channelPrompt(tools?: Record<string, unknown>): Promise<string> {
+      const args = createArgs({ channel: { platform: 'slack', isDM: false } as ChannelContext, tools });
+      await new ChatChannelProcessor().processInputStep(args);
+      return String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+    }
+
+    it('points at add_reaction when the agent has it', async () => {
+      expect(await channelPrompt({ add_reaction: {} })).toContain('use the `add_reaction` tool');
+    });
+
+    it('does not mention add_reaction when the agent lacks it', async () => {
+      expect(await channelPrompt({ other_tool: {} })).not.toContain('add_reaction');
+      expect(await channelPrompt()).not.toContain('add_reaction');
+      expect(await channelPrompt()).toContain('To stay silent, respond with an empty message.');
+    });
+  });
+
+  describe('with reply text hidden', () => {
+    it('tells an inbound run that only what it posts with tools is seen, and to stay silent by posting nothing', async () => {
+      const args = createArgs({ channel: { platform: 'slack', isDM: false } as ChannelContext });
+      args.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+      await new ChatChannelProcessor().processInputStep(args);
+      const prompt = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+
+      expect(prompt).toContain('Your text replies are not posted to this conversation.');
+      expect(prompt).toContain('Only post when you are explicitly mentioned');
+      expect(prompt).toContain('To stay silent, post nothing.');
+      expect(prompt).not.toContain('empty message');
+    });
+  });
+
+  describe('a run on a channel-backed thread that did not start from a message', () => {
+    function linkedArgs(state: Record<string, unknown> = {}) {
+      const args = createArgs({});
+      args.requestContext!.set('MastraMemory', { thread: { id: 'thread-1' } });
+      return { ...args, state } as ProcessInputStepArgs;
+    }
+    const channel = {
+      platform: 'slack',
+      isDM: false,
+      botUserName: 'shipyard',
+      botMention: '<@UBOT>',
+    } as ChannelContext;
+
+    it('gets the same system message an inbound run on that thread gets', async () => {
+      const inbound = createArgs({ channel });
+      inbound.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+      await new ChatChannelProcessor().processInputStep(inbound);
+
+      const linked = linkedArgs();
+      await new ChatChannelProcessor({
+        buildChannelContextForThread: async () => ({ channel, render: { textDisplay: 'hidden' } as never }),
+      }).processInputStep(linked);
+
+      const prompt = (args: ProcessInputStepArgs) =>
+        String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      expect(prompt(linked)).toBe(prompt(inbound));
+    });
+
+    it('looks the thread up once per run, and adds nothing for a thread with no channel', async () => {
+      const lookup = vi.fn(async () => null);
+      const processor = new ChatChannelProcessor({ buildChannelContextForThread: lookup });
+      const state = {};
+
+      expect(await processor.processInputStep(linkedArgs(state))).toBeUndefined();
+      expect(await processor.processInputStep(linkedArgs(state))).toBeUndefined();
+      expect(lookup).toHaveBeenCalledTimes(1);
+      expect(lookup).toHaveBeenCalledWith('thread-1');
+    });
   });
 });

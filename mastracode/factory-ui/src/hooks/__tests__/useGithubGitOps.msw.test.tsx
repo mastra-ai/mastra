@@ -104,7 +104,7 @@ describe('git operation mutation hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    const error = result.current.error as GitOpError | null;
+    const error: GitOpError | null = result.current.error;
     expect(error?.code).toBe('invalid_branch');
     expect(error?.authRequired).toBeUndefined();
   });
@@ -128,7 +128,7 @@ describe('git operation mutation hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    const error = result.current.error as GitOpError | null;
+    const error: GitOpError | null = result.current.error;
     expect(error?.authRequired).toBe(true);
   });
 });

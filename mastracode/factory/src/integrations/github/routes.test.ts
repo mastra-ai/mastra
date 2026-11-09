@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { setImmediate } from 'node:timers/promises';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ListIntakeIssuesInput } from '../../capabilities/intake.js';
@@ -229,21 +230,21 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
+const issue12 = {
+  number: 12,
+  title: 'Fix flaky test',
+  url: 'https://github.com/octo/hello/issues/12',
+  author: 'ada',
+  assignee: 'grace',
+  labels: ['bug'],
+  comments: 3,
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-02T00:00:00Z',
+};
+
 const listRepoOpenIssues = vi.fn(
   async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
-    issues: [
-      {
-        number: 12,
-        title: 'Fix flaky test',
-        url: 'https://github.com/octo/hello/issues/12',
-        author: 'ada',
-        assignee: 'grace',
-        labels: ['bug'],
-        comments: 3,
-        createdAt: '2026-07-01T00:00:00Z',
-        updatedAt: '2026-07-02T00:00:00Z',
-      },
-    ],
+    issues: [issue12],
     nextPage: null as number | null,
   }),
 );
@@ -253,23 +254,44 @@ const addIssueLabels = vi.fn(
 const removeIssueLabel = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _label: string) => {},
 );
-const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
-  pullRequests: [
-    {
-      number: 34,
-      title: 'Add factory pages',
-      url: 'https://github.com/octo/hello/pull/34',
-      author: 'grace',
-      assignees: ['ada'],
-      requestedReviewers: ['octocat'],
-      baseBranch: 'main',
-      headBranch: 'feat/factory',
-      createdAt: '2026-07-03T00:00:00Z',
-      updatedAt: '2026-07-04T00:00:00Z',
-    },
-  ],
-  nextPage: null as number | null,
-}));
+interface ListedPullRequestFixture {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  assignees: string[];
+  requestedReviewers: string[];
+  labels?: string[];
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface OpenPullRequestPage {
+  pullRequests: ListedPullRequestFixture[];
+  nextPage: number | null;
+}
+
+const pullRequest34: ListedPullRequestFixture = {
+  number: 34,
+  title: 'Add factory pages',
+  url: 'https://github.com/octo/hello/pull/34',
+  author: 'grace',
+  assignees: ['ada'],
+  requestedReviewers: ['octocat'],
+  baseBranch: 'main',
+  headBranch: 'feat/factory',
+  createdAt: '2026-07-03T00:00:00Z',
+  updatedAt: '2026-07-04T00:00:00Z',
+};
+
+const listRepoOpenPullRequests = vi.fn(
+  async (_installationId: number, _repoFullName: string, _page: number): Promise<OpenPullRequestPage> => ({
+    pullRequests: [pullRequest34],
+    nextPage: null,
+  }),
+);
 const getIssueDetail = vi.fn(
   async (_installationId: number, _repoFullName: string, issueId: string): Promise<Record<string, unknown> | null> =>
     issueId === '12'
@@ -509,6 +531,20 @@ vi.mock('./sandbox', () => {
   };
 });
 
+const filesystemCaptureMock = vi.hoisted(() => ({ waitError: null as Error | null }));
+vi.mock('../../session/filesystem-capture.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../session/filesystem-capture.js')>();
+  return {
+    ...actual,
+    waitForPendingFilesystemCapture: vi.fn(
+      async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
+        if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
+        return actual.waitForPendingFilesystemCapture(...args);
+      },
+    ),
+  };
+});
+
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
@@ -540,7 +576,7 @@ const testAuth: RouteAuth = {
   isOrganizationAdmin: async () => true,
 };
 
-import { buildGithubRoutes } from './routes.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -638,6 +674,7 @@ function buildApp(
     users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
+    ingestFactoryEvent?: Parameters<typeof buildGithubRoutes>[0]['ingestFactoryEvent'];
   } = {},
 ) {
   const app = new Hono();
@@ -823,7 +860,7 @@ describe('webhook route', () => {
         id: threadId,
         resourceId: 'resource-1',
       })),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     tables.subscriptions.push({
@@ -839,15 +876,11 @@ describe('webhook route', () => {
       // Delivery builds the run's request context from the subscription, which
       // needs the subscribing user: a webhook carries no signed-in identity, and
       // tenant credential resolution fails closed without one.
-      subscribedByUserId: 'owner-1',
+      subscribedByUserId: 'u1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      sessionScope: '/worktrees/a',
       source: 'explicit-tool',
       status: 'open',
-      // Delivery runs the woken session as the subscribing user; a row without
-      // one is a failed delivery, not a silent unauthenticated run.
-      subscribedByUserId: 'u1',
     });
 
     const res = await buildApp(null, { controller }).request(
@@ -862,7 +895,7 @@ describe('webhook route', () => {
 
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ ok: true });
-    expect(controller!.getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    expect(controller!.getSession).toHaveBeenCalledWith('session-1');
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         priority: 'high',
@@ -1044,20 +1077,64 @@ describe('pat route', () => {
 });
 
 describe('subscriptions route', () => {
-  it('returns pull request links for the exact scoped thread', async () => {
+  it('returns pull request links for a thread addressed by its session', async () => {
+    tables.subscriptions.push(
+      {
+        id: 'subscription-a',
+        orgId: 'org1',
+        sessionId: 'run-a',
+        resourceId: 'factory-1',
+        threadId: 'run-a',
+        repoFullName: 'octo/hello',
+        pullRequestNumber: 42,
+        status: 'open',
+      },
+      {
+        id: 'subscription-b',
+        orgId: 'org1',
+        sessionId: 'run-b',
+        resourceId: 'factory-1',
+        threadId: 'run-b',
+        repoFullName: 'octo/hello',
+        pullRequestNumber: 43,
+        status: 'open',
+      },
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?sessionId=run-a&threadId=run-a');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      subscriptions: [
+        {
+          id: 'subscription-a',
+          repoFullName: 'octo/hello',
+          pullRequestNumber: 42,
+          status: 'open',
+          url: 'https://github.com/octo/hello/pull/42',
+        },
+      ],
+    });
+  });
+
+  it('requires a thread and a session to read subscriptions', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?threadId=run-a');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns pull request links for the exact thread', async () => {
     tables.subscriptions.push({
       id: 'subscription-1',
       orgId: 'org1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      sessionScope: '/tmp/worktree',
       repoFullName: 'octo/hello',
       pullRequestNumber: 42,
       status: 'open',
     });
 
     const res = await buildApp({ workosId: 'u1' }).request(
-      '/web/github/subscriptions?resourceId=resource-1&threadId=thread-1&scope=%2Ftmp%2Fworktree',
+      '/web/github/subscriptions?resourceId=resource-1&threadId=thread-1',
     );
 
     expect(res.status).toBe(200);
@@ -1578,6 +1655,354 @@ describe('prs route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+
+  it('hands each listed pull request to Factory with its author and labels', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({
+      pullRequests: [{ ...pullRequest34, labels: ['bug'] }],
+      nextPage: null,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(200);
+    const listedPullRequestPayload = expect.objectContaining({
+      user: { login: 'grace' },
+      labels: [{ name: 'bug' }],
+    });
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ pull_request: listedPullRequestPayload }) }),
+    );
+  });
+
+  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      `/web/github/projects/p1/${resource}`,
+    );
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    warn.mockRestore();
+  });
+});
+
+// Every open board polls the same issue and pull request pages, and each rules pass reads the
+// whole project, so both feeds share one pass per page (#29248 for pull requests).
+const polledFeeds = [
+  {
+    resource: 'issues',
+    lister: listRepoOpenIssues,
+    rowsKey: 'issues',
+    payloadKey: 'issue',
+    another: 13,
+    listWithAnotherOnce: () =>
+      listRepoOpenIssues.mockResolvedValueOnce({
+        issues: [issue12, { ...issue12, number: 13, url: 'https://github.com/octo/hello/issues/13' }],
+        nextPage: null,
+      }),
+  },
+  {
+    resource: 'prs',
+    lister: listRepoOpenPullRequests,
+    rowsKey: 'pullRequests',
+    payloadKey: 'pull_request',
+    another: 35,
+    listWithAnotherOnce: () =>
+      listRepoOpenPullRequests.mockResolvedValueOnce({
+        pullRequests: [pullRequest34, { ...pullRequest34, number: 35, url: 'https://github.com/octo/hello/pull/35' }],
+        nextPage: null,
+      }),
+  },
+] as const;
+
+describe.each(polledFeeds)('rules passes for polled $resource pages', feed => {
+  const path = `/web/github/projects/p1/${feed.resource}`;
+
+  it('runs the rules once per page while several boards poll inside the window', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    for (const url of [path, path, `${path}?page=2`]) {
+      const res = await app.request(url);
+      expect((await res.json())[feed.rowsKey]).toHaveLength(1);
+    }
+
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('rests a page for the whole window after a slow rules pass finishes, then runs the rules again', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      seedMaterializedProject();
+      const pass = Promise.withResolvers<void>();
+      const ingestFactoryEvent = vi.fn(() => pass.promise);
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+      const first = app.request(path);
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+      vi.setSystemTime(Date.now() + 25_000);
+      pass.resolve();
+      await first;
+
+      vi.setSystemTime(Date.now() + 19_000);
+      await app.request(path);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(Date.now() + 2_000);
+      await app.request(path);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('answers a board that polls during a slow rules pass once that pass is done, without starting another', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      seedMaterializedProject();
+      const pass = Promise.withResolvers<void>();
+      const order: string[] = [];
+      const ingestFactoryEvent = vi.fn(async () => {
+        await pass.promise;
+        order.push('rules done');
+      });
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+      const first = app.request(path);
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+      vi.setSystemTime(Date.now() + 25_000);
+      const second = Promise.resolve(app.request(path)).then(res => {
+        order.push('second answered');
+        return res;
+      });
+      await vi.waitFor(() => expect(feed.lister).toHaveBeenCalledTimes(2));
+      await setImmediate();
+      pass.resolve();
+
+      expect((await second).status).toBe(200);
+      expect((await first).status).toBe(200);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['rules done', 'second answered']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rules an entry that shows up on a resting page on the first poll that lists it', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    await app.request(path);
+    const listBoth = () => {
+      feed.listWithAnotherOnce();
+      return app.request(path);
+    };
+
+    await listBoth();
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    expect(ingestFactoryEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ [feed.payloadKey]: expect.objectContaining({ number: feed.another }) }),
+      }),
+    );
+    await listBoth();
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers every board within the wait when a rules pass never ends, without starting another', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    try {
+      seedMaterializedProject();
+      const ingestFactoryEvent = vi.fn(() => new Promise<void>(() => {}));
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+      const answered: number[] = [];
+      const poll = (board: number) =>
+        Promise.resolve(app.request(path)).then(res => {
+          answered.push(board);
+          return res;
+        });
+
+      const first = poll(1);
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+      vi.setSystemTime(Date.now() + 60_000);
+      const second = poll(2);
+      await vi.waitFor(() => expect(feed.lister).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(answered.sort()).toEqual([1, 2]);
+      expect([(await first).status, (await second).status]).toEqual([200, 200]);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts a fresh rules pass once a stuck one has run for two minutes, and boards keep joining it after the stuck one ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    try {
+      seedMaterializedProject();
+      const stuck = Promise.withResolvers<undefined>();
+      const fresh = Promise.withResolvers<undefined>();
+      const ingestFactoryEvent = vi
+        .fn(async () => undefined)
+        .mockImplementationOnce(() => stuck.promise)
+        .mockImplementationOnce(() => fresh.promise);
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+      const first = app.request(path);
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(1));
+      vi.setSystemTime(Date.now() + 121_000);
+      const second = app.request(path);
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(2));
+
+      stuck.resolve(undefined);
+      await setImmediate();
+      feed.listWithAnotherOnce();
+      const third = app.request(path);
+      await vi.waitFor(() => expect(feed.lister).toHaveBeenCalledTimes(3));
+      await setImmediate();
+
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+      fresh.resolve(undefined);
+      expect([(await first).status, (await second).status, (await third).status]).toEqual([200, 200, 200]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('rules passes across polled feeds', () => {
+  // A board polls its issues, its triage issues (label-filtered) and its pull requests side by side.
+  // Each is its own page: joining another feed's running pass would leave its own entries unruled.
+  it.each([
+    { held: 'prs', polled: 'issues', listed: issue12 },
+    {
+      held: 'issues',
+      polled: 'issues?label=status%3A%20needs%20approval',
+      listed: { ...issue12, number: 13, labels: ['status: needs approval'] },
+    },
+  ])('rules /$polled while a slow pass holds /$held on the same page number', async ({ held, polled, listed }) => {
+    seedMaterializedProject();
+    const pass = Promise.withResolvers<void>();
+    let calls = 0;
+    const ingestFactoryEvent = vi.fn(async (_event: unknown) => {
+      calls += 1;
+      if (calls === 1) await pass.promise;
+    });
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    const first = app.request(`/web/github/projects/p1/${held}`);
+    await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(1));
+    listRepoOpenIssues.mockResolvedValueOnce({ issues: [listed], nextPage: null });
+    const second = app.request(`/web/github/projects/p1/${polled}`);
+
+    await vi.waitFor(() =>
+      expect(ingestFactoryEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ issue: expect.objectContaining({ number: listed.number }) }),
+        }),
+      ),
+    );
+    pass.resolve();
+    expect([(await first).status, (await second).status]).toEqual([200, 200]);
+  });
+});
+
+describe('linked repository backlog import', () => {
+  const deliveryIds = (ingest: ReturnType<typeof vi.fn>) =>
+    ingest.mock.calls.map(([event]) => (event as { deliveryId: string }).deliveryId);
+
+  it('ingests every page of open issues and pull requests for the linked repository', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({
+      issues: [
+        {
+          number: 12,
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: 'ada',
+          assignee: 'grace',
+          labels: ['bug'],
+          comments: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+      nextPage: 2,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+
+    expect(listRepoOpenIssues.mock.calls.map(call => call.slice(0, 3))).toEqual([
+      [7, 'octo/hello', 1],
+      [7, 'octo/hello', 2],
+    ]);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+    expect(deliveryIds(ingestFactoryEvent)).toEqual([
+      'poll:99:issue:12:2026-07-01T00:00:00Z',
+      'poll:99:issue:12:2026-07-01T00:00:00Z',
+      'poll:99:pull-request:34:2026-07-03T00:00:00Z',
+    ]);
+  });
+
+  it('stops paging after five pages', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockImplementation(async (_i, _r, page) => ({ issues: [], nextPage: page + 1 }));
+    listRepoOpenPullRequests.mockImplementation(async (_i, _r, page) => ({ pullRequests: [], nextPage: page + 1 }));
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent: vi.fn(async () => undefined),
+    });
+
+    expect(listRepoOpenIssues).toHaveBeenCalledTimes(5);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(5);
+  });
+
+  it('makes no GitHub calls for a repository this integration cannot resolve', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'other-org',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'missing',
+      ingestFactoryEvent,
+    });
+
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+    expect(ingestFactoryEvent).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when Factory rules are not configured', async () => {
+    seedMaterializedProject();
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent: undefined,
+    });
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 });
 
@@ -2132,7 +2557,7 @@ describe('Factory session routes', () => {
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
-    expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+    expect(controller.deleteSession).toHaveBeenCalledWith({ sessionId });
     expect(runTeardownCommand).toHaveBeenCalledWith(live, '/workspace/hello', 'docker compose down --remove-orphans', {
       timeoutMs: 15 * 60_000,
     });
@@ -2160,6 +2585,7 @@ describe('Factory session routes', () => {
   it('names a session from its conversation and mirrors the title onto the row', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
     } as any;
@@ -2174,9 +2600,12 @@ describe('Factory session routes', () => {
     expect(await response.json()).toEqual({ title: 'Log parser rewrite' });
     const named = controller.generateThreadTitle.mock.calls[0][0];
     expect(named.threadId).toBe('thread-1');
-    expect(named.resourceId).toBe(sessionId);
+    expect(named.sessionId).toBe(sessionId);
     // Naming runs as the session's owner, so it bills their model credentials.
     expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
     // A closed session has no live state, so the owner's stored observer model
     // is what keeps a manual rename on the model that names threads on its own.
     expect(named.model({ requestContext: named.requestContext }).modelId).toContain('claude-haiku-4-5');
@@ -2186,6 +2615,7 @@ describe('Factory session routes', () => {
   it('names a session whose owner never configured a memory model', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
     } as any;
@@ -2197,7 +2627,9 @@ describe('Factory session routes', () => {
 
     expect(response.status).toBe(200);
     // No stored model to override with, so naming runs on the memory's own title model.
-    expect(controller.generateThreadTitle.mock.calls[0][0].model).toBeUndefined();
+    const named = controller.generateThreadTitle.mock.calls[0][0];
+    expect(named.model).toBeUndefined();
+    expect(named.requestContext.get('mastra__factoryMemorySettings')).toBeNull();
     expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
   });
 
@@ -2208,6 +2640,7 @@ describe('Factory session routes', () => {
       release = resolve;
     });
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => {
         await naming;
@@ -2221,7 +2654,7 @@ describe('Factory session routes', () => {
     const first = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
     await vi.waitFor(() => expect(controller.generateThreadTitle).toHaveBeenCalledOnce());
     const second = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
-    await vi.waitFor(() => expect(controller.queryThreads).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(controller.queryThreadById).toHaveBeenCalledTimes(2));
     release();
     const [a, b] = await Promise.all([first, second]);
 
@@ -2235,6 +2668,7 @@ describe('Factory session routes', () => {
   it('caps and tidies the title the model returned', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => `  Rewrite   the log parser ${'and more '.repeat(20)}`),
     } as any;
@@ -2253,6 +2687,7 @@ describe('Factory session routes', () => {
   it('rejects a title the model returned as whitespace', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => '   '),
     } as any;
@@ -2268,7 +2703,8 @@ describe('Factory session routes', () => {
 
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
-    const controller = { queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const controller = { queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2282,7 +2718,8 @@ describe('Factory session routes', () => {
 
   it('does not name a session belonging to another user', async () => {
     seedMaterializedProject();
-    const controller = { queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const controller = { queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
     const ownerApp = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2317,6 +2754,31 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
     await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     error.mockRestore();
+  });
+
+  it('still tears down the controller session when draining the filesystem capture fails', async () => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    filesystemCaptureMock.waitError = new Error('drain failed');
+    try {
+      const controller = { deleteSession: vi.fn(async () => {}) } as any;
+      const app = buildApp({ workosId: 'u1' }, { controller });
+      const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+      const sessionId = (await created.json()).session.sessionId;
+
+      const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+      expect(deleted.status).toBe(200);
+      expect(controller.deleteSession).toHaveBeenCalledWith({ sessionId });
+      expect(tables.sessions).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(
+        '[GitHub Sessions] Failed to drain filesystem capture before delete',
+        expect.objectContaining({ sessionId }),
+      );
+    } finally {
+      filesystemCaptureMock.waitError = null;
+      warn.mockRestore();
+    }
   });
 
   it('destroys the deleted session sandbox held by this process instead of pooling it', async () => {

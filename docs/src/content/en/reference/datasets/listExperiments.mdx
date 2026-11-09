@@ -141,13 +141,13 @@ for (const exp of experiments) {
                   },
                   {
                     name: 'targetType',
-                    type: "'agent' | 'workflow' | 'scorer' | 'processor'",
-                    description: 'Type of target used.',
+                    type: "'agent' | 'workflow' | 'scorer' | 'processor' | null",
+                    description: 'Type of target used. `null` for caller-driven ingestion experiments.',
                   },
                   {
                     name: 'targetId',
-                    type: 'string',
-                    description: 'ID of the target used.',
+                    type: 'string | null',
+                    description: 'ID of the target used. `null` for caller-driven ingestion experiments.',
                   },
                   {
                     name: 'status',

@@ -1,14 +1,19 @@
 import { useState } from 'react';
 
+import type { CardContextSession } from '../boardItems';
 import { itemBoard } from '../boardStages';
+import type { ReworkReason } from '../reworkReason';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { factoryAttentionTargetPath } from '../services/attention';
 import type { WorkItem } from '../services/workItems';
 import { CardSourceDescription, useSourceDescription } from './BoardCardDetails';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { CardSessions } from './CardSessions';
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
 import type { CommentQuoteDraft } from './feed/quoteDraft';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 // One stream in time order, runs and moves and comments alike, the composer under it.
 export function WorkItemTray({
@@ -20,6 +25,8 @@ export function WorkItemTray({
   highlightCommentId,
   events,
   actors,
+  contextSessions,
+  rework,
 }: {
   item: WorkItem;
   factoryId: string;
@@ -30,6 +37,8 @@ export function WorkItemTray({
   highlightCommentId?: string;
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
 }) {
   const factoryProjectId = factoryId || undefined;
   const [quote, setQuote] = useState<CommentQuoteDraft>();
@@ -48,12 +57,16 @@ export function WorkItemTray({
         leadingLoaded={description === undefined || !description.isPending}
         leading={
           <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
-            <h3 className="text-label text-foreground m-0 font-[550] wrap-anywhere">{item.title}</h3>
+            <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
+              {item.title}
+            </Txt>
             <CardSourceDescription
               item={item}
               projectRepositoryId={projectRepositoryId}
               factoryProjectId={factoryProjectId}
             />
+            {rework && <WhyItMovedBack rework={rework} />}
+            <CardSessions factoryId={factoryId} sessions={contextSessions} />
           </div>
         }
         commentUrl={commentId =>
@@ -77,5 +90,26 @@ export function WorkItemTray({
         />
       </div>
     </>
+  );
+}
+
+const MOVED_BY = { human: 'a person', agent: 'an agent', system: 'Factory' } as const;
+
+function WhyItMovedBack({ rework }: { rework: ReworkReason }) {
+  return (
+    <section aria-label="Why it moved back" className="flex flex-col gap-1">
+      <Txt as="h4" variant="eyebrow" tone="muted" className="m-0">
+        Why it moved back from {rework.fromLabel}
+      </Txt>
+      {rework.reason ? (
+        <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
+          {rework.reason}
+        </MarkdownRenderer>
+      ) : (
+        <Txt variant="meta" tone="muted" className="m-0">
+          Moved back by {MOVED_BY[rework.movedBy]}
+        </Txt>
+      )}
+    </section>
   );
 }

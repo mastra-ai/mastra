@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { batchDeleteMessagesTool } from './tools/batch-delete-messages.js';
 import { batchModifyMessagesTool } from './tools/batch-modify-messages.js';
 import { createDraftTool } from './tools/create-draft.js';
@@ -111,5 +111,5 @@ export function createGoogleMailTools(options?: ProviderToolsOptions) {
     google_mail_update_vacation_settings: updateVacationSettingsTool(platformProxy),
     google_mail_watch_mailbox: watchMailboxTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

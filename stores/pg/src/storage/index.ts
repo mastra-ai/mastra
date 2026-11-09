@@ -2,7 +2,6 @@ import type { ConnectionOptions } from 'node:tls';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import {
   validateConfig,
@@ -14,10 +13,13 @@ import {
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../shared/pool-error-guard';
+import { parseSchemaName } from '../shared/schema-name';
 import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
 import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
+import { backoffAfterDeadlock, isRetryableDeadlock } from './db/pg-errors';
 import { loadSchemaSnapshot } from './db/schema-snapshot';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
@@ -26,7 +28,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
-import { KnowledgePG } from './domains/knowledge';
+import { getPgKnowledgeIsolationKey, KnowledgePG } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -218,7 +220,7 @@ export class PostgresStore extends MastraCompositeStore {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit, retention: config.retention });
       // Validate schema name to prevent SQL injection
-      this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
+      this.schema = parseSchemaName(config.schemaName || 'public');
 
       if (isPoolConfig(config)) {
         this.#writePool = config.pool;
@@ -250,7 +252,10 @@ export class PostgresStore extends MastraCompositeStore {
         workflows: new WorkflowsPG(domainConfig),
         workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
-        knowledge: new KnowledgePG(domainConfig),
+        knowledge: new KnowledgePG({
+          ...domainConfig,
+          storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config),
+        }),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
@@ -299,6 +304,8 @@ export class PostgresStore extends MastraCompositeStore {
         },
       );
     });
+
+    guardCheckedOutClientErrors(pool, message => this.logger?.warn?.(message));
 
     return pool;
   }
@@ -353,17 +360,33 @@ export class PostgresStore extends MastraCompositeStore {
     // blip during boot) is caught below and resets #initPromise, keeping
     // init() retryable instead of permanently rejecting.
     let pinnedClient: PoolClient | undefined;
+    let pinned: PinnedClientAdapter | undefined;
 
     try {
       pinnedClient = await this.#writePool.connect();
-      const pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
+      pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
       this.#db.pin(pinned);
       // Read the schema's catalog once, up front, so the domains below can
       // answer "does this table/column/index already exist?" locally instead of
       // asking the server ~350 times over this one serialized connection.
       // Cleared in the finally: the snapshot never outlives init().
-      this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
-      await super.init();
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
+        // Knowledge activates lazily through getStore('knowledge'). Settle every
+        // domain before retrying or unpinning: Promise.all rejects while siblings
+        // can still be issuing DDL through the pinned client and snapshot.
+        const results = await Promise.allSettled(
+          Object.entries(this.stores)
+            .filter(([name, store]) => name !== 'knowledge' && store)
+            .map(([, store]) => Promise.resolve().then(() => store.init())),
+        );
+        const failures = results.filter(result => result.status === 'rejected');
+        if (failures.length === 0) break;
+        const terminal = failures.find(result => !isRetryableDeadlock(result.reason));
+        if (terminal || attempt === 3) throw (terminal ?? failures[0])!.reason;
+        this.#db.setSchemaSnapshot(null);
+        await backoffAfterDeadlock(attempt);
+      }
       // Only mark initialized after schema creation actually finishes so a
       // racing second init() caller can't return early and issue runtime
       // queries against tables that aren't yet created.
@@ -386,6 +409,8 @@ export class PostgresStore extends MastraCompositeStore {
         error,
       );
     } finally {
+      // Snapshot loading can reject before its other queued catalog reads settle.
+      await pinned?.drain();
       // Drop the snapshot unconditionally — including when loading it or
       // super.init() threw — so no code path can read a stale catalog picture
       // after init returns.
@@ -576,6 +601,7 @@ export class PostgresStoreVNext extends PostgresStore {
     // 'error' listener, an idle client dropped by the backend escalates to an
     // uncaughtException. Only for pools this store created.
     if (built.owned) {
+      guardCheckedOutClientErrors(built.pool, message => this.logger?.warn?.(message));
       built.pool.on('error', err => {
         this.logger?.warn?.(
           'PostgresStoreVNext: idle observability pool client error (pool discards the client and reconnects on next checkout)',
@@ -625,6 +651,11 @@ export class PostgresStoreVNext extends PostgresStore {
     // Cloud SQL connector / pg ClientConfig style — pass through to pg.Pool.
     const pool = new Pool(cfg as never);
     return { client: new PoolAdapter(pool), pool, owned: true };
+  }
+
+  /** See {@link ObservabilityStoragePostgresVNext.ensurePartitions}. */
+  async ensurePartitions(): Promise<void> {
+    await (this.stores.observability as ObservabilityStoragePostgresVNext).ensurePartitions();
   }
 
   /**

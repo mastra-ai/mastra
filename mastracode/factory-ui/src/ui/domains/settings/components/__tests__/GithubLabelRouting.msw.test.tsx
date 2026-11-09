@@ -1,9 +1,4 @@
-/**
- * BDD coverage for GitHub label routing: a Factory maps issue labels onto its
- * installed custom boards, and each change is saved through the label-routes
- * endpoint (which relocates cards server-side).
- */
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { queryKeys } from '../../../../../api/keys';
 import type { IntakeLabelRoute } from '../../../factory/services/intake';
 import { GithubLabelRouting } from '../GithubLabelRouting';
 
@@ -19,14 +15,17 @@ function stub(initial: IntakeLabelRoute[], boards = [...builtinBoardCatalog.boar
   const saved: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes })),
-    http.put(`${TEST_BASE_URL}/web/intake/label-routes`, async ({ request }) => {
-      const body = (await request.json()) as IntakeLabelRoute & { board: string | null };
-      saved.push(body);
-      const label = body.label.trim().toLowerCase();
-      routes = routes.filter(route => route.label !== label);
-      if (body.board) routes = [...routes, { ...body, label, board: body.board }];
-      return HttpResponse.json({ routes });
-    }),
+    http.put<never, IntakeLabelRoute & { board: string | null }>(
+      `${TEST_BASE_URL}/web/intake/label-routes`,
+      async ({ request }) => {
+        const body = await request.json();
+        saved.push(body);
+        const label = body.label.trim().toLowerCase();
+        routes = routes.filter(route => route.label !== label);
+        if (body.board) routes = [...routes, { ...body, label, board: body.board }];
+        return HttpResponse.json({ routes });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards })),
   );
   return saved;
@@ -51,7 +50,6 @@ describe('GithubLabelRouting', () => {
 
     await waitForMutationsIdle(client);
     const label = screen.getByRole('textbox', { name: 'Label for Acme' });
-    // The card must say which Factory and repositories the routes govern.
     expect(screen.getByText('Acme')).toBeInTheDocument();
     expect(screen.getByText('Applies to issues from acme/app, acme/docs')).toBeInTheDocument();
     const picker = screen.getByRole('combobox', { name: 'Board for new Acme label' });
@@ -98,6 +96,61 @@ describe('GithubLabelRouting', () => {
     expect(screen.queryByRole('combobox', { name: 'Board for release' })).not.toBeInTheDocument();
   });
 
+  it('brings back a route whose removal failed when the label added behind it fails too', async () => {
+    stub([releaseRoute]);
+    let releaseRemoval!: () => void;
+    const removalHeld = new Promise<void>(resolve => {
+      releaseRemoval = resolve;
+    });
+    let writes = 0;
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/label-routes`, async () => {
+        writes++;
+        if (writes === 1) {
+          await removalHeld;
+          return HttpResponse.json({ error: 'storage_unavailable' }, { status: 500 });
+        }
+        return HttpResponse.json({ error: 'label_taken', message: 'Deploy is routed elsewhere.' }, { status: 409 });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderRouting();
+
+    await waitForMutationsIdle(client);
+    await user.click(screen.getByRole('button', { name: 'Remove route for release' }));
+    expect(screen.queryByRole('combobox', { name: 'Board for release' })).not.toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: 'Label for Acme' }), 'deploy');
+    await user.click(screen.getByRole('combobox', { name: 'Board for new Acme label' }));
+    await user.click(await screen.findByRole('option', { name: 'Release Preview' }));
+    const add = screen.getByRole('button', { name: 'Add' });
+    await waitFor(() => expect(add).toBeEnabled());
+    await user.click(add);
+    releaseRemoval();
+
+    await waitForMutationsIdle(client);
+    expect(writes).toBe(2);
+    expect(await screen.findByRole('combobox', { name: 'Board for release' })).toBeInTheDocument();
+  });
+
+  it('keeps cached routes editable when the reload after a refused change fails', async () => {
+    stub([releaseRoute]);
+    const user = userEvent.setup();
+    const { client } = renderRouting();
+
+    await waitForMutationsIdle(client);
+    await screen.findByRole('combobox', { name: 'Board for release' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+      http.put(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+    );
+    await user.click(screen.getByRole('button', { name: 'Remove route for release' }));
+
+    await waitFor(() => expect(client.getQueryState(queryKeys.intakeLabelRoutes('fp-1'))?.status).toBe('error'));
+    await act(() => new Promise(resolve => setTimeout(resolve, 0)));
+    expect(screen.queryByText(/label routes are unavailable/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove route for release' })).toBeEnabled();
+  });
+
   it('flags a route whose board is no longer installed', async () => {
     stub([{ ...releaseRoute, board: 'gone' }]);
     renderRouting();
@@ -107,12 +160,33 @@ describe('GithubLabelRouting', () => {
     expect(screen.getByText(/is not installed; issues stay on Work/)).toBeInTheDocument();
   });
 
-  it('explains that nothing can be routed without custom boards', async () => {
+  it('hides label editors when no custom boards can receive a route', async () => {
     stub([], builtinBoardCatalog.boards);
-    renderRouting();
+    const { client } = renderRouting();
 
-    expect(await screen.findByText(/No custom boards are installed/)).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Routing')).toBeVisible();
     expect(screen.queryByRole('textbox', { name: 'Label for Acme' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('omits redundant Factory and repository scope for a single default-routing source', async () => {
+    stub([], builtinBoardCatalog.boards);
+    const { client } = renderWithProviders(
+      <GithubLabelRouting
+        factoryProjectId="fp-1"
+        name="Acme"
+        repositories={['acme/app', 'acme/docs']}
+        showScope={false}
+      />,
+    );
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Routing')).toBeVisible();
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument();
+    expect(screen.queryByText('acme/app', { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('reports when routes cannot be loaded instead of pretending none exist', async () => {
@@ -136,8 +210,6 @@ describe('GithubLabelRouting', () => {
 
     await waitForMutationsIdle(client);
     expect(screen.getByText(/Installed boards are unavailable right now/)).toBeInTheDocument();
-    expect(screen.queryByText(/No custom boards are installed/)).not.toBeInTheDocument();
-    // The route is still listed; it must not be mislabelled as uninstalled.
     expect(screen.queryByText(/is not installed/)).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Board for release' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Board for new Acme label' })).toBeDisabled();

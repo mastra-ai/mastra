@@ -7,7 +7,7 @@ import { ComposerImageAttachments } from '../ComposerImageAttachments';
 
 describe('composer image attachments', () => {
   describe('when two images are attached', () => {
-    it('previews an image and removes only the chosen image without submitting the message', () => {
+    it('previews an image and removes only the chosen image without submitting the message', async () => {
       const onRemove = vi.fn();
       const onSubmit = vi.fn<FormEventHandler<HTMLFormElement>>(event => event.preventDefault());
       renderWithProviders(
@@ -26,6 +26,13 @@ describe('composer image attachments', () => {
       expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
         'src',
         'data:image/png;base64,aGVsbG8=',
+      );
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for second.png' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Preview' }));
+      expect(within(await screen.findByRole('dialog')).getByRole('img')).toHaveAttribute(
+        'src',
+        'data:image/png;base64,d29ybGQ=',
       );
       fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
       fireEvent.click(screen.getByRole('button', { name: 'Remove second.png' }));

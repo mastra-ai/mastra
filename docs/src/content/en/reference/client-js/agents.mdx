@@ -4,7 +4,6 @@ description: "The Agents API provides methods to interact with Mastra AI agents,
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
-  - "@mastra/core"
 ---
 
 # Agents API
@@ -26,6 +25,8 @@ Returns a record of agent IDs to their serialized agent configurations.
 Get an instance of a specific agent by its ID:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const myAgent = new Agent({
   id: 'my-agent',
 })
@@ -218,6 +219,23 @@ await agent.queueMessage({
 })
 ```
 
+### `queueSignal()`
+
+Queue a typed signal for the next thread turn. It follows the same ordering as `queueMessage()`, but keeps the signal's `type`, `tagName`, and `attributes`.
+
+```typescript
+await agent.queueSignal({
+  signal: {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
 ### `sendSignal()`
 
 Send a lower-level signal to an active agent run or memory thread. Use this for system-generated context such as reactive reminders or notification-shaped context that doesn't need inbox storage. For durable notification records, use the server-side [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) API. For user-authored input, prefer `sendMessage()` or `queueMessage()`.
@@ -348,7 +366,29 @@ await subscription.processDataStream({
 })
 ```
 
-`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout.
+Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored messages as a first `thread-history` chunk instead of fetching history separately. Finished runs aren't replayed after it, so completed answers don't stream again on reconnect.
+
+In the React SDK, `useChat()` exposes the `hasMore` flag from that first page as `initialHistoryPagination`, so you can decide whether to offer loading older messages without another history request:
+
+```typescript
+import { useChat } from '@mastra/react'
+
+const { messages, initialHistoryPagination } = useChat({
+  agentId: 'support-agent',
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  enableThreadSignals: true,
+  withInitialHistory: { perPage: 20 },
+})
+
+// { hasMore: true }: older messages exist
+// { hasMore: false }: the page reaches the start of the thread
+// undefined: history is disabled, still loading, or the subscription ended
+```
+
+`initialHistoryPagination` only describes the initial subscription page for the current agent, resource, thread, and `withInitialHistory` value. It isn't changed by live output or `setMessages()`. After you load older pages yourself, use the `hasMore` value from those responses.
+
+`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout. If a reconnect request fails with a 4xx status (for example `401` or `403`) or `501`, `processDataStream()` stops reconnecting and rejects with the original `MastraClientError`. `408` and `429` are still retried.
 
 <PropertiesTable
   content={[
@@ -364,14 +404,99 @@ await subscription.processDataStream({
     description: 'Thread ID to subscribe to.',
   },
   {
+    name: 'withRunStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Emit live and retained thread-run-status outcomes. Callback types include these chunks only when requested. useChat enables this for its thread subscription.',
+  },
+  {
     name: 'processDataStream().reconnect',
     type: 'boolean | { maxRetries?: number; delayMs?: number }',
     isOptional: true,
     description:
-      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay.',
+      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay. A 4xx (other than `408` and `429`) or `501` response stops reconnecting and rejects with that error.',
   },
 ]}
 />
+
+The subscription also exposes `abort(options?)` and `unsubscribe()`. `await subscription.abort({ clearPendingSignals: true })` requests an abort and clears pending signals without closing the subscription. Omit the flag to preserve pending input. `unsubscribe()` closes the subscription without aborting the run.
+
+### `abortRun(runId)`
+
+Requests cancellation of a durable run by its ID, including a run without a memory thread. Cancelling the response body or aborting the client-wide `abortSignal` only disconnects the observer from durable execution. A per-call `abortSignal` passed to a streaming method requests cancellation for you. Use `abortRun()` to stop a run without that signal.
+
+```typescript
+const runId = crypto.randomUUID()
+const response = await agent.stream('Research this topic', { runId })
+
+// When the user chooses Stop:
+const { aborted } = await agent.abortRun(runId)
+```
+
+<PropertiesTable content={[{ name: 'runId', type: 'string', description: 'ID of the durable run to cancel.' }]} />
+
+Returns `{ aborted: boolean }`. A remote abort request is asynchronous, so `true` doesn't confirm that the worker has stopped. Unknown or completed runs return `false`. This method requires a durable agent and Agent execution permission. Run ownership checks apply. Runs with memory threads also require `memory:write` permission when fine-grained authorization is enabled. Non-durable agents return HTTP 501.
+
+### `abortThread()`
+
+Requests cancellation of the thread's active run. Set `clearPendingSignals: true` to clear pending signals before aborting.
+
+```typescript
+const { aborted } = await agent.abortThread({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  clearPendingSignals: true,
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
+  { name: 'threadId', type: 'string', description: 'Thread to abort.' },
+  {
+    name: 'clearPendingSignals',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Clear pending signals across Agents sharing the thread before aborting. Continuations from continueWithMessages() are excluded.',
+  },
+]}
+/>
+
+Returns `{ aborted: boolean }`. For a remote active owner, `aborted: true` means the request was sent, not acknowledged. Clear-on-abort affects the receiving server's local queues and is forwarded to the active owner. It isn't a global queue clear. Local pending signals are still cleared if no active run is found and `aborted` is `false`.
+
+### `cancelQueuedMessages()`
+
+Cancels selected pending signals without stopping the active run. The operation covers pending input across Agents sharing the same memory thread on the server process handling this request. Unlike the core method, the SDK accepts only signal IDs, not `queueOwnerId`.
+
+```typescript
+const { cancelledSignalIds } = await agent.cancelQueuedMessages({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  signalIds: ['signal-123', 'signal-456'],
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
+  { name: 'threadId', type: 'string', description: 'Thread containing the pending signals.' },
+  {
+    name: 'signalIds',
+    type: 'string[]',
+    description: 'Between 1 and 1,000 nonempty signal IDs. Duplicate and unknown IDs are ignored.',
+  },
+]}
+/>
+
+Returns `{ cancelledSignalIds: string[] }` with each ID cancelled on the receiving server process once. The response doesn't include remote acknowledgements. Signals already handed to execution or another owner aren't included. Missing, empty, or oversized ID lists return HTTP 400. Thread ownership restrictions apply to both cancellation routes.
+
+The server publishes all requested IDs through its shared PubSub backend, even when none are pending on the receiving process. Other subscribed instances can then remove matching pending input, but this best-effort, asynchronous propagation doesn't confirm remote cancellation. Cancellation doesn't undo saved messages, state updates, notification records, or acceptance acknowledgements. It doesn't cancel continuations from `continueWithMessages()`.
+
+The server must use a core version supporting thread-wide cancellation and clear-on-abort. Upgrade `@mastra/core` alongside `@mastra/server`. Unsupported requests return HTTP 501 rather than using older cancellation behavior. With fine-grained authorization enabled, both cancellation routes require `memory:write` permission on the thread in addition to Agent execution permission.
 
 ### `streamUntilIdle()`
 
@@ -726,7 +851,7 @@ response.processDataStream({
 
 ### Shape client tool output for the model
 
-Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The transformed output is sent back to the server alongside the raw result, so the raw result stays available for storage and application logic.
+Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The client sends both the transformed output and the raw result back to the server, keeping the raw result available for storage and application logic.
 
 ```typescript
 const screenshotTool = createTool({
@@ -872,9 +997,9 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-#### Durable stored agents
+#### Resumable streams for stored agents
 
-Set `durable` to run the agent as a [durable agent](/docs/harness/durable-agents) once the server hydrates it. Pass `true` to accept the defaults, or an object to tune the durable loop:
+Set `durable` to configure [resumable streams](/docs/agents/resumable-streams) on the hydrated plain agent. Pass `true` to enable streams, `false` to disable them, or an object to tune stream cleanup:
 
 ```typescript
 const agent = await mastraClient.createStoredAgent({
@@ -885,11 +1010,11 @@ const agent = await mastraClient.createStoredAgent({
     provider: 'openai',
     name: 'gpt-5.4',
   },
-  durable: { maxSteps: 50, cleanupTimeoutMs: 0 },
+  durable: { cleanupTimeoutMs: 0 },
 })
 ```
 
-Only serializable options are accepted. The durable cache and pubsub are inherited from the server's `Mastra` instance. If it has no distributed cache or pubsub configured, durability is process-local. Automatic recovery is still configured in code through `recovery.durableAgents`.
+Only serializable options are accepted, with cache and pubsub inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` also use this field for resumable streams only. To retain durable execution and checkpoint recovery, register a code agent wrapped with `createDurableAgent({ agent })`.
 
 ### `getStoredAgent()`
 
@@ -1055,7 +1180,7 @@ console.log(diff.changes) // Fields that changed between versions
 In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
 
 ```typescript title="Version targeting with React SDK"
-import { useChat } from '@mastra/react'
+import { useChat } from '@mastra/react/chat'
 
 function Chat() {
   const { messages, input, handleInputChange, handleSubmit } = useChat({

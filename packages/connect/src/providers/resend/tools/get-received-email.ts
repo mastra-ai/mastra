@@ -13,7 +13,7 @@ const ProviderResponseSchema = z
     to: z.array(z.string()).optional(),
     from: z.string().optional(),
     subject: z.string().optional(),
-    message_id: z.string().optional(),
+    message_id: z.string().nullable().optional(),
     bcc: z.array(z.string()).nullable().optional(),
     cc: z.array(z.string()).nullable().optional(),
     reply_to: z.array(z.string()).nullable().optional(),

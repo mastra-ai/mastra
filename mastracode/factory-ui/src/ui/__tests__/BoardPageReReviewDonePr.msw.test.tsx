@@ -11,6 +11,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -65,29 +66,18 @@ const donePrWorkItem = {
 /** Stubs the review board's data endpoints and captures what a Re-review writes. */
 function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
   const transitions: Array<Record<string, unknown>> = [];
-  const patches: Array<Record<string, unknown>> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -110,13 +100,9 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [reviewSession] }),
     ),
-    http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
-      patches.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json({ workItem: { ...donePrWorkItem, id: String(params.itemId), revision: 4 } });
-    }),
     http.post(
       `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`,
       async ({ params, request }) => {
@@ -136,7 +122,7 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     ),
   );
 
-  return { transitions, patches };
+  return { transitions };
 }
 
 function renderReviewBoard() {
@@ -157,21 +143,6 @@ describe('Re-review action for open PRs in Done', () => {
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
     expect(transitions).toEqual([
       expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
-    ]);
-  });
-
-  it('re-reviews hands-off, stamping the card before the move that queues the run', async () => {
-    const { transitions, patches } = stubReviewBoard();
-    const user = userEvent.setup();
-    const { client } = renderReviewBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Re-review hands-off' }));
-
-    await waitForMutationsIdle(client);
-    expect(patches).toEqual([{ plansPreapproved: true }]);
-    expect(transitions).toEqual([
-      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 4 }),
     ]);
   });
 

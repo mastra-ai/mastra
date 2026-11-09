@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -258,10 +259,13 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       const pending = await screen.findByRole('list', { name: 'Pending trace signals' });
-      expect(within(pending).getByText('Handoff Quality')).not.toBeNull();
-      expect(within(pending).getByText('0 generated · 0 embedded')).not.toBeNull();
-      expect(within(pending).getByText('Resolution Detail')).not.toBeNull();
-      expect(within(pending).getByText('31 generated · 19 embedded')).not.toBeNull();
+      const handoff = within(pending).getByText('Handoff Quality').closest('li');
+      const resolution = within(pending).getByText('Resolution Detail').closest('li');
+      if (!handoff || !resolution) throw new Error('Expected both pending signal rows');
+      expect(within(handoff).getByText('0 generated')).not.toBeNull();
+      expect(within(handoff).getByText('0 embedded')).not.toBeNull();
+      expect(within(resolution).getByText('31 generated')).not.toBeNull();
+      expect(within(resolution).getByText('19 embedded')).not.toBeNull();
       expect(within(pending).queryByText('Legacy Risk')).toBeNull();
     });
   });
@@ -517,9 +521,9 @@ describe('Trace Intelligence page', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByText('Custom range...'));
-      const endPanel = (await screen.findByText('End')).parentElement;
-      if (!endPanel) throw new Error('Custom range end panel was not rendered');
-      fireEvent.click(within(endPanel).getByRole('gridcell', { name: '25' }));
+      // The preset only sets a start (July 20th), so one click picks the end.
+      fireEvent.click(await screen.findByRole('button', { name: /July 25th, 2026/ }));
+      fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '00:00' } });
       fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
       const expectedFrom = new Date(2026, 6, 20, 0, 0).toISOString();
@@ -606,7 +610,7 @@ describe('Trace Intelligence page', () => {
       );
       renderSignalsPageWithShell('billing-agent');
 
-      expect(await screen.findByText('Snapshot 1/2 · Jul 1–8, 2026 · 20 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 1/2. Jul 1 – 8, 2026. 20 traces')).not.toBeNull();
       expect(headerEntityCrumb().textContent).toContain('billing-agent');
     });
   });

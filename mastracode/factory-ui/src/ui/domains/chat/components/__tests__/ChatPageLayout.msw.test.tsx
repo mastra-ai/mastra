@@ -1,4 +1,4 @@
-import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,7 @@ import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatPageLayout } from '../ChatPageLayout';
 
 function DesktopSidebarStateProbe() {
-  const { desktopState } = useMainSidebar();
+  const { desktopState } = useSidebar();
   return <output data-testid="desktop-sidebar-state">{desktopState}</output>;
 }
 
@@ -32,30 +32,40 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('renders no header on mobile — AppLayout owns the mobile trigger and search', () => {
+  it('puts the drawer trigger and the breadcrumbs on one mobile header row, with search on the right', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
-        <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
+        <SidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <OverlaysProvider>
-            <ChatPageLayout>body</ChatPageLayout>
+            <ChatPageLayout crumbs={<li>Page title</li>} headerActions={<button type="button">Panel</button>}>
+              body
+            </ChatPageLayout>
           </OverlaysProvider>
-        </MainSidebarProvider>
+        </SidebarProvider>
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
+    expect(within(header).getByText('Page title')).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
+    const actions = within(header).getAllByRole('button').slice(-2);
+    expect(actions.map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
+      'Panel',
+      'Search and navigate',
+    ]);
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 
   it('renders page content without shell controls while the desktop sidebar is open', () => {
     mockMobileViewport(false);
     render(
-      <MainSidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
+      <SidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
         <OverlaysProvider>
           <ChatPageLayout crumbs={<li>Page title</li>}>body</ChatPageLayout>
         </OverlaysProvider>
-      </MainSidebarProvider>,
+      </SidebarProvider>,
     );
 
     const header = screen.getByRole('banner');
@@ -68,7 +78,7 @@ describe('ChatPageLayout', () => {
     mockMobileViewport(false);
 
     render(
-      <MainSidebarProvider
+      <SidebarProvider
         defaultState="collapsed"
         storageKey="chat-header-desktop-test"
         collapsedWidth={0}
@@ -78,7 +88,7 @@ describe('ChatPageLayout', () => {
           <ChatPageLayout>body</ChatPageLayout>
           <DesktopSidebarStateProbe />
         </OverlaysProvider>
-      </MainSidebarProvider>,
+      </SidebarProvider>,
     );
 
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });

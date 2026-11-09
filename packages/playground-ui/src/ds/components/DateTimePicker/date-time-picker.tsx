@@ -1,14 +1,14 @@
-import { format, formatDate, isValid } from 'date-fns';
+import { format, isValid, parse } from 'date-fns';
 import { CalendarIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
-import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 import { DatePicker } from './date-picker';
-import { TimePicker } from './time-picker';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
@@ -84,14 +84,24 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   );
 };
 
+/** `09:00 AM` or `9:00 AM` (the `defaultTimeStrValue` format) or `09:00`, as the time field's `HH:mm`. */
+function toTimeFieldValue(timeStr: string | undefined): string {
+  if (!timeStr) return '';
+  for (const pattern of ['HH:mm', 'h:mm a']) {
+    const parsed = parse(timeStr.trim(), pattern, new Date());
+    if (isValid(parsed)) return format(parsed, 'HH:mm');
+  }
+  return '';
+}
+
+/** The day at the `HH:mm` time, or the day as it is when there's no time. */
 function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string }): Date | null {
   if (!isValid(date)) {
     return null;
   }
 
   if (timeStr) {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const newDate = new Date(`${dateStr} ${timeStr}`);
+    const newDate = parse(timeStr, 'HH:mm', date);
     if (isValid(newDate)) {
       return newDate;
     }
@@ -116,10 +126,10 @@ export const DateTimePickerContent = ({
   className?: string;
 }) => {
   const [localErrorMsg, setLocalErrorMsg] = React.useState<string | null>(null);
-  const [dateInputValue, setDateInputValue] = React.useState<string>(
-    value ? format(getCompoundDate({ date: value, timeStr: defaultTimeStrValue }) || '', 'PP p') : '',
+  const [timeStrValue, setTimeStrValue] = React.useState<string>(() =>
+    value ? format(value, 'HH:mm') : toTimeFieldValue(defaultTimeStrValue) || '00:00',
   );
-  const [timeStrValue, setTimeStrValue] = React.useState<string>(defaultTimeStrValue || '');
+  const [dateInputValue, setDateInputValue] = React.useState<string>(value ? format(value, 'PP p') : '');
   const [selected, setSelected] = React.useState<Date | undefined>(value ? new Date(value) : undefined);
 
   const debouncedDateUpdate = useDebouncedCallback((date: Date) => {
@@ -156,7 +166,9 @@ export const DateTimePickerContent = ({
 
   const dateInputValueDate = new Date(dateInputValue);
   const dateInputValueIsValid = isValid(dateInputValueDate);
-  const newValueDefined = dateInputValueIsValid && dateInputValueDate.getTime() !== value?.getTime();
+  // A cleared time field leaves the last valid time in the date text, so there's nothing to apply.
+  const timeFilled = timeStrValue !== '';
+  const newValueDefined = timeFilled && dateInputValueIsValid && dateInputValueDate.getTime() !== value?.getTime();
 
   const handleDaySelect = (date: Date | undefined) => {
     setSelected(date);
@@ -217,15 +229,11 @@ export const DateTimePickerContent = ({
         }
       }}
     >
-      <TextFieldBlock
-        name="date-range"
-        type="text"
-        value={dateInputValue}
-        onChange={handleInputChange}
-        placeholder={placeholder}
-        className="m-4 mb-0 w-auto!"
-        errorMsg={localErrorMsg}
-      />
+      <Field invalid={Boolean(localErrorMsg)} className="m-4 mb-0 w-auto!">
+        <FieldLabel className="sr-only">Date</FieldLabel>
+        <Input type="text" value={dateInputValue} onChange={handleInputChange} placeholder={placeholder} />
+        <FieldError>{localErrorMsg}</FieldError>
+      </Field>
 
       <DatePicker
         mode="single"
@@ -236,10 +244,13 @@ export const DateTimePickerContent = ({
         {...props}
       />
 
-      <TimePicker
-        onValueChange={handleTimeStrChange}
-        className="m-4 mt-0 w-auto"
-        defaultValue={value ? formatDate(new Date(value), 'hh:mm a') : defaultTimeStrValue}
+      <Input
+        type="time"
+        size="sm"
+        aria-label="Time"
+        value={timeStrValue}
+        onChange={e => handleTimeStrChange(e.target.value)}
+        className="m-4 mt-0 w-auto [&::-webkit-calendar-picker-indicator]:hidden"
       />
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">
@@ -255,7 +266,7 @@ export const DateTimePickerContent = ({
           size="md"
           variant={newValueDefined ? 'primary' : 'default'}
           onClick={() => {
-            dateInputValueIsValid ? handleApply() : handleCancel();
+            newValueDefined ? handleApply() : handleCancel();
           }}
         >
           {newValueDefined ? `Apply` : `Cancel`}

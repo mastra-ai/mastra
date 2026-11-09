@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
-import { NoOpObservability } from '../../observability';
+import { NoOpObservability, SpanType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -402,7 +402,9 @@ describe('runEvals', () => {
       expect(mockScorers[1].run).toHaveBeenCalled();
     });
 
-    it('should run scorers on individual step results', async () => {
+    // On storage v2 the first step's result is evicted by the end of the run, so its scorer only
+    // sees it if the result's lazy `steps` is loaded back from storage.
+    it.each([1, 2] as const)('should run scorers on individual step results (storage v%s)', async storageVersion => {
       const mockStep = createStep({
         id: 'test-step',
         inputSchema: z.object({ input: z.string() }),
@@ -411,15 +413,25 @@ describe('runEvals', () => {
           return { output: `Processed: ${inputData.input}` };
         },
       });
+      const passOn = (id: string) =>
+        createStep({
+          id,
+          inputSchema: z.object({ output: z.string() }),
+          outputSchema: z.object({ output: z.string() }),
+          execute: async ({ inputData }) => inputData,
+        });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        options: { validateInputs: false },
+        options: { validateInputs: false, storageVersion },
       })
         .then(mockStep)
+        .then(passOn('second-step'))
+        .then(passOn('third-step'))
         .commit();
+      const mastra = new Mastra({ workflows: { workflow }, logger: false, storage: new InMemoryStore() });
 
       // Mock the scorer to track what it receives
       const mockScorer = createMockScorer('step-scorer', 0.8);
@@ -432,7 +444,7 @@ describe('runEvals', () => {
             'test-step': [mockScorer],
           },
         },
-        target: workflow,
+        target: mastra.getWorkflow('workflow'),
       });
 
       // Verify the scorer was called with step-specific data
@@ -646,37 +658,18 @@ describe('runEvals', () => {
         .then(mockStep)
         .commit();
 
-      // Create mock scores storage
-      const saveScoreSpy = vi.fn().mockResolvedValue({ score: {} });
-      const mockScoresStore = {
-        saveScore: saveScoreSpy,
-      };
-
-      // Mock workflows store with methods needed for scorer workflow runs
-      const mockWorkflowsStore = {
-        getWorkflowRunById: vi.fn().mockResolvedValue(null),
-        deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
-        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
-        listWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
-      };
-
-      const mockStorage = {
-        init: vi.fn().mockResolvedValue(undefined),
-        getStore: vi.fn().mockImplementation(async (domain: string) => {
-          if (domain === 'workflows') return mockWorkflowsStore;
-          if (domain === 'scores') return mockScoresStore;
-          return null;
-        }),
-        __setLogger: vi.fn(),
-      };
-
+      // Workflow runs claim run ownership through the workflows store, so a
+      // partial mock cannot satisfy them. Use a real in-memory store.
       const mastra = new Mastra({
         workflows: {
           testWorkflow: workflow,
         },
         logger: false,
-        storage: mockStorage as any,
+        storage: new InMemoryStore(),
       });
+
+      const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+      const saveScoreSpy = vi.spyOn(scoresStore, 'saveScore');
 
       const scorer = createScorer({
         id: 'workflowScorer',
@@ -1193,6 +1186,105 @@ describe('runEvals', () => {
       });
 
       expect(result.scores.trajectory['raw-output-check']).toBe(1.0);
+    });
+
+    describe('trace store reads', () => {
+      // The storage exporter buffers spans, so the trace is only readable after a flush.
+      async function runWithTraceStore({
+        storedOnFlush,
+        flushFails = false,
+      }: {
+        storedOnFlush: boolean;
+        flushFails?: boolean;
+      }) {
+        const { agent } = createToolCallingAgent();
+        const observability = new NoOpObservability();
+        const storage = new InMemoryStore();
+        const mastra = new Mastra({ agents: { agent }, storage, observability, logger: false });
+        const target = mastra.getAgent('agent');
+        const generate = target.generate.bind(target);
+        vi.spyOn(target, 'generate').mockImplementation(async (...args: any[]) => ({
+          ...(await (generate as any)(...args)),
+          traceId: 'trace-1',
+          spanId: 'agent-1',
+        }));
+
+        let flushed = false;
+        vi.spyOn(observability, 'flush').mockImplementation(async () => {
+          if (flushFails) throw new Error('flush failed');
+          flushed = storedOnFlush;
+        });
+        const span = (spanId: string, spanType: SpanType, parentSpanId: string | null) => ({
+          traceId: 'trace-1',
+          spanId,
+          parentSpanId,
+          name: spanId,
+          spanType,
+          startedAt: new Date('2025-01-01T00:00:00Z'),
+          endedAt: new Date('2025-01-01T00:00:01Z'),
+        });
+        const observabilityStore = (await storage.getStore('observability'))!;
+        vi.spyOn(observabilityStore, 'getTrace').mockImplementation(async () =>
+          flushed
+            ? ({
+                traceId: 'trace-1',
+                spans: [
+                  span('agent-1', SpanType.AGENT_RUN, null),
+                  span('model-1', SpanType.MODEL_GENERATION, 'agent-1'),
+                  span('tool-1', SpanType.TOOL_CALL, 'model-1'),
+                ],
+              } as any)
+            : null,
+        );
+        const warn = vi.spyOn(mastra.getLogger(), 'warn');
+        const debug = vi.spyOn(mastra.getLogger(), 'debug');
+
+        let received: any;
+        const probe = createScorer({
+          id: 'trajectory-probe',
+          description: 'Keeps its input',
+          type: 'trajectory',
+        }).generateScore(({ run }) => {
+          received = run.output;
+          return 1;
+        });
+        let gateReceived: any;
+        const gate = createScorer({
+          id: 'trajectory-gate',
+          description: 'Keeps its input',
+          type: 'trajectory',
+        }).generateScore(({ run }) => {
+          gateReceived = run.output;
+          return 1;
+        });
+        await runEvals({
+          data: [{ input: 'What is the weather?' }],
+          scorers: { trajectory: [probe] },
+          gates: [gate],
+          target,
+        });
+        return { received, gateReceived, warn, debug };
+      }
+
+      it('uses the stored trace once observability is flushed', async () => {
+        const { received, gateReceived } = await runWithTraceStore({ storedOnFlush: true });
+        expect(received.steps.map((s: any) => s.stepType)).toEqual(['model_generation']);
+        expect(gateReceived.steps.map((s: any) => s.stepType)).toEqual(['model_generation']);
+      });
+
+      it('uses the messages when the trace is not stored', async () => {
+        const { received, debug } = await runWithTraceStore({ storedOnFlush: false });
+        expect(received.steps.map((s: any) => s.name)).toEqual(['weatherTool', 'calendarTool']);
+        expect(debug).toHaveBeenCalledWith(
+          expect.stringContaining('Trace trace-1 was not found in observability storage'),
+        );
+      });
+
+      it('keeps scoring when the flush fails', async () => {
+        const { received, warn } = await runWithTraceStore({ storedOnFlush: true, flushFails: true });
+        expect(received.steps.map((s: any) => s.name)).toEqual(['weatherTool', 'calendarTool']);
+        expect(warn).toHaveBeenCalledWith('Failed to flush observability before reading the trace:', expect.any(Error));
+      });
     });
   });
 

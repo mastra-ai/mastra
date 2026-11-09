@@ -111,6 +111,32 @@ describe('attention announcements', () => {
     expect(announced).toEqual([SCOPE]);
   });
 
+  it('refuses to requeue a failure a rerun cannot fix, and stays quiet', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    const claimed = await claimDecision(storage, workItemId, 'ambiguous');
+    const failed = await storage.failDeferredDecision({
+      ...leaseOf(claimed),
+      now: NOW,
+      availableAt: NOW,
+      lastError: 'unconfirmed',
+      failureCode: 'skill_delivery_ambiguous',
+      terminal: true,
+    });
+    if (!failed) throw new Error('Expected a failed decision');
+    announced.length = 0;
+
+    await expect(storage.retryDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, failed.id, NOW)).resolves.toBe(
+      null,
+    );
+    expect(await storage.getDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, failed.id)).toMatchObject({
+      status: 'failed',
+      failureCode: 'skill_delivery_ambiguous',
+      deliveryGeneration: failed.deliveryGeneration,
+    });
+    expect(announced).toEqual([]);
+  });
+
   it('announces a superseded proposal, and nothing when none matched', async () => {
     const { storage, announced } = await makeStorage();
     const workItemId = await seedWorkItem(storage);

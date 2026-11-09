@@ -1,9 +1,6 @@
 ---
 title: "Memory | v1 Migration Guide"
 description: "Memory configuration now requires explicit parameters, and default settings have been updated for better performance and predictability."
-packages:
-  - "@mastra/memory"
-  - "@mastra/core"
 ---
 
 # Memory
@@ -193,7 +190,7 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 ```diff
 - import { MastraMessageV2 } from '@mastra/core';
 - function yourCustomFunction(input: MastraMessageV2) {}
-+ import { MastraDBMessage } from '@mastra/core';
++ import type { MastraDBMessage } from '@mastra/core/agent';
 + function yourCustomFunction(input: MastraDBMessage) {}
 ```
 

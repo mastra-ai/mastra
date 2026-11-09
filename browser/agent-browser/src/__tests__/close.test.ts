@@ -60,14 +60,6 @@ describe('browser_close', () => {
     expect(browser.status).toBe('closed');
   });
 
-  it('transitions status from ready to closed', async () => {
-    expect(browser.status).toBe('ready');
-
-    await browser.close();
-
-    expect(browser.status).toBe('closed');
-  });
-
   it('sets isBrowserRunning to false after close', async () => {
     expect(browser.isBrowserRunning()).toBe(true);
 

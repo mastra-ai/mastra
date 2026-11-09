@@ -8,6 +8,7 @@
  * coding and isn't polluted with the long workflow-authoring contract.
  */
 import type { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -50,7 +51,12 @@ export const createWorkflowTool = createTool({
     // dynamic model resolver (getDynamicModel) sees controller.session.modelId.
     // Without this the sub-agent throws "No model selected" even when the user
     // has /models configured for the main code-agent.
-    const stream = await builder.stream(request, { requestContext });
+    // Drop the reserved memory keys: they would bind the builder to the parent
+    // run's thread, and the builder would wait on the run that is waiting on it.
+    const builderRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
+    builderRequestContext?.delete(MASTRA_THREAD_ID_KEY);
+    builderRequestContext?.delete(MASTRA_RESOURCE_ID_KEY);
+    const stream = await builder.stream(request, { requestContext: builderRequestContext });
 
     // Sub-agent runs its own tool loop. We MUST verify save-workflow actually
     // ran and returned ok — otherwise the sub-agent's natural-language "summary"

@@ -27,6 +27,10 @@ const BASE_SPAN: Omit<RawTraceQuerySpan, 'cursorId' | 'traceId' | 'spanId'> = {
   rootEntityVersionId: 'agent-v1',
   environment: 'production',
   organizationId: null,
+  runId: null,
+  sessionId: null,
+  userId: null,
+  tags: null,
 };
 
 const span = (
@@ -92,11 +96,15 @@ export const TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE = {
 export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
     span(1, 'trace-a', 'root-a-old', {
+      name: 'superseded-root',
+      spanType: 'processor_run',
       startedAt: '2026-08-02T10:00:00.000Z',
       metadata: { superseded: 'old' },
       environment: 'development',
+      tags: ['superseded'],
     }),
     span(10, 'trace-a', 'root-a', {
+      tags: ['beta', 'alpha'],
       metadata: {
         region: 'us-west-2',
         customer: 'acme',
@@ -123,13 +131,15 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       endedAt: null,
       name: 'old-model-call',
       spanType: 'model_generation',
-      attributes: { model: 'superseded-model', provider: 'old-provider' },
+      model: 'superseded-model',
+      provider: 'old-provider',
     }),
     span(12, 'trace-a', 'span-model-a', {
       parentSpanId: 'root-a',
       name: 'model-call',
       spanType: 'model_generation',
-      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      model: 'claude-sonnet-4-6',
+      provider: 'anthropic',
     }),
     span(20, 'trace-b', 'root-b', {
       startedAt: '2026-08-11T10:00:00.000Z',
@@ -141,33 +151,44 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
         unicodeValue: '大阪',
       },
       environment: 'staging',
+      // Stores trim and drop blank tags on write, so discovery only sees `beta`.
+      tags: [' beta ', '', '   '],
     }),
     span(21, 'trace-b', 'span-model-b', {
       parentSpanId: 'root-b',
       name: 'model-call',
       spanType: 'model_generation',
-      attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      model: 'claude-sonnet-4-6',
+      provider: 'anthropic',
     }),
     span(30, 'trace-c', 'root-c', {
+      name: 'nightly-sync',
+      spanType: 'workflow_run',
       startedAt: '2026-08-12T10:00:00.000Z',
       metadata: { region: 'eu-west-1', customer: 'acme' },
       error: { message: 'failed' },
+      tags: [],
     }),
     span(31, 'trace-c', 'span-model-c', {
       parentSpanId: 'root-c',
       name: 'fallback-call',
       spanType: 'model_generation',
+      // Exported before the dedicated columns were filled: discovery reads the attribute fallback.
       attributes: { model: 'gpt-5', provider: 'openai' },
     }),
     span(40, 'trace-pending', 'root-pending', {
+      name: 'pending-root',
+      spanType: 'processor_run',
       isPending: true,
       startedAt: '2026-08-13T10:00:00.000Z',
       endedAt: null,
       metadata: { pendingOnly: 'excluded' },
+      tags: ['excluded'],
     }),
     span(50, 'trace-outside', 'root-outside', {
       startedAt: '2026-07-01T10:00:00.000Z',
       metadata: { outsideOnly: 'excluded' },
+      tags: ['excluded'],
     }),
     span(60, 'trace-scoped-a', 'root-scoped-a', {
       startedAt: '2026-09-02T10:00:00.000Z',

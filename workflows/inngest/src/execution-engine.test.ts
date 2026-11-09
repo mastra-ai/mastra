@@ -1,6 +1,6 @@
 import { MastraNonRetryableError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
-import { Inngest, NonRetriableError } from 'inngest';
+import { Inngest, NonRetriableError, serializeError, StepError } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
@@ -175,9 +175,20 @@ function createNestedResumeFixture(
     invokeImpl?: (id: string, opts: any) => Promise<any>;
     /** Registers a spy logger on the engine via __registerMastra. */
     withLoggerSpy?: boolean;
+    /** Resume labels stored on the nested snapshot, and the label the parent resumes with. */
+    resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+    label?: string;
   } = {},
 ) {
-  const { stepResultShape = 'legacy', foreachIndex, mode = 'resume', invokeImpl, withLoggerSpy } = options;
+  const {
+    stepResultShape = 'legacy',
+    foreachIndex,
+    mode = 'resume',
+    invokeImpl,
+    withLoggerSpy,
+    resumeLabels,
+    label,
+  } = options;
   const inngest = new Inngest({ id: 'nested-resume-test' });
   const { createWorkflow, createStep } = init(inngest);
   const suspendedStep = createStep({
@@ -204,6 +215,7 @@ function createNestedResumeFixture(
     value: { count: 1 },
     context: nestedStepResults,
     suspendedPaths,
+    resumeLabels,
   });
   const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
   const mastra = {
@@ -246,7 +258,7 @@ function createNestedResumeFixture(
         state: {},
         ...(foreachIndex !== undefined ? { foreachIndex } : {}),
       } as any,
-      ...(mode === 'resume' ? { resume: { steps: [nestedWorkflow.id], resumePayload } } : {}),
+      ...(mode === 'resume' ? { resume: { steps: [nestedWorkflow.id], resumePayload, label } } : {}),
       prevOutput: {},
       inputData: { value: 'start' },
       pubsub: { publish: vi.fn().mockResolvedValue(undefined) } as any,
@@ -266,6 +278,126 @@ function createNestedResumeFixture(
     suspendedStep,
   };
 }
+
+/**
+ * An engine whose step.run() behaves like a real Inngest server: an error thrown in
+ * the callback is serialized, and the caller gets a StepError rebuilt from it.
+ * `thrown` records what each callback threw, which is what Inngest's retry decision sees.
+ */
+function createInngestLikeEngine() {
+  const thrown: unknown[] = [];
+  const inngestStep = {
+    run: vi.fn(async (id: string, fn: () => Promise<unknown>) => {
+      try {
+        return await fn();
+      } catch (err) {
+        thrown.push(err);
+        throw new StepError(id, serializeError(err));
+      }
+    }),
+    sleep: vi.fn(),
+    sleepUntil: vi.fn(),
+  };
+
+  return { engine: new InngestExecutionEngine(undefined as any, inngestStep as any, 0, {} as any), thrown };
+}
+
+describe('InngestExecutionEngine durable failures', () => {
+  // Inngest applies the function-level `retries` to every step.run() that throws, so
+  // step code must fail its step.run() as NonRetriableError; executeStepWithRetry owns
+  // step retries.
+  it('fails step code as NonRetriableError so Inngest does not retry it', async () => {
+    const { engine, thrown } = createInngestLikeEngine();
+
+    await engine.executeStepWithRetry(
+      'workflow.test.step.failing',
+      async () => {
+        throw new Error('step code failed');
+      },
+      { retries: 0, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(thrown).toHaveLength(1);
+    expect(thrown[0]).toBeInstanceOf(NonRetriableError);
+    expect((thrown[0] as Error).cause).toMatchObject({ status: 'failed', error: { message: 'step code failed' } });
+  });
+
+  it('keeps built-in step error types non-retriable', async () => {
+    const { engine, thrown } = createInngestLikeEngine();
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.type-error',
+      async () => {
+        throw new TypeError('bad input');
+      },
+      { retries: 0, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    // The wrapper's prototype becomes TypeError (so older SDKs report that name), so Inngest
+    // must recognize it through the `NonRetriableError` name, which it also checks.
+    expect((thrown[0] as Error).name).toBe('NonRetriableError');
+    expect((thrown[0] as Error).stack).toMatch(/^TypeError: bad input/);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.error).toMatchObject({ name: 'TypeError', message: 'bad input' });
+    }
+  });
+
+  it('keeps failures of other durable operations retriable', async () => {
+    const { engine, thrown } = createInngestLikeEngine();
+
+    const error = await engine
+      .wrapDurableOperation('workflow.test.span.start', async () => {
+        throw new Error('storage unavailable');
+      })
+      .catch(e => e);
+
+    expect(thrown[0]).not.toBeInstanceOf(NonRetriableError);
+    expect(error).toBeInstanceOf(StepError);
+    expect(error.message).toBe('storage unavailable');
+  });
+
+  it('retries step code until step retries are exhausted', async () => {
+    const { engine } = createInngestLikeEngine();
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.transient',
+      async () => {
+        calls++;
+        throw new Error('temporary failure');
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(4);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.error.message).toBe('temporary failure');
+      expect(result.error.nonRetryable).toBeUndefined();
+    }
+  });
+
+  it('does not retry MastraNonRetryableError step failures', async () => {
+    const { engine } = createInngestLikeEngine();
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.fatal',
+      async () => {
+        calls++;
+        throw new MastraNonRetryableError('permanent failure');
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.nonRetryable).toBe(true);
+    }
+  });
+});
 
 describe('InngestExecutionEngine.executeWorkflowStep', () => {
   it('restores the suspended child path when resuming with only the nested workflow id', async () => {
@@ -287,6 +419,25 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
       resumePayload,
       resumePath: [1, 0],
     });
+  });
+
+  // Technical: without the iteration index the child's foreach hands the payload to every parked
+  // iteration, so approving one agent tool call ran the others too (#27925).
+  it('resumes only the parked tool call the approval names', async () => {
+    const { execute, invoke } = createNestedResumeFixture(
+      { 'suspended-child-step': [1, 0] },
+      {
+        label: 'call-b',
+        resumeLabels: {
+          'call-a': { stepId: 'suspended-child-step', foreachIndex: 0 },
+          'call-b': { stepId: 'suspended-child-step', foreachIndex: 1 },
+        },
+      },
+    );
+
+    await execute();
+
+    expect(invoke.mock.calls[0]?.[1].data.resume).toMatchObject({ label: 'call-b', forEachIndex: 1 });
   });
 
   it('replays the memoized invoke on the delivery pass when the child is no longer suspended', async () => {
@@ -407,6 +558,25 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     expect(result).toMatchObject({ status: 'failed' });
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error.mock.calls[0]?.[0]).toContain('child blew up');
+  });
+
+  it('keeps the message of a failed step.invoke() through step output serialization', async () => {
+    const { execute } = createNestedResumeFixture(
+      {},
+      {
+        mode: 'fresh',
+        invokeImpl: async (id: string) => {
+          throw new StepError(id, serializeError(new Error('step output size is greater than the limit')));
+        },
+      },
+    );
+
+    const result = await execute();
+
+    expect(result).toMatchObject({ status: 'failed' });
+    // Inngest memoizes step.run() output as JSON, so assert on the serialized form.
+    const serialized = JSON.parse(JSON.stringify((result as any).error));
+    expect(serialized.message).toContain('step output size is greater than the limit');
   });
 });
 

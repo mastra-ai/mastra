@@ -311,6 +311,49 @@ describe('MastraAuthGoogle', () => {
       expect(jwtVerify).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps SSO sessions valid for cookieMaxAge after the Google ID token expires', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const cookieMaxAge = 24 * 60 * 60;
+        const auth = new MastraAuthGoogle({
+          clientSecret: 'test-client-secret',
+          allowedDomains: 'example.com',
+          session: { cookiePassword, cookieMaxAge },
+        }) as any;
+        const parsed = new URL(await auth.getLoginUrl('http://localhost/callback', 'test-state'));
+
+        mockFetch.mockResolvedValueOnce(
+          new Response(JSON.stringify({ access_token: 'access-token', id_token: 'id-token', expires_in: 3600 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+        (jwtVerify as any).mockResolvedValueOnce({
+          payload: {
+            sub: 'google-user-123',
+            email: 'user@example.com',
+            hd: 'example.com',
+            nonce: parsed.searchParams.get('nonce'),
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          },
+        });
+        const sessionCreatedAt = Date.now();
+        const callbackResult = await auth.handleCallback('code', parsed.searchParams.get('state')!);
+        const cookie = callbackResult.cookies![0]!.split(';')[0]!;
+        const request = () => new Request('http://localhost', { headers: { Cookie: cookie } });
+
+        vi.setSystemTime(sessionCreatedAt + cookieMaxAge * 1000 - 1000);
+        const user = await auth.getCurrentUser(request());
+        expect(user?.id).toBe('google-user-123');
+        expect(auth.authorizeUser(user!)).toBe(true);
+
+        vi.setSystemTime(sessionCreatedAt + cookieMaxAge * 1000 + 1000);
+        await expect(auth.getCurrentUser(request())).resolves.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('falls back to Bearer ID token verification', async () => {
       (jwtVerify as any).mockResolvedValueOnce({
         payload: {

@@ -18,6 +18,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
 import { buildAvailableModels, buildBuilderSettings } from './fixtures/builder';
+import { datedModels } from '@/domains/llm/__tests__/fixtures/models';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -72,6 +73,23 @@ describe('Models', () => {
     cleanup();
   });
 
+  describe('when the catalog contains release dates', () => {
+    it('shows the newest model cards first within the provider', async () => {
+      server.use(http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(datedModels)));
+      const { getByTestId } = await renderModels();
+      const cards = getByTestId('model-provider-section-openai').querySelectorAll(
+        '[data-testid^="model-card-openai-"]',
+      );
+      expect(Array.from(cards, card => card.getAttribute('data-testid'))).toEqual([
+        'model-card-openai-gpt-5',
+        'model-card-openai-gpt-4.1',
+        'model-card-openai-gpt-4o',
+        'model-card-openai-custom-a',
+        'model-card-openai-custom-z',
+      ]);
+    });
+  });
+
   describe('when rendering the model grid', () => {
     it('renders an uppercase section title per provider', async () => {
       const { getByTestId } = await renderModels();
@@ -79,7 +97,7 @@ describe('Models', () => {
       const openaiTitle = getByTestId('model-provider-section-title-openai');
       expect(openaiTitle.textContent).toBe('OpenAI');
       expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-caption');
+      expect(openaiTitle.className).toContain('text-eyebrow');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');
@@ -158,9 +176,9 @@ describe('Models', () => {
     it('the left-pane search filters the provider checklist without affecting the model grid', async () => {
       const { getByTestId, queryByTestId } = await renderModels();
 
-      const filterSearch = getByTestId('models-provider-filter-search').querySelector('input');
+      const filterSearch = getByTestId('models-provider-filter-search');
       expect(filterSearch).toBeTruthy();
-      fireEvent.change(filterSearch!, { target: { value: 'anthropic' } });
+      fireEvent.change(filterSearch, { target: { value: 'anthropic' } });
 
       await waitFor(() => expect(queryByTestId('models-provider-filter-item-openai')).toBeNull());
       expect(queryByTestId('models-provider-filter-item-anthropic')).toBeTruthy();
@@ -175,9 +193,9 @@ describe('Models', () => {
 
       fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
 
-      const searchInput = getByTestId('model-card-picker-search').querySelector('input');
+      const searchInput = getByTestId('model-card-picker-search');
       expect(searchInput).toBeTruthy();
-      fireEvent.change(searchInput!, { target: { value: 'claude' } });
+      fireEvent.change(searchInput, { target: { value: 'claude' } });
 
       await findByText('No models match "claude"');
     });

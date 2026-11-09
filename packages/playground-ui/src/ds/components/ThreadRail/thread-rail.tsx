@@ -4,8 +4,10 @@ import * as React from 'react';
 import type { ThreadRailTurn } from './thread-rail-turns';
 
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { focusRing } from '@/ds/primitives/transitions';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
@@ -78,33 +80,36 @@ export function ThreadRail({
     [messageScroller, onSelect],
   );
 
-  const showPreview = (index: number, element: HTMLElement) => {
-    const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
-    const itemRect = element.getBoundingClientRect();
-    const nextTurn = turns[index];
-    if (!nextTurn) return;
+  const showPreview = React.useCallback(
+    (index: number, element: HTMLElement) => {
+      const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
+      const itemRect = element.getBoundingClientRect();
+      const nextTurn = turns[index];
+      if (!nextTurn) return;
 
-    setPreviewState(current => {
-      const nextTop = itemRect.top + itemRect.height / 2 - railTop;
-      if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
-        return { ...current, top: nextTop };
-      }
+      setPreviewState(current => {
+        const nextTop = itemRect.top + itemRect.height / 2 - railTop;
+        if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
+          return { ...current, top: nextTop };
+        }
 
-      const previousTurn =
-        current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
-          ? current.currentTurn
-          : undefined;
+        const previousTurn =
+          current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
+            ? current.currentTurn
+            : undefined;
 
-      return {
-        currentTurn: nextTurn,
-        previousTurn,
-        index,
-        phase: 'entering',
-        top: nextTop,
-        transitionKey: current.transitionKey + 1,
-      };
-    });
-  };
+        return {
+          currentTurn: nextTurn,
+          previousTurn,
+          index,
+          phase: 'entering',
+          top: nextTop,
+          transitionKey: current.transitionKey + 1,
+        };
+      });
+    },
+    [turns],
+  );
 
   const hidePreview = () => {
     setPreviewState(current => {
@@ -186,30 +191,31 @@ export function ThreadRail({
         data-testid="thread-rail-scroll-area"
         maxHeight={maxHeight}
         className={cn('w-8', scrollAreaClassName)}
-        viewPortClassName="pr-3"
       >
-        <div className="flex w-4 flex-col items-start gap-2 py-2">
-          {turns.map((turn, index) => {
-            const distance = hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
-            const active = turn.messageId === activeMessageId;
-            const inView = visibleMessageIdSet.has(turn.messageId);
-            const previewActive = hoveredIndex === index;
+        <ScrollAreaViewport className="pr-3">
+          <div className="flex w-4 flex-col items-start gap-2 py-2">
+            {turns.map((turn, index) => {
+              const distance = hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
+              const active = turn.messageId === activeMessageId;
+              const inView = visibleMessageIdSet.has(turn.messageId);
+              const previewActive = hoveredIndex === index;
 
-            return (
-              <ThreadRailItem
-                key={turn.key}
-                turn={turn}
-                index={index}
-                distance={distance}
-                active={active}
-                inView={inView}
-                previewId={previewActive ? previewId : undefined}
-                onHoverChange={showPreview}
-                onSelect={selectTurn}
-              />
-            );
-          })}
-        </div>
+              return (
+                <ThreadRailItem
+                  key={turn.key}
+                  turn={turn}
+                  index={index}
+                  distance={distance}
+                  active={active}
+                  inView={inView}
+                  previewId={previewActive ? previewId : undefined}
+                  onHoverChange={showPreview}
+                  onSelect={selectTurn}
+                />
+              );
+            })}
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
 
       {previewState.currentTurn && (
@@ -255,7 +261,7 @@ const getRailItemTone = ({
   return 'bg-foreground/40';
 };
 
-function ThreadRailItem({
+const ThreadRailItem = React.memo(function ThreadRailItem({
   turn,
   index,
   distance,
@@ -287,14 +293,14 @@ function ThreadRailItem({
         className={cn(
           'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
           "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
-          'focus-visible:ring-2 focus-visible:ring-accent1/40 focus-visible:outline-hidden',
+          focusRing,
           size,
           tone,
         )}
       />
     </div>
   );
-}
+});
 
 function ThreadRailPreview({
   id,
@@ -313,7 +319,7 @@ function ThreadRailPreview({
     ref: previewSizerRef,
     heightStyle: previewHeightStyle,
     measure: measurePreviewHeight,
-  } = useMeasuredAutoHeight<HTMLDivElement>();
+  } = useMeasuredAutoHeight();
   const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
   // Entering and exiting share the same off-screen resting style.
   const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';
@@ -373,20 +379,29 @@ function ThreadRailPreviewContent({
   return (
     <div className={className} {...props}>
       <div className="truncate text-subheading text-foreground">{turn.prompt}</div>
-      {turn.reply && <p className="mt-1.5 line-clamp-3 text-caption text-muted-foreground">{turn.reply}</p>}
+      {turn.reply && (
+        <Txt variant="caption" tone="muted" className="mt-1.5 line-clamp-3">
+          {turn.reply}
+        </Txt>
+      )}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
           {turn.files.map(file => (
-            <span
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
               key={file}
-              className="inline-flex max-w-44 items-center gap-1.5 truncate text-caption text-muted-foreground"
+              className="inline-flex max-w-44 items-center gap-1.5 truncate"
             >
               <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
-            </span>
+            </Txt>
           ))}
           {turn.hiddenFileCount > 0 && (
-            <span className="text-column text-muted-foreground">+{turn.hiddenFileCount}</span>
+            <Txt as="span" variant="column" tone="muted">
+              +{turn.hiddenFileCount}
+            </Txt>
           )}
         </div>
       )}

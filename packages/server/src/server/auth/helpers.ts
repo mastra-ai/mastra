@@ -12,6 +12,7 @@ import {
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_AUTH_MODE_KEY,
 } from '../constants';
+import { HTTPException } from '../http-exception';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -145,7 +146,9 @@ export const isCustomRoutePublic = (
     return !customRouteAuthConfig.get(allRouteKey);
   }
 
-  // Check pattern matches for dynamic routes (e.g., '/users/:id')
+  // Check pattern matches for dynamic routes (e.g., '/users/:id').
+  // Any matching pattern that requires auth wins over overlapping public patterns.
+  let matchedPublic = false;
   for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
     const colonIndex = routeKey.indexOf(':');
     if (colonIndex === -1) {
@@ -160,13 +163,15 @@ export const isCustomRoutePublic = (
       continue;
     }
 
-    // Check if path matches the pattern
     if (pathMatchesPattern(path, routePattern)) {
-      return !requiresAuth; // True when route opts out of auth
+      if (requiresAuth) {
+        return false;
+      }
+      matchedPublic = true;
     }
   }
 
-  return false;
+  return matchedPublic;
 };
 
 // NOTE: This uses isProtectedCustomRoute (default-allow for unknown paths) rather than
@@ -290,6 +295,31 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+/**
+ * Lets an app's `authorize(path, method, user, context)` read `context.get('requestContext')` and
+ * `context.get('mastra')` on every adapter, as it can on Hono, so per-caller values (the Knowledge scope) bind
+ * the same way everywhere. Hono and NestJS contexts already answer `get`; Express, Fastify and Koa pass a web
+ * Request, Elysia its own context, and adapters with no builder pass nothing.
+ */
+const withAuthorizeVariables = (
+  base: unknown,
+  ctx: Pick<AuthMiddlewareContext, 'mastra' | 'requestContext' | 'customRouteAuthConfig' | 'rawRequest'>,
+): unknown => {
+  const variables: Record<string, unknown> = {
+    mastra: ctx.mastra,
+    requestContext: ctx.requestContext,
+    customRouteAuthConfig: ctx.customRouteAuthConfig,
+  };
+  const get = (key: string) => variables[key];
+  if (base === null || base === undefined) {
+    return { get, req: ctx.rawRequest };
+  }
+  if (typeof base === 'object' && typeof (base as { get?: unknown }).get !== 'function') {
+    Object.defineProperty(base, 'get', { value: get, configurable: true });
+  }
+  return base;
+};
+
 const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
   if (!(request instanceof Request)) {
     return request;
@@ -376,7 +406,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   // When a route explicitly requires auth (requiresAuth: true), skip the
   // public-path bypass so the user is still authenticated and permissions
   // are injected into the request context.
-  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
+  if (
+    !requiresAuth &&
+    (canAccessPublicly(path, method, authConfig) || isCustomRoutePublic(path, method, customRouteAuthConfig))
+  ) {
     return pass;
   }
 
@@ -386,9 +419,26 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   let refreshHeaders: Record<string, string> | undefined;
   const authRequest = adaptToMastraAuthRequest(rawRequest);
 
+  type ConsumePendingResponseHeadersFn = (request: typeof authRequest) => Record<string, string> | undefined;
+  const mergePendingProviderHeaders = (request: typeof authRequest = authRequest) => {
+    const consume = (authConfig as { consumePendingResponseHeaders?: ConsumePendingResponseHeadersFn })
+      .consumePendingResponseHeaders;
+    if (typeof consume !== 'function') return;
+    let pending: Record<string, string> | undefined;
+    try {
+      pending = consume.call(authConfig, request);
+    } catch {
+      // Forwarding a rotated cookie is best-effort; never fail auth over it.
+      return;
+    }
+    if (!pending) return;
+    refreshHeaders = { ...(refreshHeaders ?? {}), ...pending };
+  };
+
   try {
     if (typeof authConfig.authenticateToken === 'function') {
       user = await authConfig.authenticateToken(token ?? '', authRequest);
+      mergePendingProviderHeaders();
     } else {
       throw new Error('No token verification method configured');
     }
@@ -396,6 +446,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // If authentication failed, attempt transparent session refresh before returning 401.
     // This handles expired access tokens without requiring client-side refresh logic.
     if (!user && supportsSessionRefresh(authConfig) && rawRequest instanceof Request) {
+      let retryHttpError: HTTPException | undefined;
       try {
         const sessionId = authConfig.getSessionIdFromRequest(rawRequest);
         if (sessionId) {
@@ -423,7 +474,14 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
               const cookieValue = refreshedCookie.includes('=')
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
-              user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
+              try {
+                const retryAuthRequest = adaptToMastraAuthRequest(refreshedRequest);
+                user = await authConfig.authenticateToken(cookieValue, retryAuthRequest);
+                mergePendingProviderHeaders(retryAuthRequest);
+              } catch (retryErr) {
+                retryHttpError = retryErr instanceof HTTPException ? retryErr : undefined;
+                throw retryErr;
+              }
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -432,6 +490,8 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         }
       } catch (refreshErr) {
         refreshHeaders = undefined;
+        // An explicit HTTP error from the retried authenticateToken goes to the outer handler.
+        if (retryHttpError === refreshErr) throw refreshErr;
         mastra.getLogger()?.debug('Session refresh failed, falling back to 401', {
           error: refreshErr instanceof Error ? { message: refreshErr.message } : refreshErr,
         });
@@ -525,65 +585,108 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     mastra.getLogger()?.error('Authentication error', {
       error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
     });
+    // Explicit HTTP errors from auth callbacks keep their status/message; anything else is redacted.
+    // The HTTPException message is sent to the client, so callers must keep it safe (no internal details).
+    if (err instanceof HTTPException && err.status >= 400 && err.status <= 599) {
+      return { action: 'error', status: err.status, body: { error: err.message }, headers: refreshHeaders };
+    }
     return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
   }
 
   // ── Authorization ──
 
+  const authorizationError = await authorizeAuthenticatedUser({
+    path,
+    method,
+    user,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    buildAuthorizeContext: ctx.buildAuthorizeContext,
+  });
+  if (authorizationError) {
+    return { action: 'error', ...authorizationError, headers: refreshHeaders };
+  }
+
+  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
+};
+
+export interface AuthorizeAuthenticatedUserContext {
+  path: string;
+  method: string;
+  user: unknown;
+  mastra: Mastra;
+  authConfig: MastraAuthConfig;
+  customRouteAuthConfig?: Map<string, boolean>;
+  requestContext: AuthMiddlewareContext['requestContext'];
+  rawRequest: MastraAuthRequest;
+  buildAuthorizeContext: () => unknown;
+}
+
+/**
+ * The authorization step of server auth for an already authenticated user:
+ * `authorizeUser`, `authorize(path, method, user)`, `rules`, or the RBAC default rules.
+ * Returns null when the user may access `method path`.
+ */
+export const authorizeAuthenticatedUser = async (
+  ctx: AuthorizeAuthenticatedUserContext,
+): Promise<{ status: number; body: Record<string, unknown> } | null> => {
+  const { path, method, user, mastra, authConfig, requestContext, rawRequest } = ctx;
+  const denied = { status: 403, body: { error: 'Access denied' } };
+
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
-
-      if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+      const isAuthorized = await authConfig.authorizeUser(user, adaptToMastraAuthRequest(rawRequest));
+      return isAuthorized ? null : denied;
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorizeUser', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
+      return { status: 500, body: { error: 'Authorization error' } };
     }
-  } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
-    try {
-      const authorizeCtx = ctx.buildAuthorizeContext();
-      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+  }
 
-      if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+  if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+    try {
+      const authorizeCtx = withAuthorizeVariables(ctx.buildAuthorizeContext(), {
+        mastra,
+        requestContext,
+        customRouteAuthConfig: ctx.customRouteAuthConfig,
+        rawRequest,
+      });
+      const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
+      return isAuthorized ? null : denied;
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorize', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
         path,
         method,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
-    }
-  } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(authConfig.rules, path, method, user);
-
-    if (!isAuthorized) {
-      return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-    }
-  } else {
-    // No explicit authorization configured (authorizeUser, authorize, or rules)
-    // Check if RBAC is configured - if not, allow authenticated users through
-    // (auth-only mode = authenticated users get full access)
-    const rbacProvider = mastra.getServer()?.rbac;
-    if (rbacProvider) {
-      if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
-        const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
-
-        if (!isAuthorized) {
-          return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-        }
-      } else {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
-      }
+      return { status: 500, body: { error: 'Authorization error' } };
     }
   }
 
-  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
+  if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
+    return (await checkRules(authConfig.rules, path, method, user)) ? null : denied;
+  }
+
+  // No explicit authorization configured (authorizeUser, authorize, or rules)
+  // Check if RBAC is configured - if not, allow authenticated users through
+  // (auth-only mode = authenticated users get full access)
+  const rbacProvider =
+    requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
+      ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
+      : mastra.getServer()?.rbac;
+  if (rbacProvider) {
+    if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
+      return (await checkRules(defaultAuthConfig.rules, path, method, user)) ? null : denied;
+    }
+    return denied;
+  }
+
+  return null;
 };
 
 // Check authorization rules

@@ -67,51 +67,6 @@ describe('AssistantMessageComponent (DB-native)', () => {
     expect(collectText(component)).toContain('let me think');
   });
 
-  it('renders a single Thinking label for consecutive reasoning parts when thinking is hidden', () => {
-    const component = new AssistantMessageComponent(
-      assistantMessage([
-        { type: 'reasoning', reasoning: 'first span' } as never,
-        { type: 'reasoning', reasoning: 'second span' } as never,
-      ]),
-      true,
-    );
-    const labels = collectText(component)
-      .split('\n')
-      .filter(line => line.includes('Thinking...'));
-    expect(labels).toHaveLength(1);
-  });
-
-  it('renders separate Thinking labels when text interrupts hidden reasoning runs', () => {
-    const component = new AssistantMessageComponent(
-      assistantMessage([
-        { type: 'reasoning', reasoning: 'before' } as never,
-        { type: 'text', text: 'visible answer' },
-        { type: 'reasoning', reasoning: 'after' } as never,
-      ]),
-      true,
-    );
-    const rendered = collectText(component)
-      .split('\n')
-      .filter(line => line.includes('Thinking...') || line.includes('visible answer'));
-    expect(rendered.map(line => (line.includes('Thinking...') ? 'thinking' : 'text'))).toEqual([
-      'thinking',
-      'text',
-      'thinking',
-    ]);
-  });
-
-  it('adds one spacer after a collapsed hidden thinking run, not one per part', () => {
-    const component = new AssistantMessageComponent(
-      assistantMessage([
-        { type: 'reasoning', reasoning: 'first span' } as never,
-        { type: 'reasoning', reasoning: 'second span' } as never,
-        { type: 'text', text: 'visible answer' },
-      ]),
-      true,
-    );
-    expect(countSpacers(component)).toBe(1);
-  });
-
   it('renders every reasoning span as its own block when thinking is visible', () => {
     const component = new AssistantMessageComponent(
       assistantMessage([
@@ -212,5 +167,39 @@ describe('AssistantMessageComponent (DB-native)', () => {
 
     expect(contentChildren(component)[0]).toBe(child);
     expect(component.render(80)).toEqual(wideBefore);
+  });
+  describe('hidden thinking', () => {
+    const thinkingLines = (component: AssistantMessageComponent) =>
+      collectText(component)
+        .split('\n')
+        .filter(line => line.includes('Thinking...'));
+
+    it('leaves every Thinking placeholder out of the chat, even after the segment is finalized', () => {
+      const component = new AssistantMessageComponent(
+        assistantMessage([
+          { type: 'reasoning', reasoning: 'before' } as never,
+          { type: 'text', text: 'visible answer' },
+          { type: 'reasoning', reasoning: 'after' } as never,
+        ]),
+        true,
+      );
+      expect(thinkingLines(component)).toHaveLength(0);
+      expect(collectText(component)).toContain('visible answer');
+      expect(collectText(component)).not.toContain('before');
+      expect(countSpacers(component)).toBe(0);
+
+      component.finalizeRenderState();
+      expect(thinkingLines(component)).toHaveLength(0);
+      expect(collectText(component)).toContain('visible answer');
+    });
+
+    it('takes no chat space when it only holds thinking', () => {
+      const component = new AssistantMessageComponent(
+        assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as never]),
+        true,
+      );
+      expect(thinkingLines(component)).toHaveLength(0);
+      expect(component.getChatSpacingKind()).toBeUndefined();
+    });
   });
 });

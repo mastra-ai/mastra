@@ -1,10 +1,10 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const getPhoneNumberInputSchema = z.object({ phone_number_id: z.string() });
+export const getPhoneNumberInputSchema = z.object({ phone_number_id: z.string().min(1) });
 
 const ResourceSchema = z
   .object({

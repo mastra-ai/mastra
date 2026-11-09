@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DevBundler } from './DevBundler';
@@ -39,6 +40,7 @@ vi.mock('commander', () => {
       this.alias = vi.fn().mockReturnThis();
       this.description = vi.fn().mockReturnThis();
       this.option = vi.fn().mockReturnThis();
+      this.addOption = vi.fn().mockReturnThis();
       this.requiredOption = vi.fn().mockReturnThis();
       this.parseAsync = vi.fn().mockResolvedValue(undefined);
       this.help = vi.fn();
@@ -50,9 +52,14 @@ vi.mock('commander', () => {
     default = vi.fn().mockReturnThis();
   }
 
+  class OptionMock {
+    hideHelp = vi.fn().mockReturnThis();
+  }
+
   return {
     Command: CommandMock,
     Argument: ArgumentMock,
+    Option: OptionMock,
   };
 });
 const getExistingFiles = vi.hoisted(() => vi.fn((files: string[]) => files));
@@ -246,6 +253,41 @@ describe('DevBundler', () => {
             'process.env.NODE_ENV': JSON.stringify('development'),
           },
           expect.objectContaining({ sourcemap: false }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
+    it('writes analysis output under the provided output directory, not the cwd', async () => {
+      const devBundler = new DevBundler();
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+
+      const tmpDir = '.test-tmp-root/.mastra';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        const options = vi.mocked(getWatcherInputOptions).mock.lastCall?.[3];
+        expect(options?.outputDir).toBe(join(tmpDir, '.build'));
+      } finally {
+        await remove('.test-tmp-root');
+      }
+    });
+
+    it('analyzes tool files so workspace packages keep exports only tools import', async () => {
+      const devBundler = new DevBundler();
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+      vi.spyOn(devBundler, 'listToolsInputOptions').mockResolvedValue({
+        'tools/abc': '/project/src/mastra/tools/weather.ts',
+      });
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, ['/project/src/mastra/tools/**']);
+
+        const options = vi.mocked(getWatcherInputOptions).mock.lastCall?.[3];
+        expect(options?.analysisEntries).toEqual(
+          expect.arrayContaining(['test-entry.js', '/project/src/mastra/tools/weather.ts']),
         );
       } finally {
         await remove(tmpDir);

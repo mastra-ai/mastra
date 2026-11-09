@@ -33,6 +33,7 @@ import { Agent as ValueAgent } from '@mastra/core/agent';
 import type { Tool } from '@mastra/core/tools';
 import type { Agent as TypeOnlyAgent } from '@mastra/core/agent';
 import type { Workflow as TypeOnlyWorkflow } from '@mastra/core/workflows';
+import type { MastraMessageV2, MastraDBMessage as CurrentMessage } from '@mastra/core/agent';
 
 // Should not affect other packages
 import { Mastra as MastraOther } from 'some-other-package';

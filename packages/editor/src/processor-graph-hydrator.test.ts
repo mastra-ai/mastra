@@ -251,12 +251,10 @@ describe('hydrateProcessorGraph', () => {
         });
         if (result instanceof MessageList) {
           messages = result.get.all.db();
+        } else if ('messages' in result) {
+          messages = result.messages;
         } else {
-          if ('messages' in result) {
-            messages = result.messages;
-          } else {
-            messages = result;
-          }
+          messages = result;
         }
       }
 
@@ -645,6 +643,76 @@ describe('hydrateProcessorGraph', () => {
       expect(runResult.status).toBe('success');
       if (runResult.status !== 'success') throw new Error(`Workflow failed: ${runResult.status}`);
       expect(runResult.result.phase).toBe('input');
+    }, 10000);
+  });
+
+  describe('branch joins preserve processor step fields (regression #25050)', () => {
+    const noopStepProvider: ProcessorProvider = {
+      info: { id: 'noop', name: 'Noop Provider' },
+      configSchema: z.object({}),
+      availablePhases: ['processInputStep'] as ProcessorPhase[],
+      createProcessor(): Processor {
+        return { id: 'noop-instance', name: 'Noop Instance', processInputStep: async () => undefined };
+      },
+    };
+    const branchStep = (id: string): ProcessorGraphEntry => ({
+      type: 'step',
+      step: { id, providerId: 'noop', config: {}, enabledPhases: ['processInputStep'] },
+    });
+
+    async function runInputStep(graph: StoredProcessorGraph) {
+      const result = hydrateProcessorGraph(graph, 'input', { providers: { noop: noopStepProvider } })!;
+      const workflow = result[0] as ProcessorWorkflow;
+      expect(isProcessorWorkflow(workflow)).toBe(true);
+
+      const messages = [makeMsg('Hello')] as MastraDBMessage[];
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      const tools = { retrieveKb: { description: 'Retrieve KB', parameters: {} } };
+
+      const run = await workflow.createRun();
+      const runResult = await run.start({
+        inputData: {
+          phase: 'inputStep',
+          messages,
+          messageList,
+          stepNumber: 0,
+          tools,
+          activeTools: ['retrieveKb'],
+          toolChoice: 'required',
+        } as any,
+      });
+      expect(runResult.status).toBe('success');
+      if (runResult.status !== 'success') throw new Error(`Workflow failed: ${runResult.status}`);
+      return { result: runResult.result as Record<string, unknown>, tools };
+    }
+
+    it('keeps tools, activeTools and toolChoice after a parallel join', async () => {
+      const { result, tools } = await runInputStep({
+        steps: [{ type: 'parallel', branches: [[branchStep('first')], [branchStep('second')]] }],
+      });
+      expect(result.tools).toBe(tools);
+      expect(result.activeTools).toEqual(['retrieveKb']);
+      expect(result.toolChoice).toBe('required');
+    }, 10000);
+
+    it('keeps tools, activeTools and toolChoice after a conditional join', async () => {
+      const { result, tools } = await runInputStep({
+        steps: [
+          {
+            type: 'conditional',
+            conditions: [
+              {
+                rules: { operator: 'AND', conditions: [{ field: 'phase', operator: 'equals', value: 'inputStep' }] },
+                steps: [branchStep('matched')],
+              },
+            ],
+          } as ProcessorGraphEntry,
+        ],
+      });
+      expect(result.tools).toBe(tools);
+      expect(result.activeTools).toEqual(['retrieveKb']);
+      expect(result.toolChoice).toBe('required');
     }, 10000);
   });
 

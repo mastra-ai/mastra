@@ -1,4 +1,6 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
@@ -7,7 +9,6 @@ import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 interface MobileLink {
   name: string;
@@ -74,17 +75,22 @@ export function AgentBuilderMobileBottomBar() {
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'relative flex flex-col items-center justify-center gap-1 py-2 text-caption',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                  'relative flex flex-col items-center justify-center gap-1 py-2',
                   controlStateColorTransition,
                   isActive
-                    ? 'text-foreground before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
+                    : 'hover:text-foreground',
                 )}
               >
                 <span className="flex size-6 items-center justify-center" aria-hidden="true">
-                  {link.icon}
+                  <Txt as="span" variant="caption" className="block">
+                    {link.icon}
+                  </Txt>
                 </span>
-                <span className="leading-none">{link.name}</span>
+                <Txt as="span" variant="caption">
+                  {link.name}
+                </Txt>
               </Link>
             </li>
           );

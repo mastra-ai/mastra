@@ -1,0 +1,34 @@
+---
+extends: existence
+message: "AI coinage metaphor: '%s'. Use the literal action: creates an identifier, or requests a token. Disable this rule for currency prose."
+level: error
+ignorecase: true
+# The coinage figure applied to anything a program creates: a step that
+# "mints" an identifier, a workflow that "mints an app token," a metric
+# that "mints a time series per session," localization keys that "are
+# minted," "the minted installation token," "token minting," a "newly
+# minted" release. The plain verb names what the code does: creates,
+# generates, issues, or requests.
+#
+# The verb started in MotionMetaphors gated on a determiner after it,
+# which reads "mints a token" and "minting a short-lived token" and
+# misses everything else the figure produces: the passive ("a token
+# minted from the App"), the attributive participle ("the minted
+# token"), the gerund noun ("token minting"), the pronoun and bare-plural
+# objects ("mints them," "mints identifiers"), and the idiom ("newly
+# minted," "freshly minted"). A survey of agent-written documentation
+# (2026-09) found the figure forty-odd times, almost all the GitHub App
+# token idiom, with the gate reading about half of them. A verb at zero
+# in the corpora costs nothing to ban in every inflection, so one token
+# reads them all, the literal coinage included: a mint that "strikes"
+# coins fires, and currency prose disables the rule.
+#
+# The measurement supports the ban. Across the seven pre-LLM corpora
+# the verb appears once, as "Linux Mint 18.3" in a PEP's platform list,
+# which the lookbehind leaves alone. The lookahead leaves the condition
+# ("in mint condition"), the herb, and the color's compounds ("mint
+# green," "system mint color") alone as well. A bare color name in a
+# palette listing ("Sky, Mint, Lime") still fires, and belongs in a
+# reader's own exceptions.
+tokens:
+  - "(?<!linux )mint(?:s|ed|ing)?\\b(?! (?:condition|green|tea|leaf|leaves|julep|sauce|chocolate|colou?r)\\b)"

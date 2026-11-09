@@ -10,8 +10,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
+import { KNOWLEDGE_ROUTES } from './routes';
 import { createRoute } from './routes/route-builder';
-import { MastraServer, getCustomHTTPExceptionResponse, getFGAProvider, MASTRA_AUTH_MODE_KEY } from './index';
+import {
+  MastraServer,
+  getCustomHTTPExceptionResponse,
+  getFGAProvider,
+  MASTRA_AUTH_MODE_KEY,
+  normalizeQueryParams,
+} from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -1138,6 +1145,97 @@ describe('FGA policy coverage validation', () => {
   });
 });
 
+describe('Knowledge route FGA metadata', () => {
+  const instanceRoutes = KNOWLEDGE_ROUTES.filter(route => route.path !== '/knowledge');
+
+  it('checks each instance route against the registered knowledge key', async () => {
+    const { checkRouteFGA } = await import('./index');
+    for (const route of instanceRoutes) {
+      const fgaProvider = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      const result = await checkRouteFGA({ getServer: () => ({ fga: fgaProvider }) }, route as any, requestContext, {
+        knowledgeKey: 'main',
+      });
+
+      expect(result).toBeNull();
+      expect(fgaProvider.check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({ resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' }),
+      );
+    }
+  });
+
+  it('refuses an instance route when the caller may not read that key', async () => {
+    const { checkRouteFGA } = await import('./index');
+    const fgaProvider = { ...createMockFGAProvider(false), requireForProtectedRoutes: true };
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(
+      { getServer: () => ({ fga: fgaProvider }) },
+      instanceRoutes[0] as any,
+      requestContext,
+      {
+        knowledgeKey: 'main',
+      },
+    );
+
+    expect(result).toMatchObject({ status: 403 });
+  });
+
+  it('checks the link-count and page-link routes against the knowledge key and refuses a denied caller with 403', async () => {
+    const { checkRouteFGA } = await import('./index');
+    const linkRoutes = KNOWLEDGE_ROUTES.filter(
+      route =>
+        route.path === '/knowledge/:knowledgeKey/link-counts' ||
+        route.path === '/knowledge/:knowledgeKey/pages/:pageId/links',
+    );
+    expect(linkRoutes.map(route => route.path).sort()).toEqual([
+      '/knowledge/:knowledgeKey/link-counts',
+      '/knowledge/:knowledgeKey/pages/:pageId/links',
+    ]);
+
+    for (const route of linkRoutes) {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const params = { knowledgeKey: 'main', pageId: 'page-1' };
+
+      const allowed = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+      expect(
+        await checkRouteFGA({ getServer: () => ({ fga: allowed }) }, route as any, requestContext, params),
+      ).toBeNull();
+      expect(allowed.check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({ resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' }),
+      );
+
+      const denied = { ...createMockFGAProvider(false), requireForProtectedRoutes: true };
+      expect(
+        await checkRouteFGA({ getServer: () => ({ fga: denied }) }, route as any, requestContext, params),
+      ).toMatchObject({ status: 403 });
+    }
+  });
+
+  it('leaves only the instance list out of the protected-route audit', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [...KNOWLEDGE_ROUTES],
+        fga: { ...createMockFGAProvider(), requireForProtectedRoutes: true },
+      } as any,
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn').mockImplementation(() => {});
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.validateFGAPolicyCoverage();
+
+    const routes: string[] = warn.mock.calls[0]?.[1]?.routes ?? [];
+    expect(routes.filter(route => route.includes('/knowledge'))).toEqual(['GET /knowledge']);
+  });
+});
+
 describe('validateCustomRoutePaths', () => {
   const mockHandler = vi.fn();
 
@@ -1204,6 +1302,43 @@ describe('validateCustomRoutePaths', () => {
     expect(() =>
       adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
     ).not.toThrow();
+  });
+});
+
+describe('opt-in built-in routes registered through apiRoutes', () => {
+  it('mount under the adapter prefix, while ordinary schema routes mount at the root', async () => {
+    const custom = {
+      path: '/custom/ping',
+      method: 'GET',
+      handler: vi.fn(),
+      responseType: 'json',
+      _mastraSchemaRoute: true,
+    } as any;
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [...KNOWLEDGE_ROUTES, custom] } as any });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/api' });
+    await adapter.buildCustomRouteHandlerForTest();
+    const calls = (adapter.registerRoute as any).mock.calls as Array<[unknown, { path: string }, { prefix: string }]>;
+    const knowledge = calls.filter(([, route]) => route.path.startsWith('/knowledge'));
+    expect(knowledge.length).toBe(KNOWLEDGE_ROUTES.length);
+    expect(knowledge.every(([, , options]) => options.prefix === '/api')).toBe(true);
+    const ping = calls.find(([, route]) => route.path === '/custom/ping');
+    expect(ping?.[2].prefix).toBe('');
+  });
+
+  it('documents them under the top-level server and other custom routes at the root', () => {
+    const custom = {
+      path: '/custom/ping',
+      method: 'GET',
+      handler: vi.fn(),
+      openapi: { summary: 'ping' },
+    } as any;
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [...KNOWLEDGE_ROUTES, custom] } as any });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/api' });
+    const spec = (adapter as any).buildOpenAPISpec({ title: 't', version: '1', description: 'd' }, '/api');
+    expect(spec.servers).toEqual([{ url: '/api' }]);
+    expect(spec.paths['/knowledge']).toBeDefined();
+    expect(spec.paths['/knowledge'].servers).toBeUndefined();
+    expect(spec.paths['/custom/ping'].servers).toEqual([{ url: '/' }]);
   });
 });
 
@@ -1381,5 +1516,91 @@ describe('getCustomHTTPExceptionResponse', () => {
     { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
   ])('ignores non-HTTPException values', error => {
     expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
+  });
+});
+
+describe('normalizeQueryParams', () => {
+  it('passes through plain string and repeated-key params unchanged', () => {
+    const result = normalizeQueryParams({ page: '2', tag: ['a', 'b'], single: ['only'] });
+    expect(result).toEqual({ page: '2', tag: ['a', 'b'], single: 'only' });
+  });
+
+  it('reconstructs bracket-notation keys into JSON strings', () => {
+    const result = normalizeQueryParams({
+      'orderBy[field]': 'createdAt',
+      'orderBy[direction]': 'DESC',
+      'filter[status]': 'active',
+    });
+    expect(result).toEqual({
+      orderBy: JSON.stringify({ field: 'createdAt', direction: 'DESC' }),
+      filter: JSON.stringify({ status: 'active' }),
+    });
+  });
+
+  it('does not overwrite a directly-set parent key with a bracket group', () => {
+    const result = normalizeQueryParams({
+      orderBy: JSON.stringify({ field: 'name' }),
+      'orderBy[field]': 'createdAt',
+    });
+    expect(result).toEqual({ orderBy: JSON.stringify({ field: 'name' }) });
+  });
+
+  it('ignores special object keys in bracket-notation parents and children', () => {
+    const result = normalizeQueryParams(
+      Object.fromEntries([
+        ['__proto__[polluted]', 'yes'],
+        ['constructor[prototype]', 'yes'],
+        ['prototype[x]', 'yes'],
+        ['filter[__proto__]', 'yes'],
+        ['filter[constructor]', 'yes'],
+        ['filter[status]', 'active'],
+      ]),
+    );
+
+    // Only the legitimate bracket child survives
+    expect(result).toEqual({ filter: JSON.stringify({ status: 'active' }) });
+    // Nothing was written onto Object.prototype
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+  });
+
+  it('ignores flat special object keys', () => {
+    const result = normalizeQueryParams(
+      Object.fromEntries([
+        ['__proto__', 'yes'],
+        ['constructor', 'yes'],
+        ['prototype', 'yes'],
+        ['page', '1'],
+      ]),
+    );
+
+    expect(result).toEqual({ page: '1' });
+    expect(Object.keys(result)).toEqual(['page']);
+  });
+
+  it('does not treat inherited Object.prototype members as existing bracket groups', () => {
+    // `toString` is inherited, not own: bracket-group creation must not read or
+    // write the shared builtin function.
+    const result = normalizeQueryParams({
+      'toString[length]': 'x',
+      'valueOf[tagged]': 'x',
+    });
+
+    expect(result).toEqual({
+      toString: JSON.stringify({ length: 'x' }),
+      valueOf: JSON.stringify({ tagged: 'x' }),
+    });
+    // The shared builtins were not mutated
+    expect(Object.prototype.toString.length).toBe(0);
+    expect((Object.prototype.valueOf as unknown as Record<string, unknown>).tagged).toBeUndefined();
+  });
+
+  it('returns a plain object that supports spreads, `in` checks, and JSON serialization', () => {
+    const result = normalizeQueryParams({ 'filter[status]': 'x', page: '1' });
+
+    expect({ ...result }).toEqual(result);
+    expect('page' in result).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual({ filter: '{"status":"x"}', page: '1' });
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   });
 });

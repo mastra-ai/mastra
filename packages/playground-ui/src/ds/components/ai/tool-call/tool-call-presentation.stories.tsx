@@ -1,22 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { ToolCall, ToolCallCommand, ToolCallContent, ToolCallPresentedHeader, ToolCallTrigger } from './tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../activity';
 import { ToolCallArguments } from './tool-call-arguments';
 import { ToolCallGroup } from './tool-call-group';
 import type { ToolCallGroupStep } from './tool-call-group';
+import { ToolCallCommand } from './tool-call-mono';
 import { ToolCallOutput } from './tool-call-output';
-import { presentTool } from './tool-presentation';
+import { hasToolArguments, presentTool } from './tool-presentation';
 
-interface ToolPreviewProps extends ToolCallGroupStep {
+interface ToolBlocksExampleProps extends ToolCallGroupStep {
   argsText?: string;
   hideArguments?: boolean;
   commandOnly?: boolean;
   output?: string;
-  maxOutputLength?: number;
   defaultOpen?: boolean;
 }
 
-function ToolPreview({
+function ToolBlocksExample({
   toolName,
   args,
   argsText,
@@ -24,34 +24,35 @@ function ToolPreview({
   commandOnly,
   status,
   output,
-  maxOutputLength,
   defaultOpen,
-}: ToolPreviewProps) {
-  const presentation = presentTool(toolName, args);
+}: ToolBlocksExampleProps) {
+  const { icon: ToolIcon, label, detail, command } = presentTool(toolName, args);
+  const showsCommand = Boolean(commandOnly && command);
+  const hasBody = showsCommand || output !== undefined || hasToolArguments({ toolName, args, argsText, hideArguments });
   return (
-    <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentation} />
-      </ToolCallTrigger>
-      <ToolCallContent>
-        {commandOnly && presentation.command ? (
-          <ToolCallCommand command={presentation.command} />
+    <Activity status={status} defaultOpen={defaultOpen} foldable={hasBody} aria-label={`Tool: ${toolName}`}>
+      <ActivityTrigger>
+        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
+      </ActivityTrigger>
+      <ActivityContent>
+        {showsCommand && command ? (
+          <ToolCallCommand command={command} />
         ) : (
           <ToolCallArguments toolName={toolName} args={args} argsText={argsText} hideArguments={hideArguments} />
         )}
         {output !== undefined && (
           <section aria-label="Tool output">
-            <ToolCallOutput text={output} error={status === 'error'} maxLength={maxOutputLength} />
+            <ToolCallOutput text={output} error={status === 'error'} />
           </section>
         )}
-      </ToolCallContent>
-    </ToolCall>
+      </ActivityContent>
+    </Activity>
   );
 }
 
 const meta = {
-  title: 'AI/Tool Call Presentation',
-  component: ToolPreview,
+  title: 'AI/Activity/With Tool Blocks',
+  component: ToolBlocksExample,
   decorators: [
     Story => (
       <div className="w-full max-w-3xl p-4">
@@ -64,18 +65,17 @@ const meta = {
     argsText: { description: 'Partial streamed arguments, used before structured args are available.' },
     hideArguments: { description: 'Hides ordinary arguments while keeping edit previews.', control: 'boolean' },
     commandOnly: { description: 'Shows the command line instead of all JSON arguments, as Factory does.' },
-    maxOutputLength: { description: 'Limits the visible preview. Copy always includes the complete output.' },
   },
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'Shared argument/edit and output blocks used by Studio and Factory. Apps normalize their tool data and choose which output to show; these components own presentation and copying. Factory bounds result previews while copying the full value. Studio keeps complete arguments and results, including successful edit results. Approval actions are also shared; requests and lifecycle stay with each app.',
+          '`Activity` composed with the tool blocks from `components/ai/tool-call`, the way Studio and Factory each build a tool line. `ToolBlocksExample` exists only in this story; import `presentTool`, `ToolCallArguments`, `ToolCallCommand`, `ToolCallOutput` and `ToolCallGroup` instead. Apps normalize their tool data and choose which output to show; these blocks own presentation and copying. Results show in full, including successful edit results, and scroll inside their box. Approval actions are also shared; requests and lifecycle stay with each app.',
       },
     },
   },
-} satisfies Meta<typeof ToolPreview>;
+} satisfies Meta<typeof ToolBlocksExample>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -86,12 +86,16 @@ const editArguments = { path: 'src/agent.ts', old_string: 'const count = 1;', ne
 
 export const SuccessfulEditWithResult: Story = {
   args: { toolName: 'edit_file', args: editArguments, output: 'Updated src/agent.ts successfully.' },
-  parameters: { docs: { description: { story: 'Studio retains the full success result alongside the file change.' } } },
+  parameters: {
+    docs: {
+      description: { story: 'A successful edit keeps its result, such as diagnostics, beside the file change.' },
+    },
+  },
 };
 
 export const EditPreviewOnly: Story = {
   args: { toolName: 'edit_file', args: editArguments },
-  parameters: { docs: { description: { story: 'Factory shows the file change without a redundant success result.' } } },
+  parameters: { docs: { description: { story: 'Before its result arrives, an edit shows only the file change.' } } },
 };
 
 export const FailedEdit: Story = {
@@ -132,14 +136,22 @@ export const ResultOnly: Story = {
 };
 
 export const EmptyArguments: Story = {
-  args: { args: undefined },
-  parameters: { docs: { description: { story: 'No argument block renders before any input is available.' } } },
+  args: { toolName: 'list_agents', args: {} },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A tool called without arguments has nothing to open, so the line has no disclosure.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('button')).not.toBeInTheDocument();
+  },
 };
 
 export const LongOutput: Story = {
   args: {
     output: 'A long tool result with the full content available through copy.\n'.repeat(50),
-    maxOutputLength: 800,
   },
   play: async ({ canvasElement, args }) => {
     const user = userEvent.setup();
@@ -149,26 +161,21 @@ export const LongOutput: Story = {
   },
 };
 
-export const FullOutput: Story = {
-  args: { ...LongOutput.args, maxOutputLength: undefined },
-  play: LongOutput.play,
-};
-
-const readStep: ToolPreviewProps = {
+const readStep: ToolBlocksExampleProps = {
   toolName: 'view',
   args: { path: 'src/agent.ts' },
   status: 'idle',
   hasResult: true,
   output: 'Agent source',
 };
-const searchStep: ToolPreviewProps = {
+const searchStep: ToolBlocksExampleProps = {
   toolName: 'search_content',
   args: { pattern: 'TODO' },
   status: 'idle',
   hasResult: true,
   output: 'No matches',
 };
-const commandStep: ToolPreviewProps = {
+const commandStep: ToolBlocksExampleProps = {
   toolName: 'execute_command',
   args: { command: 'pnpm test' },
   status: 'idle',
@@ -177,11 +184,11 @@ const commandStep: ToolPreviewProps = {
 };
 const completedSteps = [readStep, searchStep, commandStep];
 
-function ToolGroupPreview({ steps }: { steps: ToolPreviewProps[] }) {
+function ToolGroupPreview({ steps }: { steps: ToolBlocksExampleProps[] }) {
   return (
     <ToolCallGroup steps={steps}>
       {steps.map(step => (
-        <ToolPreview key={step.toolName} {...step} />
+        <ToolBlocksExample key={step.toolName} {...step} />
       ))}
     </ToolCallGroup>
   );
@@ -202,7 +209,9 @@ export const MixedOutcomes: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const group = canvas.getByRole('group', { name: 'Tool group: 3 steps' });
-    await expect(within(group).getByText('1 OK · 1 failed · 1 incomplete')).toBeVisible();
+    for (const outcome of ['1 OK', '1 failed', '1 incomplete']) {
+      await expect(within(group).getByText(outcome)).toBeVisible();
+    }
     await userEvent.click(within(group).getByRole('button'));
     const failed = canvas.getByRole('group', { name: 'Tool: search_content' });
     await userEvent.click(within(failed).getByRole('button'));

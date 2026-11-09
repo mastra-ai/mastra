@@ -44,6 +44,12 @@ function useInvalidateProviderState(provider: PlatformConnectProviderId) {
             queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
           ]
         : []),
+      ...(provider === 'gitlab'
+        ? [
+            queryClient.invalidateQueries({ queryKey: ['gitlab', 'status'] }),
+            queryClient.invalidateQueries({ queryKey: ['gitlab', 'projects'] }),
+          ]
+        : []),
     ]);
   };
 }

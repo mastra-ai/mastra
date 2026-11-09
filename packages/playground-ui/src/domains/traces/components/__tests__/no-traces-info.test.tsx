@@ -16,11 +16,35 @@ describe('NoTracesInfo', () => {
     rerender(<NoTracesInfo datePreset="last-24h" />);
 
     expect(screen.getByRole('heading', { name: 'No traces for the last 24 hours' })).toBeTruthy();
-    expect(
-      screen.getByText('Pick a wider time range — older traces may fall outside the current window.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Pick a wider time range. Older traces may fall outside the current window.')).toBeTruthy();
     expect(screen.queryByText('No traces yet')).toBeNull();
     expect(container.querySelector('svg.lucide-circle-slash')).toBeTruthy();
+  });
+
+  it('names spans when it stands for a span list', () => {
+    const { rerender } = render(<NoTracesInfo resource="spans" datePreset="all" />);
+
+    expect(screen.getByRole('heading', { name: 'No spans yet' })).toBeTruthy();
+    expect(screen.getByText('Spans will appear here once agents, workflows, or tools are executed.')).toBeTruthy();
+
+    rerender(<NoTracesInfo resource="spans" datePreset="last-7d" />);
+
+    expect(screen.getByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
+    expect(screen.getByText('Pick a wider time range. Older spans may fall outside the current window.')).toBeTruthy();
+  });
+
+  it('names threads when it stands for a thread list', () => {
+    const { rerender } = render(<NoTracesInfo resource="threads" datePreset="all" />);
+
+    expect(screen.getByRole('heading', { name: 'No threads yet' })).toBeTruthy();
+    expect(screen.getByText('Threads will appear here once agents, workflows, or tools are executed.')).toBeTruthy();
+
+    rerender(<NoTracesInfo resource="threads" datePreset="last-7d" />);
+
+    expect(screen.getByRole('heading', { name: 'No threads for the last 7 days' })).toBeTruthy();
+    expect(
+      screen.getByText('Pick a wider time range. Older threads may fall outside the current window.'),
+    ).toBeTruthy();
   });
 
   it('preserves explicit dates in the custom-range empty state', () => {
@@ -29,7 +53,9 @@ describe('NoTracesInfo', () => {
     );
 
     expect(
-      screen.getByRole('heading', { name: 'No traces between Sep 1, 2026 09:00 and Sep 7, 2026 18:00' }),
+      screen.getByRole('heading', {
+        name: `No traces between ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(2026, 8, 1, 9, 0))} and ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(2026, 8, 7, 18, 0))}`,
+      }),
     ).toBeTruthy();
   });
 });

@@ -775,6 +775,7 @@ describe('uploadServerDeploy', () => {
         projectId: 'proj-1',
         projectName: 'my-app',
         envVars: { FOO: 'bar' },
+        artifactBytes: 3,
         disablePlatformObservability: true,
       },
     });
@@ -799,8 +800,20 @@ describe('uploadServerDeploy', () => {
         projectId: 'proj-1',
         projectName: undefined,
         envVars: undefined,
+        artifactBytes: 3,
       },
     });
     expect(mockPOST.mock.calls[0]![1].body).not.toHaveProperty('disablePlatformObservability');
+  });
+
+  it('surfaces a 413 detail verbatim and does not upload', async () => {
+    const detail = 'Deploy bundle is 662 MB, over the 500 MB limit. Check .mastra/output for stray files.';
+    const mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
+    mockPOST.mockResolvedValueOnce({ data: undefined, error: { detail }, response: { status: 413 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await expect(uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(new Error(detail));
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

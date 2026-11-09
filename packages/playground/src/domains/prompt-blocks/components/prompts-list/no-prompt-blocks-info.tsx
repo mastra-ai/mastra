@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ExternalLinkIcon, Plus } from 'lucide-react';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useLinkComponent } from '@/lib/framework';
 
 export const NoPromptBlocksInfo = () => {
   const { Link, paths } = useLinkComponent();
@@ -29,7 +29,7 @@ export const NoPromptBlocksInfo = () => {
         <div className="flex flex-col items-center gap-2">
           {canCreate && (
             <Button render={<Link href={paths.cmsPromptBlockCreateLink()} />} variant="primary" icon={<Plus />}>
-              Create Prompt
+              Create prompt
             </Button>
           )}
           <Button
@@ -44,7 +44,7 @@ export const NoPromptBlocksInfo = () => {
 
             icon={<ExternalLinkIcon />}
           >
-            Prompts Documentation
+            Prompts documentation
           </Button>
         </div>
       }

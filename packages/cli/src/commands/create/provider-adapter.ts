@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -16,26 +15,31 @@ export interface ManagedProviderConfig {
 }
 
 export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProviderConfig> = {
+  // The template's own OpenAI models, routed through the Mastra Gateway (`mastra/openai/...`).
+  mastra: {
+    displayName: 'Mastra Gateway',
+    apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+  },
   openai: {
     displayName: 'OpenAI',
     apiKeyEnv: 'OPENAI_API_KEY',
   },
   anthropic: {
     displayName: 'Anthropic',
-    primaryModel: 'anthropic/claude-sonnet-5',
-    observationalModel: 'anthropic/claude-haiku-4-5',
+    primaryModel: 'anthropic/claude-sonnet-5-5',
+    observationalModel: 'anthropic/claude-haiku-5-5',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
   },
   google: {
     displayName: 'Google Gemini',
-    primaryModel: 'google/gemini-3.5-flash',
-    observationalModel: 'google/gemini-3.5-flash',
+    primaryModel: 'google/gemini-3.8-flash',
+    observationalModel: 'google/gemini-3.8-flash',
     apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
   },
   xai: {
     displayName: 'xAI',
-    primaryModel: 'xai/grok-4.3',
-    observationalModel: 'xai/grok-4.3',
+    primaryModel: 'xai/grok-4.7',
+    observationalModel: 'xai/grok-4.7',
     apiKeyEnv: 'XAI_API_KEY',
   },
 };
@@ -129,6 +133,15 @@ function normalizeManagedManifest(
 
 function adaptAgentSource(source: string, provider: CreateLLMProvider, config: ManagedProviderConfig): TransformResult {
   if (provider === 'openai') return { applied: true, content: source };
+  if (provider === 'mastra') {
+    if (findMatches(source, PRIMARY_OPENAI_MODEL).length !== 1) return { applied: false, content: source };
+    if (findMatches(source, OBSERVATIONAL_OPENAI_MODEL).length !== 1) return { applied: false, content: source };
+    const toGateway = (match: string) => match.replace(/(['"])openai\//, '$1mastra/openai/');
+    return {
+      applied: true,
+      content: source.replace(PRIMARY_OPENAI_MODEL, toGateway).replace(OBSERVATIONAL_OPENAI_MODEL, toGateway),
+    };
+  }
   if (!config.primaryModel || !config.observationalModel) return { applied: false, content: source };
   if (findMatches(source, PRIMARY_OPENAI_MODEL).length !== 1) return { applied: false, content: source };
   if (findMatches(source, OBSERVATIONAL_OPENAI_MODEL).length !== 1) return { applied: false, content: source };
@@ -177,7 +190,10 @@ function adaptReadme(
 }
 
 async function writeSecureEnv(envPath: string, content: string): Promise<boolean> {
-  const tempPath = path.join(path.dirname(envPath), `.env.mastra-create-${process.pid}-${randomUUID()}.tmp`);
+  const tempPath = path.join(
+    path.dirname(envPath),
+    `.env.mastra-create-${process.pid}-${globalThis.crypto.randomUUID()}.tmp`,
+  );
   try {
     await fs.writeFile(tempPath, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     if (process.platform !== 'win32') await fs.chmod(tempPath, 0o600);
@@ -189,6 +205,37 @@ async function writeSecureEnv(envPath: string, content: string): Promise<boolean
     } catch {}
     return false;
   }
+}
+
+/**
+ * Write an API key that arrived after the template was adapted (the Gateway key is created
+ * while the template clones). Starts from `.env`, or `.env.example` when there is no `.env` yet.
+ */
+export async function writeManagedApiKey({
+  projectPath,
+  apiKeyEnv,
+  apiKey,
+}: {
+  projectPath: string;
+  apiKeyEnv: string;
+  apiKey: string;
+}): Promise<boolean> {
+  const envPath = path.join(projectPath, '.env');
+  let source = '';
+  for (const candidate of [envPath, path.join(projectPath, '.env.example')]) {
+    try {
+      source = await fs.readFile(candidate, 'utf8');
+      break;
+    } catch (error) {
+      // Only a missing file falls through; an unreadable `.env` must not be replaced.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
+    }
+  }
+  const result = setEnvValue(source, apiKeyEnv, apiKey);
+  const content = result.applied
+    ? result.content
+    : `${source}${source && !source.endsWith('\n') ? '\n' : ''}${apiKeyEnv}=${apiKey}\n`;
+  return writeSecureEnv(envPath, content);
 }
 
 export async function adaptDefaultTemplate({

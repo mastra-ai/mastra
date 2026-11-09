@@ -2,8 +2,8 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import { classifyAttachment } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
 import type { ComposerAttachmentKind } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
 import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui/utils/file';
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 export type { ComposerAttachmentKind } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
 
@@ -20,10 +20,13 @@ export interface ComposerAttachment {
 
 interface ComposerAttachmentsContextValue {
   attachments: ComposerAttachment[];
-  addFiles: (files: File[] | FileList) => Promise<string[]>;
+  addFiles: (files: File[] | FileList) => Promise<void>;
   addUrl: (url: string) => Promise<void>;
   remove: (id: string) => void;
+  /** Puts back attachments that were cleared for a message the server never received. */
+  restore: (attachments: ComposerAttachment[]) => void;
   clear: () => void;
+  isAddingAttachments: boolean;
   toCoreUserMessages: () => Promise<CoreUserMessage[]>;
 }
 
@@ -112,49 +115,104 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
   };
 };
 
-export const ComposerAttachmentsProvider = ({ children }: { children: ReactNode }) => {
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+export const ComposerAttachmentsProvider = ({
+  children,
+  controlled,
+}: {
+  children: ReactNode;
+  controlled?: { value: ComposerAttachment[]; onChange: Dispatch<SetStateAction<ComposerAttachment[]>> };
+}) => {
+  const [localAttachments, setLocalAttachments] = useState<ComposerAttachment[]>([]);
+  const attachments = controlled?.value ?? localAttachments;
+  const setAttachments = controlled?.onChange ?? setLocalAttachments;
+  const generation = useRef(0);
+  const [pendingAdditions, setPendingAdditions] = useState(0);
+  useEffect(
+    () => () => {
+      generation.current++;
+    },
+    [],
+  );
 
-  const addFiles = useCallback(async (files: File[] | FileList) => {
-    const list = await Promise.all(
-      Array.from(files).map(async file => {
-        const attachment = toAttachment(file);
-        if (
-          attachment.kind === 'file' &&
-          !attachment.contentType.startsWith('application/vnd.ms-excel') &&
-          !attachment.contentType.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml') &&
-          (await looksLikeText(file))
-        ) {
-          return { ...attachment, kind: 'text' as const, contentType: 'text/plain' };
-        }
-        return attachment;
-      }),
-    );
-    const accepted = list.filter(attachment => attachment.kind !== 'file');
-    if (accepted.length > 0) setAttachments(prev => [...prev, ...accepted]);
-    return list.filter(attachment => attachment.kind === 'file').map(attachment => attachment.name);
-  }, []);
+  const addFiles = useCallback(
+    async (files: File[] | FileList) => {
+      const currentGeneration = generation.current;
+      setPendingAdditions(count => count + 1);
+      try {
+        const list = await Promise.all(
+          Array.from(files).map(async file => {
+            const attachment = toAttachment(file);
+            if (
+              attachment.kind === 'file' &&
+              !attachment.contentType.startsWith('application/vnd.ms-excel') &&
+              !attachment.contentType.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml') &&
+              (await looksLikeText(file))
+            ) {
+              return { ...attachment, kind: 'text' as const, contentType: 'text/plain' };
+            }
+            return attachment;
+          }),
+        );
+        if (list.length > 0 && generation.current === currentGeneration) setAttachments(prev => [...prev, ...list]);
+      } finally {
+        if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
+      }
+    },
+    [setAttachments],
+  );
 
-  const addUrl = useCallback(async (url: string) => {
-    const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
-    // URL attachments are represented by an empty File named with the URL.
-    const file = new File([], url, { type: contentType });
-    setAttachments(prev => [...prev, toAttachment(file)]);
-  }, []);
+  const addUrl = useCallback(
+    async (url: string) => {
+      const currentGeneration = generation.current;
+      setPendingAdditions(count => count + 1);
+      try {
+        const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
+        // URL attachments are represented by an empty File named with the URL.
+        const file = new File([], url, { type: contentType });
+        if (generation.current === currentGeneration) setAttachments(prev => [...prev, toAttachment(file)]);
+      } finally {
+        if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
+      }
+    },
+    [setAttachments],
+  );
 
-  const remove = useCallback((id: string) => {
-    setAttachments(prev => prev.filter(a => a.id !== id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => {
+      setAttachments(prev => prev.filter(a => a.id !== id));
+    },
+    [setAttachments],
+  );
 
-  const clear = useCallback(() => setAttachments([]), []);
+  const restore = useCallback(
+    (restored: ComposerAttachment[]) => {
+      setAttachments(prev => [...restored, ...prev]);
+    },
+    [setAttachments],
+  );
+
+  const clear = useCallback(() => {
+    generation.current++;
+    setPendingAdditions(0);
+    setAttachments([]);
+  }, [setAttachments]);
 
   const toCoreUserMessages = useCallback(async () => {
     return Promise.all(attachments.map(attachmentToCoreUserMessage));
   }, [attachments]);
 
   const value = useMemo<ComposerAttachmentsContextValue>(
-    () => ({ attachments, addFiles, addUrl, remove, clear, toCoreUserMessages }),
-    [attachments, addFiles, addUrl, remove, clear, toCoreUserMessages],
+    () => ({
+      attachments,
+      addFiles,
+      addUrl,
+      remove,
+      restore,
+      clear,
+      isAddingAttachments: pendingAdditions > 0,
+      toCoreUserMessages,
+    }),
+    [attachments, addFiles, addUrl, remove, restore, clear, toCoreUserMessages, pendingAdditions],
   );
 
   return <ComposerAttachmentsContext.Provider value={value}>{children}</ComposerAttachmentsContext.Provider>;

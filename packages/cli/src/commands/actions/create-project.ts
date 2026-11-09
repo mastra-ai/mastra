@@ -26,6 +26,7 @@ export const createProjectWithDependencies = async (
       await runCreateCommand(projectName, args, {
         analytics: analytics ?? undefined,
         resolveVersionTag,
+        loginSource: 'mastra-cli-create',
       });
     } catch (error) {
       if (isCreateCancelledError(error)) return;

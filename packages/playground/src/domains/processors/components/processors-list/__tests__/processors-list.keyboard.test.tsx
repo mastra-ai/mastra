@@ -1,6 +1,6 @@
+import type { ProcessorInfo } from '@mastra/react/hooks/processors';
 import { describe, expect, it } from 'vitest';
 
-import type { ProcessorInfo } from '../../../hooks/use-processors';
 import { ProcessorsList } from '../processors-list';
 import { expectArrowNavigation, expectRovingTabindex, interactiveRows } from '@/test/keyboard';
 import { TestLinkProvider } from '@/test/link-provider';

@@ -12,16 +12,39 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
-import { createObservabilityVNextTests } from '@internal/storage-test-utils';
+import {
+  createObservabilityVNextTests,
+  SPAN_AGGREGATE_CONFORMANCE_CASES,
+  SPAN_AGGREGATE_FIXTURE_DATA,
+  TRACE_AGGREGATE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+  TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_VERSION_FIXTURE_DATA,
+  TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+  traceAggregateResponseMismatch,
+  writeTraceAggregateFixture,
+  writeTraceQueryFixture,
+} from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import {
+  parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planSpanAggregate,
+  planSpanQuery,
+  planTraceAggregate,
+  planThreadRowsQuery,
   planTraceQuery,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
+  TraceStatus,
 } from '@mastra/core/storage';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_MIGRATIONS,
@@ -32,6 +55,8 @@ import {
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_SCORE_EVENTS_CURRENT,
+  MV_TRACE_BRANCHES,
+  MV_TRACE_ROOTS,
   MV_TRACE_ROOTS_DELTA,
   MV_SCORE_EVENTS_DELTA,
   buildScoreEventsDeltaMvDDL,
@@ -42,18 +67,43 @@ import {
   TABLE_DISCOVERY_VALUES,
   TABLE_FEEDBACK_EVENTS,
   TABLE_FEEDBACK_EVENTS_DELTA,
+  TABLE_METRIC_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_SCORE_EVENTS_CURRENT,
   TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_ROOTS_DELTA,
+  TRACE_BRANCHES_MV_DDL,
+  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
-import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import { TRACE_BRANCHES_SPAN_FIELD_COLUMNS } from './span-query';
+import {
+  compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryKeys,
+  compileClickHouseTraceRowsByKey,
+  runWithClickHouseTraceQueryTimeout,
+} from './trace-query';
+import type { ClickHouseTraceRootKey } from './trace-query';
+
+function rootKeys(rows: Record<string, unknown>[]): ClickHouseTraceRootKey[] {
+  const iso = (value: unknown) => {
+    const text = String(value);
+    return new Date(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`).toISOString();
+  };
+  return rows.map(row => ({
+    traceId: String(row.traceId),
+    dedupeKey: String(row.dedupeKey),
+    sortValue: iso(row.sortValue),
+    rootStartedAt: iso(row.rootStartedAt),
+    rootEndedAt: iso(row.rootEndedAt),
+  }));
+}
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -294,22 +344,37 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             ...request,
           }),
         );
-        const compiled = compileClickHouseTraceQuery(plan);
-        const explainResult = await client.query({
-          query: `EXPLAIN indexes = 1 ${compiled.query}`,
-          query_params: compiled.query_params,
-          format: 'TabSeparatedRaw',
-        });
-        const explain = await explainResult.text();
-        expect(explain).toContain(expectedTable);
-        if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
-        if (expectedIndex) expect(explain).toContain(expectedIndex);
+        const explain = async (compiled: { query: string; query_params: Record<string, unknown> }) => {
+          const result = await client.query({
+            query: `EXPLAIN indexes = 1 ${compiled.query}`,
+            query_params: compiled.query_params,
+            format: 'TabSeparatedRaw',
+          });
+          return result.text();
+        };
+        // Keyset lists run as a keys statement and a read of those roots by key; grouped lists
+        // still compile as one statement.
+        const compiled =
+          plan.result === 'traces' && plan.paginationMode !== 'delta'
+            ? compileClickHouseTraceQueryKeys(plan)
+            : compileClickHouseTraceQuery(plan);
+        const plainExplain = await explain(compiled);
+        if (expectPrimaryKey) expect(plainExplain).toContain('PrimaryKey');
+        if (expectedIndex) expect(plainExplain).toContain(expectedIndex);
 
         const queryId = `trace-query-perf-${randomUUID()}`;
-        await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
+        const keyRows = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
+        if (plan.result === 'traces' && plan.paginationMode !== 'delta') {
+          const keys = rootKeys(keyRows);
+          expect(keys.map(key => key.traceId)).toEqual(['candidate-trace']);
+          // The rows-by-key read narrows mastra_trace_roots by its sort key.
+          expect(await explain(compileClickHouseTraceRowsByKey(plan, keys))).toContain('PrimaryKey');
+        }
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({
-          query: `SELECT read_rows AS readRows, read_bytes AS readBytes
+          // Subqueries used for index analysis are built during planning, so EXPLAIN may not name
+          // every table the query reads; the query log does.
+          query: `SELECT read_rows AS readRows, read_bytes AS readBytes, tables
 FROM system.query_log
 WHERE query_id = {queryId:String} AND type = 'QueryFinish'
 ORDER BY event_time_microseconds DESC
@@ -317,8 +382,9 @@ LIMIT 1`,
           query_params: { queryId },
           format: 'JSONEachRow',
         });
-        const [log] = await logResult.json<{ readRows: number; readBytes: number }>();
+        const [log] = await logResult.json<{ readRows: number; readBytes: number; tables: string[] }>();
         expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        expect(log?.tables.some(table => table.endsWith(`.${expectedTable}`))).toBe(true);
         return Number(log?.readRows);
       };
 
@@ -381,6 +447,229 @@ LIMIT 1`,
       expect(groupedReadRows).toBeLessThan(10);
     } finally {
       await client.close();
+    }
+  });
+
+  it('reads root payloads only for traces in the requested time range', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const startedAt = new Date('2026-08-26T10:00:00.000Z');
+    const outsideRoots = 5_000;
+    const payload = 'x'.repeat(2_000);
+
+    try {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'in-range-trace',
+            spanId: 'in-range-root',
+            parentSpanId: null,
+            name: 'in-range root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1_000),
+          },
+          ...Array.from({ length: outsideRoots }, (_, index) => ({
+            traceId: `outside-${index}`,
+            spanId: `outside-root-${index}`,
+            parentSpanId: null,
+            name: 'outside root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            input: payload,
+            output: payload,
+            startedAt: new Date(startedAt.getTime() - (index + 1) * 60_000),
+            endedAt: new Date(startedAt.getTime() - (index + 1) * 60_000 + 1_000),
+          })),
+        ],
+      });
+
+      const plan = planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: {
+            from: new Date(startedAt.getTime() - 1_000).toISOString(),
+            to: new Date(startedAt.getTime() + 2_000).toISOString(),
+          },
+        }),
+      );
+      const keysQueryId = `trace-query-range-${randomUUID()}`;
+      const keys = rootKeys(
+        await runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 15_000 },
+          compileClickHouseTraceQueryKeys(plan),
+          keysQueryId,
+        ),
+      );
+      const rowsQueryId = `trace-query-range-${randomUUID()}`;
+      const rows = await runWithClickHouseTraceQueryTimeout(
+        client,
+        { timeoutMs: 15_000 },
+        compileClickHouseTraceRowsByKey(plan, keys),
+        rowsQueryId,
+      );
+      expect(rows.map(row => row.traceId)).toEqual(['in-range-trace']);
+
+      await client.command({ query: 'SYSTEM FLUSH LOGS' });
+      for (const queryId of [keysQueryId, rowsQueryId]) {
+        const logResult = await client.query({
+          query: `SELECT read_bytes AS readBytes
+FROM system.query_log
+WHERE query_id = {queryId:String} AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC
+LIMIT 1`,
+          query_params: { queryId },
+          format: 'JSONEachRow',
+        });
+        const [log] = await logResult.json<{ readBytes: number }>();
+        // Deduping the whole table would read every outside root's input and output.
+        expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+      }
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('lists a trace once in every mode across retried root copies and a second root', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+    const query = (request: Record<string, unknown>) =>
+      storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, ...request })));
+    const seed = await query({ mode: 'delta' });
+    if (!('deltaCursor' in seed)) throw new Error('Expected a delta cursor');
+
+    const root = {
+      traceId: 'one-root-trace',
+      spanId: 'root-a',
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityName: 'agentA',
+      threadId: 'one-root-thread',
+      startedAt: new Date('2026-08-05T10:00:00.000Z'),
+      endedAt: new Date('2026-08-05T10:00:02.000Z'),
+    } as const;
+
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // A retried copy of the root (same dedupeKey), and a second root in the same trace, which only
+      // a writer bug produces. The trace is listed under its earliest-started root, the one the
+      // aggregate counts and the thread rows read.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
+      await storage.createSpan({
+        span: {
+          ...root,
+          spanId: 'root-b',
+          entityName: 'agentB',
+          startedAt: new Date('2026-08-05T10:00:01.000Z'),
+          endedAt: new Date('2026-08-05T10:00:09.000Z'),
+        },
+      });
+      const physical = await client.query({
+        query: `SELECT count() AS rows FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
+        query_params: { traceId: root.traceId },
+        format: 'JSONEachRow',
+      });
+      expect(await physical.json<{ rows: number }>()).toEqual([{ rows: 3 }]);
+
+      const keyset = await query({});
+      expect('traces' in keyset ? keyset.traces.map(trace => trace.traceId) : []).toEqual([root.traceId]);
+
+      for (const direction of ['asc', 'desc'] as const) {
+        for (const field of ['startedAt', 'endedAt'] as const) {
+          const page = await query({ orderBy: [{ field, direction }], pagination: { page: 0, perPage: 10 } });
+          if (!('pagination' in page)) throw new Error('Expected a numbered page');
+          expect(page.pagination?.total).toBe(1);
+          expect(page.traces.map(trace => [trace.traceId, trace.entityName])).toEqual([[root.traceId, 'agentA']]);
+        }
+      }
+
+      // A root-column filter reads the listed root only, so filters that split the roots can't
+      // both count the trace.
+      for (const [entityName, total] of [
+        ['agentA', 1],
+        ['agentB', 0],
+        ['agentC', 0],
+      ] as const) {
+        const filtered = await query({
+          where: { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+          pagination: { page: 0, perPage: 10 },
+        });
+        if (!('pagination' in filtered)) throw new Error('Expected a numbered page');
+        expect(filtered.pagination?.total, entityName).toBe(total);
+      }
+
+      const groups = await query({ group: { by: ['threadId'] } });
+      expect('groups' in groups ? groups.groups : undefined).toEqual([{ threadId: root.threadId }]);
+
+      const delta = await query({ mode: 'delta', after: seed.deltaCursor });
+      expect('traces' in delta ? delta.traces.map(trace => trace.traceId) : []).toEqual([root.traceId]);
+
+      // A window with no root of the trace doesn't list it.
+      const outside = await storage.queryTraces(
+        planTraceQuery(
+          parseTraceQueryRequest({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' } }),
+        ),
+      );
+      expect('traces' in outside ? outside.traces : undefined).toEqual([]);
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    }
+  });
+
+  it('lists a trace with several roots once across keyset pages', async () => {
+    const timeRange = { from: '2026-08-10T00:00:00Z', to: '2026-08-11T00:00:00Z' };
+    const root = (traceId: string, spanId: string, at: string) => ({
+      traceId,
+      spanId,
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: new Date(at),
+      endedAt: new Date(at),
+    });
+    // Trace T has roots on either side of trace U's only root, which only a writer bug produces.
+    await storage.createSpan({ span: root('keyset-t', 'root-t1', '2026-08-10T10:00:01.000Z') });
+    await storage.createSpan({ span: root('keyset-t', 'root-t0', '2026-08-10T10:00:00.000Z') });
+    await storage.createSpan({ span: root('keyset-u', 'root-u', '2026-08-10T10:00:00.500Z') });
+
+    for (const field of ['startedAt', 'endedAt'] as const) {
+      for (const direction of ['desc', 'asc'] as const) {
+        const listed: string[] = [];
+        let after: string | undefined;
+        do {
+          const response = await storage.queryTraces(
+            planTraceQuery(
+              parseTraceQueryRequest({
+                timeRange,
+                orderBy: [{ field, direction }],
+                page: { limit: 1, ...(after ? { after } : {}) },
+              }),
+            ),
+          );
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
+          listed.push(...response.traces.map(trace => trace.traceId));
+          after = response.page.next ?? undefined;
+        } while (after && listed.length < 5);
+        // T sorts by its earliest root (10:00:00), once, on either side of U.
+        expect(listed, `${field} ${direction}`).toEqual(
+          direction === 'asc' ? ['keyset-t', 'keyset-u'] : ['keyset-u', 'keyset-t'],
+        );
+      }
     }
   });
 
@@ -606,6 +895,94 @@ LIMIT 1`,
       });
     });
 
+    it('keeps a tenant trace when another tenant has a root with the same traceId', async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const root = (organizationId: string, spanId: string) => ({
+          ...spanRecordToRow({
+            traceId: 'shared-trace-id',
+            spanId,
+            parentSpanId: null,
+            name: `${organizationId} root`,
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1),
+          }),
+          organizationId,
+        });
+        // The other tenant's root has the lower dedupeKey, so it would win an unscoped dedupe.
+        await client.insert({
+          table: TABLE_TRACE_ROOTS,
+          format: 'JSONEachRow',
+          values: [root('org-b', 'a-root'), root('org-a', 'b-root')],
+        });
+
+        const scope = { organizationId: 'org-a' };
+        const traces = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } }), { scope }),
+        );
+        expect('traces' in traces && traces.traces.map(trace => trace.name)).toEqual(['org-a root']);
+        const aggregate = await isolatedStorage.aggregateTraces(
+          planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count'] }), { scope }),
+        );
+        expect(aggregate.rows).toEqual([{ measures: { count: 1 } }]);
+      });
+    });
+
+    it("builds a legacy root's preview from its own tenant's payload when another tenant shares its identity", async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        // Same traceId, spanId, startedAt and endedAt in both tenants, written before previews
+        // were stored, so listing reads the preview from the payload.
+        const root = (organizationId: string) => ({
+          ...spanRecordToRow({
+            traceId: 'shared-legacy-trace',
+            spanId: 'shared-legacy-root',
+            parentSpanId: null,
+            name: `${organizationId} root`,
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            input: `${organizationId} input`,
+            output: `${organizationId} output`,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1),
+          }),
+          organizationId,
+          inputPreview: null,
+          outputPreview: null,
+          errorPreview: null,
+        });
+        for (const organizationId of ['org-b', 'org-a']) {
+          await client.insert({ table: TABLE_TRACE_ROOTS, format: 'JSONEachRow', values: [root(organizationId)] });
+        }
+
+        for (const organizationId of ['org-a', 'org-b']) {
+          const traces = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange }), { scope: { organizationId } }),
+          );
+          expect('traces' in traces && traces.traces.map(trace => [trace.inputPreview, trace.outputPreview])).toEqual([
+            [`${organizationId} input`, `${organizationId} output`],
+          ]);
+          const { spans } = await isolatedStorage.listTracesLight({
+            filters: { organizationId },
+            pagination: { page: 0, perPage: 10 },
+          });
+          expect(spans.map(span => [span.inputPreview, span.outputPreview])).toEqual([
+            [`${organizationId} input`, `${organizationId} output`],
+          ]);
+        }
+      });
+    });
+
     it('characterizes concurrent trace inserts and delta polls with numbered-page reconciliation', async () => {
       await withFallbackStorage(async isolatedStorage => {
         const startedAt = new Date();
@@ -677,11 +1054,37 @@ LIMIT 1`,
       expect(storage.getFeatures()).toEqual([
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        'trace-query-context-fields',
+        'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
+        'trace-query-time-to-first-token',
+        'trace-query-time-to-first-token-sort',
+        'span-query-outcome-fields',
+        'trace-query-outcome-fields',
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+        'trace-aggregate',
+        'aggregate-time-to-first-measures',
+        'span-query',
+        'span-query-context-fields',
+        'span-query-model-fields',
+        'span-aggregate',
+        'span-aggregate-model-dimensions',
+        'thread-query-rows',
       ]);
     });
 
@@ -692,10 +1095,36 @@ LIMIT 1`,
         expect(storage.getFeatures()).toEqual([
           'metrics',
           'logs',
+          'entity-type-discovery',
+          'entity-name-discovery',
+          'service-name-discovery',
+          'environment-discovery',
+          'tag-discovery',
+          'metric-discovery',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
+          'feedback',
+          'trace-query-context-ids',
+          'trace-query-context-fields',
+          'trace-query-time-to-first-chunk',
+          'trace-query-time-to-first-chunk-sort',
+          'trace-query-time-to-first-token',
+          'trace-query-time-to-first-token-sort',
+          'span-query-outcome-fields',
+          'trace-query-outcome-fields',
+          'trace-query-root-span-fields',
+          'trace-query-root-entity-id',
+          'trace-aggregate',
+          'aggregate-time-to-first-measures',
+          'span-query',
+          'span-query-context-fields',
+          'span-query-model-fields',
+          'span-aggregate',
+          'span-aggregate-model-dimensions',
+          'thread-query-rows',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -3100,18 +3529,22 @@ LIMIT 1`,
         await scopedClient.command({
           query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, key2, value)`,
         });
-        // Legacy views without APPEND, as created by older releases.
+        // Legacy views without APPEND, as created by older releases. A
+        // non-APPEND refresh swaps the target table, so a refresh running
+        // while the test inserts or checks the marker row would replace the
+        // table under it. EMPTY skips the refresh at creation and STOP VIEW
+        // disables the scheduled ones.
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
         });
         await scopedClient.command({
-          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} EMPTY AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
         });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_VALUES}` });
+        await scopedClient.command({ query: `SYSTEM STOP VIEW ${MV_DISCOVERY_PAIRS}` });
 
         // Marker row proving the table (and its data) survives init()'s view
-        // migration. Inserted after the legacy views because a non-APPEND
-        // view's initial refresh atomically swaps the target table — the very
-        // behavior this fix removes.
+        // migration.
         await scopedClient.command({
           query: `INSERT INTO ${TABLE_DISCOVERY_VALUES} VALUES ('entityType', '', 'marker-survivor')`,
         });
@@ -3699,6 +4132,111 @@ LIMIT 1`,
       const result = await storage.listTraces({});
       expect(result.spans).toHaveLength(1);
       expect(result.spans[0]!.traceId).toBe('dedup-root-trace');
+    });
+
+    describe('unmerged versions in different endedAt partitions', () => {
+      // Tables partition by toDate(endedAt), so versions of one span that end on
+      // different days never merge. Each read must return a version that matches
+      // its filter, with payloads from that same version.
+      const base = {
+        traceId: 'split-version-trace',
+        spanId: 'split-version-root',
+        parentSpanId: null,
+        name: 'root-span',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        entityId: 'a-split',
+        entityName: 'splitAgent',
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: 'test',
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        tags: null,
+        links: null,
+        output: null,
+        startedAt: new Date('2026-09-30T23:58:00Z'),
+      } as const;
+      const ok = {
+        ...base,
+        metadata: { version: 'ok' },
+        input: { version: 'ok' },
+        error: null,
+        endedAt: new Date('2026-09-30T23:59:00Z'),
+      };
+      const failed = {
+        ...base,
+        metadata: { version: 'failed' },
+        input: { version: 'failed' },
+        error: { message: 'boom' },
+        endedAt: new Date('2026-10-01T00:01:00Z'),
+      };
+
+      beforeEach(async () => {
+        await storage.createSpan({ span: ok });
+        await storage.createSpan({ span: failed });
+      });
+
+      it('listTraces returns the version that matches the status filter', async () => {
+        const success = await storage.listTraces({
+          filters: { status: TraceStatus.SUCCESS },
+          orderBy: { field: 'endedAt', direction: 'DESC' },
+        });
+        expect(success.spans).toHaveLength(1);
+        expect(success.spans[0]!.error ?? null).toBeNull();
+        expect(success.spans[0]!.metadata).toEqual({ version: 'ok' });
+
+        const errored = await storage.listTraces({
+          filters: { status: TraceStatus.ERROR },
+          orderBy: { field: 'endedAt', direction: 'ASC' },
+        });
+        expect(errored.spans).toHaveLength(1);
+        expect(errored.spans[0]!.error).toMatchObject({ message: 'boom' });
+        expect(errored.spans[0]!.metadata).toEqual({ version: 'failed' });
+      });
+
+      it('listBranches returns the version that matches the status filter', async () => {
+        const success = await storage.listBranches({
+          filters: { status: TraceStatus.SUCCESS },
+          orderBy: { field: 'endedAt', direction: 'DESC' },
+        });
+        expect(success.branches).toHaveLength(1);
+        expect(success.branches[0]!.error ?? null).toBeNull();
+        expect(success.branches[0]!.metadata).toEqual({ version: 'ok' });
+
+        const errored = await storage.listBranches({
+          filters: { status: TraceStatus.ERROR },
+          orderBy: { field: 'endedAt', direction: 'ASC' },
+        });
+        expect(errored.branches).toHaveLength(1);
+        expect(errored.branches[0]!.error).toMatchObject({ message: 'boom' });
+        expect(errored.branches[0]!.metadata).toEqual({ version: 'failed' });
+      });
+
+      it('queryTraces page rows carry payloads from the version they describe', async () => {
+        const response = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-09-30T00:00:00Z', to: '2026-10-01T00:00:00Z' },
+              pagination: {},
+            }),
+          ),
+        );
+        if (!('traces' in response)) throw new Error('Expected trace results');
+        expect(response.traces).toHaveLength(1);
+        const trace = response.traces[0]!;
+        const version = trace.status === 'error' ? 'failed' : 'ok';
+        expect(trace.metadata).toEqual({ version });
+        expect(trace.inputPreview).toContain(version);
+      });
     });
   });
 
@@ -4722,6 +5260,36 @@ LIMIT 1`,
         }),
       ).rejects.toThrow('Percentile value must be a finite number between 0 and 1');
     });
+
+    it('getScoreAggregate returns null when no scores match', async () => {
+      for (const aggregation of ['sum', 'avg', 'min', 'max', 'last'] as const) {
+        const result = await storage.getScoreAggregate({ scorerId: 'no-such-scorer', aggregation });
+        expect(result.value, aggregation).toBeNull();
+      }
+    });
+
+    it('getScoreAggregate count_distinct counts distinct values instead of summing', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            scoreId: 'score-test-5',
+            timestamp: new Date('2026-01-01T00:00:15Z'),
+            traceId: 'olap-s-5',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            metadata: null,
+          },
+        ],
+      });
+
+      // quality scores: 0.8, 0.6, 0.9, 0.8 → 3 distinct (sum would be 3.1)
+      const result = await storage.getScoreAggregate({ scorerId: 'quality', aggregation: 'count_distinct' });
+      expect(result.value).toBe(3);
+    });
   });
 
   // ==========================================================================
@@ -4808,6 +5376,16 @@ LIMIT 1`,
       });
       // String-valued feedback has valueNumber = NULL, so it's excluded by the identity filter
       expect(result.value).toBe(0);
+    });
+
+    it('getFeedbackAggregate count_distinct counts distinct values instead of summing', async () => {
+      // Production thumbs values are 1 and 0: sum is 1, distinct count is 2
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        filters: { environment: 'production' },
+        aggregation: 'count_distinct',
+      });
+      expect(result.value).toBe(2);
     });
 
     it('getFeedbackPercentiles rejects out-of-range values', async () => {
@@ -5135,8 +5713,10 @@ LIMIT 1`,
         expect((await storage.listScores({})).scores).toEqual([]);
         expect((await storage.listFeedback({})).feedback).toEqual([]);
 
+        // Each request is upserted once more when marked applied, so count
+        // distinct requests under FINAL rather than raw row versions.
         const requestCountResult = await client.query({
-          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS}`,
+          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS} FINAL`,
           format: 'JSONEachRow',
         });
         const [requestCountRow] = (await requestCountResult.json()) as Array<{ count: string }>;
@@ -5226,6 +5806,7 @@ LIMIT 1`,
             WHERE signal = 'feedback'
               AND predicateType = 'itemIds'
               AND has(predicateValues, {feedbackId:String})
+              AND lastAppliedAt > toDateTime64(0, 3)
               AND (organizationId = '' OR organizationId = {organizationId:String})
               AND (resourceId = '' OR resourceId = {resourceId:String})
             LIMIT 1`,
@@ -5242,6 +5823,229 @@ LIMIT 1`,
         ).resolves.toMatchObject({ feedbackId: 'index-feedback-kept', reviewStatus: 'reviewed' });
         expect((await storage.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['index-feedback-kept']);
       } finally {
+        await client.close();
+      }
+    });
+
+    it('ignores unapplied requests after a failed delete and converges on retry', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const requestsFor = async (id: string) => {
+        const result = await client.query({
+          query: `SELECT signal, lastAppliedAt > toDateTime64(0, 3) AS applied
+                  FROM ${TABLE_DELETION_REQUESTS} FINAL
+                  WHERE has(predicateValues, {id:String}) ORDER BY requestedAt`,
+          query_params: { id },
+          format: 'JSONEachRow',
+        });
+        return (await result.json()) as Array<{ signal: string; applied: number }>;
+      };
+
+      try {
+        const flaky = new ObservabilityStorageClickhouseVNext({ client });
+        await flaky.init();
+        await flaky.createFeedback({
+          feedback: {
+            feedbackId: 'unapplied-feedback-1',
+            timestamp: new Date('2026-09-01T12:00:01Z'),
+            traceId: 'unapplied-trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 1,
+            comment: 'still visible',
+            experimentId: null,
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            metadata: null,
+          },
+        });
+
+        // Request insert succeeds, lightweight DELETE fails.
+        const originalCommand = client.command.bind(client);
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          const query = (args as { query: string }).query;
+          if (/^\s*DELETE FROM/i.test(query)) throw new Error('simulated delete failure');
+          return originalCommand(args);
+        });
+        try {
+          await expect(
+            flaky.deleteFeedback({
+              feedbackIds: ['unapplied-feedback-1'],
+              organizationId: 'org-1',
+              resourceId: 'resource-1',
+            }),
+          ).rejects.toThrow('simulated delete failure');
+        } finally {
+          spy.mockRestore();
+        }
+
+        expect(await requestsFor('unapplied-feedback-1')).toEqual([{ signal: 'feedback', applied: 0 }]);
+        expect((await flaky.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['unapplied-feedback-1']);
+
+        // The failed request does not block the update up front. The update's
+        // post-write check finds it and retries the delete, which now succeeds.
+        await expect(
+          flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+        expect((await flaky.listFeedback({})).feedback).toEqual([]);
+        expect((await requestsFor('unapplied-feedback-1')).map(r => r.applied)).toEqual([0, 1]);
+        await expect(
+          flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+
+        // Scores and traces mark their requests applied too.
+        await flaky.deleteScores({ scoreIds: ['applied-score-1'], organizationId: 'org-1', resourceId: 'resource-1' });
+        await flaky.batchDeleteTraces({ traceIds: ['applied-trace-1'] });
+        expect(await requestsFor('applied-score-1')).toEqual([{ signal: 'scores', applied: 1 }]);
+        expect(await requestsFor('applied-trace-1')).toEqual([{ signal: 'traces', applied: 1 }]);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('does not recreate feedback when a review update lands between the delete and the applied mark', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const gate = () => {
+        let open!: () => void;
+        const opened = new Promise<void>(resolve => (open = resolve));
+        return { open, opened };
+      };
+      // Update pauses at its pre-write guard until the first DELETE has run;
+      // the delete pauses before its applied mark until the update has returned.
+      const updateGuard = gate();
+      const appliedMark = gate();
+      const originalQuery = client.query.bind(client);
+      const originalInsert = client.insert.bind(client);
+      let guardCalls = 0;
+      let appliedMarks = 0;
+      const querySpy = vi.spyOn(client, 'query').mockImplementation(async args => {
+        const query = (args as { query: string }).query;
+        if (query.includes('has(predicateValues') && guardCalls++ === 0) await updateGuard.opened;
+        return originalQuery(args);
+      });
+      const insertSpy = vi.spyOn(client, 'insert').mockImplementation(async args => {
+        const row = (args as { table: string; values: Array<{ lastAppliedAt?: string }> }).values[0];
+        if (
+          (args as { table: string }).table === TABLE_DELETION_REQUESTS &&
+          row?.lastAppliedAt !== '1970-01-01T00:00:00.000Z' &&
+          appliedMarks++ === 0
+        ) {
+          await appliedMark.opened;
+        }
+        return originalInsert(args);
+      });
+
+      try {
+        const racing = new ObservabilityStorageClickhouseVNext({ client });
+        await racing.init();
+        await racing.createFeedback({
+          feedback: {
+            feedbackId: 'race-feedback-1',
+            timestamp: new Date('2026-09-01T12:00:01Z'),
+            traceId: 'race-trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 1,
+            comment: 'racing',
+            experimentId: null,
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            metadata: null,
+          },
+        });
+
+        const update = racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' });
+        await vi.waitFor(() => expect(guardCalls).toBe(1));
+        const deletion = racing.deleteFeedback({
+          feedbackIds: ['race-feedback-1'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+        await vi.waitFor(async () => {
+          const rows = (await originalQuery({
+            query: `SELECT count() AS c FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId = 'race-feedback-1'`,
+            format: 'JSONEachRow',
+          }).then(r => r.json())) as Array<{ c: number | string }>;
+          expect(Number(rows[0]?.c)).toBe(0);
+        });
+
+        updateGuard.open();
+        await expect(update).rejects.toThrow('Feedback record not found');
+        // The first request is still pending. The update's replacement row was
+        // written after the DELETE, so its post-write check re-ran the delete.
+        expect((await racing.listFeedback({})).feedback).toEqual([]);
+
+        appliedMark.open();
+        await deletion;
+        expect((await racing.listFeedback({})).feedback).toEqual([]);
+        await expect(
+          racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+      } finally {
+        updateGuard.open();
+        appliedMark.open();
+        querySpy.mockRestore();
+        insertSpy.mockRestore();
+        await client.close();
+      }
+    });
+
+    it('publishes review updates through the delta cursor', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const feedback = {
+        feedbackId: 'delta-wiring-feedback-1',
+        timestamp: new Date('2026-09-01T12:00:03Z'),
+        traceId: 'delta-wiring-trace-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+        metadata: null,
+      } as const;
+      const publishedRows = async () => {
+        const result = await client.query({
+          query: `SELECT count() AS rows FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE feedbackId = {feedbackId:String}`,
+          query_params: { feedbackId: feedback.feedbackId },
+          format: 'JSONEachRow',
+        });
+        return Number(((await result.json()) as Array<{ rows: string }>)[0]?.rows);
+      };
+      const enabled = coreFeatures.has('observability-delta-polling');
+
+      try {
+        coreFeatures.add('observability-delta-polling');
+        const store = new ObservabilityStorageClickhouseVNext({ client });
+        await store.init();
+        await store.createFeedback({ feedback });
+        const cursor = (await store.listFeedback({ mode: 'delta' })).deltaCursor!;
+
+        await store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' });
+
+        expect((await store.listFeedback({ mode: 'delta', after: cursor })).feedback).toMatchObject([
+          { feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' },
+        ]);
+        // The insert materialized view publishes the replacement row.
+        expect(await publishedRows()).toBe(2);
+      } finally {
+        if (enabled) coreFeatures.add('observability-delta-polling');
+        else coreFeatures.delete('observability-delta-polling');
         await client.close();
       }
     });
@@ -5661,6 +6465,137 @@ LIMIT 1`,
       }
     });
 
+    it('adds the native span fields to existing span tables and copies them into trace roots and branches', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'initial-run',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      const columns = Object.keys(fields);
+      // The raw column holds the JSON text; the store parses it on read.
+      const stored = { ...fields, stopReasonContext: JSON.stringify(fields.stopReasonContext) };
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      const span = (traceId: string) => ({
+        traceId,
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 1000),
+        ...fields,
+      });
+      const select = `SELECT traceId, ${columns.join(', ')}`;
+
+      try {
+        // Rebuild the pre-upgrade state: tables without the columns, and the
+        // root / branch views created on top of them.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_BRANCHES}` });
+        for (const table of spanTables) {
+          for (const column of columns) {
+            await client.command({ query: `ALTER TABLE ${table} DROP COLUMN IF EXISTS ${column}` });
+          }
+        }
+        await client.command({ query: TRACE_ROOTS_MV_DDL });
+        await client.command({ query: TRACE_BRANCHES_MV_DDL });
+        // A row written before the upgrade, through the old column set.
+        const legacyRow = Object.fromEntries(
+          Object.entries(spanRecordToRow(span('native-upgrade-old'))).filter(([key]) => !columns.includes(key as any)),
+        );
+        await client.insert({ table: TABLE_SPAN_EVENTS, values: [legacyRow], format: 'JSONEachRow' });
+
+        const upgraded = new ObservabilityStorageClickhouseVNext({ client });
+        await upgraded.init();
+        await upgraded.batchCreateSpans({ records: [span('native-upgrade-new')] });
+
+        for (const table of spanTables) {
+          const result = await client.query({
+            query: `${select} FROM ${table} FINAL
+              WHERE traceId IN ('native-upgrade-old', 'native-upgrade-new') ORDER BY traceId`,
+            format: 'JSONEachRow',
+          });
+          expect(await result.json(), table).toEqual([
+            { traceId: 'native-upgrade-new', ...stored },
+            { traceId: 'native-upgrade-old', ...Object.fromEntries(columns.map(column => [column, null])) },
+          ]);
+        }
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
+    });
+
+    it('adds timeToFirstChunkMs to existing span tables and copies it into trace roots and branches', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      const span = (traceId: string, timeToFirstChunkMs: number) => ({
+        traceId,
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 1000),
+        timeToFirstChunkMs,
+      });
+
+      try {
+        // Rebuild the pre-upgrade state: tables without the column, and the
+        // root / branch views created on top of them.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_BRANCHES}` });
+        for (const table of spanTables) {
+          await client.command({ query: `ALTER TABLE ${table} DROP COLUMN IF EXISTS timeToFirstChunkMs` });
+        }
+        await client.command({ query: TRACE_ROOTS_MV_DDL });
+        await client.command({ query: TRACE_BRANCHES_MV_DDL });
+        // A row written before the upgrade, through the old column set.
+        const { timeToFirstChunkMs: _dropped, ...legacyRow } = spanRecordToRow(span('ttfc-upgrade-old', 100));
+        await client.insert({ table: TABLE_SPAN_EVENTS, values: [legacyRow], format: 'JSONEachRow' });
+
+        const upgraded = new ObservabilityStorageClickhouseVNext({ client });
+        await upgraded.init();
+        await upgraded.batchCreateSpans({
+          records: [span('ttfc-upgrade-new', 250)],
+        });
+
+        for (const table of spanTables) {
+          const result = await client.query({
+            query: `SELECT traceId, timeToFirstChunkMs FROM ${table} FINAL
+              WHERE traceId IN ('ttfc-upgrade-old', 'ttfc-upgrade-new') ORDER BY traceId`,
+            format: 'JSONEachRow',
+          });
+          expect(await result.json(), table).toEqual([
+            { traceId: 'ttfc-upgrade-new', timeToFirstChunkMs: 250 },
+            { traceId: 'ttfc-upgrade-old', timeToFirstChunkMs: null },
+          ]);
+        }
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
+    });
+
     it('resumes a partial current-score backfill and skips it after completion', async () => {
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -5956,10 +6891,10 @@ describe('listTracesLight projection', () => {
           entityName: null,
           userId: null,
           organizationId: null,
-          resourceId: null,
+          resourceId: 'user-light',
           runId: null,
           sessionId: null,
-          threadId: null,
+          threadId: 'thread-light',
           requestId: null,
           environment: null,
           source: null,
@@ -5992,6 +6927,8 @@ describe('listTracesLight projection', () => {
     expect(row.inputPreview).toBe('summarize this');
     expect(row.status).toBe('success');
     expect(row.metadata).toEqual({ customer: 'acme' });
+    expect(row.threadId).toBe('thread-light');
+    expect(row.resourceId).toBe('user-light');
   });
 
   it('computes status on light rows matching the full listTraces status', async () => {
@@ -6100,6 +7037,67 @@ describe('listTracesLight projection', () => {
     expect(row.inputPreview).toBe('summarize this');
     expect(row.status).toBe('success');
     expect(row.metadata).toEqual({ customer: 'acme' });
+  });
+
+  it('caps oversized supplied previews like generated ones', async () => {
+    const huge = 'p'.repeat(99) + '\u{1F600}'.repeat(1_000_000);
+    const capped = `${'p'.repeat(99)}…`;
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'light-trace-supplied',
+          spanId: 'light-span-supplied',
+          parentSpanId: null,
+          name: 'agent run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:03:00Z'),
+          endedAt: new Date('2026-01-01T00:03:05Z'),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          links: null,
+          metadata: null,
+          tags: [],
+          error: { message: 'boom' },
+          attributes: null,
+          input: 'input',
+          output: 'output',
+          inputPreview: huge,
+          outputPreview: huge,
+          errorPreview: huge,
+        },
+      ],
+    });
+
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const stored = await (
+      await client.query({
+        query: `SELECT inputPreview, outputPreview, errorPreview FROM ${TABLE_TRACE_ROOTS} WHERE traceId = 'light-trace-supplied'`,
+        format: 'JSONEachRow',
+      })
+    ).json();
+    await client.close();
+    expect(stored).toEqual([{ inputPreview: capped, outputPreview: capped, errorPreview: capped }]);
+
+    const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    const row = spans.find(s => s.traceId === 'light-trace-supplied')! as Record<string, unknown>;
+    expect([row.inputPreview, row.outputPreview, row.errorPreview]).toEqual([capped, capped, capped]);
   });
 });
 
@@ -6229,3 +7227,669 @@ async function eventuallyNull<T>(
   }
   return false;
 }
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
+  const TIME_RANGE = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    await storage.init();
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  describe('fixtures', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it.each<[string, Record<string, unknown> | undefined, TraceQueryTenantScope | undefined]>([
+      ['the whole window', undefined, undefined],
+      ['a where filter', { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }, undefined],
+      ['a metadata filter', { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } }, undefined],
+      [
+        'a root entityId filter',
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+        undefined,
+      ],
+      ['a tenant scope', undefined, { organizationId: 'org-b' }],
+    ])('counts the same traces as queryTraces for %s', async (_name, where, scope) => {
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] }), {
+          scope,
+        }),
+      );
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, where, pagination: { page: 0, perPage: 1 } }), {
+          scope,
+        }),
+      );
+      const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+      expect(total).toBeGreaterThan(0);
+      expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
+    });
+  });
+
+  it('collapses retried and replacement roots without background merges', async () => {
+    await storage.dangerouslyClearAll();
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const root = {
+      traceId: 'aggregate-merge-trace',
+      spanId: 'aggregate-merge-root',
+      parentSpanId: null,
+      name: 'root-span',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityName: 'mergeAgent',
+      environment: 'test',
+      startedAt: new Date('2026-08-02T00:00:00Z'),
+      endedAt: new Date('2026-08-02T00:00:01Z'),
+    } as const;
+
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // A retried insert (same dedupeKey) and a replacement root for the same trace.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: { ...root, spanId: 'aggregate-merge-replacement' } });
+
+      const physical = await client.query({
+        query: `SELECT count() AS rows FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
+        query_params: { traceId: root.traceId },
+        format: 'JSONEachRow',
+      });
+      expect(await physical.json<{ rows: number }>()).toEqual([{ rows: 3 }]);
+
+      for (const interval of [undefined, '1d'] as const) {
+        const aggregate = await storage.aggregateTraces(
+          planTraceAggregate(
+            parseTraceAggregateRequest({
+              timeRange: TIME_RANGE,
+              groupBy: ['entityName'],
+              interval,
+              measures: ['count', 'countDistinct.traceId'],
+            }),
+          ),
+        );
+        expect(aggregate.rows).toEqual([
+          {
+            dimensions: { entityName: 'mergeAgent' },
+            ...(interval ? { bucket: '2026-08-02T00:00:00.000Z' } : {}),
+            measures: { count: 1, 'countDistinct.traceId': 1 },
+          },
+        ]);
+      }
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, pagination: { page: 0, perPage: 10 } })),
+      );
+      expect('pagination' in traces ? traces.pagination?.total : undefined).toBe(1);
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    }
+  });
+
+  it('counts unmerged copies of a root once under pushed-down filters', async () => {
+    await storage.dangerouslyClearAll();
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const root = {
+      traceId: 'aggregate-pushdown-trace',
+      spanId: 'pushdown-root',
+      parentSpanId: null,
+      name: 'root-span',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityName: 'agentA',
+      environment: 'test',
+      startedAt: new Date('2026-08-02T00:00:00Z'),
+      endedAt: new Date('2026-08-02T00:00:01Z'),
+    } as const;
+
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // Two physical copies of the same root, as left by a retried insert before merges run.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
+
+      for (const [entityName, expected] of [
+        ['agentA', [{ measures: { count: 1 } }]],
+        ['agentB', []],
+      ] as const) {
+        const where = {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+            { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
+          ],
+        };
+        const aggregate = await storage.aggregateTraces(
+          planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
+        );
+        expect(aggregate.rows).toEqual(expected);
+      }
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    }
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateSpans', () => {
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    await storage.init();
+    await storage.dangerouslyClearAll();
+    await writeTraceAggregateFixture(
+      storage as unknown as ObservabilityStorage,
+      SPAN_AGGREGATE_FIXTURE_DATA,
+      'completion-only',
+    );
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  it.each(SPAN_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+    'matches the reference evaluator: %s',
+    async (_name, testCase) => {
+      const response = await storage.aggregateSpans(planSpanAggregate(testCase.request, { scope: testCase.scope }));
+      expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+    },
+  );
+
+  it('has a trace_branches column for every field the branch path reads', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      const result = await client.query({
+        query: 'SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String}',
+        query_params: { table: TABLE_TRACE_BRANCHES },
+        format: 'JSONEachRow',
+      });
+      const columns = new Set(((await result.json()) as { name: string }[]).map(row => row.name));
+      const missing = Object.values(TRACE_BRANCHES_SPAN_FIELD_COLUMNS)
+        .flat()
+        .filter(column => !columns.has(column));
+      expect(missing).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('counts the same spans querySpans pages through', async () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-04T00:00:00Z' };
+    const aggregate = await storage.aggregateSpans(planSpanAggregate({ timeRange, measures: ['count'] }));
+    const spans = await storage.querySpans(planSpanQuery({ timeRange }));
+    expect(spans.spans).toHaveLength(8);
+    expect(aggregate.rows[0]?.measures.count).toBe(spans.spans.length);
+  });
+
+  it('counts the latest copy of a nested agent run whether it reads branches or every span', async () => {
+    const timeRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-02T00:00:00Z' };
+    const run = {
+      traceId: 'copied-run-trace',
+      spanId: 'copied-run',
+      parentSpanId: 'copied-run-parent',
+      name: 'copied-run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityName: 'nested',
+      startedAt: new Date('2026-09-01T10:00:00.000Z'),
+    } as const;
+    // The superseded copy failed; the retry that replaced it succeeded and ended later.
+    await storage.createSpan({
+      span: { ...run, endedAt: new Date('2026-09-01T10:00:05.000Z'), error: { message: 'interrupted' } },
+    });
+    await storage.createSpan({ span: { ...run, endedAt: new Date('2026-09-01T10:00:09.000Z') } });
+
+    for (const where of [
+      { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+      { op: 'eq', left: { path: 'entityName' }, right: { literal: 'nested' } },
+    ]) {
+      const response = await storage.aggregateSpans(
+        planSpanAggregate({ timeRange, where, groupBy: ['status'], measures: ['count', 'duration.max'] }),
+      );
+      expect(response.rows).toEqual([
+        { dimensions: { status: 'success' }, measures: { count: 1, 'duration.max': 9000 } },
+      ]);
+    }
+  });
+});
+
+// Every version of a root stays a separate trace_roots row until a merge, and merges never meet
+// versions that ended on different days. Reads must pick the current version (the one that ended
+// last) whatever the write order, and before filtering, so filters can't keep an older version.
+describe('ObservabilityStorageClickhouseVNext root versions without background merges', () => {
+  const VERSION_RANGE = { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+  const REPEATS = 20;
+  let storage: ObservabilityStorageClickhouseVNext;
+  let client: ReturnType<typeof createClient>;
+
+  beforeAll(async () => {
+    const connection = {
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    };
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+    client = createClient(connection);
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+  });
+
+  afterAll(async () => {
+    await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+    await client.close();
+    await storage.dangerouslyClearAll();
+  });
+
+  const physicalRoots = async () => {
+    const result = await client.query({
+      query: `SELECT count() AS rows, uniqExact(traceId) AS traces FROM ${TABLE_TRACE_ROOTS}`,
+      format: 'JSONEachRow',
+    });
+    return (await result.json<{ rows: string | number; traces: string | number }>()).map(row => ({
+      rows: Number(row.rows),
+      traces: Number(row.traces),
+    }))[0];
+  };
+
+  describe.each(['superseded-first', 'current-first'] as const)('versions written %s', order => {
+    let deltaCursor: string;
+
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      const seed = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: VERSION_RANGE, mode: 'delta' })),
+      );
+      if (!('deltaCursor' in seed)) throw new Error('Expected a delta cursor');
+      deltaCursor = seed.deltaCursor;
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_VERSION_FIXTURE_DATA,
+        'completion-only',
+        order,
+      );
+    });
+
+    it('keeps every version as its own row', async () => {
+      expect(await physicalRoots()).toEqual({ rows: 9, traces: 5 });
+    });
+
+    it.each(TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'aggregateTraces matches the reference evaluator on every run: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request));
+        for (let run = 0; run < REPEATS; run++) {
+          const response = await storage.aggregateTraces(plan);
+          expect(
+            traceAggregateResponseMismatch(response, testCase),
+            `run ${run}: ${JSON.stringify(response)}`,
+          ).toBeNull();
+        }
+      },
+    );
+
+    it('queryTraces totals for disjoint filters sum to the population', async () => {
+      const total = async (where?: Record<string, unknown>) => {
+        const response = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({ timeRange: VERSION_RANGE, where, pagination: { page: 0, perPage: 10 } }),
+          ),
+        );
+        return 'pagination' in response ? response.pagination?.total : undefined;
+      };
+      const is = (path: string, literal: string) => ({ op: 'eq', left: { path }, right: { literal } });
+      for (let run = 0; run < REPEATS; run++) {
+        expect(await total()).toBe(5);
+        expect([await total(is('status', 'error')), await total(is('status', 'success'))]).toEqual([2, 3]);
+        expect([
+          await total(is('entityName', 'alpha')),
+          await total(is('entityName', 'beta')),
+          await total(is('entityName', 'gamma')),
+        ]).toEqual([2, 2, 1]);
+      }
+    });
+
+    it('queryTraces lists the current version in keyset, page and delta mode', async () => {
+      const current = [
+        ['v-1', 'alpha', 'success', '2026-09-01T10:00:02.000Z'],
+        ['v-2', 'alpha', 'error', '2026-09-02T10:00:03.000Z'],
+        ['v-3', 'beta', 'success', '2026-09-03T00:00:02.000Z'],
+        ['v-4', 'beta', 'success', '2026-09-03T10:00:01.000Z'],
+        ['v-5', 'gamma', 'error', '2026-09-05T00:00:03.000Z'],
+      ];
+      const listed = (traces: { traceId: string; entityName?: string | null; status: string; endedAt: unknown }[]) =>
+        traces
+          .map(trace => [trace.traceId, trace.entityName, trace.status, new Date(String(trace.endedAt)).toISOString()])
+          .sort(([a], [b]) => String(a).localeCompare(String(b)));
+      const query = (request: Record<string, unknown>) =>
+        storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange: VERSION_RANGE, ...request })));
+
+      for (const field of ['startedAt', 'endedAt'] as const) {
+        const keyset = await query({ orderBy: [{ field, direction: 'desc' }], page: { limit: 10 } });
+        expect('traces' in keyset ? listed(keyset.traces) : undefined, `keyset ${field}`).toEqual(current);
+        const page = await query({ orderBy: [{ field, direction: 'asc' }], pagination: { page: 0, perPage: 10 } });
+        expect('traces' in page ? listed(page.traces) : undefined, `page ${field}`).toEqual(current);
+      }
+      // A filter that only a superseded version matches lists nothing.
+      const stale = await query({
+        where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'alpha' } },
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect('traces' in stale ? listed(stale.traces) : undefined).toEqual(current.slice(0, 2));
+
+      const delta = await query({ mode: 'delta', after: deltaCursor });
+      expect('traces' in delta ? listed(delta.traces) : undefined, 'delta').toEqual(current);
+    });
+
+    it('the shared aggregate fixture with its superseded triage-6 version matches the reference evaluator', async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_FIXTURE_DATA,
+        'completion-only',
+        order,
+      );
+      for (const testCase of TRACE_AGGREGATE_CONFORMANCE_CASES) {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), testCase.name).toBeNull();
+      }
+    });
+  });
+
+  // Versions that end at the same instant, both with a thread, share a partition and sort key, so a
+  // merge keeps the last insert. Reads pick that version before and after the merge.
+  describe.each([
+    ['alpha', 'beta'],
+    ['beta', 'alpha'],
+  ] as const)('tied versions written %s then %s', (first, last) => {
+    const version = (entityName: 'alpha' | 'beta') =>
+      ({
+        traceId: 'tie-trace',
+        spanId: 'tie-root',
+        parentSpanId: null,
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        entityName,
+        threadId: 'tie-thread',
+        startedAt: new Date('2026-09-02T10:00:00.000Z'),
+        endedAt: new Date('2026-09-02T10:00:05.000Z'),
+        input: `${entityName} input`,
+        error: entityName === 'beta' ? { message: 'beta failed' } : null,
+      }) as const;
+    const status = last === 'beta' ? 'error' : 'success';
+
+    const expectLastInsert = async () => {
+      const byStatus = await storage.aggregateTraces(
+        planTraceAggregate(
+          parseTraceAggregateRequest({ timeRange: VERSION_RANGE, measures: ['count'], groupBy: ['status'] }),
+        ),
+      );
+      expect(byStatus.rows).toMatchObject([{ dimensions: { status }, measures: { count: 1 } }]);
+      for (const request of [{ page: { limit: 10 } }, { pagination: { page: 0, perPage: 10 } }]) {
+        const response = await storage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange: VERSION_RANGE, ...request })),
+        );
+        expect('traces' in response ? response.traces : undefined).toMatchObject([
+          { traceId: 'tie-trace', entityName: last, status, inputPreview: `${last} input` },
+        ]);
+      }
+      const threads = await storage.queryThreads(planThreadRowsQuery({ timeRange: { traces: VERSION_RANGE } }));
+      expect(threads.threads).toMatchObject([{ threadId: 'tie-thread', status, inputPreview: `${last} input` }]);
+    };
+
+    it('reads the last insert before and after the merge', async () => {
+      await storage.dangerouslyClearAll();
+      await storage.createSpan({ span: version(first) });
+      await storage.createSpan({ span: version(last) });
+      expect(await physicalRoots()).toEqual({ rows: 2, traces: 1 });
+      for (let run = 0; run < 5; run++) await expectLastInsert();
+
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      try {
+        await client.command({ query: `OPTIMIZE TABLE ${TABLE_TRACE_ROOTS} FINAL` });
+      } finally {
+        await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+      }
+      expect(await physicalRoots()).toEqual({ rows: 1, traces: 1 });
+      await expectLastInsert();
+    });
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces over a 365-day window', () => {
+  const connection = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  describe('written once', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+  });
+
+  // Every root lands twice in separate parts and merges are stopped, as after an exporter retry
+  // that background merges have not collapsed yet. Results must not depend on those merges.
+  describe('written twice with merges stopped', () => {
+    let client: ReturnType<typeof createClient>;
+
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      client = createClient(connection);
+      await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+      // The completion-only writer keeps one version per root, so the superseded `beta-07`
+      // version is written on its own first, as an earlier export that a later one replaced.
+      const stale = TRACE_AGGREGATE_YEAR_FIXTURE_DATA.spans.filter(
+        span => span.traceId === 'beta-07' && span.entityName === 'gamma',
+      );
+      expect(stale).toHaveLength(1);
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        { spans: stale, scores: [], feedback: [] },
+        'completion-only',
+      );
+      for (let copy = 0; copy < 2; copy += 1) {
+        await writeTraceQueryFixture(
+          storage as unknown as ObservabilityStorage,
+          TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+          'completion-only',
+        );
+      }
+    });
+
+    afterAll(async () => {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    });
+
+    it('keeps every physical copy, including the superseded version', async () => {
+      // 43 traces: the 41 in the window plus the two boundary decoys, each twice, plus the
+      // superseded `beta-07` version.
+      const [counts] = await (
+        await client.query({
+          query: `SELECT toUInt32(count()) AS rows, toUInt32(uniqExact(traceId)) AS traces FROM ${TABLE_TRACE_ROOTS}`,
+          format: 'JSONEachRow',
+        })
+      ).json<{ rows: number; traces: number }>();
+      expect(counts).toEqual({ rows: 87, traces: 43 });
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces token and cost measures', () => {
+  const connection = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+  let storage: ObservabilityStorageClickhouseVNext;
+  let client: ReturnType<typeof createClient>;
+
+  async function physicalMetricRows(metricId: string): Promise<number> {
+    const result = await client.query({
+      query: `SELECT count() AS rows FROM ${TABLE_METRIC_EVENTS} WHERE metricId = {metricId:String}`,
+      query_params: { metricId },
+      format: 'JSONEachRow',
+    });
+    const [row] = await result.json<{ rows: number | string }>();
+    return Number(row?.rows);
+  }
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+    client = createClient(connection);
+    // Every assertion below runs without background merges, so duplicate metric rows stay physically present
+    // and only the query-time `LIMIT 1 BY metricId` dedupe can collapse them.
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_METRIC_EVENTS}` });
+  });
+
+  afterAll(async () => {
+    try {
+      await storage.dangerouslyClearAll();
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_METRIC_EVENTS}` });
+      await client.close();
+    }
+  });
+
+  describe('fixtures', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it('keeps the retried metric rows physically duplicated', async () => {
+      expect(await physicalMetricRows('sup-1-in')).toBe(2);
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it('counts the same traces as queryTraces with token measures requested', async () => {
+      const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count', 'tokens.total.sum'] })),
+      );
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 1 } })),
+      );
+      const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+      expect(total).toBe(11);
+      expect(aggregate.rows[0]?.measures.count).toBe(total);
+    });
+  });
+
+  describe('edge cases', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      '%s',
+      async (_name, testCase) => {
+        // The copies differ in timestamp, so their sort keys differ and no merge would ever collapse them.
+        expect(await physicalMetricRows('edge-dup')).toBe(2);
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+  });
+});

@@ -1,42 +1,52 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
 
-import { useCardMorph } from '../hooks/useCardMorph';
-import { boardCardStatus } from '../boardCardStatus';
 import type { BoardCandidate } from '../boardCandidates';
-import { setDragPayload } from '../boardDrag';
+import { boardCardState } from '../boardCardState';
+import { candidatePayload, setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
+import type { BoardLayout } from '../boardLayout';
+import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import { cardMoves } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
+import { useCardMorph } from '../hooks/useCardMorph';
 import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { actionIcon } from './BoardIcons';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CandidateDetailsPanel } from './CandidateDetailsPanel';
+import { CandidateListRow } from './CandidateListRow';
 
 // Acting on it is what files the record.
 export function CandidateCard({
   candidate,
   projectRepositoryId,
   factoryProjectId,
+  board,
   onRun,
+  layout,
 }: {
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
   /** Factory project id resolving Linear descriptions in the detail panel. */
   factoryProjectId: string;
+  /** Board the candidate is filed on. */
+  board?: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
+  layout: BoardLayout;
 }) {
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const moves = cardMoves(candidate, candidate.column);
+  const moves = cardMoves(board === undefined ? candidate : { ...candidate, board }, candidate.column);
   const [defaultMove] = moves;
-  const status = boardCardStatus({});
+  const { status } = boardCardState({});
 
   const menuItems: ReactElement[] = [
     ...moves.map(move => (
@@ -57,6 +67,35 @@ export function CandidateCard({
     </DropdownMenu.Item>,
   ];
 
+  const actions =
+    defaultMove === undefined ? undefined : (
+      <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+    );
+
+  const detailsPanel = (
+    <CandidateDetailsPanel
+      candidate={candidate}
+      labelledBy={detailsTitleId}
+      morph={morph}
+      status={status}
+      projectRepositoryId={projectRepositoryId}
+      factoryProjectId={factoryProjectId}
+      menu={menuItems}
+      defaultMove={defaultMove}
+      onRun={onRun}
+      layout={layout}
+    />
+  );
+
+  if (layout === 'list') {
+    return (
+      <>
+        <CandidateListRow candidate={candidate} morph={morph} status={status} actions={actions} menu={menuItems} />
+        {detailsPanel}
+      </>
+    );
+  }
+
   return (
     <>
       <article
@@ -64,40 +103,28 @@ export function CandidateCard({
         draggable
         aria-label={candidate.title}
         data-testid="candidate-card"
-        onDragStart={event =>
-          setDragPayload(event, {
-            kind: 'candidate',
-            candidate: {
-              source: candidate.source,
-              sourceKey: candidate.sourceKey,
-              title: candidate.title,
-              url: candidate.url,
-              metadata: candidate.metadata,
-            },
-          })
-        }
+        onDragStart={event => setDragPayload(event, candidatePayload(candidate))}
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
-        className="group border-border/50 bg-fill-subtle hover:bg-fill-hover rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
+        className={cn(
+          BOARD_CARD_LAYOUT_CLASS,
+          'group cursor-grab transition-colors outline-none hover:bg-fill-hover [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing',
+        )}
       >
         <button
           type="button"
           draggable={false}
           aria-label={`Details for ${candidate.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
         />
         <CandidateCardRows
           candidate={candidate}
           status={status}
-          actions={
-            defaultMove === undefined ? undefined : (
-              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
-            )
-          }
+          actions={actions}
           controls={
             <>
-              <CardDetailsHint />
+              <CardDetailsHint onOpen={morph.openDetails} />
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
@@ -120,18 +147,7 @@ export function CandidateCard({
           }
         />
       </article>
-
-      <CandidateDetailsPanel
-        candidate={candidate}
-        labelledBy={detailsTitleId}
-        morph={morph}
-        status={status}
-        projectRepositoryId={projectRepositoryId}
-        factoryProjectId={factoryProjectId}
-        menu={menuItems}
-        defaultMove={defaultMove}
-        onRun={onRun}
-      />
+      {detailsPanel}
     </>
   );
 }

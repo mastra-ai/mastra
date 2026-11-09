@@ -226,7 +226,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('renders assistant text through the shared MarkdownRenderer', () => {
-    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' }]));
 
     expect(container.querySelector('strong')?.textContent).toBe('bold');
   });
@@ -270,7 +270,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('routes assistant text through the shared MessageText error-prefix handling', () => {
-    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' } as ToolPart]));
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' }]));
 
     // The shared MessageText turns an `Error:`-prefixed body into a destructive notice.
     expect(container.textContent).toContain('it broke');
@@ -319,33 +319,27 @@ describe('MessageRow dynamic-tool rendering', () => {
       }),
     ]);
 
-    // Unknown dynamic tools render as a GenericTool ToolCard showing "Executing <toolName>".
-    expect(container.textContent).toContain('Executing');
-    expect(container.textContent).toContain('some-other-tool');
+    expect(container.textContent).toContain('Some other tool');
     expect(container.textContent).not.toContain('Web Search');
 
-    fireEvent.click(getByRole('button'));
+    fireEvent.click(getByRole('button', { name: /some other tool/i }));
 
-    expect(container.textContent).toContain('Input');
     expect(container.textContent).toContain('"web-search"');
-    expect(container.textContent).toContain('Output');
     expect(container.textContent).toContain('"success": true');
   });
 
-  it('omits the generic fallback output panel when there is no output', () => {
-    const { container, getByRole } = renderRow([
+  it('offers nothing to open when the generic fallback has neither arguments nor output', () => {
+    const { container, queryByRole } = renderRow([
       builderToolPart({
         toolCallId: 'call-5',
         toolName: 'some-other-tool',
-        input: { a: 1 },
+        input: {},
         output: undefined,
       }),
     ]);
 
-    fireEvent.click(getByRole('button'));
-
-    expect(container.textContent).toContain('Input');
-    expect(container.textContent).not.toContain('Output');
+    expect(container.textContent).toContain('Some other tool');
+    expect(queryByRole('button', { name: /some other tool/i })).toBeNull();
   });
 
   it('renders signal data parts in agent-builder chat messages', () => {
@@ -358,7 +352,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           contents: [{ type: 'text', text: 'github: 2' }],
           attributes: { pending: 2, priority: 'high' },
         },
-      } as ToolPart,
+      },
     ]);
 
     expect(container.textContent).toContain('Notification summary');
@@ -488,7 +482,7 @@ describe('MessageRow dynamic-tool rendering', () => {
         tools: {},
         agents: { 'my-agent': true },
         workflows: { 'my-workflow': true },
-      } as Partial<AgentBuilderEditFormValues>,
+      },
     );
 
     const text = container.textContent ?? '';
@@ -514,7 +508,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { tools: {}, agents: {}, workflows: {} } as Partial<AgentBuilderEditFormValues>,
+      { tools: {}, agents: {}, workflows: {} },
     );
 
     expect(container.textContent).toContain('Enabling tools: none');
@@ -538,7 +532,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { skills: { 'sk-1': true, 'sk-2': true } } as Partial<AgentBuilderEditFormValues>,
+      { skills: { 'sk-1': true, 'sk-2': true } },
     );
 
     expect(container.textContent).toContain('Enabling skills:');
@@ -561,7 +555,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { skills: {} } as Partial<AgentBuilderEditFormValues>,
+      { skills: {} },
     );
 
     expect(container.textContent).toContain('Enabling skills: none');

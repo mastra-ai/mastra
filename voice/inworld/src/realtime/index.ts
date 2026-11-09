@@ -1033,7 +1033,7 @@ export class InworldRealtimeVoice extends MastraVoice {
         item: {
           type: 'function_call_output',
           call_id: output.call_id,
-          output: JSON.stringify(result),
+          output: JSON.stringify(result ?? null),
         },
       });
     } catch (e) {

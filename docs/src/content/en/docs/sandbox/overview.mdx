@@ -65,7 +65,7 @@ Agents receive tools for the capabilities supported by the sandbox backend:
 | Tool | Does |
 | - | - |
 | `execute_command` | Runs a shell command and returns stdout, stderr, and the exit code. Supports `background: true` when the backend can spawn long-running processes. |
-| `get_process_output` | Gets stdout, stderr, and status for a background process. Supports `tail` to limit output and `wait: true` to wait for the process to exit. This tool and `kill_process` are only added when the backend supports background processes. |
+| `get_process_output` | Gets stdout, stderr, and status for a background process. Supports `tail` to limit output and `wait: true` to wait for the process to exit. For a static sandbox, this tool and `kill_process` are only added when the backend supports background processes. Workspaces that resolve their sandbox per request always include both tools, because capabilities aren't known until the sandbox resolves. |
 | `kill_process` | Stops a background process and returns its recent output. |
 
 Configured capabilities determine which tools are available. Tool configuration can then disable, rename, or add policies to those tools:
@@ -231,6 +231,12 @@ The example mounts the filesystem inside the resolver because static `mounts` ca
 Your application owns sandboxes returned by a resolver. Destroy them and call `workspace.clearSandboxCache(cacheKey)` when the user, thread, or session ends. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
 
 :::
+
+### Agent workspace functions
+
+An agent's `workspace` option also accepts a function that returns a `Workspace`. Mastra calls this function whenever it needs the agent's workspace, not only when the agent runs. This includes registering the agent at startup and reading agent metadata, such as `GET /api/agents` and `GET /api/agents/:agentId`, which Studio calls when it lists agents. These calls aren't cached.
+
+Keep the function cheap. Don't start a sandbox or other paid infrastructure inside it. Return a workspace that uses `filesystem` and `sandbox` resolvers instead. Mastra calls the filesystem resolver when it builds the workspace instructions for a run, when a tool needs the provider, and when the agent's workspace skills are read, including on the agent metadata routes. It calls the sandbox resolver only when a tool needs the provider, unless you set `instructions.dynamicSandbox` to `'resolve'`.
 
 ### Tool availability
 

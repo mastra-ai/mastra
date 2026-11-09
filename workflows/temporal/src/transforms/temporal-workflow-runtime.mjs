@@ -1,68 +1,262 @@
-import { executeChild, proxyActivities, log, sleep } from '@temporalio/workflow';
+import {
+  ApplicationFailure,
+  TemporalFailure,
+  condition,
+  defineQuery,
+  defineSignal,
+  executeChild,
+  isCancellation,
+  proxyActivities,
+  log,
+  setHandler,
+  sleep,
+} from '@temporalio/workflow';
+
+const resumeSignal = defineSignal('mastra.resume');
+const statusQuery = defineQuery('mastra.status');
+
+// The step error an Activity or child Workflow put in its failure details. Failures without them
+// (timeouts, Activities from an older Worker) give the innermost cause's type and message.
+function readStepFailure(error) {
+  let current = error;
+  while (current) {
+    const details = current.details?.[0];
+
+    if (details?.error) {
+      return { error: details.error, ...(details.tripwire && { tripwire: details.tripwire }) };
+    }
+
+    if (!current.cause) {
+      break;
+    }
+
+    current = current.cause;
+  }
+
+  return { error: { name: current?.type ?? current?.name ?? 'Error', message: current?.message ?? String(error) } };
+}
+
+// Records a step as failed, in the core StepResult shape, before its failure ends the run.
+function recordFailure(stepResults, id, payload, startedAt, error) {
+  stepResults[id] = {
+    __temporalStepResult: true,
+    status: 'failed',
+    payload,
+    ...readStepFailure(error),
+    startedAt,
+    endedAt: Date.now(),
+  };
+}
 
 export class TemporalExecutionEngine {
   startToCloseTimeout;
   activityHandle;
+  resumePayloads = new Map();
+  suspendedSteps = new Set();
+  resumeLabels = new Map();
+  currentResult;
+  initData;
+  initialState;
 
   constructor(params) {
     this.startToCloseTimeout = params?.options?.startToCloseTimeout ?? '1 minute';
-    this.activityHandle = proxyActivities({ startToCloseTimeout: this.startToCloseTimeout });
+    this.activityHandle = proxyActivities({
+      startToCloseTimeout: this.startToCloseTimeout,
+      ...(params?.options?.retry !== undefined && { retry: params.options.retry }),
+    });
+    setHandler(resumeSignal, payload => {
+      const id = this.resumeTarget(payload);
+      if (id !== undefined && !this.resumePayloads.has(id)) {
+        this.resumePayloads.set(id, payload);
+      }
+    });
+    setHandler(statusQuery, () => this.currentResult);
   }
 
   async execute(params) {
     this.initData = params.input;
+    this.initialState = params.initialState;
     this.executionContext = {
       ...(params.requestContext !== undefined && { requestContext: params.requestContext }),
       ...(params.runId !== undefined && { runId: params.runId }),
       ...(params.resourceId !== undefined && { resourceId: params.resourceId }),
+      ...(params.validateInputs !== undefined && { validateInputs: params.validateInputs }),
       workflowId: params.workflowId,
     };
     let result = params.input;
     const stepResults = {};
+    this.currentResult = {
+      status: 'running',
+      input: params.input,
+      state: params.initialState,
+      steps: stepResults,
+    };
 
-    for (const entry of params.graph.steps) {
-      result = await this.executeEntry(entry, result, stepResults);
+    try {
+      for (const entry of params.graph.steps) {
+        result = await this.executeEntry(entry, result, stepResults);
+      }
+    } catch (error) {
+      // An error that isn't a Temporal failure comes from Workflow code. It fails only the Workflow
+      // Task, which Temporal retries, so a fixed Worker can still finish the run.
+      if (isCancellation(error) || !(error instanceof TemporalFailure)) {
+        throw error;
+      }
+
+      // The run still fails in Temporal. The details let start() return step records and the
+      // step's own error, which a thrown ActivityFailure would lose.
+      const failure = readStepFailure(error);
+      throw ApplicationFailure.create({
+        message: failure.error.message,
+        type: failure.error.name,
+        cause: error,
+        details: [{ ...failure, steps: stepResults }],
+      });
     }
 
-    return {
+    this.currentResult = {
       status: 'success',
       input: params.input,
       result,
       state: params.initialState,
       steps: stepResults,
     };
+    return this.currentResult;
+  }
+
+  resumeTarget(payload) {
+    if (payload?.step !== undefined) {
+      return this.suspendedSteps.has(payload.step) ? payload.step : undefined;
+    }
+    if (payload?.label !== undefined) {
+      const labeledStep = this.resumeLabels.get(payload.label);
+      return labeledStep !== undefined && this.suspendedSteps.has(labeledStep) ? labeledStep : undefined;
+    }
+    return this.suspendedSteps.size === 1 ? [...this.suspendedSteps][0] : undefined;
+  }
+
+  // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
+  async recordStep(stepResults, id, payload, run, group) {
+    const startedAt = Date.now();
+    const attempt = async resumeData => {
+      try {
+        return await run(resumeData);
+      } catch (error) {
+        recordFailure(stepResults, id, payload, startedAt, error);
+        throw error;
+      }
+    };
+    let output = await attempt();
+    let suspendPayload;
+    let resumeData;
+
+    while (output?.__temporalSuspension === true) {
+      suspendPayload = output.suspendPayload;
+      stepResults[id] = {
+        __temporalStepResult: true,
+        status: 'suspended',
+        payload,
+        suspendPayload,
+        suspendedAt: Date.now(),
+      };
+      for (const [label, target] of Object.entries(output.resumeLabels ?? {})) {
+        if (target?.stepId === id) {
+          this.resumeLabels.set(label, id);
+        }
+      }
+      this.currentResult = {
+        status: 'suspended',
+        input: this.initData,
+        state: this.initialState,
+        steps: stepResults,
+        suspended: [[id]],
+        suspendPayload: { [id]: suspendPayload },
+        resumeLabels: Object.fromEntries([...this.resumeLabels].map(([label, stepId]) => [label, { stepId }])),
+      };
+
+      this.suspendedSteps.add(id);
+      try {
+        await condition(() => this.resumePayloads.has(id) || group?.failed === true);
+        // A failed sibling branch ends the run, so the step stays suspended in the records.
+        if (!this.resumePayloads.has(id)) {
+          return output;
+        }
+        resumeData = this.resumePayloads.get(id)?.resumeData;
+        this.resumePayloads.delete(id);
+      } finally {
+        this.suspendedSteps.delete(id);
+        for (const [label, stepId] of this.resumeLabels.entries()) {
+          if (stepId === id) {
+            this.resumeLabels.delete(label);
+          }
+        }
+      }
+      this.currentResult = {
+        status: 'running',
+        input: this.initData,
+        state: this.initialState,
+        steps: stepResults,
+      };
+      output = await attempt(resumeData);
+    }
+
+    stepResults[id] = {
+      __temporalStepResult: true,
+      status: 'success',
+      payload,
+      output,
+      ...(suspendPayload !== undefined && { suspendPayload }),
+      ...(resumeData !== undefined && { resumeData }),
+      startedAt,
+      endedAt: Date.now(),
+    };
+    this.currentResult = {
+      status: 'running',
+      input: this.initData,
+      state: this.initialState,
+      steps: stepResults,
+    };
+    return output;
   }
 
   activityParams(inputData, extra = {}) {
     return { inputData, ...extra, ...this.executionContext };
   }
 
-  async executeEntry(entry, inputData, stepResults) {
+  async executeEntry(entry, inputData, stepResults, group) {
     switch (entry.type) {
       case 'step': {
         log.info('step', { stepId: entry.step.id });
-        const out = await this.activityHandle[entry.step.id](
-          this.activityParams(inputData, { initData: this.initData }),
+        return this.recordStep(
+          stepResults,
+          entry.step.id,
+          inputData,
+          resumeData =>
+            this.activityHandle[entry.step.id](
+              this.activityParams(inputData, {
+                initData: this.initData,
+                ...(resumeData !== undefined && { resumeData }),
+              }),
+            ),
+          group,
         );
-        stepResults[entry.step.id] = out;
-        return out;
       }
 
       case 'childWorkflow': {
         log.info('childWorkflow', { workflowType: entry.workflowType });
-        const childResult = await executeChild(entry.workflowType, {
-          args: [{ inputData, ...this.executionContext }],
+        return this.recordStep(stepResults, entry.id ?? entry.workflowType, inputData, async () => {
+          const childResult = await executeChild(entry.workflowType, {
+            args: [{ inputData, ...this.executionContext }],
+          });
+          return childResult?.result ?? childResult;
         });
-        const out = childResult?.result ?? childResult;
-        stepResults[entry.workflowType] = out;
-        return out;
       }
 
       case 'mapping': {
         log.info('mapping', { mappingId: entry.id });
-        const out = await this.activityHandle[entry.id](this.activityParams(inputData, { initData: this.initData }));
-        stepResults[entry.id] = out;
-        return out;
+        return this.recordStep(stepResults, entry.id, inputData, () =>
+          this.activityHandle[entry.id](this.activityParams(inputData, { initData: this.initData })),
+        );
       }
 
       case 'sleep': {
@@ -90,11 +284,34 @@ export class TemporalExecutionEngine {
         const entryId = parallelEntry =>
           parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
         log.info('parallel', { steps: entry.steps.map(entryId) });
-        const results = await Promise.all(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
+        // Waits for every branch, as a local run does, so a failed run keeps the others' records.
+        // A failed branch also ends the wait of a suspended one, which would otherwise keep the run
+        // open until a resume. The flag is per group so a later parallel starts clean.
+        const group = { failed: false };
+        const settled = await Promise.allSettled(
+          entry.steps.map(step =>
+            this.executeEntry(step, inputData, stepResults, group).catch(error => {
+              group.failed = true;
+              throw error;
+            }),
+          ),
+        );
+        const failures = settled.filter(outcome => outcome.status === 'rejected');
+        // Same order as in execute(), whatever the branch order: a cancelled run ends Canceled, and
+        // an error from Workflow code wins so Temporal retries the Workflow Task.
+        const rejected =
+          failures.find(outcome => isCancellation(outcome.reason)) ??
+          failures.find(outcome => !(outcome.reason instanceof TemporalFailure)) ??
+          failures[0];
+
+        if (rejected) {
+          throw rejected.reason;
+        }
+
         const out = {};
 
         entry.steps.forEach((step, i) => {
-          out[entryId(step)] = results[i];
+          out[entryId(step)] = settled[i].value;
         });
 
         return out;
@@ -114,9 +331,14 @@ export class TemporalExecutionEngine {
         for (let i = 0; i < entry.steps.length; i++) {
           if (condResults[i]) {
             const stepId = entry.steps[i].step.id;
-            const res = await this.activityHandle[stepId](this.activityParams(inputData, { initData: this.initData }));
-            out[stepId] = res;
-            stepResults[stepId] = res;
+            out[stepId] = await this.recordStep(stepResults, stepId, inputData, resumeData =>
+              this.activityHandle[stepId](
+                this.activityParams(inputData, {
+                  initData: this.initData,
+                  ...(resumeData !== undefined && { resumeData }),
+                }),
+              ),
+            );
           }
         }
 
@@ -128,8 +350,15 @@ export class TemporalExecutionEngine {
         let current = inputData;
 
         while (true) {
-          current = await this.activityHandle[entry.step.id](this.activityParams(current, { initData: this.initData }));
-          stepResults[entry.step.id] = current;
+          const payload = current;
+          current = await this.recordStep(stepResults, entry.step.id, payload, resumeData =>
+            this.activityHandle[entry.step.id](
+              this.activityParams(payload, {
+                initData: this.initData,
+                ...(resumeData !== undefined && { resumeData }),
+              }),
+            ),
+          );
           const shouldContinue = Boolean(
             await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)),
           );
@@ -151,6 +380,7 @@ export class TemporalExecutionEngine {
             : (entry.opts.concurrency ?? 1);
         const concurrency = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 1;
         log.info('foreach', { step: entry.step.id, concurrency });
+        const startedAt = Date.now();
         const results = new Array(items.length);
         let index = 0;
         const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
@@ -165,8 +395,20 @@ export class TemporalExecutionEngine {
           }
         });
 
-        await Promise.all(workers);
-        stepResults[entry.step.id] = results;
+        try {
+          await Promise.all(workers);
+        } catch (error) {
+          recordFailure(stepResults, entry.step.id, inputData, startedAt, error);
+          throw error;
+        }
+        stepResults[entry.step.id] = {
+          __temporalStepResult: true,
+          status: 'success',
+          payload: inputData,
+          output: results,
+          startedAt,
+          endedAt: Date.now(),
+        };
         return results;
       }
 
@@ -189,6 +431,8 @@ export function createWorkflow(workflowId, options) {
       runId: startArgs?.runId,
       resourceId: startArgs?.resourceId,
       requestContext: startArgs?.requestContext,
+      // A child Workflow gets its parent's setting in startArgs, as nested workflows do in Mastra.
+      validateInputs: startArgs?.validateInputs ?? options?.validateInputs ?? true,
       graph: {
         id: workflowId,
         steps: stepFlow,
@@ -208,10 +452,11 @@ export function createWorkflow(workflowId, options) {
       });
       return workflow;
     },
-    thenWorkflow(workflowType) {
+    thenWorkflow(workflowType, id) {
       stepFlow.push({
         type: 'childWorkflow',
         workflowType,
+        id,
       });
       return workflow;
     },

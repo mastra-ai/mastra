@@ -61,6 +61,24 @@ export class Channels extends BaseResource {
   }
 
   /**
+   * Reconciles an agent's installation with platform state — activates a
+   * pending installation whose connect flow completed out-of-band (e.g. a
+   * Discord bot invite finished in another tab). No-op (returns null) on
+   * platforms without reconciliation.
+   * @param platform - Platform identifier (e.g., "discord")
+   * @param agentId - Agent whose installation to reconcile
+   * @returns The (possibly updated) installation, or null
+   */
+  reconcileInstallation(
+    platform: PathParams<'POST /channels/:platform/:agentId/reconcile'>['platform'],
+    agentId: PathParams<'POST /channels/:platform/:agentId/reconcile'>['agentId'],
+  ): Promise<RouteResponse<'POST /channels/:platform/:agentId/reconcile'>> {
+    return this.request(`/channels/${platform}/${agentId}/reconcile`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * Disconnects an agent from a channel platform.
    * @param platform - Platform identifier (e.g., "slack")
    * @param agentId - Agent to disconnect

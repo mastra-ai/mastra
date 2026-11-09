@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI designation verb: '%s'. Say that it specifies or references the thing. Disable this rule for API reference prose."
+message: "AI designation verb: '%s'. Say that it specifies or references the thing, or tell the reader to state it. Disable this rule for API reference prose."
 level: error
 nonword: true
 ignorecase: true
@@ -40,6 +40,23 @@ ignorecase: true
 # anywhere else; a project writing that register disables the rule per
 # file. "The named file" is the same designation as an adjective and
 # belongs to NamedAdjective.
+#
+# The imperative is the same designation as an instruction: "Name the
+# version in the changelog," "Name the command behind every figure,"
+# "name what you tried," "Name every path," "then name the grant this
+# merge goes under." The reader is told to state or give the thing, and
+# the plain verb is "state," "give," or "say which." Agent-written
+# skill and runbook prose puts it at three to five per ten thousand
+# words. The pre-LLM corpora have it eleven times, every one the
+# literal act of giving a name: "Name the new file ``pep-9999.rst``,"
+# "Name the subdirectory ``licenses``," "Name the logger after the
+# package," "name the result parameter `_`." A lookahead keeps out the
+# object that a code span, a quoted name, or "after" follows within
+# three words, which reads eight of the eleven; the three that fire are
+# "Name these methods along the lines of," "name the result parameter,
+# and use a naked return," and the Go linker's "Name all the threads to
+# the emitter," each the literal act with the name out of reach of a
+# regex, and each flagged on the maintainer's call.
 exceptions:
   # People and bodies that literally give a name
   - "(?i)people"
@@ -102,3 +119,16 @@ tokens:
   # --- A file as the subject, which the determiner gate never sees
   # ("vendir.yml names the tag," "mise.toml names the pins").
   - "\\b[a-z][a-z0-9_.-]*\\.[a-z]{1,5} (?:also |only |then |now |never |always |still |already |actually |simply |merely |just )?(?:names|named|naming) (?:a|an|the|its|their|this|these|those|every|each|all|any|some|no|zero|one|two|three|both|what|whatever|which|whichever|exactly|only|nothing)\\b"
+
+  # --- The imperative ("Name the version in the changelog," "Name what
+  # you tried," "Name every path," ", name the grant this merge goes
+  # under," "then name the tag"), at the start of a sentence or after a
+  # colon, a comma, a semicolon, or a coordinator. The boundary sits in
+  # a lookbehind so both tokens start on the verb and Vale keeps one
+  # alert per sentence. The lookahead leaves the literal act alone
+  # where the name itself follows the object within three words: a code
+  # span (masked to asterisks in Markdown, literal backticks in plain
+  # text), a quoted name, or "after" ("Name the new file
+  # `pep-9999.rst`," "Name the logger after the package").
+  - "(?<=^|[.!?:;]['\")\\]]* )name (?:a|an|the|its|their|this|these|those|every|each|all|any|some|one|both|what|whatever|which|whichever|exactly|only)\\b(?!(?: [a-z'-]+){0,3} (?:\\*|[`'\"‘“]|after\\b))"
+  - "(?<=, |; |\\b(?:and|then|or) )name (?:a|an|the|its|their|this|these|those|every|each|all|any|some|one|both|what|whatever|which|whichever|exactly|only)\\b(?!(?: [a-z'-]+){0,3} (?:\\*|[`'\"‘“]|after\\b))"

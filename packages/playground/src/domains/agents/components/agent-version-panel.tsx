@@ -4,18 +4,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useAgentVersions } from '../hooks/use-agent-versions';
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 
 export interface AgentVersionPanelProps {
   agentId: string;
@@ -33,6 +23,7 @@ export function AgentVersionPanel({
   const { data, isLoading } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = data?.versions ?? [];
@@ -69,10 +60,11 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full border-l-2 px-3 py-2.5 text-left text-body',
+                      'text-foreground',
+                      'w-full border-l-2 px-3 py-2.5 text-left',
                       controlStateColorTransition,
                       isSelected
-                        ? 'border-accent1 bg-fill-hover text-foreground'
+                        ? 'border-border-strong bg-fill-hover'
                         : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,
                     )}
                   >
@@ -80,11 +72,11 @@ export function AgentVersionPanel({
                       <Txt variant="caption" className="text-inherit">
                         v{version.versionNumber}
                       </Txt>
-                      {isPublished && <Badge variant="green">Published</Badge>}
-                      {isDraft && <Badge variant="blue">Draft</Badge>}
+                      {isPublished && <Badge variant="success">Published</Badge>}
+                      {isDraft && <Badge variant="info">Draft</Badge>}
                     </div>
                     <Txt variant="meta" tone="faint" className="mt-0.5">
-                      {formatTimestamp(version.createdAt)}
+                      {formatDate(version.createdAt, 'date-time') ?? ''}
                     </Txt>
                   </button>
                 </li>

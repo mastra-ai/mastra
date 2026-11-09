@@ -19,7 +19,6 @@
  *    `this` as the API client.
  */
 
-import { createHash } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -162,6 +161,8 @@ const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 const LINEAR_TEAMS_PAGE_SIZE = 100;
 const LINEAR_TEAMS_MAX_PAGES = 20;
+const LINEAR_PROJECTS_PAGE_SIZE = 100;
+const LINEAR_PROJECTS_MAX_PAGES = 20;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
 
@@ -185,6 +186,8 @@ export interface LinearConnectionCheck {
   connected: boolean;
   /** Whether the granted OAuth scope allows posting issue comments. */
   canComment: boolean;
+  /** Linear workspace slug, for `https://linear.app/<urlKey>/issue/<ID>` links. */
+  workspaceUrlKey: string | null;
   checkedAt: number;
 }
 
@@ -470,6 +473,7 @@ export class LinearIntegration implements FactoryIntegration {
     const check: LinearConnectionCheck = {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
       checkedAt: Date.now(),
     };
     this.#connectionChecks.set(orgId, check);
@@ -570,6 +574,7 @@ export class LinearIntegration implements FactoryIntegration {
               updatedAt: issue.updatedAt,
               metadata: {
                 identifier: issue.identifier,
+                ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
                 stateType: issue.stateType,
                 priority: issue.priority,
                 team: issue.source,
@@ -713,7 +718,7 @@ export class LinearIntegration implements FactoryIntegration {
     if (input.sourceIds.length === 0) return { issues: [], nextCursor: null };
     const attributionSourceIds = input.attributionSourceIds ?? input.sourceIds;
     const { projectIds, teamIds } = splitSelfManagedSourceIds(input.sourceIds);
-    const cursors = decodeSelfManagedListCursor(input.cursor, input.sourceIds, attributionSourceIds);
+    const cursors = await decodeSelfManagedListCursor(input.cursor, input.sourceIds, attributionSourceIds);
 
     // Project-only intake still uses one Linear query, but its provider cursor
     // is wrapped so a later source-selection change cannot reinterpret it.
@@ -722,7 +727,7 @@ export class LinearIntegration implements FactoryIntegration {
       const result = await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels);
       return {
         issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
-        nextCursor: encodeSelfManagedListCursor(
+        nextCursor: await encodeSelfManagedListCursor(
           { projects: result.nextCursor, teams: null },
           input.sourceIds,
           attributionSourceIds,
@@ -760,7 +765,7 @@ export class LinearIntegration implements FactoryIntegration {
     const deduped = dedupeSelfManagedIssues([...projectIssues, ...teamIssues]);
     return {
       issues: deduped,
-      nextCursor: encodeSelfManagedListCursor(
+      nextCursor: await encodeSelfManagedListCursor(
         { projects: projectResult.nextCursor, teams: teamResult.nextCursor },
         input.sourceIds,
         attributionSourceIds,
@@ -837,20 +842,33 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** List the workspace's projects (for the Settings intake-source picker). */
   async listProjects(accessToken: string): Promise<LinearProject[]> {
-    const data = await linearGraphql<{
-      projects: {
-        nodes: Array<{
-          id: string;
-          name: string;
-          state: string;
-          teams: { nodes: Array<{ id: string; key: string; name: string }> };
-        }>;
-      };
-    }>(
-      accessToken,
-      `query { projects(first: 100) { nodes { id name state teams(first: 10) { nodes { id key name } } } } }`,
-    );
-    return data.projects.nodes.map(node => ({
+    type ProjectNode = {
+      id: string;
+      name: string;
+      state: string;
+      teams: { nodes: Array<{ id: string; key: string; name: string }> };
+    };
+    const projects: ProjectNode[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < LINEAR_PROJECTS_MAX_PAGES; page += 1) {
+      const data = await linearGraphql<{
+        projects: { nodes: ProjectNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
+      }>(
+        accessToken,
+        `query Projects($first: Int!, $after: String) {
+          projects(first: $first, after: $after) {
+            nodes { id name state teams(first: 10) { nodes { id key name } } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }`,
+        { first: LINEAR_PROJECTS_PAGE_SIZE, ...(after ? { after } : {}) },
+      );
+      projects.push(...data.projects.nodes);
+      if (!data.projects.pageInfo.hasNextPage || !data.projects.pageInfo.endCursor) break;
+      if (data.projects.pageInfo.endCursor === after) throw invalidLinearCursor();
+      after = data.projects.pageInfo.endCursor;
+    }
+    return projects.map(node => ({
       id: node.id,
       name: node.name,
       state: node.state,
@@ -957,6 +975,8 @@ export class LinearIntegration implements FactoryIntegration {
       },
     );
     const { nodes, pageInfo } = data.issues;
+    // A page that hands back the cursor it was asked for would replay forever.
+    if (pageInfo.hasNextPage && after && pageInfo.endCursor === after) throw invalidLinearCursor();
     return {
       issues: nodes.map(node => ({
         id: node.id,
@@ -1220,12 +1240,13 @@ type SelfManagedListCursor = {
   teams: string | null;
 };
 
-function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+async function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): Promise<string> {
   const scope = {
     sourceIds: [...new Set(sourceIds)].sort(),
     attributionSourceIds: [...new Set(attributionSourceIds)].sort(),
   };
-  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
+  const bytes = new TextEncoder().encode(JSON.stringify(scope));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('base64url');
 }
 
 function invalidLinearCursor(): Error {
@@ -1236,11 +1257,11 @@ function isCursorValue(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
-function decodeSelfManagedListCursor(
+async function decodeSelfManagedListCursor(
   cursor: string | undefined,
   sourceIds: string[],
   attributionSourceIds: string[],
-): { projects: string | null | undefined; teams: string | null | undefined } {
+): Promise<{ projects: string | null | undefined; teams: string | null | undefined }> {
   const { projectIds, teamIds } = splitSelfManagedSourceIds(sourceIds);
   if (!cursor) {
     return {
@@ -1252,7 +1273,7 @@ function decodeSelfManagedListCursor(
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<SelfManagedListCursor>;
     if (
       parsed.v !== 1 ||
-      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
+      parsed.sourceSet !== (await linearSourceSetFingerprint(sourceIds, attributionSourceIds)) ||
       !isCursorValue(parsed.projects) ||
       !isCursorValue(parsed.teams)
     ) {
@@ -1267,16 +1288,16 @@ function decodeSelfManagedListCursor(
   }
 }
 
-function encodeSelfManagedListCursor(
+async function encodeSelfManagedListCursor(
   state: Pick<SelfManagedListCursor, 'projects' | 'teams'>,
   sourceIds: string[],
   attributionSourceIds: string[],
-): string | null {
+): Promise<string | null> {
   if (state.projects === null && state.teams === null) return null;
   return Buffer.from(
     JSON.stringify({
       v: 1,
-      sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
+      sourceSet: await linearSourceSetFingerprint(sourceIds, attributionSourceIds),
       ...state,
     } satisfies SelfManagedListCursor),
   ).toString('base64url');
@@ -1324,6 +1345,7 @@ function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { proj
   return {
     id: issue.id,
     sourceId: issue.projectId ?? null,
+    projectId: issue.projectId ?? null,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,

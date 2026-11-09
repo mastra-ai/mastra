@@ -91,6 +91,19 @@ describe('Workspace', () => {
   });
 
   // ===========================================================================
+  // serializeForSpan
+  // ===========================================================================
+  describe('serializeForSpan', () => {
+    it('should expose only id, name, and status', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ id: 'ws-1', name: 'My Workspace', filesystem, sandbox });
+
+      expect(workspace.serializeForSpan()).toEqual({ id: 'ws-1', name: 'My Workspace', status: 'pending' });
+    });
+  });
+
+  // ===========================================================================
   // Constructor
   // ===========================================================================
   describe('constructor', () => {
@@ -507,6 +520,84 @@ Line 3 conclusion`;
       // All special chars should be replaced with underscores
       expect(capturedIndexName).toBe('my_workspace_123_search');
       expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
+    });
+
+    describe('with a vector store that embeds server-side', () => {
+      const makeStore = () => ({
+        id: 'mock-vector',
+        isSelfEmbedding: true,
+        createIndex: vi.fn(async () => {}),
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      });
+
+      it('should offer vector search without an embedder', () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: makeStore() as any,
+        });
+
+        expect(workspace.canVector).toBe(true);
+      });
+
+      it('should still require an embedder for a store that does not embed server-side', () => {
+        const store = { ...makeStore(), isSelfEmbedding: false };
+
+        expect(
+          () => new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }), vectorStore: store as any }),
+        ).toThrow(/vectorStore requires an embedder/);
+      });
+
+      it('should index and search through the store as text', async () => {
+        const store = makeStore();
+        const workspace = new Workspace({
+          id: 'my-workspace-id',
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+        });
+
+        await workspace.index('/doc.txt', 'Reset passwords from the account settings page.');
+        await workspace.search('password reset', { mode: 'vector' });
+
+        expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'my_workspace_id_search_selfembed' });
+        expect(store.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            indexName: 'my_workspace_id_search_selfembed',
+            documents: ['Reset passwords from the account settings page.'],
+          }),
+        );
+        expect(store.query).toHaveBeenCalledWith(
+          expect.objectContaining({ indexName: 'my_workspace_id_search_selfembed', queryText: 'password reset' }),
+        );
+      });
+
+      it('should keep a custom searchIndexName as given', async () => {
+        const store = makeStore();
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          searchIndexName: 'custom_index_name',
+        });
+
+        await workspace.index('/doc.txt', 'Test content');
+
+        expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'custom_index_name' });
+      });
+
+      it('should keep the default index name when an embedder is configured', async () => {
+        const store = makeStore();
+        const workspace = new Workspace({
+          id: 'my-workspace-id',
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          embedder: vi.fn(async () => [0.1, 0.2, 0.3]),
+        });
+
+        await workspace.index('/doc.txt', 'Test content');
+
+        expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'my_workspace_id_search', dimension: 3 });
+      });
     });
 
     it('should release the search index on destroy', async () => {

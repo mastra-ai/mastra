@@ -76,7 +76,7 @@ export class DevLogger {
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.info('');
     console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)}`);
-    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${`${protocol}://${host}:${port}${apiPrefix}`}`);
+    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${protocol}://${host}:${port}${apiPrefix}`);
     console.info(`${pc.dim('│')} ${pc.bold('Deploy:')} ${pc.cyan('mastra deploy')}`);
     console.info('');
   }

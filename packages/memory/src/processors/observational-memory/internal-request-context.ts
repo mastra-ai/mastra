@@ -1,4 +1,4 @@
-import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 
 /**
  * OM observer/reflector agents are implementation-detail agents invoked from
@@ -28,4 +28,23 @@ export function withOmInternalThreadId(
   }
 
   return internalRequestContext;
+}
+
+/**
+ * A copy of `requestContext` whose reserved thread and resource ids name the
+ * thread a background agent addresses. The reserved ids outrank the memory
+ * target of a run, so forwarding the parent's ids, or rewriting them to some
+ * other id, runs the agent on a thread other than its own.
+ */
+export function withOwnThreadIds(
+  requestContext: RequestContext | undefined,
+  threadId: string,
+  resourceId: string,
+): RequestContext | undefined {
+  if (!requestContext) return undefined;
+
+  const ownRequestContext = new RequestContext(requestContext.entries());
+  ownRequestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+  ownRequestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  return ownRequestContext;
 }

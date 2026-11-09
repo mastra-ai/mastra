@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI abstraction subject: '%s'. Name the thing the demonstrative stands for, then say what it does."
+message: "AI abstraction subject: '%s'. State what the demonstrative stands for, then say what it does."
 level: error
 nonword: true
 # The anaphoric abstraction subject: the prior sentence compressed into an
@@ -10,9 +10,10 @@ nonword: true
 # the price"; "That symmetry is not an accident"). The reader has just
 # read the fact; the sentence names it again as an "asymmetry" or a
 # "tension" and then grades it. Metacommentary owns the "This X matters."
-# bridge and "This X means"; MicDrop owns "This is the point" and "That's
-# by design." This rule takes the abstraction noun as subject with any
-# other verb of comment, and the copula ahead of a verdict (2026-09).
+# bridge and "This X means"; PointVerdict owns "This is the point" and
+# MicDrop "That's by design." This rule takes the abstraction noun as
+# subject with any other verb of comment, and the copula ahead of a
+# verdict (2026-09).
 #
 # The plain form names the thing and says what it does: "The reverse
 # lookup costs one read," or "The writer never sees the index."

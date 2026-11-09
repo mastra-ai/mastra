@@ -81,14 +81,14 @@ export async function rehydrateWorkflow(
     requestContextSchema: requestContextSchema as any,
   };
 
+  const factory = opts?.engineType === 'evented' ? createEventedWorkflow : createWorkflow;
   let wf;
   if (def.schedule === undefined) {
-    wf = opts?.engineType === 'evented' ? createEventedWorkflow(baseParams) : createWorkflow(baseParams);
+    wf = factory(baseParams);
   } else {
     try {
-      // Presence of `schedule` promotes the workflow to the evented engine,
-      // which validates the cron expression(s) at construction time.
-      wf = createWorkflow({ ...baseParams, schedule: def.schedule as any });
+      // The cron expression(s) are validated at construction time.
+      wf = factory({ ...baseParams, schedule: def.schedule as any });
     } catch (error) {
       // A bad stored schedule shouldn't sink the whole workflow: degrade to
       // an unscheduled workflow and surface the problem.
@@ -96,7 +96,7 @@ export async function rehydrateWorkflow(
       opts.onUnsupported?.(
         `Ignoring invalid stored schedule config: ${error instanceof Error ? error.message : String(error)}`,
       );
-      wf = opts.engineType === 'evented' ? createEventedWorkflow(baseParams) : createWorkflow(baseParams);
+      wf = factory(baseParams);
     }
   }
 

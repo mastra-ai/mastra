@@ -91,12 +91,16 @@ function createWorker(input: {
           repositoryExternalId: String(row.repositoryId),
         })),
       ),
-      listByExternalRepository: vi.fn(async (args: { installationExternalId: string; repositoryExternalId: string }) => {
-        const match = configured.find(
-          row => String(row.installationId) === args.installationExternalId && String(row.repositoryId) === args.repositoryExternalId,
-        );
-        return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
-      }),
+      listByExternalRepository: vi.fn(
+        async (args: { installationExternalId: string; repositoryExternalId: string }) => {
+          const match = configured.find(
+            row =>
+              String(row.installationId) === args.installationExternalId &&
+              String(row.repositoryId) === args.repositoryExternalId,
+          );
+          return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
+        },
+      ),
     },
     repositories: {
       findByExternalId: vi.fn(async (args: { orgId: string; externalId: string }) => {
@@ -211,6 +215,11 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
+    const parsedIssueOpened = {
+      event: 'issues',
+      deliveryId: 'delivery-opened',
+      payload: { action: 'opened' },
+    };
     const parsedPullRequestOpened = {
       event: 'pull_request',
       deliveryId: 'delivery-pr-opened',
@@ -244,15 +253,16 @@ describe('PlatformGithubEventWorker', () => {
     });
     // A pull request being opened is what mints its Review card, so it has to
     // reach the rules engine; synchronize and review_requested feed the
-    // re-review path, and closed feeds the reconciler. An opened *issue* is
-    // deliberately absent — the factory picks new issues up via the reconciler.
+    // re-review path, and closed feeds the reconciler. An opened issue mints
+    // its Work card the same way, so it has to reach the rules engine too.
     // Pushes feed the base-checkpoint trigger wrapped around the ingest.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(5);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedPullRequestOpened);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedSynchronize);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedReviewRequested);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedClosed);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(5, parsedPush);
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(6);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedIssueOpened);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedPullRequestOpened);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedSynchronize);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedReviewRequested);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(5, parsedClosed);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(6, parsedPush);
     expect(dispatch).toHaveBeenCalledTimes(6);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
@@ -287,7 +297,7 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.stop();
   });
 
-  it('forwards created PR comments to Factory rules but never retriggers from edits', async () => {
+  it('forwards created PR comments and PR verdict edits to Factory rules, never issue comment edits', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
@@ -326,8 +336,20 @@ describe('PlatformGithubEventWorker', () => {
                 event: 'issue_comment',
                 payload: { action: 'edited' },
               },
+              {
+                id: '2003-0',
+                deliveryId: 'delivery-pr-comment-edited',
+                event: 'issue_comment',
+                payload: { action: 'edited', issue: { pull_request: { url: 'pr' } } },
+              },
+              {
+                id: '2004-0',
+                deliveryId: 'delivery-review-edited',
+                event: 'pull_request_review',
+                payload: { action: 'edited' },
+              },
             ],
-            nextCursor: '2002-0',
+            nextCursor: '2004-0',
           });
         }
         return json({ events: [], nextCursor: null });
@@ -348,8 +370,10 @@ describe('PlatformGithubEventWorker', () => {
 
     // A submitted review and a new pull-request comment are the two ways review
     // feedback reaches the agent that authored the branch. Comment edits stay
-    // with the subscription dispatcher — re-waking on an edit would double-fire.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    // with the subscription dispatcher, except edits on a pull request: the
+    // review skill edits its verdict in place, and the rules engine decides
+    // whether the edit carries a verdict worth waking the author for.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(4);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, {
       event: 'pull_request_review',
       deliveryId: 'delivery-review',
@@ -360,7 +384,15 @@ describe('PlatformGithubEventWorker', () => {
       deliveryId: 'delivery-comment',
       payload: { action: 'created' },
     });
-    expect(dispatch).toHaveBeenCalledTimes(3);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ deliveryId: 'delivery-pr-comment-edited' }),
+    );
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({ deliveryId: 'delivery-review-edited' }),
+    );
+    expect(dispatch).toHaveBeenCalledTimes(5);
     await worker.stop();
   });
 
@@ -1082,9 +1114,7 @@ describe('PlatformGithubEventWorker', () => {
         if (url.pathname.endsWith('/repositories/101/events')) {
           if (url.searchParams.has('afterTimestamp')) {
             return json({
-              events: [
-                { id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } },
-              ],
+              events: [{ id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } }],
               nextCursor: '1000-0',
             });
           }

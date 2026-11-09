@@ -1,10 +1,20 @@
-import { boardForWorkItem } from '../../boards/index.js';
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  rulePhaseField,
+  withBoardClosure,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -13,8 +23,10 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -33,6 +45,17 @@ function string(value: unknown): string | undefined {
 
 function number(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/** GitLab sends `2024-01-02T03:04:05Z`, `2024-01-02 03:04:05 UTC` or `2024-01-02 03:04:05 +0000`. */
+function timestamp(value: unknown): number | undefined {
+  const text = string(value);
+  if (!text) return undefined;
+  const spaced = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?) (?:UTC|([+-]\d{2}):?(\d{2}))$/.exec(text);
+  const parsed = Date.parse(
+    spaced ? `${spaced[1]}T${spaced[2]}${spaced[3] ? `${spaced[3]}:${spaced[4]}` : 'Z'}` : text,
+  );
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function boolean(value: unknown): boolean | undefined {
@@ -68,11 +91,58 @@ function labelColors(value: unknown): Record<string, string> {
   );
 }
 
+/**
+ * Points the card's session at a new comment on its issue, or at an edit to
+ * the issue's title or description. Only pointers travel (who, where, a link).
+ * An edited comment (a Note Hook with action `update`, GitLab 16.11+) is no new comment.
+ * GitLab deliveries don't say whether Factory wrote the comment, so the
+ * message waits in the session's notifications instead of waking it: a session
+ * that comments must not wake itself.
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGitLabRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'note'>,
+  delivery: { edited: boolean; noteEdited: boolean },
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommented' && !delivery.noteEdited
+      ? ('work_item.commented' as const)
+      : context.event === 'issueUpdated' && delivery.edited
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'gitlab' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.note?.url : undefined) ?? context.issue.url,
+    ...(context.actor.username ? { author: context.actor.username } : {}),
+    authorTrusted: context.actor.trusted,
+    idleBehavior: 'persist',
+  };
+}
+
+/** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
+export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed':
+      return { type: 'work_item.closed', reason: closeReason(false) };
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
   const attributes = object(parsed.payload.object_attributes);
   const action = string(attributes?.action)?.toLowerCase();
   if (parsed.event === 'Issue Hook') {
-    if (action === 'open' || action === 'reopen') return 'issueOpened';
+    if (action === 'open') return 'issueOpened';
+    if (action === 'reopen') return 'issueReopened';
     if (action === 'close') return 'issueClosed';
     return 'issueUpdated';
   }
@@ -123,6 +193,8 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
     if (timeout) clearTimeout(timeout);
   }
 }
+
+const MAX_STALE_RULE_ATTEMPTS = 3;
 
 export interface GitLabRulesIntegration {
   readonly rules: GitLabEventRules;
@@ -226,7 +298,9 @@ export class GitLabRules {
       integrationIds: ['gitlab'],
     });
     if (!config.gitlab?.enabled || !config.gitlab.sourceIds?.includes(sourceId)) return { status: 'ignored' };
-    const binding = (await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })).find(
+    const binding = (
+      await this.options.intake.listBindings({ orgId: target.target.orgId, integrationId: 'gitlab' })
+    ).find(
       candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
     );
     if (!binding) return { status: 'ignored' };
@@ -236,8 +310,8 @@ export class GitLabRules {
     const connectionIds = [
       ...new Set(
         await Promise.all(
-          target.connectionIds.map(connectionId =>
-            this.options.gitlab.resolveActiveConnectionForHost?.(connectionId, host) ?? connectionId,
+          target.connectionIds.map(
+            connectionId => this.options.gitlab.resolveActiveConnectionForHost?.(connectionId, host) ?? connectionId,
           ),
         ),
       ),
@@ -252,15 +326,28 @@ export class GitLabRules {
       ? encodeIssueReference({ host, projectId: String(projectId), issueIid })
       : undefined;
     const mergeRequestKey = mergeRequestIid ? mergeRequestSourceKey(host, projectId, mergeRequestIid) : undefined;
+    // A finished card may still be only in the legacy table; copy it so the event finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: target.target.orgId,
+      factoryProjectId: target.target.factoryProjectId,
+      sources: [
+        ...(issueSourceKey ? [{ integrationId: 'gitlab', type: 'issue', externalId: issueSourceKey }] : []),
+        ...(mergeRequestKey ? [{ integrationId: 'gitlab', type: 'pull-request', externalId: mergeRequestKey }] : []),
+      ],
+    });
     const items = await this.options.storage.list({
       orgId: target.target.orgId,
       factoryProjectId: target.target.factoryProjectId,
     });
     const issueItem = issueSourceKey
-      ? items.find(item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === issueSourceKey)
+      ? items.find(
+          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === issueSourceKey,
+        )
       : undefined;
     const reviewItem = mergeRequestKey
-      ? items.find(item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey)
+      ? items.find(
+          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === mergeRequestKey,
+        )
       : undefined;
     const headBranch = string(mergeRequest?.source_branch) ?? '';
     const authoringItem = headBranch
@@ -302,9 +389,7 @@ export class GitLabRules {
     ]);
     const authorTrusted = async (author: string | undefined): Promise<boolean> => {
       if (!author) return false;
-      return author === username
-        ? actorTrusted
-        : this.#trusted(connectionIds, String(projectId), author);
+      return author === username ? actorTrusted : this.#trusted(connectionIds, String(projectId), author);
     };
     const [issueAuthorTrusted, mergeRequestAuthorTrusted] = await Promise.all([
       authorTrusted(issueAuthor),
@@ -317,15 +402,56 @@ export class GitLabRules {
       factoryAuthored: false,
     };
 
-    const candidates: Array<WorkItemRow | undefined> =
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. It is
+    // recorded before the push is evaluated: the dispatcher can apply the
+    // re-review transition as soon as it commits, and the pass it starts names
+    // the head it covers, which must be the pushed one.
+    const lastCommit = object(mergeRequest?.last_commit);
+    const headSha = string(lastCommit?.id)?.toLowerCase();
+    // Without an update time the commit time still orders the push; dropping
+    // the write would leave the pass naming the head the last verdict covered.
+    const headAt = timestamp(mergeRequest?.updated_at) ?? timestamp(lastCommit?.timestamp);
+    const unchangedListedHead =
+      parsed.deliveryId.startsWith('poll:merge-request-head:') &&
+      headAt !== undefined &&
+      reviewItem?.metadata?.pullRequestHeadSha === headSha &&
+      (reviewItem?.metadata?.pullRequestHeadAt !== headAt ||
+        reviewItem?.metadata?.pullRequestHeadDeliveryId !== parsed.deliveryId);
+    let pushedReviewItem = reviewItem;
+    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
+      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
+      // The authoring Work item mirrors the verdict of the merge request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: reviewItem.orgId,
+        id: reviewItem.id,
+        headSha,
+        headAt,
+        deliveryId: parsed.deliveryId.startsWith('poll:merge-request-head:') ? parsed.deliveryId : undefined,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: mergeRequestIid,
+        });
+      }
+      pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
+      if (unchangedListedHead) return { status: 'ignored' };
+    }
+    const candidates: Array<Card | undefined> =
       event === 'mergeRequestMerged'
         ? [...new Map([reviewItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
         : event === 'mergeRequestCommented'
           ? [authoringItem ?? reviewItem]
           : event === 'mergeRequestOpened'
-            ? [authoringItem]
+            ? [authoringItem, ...(authoringItem ? [authoringItem] : [])]
             : event.startsWith('mergeRequest')
-              ? [reviewItem ?? authoringItem]
+              ? [pushedReviewItem ?? authoringItem]
               : [issueItem];
     const results = [];
     for (const [index, item] of candidates.entries()) {
@@ -354,12 +480,102 @@ export class GitLabRules {
           factoryAuthored: Boolean(authoringItem),
           item,
           ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
+          // A merge request opening concerns two cards: its own card,
+          // which the integration handler files against the authoring item,
+          // and that authoring item, which its board may react to. The second
+          // evaluation runs only the board handler, under an id-suffixed
+          // identity so it is not dropped as a replay of the first.
+          ...(event === 'mergeRequestOpened' ? { mergeRequestOpenedScope: index ? ('board' as const) : ('intake' as const) } : {}),
         }),
       );
+    }
+    // The authoring Work item records which merge request it has out, so the
+    // Work transition policy keeps an agent from closing the work while it is
+    // open. Sessions carry no repository, so a branch shared by two Work cards
+    // is ambiguous and records nothing.
+    const branchOwners = headBranch
+      ? items.filter(
+          item =>
+            item.externalSource?.type !== 'pull-request' &&
+            Object.values(item.sessions).some(session => session.branch === headBranch),
+        )
+      : [];
+    if (authoringItem && mergeRequestIid && branchOwners.length === 1) {
+      await this.#trackOpenMergeRequest({
+        orgId: authoringItem.orgId,
+        id: authoringItem.id,
+        event,
+        mergeRequestIid,
+        eventAt: timestamp(mergeRequest?.updated_at),
+        opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
+        headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
+      });
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
+  }
+
+  /**
+   * Records or clears the merge request a Work card has out. Each merge
+   * request's last applied event time is kept on the card, so an opening that
+   * is older than a close already applied (a replay, or a close delivered
+   * first) is ignored, while a genuine reopen is newer and records it again.
+   */
+  async #trackOpenMergeRequest(input: {
+    orgId: string;
+    id: string;
+    event: string;
+    mergeRequestIid: number;
+    eventAt: number | undefined;
+    opened: boolean;
+    headSha: string | undefined;
+  }): Promise<void> {
+    const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
+    if (input.event !== 'mergeRequestOpened' && !settling) return;
+    const key = String(input.mergeRequestIid);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const item = await this.options.storage.get({ orgId: input.orgId, id: input.id });
+      if (!item) return;
+      const events = object(item.metadata?.mergeRequestEvents) ?? {};
+      const last = object(events[key]);
+      const lastAt = number(last?.at);
+      if (input.eventAt !== undefined && lastAt !== undefined && lastAt >= input.eventAt) return;
+      // Without a timestamp, only an opening that no close has settled is trusted.
+      if (input.eventAt === undefined && !settling && last?.open === false) return;
+      if (!settling && !input.opened) return;
+      const recorded = item.metadata?.openPullRequestNumber;
+      const patch: Record<string, unknown> = {
+        mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
+      };
+      if (!settling) {
+        // A head recorded for an earlier merge request must not mark this one's
+        // verdict outdated. A replayed opening of the merge request already
+        // recorded keeps the head its pushes left.
+        if (recorded !== input.mergeRequestIid) {
+          patch.pullRequestHeadSha = input.headSha ?? null;
+          patch.pullRequestHeadAt = input.eventAt ?? null;
+        }
+        patch.openPullRequestNumber = input.mergeRequestIid;
+      } else if (recorded === input.mergeRequestIid) {
+        patch.openPullRequestNumber = null;
+        if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
+          patch.reviewVerdict = null;
+        }
+      }
+      try {
+        await this.options.storage.update({
+          orgId: item.orgId,
+          id: item.id,
+          userId: 'factory-rule-dispatcher',
+          expectedRevision: item.revision,
+          patch: { metadata: patch },
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      }
+    }
   }
 
   async #trusted(connectionIds: string[], projectId: string, username: string): Promise<boolean> {
@@ -374,31 +590,35 @@ export class GitLabRules {
     return false;
   }
 
-  async #evaluate(input: {
-    parsed: ParsedGitLabWebhook;
-    event: FactoryGitLabEventName;
-    projectId: number;
-    projectPath: string;
-    host: string;
-    actor: FactoryRuleActor;
-    orgId: string;
-    factoryProjectId: string;
-    factoryProject: { createdAt: Date };
-    board: { board: string; initialPhase: string };
-    issue: Record<string, unknown> | undefined;
-    issueAuthor: string | undefined;
-    issueAuthorTrusted: boolean;
-    issueIid: number | undefined;
-    issueSourceKey: string | undefined;
-    mergeRequest: Record<string, unknown> | undefined;
-    mergeRequestAuthor: string | undefined;
-    mergeRequestAuthorTrusted: boolean;
-    mergeRequestIid: number | undefined;
-    mergeRequestKey: string | undefined;
-    factoryAuthored: boolean;
-    item: WorkItemRow | undefined;
-    ingressIdentity: string;
-  }): Promise<{ status: IngressStatus }> {
+  async #evaluate(
+    input: {
+      parsed: ParsedGitLabWebhook;
+      event: FactoryGitLabEventName;
+      projectId: number;
+      projectPath: string;
+      host: string;
+      actor: FactoryRuleActor;
+      orgId: string;
+      factoryProjectId: string;
+      factoryProject: { createdAt: Date };
+      board: { board: string; initialPhase: string };
+      issue: Record<string, unknown> | undefined;
+      issueAuthor: string | undefined;
+      issueAuthorTrusted: boolean;
+      issueIid: number | undefined;
+      issueSourceKey: string | undefined;
+      mergeRequest: Record<string, unknown> | undefined;
+      mergeRequestAuthor: string | undefined;
+      mergeRequestAuthorTrusted: boolean;
+      mergeRequestIid: number | undefined;
+      mergeRequestKey: string | undefined;
+      factoryAuthored: boolean;
+      item: Card | undefined;
+      ingressIdentity: string;
+      mergeRequestOpenedScope?: 'intake' | 'board';
+    },
+    attempt = 1,
+  ): Promise<{ status: IngressStatus }> {
     const note = object(input.parsed.payload.object_attributes);
     const issueAuthor = input.issueAuthor;
     const mergeRequestAuthor = input.mergeRequestAuthor;
@@ -425,11 +645,14 @@ export class GitLabRules {
               title: input.item.title,
               url: input.item.externalSource?.url ?? null,
               stages: input.item.stages,
+              workItem: input.item.workItem,
               acceptedAt: input.item.acceptedAt,
               metadata: input.item.metadata,
             },
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
+            ...withBoardClosure(this.options.boards, input.item),
+            ...rulePhaseField(this.options.boards, input.item),
           }
         : {}),
       intake: input.board,
@@ -482,10 +705,11 @@ export class GitLabRules {
                 string(input.mergeRequest?.url) ??
                 string(input.mergeRequest?.web_url) ??
                 `https://${input.host}/${input.projectPath}/-/merge_requests/${input.mergeRequestIid}`,
-              ...(string(input.mergeRequest?.created_at)
-                ? { createdAt: string(input.mergeRequest?.created_at) }
-                : {}),
-              state: mergeRequestState === 'closed' || mergeRequestState === 'merged' ? ('closed' as const) : ('open' as const),
+              ...(string(input.mergeRequest?.created_at) ? { createdAt: string(input.mergeRequest?.created_at) } : {}),
+              state:
+                mergeRequestState === 'closed' || mergeRequestState === 'merged'
+                  ? ('closed' as const)
+                  : ('open' as const),
               draft: boolean(input.mergeRequest?.draft) ?? boolean(input.mergeRequest?.work_in_progress) ?? false,
               merged: input.event === 'mergeRequestMerged' || mergeRequestState === 'merged',
               assignees: usernames(input.parsed.payload.assignees ?? input.mergeRequest?.assignees),
@@ -501,8 +725,24 @@ export class GitLabRules {
           }
         : {}),
     };
-    const rule = this.options.gitlab.rules[input.event];
-    let decision: FactoryRuleDecision | void;
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
+    const boardRules = boardEventHandlers(
+      this.options.boards,
+      input.mergeRequestOpenedScope === 'intake' ? undefined : eventBoardId(context),
+      'gitlab',
+    );
+    const rule =
+      input.mergeRequestOpenedScope === 'board'
+        ? hasExplicitRuleOverride(this.options.gitlab.rules, input.event)
+          ? undefined
+          : boardRules?.mergeRequestOpened
+        : selectEventRule(this.options.gitlab.rules, boardRules, input.event);
+    // Without a board handler the authoring card has nothing to answer; skip
+    // recording an empty evaluation for it.
+    if (input.mergeRequestOpenedScope === 'board' && !rule) return { status: 'ignored' };
+    const ownedByDeployment = deploymentOwnsEvent(this.options.gitlab.rules, boardRules, input.event);
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -511,7 +751,11 @@ export class GitLabRules {
         outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
       } else if (decision) {
         decisions = validateFactoryRuleDecisions([decision]).map(entry => {
-          assertFactoryDecisionTarget(entry, this.options.boards, input.item ? boardForWorkItem(input.item) : undefined);
+          assertFactoryDecisionTarget(
+            entry,
+            this.options.boards,
+            input.item ? boardForWorkItem(input.item) : undefined,
+          );
           return { ...entry };
         });
       }
@@ -527,6 +771,20 @@ export class GitLabRules {
             : 'Factory GitLab rule failed.',
       };
     }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+    if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+      const changes = object(input.parsed.payload.changes);
+      const routed =
+        (await routeEventDecision(context, this.options.storage, {
+          orgId: input.orgId,
+          factoryProjectId: input.factoryProjectId,
+        })) ??
+        activitySignalFor(context, {
+          edited: Boolean(object(changes?.title) || object(changes?.description)),
+          noteEdited: string(object(input.parsed.payload.object_attributes)?.action)?.toLowerCase() === 'update',
+        });
+      if (routed) decisions = [{ ...routed }];
+    }
 
     const committed = await this.options.storage.commitRuleEvaluation({
       orgId: input.orgId,
@@ -541,6 +799,15 @@ export class GitLabRules {
       causalChain: [],
       now: new Date(),
     });
+    if (committed.status === 'stale') {
+      // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
+      if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+        throw new Error(`Factory GitLab rule evaluation for ${input.ingressIdentity} kept losing revision races.`);
+      }
+      const fresh = input.item ? await this.options.storage.get({ orgId: input.orgId, id: input.item.id }) : null;
+      if (input.item && !fresh) return { status: 'missing' };
+      return this.#evaluate({ ...input, item: fresh ?? undefined }, attempt + 1);
+    }
     return { status: committed.status };
   }
 }

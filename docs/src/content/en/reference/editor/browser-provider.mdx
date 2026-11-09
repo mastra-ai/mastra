@@ -55,7 +55,7 @@ new MastraEditor({
     name: 'createBrowser',
     type: '(config: TConfig) => MastraBrowser | Promise<MastraBrowser>',
     description:
-      'Create a runtime `MastraBrowser` instance from the stored config. Called once per agent hydration; the resulting instance is cached alongside the agent.',
+      'Create a runtime `MastraBrowser` instance from the stored config. For a static browser config, it is called once per agent hydration and the resulting instance is cached alongside the agent.',
   },
 ]}
 />
@@ -63,7 +63,8 @@ new MastraEditor({
 ## Implementing a provider
 
 ```typescript title="src/providers/my-browser.ts"
-import type { BrowserProvider, MastraBrowser } from '@mastra/core/editor'
+import type { BrowserProvider } from '@mastra/core/editor'
+import type { MastraBrowser } from '@mastra/core/browser'
 
 export const myBrowserProvider: BrowserProvider<{ apiKey: string }> = {
   id: 'my-browser',

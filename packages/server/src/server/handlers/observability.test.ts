@@ -25,6 +25,7 @@ import {
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
 import { LIST_METRICS, NEW_ROUTES } from './observability-new-endpoints';
+import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from './observability-shared';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -1618,7 +1619,7 @@ describe('Observability Handlers', () => {
         score: scoreData,
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
         score: expect.objectContaining({ ...scoreData, scoreId: expect.any(String), timestamp: expect.any(Date) }),
       });
@@ -1973,7 +1974,7 @@ describe('Observability Handlers', () => {
         },
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
         feedback: expect.objectContaining({ feedbackUserId: 'authenticated-user' }),
       });
@@ -1996,10 +1997,13 @@ describe('Observability Handlers', () => {
               ...(feedbackUserId ? { feedbackUserId } : {}),
             },
           });
-          expect(result).toEqual({ success: true });
+          expect(result).toMatchObject({
+            success: true,
+            data: { traceId: 'trace-123', timestamp: expect.any(String) },
+          });
           const stored = mockObservabilityStore.createFeedback.mock.lastCall?.[0].feedback;
           if (feedbackUserId) expect(stored.feedbackUserId).toBe(feedbackUserId);
-          else expect(stored).not.toHaveProperty('feedbackUserId');
+          else expect(stored.feedbackUserId).toBeNull();
         }
       },
     );
@@ -2021,7 +2025,7 @@ describe('Observability Handlers', () => {
         feedback: feedbackData,
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
         feedback: expect.objectContaining({
           ...feedbackData,
@@ -3407,6 +3411,112 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
+    });
+  });
+
+  describe('discovery routes on stores without discovery support', () => {
+    const createLegacyMastra = async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyObservabilityStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyObservabilityStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      return createMockMastra(storage);
+    };
+
+    it.each([
+      ['GET_ENTITY_TYPES', {}, { entityTypes: [] }],
+      ['GET_ENTITY_NAMES', {}, { names: [] }],
+      ['GET_SERVICE_NAMES', {}, { serviceNames: [] }],
+      ['GET_ENVIRONMENTS', {}, { environments: [] }],
+      ['GET_TAGS', {}, { tags: [] }],
+      ['GET_METRIC_NAMES', {}, { names: [] }],
+      ['GET_METRIC_LABEL_KEYS', { metricName: 'mastra_agent_duration_ms' }, { keys: [] }],
+      ['GET_METRIC_LABEL_VALUES', { metricName: 'mastra_agent_duration_ms', labelKey: 'agent' }, { values: [] }],
+    ] as const)('%s returns an empty result instead of an error', async (routeKey, params, expected) => {
+      const mastra = await createLegacyMastra();
+      const route = NEW_ROUTES[routeKey] as { handler: (args: unknown) => Promise<unknown> };
+
+      const result = await route.handler({ ...createTestServerContext({ mastra }), ...params });
+
+      expect(result).toEqual(expected);
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET_CAPABILITIES', () => {
+    it('reports every flag as unsupported when no storage is configured', async () => {
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(undefined) }),
+      });
+
+      expect(result).toEqual({
+        observabilityStorageType: null,
+        capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      });
+    });
+
+    it('reports the configured store and its declared capabilities', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class DeclaredStore extends ObservabilityStorage {
+        override getFeatures() {
+          return [
+            'metrics',
+            'tag-discovery',
+            'trace-query',
+            'trace-query-context-ids',
+            'trace-query-context-fields',
+            'trace-query-root-span-fields',
+            'trace-query-root-entity-id',
+            'span-query',
+            'span-query-context-fields',
+            'feedback',
+          ] as const;
+        }
+      }
+      const storage = createMockStorage(
+        new DeclaredStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(storage) }),
+      });
+
+      expect(result.observabilityStorageType).toBe('DeclaredStore');
+      expect(result.capabilities).toMatchObject({
+        metrics: true,
+        logs: false,
+        traceQuery: true,
+        traceQueryContextIds: true,
+        traceQueryContextFields: true,
+        traceQueryRootSpanFields: true,
+        traceQueryRootEntityId: true,
+        traceQueryRootDuration: false,
+        spanQuery: true,
+        spanQueryContextFields: true,
+        feedback: true,
+      });
+      expect(result.capabilities.discovery.tags).toBe(true);
+    });
+
+    it('reports legacy stores without feature declarations as unsupported', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(storage) }),
+      });
+
+      expect(result).toEqual({
+        observabilityStorageType: 'LegacyStore',
+        capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      });
     });
   });
 });

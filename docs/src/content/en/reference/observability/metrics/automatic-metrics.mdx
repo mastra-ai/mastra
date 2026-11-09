@@ -13,7 +13,7 @@ For setup instructions, see the [Metrics overview](/docs/observability/metrics/o
 
 ## When Mastra emits automatic metrics
 
-Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and (for model generation spans) reads token usage data. No manual instrumentation is needed.
+Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and reads token usage data from model generation and classifier evaluation spans. No manual instrumentation is needed.
 
 ### What affects whether a metric is available
 
@@ -38,7 +38,7 @@ Duration metrics record execution time in milliseconds, calculated from the span
 
 ## Token usage metrics
 
-Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage` data. Token metrics require usage data from the provider.
+Token metrics are emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans that include `usage` data. Token metrics require usage data from the provider.
 
 ### Input token metrics
 
@@ -48,6 +48,8 @@ Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage
 | `mastra_model_input_text_tokens` | Text tokens in the input prompt |
 | `mastra_model_input_cache_read_tokens` | Tokens read from prompt cache (e.g. Anthropic) |
 | `mastra_model_input_cache_write_tokens` | Tokens written to prompt cache |
+| `mastra_model_input_cache_write_5m_tokens` | Tokens written to prompt cache with a 5-minute TTL (e.g. Anthropic) |
+| `mastra_model_input_cache_write_1h_tokens` | Tokens written to prompt cache with a 1-hour TTL (e.g. Anthropic) |
 | `mastra_model_input_audio_tokens` | Audio tokens in the input (multimodal models) |
 | `mastra_model_input_image_tokens` | Image tokens in the input (vision models) |
 
@@ -69,9 +71,19 @@ The detailed breakdown metrics (everything except `total_input` and `total_outpu
 
 ### When cost context is attached
 
-Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the embedded pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
+Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
 
 A caller-supplied `costContext` takes precedence over provider-reported costs and pricing registry estimates. Provider-reported totals use `costMetadata.source: 'provider_reported'`, `costMetadata.scope: 'query_total'`, and `costMetadata.reportedStepCount` to identify the source, scope, and number of completed steps included in the total.
+
+### Where prices come from
+
+The pricing registry uses model prices from [models.dev](https://models.dev). `@mastra/observability` includes a snapshot of these prices, and each new release of the package includes recent prices. Stored cost estimates aren't recalculated when prices change. A [custom gateway](/models/gateways/custom-gateways#model-pricing) can return its own `pricing` for models that models.dev doesn't list. These prices only fill in models that models.dev doesn't price.
+
+When you run `mastra dev`, Mastra also refreshes prices from models.dev in the background once a day, and when a model has no price. Cost estimates don't wait for a refresh, so the first call to a newly released model can still have no cost. In other environments, such as production, you can turn on the refresh with `MASTRA_AUTO_REFRESH_PRICING=true`.
+
+Refreshed prices are cached in `~/.cache/mastra/pricing-data.json` and reused by later processes. If a refresh fails, Mastra keeps the prices it already has.
+
+To use only the bundled snapshot, set `MASTRA_AUTO_REFRESH_PRICING=false`. Setting `MASTRA_OFFLINE=true` also turns off the refresh.
 
 ### What cost fields may be included
 
@@ -135,7 +147,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ### Token metrics are missing
 
-- **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
+- **Span is a model generation or classifier evaluation**: Token metrics are only emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans.
 - **Provider reports usage**: The model provider must include `usage` data in its response. Usage data is required to emit token metrics.
 
 ## Related

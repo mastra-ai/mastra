@@ -42,6 +42,45 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('current messages in tool execution context', () => {
+  it('exposes remembered and response messages, including after flush, without changing input-only messages', async () => {
+    const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    messageList.add({ id: 'remembered', role: 'user', content: 'Earlier question' }, 'memory');
+    messageList.add({ id: 'response', role: 'assistant', content: 'Earlier result' }, 'response');
+    messageList.drainUnsavedMessages();
+    let getMessages: NonNullable<MastraToolInvocationOptions['getMessages']> | undefined;
+    const tool = createTool({
+      id: 'inspect-context',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        expect(context?.agent?.messages).toEqual([]);
+        getMessages = context?.agent?.getMessages;
+        expect(getMessages?.().map(message => message.id)).toEqual(['remembered', 'response']);
+        return { ok: true };
+      },
+    });
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'inspect-context', agentId: 'agent', threadId: 'thread' },
+    }).build();
+    const step = createToolCallStep({
+      tools: { 'inspect-context': built },
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+    } as OuterLLMRun);
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'context-call', toolName: 'inspect-context', args: {} },
+      }),
+    );
+    expect(getMessages).toBeTypeOf('function');
+    messageList.removeByIds(['remembered']);
+    expect(getMessages?.().map(message => message.id)).toEqual(['response']);
+  });
+});
+
 describe('createToolCallStep delegated run identity provenance', () => {
   it('does not forward unverified model-authored resume identity without persisted suspension state', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
@@ -75,6 +114,167 @@ describe('createToolCallStep delegated run identity provenance', () => {
       }),
       expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
     );
+  });
+
+  it('does not merge an earlier suspended message into the current response when resuming', async () => {
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add(
+      {
+        id: 'earlier-assistant',
+        role: 'assistant',
+        createdAt: new Date(1000),
+        content: {
+          format: 2,
+          metadata: {
+            suspendedTools: { 'call-a': { toolCallId: 'call-a', toolName: 'workflow-test', runId: 'inner-a' } },
+          },
+          parts: [
+            { type: 'text', text: 'Here is a food carousel' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'carousel-1', toolName: 'carousel', args: {}, result: {} },
+            },
+          ],
+        },
+      },
+      'memory',
+    );
+    messageList.add({ id: 'user-2', role: 'user', content: 'yes' }, 'input');
+    messageList.add(
+      {
+        id: 'current-assistant',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Resuming' }] },
+      },
+      'response',
+    );
+
+    let unsaved: any[] = [];
+    const flushMessages = vi.fn(async (list: MessageList) => {
+      unsaved = list.drainUnsavedMessages();
+    });
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-test': { execute: vi.fn(async () => ({ ok: true })) } },
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'resume-call',
+          toolName: 'workflow-test',
+          args: { resumeData: { answer: 'yes' }, suspendedToolCallId: 'call-a', suspendedToolRunId: 'inner-a' },
+        },
+      }),
+    );
+
+    expect(flushMessages).toHaveBeenCalled();
+    const all = messageList.get.all.db();
+    const current = all.find(m => m.id === 'current-assistant')!;
+    expect(current.content.parts).toEqual([expect.objectContaining({ type: 'text', text: 'Resuming' })]);
+    const earlier = all.find(m => m.id === 'earlier-assistant')!;
+    expect(earlier.content.metadata?.suspendedTools).toBeUndefined();
+    const carouselOwners = unsaved.filter(m =>
+      m.content.parts.some((p: any) => p.toolInvocation?.toolCallId === 'carousel-1'),
+    );
+    expect(carouselOwners.map(m => m.id)).toEqual(['earlier-assistant']);
+  });
+
+  it('suspends without announcing the suspension when the pre-suspension flush fails', async () => {
+    // A consumer that reacts to `tool-call-suspended` (a resume, or an abort that must
+    // settle the parked call) looks the call up in memory. If the flush failed the call
+    // was never stored, so the chunk must be withheld - but the run still has to suspend,
+    // otherwise it can never be resumed.
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'flush-failure-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-1', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    expect(flushMessages).toHaveBeenCalled();
+    // The default queue flush swallows storage errors; only this strict form rejects
+    // and lets the guard withhold the chunk.
+    expect(flushMessages).toHaveBeenCalledWith(expect.anything(), 'thread-1', undefined, { throwOnError: true });
+    expect(suspend).toHaveBeenCalled();
+    expect(enqueue.mock.calls.map(([chunk]: [any]) => chunk.type)).not.toContain('tool-call-suspended');
+    // The suspension is silent by design, so the flush failure itself must reach the
+    // stream: otherwise the caller sees a normal completion while the run stays parked.
+    const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
+    expect(failureChunk).toBeDefined();
+    expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+    expect(failureChunk.payload.error.cause).toBeInstanceOf(Error);
+    // The chunk names the call that failed to persist, so a parallel call that already
+    // suspended keeps its parked state instead of being retracted with the run.
+    expect(failureChunk.payload.toolCallId).toBe('call-suspend-1');
+  });
+
+  it('delivers the flush failure directly when the writer rejects it', async () => {
+    // A rejecting writer only fails before enqueuing, so the failure chunk never reached
+    // the client. Without the fallback the caller sees a normal completion while the run
+    // is parked: no suspension event, and no error explaining why.
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add({ id: 'user-1', role: 'user', content: 'process this' }, 'input');
+    const enqueue = vi.fn();
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const tool = createTool({
+      id: 'suspend-tool',
+      description: 'Suspends until resumed',
+      inputSchema: z.object({ data: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      execute: async (_input, context) => await context?.agent?.suspend?.({ reason: 'waiting' }),
+    });
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected the error chunk'));
+    const toolCallStep = createToolCallStep({
+      tools: { suspendTool: tool } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue },
+      runId: 'flush-writer-failure-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        inputData: { toolCallId: 'call-suspend-2', toolName: 'suspendTool', args: { data: 'x' } },
+      }),
+    );
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    expect(suspend).toHaveBeenCalled();
+    const failureChunk = enqueue.mock.calls.map(([chunk]: [any]) => chunk).find(chunk => chunk.type === 'error');
+    expect(failureChunk.payload.error.message).toContain('Failed to save the suspended tool call');
+    // The fallback skips the processors that ran on the chunk, so it must not hand the
+    // client a storage error they would have redacted.
+    expect(failureChunk.payload.error.cause).toBeUndefined();
+    // Both paths carry the failing call, so the retraction stays scoped to it.
+    expect(failureChunk.payload.toolCallId).toBe('call-suspend-2');
   });
 
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
@@ -201,7 +401,10 @@ describe('createToolCallStep background task resume with falsy payload', () => {
     return backgroundTaskManager;
   };
 
-  const runBackgroundDispatchOnResume = async (resumeData: unknown) => {
+  const runBackgroundDispatchOnResume = async (
+    resumeData: unknown,
+    terminalStatuses: Array<'completed' | 'failed'> = ['completed'],
+  ) => {
     const controller = { enqueue: vi.fn() };
     const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
     const messageList = createMessageList();
@@ -211,18 +414,35 @@ describe('createToolCallStep background task resume with falsy payload', () => {
       listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
       resume: vi.fn(),
       enqueue: vi.fn(async (_payload: any, context: any) => {
-        context.onChunk?.({
-          type: 'background-task-completed',
-          payload: {
-            taskId: 'task-1',
-            toolCallId: 'call-1',
-            toolName: 'background-tool',
-            agentId: 'agent-1',
-            runId: 'current-run',
-            result: { ok: true },
-            completedAt: new Date(),
-          },
-        });
+        for (const status of terminalStatuses) {
+          context.onChunk?.(
+            status === 'completed'
+              ? {
+                  type: 'background-task-completed',
+                  payload: {
+                    taskId: 'task-1',
+                    toolCallId: 'call-1',
+                    toolName: 'background-tool',
+                    agentId: 'agent-1',
+                    runId: 'current-run',
+                    result: { ok: true },
+                    completedAt: new Date(),
+                  },
+                }
+              : {
+                  type: 'background-task-failed',
+                  payload: {
+                    taskId: 'task-1',
+                    toolCallId: 'call-1',
+                    toolName: 'background-tool',
+                    agentId: 'agent-1',
+                    runId: 'current-run',
+                    error: new Error('background failed'),
+                    completedAt: new Date(),
+                  },
+                },
+          );
+        }
         return { task: { id: 'task-1' }, fallbackToSync: false };
       }),
       cancel: vi.fn(),
@@ -276,6 +496,18 @@ describe('createToolCallStep background task resume with falsy payload', () => {
           }),
         }),
       );
+    });
+  });
+
+  it('emits each synthetic terminal chunk once for deferred background tasks', async () => {
+    const completedController = await runBackgroundDispatchOnResume(undefined, ['completed']);
+    const failedController = await runBackgroundDispatchOnResume(undefined, ['failed']);
+
+    await vi.waitFor(() => {
+      const completedChunks = completedController.enqueue.mock.calls.map(([chunk]: [any]) => chunk);
+      const failedChunks = failedController.enqueue.mock.calls.map(([chunk]: [any]) => chunk);
+      expect(completedChunks.filter((chunk: any) => chunk.type === 'tool-result')).toHaveLength(1);
+      expect(failedChunks.filter((chunk: any) => chunk.type === 'tool-error')).toHaveLength(1);
     });
   });
 
@@ -379,6 +611,85 @@ describe('createToolCallStep background task resume with falsy payload', () => {
 
     expect(manager.resume).toHaveBeenCalledWith('suspended-task-1', resumeData);
     expect(manager.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('createToolCallStep background task result readOnly flush guard', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  const runBackgroundResult = async (memoryConfig?: { readOnly?: boolean }) => {
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [], aiV5: { model: () => [] } },
+      },
+      updateToolInvocation: vi.fn(() => true),
+      updateMessageMetadataByToolCallId: vi.fn(() => true),
+    } as unknown as MessageList;
+
+    const backgroundTaskManager = {
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      resume: vi.fn(),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        await context.onResult?.({
+          taskId: 'task-1',
+          toolCallId: 'call-1',
+          toolName: 'background-tool',
+          runId: 'current-run',
+          status: 'completed',
+          result: { ok: true },
+          startedAt: new Date(0),
+          completedAt: new Date(0),
+        });
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() } } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+        ...(memoryConfig ? { memoryConfig } : {}),
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    return flushMessages;
+  };
+
+  it('flushes the patched background result to memory on a writable run', async () => {
+    const flushMessages = await runBackgroundResult();
+
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('does not flush the background result to memory when memory is read-only', async () => {
+    // Mirrors the durable engine's readOnly flush guard (R1): a readOnly run
+    // must not have its transcript persisted just because a background tool
+    // completed and patched its placeholder result into the message list.
+    const flushMessages = await runBackgroundResult({ readOnly: true });
+
+    expect(flushMessages).not.toHaveBeenCalled();
   });
 });
 
@@ -492,6 +803,20 @@ describe('createToolCallStep background task stream replay', () => {
       resume: vi.fn(async () => {
         if (terminalTask.status !== 'cancelled') {
           setTimeout(async () => {
+            registeredContext.onChunk({
+              type: terminalTask.status === 'completed' ? 'background-task-completed' : 'background-task-failed',
+              payload: {
+                taskId: terminalTask.id,
+                toolCallId: 'call-resumed-awaited',
+                toolName: 'background-tool',
+                agentId: 'agent-1',
+                runId: 'current-run',
+                ...(terminalTask.status === 'completed'
+                  ? { result: terminalTask.result }
+                  : { error: terminalTask.error }),
+                completedAt: new Date(),
+              },
+            });
             await registeredContext.onResult({
               taskId: terminalTask.id,
               toolCallId: 'call-resumed-awaited',
@@ -516,12 +841,13 @@ describe('createToolCallStep background task stream replay', () => {
       updateToolInvocation: vi.fn(() => true),
       updateMessageMetadataByToolCallId: vi.fn(),
     } as unknown as MessageList;
+    const controller = { enqueue: vi.fn() };
     const toolCallStep = createToolCallStep({
       tools: {
         'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
       } as any,
       messageList,
-      controller: { enqueue: vi.fn() },
+      controller,
       runId: 'current-run',
       streamState: { serialize: vi.fn() },
       _internal: {
@@ -542,11 +868,11 @@ describe('createToolCallStep background task stream replay', () => {
       }),
     );
 
-    return { result, backgroundTaskManager };
+    return { result, backgroundTaskManager, controller };
   };
 
   it('awaits a resumed awaited task until its authoritative result is reconciled', async () => {
-    const { result, backgroundTaskManager } = await runResumedAwaitedTask({
+    const { result, backgroundTaskManager, controller } = await runResumedAwaitedTask({
       id: 'task-resumed-awaited',
       status: 'completed',
       result: { authoritative: true },
@@ -561,6 +887,7 @@ describe('createToolCallStep background task stream replay', () => {
     expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-resumed-awaited'], {
       abortSignal: undefined,
     });
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
   });
 
   it.each([
@@ -574,10 +901,13 @@ describe('createToolCallStep background task stream replay', () => {
       task: { id: 'task-resumed-cancelled', status: 'cancelled' as const },
       message: 'Background task cancelled: task-resumed-cancelled',
     },
-  ])('returns a resumed awaited $status task without hanging', async ({ task, message }) => {
-    const { result } = await runResumedAwaitedTask(task);
+  ])('returns a resumed awaited $status task without hanging', async ({ status, task, message }) => {
+    const { result, controller } = await runResumedAwaitedTask(task);
 
     expect(result as any).toMatchObject({ error: expect.objectContaining({ message }) });
+    if (status === 'failed') {
+      expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-error' }));
+    }
   });
 
   it('awaits the exact background task until its authoritative result is reconciled', async () => {
@@ -1278,10 +1608,9 @@ describe('createToolCallStep tool execution error handling', () => {
     });
   });
 
-  it('should return aborted (not error/result) when the request was aborted while the tool threw', async () => {
-    // A throw caused by request cancellation must NOT become a tool result, or the call is
-    // persisted as completed (result = abort message) and reads as success on resume. The
-    // step flags it `aborted` instead. CoreToolBuilder wraps the throw in a MastraError, so
+  it('should return aborted with a cancellation notice when the request was aborted while the tool threw', async () => {
+    // Preserve the abort classification while recording that the tool ran and its
+    // effects are unknown. CoreToolBuilder wraps the throw in a MastraError, so
     // the abort signal — not the error type — is the evidence.
     const abortedTool = createTool({
       id: 'failing-tool',
@@ -1321,7 +1650,10 @@ describe('createToolCallStep tool execution error handling', () => {
 
     expect(result).toHaveProperty('aborted', true);
     expect(result).not.toHaveProperty('error');
-    expect(result).not.toHaveProperty('result');
+    expect(result).toHaveProperty(
+      'result',
+      'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.',
+    );
   });
 
   it('should still return error (not aborted) when a tool throws and the request was NOT aborted', async () => {
@@ -1530,12 +1862,51 @@ describe('createToolCallStep tool approval workflow', () => {
           args: { param: 'test' },
         },
         __streamState: 'serialized-state',
+        // Recorded unconditionally so a resume can tell "held no scopes" from a pre-upgrade snapshot.
+        __resolvedScopes: [],
       },
       {
         resumeLabel: 'test-call-id',
       },
     );
 
+    expectNoToolExecution();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('still suspends and still delivers the approval chunk when the writer fails', async () => {
+    // The call is already persisted at this point; a writer that throws (a processor
+    // rejecting the chunk, a closed stream) must not turn the suspension into an error.
+    // It must not swallow the approval request either: the caller would otherwise see a
+    // normal completion while the run is parked waiting for an approval it never saw.
+    const outputWriter = vi.fn().mockRejectedValue(new Error('processor rejected approval'));
+    toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+      outputWriter,
+    } as any);
+
+    const executePromise = toolCallStep.execute(makeExecuteParams());
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-call-approval' }));
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-call-approval',
+        payload: expect.objectContaining({ toolCallId: 'test-call-id', toolName: 'test-tool' }),
+      }),
+    );
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requireToolApproval: expect.objectContaining({ toolCallId: 'test-call-id' }),
+      }),
+      { resumeLabel: 'test-call-id' },
+    );
     expectNoToolExecution();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
@@ -2041,6 +2412,40 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
     expect(resumeSchema.properties.reason).toBeDefined();
     expect(resumeSchema.required).toEqual(['approved']);
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('persists the same resume schema it streams for an in-execution approval', async () => {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+
+    // A client that reloads a pending approval reads this persisted copy, not the streamed
+    // chunk, so both must publish the same schema.
+    const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals?.[
+      'parent-tool-call-id'
+    ];
+    expect(pending.resumeSchema).toBe(approvalChunk.payload.resumeSchema);
+    expect(JSON.parse(pending.resumeSchema)).toMatchObject({
+      additionalProperties: false,
+      required: ['approved'],
+    });
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
@@ -3145,5 +3550,81 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     // Should return a descriptive error
     expect(result.error).toBeDefined();
     expect(result.error.message).toMatch(/invalid|malformed|json|args|arguments/i);
+  });
+});
+
+describe('data chunks written by a tool', () => {
+  it('persist under the step response message, not the run-level message id', async () => {
+    const tool = createTool({
+      id: 'emit-metadata',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-workspace-metadata', data: { toolName: 'emit-metadata' } });
+        return { ok: true };
+      },
+    });
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'emit-metadata', agentId: 'agent' },
+    }).build();
+    const outputWriter = vi.fn(async () => {});
+    const step = createToolCallStep({
+      tools: { 'emit-metadata': built },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter,
+      _internal: { stepResponseMessageId: 'msg-rotated' },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'metadata-call', toolName: 'emit-metadata', args: {} },
+      }),
+    );
+
+    expect(outputWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-workspace-metadata' }), {
+      messageId: 'msg-rotated',
+    });
+  });
+
+  it('prefer the step writer over a writer captured when the tool was built', async () => {
+    // Tools added by an input processor are converted before the step runs, so their
+    // build-time writer still points at the run-level message id.
+    const tool = createTool({
+      id: 'emit-metadata',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-workspace-metadata', data: { toolName: 'emit-metadata' } });
+        return { ok: true };
+      },
+    });
+    const buildTimeWriter = vi.fn(async () => {});
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'emit-metadata', agentId: 'agent', outputWriter: buildTimeWriter },
+    }).build();
+    const stepWriter = vi.fn(async () => {});
+    const step = createToolCallStep({
+      tools: { 'emit-metadata': built },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter: stepWriter,
+      _internal: { stepResponseMessageId: 'msg-rotated' },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'metadata-call', toolName: 'emit-metadata', args: {} },
+      }),
+    );
+
+    expect(stepWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-workspace-metadata' }), {
+      messageId: 'msg-rotated',
+    });
+    expect(buildTimeWriter).not.toHaveBeenCalled();
   });
 });

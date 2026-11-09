@@ -4,6 +4,8 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
+import { McpServerEventsList } from './mcp-server-events-list';
+import { McpServerTasksList } from './mcp-server-tasks-list';
 import { McpServerToolsList } from './mcp-server-tools-list';
 
 export interface MCPDetailProps {
@@ -80,7 +82,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       label: 'CLI',
       description: 'Use for local command-line access via npx and mcp-remote.',
       content: commandLineConfig,
-      tooltip: 'Copy Command Line Config',
+      tooltip: 'Copy command line config',
     },
   ];
 
@@ -88,7 +90,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
     <div className="flex flex-col gap-6 pt-4">
       <Card>
         <Tabs defaultTab="http">
-          <CardHeader className="border-border1 flex-row items-center justify-between gap-3 space-y-0 border-b">
+          <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border">
             <CardTitle className="shrink-0">Connect</CardTitle>
             <div className="min-w-0">
               <TabList variant="pill-ghost" size="sm">
@@ -106,7 +108,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
               <CardContent className="flex flex-col gap-3">
                 <Txt tone="muted">{endpoint.description}</Txt>
                 <div className="flex items-center justify-between gap-3 rounded-lg bg-muted py-2 pr-2 pl-3">
-                  <Txt as="span" className="min-w-0 font-mono break-all">
+                  <Txt as="span" font="mono" className="min-w-0 break-all">
                     {endpoint.content}
                   </Txt>
                   <CopyButton tooltip={endpoint.tooltip} content={endpoint.content} />
@@ -118,6 +120,8 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </Card>
 
       <McpServerToolsList server={server} />
+      {server.tasks_capability && <McpServerTasksList server={server} />}
+      {server.events_capability && <McpServerEventsList server={server} />}
     </div>
   );
 };

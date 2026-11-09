@@ -160,9 +160,12 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
+  const contentHash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-1', fs.readFileSync(entryPath))).toString(
+    'hex',
+  );
   const stat = fs.statSync(entryPath, { bigint: true });
+  url.searchParams.set('contentHash', contentHash);
   url.searchParams.set('mtimeNs', stat.mtimeNs.toString());
-  url.searchParams.set('size', stat.size.toString());
   const mod = (await import(url.href)) as { default?: unknown; plugin?: unknown };
   return validatePluginExport(mod.default ?? mod.plugin);
 }

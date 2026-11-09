@@ -11,7 +11,7 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
 /** The inline "new card" composer: which lane owns it, where focus returns, and what a submit files. */
-export function useBoardComposer(factoryProjectId: string, board: InstalledBoardInfo) {
+export function useBoardComposer(factoryProjectId: string, board: InstalledBoardInfo, currentUserId?: string) {
   const [stage, setStage] = useState<BoardStageId>();
   const triggerRefs = useRef(new Map<BoardStageId, HTMLButtonElement>());
   const pendingItemRef = useRef<{ stage: BoardStageId; title: string; item: WorkItem } | undefined>(undefined);
@@ -19,7 +19,7 @@ export function useBoardComposer(factoryProjectId: string, board: InstalledBoard
 
   const create = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
-  const transition = useTransitionWorkItemMutation(factoryProjectId);
+  const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
 
   useEffect(() => {
     const closedStage = closedStageRef.current;

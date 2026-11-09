@@ -492,6 +492,58 @@ describe('MDocument', () => {
     });
   });
 
+  describe('addStartIndex', () => {
+    const text = Array.from({ length: 400 }, (_, i) => `word${i}`).join(' ');
+
+    const expectCorrectStartIndexes = (chunks: { text: string; metadata: Record<string, any> }[]) => {
+      expect(chunks.length).toBeGreaterThan(1);
+      let previous = -1;
+      for (const chunk of chunks) {
+        const startIndex = chunk.metadata.startIndex;
+        expect(startIndex).toBeGreaterThan(previous);
+        expect(text.slice(startIndex).startsWith(chunk.text)).toBe(true);
+        previous = startIndex;
+      }
+    };
+
+    it('reports the real start of every chunk with the token strategy and overlap', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'token', maxSize: 50, overlap: 10, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+      expect(chunks[1]!.metadata.startIndex).toBe(130);
+    });
+
+    it('reports the real start of every chunk with a token-counting lengthFunction', async () => {
+      const { getEncoding } = await import('js-tiktoken');
+      const encoding = getEncoding('cl100k_base');
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'recursive',
+        maxSize: 50,
+        overlap: 10,
+        addStartIndex: true,
+        lengthFunction: t => encoding.encode(t).length,
+      });
+
+      expectCorrectStartIndexes(chunks);
+    });
+
+    it('keeps correct start indexes with the default character length', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'recursive', maxSize: 200, overlap: 40, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+    });
+
+    it('keeps correct start indexes with the token strategy and no overlap', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'token', maxSize: 50, overlap: 0, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+    });
+  });
+
   describe('chunkRecursive', () => {
     it('chunkRecursive', async () => {
       const text =
@@ -2011,27 +2063,14 @@ describe('MDocument', () => {
         });
 
         expect(doc.getText().some(chunk => chunk.includes('\\u'))).toBe(true);
+        expect(doc.getText().every(chunk => /^[\x00-\x7F]*$/.test(chunk))).toBe(true);
 
         const combined = doc
           .getText()
-          .map(chunk => {
-            const c = JSON.parse(chunk);
-            const retVal: Record<string, string> = {};
-            Object.entries(c).forEach(([key, value]) => {
-              retVal[key] = JSON.parse(`"${value as string}"`);
-            });
-
-            return retVal;
-          })
+          .map(chunk => JSON.parse(chunk))
           .reduce((acc, curr) => ({ ...acc, ...curr }), {});
 
-        expect(combined?.key1?.charCodeAt(0)).toBe('你'.charCodeAt(0));
-        expect(combined?.key1?.charCodeAt(1)).toBe('好'.charCodeAt(0));
-        expect(combined?.key2?.charCodeAt(0)).toBe('世'.charCodeAt(0));
-        expect(combined?.key2?.charCodeAt(1)).toBe('界'.charCodeAt(0));
-
-        expect(combined?.key1).toBe('你好');
-        expect(combined?.key2).toBe('世界');
+        expect(combined).toEqual(input);
       });
 
       it('should handle non-ASCII without escaping when ensureAscii is false', async () => {
@@ -2058,6 +2097,62 @@ describe('MDocument', () => {
         expect(combined.key1).toBe('你好');
         expect(combined.key2).toBe('世界');
       });
+
+      const roundTripInput = {
+        text: '你好',
+        café: 'clé',
+        emoji: 'Hello 🌍',
+        literal: '\\u00e9 and \\\\u0041',
+        nested: { ключ: ['ü', { deep: '日本' }] },
+      };
+
+      it.each([true, false, undefined])(
+        'should round-trip keys, values, emoji and literal escapes with ensureAscii=%s',
+        async ensureAscii => {
+          const doc = MDocument.fromJSON(JSON.stringify(roundTripInput));
+
+          await doc.chunk({ strategy: 'json', maxSize: 1000, ensureAscii });
+
+          const chunks = doc.getText();
+          const combined = chunks.map(chunk => JSON.parse(chunk)).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+          expect(combined).toEqual(roundTripInput);
+
+          const raw = chunks.join('\n');
+          if (ensureAscii === false) {
+            expect(raw).toContain('你好');
+            expect(raw).toContain('🌍');
+            expect(raw).toContain('ключ');
+          } else {
+            expect(chunks.every(chunk => /^[\x00-\x7F]*$/.test(chunk))).toBe(true);
+            expect(raw).toContain('\\\\u00e9');
+          }
+        },
+      );
+
+      it.each([true, false])(
+        'should round-trip non-ASCII data across multiple chunks with ensureAscii=%s',
+        async ensureAscii => {
+          const input = {
+            名前: '山田太郎',
+            ville: 'Zürich',
+            ключ: 'значение',
+            emoji: '🚀🌍',
+            literal: 'C:\\u0041',
+          };
+          const doc = MDocument.fromJSON(JSON.stringify(input));
+
+          await doc.chunk({ strategy: 'json', maxSize: 30, ensureAscii });
+
+          const chunks = doc.getText();
+          expect(chunks.length).toBeGreaterThan(1);
+          if (ensureAscii) {
+            expect(chunks.every(chunk => /^[\x00-\x7F]*$/.test(chunk))).toBe(true);
+          }
+
+          const combined = chunks.map(chunk => JSON.parse(chunk)).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+          expect(combined).toEqual(input);
+        },
+      );
     });
 
     describe('JSON structure handling', () => {
@@ -2345,6 +2440,7 @@ describe('MDocument', () => {
 
         const asciiChunks = doc.getText();
         expect(asciiChunks[0]).not.toMatch(/[^\x00-\x7F]/);
+        expect(JSON.parse(asciiChunks[0]!).text).toBe('Hello café world 🌍');
 
         // With ensureAscii false
         await doc.chunk({
@@ -2356,6 +2452,7 @@ describe('MDocument', () => {
 
         const unicodeChunks = doc.getText();
         expect(JSON.parse(unicodeChunks[0]).text).toMatch(/[^\x00-\x7F]/);
+        expect(JSON.parse(unicodeChunks[0]!).text).toBe('Hello café world 🌍');
       });
 
       it('should handle deeply nested structures', async () => {
@@ -2475,6 +2572,73 @@ describe('MDocument', () => {
             return mobile && mobile.score === 90 && Array.isArray(mobile.issues);
           }),
         ).toBe(true);
+      });
+    });
+
+    describe('minSize does not drop data', () => {
+      it('keeps array items when a completed group is smaller than minSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ items: ['aaaa', 'bbbb', 'c'] }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 24, minSize: 20 });
+
+        expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['aaaa', 'bbbb', 'c']);
+      });
+
+      it('keeps nested object fields when a completed chunk is smaller than minSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ item: { a: 'aaaa', b: 'bbbb', c: 'c' } }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 28, minSize: 25 });
+
+        const merged = doc
+          .getText()
+          .map(text => JSON.parse(text).item)
+          .reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        expect(merged).toEqual({ a: 'aaaa', b: 'bbbb', c: 'c' });
+      });
+
+      it('returns chunks for a nonempty document with the default minSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ items: ['aaaa', 'bbbb', 'c'] }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 24 });
+
+        expect(doc.getText().length).toBeGreaterThan(0);
+        expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['aaaa', 'bbbb', 'c']);
+      });
+
+      it('keeps every array item with the default minSize at a typical maxSize', async () => {
+        const items = Array.from({ length: 150 }, (_, i) => ({ id: i, name: `item-${i}` }));
+        const doc = MDocument.fromJSON(JSON.stringify({ items }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 2000 });
+
+        const texts = doc.getText();
+        const ids = texts.flatMap(text => JSON.parse(text).items.map((item: { id: number }) => item.id));
+        expect(ids).toEqual(items.map(item => item.id));
+        for (const text of texts) {
+          expect(text.length).toBeLessThanOrEqual(2000);
+        }
+      });
+
+      it('keeps every array item when minSize is larger than maxSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ items: ['one', 'two', 'three', 'four', 'five'] }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 30, minSize: 1000 });
+
+        expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['one', 'two', 'three', 'four', 'five']);
+      });
+
+      it('keys a split array object by its index in the source array', async () => {
+        const doc = MDocument.fromJSON(
+          JSON.stringify({ items: ['a', 'b', { first: 'x'.repeat(20), second: 'y'.repeat(20) }] }),
+        );
+
+        await doc.chunk({ strategy: 'json', maxSize: 50 });
+
+        const chunks = doc.getText().map(text => JSON.parse(text).items);
+        expect(chunks[0]).toEqual(['a', 'b']);
+        const splitFields = chunks.slice(1).reduce((acc, curr) => ({ ...acc, ...curr['2'] }), {});
+        expect(splitFields).toEqual({ first: 'x'.repeat(20), second: 'y'.repeat(20) });
+        expect(chunks.slice(1).every(chunk => Object.keys(chunk).join() === '2')).toBe(true);
       });
     });
   });
@@ -4152,3 +4316,128 @@ function findCommonSubstring(str1: string, str2: string): string {
 
   return longest;
 }
+
+describe('MDocument.chunk tracing', () => {
+  it('records chunkSize and chunkOverlap on the chunk span', async () => {
+    const spans: any[] = [];
+    const span: any = {
+      createChildSpan: (opts: any) => {
+        spans.push(opts);
+        return span;
+      },
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+    };
+    const doc = MDocument.fromText('Hello world. '.repeat(20));
+
+    await doc.chunk(
+      { strategy: 'recursive', maxSize: 50, overlap: 10 },
+      { observabilityContext: { tracingContext: { currentSpan: span } } as any },
+    );
+
+    expect(spans[0].attributes).toMatchObject({
+      action: 'chunk',
+      strategy: 'recursive',
+      chunkSize: 50,
+      chunkOverlap: 10,
+    });
+  });
+});
+
+describe('regex separators with capture groups', () => {
+  const text = ', alpha; beta,; gamma;';
+
+  // Separators attach to the preceding piece for 'end' and the following piece for 'start'.
+  // The character strategy keeps each split; the recursive strategy merges splits up to maxSize.
+  const expectedChunks = {
+    character: {
+      start: [', alpha', '; beta', ',', '; gamma', ';'],
+      end: [', ', 'alpha; ', 'beta,', '; ', 'gamma;'],
+    },
+    recursive: {
+      start: [', alpha', '; beta,', '; gamma;'],
+      end: [', alpha; ', 'beta,; ', 'gamma;'],
+    },
+  } as const;
+
+  async function chunkText(input: string, options: Parameters<MDocument['chunk']>[0]) {
+    const doc = MDocument.fromText(input);
+    await doc.chunk(options);
+    return doc.getText();
+  }
+
+  for (const strategy of ['character', 'recursive'] as const) {
+    for (const separatorPosition of ['start', 'end'] as const) {
+      it(`preserves text for ${strategy} strategy with separatorPosition '${separatorPosition}'`, async () => {
+        const separatorOptions = strategy === 'character' ? { separator: '(,|;)\\s*' } : { separators: ['(,|;)\\s*'] };
+        const chunks = await chunkText(text, {
+          strategy,
+          ...separatorOptions,
+          isSeparatorRegex: true,
+          separatorPosition,
+          maxSize: 12,
+          overlap: 0,
+          stripWhitespace: false,
+        } as Parameters<MDocument['chunk']>[0]);
+
+        expect(chunks).toEqual(expectedChunks[strategy][separatorPosition]);
+        expect(chunks.join('')).toBe(text);
+        expect(chunks.every(chunk => chunk.length > 0)).toBe(true);
+      });
+    }
+  }
+
+  it('preserves numbered backreferences in the separator pattern', async () => {
+    const chunks = await chunkText('a,,b;;c,d', {
+      strategy: 'character',
+      separator: '(,|;)\\1',
+      isSeparatorRegex: true,
+      separatorPosition: 'end',
+      maxSize: 100,
+      overlap: 0,
+      stripWhitespace: false,
+    });
+
+    expect(chunks).toEqual(['a,,', 'b;;', 'c,d']);
+  });
+
+  it('does not throw on unmatched optional captures with the character strategy', async () => {
+    const chunks = await chunkText('alpha, beta; gamma', {
+      strategy: 'character',
+      separator: '(,)?;?\\s+',
+      isSeparatorRegex: true,
+      maxSize: 100,
+      overlap: 0,
+    });
+
+    expect(chunks).toEqual(['alpha', 'beta', 'gamma']);
+  });
+
+  it('does not throw on unmatched optional captures with the recursive strategy', async () => {
+    const chunks = await chunkText('alpha, beta; gamma', {
+      strategy: 'recursive',
+      separators: ['(,)?;?\\s+'],
+      isSeparatorRegex: true,
+      maxSize: 8,
+      overlap: 0,
+    });
+
+    expect(chunks).toEqual(['alpha', 'beta', 'gamma']);
+  });
+
+  it('keeps zero-width separators splitting at match positions', async () => {
+    const options = {
+      strategy: 'character',
+      separator: '(?=#)',
+      isSeparatorRegex: true,
+      maxSize: 100,
+      overlap: 0,
+      stripWhitespace: false,
+    } as const;
+
+    expect(await chunkText('#a#b#c', { ...options, separatorPosition: 'start' })).toEqual(['#a', '#b', '#c']);
+    expect(await chunkText('#a#b#c', { ...options, separatorPosition: 'end' })).toEqual(['#a', '#b', '#c']);
+    expect(await chunkText('#a#b#c', options)).toEqual(['#a', '#b', '#c']);
+  });
+});

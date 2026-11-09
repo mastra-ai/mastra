@@ -760,7 +760,7 @@ describe('safeStringify', () => {
   });
 
   it('should handle BigInt values without throwing', () => {
-    const obj = { count: BigInt(42), name: 'test' };
+    const obj = { count: 42n, name: 'test' };
     const result = safeStringify(obj);
     expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
   });

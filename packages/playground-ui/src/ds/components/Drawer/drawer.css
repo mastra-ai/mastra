@@ -3,7 +3,7 @@
  * Only the *advanced* motion lives here — the swipe/stack transforms are long
  * calc() expressions that are unreadable as escaped Tailwind arbitrary values
  * (`[transform:translateY(calc(..._-_...))]`). Everything native (layout, colour,
- * sizing, borders, the `after:` dim overlay) stays as inline Tailwind in drawer.tsx.
+ * sizing, the `after:` dim overlay) stays as inline Tailwind in drawer.tsx.
  *
  * Base UI drives the gesture through CSS custom properties set on the popup:
  *   --drawer-swipe-movement-x/y   finger tracking

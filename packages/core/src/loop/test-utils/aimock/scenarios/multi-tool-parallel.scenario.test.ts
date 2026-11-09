@@ -16,7 +16,12 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 describeForAllEngines('AIMock loop scenario: multi-tool parallel execution', engine => {
   const getMock = useLoopScenarioAimock();
@@ -112,7 +117,7 @@ describeForAllEngines('AIMock loop scenario: multi-tool parallel execution', eng
     // suspend/resume support), so skip the timing assertion there.
     expect(executionTimestamps).toHaveLength(3);
     const timeSpan = Math.max(...executionTimestamps) - Math.min(...executionTimestamps);
-    if (engine !== 'durable') {
+    if (!isDurableEngineVariant(engine)) {
       expect(timeSpan).toBeLessThan(100); // Should start within 100ms of each other
     }
 

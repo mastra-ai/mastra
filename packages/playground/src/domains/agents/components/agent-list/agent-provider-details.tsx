@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CardTitle } from '@mastra/playground-ui/components/Card';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
 
@@ -44,15 +45,15 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
       >
         <div className="grid gap-3">
           <CardTitle id={titleId}>Model</CardTitle>
-          <TextAndIcon className="text-caption text-foreground">
+          <TextAndIcon className="text-foreground">
             <span aria-hidden="true">
               <ProviderLogo providerId={provider} className="dark:invert" />
             </span>
             <span className="overflow-wrap-anywhere min-w-0">{provider}</span>
           </TextAndIcon>
-          <span className="overflow-wrap-anywhere min-w-0 text-caption text-foreground">
+          <Txt as="span" variant="caption" tone="ink" className="overflow-wrap-anywhere min-w-0">
             {modelId || 'No model configured'}
-          </span>
+          </Txt>
         </div>
       </HoverCardContent>
     </HoverCard>

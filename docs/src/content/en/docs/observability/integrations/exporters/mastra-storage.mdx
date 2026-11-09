@@ -203,10 +203,11 @@ The MastraStorageExporter includes reliable error handling for production use:
 
 `DefaultExporter` emits structured drop events when it can't persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
 
-For two reasons events are dropped:
+Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
 - `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 

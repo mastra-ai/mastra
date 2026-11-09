@@ -1,27 +1,29 @@
 import { FoldVertical, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import {
-  ToolCall,
-  ToolCallContent,
-  ToolCallDetail,
-  ToolCallDisclosure,
-  ToolCallHeader,
-  ToolCallIcon,
-  ToolCallLabel,
-  ToolCallSpacer,
-  ToolCallSummary,
-  ToolCallTrailing,
-  ToolCallTrigger,
-} from './tool-call';
-import type { ToolCallStatus } from './tool-call';
 import { presentTool } from './tool-presentation';
+import {
+  Activity,
+  ActivityContent,
+  ActivityDetail,
+  ActivityDisclosure,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+  ActivityLeading,
+  ActivitySpacer,
+  ActivitySummary,
+  ActivityTrailing,
+  ActivityTrigger,
+} from '@/ds/components/ai/activity';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { Metadata } from '@/ds/components/Metadata';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 
 export interface ToolCallGroupStep {
   toolName: string;
   args: unknown;
-  status: ToolCallStatus;
+  status: ActivityStatus;
   /** A successful tool result was recorded. Supply for every step to enable outcome counts; omit to keep legacy summaries. */
   hasResult?: boolean;
 }
@@ -37,32 +39,36 @@ const MAX_KIND_GLYPHS = 4;
 
 export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) {
   const running = steps.find(step => step.status === 'running');
-  const liveDetail = running && presentTool(running.toolName, running.args).detail;
+  const live = running && presentTool(running.toolName, running.args);
 
   return (
-    <ToolCall status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
-      <ToolCallTrigger>
-        <ToolCallHeader>
-          {leading}
-          <ToolCallIcon>
-            <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
-          </ToolCallIcon>
-          <ToolCallLabel>{steps.length} steps</ToolCallLabel>
-          {liveDetail && <ToolCallDetail>{liveDetail}</ToolCallDetail>}
+    <Activity status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
+      <ActivityTrigger>
+        <ActivityHeader>
+          <ActivityLeading>{leading}</ActivityLeading>
+          <ActivityIcon>
+            <FoldVertical size={14} aria-hidden className="text-placeholder" />
+          </ActivityIcon>
+          <ActivityLabel>{steps.length} steps</ActivityLabel>
+          {live && live.description ? (
+            <ActivityLabel className="max-w-none min-w-0 shrink">{live.description}</ActivityLabel>
+          ) : (
+            live && live.detail && <ActivityDetail>{live.detail}</ActivityDetail>
+          )}
           <GroupKinds steps={steps} />
-          <ToolCallSpacer rule />
-          <ToolCallTrailing>
+          <ActivitySpacer rule />
+          <ActivityTrailing>
             <GroupProgress steps={steps} />
-          </ToolCallTrailing>
-          <ToolCallDisclosure />
-        </ToolCallHeader>
-      </ToolCallTrigger>
-      <ToolCallContent className="py-0.5 pr-0 pl-2.5">
+          </ActivityTrailing>
+          <ActivityDisclosure />
+        </ActivityHeader>
+      </ActivityTrigger>
+      <ActivityContent className="py-0.5 pr-0 pl-2.5">
         <ScrollArea maxHeight="18rem" autoScroll={Boolean(running)} revealScrollbarOnHover={false}>
           {children}
         </ScrollArea>
-      </ToolCallContent>
-    </ToolCall>
+      </ActivityContent>
+    </Activity>
   );
 }
 
@@ -77,7 +83,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   }
   const failed = steps.filter(step => step.status === 'error').length;
   const errorIndicator =
-    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" /> : null;
+    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" /> : null;
   // Older consumers only supply visual status, which cannot distinguish completed from interrupted calls.
   if (steps.some(step => step.hasResult === undefined)) return errorIndicator;
 
@@ -87,31 +93,32 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
     succeeded > 0 && `${succeeded} OK`,
     failed > 0 && `${failed} failed`,
     incomplete > 0 && `${incomplete} incomplete`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  ].filter((part): part is string => typeof part === 'string');
 
   return (
     <>
       {errorIndicator}
       <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
-        {summary}
+        <Metadata>
+          {summary.map(part => (
+            <Metadata.Item key={part}>{part}</Metadata.Item>
+          ))}
+        </Metadata>
       </Txt>
     </>
   );
 }
 
 function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {
-  const iconByLabel = new Map(
-    steps.map(step => presentTool(step.toolName, step.args)).map(({ label, icon }) => [label, icon]),
-  );
-  const kinds = [...iconByLabel].slice(0, MAX_KIND_GLYPHS);
+  const presented = steps.map(step => presentTool(step.toolName, step.args));
+  const labels = new Set(presented.map(({ label }) => label));
+  const glyphs = [...new Map(presented.map(({ pose, icon }) => [pose, icon]))].slice(0, MAX_KIND_GLYPHS);
 
   return (
-    <ToolCallSummary role="img" aria-label={kinds.map(([label]) => label).join(', ')} className="shrink-0 gap-1.5">
-      {kinds.map(([label, Kind]) => (
-        <Kind key={label} size={12} strokeWidth={1.75} className="text-placeholder" />
+    <ActivitySummary role="img" aria-label={[...labels].join(', ')} className="shrink-0 gap-1.5">
+      {glyphs.map(([pose, Kind]) => (
+        <Kind key={pose} size={12} className="text-placeholder" />
       ))}
-    </ToolCallSummary>
+    </ActivitySummary>
   );
 }

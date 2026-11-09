@@ -1,4 +1,5 @@
 import type { CreateStoredSkillParams } from '@mastra/client-js';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +8,6 @@ import { useCreateSkill } from '../use-create-skill';
 import { writeAllowedCapabilities, writeDeniedCapabilities } from './fixtures/auth';
 import { createdSkill, workspaceWriteOk } from './fixtures/skills';
 import { usePermissions } from '@/domains/auth/hooks';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL as BASE_URL, waitForMutationsIdle } from '@/test/render';
 

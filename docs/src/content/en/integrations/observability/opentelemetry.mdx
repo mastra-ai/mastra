@@ -13,25 +13,25 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, Sazabi, and more.
 
 ### Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf Providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
+#### For HTTP/Protobuf providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
 ```
 
-#### For `gRPC` Providers (Dash0, Datadog)
+#### For `gRPC` providers (Dash0, Datadog)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
-#### For HTTP/JSON Providers (Traceloop)
+#### For HTTP/JSON providers (Traceloop, Sazabi)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
@@ -143,6 +143,29 @@ new OtelExporter({
   },
 })
 ```
+
+#### Sazabi
+
+[Sazabi](https://sazabi.com) is an AI-native observability platform that ingests OTLP traces. In Sazabi, add a Mastra log source and copy its intake URL. The URL carries your project key, so no auth header is needed:
+
+```bash title=".env"
+SAZABI_INTAKE_URL=https://...
+```
+
+Use the `custom` provider with HTTP/JSON:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: process.env.SAZABI_INTAKE_URL!,
+      protocol: 'http/json',
+    },
+  },
+})
+```
+
+See [Sazabi's Mastra guide](https://docs.sazabi.com/catalogs/log-sources/send-to-an-endpoint/mastra) for the full setup.
 
 #### Dash0
 
@@ -684,7 +707,7 @@ No Mastra exporters are required when using the bridge. Traces are sent via your
 
 #### Forwarding logs (optional)
 
-The bridge also forwards Mastra log events to the globally registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a `logRecordProcessor` on `NodeSDK`:
+The bridge also forwards Mastra log events to the globally registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a log record processor on `NodeSDK`:
 
 ```typescript title="instrumentation.ts"
 import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -693,11 +716,13 @@ import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
 
 const sdk = new NodeSDK({
   // ...trace config as usual
-  logRecordProcessor: new BatchLogRecordProcessor(
-    new OTLPLogExporter({
-      url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+  logRecordProcessors: [
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
+        url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+      }),
     }),
-  ),
+  ],
 })
 ```
 
@@ -712,6 +737,10 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 ```bash
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
+
+#### Flushing before exit
+
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
 
 ### Semantic conventions
 
@@ -756,6 +785,8 @@ Both services must have:
 1. W3C Trace Context propagator enabled
 1. Mastra with `OtelBridge` configured
 
+A Mastra `MCPServer` request over HTTP follows the same rule. With this setup, it joins the caller's trace. Without HTTP instrumentation on the server, each request keeps its own trace. In both cases, when a request carries a W3C `traceparent`, in `_meta` or as an HTTP header, the request span links to the caller's span, and the exporter and the bridge send that link as an OpenTelemetry span link. See [Linking to the caller's trace](/reference/tools/mcp-server#linking-to-the-callers-trace).
+
 ### Using tags
 
 Tags help you categorize and filter traces in your OTEL backend. Add tags when executing agents or workflows:
@@ -779,6 +810,7 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 If traces aren't displaying or connecting as expected:
 
 - Verify OTEL SDK is initialized before Mastra (use the `--import` flag or import at the top of the entry point)
+- If you see `[OtelBridge] No OpenTelemetry tracer provider is registered globally`, the bridge can't find a tracer provider. Some frameworks create a provider without registering it globally. Pass that provider directly with `new OtelBridge({ tracerProvider })`. See [setup requirements](/reference/observability/tracing/bridges/otel#setup-requirements)
 - Ensure the `OtelBridge` is added to your observability config
 - Check that your OTEL backend is running and accessible
 

@@ -1,8 +1,24 @@
+import type { RedisClusterType } from 'redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedisStreamsPubSub } from './index';
 
 const clients = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock('redis', () => ({ createClient: clients.create }));
+
+// Default publishes (idle TTL on) run XADD + PEXPIRE in one MULTI.
+function fakeMulti(onExec: () => void = () => {}) {
+  return vi.fn(() => {
+    const tx = {
+      xAdd: () => tx,
+      pExpire: () => tx,
+      exec: vi.fn(async () => {
+        onExec();
+        return ['1-0', 1];
+      }),
+    };
+    return tx;
+  });
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -33,10 +49,7 @@ describe('close() drains in-flight publishes', () => {
       quit: vi.fn(async () => {
         order.push('quit');
       }),
-      xAdd: vi.fn(async () => {
-        order.push('xAdd');
-        return '1-0';
-      }),
+      multi: fakeMulti(() => order.push('xAdd')),
     };
     clients.create.mockReturnValue(writer);
     const pubsub = new RedisStreamsPubSub();
@@ -58,7 +71,7 @@ describe('close() drains in-flight publishes', () => {
   });
 
   it('rejects publishes issued after close()', async () => {
-    const writer = { isOpen: false, on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xAdd: vi.fn() };
+    const writer = { isOpen: false, on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xAdd: vi.fn(), multi: fakeMulti() };
     clients.create.mockReturnValue(writer);
     const pubsub = new RedisStreamsPubSub();
     await pubsub.close();
@@ -66,5 +79,32 @@ describe('close() drains in-flight publishes', () => {
       'cannot publish on closed client',
     );
     expect(writer.xAdd).not.toHaveBeenCalled();
+    expect(writer.multi).not.toHaveBeenCalled();
+  });
+
+  it('destroys a cluster writer instead of quitting it while a node is reconnecting', async () => {
+    // Cluster quit() quits every node client, and node-redis quit() on a node
+    // in reconnect backoff never settles.
+    const node = { client: { isOpen: true, isReady: true } };
+    const cluster = {
+      isOpen: false,
+      masters: [node],
+      replicas: [],
+      on: vi.fn(),
+      connect: vi.fn(async () => {
+        cluster.isOpen = true;
+      }),
+      quit: vi.fn(() => new Promise<void>(() => {})),
+      destroy: vi.fn(),
+      multi: fakeMulti(),
+    };
+    const pubsub = new RedisStreamsPubSub({ client: cluster as unknown as RedisClusterType });
+    await pubsub.publish('workflows', { type: 'x', data: {}, runId: 'r' });
+
+    node.client.isReady = false;
+    await pubsub.close();
+
+    expect(cluster.destroy).toHaveBeenCalledTimes(1);
+    expect(cluster.quit).not.toHaveBeenCalled();
   });
 });

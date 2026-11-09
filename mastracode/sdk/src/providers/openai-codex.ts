@@ -12,10 +12,10 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
-import { supportsMaxReasoningEffort } from '../thinking.js';
+import { runCatalogThinkingLevel } from '../thinking-catalog.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 export { supportsMaxReasoningEffort } from '../thinking.js';
 
@@ -23,6 +23,7 @@ export { supportsMaxReasoningEffort } from '../thinking.js';
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 const CODEX_ORIGINATOR = 'mastracode';
 const CODEX_USER_AGENT = 'mastracode';
+const CODEX_PROVIDER_NAME = 'OpenAI Codex';
 
 // Singleton auth storage instance (shared with claude-max.ts)
 let authStorageInstance: AuthStorage | null = null;
@@ -55,22 +56,13 @@ const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // GPT-5.* models on Codex require at least low reasoning.
-  if (GPT5_MODEL_RE.test(modelId) && level === 'off') {
-    return 'low';
-  }
-
-  // Clamp `max` to `xhigh` only for models whose effort scale tops out there.
-  if (level === 'max' && !supportsMaxReasoningEffort(modelId)) {
-    return 'xhigh';
-  }
-
-  return level;
+  const requestedLevel = GPT5_MODEL_RE.test(modelId) && level === 'off' ? 'low' : level;
+  return runCatalogThinkingLevel(`openai/${modelId}`, requestedLevel);
 }
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
-// undefined means omit the parameter (no reasoning). Model-dependent clamping
-// (e.g. `max` → `xhigh` for pre-GPT-5.6 models) happens in
-// getEffectiveThinkingLevel before this lookup.
+// undefined means omit the parameter (no reasoning). Model-dependent fitting
+// happens in getEffectiveThinkingLevel before this lookup.
 export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',
@@ -85,7 +77,7 @@ export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | 
  */
 export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       // Remove topP if temperature is set (OpenAI doesn't like both)
       if (params.temperature !== undefined && params.temperature !== null) {
@@ -114,6 +106,76 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
 }
 
 /**
+ * The thread a model request belongs to, from the `x-thread-id` header that
+ * model resolution adds for requests made inside a thread.
+ */
+export function getRequestThreadId(headers?: Record<string, string>): string | undefined {
+  if (!headers) return undefined;
+  for (const name in headers) {
+    if (name.toLowerCase() === 'x-thread-id') return headers[name] || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Create middleware that sends `prompt_cache_key` on OpenAI Responses requests.
+ *
+ * OpenAI routes a cached prompt by a hash of its start plus this key. Every
+ * Mastra Code prompt starts with the same system prompt, so without a key all
+ * threads compete for the same cache slot and consecutive steps of one run often
+ * land on a machine that doesn't hold their prefix. Keying by thread keeps each
+ * thread's requests together. A key the caller already set wins.
+ */
+export function createPromptCacheKeyMiddleware(promptCacheKey?: string): LanguageModelMiddleware | undefined {
+  if (!promptCacheKey) return undefined;
+  return {
+    specificationVersion: 'v4',
+    transformParams: async ({ params }) => {
+      params.providerOptions = {
+        ...params.providerOptions,
+        openai: {
+          promptCacheKey,
+          ...(params.providerOptions?.openai ?? {}),
+        },
+      } as typeof params.providerOptions;
+
+      return params;
+    },
+  };
+}
+
+/**
+ * Create middleware that forwards a resolved reasoning effort to an
+ * OpenAI-compatible provider as `providerOptions[providerKey].reasoningEffort`.
+ *
+ * Returns `undefined` when `reasoningEffort` is unset so callers wrap nothing
+ * (e.g. thinking level `off`), leaving the wire request without a
+ * `reasoning_effort` field. Unlike {@link createCodexMiddleware}, it does not
+ * inject Codex-only options (instructions/store); it only sets reasoning
+ * effort, keyed by the caller-supplied provider id.
+ */
+export function createReasoningEffortMiddleware(
+  providerKey: string,
+  reasoningEffort?: string,
+): LanguageModelMiddleware | undefined {
+  if (!reasoningEffort) return undefined;
+  return {
+    specificationVersion: 'v4',
+    transformParams: async ({ params }) => {
+      params.providerOptions = {
+        ...params.providerOptions,
+        [providerKey]: {
+          ...(params.providerOptions?.[providerKey] ?? {}),
+          reasoningEffort,
+        },
+      } as typeof params.providerOptions;
+
+      return params;
+    },
+  };
+}
+
+/**
  * Get a live OAuth bearer token for the Codex OAuth credential.
  *
  * Refreshes the token if it's expired, and returns the credential's
@@ -132,26 +194,54 @@ async function getCodexBearer(
 
   let cred = storage.get('openai-codex');
   if (!cred || cred.type !== 'oauth') {
-    throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
+    throw ProviderAuthRequiredError.notSignedIn(CODEX_PROVIDER_NAME);
   }
 
   if (storage.getOAuthCredential) {
     cred = await storage.getOAuthCredential('openai-codex');
-    if (!cred) throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
+    if (!cred) throw ProviderAuthRequiredError.signInExpired(CODEX_PROVIDER_NAME);
   } else if (Date.now() >= cred.expires) {
     const refreshedToken = await storage.getApiKey('openai-codex');
-    if (!refreshedToken) {
-      throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
-    }
+    if (!refreshedToken) throw ProviderAuthRequiredError.signInExpired(CODEX_PROVIDER_NAME);
     storage.reload();
     const reloaded = storage.get('openai-codex');
     if (!reloaded || reloaded.type !== 'oauth') {
-      throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
+      throw ProviderAuthRequiredError.notSignedIn(CODEX_PROVIDER_NAME);
     }
     cred = { ...reloaded, access: refreshedToken };
   }
 
   return { accessToken: cred.access, accountId: (cred as any).accountId as string | undefined };
+}
+
+/**
+ * Make a Responses request body safe for Codex's stateless (`store: false`) mode.
+ *
+ * AI SDK replays earlier output items with their server ids (`rs_…`, `msg_…`,
+ * `fc_…`) even when `store` is false. Codex looks those ids up and answers
+ * 404 `Item with id 'rs_…' not found` once its short-lived item cache has
+ * expired, so every later request in the thread fails the same way. Like the
+ * Codex CLI, send items without ids (the encrypted reasoning content carries the
+ * reasoning chain) and drop `item_reference`s, which can never resolve.
+ */
+export function stripCodexInputItemIds(body: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { input?: unknown }).input)) return body;
+  const request = parsed as { store?: unknown; input: unknown[] };
+  if (request.store !== false) return body;
+
+  request.input = request.input.flatMap(item => {
+    if (!item || typeof item !== 'object') return [item];
+    const { id: _id, ...rest } = item as Record<string, unknown>;
+    if (rest.type === 'item_reference') return [];
+    return [rest];
+  });
+  return JSON.stringify(request);
 }
 
 /**
@@ -184,6 +274,12 @@ export function buildOpenAICodexOAuthFetch(
     if (accountId) {
       headers.set('ChatGPT-Account-ID', accountId);
     }
+    // Codex CLI sends its session on every request; send the thread the same way.
+    const threadId = headers.get('x-thread-id');
+    if (threadId) {
+      if (!headers.has('session-id')) headers.set('session-id', threadId);
+      if (!headers.has('thread-id')) headers.set('thread-id', threadId);
+    }
 
     // URL rewriting — only when rewriteUrl !== false
     const parsed = new URL(request.url);
@@ -192,7 +288,17 @@ export function buildOpenAICodexOAuthFetch(
       (parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions'));
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
-    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body;
+    const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
+    // Only JSON bodies are rewritten; anything else (e.g. multipart uploads) streams through untouched.
+    const mediaType = headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+    const isJson = mediaType === 'application/json';
+    let body: RequestInit['body'];
+    if (hasBody && isJson) {
+      body = stripCodexInputItemIds(await request.text());
+      headers.delete('content-length');
+    } else if (hasBody) {
+      body = request.body!;
+    }
     const finalRequest = new Request(finalUrl, {
       method: request.method,
       headers,
@@ -200,10 +306,13 @@ export function buildOpenAICodexOAuthFetch(
       signal: request.signal,
       redirect: request.redirect,
       integrity: request.integrity,
-      ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
+      ...(body instanceof ReadableStream ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {
-      return await fetch(finalRequest);
+      return await rejectUnauthorizedResponse(await fetch(finalRequest), {
+        providerName: CODEX_PROVIDER_NAME,
+        requestUrl: finalUrl.toString(),
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
@@ -422,8 +531,12 @@ export function openaiCodexProvider(
   const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
   const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
   const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-  const middleware = createCodexMiddleware(reasoningEffort);
   const headers = options?.headers;
+  const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(headers));
+  const middleware = [
+    createCodexMiddleware(reasoningEffort),
+    ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : []),
+  ];
 
   const baseURL = process.env.OPENAI_BASE_URL;
 
@@ -436,7 +549,7 @@ export function openaiCodexProvider(
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),
-      middleware: [middleware],
+      middleware,
     });
   }
 
@@ -451,6 +564,6 @@ export function openaiCodexProvider(
   // Wrap with middleware
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: [middleware],
+    middleware,
   });
 }

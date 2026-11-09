@@ -149,6 +149,7 @@ export type SerializableOutputResult = {
   usage: Record<string, unknown>;
   finishReason: string;
   steps: unknown[];
+  inputAccepted?: boolean;
 };
 
 export type ProcessorOutputResultPhaseType = {
@@ -602,6 +603,10 @@ const outputResultSchema = z.object({
   usage: z.record(z.string(), z.unknown()).describe('Token usage (cumulative across all steps)'),
   finishReason: z.string().describe('Why the generation finished'),
   steps: z.array(z.unknown()).describe('All LLM step results'),
+  inputAccepted: z
+    .boolean()
+    .optional()
+    .describe("Whether the run accepted this turn's input before it failed. Set only when finishReason is 'error'"),
 });
 
 export const ProcessorOutputResultPhaseSchema = z.object({

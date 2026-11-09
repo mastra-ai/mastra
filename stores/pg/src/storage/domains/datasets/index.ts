@@ -45,11 +45,12 @@ import type {
 import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
-  return value === undefined || value === null ? null : JSON.stringify(value);
+  return value === undefined || value === null ? null : toPgJson(value);
 }
 
 /** Preserve JSON null as data, rather than converting it to an absent SQL value. */
@@ -450,23 +451,23 @@ export class DatasetsPG extends DatasetsStorage {
       }
       if (args.metadata !== undefined) {
         setClauses.push(`"metadata" = $${paramIndex++}`);
-        values.push(JSON.stringify(args.metadata));
+        values.push(toPgJson(args.metadata));
       }
       if (args.inputSchema !== undefined) {
         setClauses.push(`"inputSchema" = $${paramIndex++}`);
-        values.push(args.inputSchema === null ? null : JSON.stringify(args.inputSchema));
+        values.push(args.inputSchema === null ? null : toPgJson(args.inputSchema));
       }
       if (args.groundTruthSchema !== undefined) {
         setClauses.push(`"groundTruthSchema" = $${paramIndex++}`);
-        values.push(args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema));
+        values.push(args.groundTruthSchema === null ? null : toPgJson(args.groundTruthSchema));
       }
       if (args.requestContextSchema !== undefined) {
         setClauses.push(`"requestContextSchema" = $${paramIndex++}`);
-        values.push(args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema));
+        values.push(args.requestContextSchema === null ? null : toPgJson(args.requestContextSchema));
       }
       if (args.tags !== undefined) {
         setClauses.push(`"tags" = $${paramIndex++}`);
-        values.push(args.tags === null ? null : JSON.stringify(args.tags));
+        values.push(args.tags === null ? null : toPgJson(args.tags));
       }
       if (args.targetType !== undefined) {
         setClauses.push(`"targetType" = $${paramIndex++}`);
@@ -474,11 +475,11 @@ export class DatasetsPG extends DatasetsStorage {
       }
       if (args.targetIds !== undefined) {
         setClauses.push(`"targetIds" = $${paramIndex++}`);
-        values.push(args.targetIds === null ? null : JSON.stringify(args.targetIds));
+        values.push(args.targetIds === null ? null : toPgJson(args.targetIds));
       }
       if (args.scorerIds !== undefined) {
         setClauses.push(`"scorerIds" = $${paramIndex++}`);
-        values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
+        values.push(args.scorerIds === null ? null : toPgJson(args.scorerIds));
       }
       // Tenancy (organizationId, projectId) and candidate identity (candidateKey,
       // candidateId) are immutable after creation — they're not part of UpdateDatasetInput.
@@ -602,7 +603,13 @@ export class DatasetsPG extends DatasetsStorage {
       let paramIndex = 1;
 
       if (args.filters) {
-        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, datasetIds, name } =
+          args.filters;
+        if (datasetIds !== undefined) {
+          // = ANY of an empty array is false, so [] matches no datasets.
+          conditions.push(`"id" = ANY($${paramIndex++}::text[])`);
+          queryParams.push(datasetIds);
+        }
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);
@@ -982,7 +989,7 @@ export class DatasetsPG extends DatasetsStorage {
         schemaName: getSchemaName(this.#schema),
       });
       const purgedAt = new Date().toISOString();
-      const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
+      const purgedMetadata = toPgJson({ __purged: true, purgedAt });
 
       await this.#db.client.tx(async t => {
         const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);

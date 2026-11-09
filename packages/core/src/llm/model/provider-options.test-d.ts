@@ -1,7 +1,25 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { ProviderOptions } from './provider-options';
+import type { DeepSeekChatOptions, DeepSeekProviderOptions, ProviderOptions } from './provider-options';
 
 describe('ProviderOptions type tests', () => {
+  it('accepts current and runtime-supported legacy DeepSeek options', () => {
+    const current: DeepSeekProviderOptions = {
+      thinking: { type: 'enabled' },
+      reasoningEffort: 'max',
+      userId: 'user-1',
+      logprobs: true,
+      topLogprobs: 5,
+    };
+    const legacy: DeepSeekChatOptions = { thinking: { type: 'adaptive' }, reasoningEffort: 'xhigh' };
+    const options: ProviderOptions = { deepseek: { ...current, ...legacy, reasoningEffort: 'medium' } };
+
+    expectTypeOf(current).toExtend<DeepSeekChatOptions>();
+    expectTypeOf(options).toExtend<ProviderOptions>();
+    expectTypeOf<DeepSeekProviderOptions['reasoningEffort']>().toEqualTypeOf<
+      'low' | 'medium' | 'high' | 'xhigh' | 'max' | undefined
+    >();
+  });
+
   it('accepts Azure Responses WebSocket options with Responses continuation options', () => {
     const options: ProviderOptions = {
       azure: {

@@ -3,28 +3,13 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ArrivalScope } from '../Arrival';
 import { TooltipProvider } from '../Tooltip';
 import { MarkdownRenderer } from './markdown-renderer';
 import { useRevealedText } from './use-reveal';
-import { highlight } from '@/ds/components/CodeEditor/highlight';
-
-vi.mock('@/ds/components/CodeEditor/highlight', () => ({
-  highlight: vi.fn(async () => [
-    [
-      {
-        content: 'const',
-        htmlStyle: {
-          '--shiki-light': '#24292f',
-          '--shiki-dark': '#c9d1d9',
-        },
-      },
-    ],
-  ]),
-}));
 
 afterEach(() => {
   cleanup();
@@ -57,24 +42,20 @@ describe('MarkdownRenderer', () => {
       </TooltipProvider>,
     );
 
-    const token = await screen.findByText('const');
+    await waitFor(() => expect(screen.getByText('const').className).toBe('syntax-keyword'));
 
-    expect(token.classList.contains('shiki-token')).toBe(true);
-    expect(token.style.getPropertyValue('--shiki-light')).toBe('#24292f');
-    expect(token.style.getPropertyValue('--shiki-dark')).toBe('#c9d1d9');
-    expect(token.closest('pre')).not.toBeNull();
+    expect(screen.getByText('const').closest('pre')).not.toBeNull();
   });
 
-  it('tells the highlighter which language the fence named', async () => {
+  it('highlights a fence in the language it named', async () => {
     render(
       <TooltipProvider>
-        <MarkdownRenderer>{'```typescript\nconst ok = true;\n```'}</MarkdownRenderer>
+        <MarkdownRenderer>{'```python\ndef ok():\n    pass\n```'}</MarkdownRenderer>
       </TooltipProvider>,
     );
 
-    await screen.findByText('const');
-
-    expect(vi.mocked(highlight)).toHaveBeenCalledWith('const ok = true;', 'typescript');
+    // `def` is only a keyword in Python; read as TypeScript it would be a plain name.
+    await waitFor(() => expect(screen.getByText('def').className).toBe('syntax-keyword'));
   });
 
   it('shows a fence that names no language as plain text', () => {
@@ -85,19 +66,21 @@ describe('MarkdownRenderer', () => {
     );
 
     expect(container.textContent).toContain('const ok = true;');
-    expect(container.querySelector('.shiki-token')).toBeNull();
+    expect(container.querySelector('[class^="syntax-"]')).toBeNull();
   });
 
   it('keeps every line of a fenced block, dropping only the trailing break', async () => {
-    render(
+    const { container } = render(
       <TooltipProvider>
         <MarkdownRenderer>{'```typescript\nconst a = 1;\nconst b = 2;\n```'}</MarkdownRenderer>
       </TooltipProvider>,
     );
 
-    await screen.findByText('const');
+    await waitFor(() =>
+      expect(screen.getAllByText('const').map(token => token.className)).toEqual(['syntax-keyword', 'syntax-keyword']),
+    );
 
-    expect(vi.mocked(highlight)).toHaveBeenCalledWith('const a = 1;\nconst b = 2;', 'typescript');
+    expect(container.querySelector('pre')?.textContent).toBe('const a = 1;\nconst b = 2;');
   });
 
   it('understands the GitHub flavour of markdown', () => {
@@ -138,7 +121,7 @@ describe('MarkdownRenderer', () => {
 
     expect(inline.tagName).toBe('CODE');
     expect(inline.closest('pre')).toBeNull();
-    expect(inline.querySelector('.shiki-token')).toBeNull();
+    expect(inline.querySelector('[class^="syntax-"]')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Copy to clipboard' })).toBeNull();
   });
 
@@ -284,7 +267,7 @@ describe('MarkdownRenderer', () => {
 
   it('reveals a streamed reply a word at a time', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'Two **bold** words here'} />);
+    const { container } = render(<Streamed text="Two **bold** words here" />);
 
     expect(container.textContent).toBe('');
 
@@ -298,7 +281,7 @@ describe('MarkdownRenderer', () => {
   it('never remounts a word that has landed, however far the reply runs past it', () => {
     vi.useFakeTimers();
     const reply = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
-    const { container, rerender } = render(<Streamed text={'word0'} />);
+    const { container, rerender } = render(<Streamed text="word0" />);
     const held = (text: string) => [...container.querySelectorAll('span')].find(node => node.textContent === text);
 
     rerender(<Streamed text={reply} />);
@@ -353,9 +336,9 @@ describe('MarkdownRenderer', () => {
 
   it('stops animating a word once its entrance is over', () => {
     vi.useFakeTimers();
-    const { container, rerender } = render(<Streamed text={''} />);
+    const { container, rerender } = render(<Streamed text="" />);
 
-    rerender(<Streamed text={'Two words here'} />);
+    rerender(<Streamed text="Two words here" />);
     arrive(container, 'here');
 
     expect(container.querySelectorAll('.mastra-arriving').length).toBeGreaterThan(0);
@@ -367,9 +350,9 @@ describe('MarkdownRenderer', () => {
 
   it('never lands a word twice when the markdown around it is rebuilt', () => {
     vi.useFakeTimers();
-    const { container, rerender } = render(<Streamed text={''} />);
+    const { container, rerender } = render(<Streamed text="" />);
 
-    rerender(<Streamed text={'Two words here'} />);
+    rerender(<Streamed text="Two words here" />);
     arrive(container, 'here');
     settle();
 
@@ -382,7 +365,7 @@ describe('MarkdownRenderer', () => {
 
   it('fades inline code in whole rather than a letter at a time', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'Run `npm i` now'} />);
+    const { container } = render(<Streamed text="Run `npm i` now" />);
 
     arrive(container, 'now');
 
@@ -445,7 +428,7 @@ describe('MarkdownRenderer', () => {
 
   it('closes a marker the stream has not caught up with', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'A **bold wo'} />);
+    const { container } = render(<Streamed text="A **bold wo" />);
 
     arrive(container, 'wo');
 
@@ -454,7 +437,7 @@ describe('MarkdownRenderer', () => {
 
   it('renders a half-written link as its text rather than a dead anchor', () => {
     vi.useFakeTimers();
-    const { container } = render(<Streamed text={'See [the docs](https://mastra'} />);
+    const { container } = render(<Streamed text="See [the docs](https://mastra" />);
 
     arrive(container, 'docs');
 

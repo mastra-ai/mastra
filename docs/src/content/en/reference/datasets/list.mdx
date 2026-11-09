@@ -35,6 +35,12 @@ const filtered = await mastra.datasets.list({
 const forAgents = await mastra.datasets.list({
   filters: { targetIds: ['agent-a', 'agent-b'] },
 })
+
+// Fetch specific datasets by ID, all on one page
+const byId = await mastra.datasets.list({
+  perPage: false,
+  filters: { datasetIds: ['dataset-1', 'dataset-2'] },
+})
 ```
 
 ## Parameters
@@ -49,9 +55,9 @@ const forAgents = await mastra.datasets.list({
   },
   {
     name: 'perPage',
-    type: 'number',
+    type: 'number | false',
     isOptional: true,
-    description: 'Number of datasets per page. Defaults to `20`.',
+    description: 'Number of datasets per page, or `false` to return every match on one page. Defaults to `20`.',
   },
   {
     name: 'filters',
@@ -98,6 +104,13 @@ const forAgents = await mastra.datasets.list({
             isOptional: true,
             description:
               'Restrict to datasets whose `targetIds` intersect this list (any-overlap match). Empty array is treated as no filter.',
+          },
+          {
+            name: 'datasetIds',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              'Restrict to datasets with these IDs. Empty array matches no datasets. Pass `perPage: false` to get every match on one page.',
           },
           {
             name: 'name',

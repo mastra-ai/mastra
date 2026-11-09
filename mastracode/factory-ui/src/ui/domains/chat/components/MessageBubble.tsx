@@ -1,37 +1,57 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
 import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
+import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/message-attachments';
+import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
+import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
+import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
+import { PinnedKnowledgeActivity } from '@mastra/playground-ui/domains/chat/knowledge';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
+import { replyCredentialLabel } from '../services/reply-credential';
+import type { ThreadOwner } from '../services/reply-credential';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
-import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
+import { SignalActivity } from '@mastra/playground-ui/components/ai/activity';
+import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
+import {
+  Message,
+  MessageActions,
+  MessageCopyButton,
+  MessageMetadata,
+  MessageTimestamp,
+} from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
-import { parseSkillActivation, SkillMessage } from './SkillMessage';
+import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
-import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
-import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
 import {
-  isSkillNotificationSignal,
-  notificationMetadata,
-  NotificationCard,
-  NotificationSummaryCard,
-} from './TranscriptNotifications';
-import {
-  HIDDEN_REACTIVE_SIGNAL_TAGS,
-  SignalRow,
-  signalRowView,
-  SUPPRESSED_STATE_SIGNAL_IDS,
-  TimeGap,
-} from './TranscriptSignals';
+  draws,
+  hasVisibleText,
+  messageText,
+  reasoningWithState,
+  renderableParts,
+  toolFromInvocationPart,
+} from './transcript-parts';
+import type { MessagePart } from './transcript-parts';
+import { HostedStretch } from './activity/HostedStretch';
+import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
+import type { EntryActivity } from './activity/activity-plan';
+import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
+import { useTurnLanded } from './TurnReveal';
+import { messageEntryView } from './message-entry-view';
+import type { StatusMetadata } from './message-entry-view';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -40,10 +60,18 @@ function steeringLabel(entry: MessageEntry): string | undefined {
   return 'Steered message';
 }
 
-function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
+function metaText(entry: MessageEntry, prose: string, settled: boolean, reply?: string): string | undefined {
   if (entry.message.role === 'user') return prose || undefined;
 
-  return entry.streaming ? undefined : reply;
+  return settled ? reply : undefined;
+}
+
+/** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
+function withLiveHost(entryId: string, written: MessagePart[], paced: MessagePart[], activity: EntryActivity) {
+  const host = written.findIndex(
+    (part, index) => index >= paced.length && activity.hosts.get(activityPartKey(entryId, part, index))?.live,
+  );
+  return host === -1 ? paced : [...paced, written[host]];
 }
 
 export function MessageBubble({
@@ -53,6 +81,8 @@ export function MessageBubble({
   isSubmitting,
   onRespond,
   viewerId,
+  owner,
+  activity = NO_ACTIVITY,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -60,21 +90,61 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
+  owner?: ThreadOwner;
+  /** The stretches of tool work this entry hosts, and the parts an earlier entry's stretch draws instead. */
+  activity?: EntryActivity;
 }) {
   const written = renderableParts(entry);
-  const parts = useRevealedParts(written, Boolean(entry.streaming));
-  const message = { ...entry.message, content: { ...entry.message.content, parts } };
-  const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
+  const paced = useRevealedParts(written, Boolean(entry.streaming));
+  const parts = withLiveHost(entry.id, written, paced, activity);
+  const { attachments, content } =
+    entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
+  const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
+  const hasRenderablePart = written.some(part => draws(part, entry, suspensions));
+  const drawsOwnPart = written.some((part, index) => {
+    const key = activityPartKey(entry.id, part, index);
+    if (activity.hosts.has(key)) return true;
+    return draws(part, entry, suspensions) && !activity.hidden.has(key);
+  });
+  const revealed = new Map<string, MessagePart>(
+    paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),
+  );
+  const keyed = (list: MessagePart[]) =>
+    list.map((part, index) => [part, activityPartKey(entry.id, part, index)] as const);
+  const keyOfPart = new Map<object, string>([...keyed(written), ...keyed(paced)]);
 
-  const toolGroups = collectToolGroups(parts, suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
-  const prose = messageText(written);
-  const meta = metaText(entry, prose, reply);
+  const prose = messageText(entry.message.role === 'user' ? content : written);
+  const settled = !entry.streaming && paced === written;
+  const turnLanded = useTurnLanded(entry.id, !settled);
+  const meta = metaText(entry, prose, settled && turnLanded, reply);
+  const showsReplyFooter = Boolean(meta);
+  const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
+  const metadata = entry.message.content.metadata;
+  const modelId = typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = modelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
+  const modelLabel = modelId && (
+    <MessageMetadata>
+      <Metadata>
+        <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
+        {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
+      </Metadata>
+    </MessageMetadata>
+  );
+  const replyFooter = (text: string) => ({
+    model: modelLabel,
+    actions: (
+      <MessageActions>
+        <MessageCopyButton text={text} />
+        <MessageTimestamp value={entry.message.createdAt} />
+      </MessageActions>
+    ),
+  });
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -86,45 +156,59 @@ export function MessageBubble({
       <Message
         from="user"
         pending={steeringPending}
-        avatar={sender && <SenderAvatar author={sender} />}
+        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
+        avatar={!origin && sender && <SenderAvatar author={sender} />}
         footer={
           <>
             {steeringStatus && (
-              <span
-                className={cn('text-meta text-muted-foreground', steeringFailed && 'text-notice-destructive-fg')}
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                className={cn(steeringFailed && 'text-destructive-foreground')}
                 aria-live="polite"
               >
                 {steeringStatus}
-              </span>
+              </Txt>
             )}
-            {origin && <ChannelOriginBadge origin={origin} />}
+            {origin && <ChannelOriginBadge origin={origin} author={author} />}
             {messageActions}
           </>
+        }
+      >
+        {(attachments.length === 0 || content.length > 0) && children}
+      </Message>
+    ),
+    Assistant: ({ children }) => (
+      <Message
+        from="assistant"
+        footer={
+          messageActions && (
+            <div className="flex flex-wrap items-center gap-2">
+              {modelLabel}
+              {messageActions}
+            </div>
+          )
         }
       >
         {children}
       </Message>
     ),
-    Assistant: ({ children }) => (
-      <Message from="assistant" footer={messageActions}>
-        {children}
-      </Message>
-    ),
-    System: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
-    Signal: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
+    System: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
+    Signal: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
   };
 
   const renderers = {
-    Error: (part: MastraErrorPart) => (
-      <Notice variant="destructive" title={part.error.name ?? 'Error'}>
-        <Notice.Message>{part.error.message}</Notice.Message>
-      </Notice>
-    ),
+    Error: (part: MastraErrorPart) => <RunErrorNotice error={part.error} entryId={entry.id} />,
     Text: (part: TextPart) => {
-      if (!part.text.trim()) return null;
+      if (!hasVisibleText(part.text)) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        return activation ? (
+          <SkillMessage activation={activation} appearance="inline" />
+        ) : (
+          <MarkdownRenderer>{part.text}</MarkdownRenderer>
+        );
       }
 
       return (
@@ -133,27 +217,18 @@ export function MessageBubble({
         </MarkdownRenderer>
       );
     },
-    Reasoning: (part: ReasoningPart) => (
-      <ReasoningPartRenderer part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }} />
-    ),
+    Reasoning: (part: ReasoningPart) => {
+      const key = keyOfPart.get(part);
+      const stretch = key === undefined ? undefined : activity.hosts.get(key);
+      if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
+      if (key !== undefined && activity.hidden.has(key)) return null;
+      return <ReasoningPartRenderer part={reasoningWithState(part, Boolean(entry.streaming))} defaultOpen={false} />;
+    },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
-      const group = toolGroups.byFirstKey.get(toolCallId);
-      if (group) {
-        const tools = group.map(member =>
-          toolFromInvocationPart(
-            member,
-            entry.runtimeTools?.[member.toolInvocation.toolCallId],
-            entry.message.createdAt,
-          ),
-        );
-        return (
-          <Arriving>
-            <ToolGroup tools={tools} />
-          </Arriving>
-        );
-      }
-      if (toolGroups.memberKeys.has(toolCallId)) return null;
+      const stretch = activity.hosts.get(toolCallId);
+      if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
+      if (activity.hidden.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);
@@ -164,6 +239,8 @@ export function MessageBubble({
             toolName={tool.toolName}
             toolCallId={tool.toolCallId}
             input={suspension?.suspendPayload ?? tool.args}
+            argsText={tool.argsText}
+            replyFooter={replyFooter}
             output={tool.result}
             status={suspension ? 'running' : tool.status}
             isSubmitting={isSubmitting}
@@ -176,94 +253,57 @@ export function MessageBubble({
     File: (part: FilePart) => <UserFilePartRenderer part={part} />,
   };
 
-  const skillActivation =
-    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
-      ? parseSkillActivation(parts[0].text)
-      : undefined;
-  if (skillActivation) {
-    return skillActivation.feed === undefined ? (
-      <SkillMessage activation={skillActivation} />
-    ) : (
-      <div className="flex flex-col">
-        <SkillMessage activation={skillActivation} />
-        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
-      </div>
-    );
-  }
-  if (isSkillNotificationSignal(entry)) return null;
-
-  const notifications = notificationMetadata(entry);
-  if (notifications.length > 0) {
-    return (
-      <div className="flex flex-col">
-        {notifications.map(notification =>
-          notification.kind === 'notification' ? (
-            <NotificationCard key={notification.id} entry={notification} />
-          ) : (
-            <NotificationSummaryCard key={notification.id} entry={notification} />
-          ),
-        )}
-        {hasRenderablePart && entry.message.role !== 'signal' && (
-          <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
-        )}
-      </div>
-    );
-  }
-
-  const signalRow = signalRowView(entry);
-  if (signalRow) {
-    if (signalRow.kind === 'state') {
-      if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
+  const view = messageEntryView(entry, parts);
+  switch (view.kind) {
+    case 'skill':
+      return <SkillMessage activation={view.activation} appearance="inline" />;
+    case 'hidden':
+      return null;
+    case 'notifications':
       return (
-        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
+        <div className="flex flex-col">
+          {view.notifications.map(notification =>
+            notification.kind === 'notification' ? (
+              <NotificationCard key={notification.id} entry={notification} />
+            ) : (
+              <NotificationSummaryCard key={notification.id} entry={notification} />
+            ),
+          )}
+          {hasRenderablePart && entry.message.role !== 'signal' && (
+            <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
+          )}
+        </div>
       );
+    case 'signal': {
+      const { row } = view;
+      if (row.kind === 'pinned') return <PinnedKnowledgeActivity pinned={row.pinned} />;
+      if (row.kind === 'state') {
+        return (
+          <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
+        );
+      }
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
+      if (row.kind === 'reminder') {
+        return (
+          <SignalActivity
+            kind="reminder"
+            label={row.loadedFile ? 'Project instructions' : 'System reminder'}
+            detail={row.loadedFile}
+            message={row.text}
+            appearance="inline"
+          />
+        );
+      }
+      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} appearance="inline" />;
     }
-    if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
-    if (signalRow.kind === 'reminder') {
-      return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
-    }
-    if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
-    return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+    case 'status':
+      return <StatusMetadataCard status={view.status} />;
+    case 'parts':
+      break;
   }
-
-  const status = statusMetadata(entry);
-  if (status?.text.trim()) return <StatusMetadataCard status={status} />;
-  if (!hasRenderablePart) return null;
+  if (!drawsAnything) return null;
 
   return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
-}
-
-interface StatusMetadata {
-  id: string;
-  text: string;
-  level: 'info' | 'error';
-}
-
-function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
-  const harnessContent = entry.message.content.metadata?.harnessContent;
-  if (!Array.isArray(harnessContent)) return undefined;
-
-  const statusPart = harnessContent.find(
-    part =>
-      typeof part === 'object' &&
-      part !== null &&
-      'type' in part &&
-      typeof part.type === 'string' &&
-      (part.type === 'notification_summary' || part.type.startsWith('om_') || part.type === 'harness-error'),
-  );
-  if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
-
-  const text =
-    'text' in statusPart && typeof statusPart.text === 'string'
-      ? statusPart.text
-      : 'message' in statusPart && typeof statusPart.message === 'string'
-        ? statusPart.message
-        : '';
-  return {
-    id: `${entry.id}-${String(statusPart.type)}`,
-    text,
-    level: statusPart.type === 'harness-error' ? 'error' : 'info',
-  };
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {

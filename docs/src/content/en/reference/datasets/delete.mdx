@@ -1,6 +1,6 @@
 ---
 title: "Reference: DatasetsManager.delete() | Datasets"
-description: "Use DatasetsManager.delete() to remove a dataset by ID together with its items, versions, experiments, and associated stored records."
+description: "Use DatasetsManager.delete() to remove a dataset by ID together with its items and versions, detaching any experiments that reference it."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Deletes a dataset by ID, including all items, versions, and experiments.
+Deletes a dataset by ID, including all of its items and versions. Experiments that ran against the dataset are kept but detached: their `datasetId` and `datasetVersion` are set to `null`. Database-backed storage adapters also remove the results of those experiments.
 
 ## Usage example
 
@@ -21,6 +21,8 @@ const mastra = new Mastra({/* storage config */})
 await mastra.datasets.delete({ id: 'dataset-id' })
 ```
 
+When `organizationId` or `projectId` is provided, deletion is scoped to those values. A tenancy mismatch is a silent no-op.
+
 ## Parameters
 
 <PropertiesTable
@@ -29,6 +31,18 @@ await mastra.datasets.delete({ id: 'dataset-id' })
     name: 'id',
     type: 'string',
     description: 'ID of the dataset to delete.',
+  },
+  {
+    name: 'organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the deletion.',
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the deletion.',
   },
 ]}
 />

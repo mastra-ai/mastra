@@ -1,9 +1,11 @@
 /**
- * Execute subagent — focused task execution with write capabilities.
+ * Build mode — interactive task execution with write capabilities.
  *
- * This subagent is given a specific implementation task and uses both
- * read and write tools to complete it. It can modify files, run commands,
- * and perform actual development work within a constrained scope.
+ * The default top-level mode for implementing features, fixing bugs, and
+ * making changes directly in conversation with the user. Full read/write
+ * access within the task's scope. (Not to be confused with the separate
+ * `executeSubagent`, which has its own concise, parent-reporting
+ * instructions for when work is delegated to a sub-agent.)
  */
 import type { AgentControllerMode } from '@mastra/core/agent-controller';
 
@@ -17,11 +19,11 @@ export const buildMode: AgentControllerMode = {
 ## Rules
 - You have FULL ACCESS to read, write, and execute within your task scope.
 - Stay focused on the specific task given. Do not make unrelated changes.
-- Read files before modifying them — use view first, then string_replace_lsp or write_file.
+- Understand the relevant code before modifying it, then use string_replace_lsp or write_file.
 - Verify your changes work by running relevant tests or checking for errors.
 
 ## Tool Strategy
-- **Read first**: Always view a file before editing it
+- **Understand first**: Know what a file contains before editing it, however you read it
 - **Edit precisely**: Use string_replace_lsp with enough context to match uniquely
 - **Use specialized tools**: Prefer view/search_content/find_files over shell commands for reading
 - **Parallelize**: Make independent tool calls together (e.g., view multiple files at once)
@@ -31,19 +33,6 @@ export const buildMode: AgentControllerMode = {
 . For complex tasks (3+ steps): track progress internally and summarize it in your final answer
 . Make changes incrementally — verify each change before moving on
 . Run tests or type-check to verify
-
-## Efficiency
-Your output returns to the parent agent. Be concise:
-- Don't repeat file contents in your response
-- Summarize what changed, don't narrate each step
-- Keep your final summary under 300 words
-
-## Output Format
-End with a structured summary:
-. **Completed**: What you implemented (1-2 sentences)
-. **Changes**: Files modified/created
-. **Verification**: How you verified it works
-. **Notes**: Follow-up needed (if any)
 
 ## Workflows
 - To build a workflow: call \`create-workflow\` with the user's request verbatim. A focused sub-agent handles discovery, composition, and saving — don't try to do it inline.

@@ -24,7 +24,7 @@ export {
   useStoredPromptBlocks,
   useStoredPromptBlock,
   useStoredPromptBlockMutations,
-} from './hooks/use-stored-prompt-blocks';
+} from '@mastra/react/hooks/prompt-blocks';
 export {
   usePromptBlockVersions,
   usePromptBlockVersion,
@@ -32,4 +32,4 @@ export {
   useActivatePromptBlockVersion,
   useRestorePromptBlockVersion,
   useDeletePromptBlockVersion,
-} from './hooks/use-prompt-block-versions';
+} from '@mastra/react/hooks/prompt-blocks';

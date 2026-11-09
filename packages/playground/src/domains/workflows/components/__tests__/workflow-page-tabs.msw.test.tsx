@@ -1,9 +1,9 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,18 +16,13 @@ import {
   weatherWorkflow,
 } from '../../__tests__/fixtures/workflow';
 import { WorkflowLayout } from '../../workflow-layout';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
+import { paths } from '@/lib/app-routing';
+import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-  <a {...props}>{children}</a>
-);
-
 const navigateSpy = vi.fn();
-const noopPaths = {} as unknown as LinkComponentProviderProps['paths'];
 
 function renderLayout(initialEntry = `/workflows/${WORKFLOW_ID}/traces`) {
   const queryClient = new QueryClient({
@@ -37,7 +32,7 @@ function renderLayout(initialEntry = `/workflows/${WORKFLOW_ID}/traces`) {
   const view = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
+        <LinkComponentProvider Link={Link} navigate={navigateSpy} paths={paths}>
           <TooltipProvider>
             <MemoryRouter initialEntries={[initialEntry]}>
               <Routes>
@@ -239,7 +234,7 @@ describe('WorkflowPageTabs', () => {
       const schedules = await screen.findByRole('tab', { name: 'Schedules' });
 
       expect(schedules.getAttribute('aria-selected')).toBe('true');
-      expect(screen.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
+      expect((await screen.findByRole('tab', { name: 'Traces' })).getAttribute('aria-selected')).toBe('false');
     });
   });
 

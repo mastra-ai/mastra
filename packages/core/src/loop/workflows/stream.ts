@@ -10,33 +10,76 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
+import { ChunkFrom, isDataChunk } from '../../stream/types';
+import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
-  resumeContext,
-  requireToolApproval,
-  models,
-  toolChoice,
-  modelSettings,
-  _internal,
-  messageId,
-  runId,
-  messageList,
-  startTimestamp,
-  streamState,
-  agentId,
-  toolCallId,
-  toolCallConcurrency,
-  ...rest
-}: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async controller => {
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
+  {
+    resumeContext,
+    requireToolApproval,
+    models,
+    toolChoice,
+    modelSettings,
+    _internal,
+    messageId,
+    runId,
+    messageList,
+    startTimestamp,
+    streamState,
+    agentId,
+    toolCallId,
+    toolCallConcurrency,
+    streamPublisher,
+    ...rest
+  }: LoopRun<Tools, OUTPUT>,
+  finalization?: { register: (cleanup: () => Promise<void>) => void },
+) {
+  let finishQueued = false;
+  let terminalErrorReported = false;
+  const reportTerminalTracingError = (error: unknown) => {
+    if (finishQueued || terminalErrorReported) return;
+    terminalErrorReported = true;
+    try {
+      rest.onTracingTerminalError?.(getErrorFromUnknown(error));
+    } catch {
+      // Optional tracing must not replace the stream's original failure.
+    }
+  };
+  const loopSource = {
+    start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
+      // Stamp chunks when the loop produces them; consumers may read them much later.
+      const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
+        enqueue: chunk => {
+          if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+          streamController.enqueue(chunk);
+          streamPublisher?.publish(chunk);
+        },
+        close: () => {
+          try {
+            streamController.close();
+          } finally {
+            void streamPublisher?.close();
+          }
+        },
+        error: reason => {
+          try {
+            streamController.error(reason);
+          } finally {
+            void streamPublisher?.fail(reason);
+          }
+        },
+        get desiredSize() {
+          return streamController.desiredSize;
+        },
+      };
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
 
@@ -54,6 +97,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent: rest.agent,
             processorStates: dataChunkProcessorStates,
           })
         : undefined;
@@ -66,7 +110,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             writerOptions?: { messageId?: string },
           ) => {
             const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
-            if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
+            if (isDataChunk(data) && emittedMessageId && !data.transient) {
               // Persistence failures must not drop the frame from the stream —
               // delivery to the client takes priority over saving to memory.
               try {
@@ -95,12 +139,58 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           },
         };
 
+        const enqueueTripwire = (
+          reason: string | undefined,
+          tripwireOptions: { retry?: unknown; metadata?: unknown } | undefined,
+          processorId: string | undefined,
+        ) => {
+          safeEnqueue(controller, {
+            type: 'tripwire',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              reason: reason || 'Output processor blocked content',
+              retry: tripwireOptions?.retry,
+              metadata: tripwireOptions?.metadata,
+              processorId,
+            },
+          } as ChunkType<OUTPUT>);
+        };
+
+        // Emit parts a processor stashed for reprocessing (e.g. the non-text part
+        // that triggered a BatchPartsProcessor flush). Leaving them stashed lets
+        // them leak into the next step — after a retried mid-stream error that
+        // surfaces a stray step-finish on an already-consumed step output.
+        const drainReprocessed = async () => {
+          const reprocessed = await dataChunkProcessorRunner!.drainReprocessParts(
+            dataChunkProcessorStates! as Map<string, ProcessorState<OUTPUT>>,
+            undefined,
+            requestContext,
+            messageList,
+            0,
+            dataChunkStreamWriter,
+          );
+          for (const r of reprocessed) {
+            if (r.blocked) {
+              enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+              return;
+            }
+            if (r.part == null) continue;
+            const part = r.part as ChunkType<OUTPUT>;
+            if (isDataChunk(part)) {
+              await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
+            } else {
+              safeEnqueue(controller, part);
+            }
+          }
+        };
+
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
-        if (chunk.type.startsWith('data-')) {
+        if (isDataChunk(chunk)) {
           // Run data-* chunks through output processors before persisting
-          let processedChunk = chunk;
+          let processedChunk: ChunkType<OUTPUT> = chunk;
           if (dataChunkProcessorRunner) {
             const {
               part: processed,
@@ -119,31 +209,21 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             );
 
             if (blocked) {
-              safeEnqueue(controller, {
-                type: 'tripwire',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  reason: reason || 'Output processor blocked content',
-                  retry: tripwireOptions?.retry,
-                  metadata: tripwireOptions?.metadata,
-                  processorId,
-                },
-              } as ChunkType<OUTPUT>);
+              enqueueTripwire(reason, tripwireOptions, processorId);
               return;
             }
 
             if (processed) {
               processedChunk = processed as ChunkType<OUTPUT>;
             } else {
+              await drainReprocessed();
               return;
             }
           }
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
           if (
-            typeof processedChunk.type === 'string' &&
-            processedChunk.type.startsWith('data-') &&
+            isDataChunk(processedChunk) &&
             responseMessageId &&
             !('transient' in processedChunk && processedChunk.transient)
           ) {
@@ -175,6 +255,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           safeEnqueue(controller, processedChunk);
+          if (dataChunkProcessorRunner) await drainReprocessed();
           return;
         }
 
@@ -201,22 +282,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           );
 
           if (blocked) {
-            safeEnqueue(controller, {
-              type: 'tripwire',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                reason: reason || 'Output processor blocked content',
-                retry: tripwireOptions?.retry,
-                metadata: tripwireOptions?.metadata,
-                processorId,
-              },
-            } as ChunkType<OUTPUT>);
+            enqueueTripwire(reason, tripwireOptions, processorId);
             return;
           }
 
-          if (!processed) return;
-          safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          if (processed) safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          await drainReprocessed();
           return;
         }
 
@@ -237,9 +308,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         timeoutType: 'total',
       });
 
-      const restWithTimeoutSignal = totalTimeoutPromise
-        ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } }
-        : rest;
+      // A run-owned signal linked to the caller's. Callers often reuse one long-lived signal
+      // across many runs, so run internals listen here rather than on the caller's signal;
+      // the single link back is removed in the `finally` below. Tools and sub-agents still
+      // receive the caller's signal unchanged through `options.abortSignal`.
+      const upstreamAbortSignal = totalTimeoutPromise ? totalTimeoutSignal : rest.options?.abortSignal;
+      const runAbortController = upstreamAbortSignal ? new AbortController() : undefined;
+      const onUpstreamAbort = () => runAbortController?.abort(upstreamAbortSignal?.reason);
+      if (upstreamAbortSignal?.aborted) {
+        onUpstreamAbort();
+      } else {
+        upstreamAbortSignal?.addEventListener('abort', onUpstreamAbort, { once: true });
+      }
+
+      const restWithTimeoutSignal = {
+        ...(totalTimeoutPromise ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } } : rest),
+        runAbortSignal: runAbortController?.signal,
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -274,6 +359,30 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // refcount is owned by the internal-workflow registration above —
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
+        // A scope kept alive across suspension still holds the previous request's step tools,
+        // which close over that request's requestContext. Let the tools built for this call
+        // replace the ones the previous request configured, but keep the ones a processor added
+        // or swapped in, since the suspended call may be one of them and the processors do not
+        // run again before it resumes. Processor-added tools are rebuilt for this call's
+        // requestContext instead, so an approved one runs with the approver's context (#27544).
+        const runScope = rest.mastra.__getRunScope(runId);
+        const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
+        if (previousStepTools) {
+          const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
+          const stepTools = rebindProcessorTools({ ...previousStepTools }, requestContext);
+          for (const [name, tool] of Object.entries(rest.tools ?? {})) {
+            // A name the previous request configured but the step tools lack was withheld by a processor.
+            const refresh =
+              name in previousStepTools
+                ? previousStepTools[name] === previousRequestTools?.[name]
+                : !previousRequestTools || !(name in previousRequestTools);
+            if (refresh) {
+              stepTools[name] = tool;
+            }
+          }
+          runScope!.set(STEP_TOOLS_KEY, stepTools);
+        }
+        if (rest.tools) runScope?.set(REQUEST_TOOLS_KEY, rest.tools);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer
@@ -361,20 +470,32 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
         }
 
-        const executionPromise = resumeContext
-          ? run.resume({
+        await resumeContext?.claim?.start?.();
+
+        const executionPromise = resumeContext?.claim?.snapshot
+          ? run.resumeClaimed({
               resumeData: resumeContext.resumeData,
               ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
               requestContext,
               actor: rest.actor,
               label: toolCallId,
+              claimedSnapshot: resumeContext.claim.snapshot,
+              onExecutionStarted: resumeContext.claim.onExecutionStarted,
             })
-          : run.start({
-              inputData: initialData,
-              ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
-              requestContext,
-              actor: rest.actor,
-            });
+          : resumeContext
+            ? run.resume({
+                resumeData: resumeContext.resumeData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+                label: toolCallId,
+              })
+            : run.start({
+                inputData: initialData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+              });
 
         let executionResult: Awaited<typeof executionPromise>;
         try {
@@ -400,7 +521,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: { error },
           });
 
-          await rest.options?.onError?.({ error });
+          try {
+            await rest.options?.onError?.({ error });
+          } finally {
+            reportTerminalTracingError(error);
+          }
           await deleteRunSnapshots();
           safeClose(controller);
           return;
@@ -419,8 +544,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               payload: { error },
             });
 
-            if (rest.options?.onError) {
+            try {
               await rest.options?.onError?.({ error });
+            } finally {
+              reportTerminalTracingError(error);
             }
           }
 
@@ -434,12 +561,18 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           return;
         }
 
-        await deleteRunSnapshots();
+        // Enqueuing finish does not await the agent's final memory save. Hand successful
+        // cleanup to the output's awaited finish lifecycle; bails retain immediate cleanup.
+        if (finalization && executionResult.result.stepResult.reason !== 'tripwire' && !upstreamAbortSignal?.aborted) {
+          finalization.register(deleteRunSnapshots);
+        } else {
+          await deleteRunSnapshots();
+        }
 
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
         // The tripwire/abort status is communicated through the stepResult.reason
-        safeEnqueue(controller, {
+        finishQueued = safeEnqueue(controller, {
           type: 'finish',
           runId,
           from: ChunkFrom.AGENT,
@@ -447,7 +580,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...executionResult.result,
             stepResult: {
               ...executionResult.result.stepResult,
-              // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
+              // runtime reason can be 'tripwire' | 'retry' from processors
               reason: executionResult.result.stepResult.reason,
             },
           },
@@ -455,12 +588,38 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        // The run is over, so close any output stream processor span still open, e.g. one
+        // opened by a tool result resumed after approval when no step follows it.
+        dataChunkProcessorRunner?.endStreamProcessorSpans(dataChunkProcessorStates!);
+        upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
+        await resumeContext?.claim?.release();
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
       }
+    },
+  };
+
+  // A rejected `start` would error the stream at once, and erroring a ReadableStream discards every
+  // chunk still queued for a reader that has not caught up (e.g. one that began reading late). Hold
+  // the failure until `pull` runs, which only happens once the queue is empty.
+  let failure: { error: unknown } | undefined;
+  return new ReadableStream<ChunkType<OUTPUT>>({
+    start: async streamController => {
+      try {
+        await loopSource.start(streamController);
+      } catch (error) {
+        // Also cover throws before the workflow returns a result. If finish was
+        // queued, its consumer still owns finalization after draining the queue.
+        reportTerminalTracingError(error);
+        failure = { error };
+        void streamPublisher?.fail(error);
+      }
+    },
+    pull: streamController => {
+      if (failure) streamController.error(failure.error);
     },
   });
 }

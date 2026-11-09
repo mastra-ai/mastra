@@ -1,78 +1,63 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { useParams } from 'react-router';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Link, useParams } from 'react-router';
 
-import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
+import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { ConnectRepositoriesPanel } from '../../workspaces';
-import { manageGithubConnection } from '../../workspaces/services/github';
-import { FactorySetupSection } from './FactorySetupSection';
+import { settingsSectionPath } from '../settingsSections';
 import { GithubPatBlock } from './GithubPatBlock';
 import { SettingsSubsection } from './SettingsSubsection';
-import { UserGithubConnectionRow } from './UserGithubConnectionRow';
+import { SourceControlConnections } from './SourceControlConnections';
 
 export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const githubConnected = useGithubStatusQuery().data?.connected === true;
-  const gitlabStatus = useGitLabStatusQuery().data;
   const activeFactory = factoryQuery.data;
 
+  if (factoryQuery.isLoading) {
+    return (
+      <SettingsSubsection scope="factory" title="Added to this Factory">
+        <SettingsContainer>
+          <SettingsRowsSkeleton label="Loading repositories" />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
+  }
+  if (factoryQuery.isError && !activeFactory) {
+    return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
+  }
   if (!activeFactory) {
     return <Notice variant="info">Select a factory to manage its repositories.</Notice>;
   }
 
-  const showGithubSettings = githubConnected || activeFactory.repositories.some(repo => repo.provider !== 'gitlab');
+  const githubRelevant =
+    githubConnected || activeFactory.repositories.some(repository => repository.provider !== 'gitlab');
 
   return (
     <div className="flex min-w-0 flex-col gap-8">
+      <SourceControlConnections />
+
       <SettingsSubsection
         scope="factory"
-        title="Repositories"
-        description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
-        action={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {githubConnected && (
-              <Button size="sm" onClick={() => manageGithubConnection(baseUrl)}>
-                Manage GitHub connection
-              </Button>
-            )}
-            {gitlabStatus?.mode === 'platform' && (
-              <Button as="a" href={MASTRA_PROJECTS_URL} target="_blank" size="sm">
-                {gitlabStatus.reauthRequired
-                  ? 'Reconnect GitLab'
-                  : gitlabStatus.configured
-                    ? 'Manage GitLab connection'
-                    : 'Connect GitLab'}
-              </Button>
-            )}
-            {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
-              <span className="text-meta text-muted-foreground">
-                GitLab managed by deployment environment variables
-              </span>
-            )}
-          </div>
-        }
+        title="Added to this Factory"
+        description={`Repositories agents in ${activeFactory.name} can edit. Pre-cloned repositories are set up in this order.`}
       >
-        <SettingsContainer>
-          <ConnectRepositoriesPanel factory={activeFactory} />
-        </SettingsContainer>
+        <ConnectRepositoriesPanel key={activeFactory.id} factory={activeFactory} />
       </SettingsSubsection>
 
-      <FactorySetupSection factory={activeFactory} />
+      {githubRelevant && <GithubPatBlock />}
 
-      {showGithubSettings && (
-        <>
-          <UserGithubConnectionRow />
-
-          <GithubPatBlock />
-        </>
-      )}
+      <Txt as="p" variant="meta" tone="muted">
+        Configure sandbox resources and workspace setup in{' '}
+        <Link to={settingsSectionPath(activeFactory.id, 'factory')} className="underline">
+          Manage Factory
+        </Link>
+        .
+      </Txt>
     </div>
   );
 }

@@ -64,7 +64,7 @@ export const mastra = new Mastra({
 | `tokens` | `Record<string, TUser>` | Yes | Map of tokens to user objects |
 | `headers` | `string \| string[]` | No | Additional headers to check for tokens |
 | `name` | `string` | No | Provider name for logging |
-| `authorizeUser` | `(user, request) => boolean` | No | Custom authorization function |
+| `authorizeUser` | `(user, request) => boolean \| Promise<boolean>` | No | Custom authorization function |
 | `protected` | `(RegExp \| string)[]` | No | Paths that require authentication |
 | `public` | `(RegExp \| string)[]` | No | Paths that bypass authentication |
 
@@ -109,14 +109,19 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
 Add role-based or custom authorization logic:
 
 ```typescript
+import { SimpleAuth, getWebRequest } from '@mastra/core/server'
+
 new SimpleAuth<User>({
   tokens: {
     'sk-admin-token': { id: '1', name: 'Admin', role: 'admin' },
     'sk-user-token': { id: '2', name: 'User', role: 'user' },
   },
   authorizeUser: (user, request) => {
+    const webRequest = getWebRequest(request)
+    const path = webRequest ? new URL(webRequest.url).pathname : ''
+
     // Only admins can access /admin routes
-    if (request.url.includes('/admin')) {
+    if (path.includes('/admin')) {
       return user.role === 'admin'
     }
     return true

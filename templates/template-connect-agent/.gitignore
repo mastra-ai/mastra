@@ -1,0 +1,11 @@
+output.txt
+node_modules
+dist
+.mastra
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+.netlify
+.vercel

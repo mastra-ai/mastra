@@ -765,83 +765,6 @@ describe('Dynamic Model Selection with Fallback', () => {
     expect(fullText).toBe('Nested dynamic success');
   });
 
-  it('should skip disabled models and use first enabled model', async () => {
-    const disabledModel = new MockLanguageModelV2({
-      doGenerate: async () => {
-        throw new Error('Disabled model should not be called');
-      },
-      doStream: async () => {
-        const stream = new ReadableStream({
-          pull() {
-            throw new Error('Disabled model should not be called');
-          },
-        });
-        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-      },
-    });
-
-    const enabledModel = new MockLanguageModelV2({
-      doGenerate: async () => {
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-          text: 'Enabled model success',
-          content: [
-            {
-              type: 'text',
-              text: 'Enabled model success',
-            },
-          ],
-          warnings: [],
-        };
-      },
-      doStream: async () => {
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            {
-              type: 'stream-start',
-              warnings: [],
-            },
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'enabled-model',
-              timestamp: new Date(0),
-            },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Enabled model success' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-            },
-          ]),
-        };
-      },
-    });
-
-    const agent = new Agent({
-      id: 'skip-disabled-test',
-      name: 'Skip Disabled Test',
-      instructions: 'You are a test agent',
-      model: [
-        { model: disabledModel, enabled: false, maxRetries: 0 }, // Disabled - should be skipped
-        { model: enabledModel, enabled: true, maxRetries: 0 }, // Enabled - should be used
-      ],
-    });
-
-    const requestContext = new RequestContext();
-    const result = await agent.stream('test', { requestContext });
-    const fullText = await result.text;
-
-    // Should use the enabled model, skipping the disabled one
-    expect(fullText).toBe('Enabled model success');
-  });
-
   it('should throw error when all models are disabled', async () => {
     const disabledModel = new MockLanguageModelV2({
       doGenerate: async () => {
@@ -869,5 +792,62 @@ describe('Dynamic Model Selection with Fallback', () => {
 
     const requestContext = new RequestContext();
     await expect(agent.stream('test', { requestContext })).rejects.toThrow('No enabled models found in model list');
+  });
+
+  describe('labeled { model, id } results', () => {
+    function textModel(text: string) {
+      return new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: text },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+    }
+
+    it('runs the labeled model and exposes its ID to processors', async () => {
+      const seenIds: Array<string | undefined> = [];
+      const agent = new Agent({
+        id: 'labeled-dynamic-model',
+        name: 'Labeled Dynamic Model',
+        instructions: 'You are a test agent',
+        model: () => ({ model: textModel('labeled response'), id: 'mastra/openai/gpt-5.5' }),
+        inputProcessors: [
+          {
+            id: 'model-id-probe',
+            processInputStep: async ({ model }) => {
+              seenIds.push((model as { id?: string }).id);
+            },
+          },
+        ],
+      });
+
+      const result = await agent.stream('test');
+
+      expect(await result.text).toBe('labeled response');
+      expect(seenIds).toEqual(['mastra/openai/gpt-5.5']);
+      expect(((await agent.getModel()) as { id?: string }).id).toBe('mastra/openai/gpt-5.5');
+    });
+
+    it('exposes labels on fallback entries', async () => {
+      const agent = new Agent({
+        id: 'labeled-fallback-model',
+        name: 'Labeled Fallback Model',
+        instructions: 'You are a test agent',
+        model: [{ model: () => ({ model: textModel('fallback response'), id: 'mastra/anthropic/claude-opus-4-7' }) }],
+      });
+
+      const result = await agent.stream('test');
+
+      expect(await result.text).toBe('fallback response');
+      expect(((await agent.getModel()) as { id?: string }).id).toBe('mastra/anthropic/claude-opus-4-7');
+    });
   });
 });

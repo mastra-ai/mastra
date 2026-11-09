@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MessageMetadata } from '../../messages/message-metadata';
 import type { ToolPartFields } from '../../messages/renderers/tool-part';
-import { badgeStatus, toolCardKind, toolInteraction } from '../tool-card-kind';
+import { badgeStatus, isHiddenTool, toolCardKind, toolInteraction } from '../tool-card-kind';
 import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 
 const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPartFields => ({
@@ -16,6 +16,15 @@ const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPart
 const network = (from: string): MessageMetadata => ({ mode: 'network', from });
 
 const approval = (toolCallId: string) => ({ toolCallId, toolName: 'view', args: {} });
+
+describe('isHiddenTool', () => {
+  it('hides task tools and working memory updates, not regular tools', () => {
+    for (const name of ['task_write', 'task_update', 'task_complete', 'task_check', 'updateWorkingMemory']) {
+      expect(isHiddenTool(name)).toBe(true);
+    }
+    expect(isHiddenTool('view')).toBe(false);
+  });
+});
 
 describe('toolCardKind', () => {
   describe('when the tool draws nothing on its own', () => {
@@ -32,6 +41,21 @@ describe('toolCardKind', () => {
   describe('when the tool waits on the reader', () => {
     it('keeps a question as ask_user even once answered', () => {
       expect(toolCardKind(fields('ask_user', { output: { answer: 'yes' } }), {})).toBe('ask_user');
+    });
+
+    it('detects a settled request_connection call as a connect prompt, and leaves a running one plain', () => {
+      const payload = { type: 'connect-prompt', providers: [] };
+      expect(toolCardKind(fields('request_connection', { output: payload }), {})).toBe('connect_prompt');
+      // No output yet (still running) or an unexpected shape: fall back to the plain badge.
+      expect(toolCardKind(fields('request_connection'), {})).toBe('plain');
+      expect(toolCardKind(fields('request_connection', { output: 'oops' }), {})).toBe('plain');
+    });
+
+    it('detects a request_connection call paused on its connect prompt', () => {
+      const metadata: MessageMetadata = {
+        suspendedTools: { 'call-1': { suspendPayload: { type: 'connect-prompt', providers: [] } } },
+      };
+      expect(toolCardKind(fields('request_connection'), { metadata })).toBe('connect_prompt');
     });
 
     it('detects submit_plan by tool name', () => {
@@ -94,18 +118,38 @@ describe('toolCardKind', () => {
 });
 
 describe('badgeStatus', () => {
+  const call = (state: string, toolName = 'view') => ({ toolName, toolCallId: 'call-1', state });
+  const exit = (exitCode: number, killed?: boolean) => [
+    { type: 'data', name: 'sandbox-exit', data: { exitCode, success: exitCode === 0, killed, toolCallId: 'call-1' } },
+  ];
+
   it('reports an error state regardless of the run', () => {
-    expect(badgeStatus('output-error', true)).toBe('error');
+    expect(badgeStatus(call('output-error'), undefined, true)).toBe('error');
   });
 
   it('reads settled calls and stale history as idle', () => {
-    expect(badgeStatus('output-available', true)).toBe('idle');
-    expect(badgeStatus('result', true)).toBe('idle');
-    expect(badgeStatus('input-available', false)).toBe('idle');
+    expect(badgeStatus(call('output-available'), undefined, true)).toBe('idle');
+    expect(badgeStatus(call('result'), undefined, true)).toBe('idle');
+    expect(badgeStatus(call('input-available'), undefined, false)).toBe('idle');
   });
 
   it('reads an unsettled call carried by a live run as running', () => {
-    expect(badgeStatus('input-available', true)).toBe('running');
+    expect(badgeStatus(call('input-available'), undefined, true)).toBe('running');
+  });
+
+  describe('when a command reports its exit', () => {
+    const command = WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+
+    it('reads a non-zero exit as failed, even though the call returned normally', () => {
+      expect(badgeStatus(call('output-available', command), exit(1), false)).toBe('error');
+    });
+
+    it('keeps a clean exit, and the process another tool killed, successful', () => {
+      expect(badgeStatus(call('output-available', command), exit(0), false)).toBe('idle');
+      expect(badgeStatus(call('output-available', WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS), exit(137, true), false)).toBe(
+        'idle',
+      );
+    });
   });
 });
 

@@ -37,11 +37,40 @@ const renderBadge = (
   return { ...utils, approveToolcall };
 };
 
-const badge = () => screen.getByTestId<HTMLElement>('ask-user-badge');
+const badge = () => screen.getByTestId('ask-user-badge');
 
 afterEach(() => cleanup());
 
 describe('AskUserBadge', () => {
+  describe('when the user enters a custom answer alongside options', () => {
+    it.each(['single_select', 'multi_select'] as const)(
+      'responds to the originating tool call with a %s custom answer',
+      selectionMode => {
+        const { approveToolcall } = renderBadge({
+          toolCallId: 'call-custom',
+          suspendPayload: {
+            question: 'Which environment?',
+            options: [{ label: 'Staging' }, { label: 'Production' }],
+            selectionMode,
+          },
+          result: undefined,
+        });
+        const isMultiSelect = selectionMode === 'multi_select';
+        if (isMultiSelect) fireEvent.click(screen.getByRole('checkbox', { name: 'Staging' }));
+        fireEvent.click(screen.getByRole(isMultiSelect ? 'checkbox' : 'radio', { name: 'Other…' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), {
+          target: { value: '  Customer test environment  ' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+
+        expect(approveToolcall).toHaveBeenCalledExactlyOnceWith(
+          'call-custom',
+          isMultiSelect ? ['Staging', 'Customer test environment'] : 'Customer test environment',
+        );
+      },
+    );
+  });
+
   describe('when the payload offers single-select options', () => {
     const suspendPayload: AskUserPayload = {
       question: 'Pick a fruit',
@@ -107,7 +136,7 @@ describe('AskUserBadge', () => {
     it('submits the trimmed text on Enter', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
 
-      const input = within(badge()).getByPlaceholderText('Type your answer...');
+      const input = within(badge()).getByPlaceholderText('Type your answer');
       fireEvent.change(input, { target: { value: '  Ada  ' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -118,7 +147,7 @@ describe('AskUserBadge', () => {
     it('submits the trimmed text via the send button', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
 
-      const input = within(badge()).getByPlaceholderText('Type your answer...');
+      const input = within(badge()).getByPlaceholderText('Type your answer');
       fireEvent.change(input, { target: { value: 'Grace' } });
 
       fireEvent.click(within(badge()).getByRole<HTMLButtonElement>('button', { name: 'Submit answer' }));
@@ -129,7 +158,7 @@ describe('AskUserBadge', () => {
     it('does not submit whitespace-only input', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
 
-      const input = within(badge()).getByPlaceholderText('Type your answer...');
+      const input = within(badge()).getByPlaceholderText('Type your answer');
       fireEvent.change(input, { target: { value: '   ' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 

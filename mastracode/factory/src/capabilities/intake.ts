@@ -57,6 +57,8 @@ export interface IntakeIssue {
   source: string | null;
   /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
   sourceId?: string | null;
+  /** Provider project id, independent of the selected source (which may be a team). */
+  projectId?: string | null;
   labels: string[];
   /** Provider label name to its display color, when supplied by the upstream API. */
   labelColors?: Record<string, string>;
@@ -140,6 +142,12 @@ export interface ResolvedIntakeDispatch {
 
 /** Fixed issue-oriented contract implemented by GitHub, Linear, and future sources. */
 export interface Intake {
+  /**
+   * Several Factory projects may bind the same source, each to the issues
+   * carrying its own labels (or every unclaimed issue). Without it a source
+   * feeds exactly one Factory project and rebinding moves it.
+   */
+  readonly bindingLabelFilters?: boolean;
   /**
    * Resolve the connection and provider-specific identifiers needed to call
    * this capability from a background dispatch context.

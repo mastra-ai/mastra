@@ -6,13 +6,16 @@
  * agent still produces output normally.
  */
 
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { OmModelExecutionError } from '../error';
+import { ObserverRunner } from '../observer-runner';
 import { RETRY_CONFIG } from '../retry';
 
 type StreamPart =
@@ -257,6 +260,33 @@ const observationsText = `<observations>
 - 🟢 User greeted and asked for help
 </observations>`;
 
+function createObserverRunner(maxRetries?: number) {
+  return new ObserverRunner({
+    observationConfig: {
+      model: 'mock/model',
+      messageTokens: 1000,
+      bufferTokens: false,
+      previousObserverTokens: 1000,
+      observeAttachments: false,
+      ...(maxRetries === undefined ? {} : { maxRetries }),
+    } as any,
+    observedMessageIds: new Set(),
+    resolveModel: () => ({ model: 'mock/model' as any }),
+    tokenCounter: { countMessages: () => 1 } as any,
+  });
+}
+
+function createMessage(): MastraDBMessage {
+  return {
+    id: 'message-1',
+    threadId: 'thread-1',
+    resourceId: 'resource-1',
+    role: 'user',
+    content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+    createdAt: new Date(),
+  } as MastraDBMessage;
+}
+
 describe('OM transient-error retry', { timeout: 30_000 }, () => {
   const originalConfig = { ...RETRY_CONFIG };
 
@@ -271,11 +301,47 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
     Object.assign(RETRY_CONFIG, originalConfig);
   });
 
-  it('retries sync observation past the AI SDK retry budget on transient "terminated" errors', async () => {
-    // AI SDK's pRetry retries 2 times by default → 3 total attempts. Force more
-    // failures than that so the call only succeeds if OM's withRetry layers
-    // additional retries on top.
-    const failuresBeforeSuccess = 5;
+  it.each([
+    { maxRetries: 0, expectedCalls: 1 },
+    { maxRetries: 1, expectedCalls: 2 },
+    { maxRetries: undefined, expectedCalls: 9 },
+  ])('uses $maxRetries retries as $expectedCalls total observer calls', async ({ maxRetries, expectedCalls }) => {
+    const observer = createObserverRunner(maxRetries);
+    const stream = vi.fn().mockRejectedValue(new TypeError('terminated'));
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream,
+    });
+
+    await expect(observer.call(undefined, [createMessage()])).rejects.toBeInstanceOf(OmModelExecutionError);
+
+    expect(stream).toHaveBeenCalledTimes(expectedCalls);
+  });
+
+  it('succeeds on the configured observer retry', async () => {
+    const observer = createObserverRunner(1);
+    const stream = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('terminated'))
+      .mockResolvedValueOnce({
+        getFullOutput: async () => ({
+          text: observationsText,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        }),
+      });
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream,
+    });
+
+    const result = await observer.call(undefined, [createMessage()]);
+
+    expect(result.observations).toContain('User greeted');
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the observation retry budget for a transient "terminated" failure', async () => {
+    const failuresBeforeSuccess = 1;
     const store = new InMemoryStore();
     const observerModel = createFlakyObserverModel(observationsText, failuresBeforeSuccess);
 
@@ -287,6 +353,7 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
           observation: {
             model: observerModel as any,
             messageTokens: 20,
+            maxRetries: 1,
             // Disable async buffering — test the synchronous observation path
             // (the path that previously killed the actor on `terminated`).
             bufferTokens: false,
@@ -318,7 +385,6 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
     expect(result.tripwire).toBeFalsy();
     expect(result.text).toBe(longResponseText);
 
-    // We were called more times than the AI SDK retry budget allows on its own.
     expect(observerModel.__observerCallCount).toBeGreaterThan(failuresBeforeSuccess);
   });
 
@@ -341,6 +407,7 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
             model: observerModel as any,
             messageTokens: 20,
             bufferTokens: false,
+            maxRetries: 2,
           },
           reflection: {
             observationTokens: 50_000,

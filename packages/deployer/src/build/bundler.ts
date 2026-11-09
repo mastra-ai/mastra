@@ -11,6 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
 import { localStorageDetector } from './plugins/local-storage-detector';
+import { moduleAlias } from './plugins/module-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -76,6 +77,8 @@ export async function getInputOptions(
     workspaceRoot = undefined,
     enableEsmShim = true,
     externalsPreset = false,
+    explicitExternals = [],
+    alias = {},
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -84,6 +87,8 @@ export async function getInputOptions(
     projectRoot: string;
     enableEsmShim?: boolean;
     externalsPreset?: boolean;
+    explicitExternals?: string[];
+    alias?: Record<string, string>;
   },
 ): Promise<InputOptions> {
   const nodeResolvePlugin = nodeResolve({
@@ -93,15 +98,18 @@ export async function getInputOptions(
   });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
-  const externals = externalsPreset ? [] : Array.from(externalsCopy);
+  const externals = externalsPreset ? explicitExternals : Array.from(externalsCopy);
+  const aliasSources = new Set(Object.keys(alias));
+  const rollupExternals = externals.filter(external => !aliasSources.has(external));
 
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
     preserveSymlinks: true,
-    external: externals,
+    external: externalsPreset ? [] : rollupExternals,
     plugins: [
       protocolExternalResolver(),
+      moduleAlias(alias, entryFile, platform),
       subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
       {
         name: 'alias-optimized-deps',
@@ -138,15 +146,13 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      externalsPreset
-        ? null
-        : commonjs({
-            extensions: ['.js', '.ts'],
-            transformMixedEsModules: true,
-            esmExternals(id) {
-              return externals.includes(id);
-            },
-          }),
+      commonjs({
+        extensions: ['.js', '.ts', '.cjs'],
+        transformMixedEsModules: true,
+        esmExternals(id) {
+          return externals.includes(id);
+        },
+      }),
       enableEsmShim ? esmShim() : undefined,
       externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging

@@ -8,59 +8,27 @@
  */
 export const RUN_REGISTRY_SYMBOL = Symbol('run_registry');
 
-/**
- * Generate the pubsub topic name for agent streaming events
- * @param runId - The unique run identifier
- * @returns The topic name for subscribing/publishing agent stream events
- */
-export const AGENT_STREAM_TOPIC = (runId: string): string => `agent.stream.${runId}`;
+export {
+  AGENT_STREAM_TOPIC,
+  AGENT_CONTROL_TOPIC,
+  AgentControlEventTypes,
+  AgentStreamEventTypes,
+} from '../streams/constants';
 
-/**
- * Generate the pubsub topic name for agent control messages.
- *
- * Separate from {@link AGENT_STREAM_TOPIC} because control messages travel the
- * opposite direction: stream events flow worker -> consumer, control messages
- * flow caller -> worker. Keeping them apart means stream consumers never see
- * control traffic and vice versa.
- *
- * @param runId - The unique run identifier
- * @returns The topic name for publishing/subscribing agent control events
- */
-export const AGENT_CONTROL_TOPIC = (runId: string): string => `agent.control.${runId}`;
+export const DURABLE_STOP_WHEN_ERROR_ID = 'DURABLE_AGENT_STOP_WHEN_FAILED';
 
-/**
- * Event type constants for agent control events
- */
-export const AgentControlEventTypes = {
-  /**
-   * Request that a run abort itself. Published by `abort()` in whichever
-   * process the caller lives in; handled by whichever process is actually
-   * executing the run's steps.
-   */
-  ABORT_REQUEST: 'abort-request',
-} as const;
+const REJECT_STREAM_ERROR = Symbol('mastra.durable.rejectStreamError');
 
-/**
- * Event type constants for agent stream events
- */
-export const AgentStreamEventTypes = {
-  /** Chunk of streaming data (text, tool call, etc.) */
-  CHUNK: 'chunk',
-  /** Start of a new step in the agentic loop */
-  STEP_START: 'step-start',
-  /** End of a step in the agentic loop */
-  STEP_FINISH: 'step-finish',
-  /** Agent execution completed successfully */
-  FINISH: 'finish',
-  /** Error occurred during execution */
-  ERROR: 'error',
-  /** Workflow suspended (e.g., for tool approval) */
-  SUSPENDED: 'suspended',
-  /** Execution aborted by abortSignal */
-  ABORT: 'abort',
-  /** Single agentic-loop iteration completed (observability hook) */
-  ITERATION_COMPLETE: 'iteration-complete',
-} as const;
+type RejectStreamError = Error & { [REJECT_STREAM_ERROR]?: true };
+
+export function markErrorForStreamRejection(error: Error): Error {
+  (error as RejectStreamError)[REJECT_STREAM_ERROR] = true;
+  return error;
+}
+
+export function shouldRejectStream(error: Error): boolean {
+  return (error as RejectStreamError)[REJECT_STREAM_ERROR] === true;
+}
 
 /**
  * Default values for durable agent execution

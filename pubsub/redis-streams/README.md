@@ -24,6 +24,8 @@ export const mastra = new Mastra({
 });
 ```
 
+Every stream gets a sliding idle TTL, controlled by `streamIdleTtlMs` (default: 7 days). Every write refreshes it, so actively written topics never expire, while abandoned ones (a crashed run, or open-ended topics that never reach a `clearTopic` call) are reclaimed by Redis once they go idle. Reads do not refresh the TTL, so keep it above the longest expected gap between writes on a live topic, including the time a grouped consumer may need to replay a backlog. Setting `streamIdleTtlMs: 0` disables expiry; those streams then stay in Redis forever and its memory grows without bound.
+
 ### Redis Cluster
 
 Pass `cluster` (forwarded to `createCluster()` from `redis`) instead of `url`/`redisOptions`:

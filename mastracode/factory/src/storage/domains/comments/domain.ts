@@ -14,7 +14,7 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { ChannelIdentityStorage } from '../channel-identity/base.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
-import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../work-items/base.js';
+import type { ExternalWorkItemSource, Card, WorkItemsStorage } from '../work-items/base.js';
 import { factoryMentionAttentionIdentity } from '../work-items/base.js';
 import type { FactoryActorRef } from './actor.js';
 import { isMentionableActorId } from './actor.js';
@@ -70,7 +70,7 @@ export interface CreateCommentServiceInput {
 
 export type CreateCommentServiceResult =
   /** `mirrored` settles when the platforms have been posted to; nothing in the response waits on it. */
-  | { status: 'created'; comment: WorkItemCommentRow; workItem: WorkItemRow; mirrored: Promise<void> }
+  | { status: 'created'; comment: WorkItemCommentRow; workItem: Card; mirrored: Promise<void> }
   | { status: 'work_item_not_found' }
   | { status: 'token_conflict' }
   | { status: 'invalid'; message: string };
@@ -217,7 +217,7 @@ export class CommentsDomain {
    * create re-publishes to the one that is not recorded, and a process that
    * restarts mid-flight drops the post. Both need an outbox.
    */
-  async #mirrorComment(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<void> {
+  async #mirrorComment(comment: WorkItemCommentRow, workItem: Card): Promise<void> {
     let current = comment;
     for (const publisher of this.#publishers) {
       if (current.externalSource?.integrationId === publisher.id) continue;

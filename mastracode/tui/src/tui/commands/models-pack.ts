@@ -1,7 +1,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import { PACK_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -25,6 +25,7 @@ import chalk from 'chalk';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { applyPackToSession, listResolvableModePacks } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
@@ -423,7 +424,7 @@ async function askModifiedBuiltinPackAction(
 async function askCustomPackEditTarget(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save' | null> {
+): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-auto' | 'memory-clear' | 'save' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
@@ -437,14 +438,19 @@ async function askCustomPackEditTarget(
       {
         value: 'memory',
         label: `  ${chalk.hex(mastra.pink)('memory')} → ${
-          pack.models.memory
-            ? theme.fg('text', pack.models.memory)
-            : theme.fg('dim', 'not set (uses standalone OM config)')
+          pack.models.memory === 'auto'
+            ? theme.fg('text', 'Auto')
+            : pack.models.memory
+              ? theme.fg('text', pack.models.memory)
+              : theme.fg('dim', 'not set (uses /om settings)')
         }`,
       },
     ];
+    if (pack.models.memory !== 'auto') {
+      items.push({ value: 'memory-auto', label: `  ${chalk.hex(mastra.pink)('Use Auto memory model')}` });
+    }
     if (pack.models.memory) {
-      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model')}` });
+      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model (use /om settings)')}` });
     }
     items.push({ value: 'save', label: `  ${theme.fg('success', 'Save')}` });
 
@@ -457,7 +463,7 @@ async function askCustomPackEditTarget(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save');
+      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-auto' | 'memory-clear' | 'save');
     };
 
     selectList.onCancel = () => {
@@ -475,7 +481,7 @@ async function askCustomPackEditTarget(
   });
 }
 
-async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'skip' | null> {
+async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'auto' | 'skip' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', 'Observational memory model (optional)')), 0, 0));
@@ -483,7 +489,7 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
       new Text(
         theme.fg(
           'dim',
-          'Drives the OM observer/reflector for this pack. Skipped packs fall back to your standalone OM configuration.',
+          'Drives the OM observer/reflector while this pack is active. Skipped packs use your /om settings.',
         ),
         0,
         0,
@@ -494,9 +500,10 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
     const selectList = new SelectList(
       [
         { value: 'choose', label: `  ${chalk.hex(mastra.pink)('Choose model…')}` },
-        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use standalone OM config')}` },
+        { value: 'auto', label: `  ${chalk.hex(mastra.pink)('Auto — follow the main model')}` },
+        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use /om settings')}` },
       ],
-      2,
+      3,
       getSelectListTheme(),
     );
 
@@ -507,7 +514,7 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'choose' | 'skip');
+      resolve(item.value as 'choose' | 'auto' | 'skip');
     };
 
     selectList.onCancel = () => {
@@ -561,12 +568,13 @@ async function runCustomFlow(
 
   const omChoice = await askOptionalOmChoice(ctx);
   if (omChoice === null) return null;
+  if (omChoice === 'auto') models.memory = 'auto';
   if (omChoice === 'choose') {
     const memoryModelId = await selectModel(
       ctx,
       'Select observational memory model',
       mastra.pink,
-      models.memory || undefined,
+      models.memory && models.memory !== 'auto' ? models.memory : undefined,
     );
     if (!memoryModelId) return null;
     models.memory = memoryModelId;
@@ -611,6 +619,11 @@ async function runCustomPackEditFlow(
       continue;
     }
 
+    if (editTarget === 'memory-auto') {
+      workingPack = { ...workingPack, models: { ...workingPack.models, memory: 'auto' } };
+      continue;
+    }
+
     if (editTarget === 'memory-clear') {
       const models = { ...workingPack.models };
       delete models.memory;
@@ -623,7 +636,7 @@ async function runCustomPackEditFlow(
         ctx,
         'Select observational memory model',
         mastra.pink,
-        workingPack.models.memory,
+        workingPack.models.memory === 'auto' ? undefined : workingPack.models.memory,
       );
       if (!memoryModelId) continue;
       workingPack = { ...workingPack, models: { ...workingPack.models, memory: memoryModelId } };
@@ -747,40 +760,8 @@ export function upsertCustomPackInSettings(
   }
 }
 
-async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
-  const controller = ctx.state.controller;
-  const modes = controller.listModes();
-
-  for (const mode of modes) {
-    const modelId = (pack.models as Record<string, string>)[mode.id];
-    if (modelId) {
-      (mode as any).defaultModelId = modelId;
-      await ctx.state.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
-    }
-  }
-
-  const currentModeId = ctx.state.session.mode.get();
-  const currentModeModel = (pack.models as Record<string, string>)[currentModeId];
-  if (currentModeModel) {
-    await ctx.state.session.model.switch({ modelId: currentModeModel });
-  }
-
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const saModelId = (pack.models as Record<string, string>)[modeId];
-    if (saModelId) {
-      await ctx.state.session.subagents.model.set({ modelId: saModelId, agentType });
-    }
-  }
-
-  await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
-  await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
-  // A manual switch supersedes any queued hop: getDynamicModel prefers the
-  // pending toModelId over the session model, so leaving the marker in place
-  // would override the user's choice until the hop landed.
-  await ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
-  ctx.state.fallbackStatus = undefined;
-  await ctx.state.session.state.set({ activeModelPackId: pack.id, [PACK_FALLBACK_STATE_KEY]: null });
+async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<boolean> {
+  const modes = ctx.state.controller.listModes();
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};
@@ -799,6 +780,8 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   s.models.subagentModels = {};
 
+  const currentModeId = ctx.state.session.mode.get();
+  const currentModeModel = resolveModePackModels(s, pack)[currentModeId];
   const hasOpenAI = Object.values(pack.models).some(modelId => modelId.startsWith('openai/'));
   const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
   const defaultThinking = resolveDefaultThinkingLevel(s, currentModeId);
@@ -812,13 +795,21 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     // Bump the active global fallback so OpenAI models don't silently run
     // without reasoning, while preserving explicit session and mode defaults.
     s.preferences.thinkingLevel = 'low';
-  } else if (currentModeModel?.startsWith('openai/') && effectiveThinking === 'max') {
-    // OpenAI API-key models do not accept the Codex-only `max` effort.
-    await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
   }
+  const shouldSetXhigh = currentModeModel?.startsWith('openai/') && effectiveThinking === 'max';
 
-  saveSettings(s);
-  updateStatusLine(ctx.state);
+  const application = await applyPackToSession(ctx, pack.id, {
+    settings: s,
+    // OpenAI API-key models do not accept the Codex-only `max` effort.
+    ...(shouldSetXhigh ? { thinkingLevel: 'xhigh' } : {}),
+    afterApply: async () => {
+      await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+      saveSettings(s);
+      ctx.state.fallbackStatus = undefined;
+      updateStatusLine(ctx.state);
+    },
+  });
+  return application.applied;
 }
 
 export function getOverriddenPackModes(pack: ModePack, builtinPack: ModePack): Array<'plan' | 'build' | 'fast'> {
@@ -1250,6 +1241,18 @@ async function runSetSubscriptionRouting(ctx: SlashCommandContext, pack: ModePac
       delete settings.models.packAccountPreferences[pack.id];
     }
     saveSettings(settings);
+
+    const threadId = ctx.state.session.thread.getId();
+    const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
+    const activePackId = resolveThreadActiveModelPackId(
+      settings,
+      listResolvableModePacks(settings),
+      thread?.metadata as Record<string, unknown> | undefined,
+    );
+    if (activePackId === pack.id) {
+      await applyPackToSession(ctx, pack.id, { settings, expectedThreadId: threadId });
+    }
+
     const providerId = providerFromModelId(modelId);
     const accountLabel = accountId
       ? (ctx.authStorage?.listAccounts(providerId ?? '').find(account => account.id === accountId)?.label ?? accountId)
@@ -1412,8 +1415,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           // collision === 'overwrite' falls through
         }
 
-        await applyPack(ctx, imported);
-        ctx.showInfo(`Imported and activated ${imported.name} pack`);
+        if (await applyPack(ctx, imported)) {
+          ctx.showInfo(`Imported and activated ${imported.name} pack`);
+        }
         resolve();
         return;
       }
@@ -1516,8 +1520,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         return;
       }
 
-      await applyPack(ctx, pack, previousPackId);
-      ctx.showInfo(resetBuiltinPack ? `Reset and switched to ${pack.name} pack` : `Switched to ${pack.name} pack`);
+      if (await applyPack(ctx, pack, previousPackId)) {
+        ctx.showInfo(resetBuiltinPack ? `Reset and switched to ${pack.name} pack` : `Switched to ${pack.name} pack`);
+      }
       resolve();
     };
 

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const getMessageInputSchema = z.object({
   channelId: z.string().describe('The ID of the channel containing the message. Example: "1504364254634180618"'),
@@ -101,20 +102,13 @@ export function getMessageTool(proxy: PlatformProxy) {
     outputSchema: getMessageOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof getMessageOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken: string }>();
-
-      if (!metadata?.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/message#get-channel-message
       const response = await platformProxy.get({
         endpoint: `/api/v10/channels/${input.channelId}/messages/${input.messageId}`,
         headers: {
-          Authorization: `Bot ${metadata.botToken}`,
+          Authorization: `Bot ${botToken}`,
         },
         retries: 3,
       });

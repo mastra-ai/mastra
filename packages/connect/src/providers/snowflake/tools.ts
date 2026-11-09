@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { cancelStatementTool } from './tools/cancel-statement.js';
 import { executeStatementTool } from './tools/execute-statement.js';
 import { getStatementResultTool } from './tools/get-statement-result.js';
@@ -37,5 +37,5 @@ export function createSnowflakeTools(options?: ProviderToolsOptions) {
     snowflake_list_views: listViewsTool(platformProxy),
     snowflake_list_warehouses: listWarehousesTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

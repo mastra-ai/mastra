@@ -1,0 +1,47 @@
+import { MenuIcon } from 'lucide-react';
+import type { ComponentPropsWithoutRef } from 'react';
+import { useSidebar } from './sidebar-context';
+import { focusRing } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
+
+export type SidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
+  icon?: React.ReactNode;
+};
+
+export function SidebarMobileTrigger({
+  className,
+  icon,
+  'aria-label': ariaLabel = 'Open navigation menu',
+  onClick,
+  ...props
+}: SidebarMobileTriggerProps) {
+  const { isMobile, mobileTriggerRef, setOpenMobile } = useSidebar();
+  return (
+    <button
+      ref={mobileTriggerRef}
+      type="button"
+      aria-label={ariaLabel}
+      aria-hidden={!isMobile}
+      tabIndex={isMobile ? 0 : -1}
+      data-mobile-only
+      {...props}
+      onClick={event => {
+        onClick?.(event);
+        if (!event.defaultPrevented) setOpenMobile(true);
+      }}
+      className={cn(
+        'inline-flex size-10 items-center justify-center rounded-md',
+        // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
+        "[[data-sidebar-mobile='false']_&]:hidden",
+        "[[data-sidebar-mobile-present='true']_&]:invisible",
+        quietTextHover,
+        'hover:bg-fill-subtle',
+        focusRing,
+        className,
+      )}
+    >
+      {icon ?? <MenuIcon className="size-5" />}
+    </button>
+  );
+}

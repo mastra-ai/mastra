@@ -1,14 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { EllipsisVertical, Minimize2, PencilLine } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useRef, useState } from 'react';
 
+import { useRef, useState } from 'react';
 import type { BoardCandidate } from '../boardCandidates';
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
+import type { BoardLayout } from '../boardLayout';
 import type { CardMove } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import { CardSourceDescription } from './BoardCardDetails';
@@ -26,6 +28,7 @@ export function CandidateDetailsPanel({
   menu,
   defaultMove,
   onRun,
+  layout,
 }: {
   candidate: BoardCandidate;
   labelledBy: string;
@@ -37,6 +40,7 @@ export function CandidateDetailsPanel({
   defaultMove?: CardMove;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
+  layout: BoardLayout;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -59,6 +63,7 @@ export function CandidateDetailsPanel({
   return (
     <CardDetailsPanel
       morph={morph}
+      layout={layout}
       labelledBy={labelledBy}
       header={
         <CandidateCardRows
@@ -114,15 +119,19 @@ export function CandidateDetailsPanel({
         />
       }
     >
-      <ScrollArea className="flex min-h-0 grow flex-col" viewPortClassName="min-h-0 grow">
-        <div className="stream-landing flex flex-col gap-2 p-3">
-          <h3 className="text-label text-foreground m-0 font-[550] wrap-anywhere">{candidate.title}</h3>
-          <CardSourceDescription
-            item={candidate}
-            projectRepositoryId={projectRepositoryId}
-            factoryProjectId={factoryProjectId}
-          />
-        </div>
+      <ScrollArea className="flex min-h-0 grow flex-col">
+        <ScrollAreaViewport className="min-h-0 grow">
+          <div className="stream-landing flex flex-col gap-2 p-3">
+            <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
+              {candidate.title}
+            </Txt>
+            <CardSourceDescription
+              item={candidate}
+              projectRepositoryId={projectRepositoryId}
+              factoryProjectId={factoryProjectId}
+            />
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
       <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
         <PopoverContent anchor={promptAnchorRef} align="end" className="w-80 p-3">

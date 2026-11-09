@@ -184,9 +184,18 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 42 } });
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain('text');
-      const unknown = await client.callTool({ name: 'nope', arguments: {} });
-      expect(unknown.isError).toBe(true);
-      expect(textOf(unknown)).toBe('Unknown tool: nope');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it.each(['nope', 'constructor'])('rejects a call to unknown tool %s with a protocol error', async name => {
+    const client = await connectClient(served.url);
+    try {
+      await expect(client.callTool({ name, arguments: {} })).rejects.toMatchObject({
+        code: -32602,
+        message: expect.stringContaining(`Unknown tool: ${name}`),
+      });
     } finally {
       await client.close();
     }
@@ -212,6 +221,57 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       }
     } finally {
       await anonymousServed.close();
+    }
+  });
+
+  it('gives tools the request context Mastra server auth resolved, never one the caller sent', async () => {
+    const contextTool = createTool({
+      id: 'contextTool',
+      description: 'Reports the trusted request context',
+      inputSchema: z.object({}),
+      execute: async (_input, { requestContext }) =>
+        JSON.stringify({
+          permissions: requestContext?.get('mastra__userPermissions') ?? null,
+          organizationId: requestContext?.get('organizationId') ?? null,
+        }),
+    });
+    const trusted = new MCPServer({ name: 'Trusted', version: '1.0.0', tools: { contextTool } });
+    const trustedServed = await serveHTTP(trusted, {
+      auth: req => {
+        // A caller-sent claim with the same name must not be read as trusted context.
+        const auth: AuthInfo = {
+          ...authInfo,
+          extra: { organizationId: 'spoofed', 'mastra.mcp.trustedRequestContext': { organizationId: 'spoofed' } },
+        };
+        if (req.headers['x-test-mastra-route']) {
+          Object.defineProperty(auth, Symbol.for('mastra.mcp.trustedRequestContext'), {
+            value: { mastra__userPermissions: ['observability:read'], organizationId: 'org-1' },
+          });
+        }
+        return auth;
+      },
+    });
+    try {
+      const viaRoute = await connectClient(trustedServed.url, {}, { 'x-test-mastra-route': '1' });
+      try {
+        expect(JSON.parse(textOf(await viaRoute.callTool({ name: 'contextTool', arguments: {} })))).toEqual({
+          permissions: ['observability:read'],
+          organizationId: 'org-1',
+        });
+      } finally {
+        await viaRoute.close();
+      }
+      const direct = await connectClient(trustedServed.url);
+      try {
+        expect(JSON.parse(textOf(await direct.callTool({ name: 'contextTool', arguments: {} })))).toEqual({
+          permissions: null,
+          organizationId: null,
+        });
+      } finally {
+        await direct.close();
+      }
+    } finally {
+      await trustedServed.close();
     }
   });
 
@@ -408,6 +468,52 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       await expect(legacyClient.connect(new StreamableHTTPClientTransport(served.url))).rejects.toBeInstanceOf(
         SdkError,
       );
+    });
+
+    it('serves 2025-era clients statelessly when the server opts in', async () => {
+      const lenient = new MCPServer({ name: 'Lenient', version: '1.0.0', tools: makeTools(), legacy: 'stateless' });
+      const lenientServed = await serveHTTP(lenient);
+      try {
+        const client = new Client(
+          { name: 'legacy-client', version: '1.0.0' },
+          { versionNegotiation: { mode: 'legacy' as const } },
+        );
+        await client.connect(new StreamableHTTPClientTransport(lenientServed.url));
+        try {
+          expect(client.getServerVersion()?.name).toBe('Lenient');
+          const { tools } = await client.listTools();
+          expect(tools.map(tool => tool.name)).toContain('echoTool');
+          const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });
+          expect(textOf(result)).toBe('echo: hi');
+
+          // 2025-era structuredContent must be an object, so non-object results come back wrapped.
+          const nullResult = await client.callTool({ name: 'nullTool', arguments: {} });
+          expect(nullResult.isError).not.toBe(true);
+          expect(nullResult.structuredContent).toEqual({ result: null });
+          const tupleResult = await client.callTool({ name: 'tupleTool', arguments: {} });
+          expect(tupleResult.isError).not.toBe(true);
+          expect(tupleResult.structuredContent).toEqual({ result: ['pair', 2] });
+        } finally {
+          await client.close();
+        }
+
+        const initialize = await rawRequest(lenientServed.url, {
+          envelope: false,
+          method: 'initialize',
+          params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'old', version: '1' } },
+        });
+        expect(initialize.status).toBe(200);
+        expect(initialize.headers.has('mcp-session-id')).toBe(false);
+
+        const modern = await connectClient(lenientServed.url);
+        try {
+          expect((await modern.listTools()).tools.map(tool => tool.name)).toContain('echoTool');
+        } finally {
+          await modern.close();
+        }
+      } finally {
+        await lenientServed.close();
+      }
     });
 
     it('exposes no legacy transport entry points or options', async () => {

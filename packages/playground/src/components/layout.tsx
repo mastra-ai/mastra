@@ -1,35 +1,34 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
-import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
-import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
-import { useLinkComponent } from '@/lib/framework';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
-  const { setOpenMobile } = useSidebarNew();
+  const { setOpenMobile } = useSidebar();
   const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
 
   const openNavigationCommand = () => {
@@ -40,10 +39,12 @@ function MobileNavbar() {
   return (
     <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3 lg:hidden">
       <div className="flex min-w-0 items-center gap-3">
-        <SidebarNew.MobileTrigger />
+        <Sidebar.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <span className="font-display text-body whitespace-nowrap">Mastra Studio</span>
+          <Txt variant="body-sm" font="display" as="span" className="whitespace-nowrap">
+            Mastra Studio
+          </Txt>
         </span>
       </div>
       <Button
@@ -70,8 +71,9 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
 
 /**
  * Hosts the page-registered side panel next to the Studio frame (outside the
- * rounded card). Desktop: resizable panel; mobile: edge drawer. The page always
- * renders under the same `Panel` so crossing the breakpoint never remounts it.
+ * rounded card), on desktop only: below the breakpoint each page shows its panel
+ * in its own drawer, opened from its header. The page always renders under the
+ * same `Panel` so crossing the breakpoint never remounts it.
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
@@ -95,7 +97,8 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
         </Panel>
         {hasPanel && !isMobile && (
           <>
-            <PanelSeparator />
+            {/* The separator is the gap between the two cards, so its handle sits between them. */}
+            <PanelSeparator className="w-2" />
             <CollapsiblePanel
               id="route-side-panel"
               ref={panelHandle}
@@ -103,9 +106,12 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={320}
+              // Must fit under `maxSize` at the smallest desktop width (1024px gives ~384px):
+              // CollapsiblePanel keeps its content at least `minSize` wide, so a panel capped
+              // below it clips its content's left side.
+              minSize={370}
               maxSize="50%"
-              defaultSize={380}
+              defaultSize={560}
               className="min-w-0"
               onResize={size => onPanelResize(size.inPixels)}
             >
@@ -114,11 +120,6 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
           </>
         )}
       </PanelGroup>
-      {hasPanel && isMobile && (
-        <PanelDrawer direction="right" label="Open details panel">
-          <RouteSidePanelSlot className="h-full min-h-0" />
-        </PanelDrawer>
-      )}
     </div>
   );
 }
@@ -154,17 +155,17 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
-    <div className="h-screen bg-sidebar font-body">
+    <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <SidebarNew.Provider LinkComponent={Link}>
+            <Sidebar.Provider LinkComponent={Link}>
               <SidebarShortcuts />
               <RouteSidePanelProvider>
                 <LayoutContent>{children}</LayoutContent>
               </RouteSidePanelProvider>
-            </SidebarNew.Provider>
+            </Sidebar.Provider>
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>

@@ -40,11 +40,17 @@ After building, Mastra creates the following structure:
     ├── package.json       # Production dependencies
     ├── node_modules/      # Installed dependencies
     ├── .npmrc             # Copied from your project (if present)
-    ├── public/            # Static assets (if src/mastra/public exists)
+    ├── <static assets>     # Contents of src/mastra/public, merged into the output root
     └── playground/        # Studio UI (if --studio flag used)
 ```
 
 The `output` directory is self-contained. You can copy it to any server and run it directly.
+
+:::warning[Don't keep a database file in `src/mastra/public`]
+
+Build copies the contents of `src/mastra/public` into `.mastra/output` and overwrites files with the same name. A SQLite database stored in `public` therefore ends up inside the build, and a URL such as `file:./mastra.db` resolves against the directory the server runs from. If that's the output directory, the server opens the copied database instead of the one you edit, and changes to it are lost on the next build. Keep database files outside `public`.
+
+:::
 
 ## Running the server
 
@@ -92,6 +98,8 @@ export const mastra = new Mastra({
 The value of each option can come from a variable, import, or function call. The option itself must remain a direct property. Don't hide build-time options behind a factory call or an object spread:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
 const options = {
   bundler: {
     externals: ['sharp'],
@@ -150,7 +158,7 @@ To add your own endpoints, see [Custom API Routes](/docs/server/custom-api-route
 
 ## Graceful shutdown and rolling deploys
 
-By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
+By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. A durable agent run still executing after the window stops and releases its claim on the run, so the next boot can recover it right away. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
 
 Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both plus shutdown cleanup.
 
@@ -170,7 +178,7 @@ export const mastra = new Mastra({
 })
 ```
 
-A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Multi-replica recovery doesn't yet use a distributed lease.
+A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and [idempotent tools](/docs/harness/durable-agents#make-tools-safe-to-repeat). Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Recovering from multiple replicas requires a storage adapter that supports run fencing or a PubSub backend whose lease every replica shares. See [multi-instance deployments](/docs/harness/durable-agents#multi-instance-deployments).
 
 ## Troubleshooting
 

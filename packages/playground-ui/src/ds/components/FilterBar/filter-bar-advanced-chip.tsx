@@ -1,7 +1,7 @@
 import { BracesIcon, XIcon } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { chipClass, editableSegmentClass } from './filter-bar-chip';
+import { chipClass, editableSegmentClass, removeSegmentClass } from './filter-bar-chip';
 import { FILTER_BAR_SCOPE_ATTR, useFilterBarContext } from './filter-bar-context';
 import { FilterBarGroupEditor } from './filter-bar-group-editor';
 import { countLeaves } from './filter-bar-tree';
@@ -9,6 +9,7 @@ import type { FilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type FilterBarAdvancedChipProps = {
@@ -22,6 +23,7 @@ export type FilterBarAdvancedChipProps = {
  */
 export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChipProps) {
   const ctx = useFilterBarContext();
+  const [initial] = useState(() => !ctx.mounted);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const leaving = ctx.leaving.has(group.id);
@@ -56,7 +58,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       case 'Backspace':
         event.preventDefault();
         remove();
-        return;
+        break;
       default:
     }
   };
@@ -74,6 +76,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         aria-label={`Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}`}
         aria-hidden={leaving || undefined}
         data-slot="filter-bar-advanced"
+        data-initial={initial || undefined}
         data-leaving={leaving || undefined}
         className={cn('filter-bar-advanced', chipClass, leaving && 'pointer-events-none', className)}
         onKeyDown={handleKeyDown}
@@ -85,20 +88,20 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           }}
           render={<button type="button" />}
           data-filter-bar-segment="field"
-          className={cn(editableSegmentClass, 'gap-1.5')}
+          className={editableSegmentClass}
           title="Edit advanced filter"
         >
-          <BracesIcon className="size-[1.1em] shrink-0" aria-hidden />
+          <BracesIcon aria-hidden />
           <span className="truncate">Advanced filter</span>
           {count > 0 && (
-            <span className="text-column text-muted-foreground" aria-hidden>
+            <Txt as="span" variant="column" tone="muted" aria-hidden>
               {count}
-            </span>
+            </Txt>
           )}
         </PopoverTrigger>
         {leaving ? (
-          <span aria-hidden className={cn(editableSegmentClass, 'px-1.5')}>
-            <XIcon className="size-[1.1em]" />
+          <span aria-hidden className={removeSegmentClass}>
+            <XIcon />
           </span>
         ) : (
           <button
@@ -107,10 +110,10 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             data-filter-bar-segment="remove"
             aria-label="Remove advanced filter"
             title="Remove advanced filter"
-            className={cn(editableSegmentClass, 'px-1.5')}
+            className={removeSegmentClass}
             onClick={remove}
           >
-            <XIcon className="size-[1.1em]" />
+            <XIcon />
           </button>
         )}
       </div>
@@ -122,8 +125,12 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <BracesIcon className="size-3.5 text-muted-foreground" />
-          <span className="text-label text-foreground">Advanced filter</span>
-          <span className="rounded-md bg-fill-subtle px-1.5 text-column text-muted-foreground">{count}</span>
+          <Txt as="span" variant="label" tone="ink">
+            Advanced filter
+          </Txt>
+          <Txt as="span" variant="column" tone="muted" className="rounded-md bg-fill-subtle px-1.5">
+            {count}
+          </Txt>
           <Button
             variant="ghost"
             size="icon-sm"

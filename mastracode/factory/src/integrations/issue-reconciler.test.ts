@@ -12,8 +12,8 @@ import { defaultGithubRules, resolveGithubRules } from './github/default-rules.j
 import type { GithubRuleOverrides } from './github/default-rules.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
 import { reconciledIssueRelabeledEvent } from './github/rules.js';
-import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
-import { createIssueReconciler } from './issue-reconciler.js';
+import type { GithubIssueFetcher, GithubOpenIssueLister, ReconcileIssueState } from './github/rules.js';
+import { createIssueReconciler, EXTERNAL_SOURCE_MISSING_KEY } from './issue-reconciler.js';
 import { resolveLinearRules } from './linear/default-rules.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
@@ -49,6 +49,7 @@ async function githubSetup(
     externalId?: string;
     url?: string;
     fetchIssue?: GithubIssueFetcher;
+    listOpenIssues?: GithubOpenIssueLister;
     permission?: string;
     rules?: GithubRuleOverrides;
     board?: string;
@@ -118,6 +119,7 @@ async function githubSetup(
       boards: input.boards ?? createBoardRegistry(),
     },
     input.fetchIssue ?? vi.fn(),
+    input.listOpenIssues,
   );
   return { ...seeded, project, sourceControl, workItem, reconciler, permissionLookup };
 }
@@ -176,6 +178,125 @@ describe('issue reconcilers', () => {
     expect(afterSecond?.revision).toBe(afterFirst?.revision);
   });
 
+  it('backs off missing issues and clears the marker when they return', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const { item } = await seeded.workItems.upsert({
+      orgId: project.orgId,
+      userId: project.createdBy,
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'gitlab',
+          type: 'issue',
+          externalId: 'gitlab-issue:42',
+          url: 'https://gitlab.example.com/acme/app/-/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    let currentTime = new Date('2026-09-24T12:00:00Z');
+    const getIssue = vi.fn().mockResolvedValue(null);
+    const intake = {
+      resolveIntakeDispatch: vi.fn().mockResolvedValue({ issueId: '42', sourceId: 'gitlab-project:1' }),
+      getIssue,
+    } as unknown as Intake;
+    const reconcile = createIssueReconciler({
+      integrationId: 'gitlab',
+      intake,
+      projects: seeded.projects,
+      storage: seeded.workItems,
+      issueId: () => '42',
+      isTerminal: () => false,
+      metadata: () => ({ state: 'opened' }),
+      now: () => currentTime,
+    });
+
+    await expect(reconcile()).resolves.toMatchObject({ missing: 1, failed: 0 });
+    const marked = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
+    expect(marked?.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY]).toBe(currentTime.toISOString());
+    await expect(reconcile()).resolves.toMatchObject({ missing: 1 });
+    expect(getIssue).toHaveBeenCalledTimes(1);
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.revision).toBe(marked?.revision);
+
+    currentTime = new Date(currentTime.getTime() + 24 * 60 * 60_000 + 1);
+    await reconcile();
+    expect(getIssue).toHaveBeenCalledTimes(2);
+    const refreshed = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
+    expect(refreshed?.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY]).toBe(currentTime.toISOString());
+
+    getIssue.mockResolvedValue(issue());
+    currentTime = new Date(currentTime.getTime() + 24 * 60 * 60_000 + 1);
+    await expect(reconcile()).resolves.toMatchObject({ updated: 1, missing: 0 });
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata ?? {}).not.toHaveProperty(
+      EXTERNAL_SOURCE_MISSING_KEY,
+    );
+
+    await seeded.workItems.update({
+      orgId: project.orgId,
+      id: item.id,
+      userId: 'factory-rule-dispatcher',
+      patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: '2099-01-01T00:00:00.000Z' } },
+    });
+    getIssue.mockResolvedValue(null);
+    await expect(reconcile()).resolves.toMatchObject({ missing: 1 });
+    expect(getIssue).toHaveBeenCalledTimes(4);
+    expect(
+      (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY],
+    ).toBe(currentTime.toISOString());
+  });
+
+  it('retries transient errors and marks unresolved dispatches as missing', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const { item } = await seeded.workItems.upsert({
+      orgId: project.orgId,
+      userId: project.createdBy,
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'gitlab',
+          type: 'issue',
+          externalId: 'gitlab-issue:42',
+          url: 'https://gitlab.example.com/acme/app/-/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const getIssue = vi.fn().mockRejectedValue(new Error('upstream 502'));
+    const intake = {
+      resolveIntakeDispatch: vi.fn().mockResolvedValue({ issueId: '42', sourceId: 'gitlab-project:1' }),
+      getIssue,
+    } as unknown as Intake;
+    const reconcile = createIssueReconciler({
+      integrationId: 'gitlab',
+      intake,
+      projects: seeded.projects,
+      storage: seeded.workItems,
+      issueId: () => '42',
+      isTerminal: () => false,
+      metadata: () => ({}),
+    });
+    await expect(reconcile()).resolves.toMatchObject({ failed: 1, missing: 0 });
+    await expect(reconcile()).resolves.toMatchObject({ failed: 1 });
+    expect(getIssue).toHaveBeenCalledTimes(2);
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata ?? {}).not.toHaveProperty(
+      EXTERNAL_SOURCE_MISSING_KEY,
+    );
+
+    intake.resolveIntakeDispatch = vi.fn().mockResolvedValue(null);
+    await expect(reconcile()).resolves.toMatchObject({ missing: 1, failed: 0 });
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata).toHaveProperty(
+      EXTERNAL_SOURCE_MISSING_KEY,
+    );
+  });
+
   it('reconciles only scoped GitHub issue cards and refreshes metadata', async () => {
     const fetchIssue = vi.fn().mockResolvedValue(githubState());
     const setup = await githubSetup({ metadata: { assignees: ['old'] }, fetchIssue });
@@ -188,7 +309,7 @@ describe('issue reconcilers', () => {
     });
     expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
-    expect(updated?.metadata).toMatchObject({ author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug'] });
+    expect((updated)).toMatchObject({ workItem: { metadata: {author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug']} } });
   });
 
   it('backfills author trust on issue cards created before the stamp existed', async () => {
@@ -267,6 +388,33 @@ describe('issue reconcilers', () => {
     expect(stamped?.metadata).toMatchObject({ authorTrusted: false });
   });
 
+  it('replays an open issue with no card as a missed opened delivery', async () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    const listOpenIssues = vi.fn().mockResolvedValue([
+      { ...githubState(), number: 42, createdAt: future },
+      {
+        ...githubState({ title: 'Missed', url: 'https://github.com/acme/repo/issues/39' }),
+        number: 39,
+        createdAt: future,
+      },
+      { ...githubState({ title: 'Backlog' }), number: 7, createdAt: '2000-01-01T00:00:00Z' },
+    ]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ labels: [] })),
+      listOpenIssues,
+      metadata: { labels: [] },
+    });
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ created: 1, failed: 0 });
+    const decisions = await setup.workItems.listDeferredDecisions('org-1', setup.project.id);
+    expect(decisions.map(entry => entry.decision)).toMatchObject([{ type: 'upsertLinkedWorkItem' }]);
+    expect(JSON.stringify(decisions)).toContain('github:10:issue:39');
+
+    // A repeat sweep dedupes at the ingress by the stable delivery id.
+    await setup.reconciler([repository]);
+    expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(1);
+  });
+
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {
     const setup = await githubSetup({
       fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
@@ -295,7 +443,7 @@ describe('issue reconcilers', () => {
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(0);
     expect(await setup.workItems.get({ orgId: 'org-1', id: setup.workItem.id })).toMatchObject({
       stages: ['planning'],
-      metadata: { labels: ['bug'] },
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: ['bug']}) }),
     });
   });
 
@@ -330,7 +478,7 @@ describe('issue reconcilers', () => {
     ]);
     // The sync still refreshes the card's own label facts.
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
-    expect(updated?.metadata).toMatchObject({ labels: ['bug', AUTO_TRIAGED_LABEL] });
+    expect((updated)).toMatchObject({ workItem: { metadata: {labels: ['bug', AUTO_TRIAGED_LABEL]} } });
     expect(updated?.stages).toEqual(['intake']);
 
     // Dispatch the committed decision and the existing card is relocated onto
@@ -575,7 +723,7 @@ describe('issue reconcilers', () => {
     });
     await expect(setup.reconciler([repository])).resolves.toMatchObject({ updated: 1, failed: 0 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
-    expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
+    expect((updated)).toMatchObject({ workItem: { metadata: {author: 'stored author', labels: ['stored'], assignees: ['new']} } });
   });
 
   it('reads terminal from the installed board, so a custom final phase is skipped and an undeclared one is not', async () => {

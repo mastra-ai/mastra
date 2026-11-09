@@ -3,7 +3,7 @@ services:
     # Pinned to 7.x: MongoDB 8.x fatally refuses to start on Linux kernel 6.19+
     # (TCMalloc rseq incompatibility, SERVER-121912), which is what the CI runner
     # fleet runs. Do not bump back to 8.x until MongoDB ships a patched TCMalloc.
-    image: mongo:7.0.37
+    image: mongo:7.0.45
     container_name: 'mongodb-storage-test-db'
     ports:
       - '27017:27017'
@@ -18,7 +18,7 @@ services:
       retries: 15
       start_period: 3s
   mongodb-fidelity:
-    image: mongo:7.0.37
+    image: mongo:7.0.45
     profiles: ['fidelity']
     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27019']
     ports:
@@ -37,11 +37,22 @@ services:
       retries: 30
   mongodb-vector:
     # Pinned to 8.2: $rankFusion (used by hybridQuery) requires MongoDB >= 8.1.
-    image: mongodb/mongodb-atlas-local:8.2
+    #
+    # Automated Embedding needs the `preview` image, which bundles the Community mongot
+    # build, and a Voyage API key. To run those tests, set both in stores/mongodb/.env and
+    # opt in with TEST_MONGODB_AUTOEMBEDDING=1:
+    #   ATLAS_LOCAL_TAG=preview
+    #   VOYAGE_API_KEY=<key>
+    # https://hub.docker.com/r/mongodb/mongodb-atlas-local#current-experimental-features
+    image: mongodb/mongodb-atlas-local:${ATLAS_LOCAL_TAG:-8.2}
     container_name: 'mongodb-vector-test-db'
     environment:
       MONGODB_INITDB_ROOT_USERNAME: mongodb
       MONGODB_INITDB_ROOT_PASSWORD: mongodb
+      # Consumed by mongot in the preview image; ignored by the pinned tag. The key must be
+      # provisioned through the Atlas UI — a key issued by Voyage AI directly is rejected by
+      # the default https://ai.mongodb.com/v1/embeddings endpoint.
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
     ports:
       - 27018:27017
     healthcheck:

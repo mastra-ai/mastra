@@ -103,6 +103,42 @@ describe('ThreadListItem', () => {
     expect(screen.getByRole('button', { name: 'delete thread' })).toBeTruthy();
   });
 
+  describe('when actions are provided', () => {
+    it('renders the actions without following the thread link', () => {
+      const onClick = vi.fn();
+      const onAction = vi.fn();
+      render(
+        <ThreadListItem
+          as="a"
+          href="/threads/one"
+          onClick={onClick}
+          actions={
+            <button type="button" onClick={onAction}>
+              Thread actions
+            </button>
+          }
+        >
+          A thread
+        </ThreadListItem>,
+      );
+
+      screen.getByRole('button', { name: 'Thread actions' }).click();
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('reserves right padding for the actions', () => {
+      render(
+        <ThreadListItem as="a" href="/threads/one" actions={<button type="button">Thread actions</button>}>
+          A thread
+        </ThreadListItem>,
+      );
+
+      expect(screen.getByRole('link', { name: 'A thread' }).className).toContain('pr-9');
+    });
+  });
+
   it('keeps a caller class alongside its own', () => {
     render(
       <ThreadListItem as="a" href="/threads/one" className="my-own-class">

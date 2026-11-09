@@ -656,7 +656,7 @@ export function dbCreateCommandFor(envVarName: string, environmentName?: string)
  * still emitted: `maybeAutoProvisionDatabases` consults the platform's
  * per-org provider catalog before offering it, so gated orgs never see it.
  */
-export const SELF_SERVE_DB_KINDS: ReadonlySet<DatabaseKind> = new Set(['turso', 'neon']);
+export const SELF_SERVE_DB_KINDS: ReadonlySet<DatabaseKind> = new Set(['turso', 'neon', 'postgres']);
 
 export function dbAutofixFor(envVarName: string): PreflightAutofix | undefined {
   for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES) as [DatabaseKind, string[]][]) {

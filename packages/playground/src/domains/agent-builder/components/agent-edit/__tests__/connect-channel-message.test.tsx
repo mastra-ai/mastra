@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConnectChannelMessage } from '../connect-channel-message';
 import { server } from '@/test/msw-server';
 
@@ -37,6 +37,31 @@ const installRadixDomShims = () => {
   }
 };
 
+/**
+ * jsdom throws on real navigation; intercept `window.location.href = …` with a
+ * spy. Slack's connect flow redirects back to Studio, so the action navigates
+ * the CURRENT tab instead of pre-opening a new one.
+ */
+const stubLocationHref = () => {
+  const originalLocation = window.location;
+  const hrefSetter = vi.fn();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: new Proxy(originalLocation, {
+      set(_target, prop, value) {
+        if (prop === 'href') hrefSetter(value);
+        return true;
+      },
+      get(target, prop) {
+        // @ts-expect-error indexed access
+        return target[prop];
+      },
+    }),
+  });
+  const restore = () => Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+  return { hrefSetter, restore };
+};
+
 const platformsHandler = (platforms: unknown[]) =>
   http.get('*/api/channels/platforms', () => HttpResponse.json(platforms));
 
@@ -53,6 +78,7 @@ describe('ConnectChannelMessage', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('renders nothing when agentId is missing', () => {
@@ -97,15 +123,10 @@ describe('ConnectChannelMessage', () => {
     expect(badge?.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('shows "Continue with Slack" and triggers the OAuth redirect when configured but not yet connected', async () => {
+  it('shows "Continue with Slack" and navigates this tab to the OAuth URL when configured but not yet connected', async () => {
     let connectCalled = false;
-    const originalLocation = window.location;
-    const locationStub = { href: 'http://localhost/start' };
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: locationStub,
-    });
+    const openSpy = vi.spyOn(window, 'open');
+    const { hrefSetter, restore } = stubLocationHref();
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -120,29 +141,30 @@ describe('ConnectChannelMessage', () => {
       }),
     );
 
-    render(
-      <Wrapper>
-        <ConnectChannelMessage platformId="slack" agentId="agent-1" />
-      </Wrapper>,
-    );
+    try {
+      render(
+        <Wrapper>
+          <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+        </Wrapper>,
+      );
 
-    const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
-    expect(button.textContent).toContain('Continue with Slack');
+      const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+      expect(button.textContent).toContain('Continue with Slack');
 
-    fireEvent.click(button);
+      fireEvent.click(button);
 
-    await waitFor(() => {
-      expect(connectCalled).toBe(true);
-    });
-    await waitFor(() => {
-      expect(locationStub.href).toBe('https://slack.example/oauth');
-    });
-
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: originalLocation,
-    });
+      await waitFor(() => {
+        expect(connectCalled).toBe(true);
+      });
+      // Slack's flow redirects back to Studio, so the CURRENT tab navigates —
+      // no pre-opened tab that would leave this Studio copy stale.
+      await waitFor(() => {
+        expect(hrefSetter).toHaveBeenCalledWith('https://slack.example/oauth');
+      });
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 
   it('shows a "Connected" badge and a Manage button when there is an active installation', async () => {
@@ -175,14 +197,9 @@ describe('ConnectChannelMessage', () => {
     expect(button.textContent).toContain('Manage');
   });
 
-  it('does not navigate after the connect mutation settles with an error', async () => {
-    const originalLocation = window.location;
-    const locationStub = { href: 'http://localhost/start' };
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: locationStub,
-    });
+  it('leaves this tab alone when the connect mutation settles with an error', async () => {
+    const openSpy = vi.spyOn(window, 'open');
+    const { hrefSetter, restore } = stubLocationHref();
 
     server.use(
       platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
@@ -190,23 +207,68 @@ describe('ConnectChannelMessage', () => {
       http.post('*/api/channels/slack/connect', () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
     );
 
-    render(
-      <Wrapper>
-        <ConnectChannelMessage platformId="slack" agentId="agent-1" />
-      </Wrapper>,
+    try {
+      render(
+        <Wrapper>
+          <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+        </Wrapper>,
+      );
+
+      const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+      fireEvent.click(button);
+
+      // The button label flips back once the mutation settles — the error path
+      // must never navigate away from Studio or open a tab.
+      await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
+      expect(hrefSetter).not.toHaveBeenCalled();
+      expect(openSpy).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it('navigates this tab even when the surface unmounts before connect resolves', async () => {
+    const { hrefSetter, restore } = stubLocationHref();
+    let releaseConnect!: () => void;
+    const gate = new Promise<void>(resolve => {
+      releaseConnect = resolve;
+    });
+
+    server.use(
+      platformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]),
+      installationsHandler({}),
+      http.post('*/api/channels/slack/connect', async () => {
+        await gate;
+        return HttpResponse.json({
+          type: 'oauth',
+          authorizationUrl: 'https://slack.example/oauth',
+          installationId: 'inst-1',
+        });
+      }),
     );
 
-    const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
-    fireEvent.click(button);
+    try {
+      const { unmount } = render(
+        <Wrapper>
+          <ConnectChannelMessage platformId="slack" agentId="agent-1" />
+        </Wrapper>,
+      );
 
-    // Waiting on the label revert, not a sleep, keeps the failed-mutation state update inside act.
-    await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
-    expect(locationStub.href).toBe('http://localhost/start');
+      const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
+      fireEvent.click(button);
 
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: originalLocation,
-    });
+      // The surface goes away while the request is in flight (e.g. the user
+      // closes the dialog). React Query's per-call mutate callbacks are skipped
+      // after unmount — the flow must still navigate, not silently dead-end
+      // with a pending install already created server-side.
+      unmount();
+      releaseConnect();
+
+      await waitFor(() => {
+        expect(hrefSetter).toHaveBeenCalledWith('https://slack.example/oauth');
+      });
+    } finally {
+      restore();
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,7 +9,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { SkillEditFormValues } from '../use-autosave-skill';
 import { useAutosaveSkill } from '../use-autosave-skill';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

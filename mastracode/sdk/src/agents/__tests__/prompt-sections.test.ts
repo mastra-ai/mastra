@@ -10,7 +10,8 @@ vi.mock('../../tools/index.js', () => ({
 }));
 
 import { getDynamicInstructions, getDynamicInstructionSections } from '../instructions.js';
-import { buildFullPrompt, buildFullPromptSections, joinPromptSections, type PromptContext } from '../prompts/index.js';
+import { buildFullPrompt, buildFullPromptSections, joinPromptSections } from '../prompts/index.js';
+import type { PromptContext } from '../prompts/index.js';
 
 let projectPath: string;
 
@@ -97,6 +98,35 @@ describe('buildFullPromptSections', () => {
   });
 });
 
+describe('unavailable submit_plan', () => {
+  const planCtx = (overrides: Partial<PromptContext> = {}) => makeCtx({ mode: 'plan', modeId: 'plan', ...overrides });
+
+  it('keeps submit_plan instructions in plan mode by default', () => {
+    expect(buildFullPrompt(planCtx())).toContain('submit_plan({');
+  });
+
+  it('omits submit_plan instructions when the built-in is disabled', () => {
+    const prompt = buildFullPrompt(planCtx({ disabledBuiltinTools: ['submit_plan'] }));
+
+    expect(prompt).not.toContain('submit_plan(');
+    expect(prompt).not.toContain('Call \`submit_plan\`');
+    expect(prompt).toContain('Plan approval is not available in this session');
+  });
+
+  it('omits submit_plan instructions when a permission rule denies it', () => {
+    const prompt = buildFullPrompt(
+      planCtx({ state: { permissionRules: { tools: { submit_plan: 'deny' } }, skipGlobalInstructions: true } }),
+    );
+
+    expect(prompt).not.toContain('submit_plan(');
+    expect(prompt).toContain('Plan approval is not available in this session');
+  });
+
+  it('leaves the prompt unchanged when an unrelated built-in is disabled', () => {
+    expect(buildFullPrompt(planCtx({ disabledBuiltinTools: ['ask_user'] }))).toContain('submit_plan({');
+  });
+});
+
 describe('getDynamicInstructionSections', () => {
   function makeRequestContext(state: Record<string, unknown>) {
     return {
@@ -133,36 +163,6 @@ describe('getDynamicInstructionSections', () => {
     const sections = await getDynamicInstructionSections({ requestContext });
 
     expect(joinPromptSections(sections)).toBe(await getDynamicInstructions({ requestContext }));
-  });
-
-  it('advertises subconscious tools only when the caller says they are registered, not from the env flag', async () => {
-    const requestContext = makeRequestContext({});
-    const previous = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    try {
-      const withoutFlag = await getDynamicInstructions({ requestContext });
-      expect(withoutFlag).not.toContain('# Subconscious Memory');
-
-      const withFlag = await getDynamicInstructions({ requestContext, hasSubconscious: true });
-      expect(withFlag).toContain('# Subconscious Memory');
-      expect(withFlag).toContain('**ask_memory**');
-
-      // A resolver is evaluated against the session state, so Factory sessions
-      // can be refused per request.
-      const seen: unknown[] = [];
-      const resolved = await getDynamicInstructions({
-        requestContext: makeRequestContext({ factoryProjectId: 'proj-1' }),
-        hasSubconscious: s => {
-          seen.push(s?.factoryProjectId);
-          return false;
-        },
-      });
-      expect(seen).toEqual(['proj-1']);
-      expect(resolved).not.toContain('# Subconscious Memory');
-    } finally {
-      if (previous === undefined) delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
-      else process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = previous;
-    }
   });
 
   it('rejoins into exactly getDynamicInstructions output with plugin instructions', async () => {

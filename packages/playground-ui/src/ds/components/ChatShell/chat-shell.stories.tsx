@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect } from 'storybook/test';
 
 import { Notice } from '../Notice';
 import { ChatShell } from './index';
@@ -12,6 +13,18 @@ const meta: Meta<typeof ChatShell> = {
 
 export default meta;
 type Story = StoryObj<typeof ChatShell>;
+
+const expectHorizontalNavigation: Story['play'] = async ({ canvasElement }) => {
+  const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+  if (!viewport) throw new Error('Expected the chat scroll viewport');
+
+  // No horizontal overflow: a sideways trackpad gesture must be allowed to
+  // reach the browser, including when the conversation scrolls vertically.
+  await expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+  const style = getComputedStyle(viewport);
+  await expect(style.overscrollBehaviorX).toBe('auto');
+  await expect(style.overscrollBehaviorY).toBe('none');
+};
 
 const gitRemoteFailure =
   "Failed to prepare the workspace: Failed to set git remote: error: could not lock config file .git/config: File exists fatal: could not set 'remote.origin.url' to 'https://x-access-token:ghs_EXAMPLEtokenaGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9eyJhdWQiOiJhdXRobiIsImRpZ2VzdCI6IlF2QzJWbmNsIjNkbFZtbFBNUXJleDhxdnl2d1RMZ0Z2N2FQbXVlTnJ1TGVn@github.com/mastra-ai/mastra.git'";
@@ -54,6 +67,7 @@ const Shell = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const ShortThread: Story = {
+  play: expectHorizontalNavigation,
   render: () => (
     <Shell>
       <Turn>A thread short enough that nothing scrolls — the composer still sits at the bottom edge.</Turn>
@@ -62,6 +76,12 @@ export const ShortThread: Story = {
 };
 
 export const LongThread: Story = {
+  play: async context => {
+    await expectHorizontalNavigation(context);
+    const viewport = context.canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+    if (!viewport) throw new Error('Expected the chat scroll viewport');
+    await expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight);
+  },
   render: () => (
     <Shell>
       {Array.from({ length: 30 }, (_, index) => (

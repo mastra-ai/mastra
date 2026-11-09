@@ -1,43 +1,63 @@
-import { EyeIcon, LogsIcon } from 'lucide-react';
+import { ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
 import { Button } from '../../../ds/components/Button/Button';
-import type { LinkComponent } from '../../../ds/types/link-component';
+import { TraceIcon } from '../../../ds/icons/TraceIcon';
 
 type CardActionButtonProps = {
-  /** Pre-built drilldown URL (typically from `useDrilldown().getTracesHref(...)`). */
-  href: string;
-  /** Override how the underlying anchor is rendered — pass a router-aware Link
-   *  to keep navigation in-app. Defaults to `<a>`. */
-  LinkComponent?: LinkComponent;
+  onClick: () => void;
 };
 
-/** Icon link in a MetricsCard top bar that opens the Traces page pre-filtered
+/** Icon button in a MetricsCard top bar that opens the Traces page pre-filtered
  *  to whatever dimensions the card knows about. */
-export function OpenInTracesButton({ href, LinkComponent = 'a' }: CardActionButtonProps) {
+export function OpenInTracesButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button
-      render={<LinkComponent href={href} />}
-      variant="ghost"
-      size="icon-md"
-      tooltip="View in Traces"
-      aria-label="View in Traces"
-    >
-      <EyeIcon />
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in traces" aria-label="View in traces">
+      <TraceIcon />
     </Button>
   );
 }
 
-/** Icon link in a MetricsCard top bar that opens the Logs page scoped to
+/** Icon button in a MetricsCard top bar that opens the Logs page scoped to
  *  errors for the card's current dimensions. */
-export function OpenErrorsInLogsButton({ href, LinkComponent = 'a' }: CardActionButtonProps) {
+export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
   return (
     <Button
-      render={<LinkComponent href={href} />}
+      onClick={onClick}
       variant="ghost"
-      size="icon-md"
-      tooltip="View errors in Logs"
-      aria-label="View errors in Logs"
+      size="icon-sm"
+      tooltip="View errors in logs"
+      aria-label="View errors in logs"
     >
       <LogsIcon />
+    </Button>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Logs page scoped to
+ *  the card's current dimensions, whatever their status. */
+export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
+  return (
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in logs" aria-label="View in logs">
+      <LogsIcon />
+    </Button>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Spans page scoped to
+ *  the card's current dimensions. */
+export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
+  return (
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in spans" aria-label="View in spans">
+      <ListTreeIcon />
+    </Button>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Threads page scoped to
+ *  the card's current dimensions. */
+export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
+  return (
+    <Button onClick={onClick} variant="ghost" size="icon-sm" tooltip="View in threads" aria-label="View in threads">
+      <MessagesSquareIcon />
     </Button>
   );
 }

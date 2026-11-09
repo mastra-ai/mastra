@@ -60,3 +60,16 @@ describe('LogsListView keyboard navigation', () => {
     expect(scrollToIndex).toHaveBeenCalledWith(2);
   });
 });
+
+describe('LogsListView fit', () => {
+  describe('when rendering long log rows', () => {
+    it('sizes the grid to its container so rows do not overflow horizontally', () => {
+      renderList();
+
+      const grid = Array.from(document.querySelectorAll('div')).find(div => !!div.style.gridTemplateColumns);
+      expect(grid?.className).toContain('w-full');
+      expect(grid?.className).toContain('max-w-full');
+      expect(grid?.className).not.toContain('w-max');
+    });
+  });
+});

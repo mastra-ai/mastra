@@ -1,516 +1,305 @@
-import { InMemoryDB, InMemoryKnowledgeStorage } from '@mastra/core/storage';
-import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import { Knowledge } from '@mastra/core/knowledge';
+import type { KnowledgeStorage } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import type { KnowledgeNodePayload, KnowledgeGraphPayload, KnowledgeRouteLimits } from './knowledge.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const ORG = 'org-1';
 const OTHER_ORG = 'org-2';
+const host = { author: 'host' };
 
-interface Harness {
-  app: Hono;
-  knowledge: KnowledgeStorage;
-  projectId: string;
-  orgScope: KnowledgeScope;
-  projectScope: KnowledgeScope;
-  threadScope: (threadId: string) => KnowledgeScope;
-}
+/** Factory-style declarations: an org, its projects, and private session threads under a project. */
+const scopes = {
+  'org:$orgId': { access: [{ principal: 'self' as const, role: 'editor' as const }] },
+  'project:$projectId': { access: [{ principal: 'self' as const, role: 'editor' as const }], belongsTo: 'org:$orgId' },
+  'thread:$threadId': {
+    access: [{ principal: 'self' as const, role: 'owner' as const }],
+    belongsTo: 'project:$projectId',
+  },
+};
 
+/**
+ * org-1 ─┬─ Handbook
+ *        ├─ project P ─ Deploy runbook (a note mentions Handbook) · thread T ─ Session scratch
+ *        └─ project Q ─ Q secret
+ * org-2 ─ Other org notes
+ */
 async function createHarness(
   options: {
-    limits?: Partial<KnowledgeRouteLimits>;
-    user?: { workosId: string; organizationId?: string };
-    orgId?: string;
-    knowledge?: KnowledgeStorage;
+    user?: { workosId: string; organizationId?: string } | null;
+    declarations?: ConstructorParameters<typeof Knowledge>[0]['scopes'];
   } = {},
-): Promise<Harness> {
-  const orgId = options.orgId ?? ORG;
-  const seed = await createFactoryStorageForTests();
-  const project = await seed.projects.create({ orgId, userId: 'user-1', input: { name: 'Graph project' } });
-  const knowledge = options.knowledge ?? new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-  const routes = new KnowledgeRoutes({
-    auth: fakeRouteAuth(),
-    projects: seed.projects,
-    knowledge: async () => knowledge,
-    ...(options.limits ? { limits: options.limits } : {}),
-  }).routes();
+) {
+  const factory = await createFactoryStorageForTests();
+  const project = await factory.projects.create({ orgId: ORG, userId: 'user-1', input: { name: 'P' } });
+  const other = await factory.projects.create({ orgId: ORG, userId: 'user-1', input: { name: 'Q' } });
+  const foreign = await factory.projects.create({ orgId: OTHER_ORG, userId: 'user-2', input: { name: 'X' } });
+
+  const knowledge = new Knowledge({
+    id: 'knowledge',
+    storage: new InMemoryStore(),
+    scopes: options.declarations ?? scopes,
+  });
+  const store: KnowledgeStorage = await knowledge.getStorage();
+  const scope = async (address: string, declaration: string, name: string, parentId?: string) =>
+    (await store.materializeScope({ address, declaration, name, provenance: host, ...(parentId ? { parentId } : {}) }))
+      .scope;
+  const org = await scope(`org:${ORG}`, 'org:$orgId', 'Org one');
+  const p = await scope(`project:${project.id}`, 'project:$projectId', 'Project P', org.id);
+  const q = await scope(`project:${other.id}`, 'project:$projectId', 'Project Q', org.id);
+  const thread = await scope('thread:t-1', 'thread:$threadId', 'Session T', p.id);
+  const otherOrg = await scope(`org:${OTHER_ORG}`, 'org:$orgId', 'Org two');
+  const handbook = await store.createPage({ parentId: org.id, name: 'Handbook', provenance: host });
+  const runbook = await store.createPage({ parentId: p.id, name: 'Deploy runbook', provenance: host });
+  await store.createPage({ parentId: q.id, name: 'Q secret', provenance: host });
+  await store.createPage({ parentId: thread.id, name: 'Session scratch', provenance: host });
+  await store.createPage({ parentId: otherOrg.id, name: 'Other org notes', provenance: host });
+  await store.addNote({
+    pageId: runbook.id,
+    text: 'Follow the [[Handbook]] before deploying',
+    stampScopeIds: [p.id],
+    mentions: [handbook.id],
+    provenance: { author: 'agent:alex' },
+  });
+
   const app = new Hono();
-  const user = options.user ?? { workosId: 'user-1', organizationId: orgId };
+  const user = options.user === undefined ? { workosId: 'user-1', organizationId: ORG } : options.user;
   app.use('*', async (context, next) => {
-    context.set('factoryAuthUser' as never, user as never);
+    if (user) context.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as never, routes);
-  const projectScope: KnowledgeScope = [`org:${orgId}`, `resource:${project.id}`];
+  mountApiRoutes(
+    app as never,
+    new KnowledgeRoutes({
+      auth: fakeRouteAuth(),
+      projects: factory.projects,
+      knowledge: async () => knowledge,
+    }).routes(),
+  );
+  const get = async (path: string, projectId = project.id) => {
+    const response = await app.request(`/web/factory/projects/${projectId}/knowledge${path}`);
+    return { status: response.status, body: (await response.json()) as any };
+  };
   return {
+    get,
     app,
-    knowledge,
+    store,
+    handbook,
     projectId: project.id,
-    orgScope: [`org:${orgId}`],
-    projectScope,
-    threadScope: threadId => [...projectScope, `thread:${threadId}`],
+    otherProjectId: other.id,
+    foreignProjectId: foreign.id,
+    org,
+    p,
+    q,
+    thread,
+    runbook,
   };
 }
 
-async function node(
-  store: KnowledgeStorage,
-  name: string,
-  scope: KnowledgeScope,
-  kind = 'concept',
-  description?: string,
-): Promise<KnowledgeNode> {
-  return store.createNode({ name, kind, scope, ...(description !== undefined ? { description } : {}) });
-}
+const names = (pages: Array<{ name: string }>) => pages.map(page => page.name).sort();
 
-async function record(
-  store: KnowledgeStorage,
-  parent: KnowledgeNode,
-  text: string,
-  scope: KnowledgeScope,
-  sourceThreadId = 'thread-a',
-  metadata?: Record<string, unknown>,
-  options: {
-    /**
-     * Where `appendKnowledge`'s mention pass auto-creates nodes for unresolved
-     * wikilinks. Tests that need a genuinely dangling name point this at a
-     * thread scope invisible from the view under test (downward invisibility —
-     * the only way a wikilink stays unresolved, since capture auto-creates).
-     */
-    autoCreateScope?: KnowledgeScope;
-  } = {},
-) {
-  return store.appendKnowledge({
-    node: parent,
-    text,
-    scope,
-    sourceThreadId,
-    metadata,
-    resolutionScope: options.autoCreateScope ?? scope,
-    defaultScope: options.autoCreateScope ?? scope,
-  });
-}
-
-async function graph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph${query}`);
-  return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
-}
-
-async function nodeDetail(
-  h: Harness,
-  entityId: string,
-  query = '',
-): Promise<{ status: number; body: KnowledgeNodePayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${entityId}${query}`);
-  return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeNodePayload };
-}
-
-describe('KnowledgeRoutes', () => {
-  // 1
-  it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
-    const h = await createHarness();
-    const service = await node(h.knowledge, 'Payments Service', h.projectScope, 'service');
-    const runbook = await node(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
-    await record(h.knowledge, service, 'Deploys follow the [[Deploy Runbook]] steps.', h.projectScope);
-
-    const { status, body } = await graph(h);
-    expect(status).toBe(200);
-    expect(body.view).toBe('project');
-    expect(body.nodes.map(node => node.id).sort()).toEqual([service.id, runbook.id].sort());
-    expect(body.edges).toHaveLength(1);
-    expect(body.edges[0]).toMatchObject({ source: service.id, target: runbook.id, type: 'wikilink' });
-    expect(body.nodes.find(node => node.id === service.id)?.recordCount).toBe(1);
-    expect(body.truncated).toBe(false);
-  });
-
-  it('projects the bounded description into graph snapshots and never leaks content', async () => {
-    const h = await createHarness();
-    const synopsis =
-      'Payments coordinates settlement and reconciliation. Repository: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory';
-    const described = await node(h.knowledge, 'Described', h.projectScope, 'service', synopsis);
-    const absent = await node(h.knowledge, 'Absent', h.projectScope);
-    const empty = await node(h.knowledge, 'Empty', h.projectScope, 'concept', '');
-    // A node with long-form content but no description must not fall back to content.
-    const contentful = await h.knowledge.createNode({
-      name: 'Contentful',
-      kind: 'doc',
-      scope: h.projectScope,
-      content: 'Long-form body that must never appear in the graph payload. '.repeat(20),
-    });
-
-    const { status, body } = await graph(h);
-    expect(status).toBe(200);
-    expect(body.nodes.find(node => node.id === described.id)?.description).toBe(synopsis);
-    expect(body.nodes.find(node => node.id === absent.id)).not.toHaveProperty('description');
-    // '' is a curator clear — projected as omitted, same as absent.
-    expect(body.nodes.find(node => node.id === empty.id)).not.toHaveProperty('description');
-    expect(body.nodes.find(node => node.id === contentful.id)).not.toHaveProperty('description');
-    for (const graphNode of body.nodes) {
-      expect(graphNode).not.toHaveProperty('content');
-    }
-    expect(body.nodes).toHaveLength(4);
-    expect(body.records).toHaveLength(0);
-    expect(body.truncated).toBe(false);
-  });
-
-  // 2
-  it('yields a real edge for a cross-rung mention (thread fact linking an org entity) in the thread view', async () => {
-    const h = await createHarness();
-    const orgEntity = await node(h.knowledge, 'Org Concept', h.orgScope);
-    const threadEntity = await node(h.knowledge, 'Session Note', h.threadScope('t-1'));
-    await record(h.knowledge, threadEntity, 'Relates to [[Org Concept]].', h.threadScope('t-1'), 't-1');
-
-    const { status, body } = await graph(h, '?threadId=t-1');
-    expect(status).toBe(200);
-    expect(body.view).toBe('thread');
-    expect(body.edges).toHaveLength(1);
-    expect(body.edges[0]).toMatchObject({ source: threadEntity.id, target: orgEntity.id, type: 'wikilink' });
-  });
-
-  // 3
-  it('resolves a case-mismatched wikilink', async () => {
-    const h = await createHarness();
-    const source = await node(h.knowledge, 'Source Entity', h.projectScope);
-    const target = await node(h.knowledge, 'CamelCase Name', h.projectScope);
-    await record(h.knowledge, source, 'See [[camelcase name]].', h.projectScope);
-
-    const { body } = await graph(h);
-    expect(body.edges).toHaveLength(1);
-    expect(body.edges[0]).toMatchObject({ source: source.id, target: target.id });
-  });
-
-  // 4
-  it('drops unresolvable and self links', async () => {
-    const h = await createHarness();
-    const solo = await node(h.knowledge, 'Solo Entity', h.projectScope);
-    await record(
-      h.knowledge,
-      solo,
-      'Mentions [[No Such Thing]] and itself [[Solo Entity]].',
-      h.projectScope,
-      'thread-a',
-      undefined,
-      {
-        autoCreateScope: h.threadScope('t-hidden'),
+describe('Factory Knowledge routes on the page store', () => {
+  it("labels scope pages with their declaration's displayLabel, filling in the address's params", async () => {
+    const h = await createHarness({
+      declarations: {
+        ...scopes,
+        'org:$orgId': { ...scopes['org:$orgId'], displayLabel: 'Organization $orgId' },
+        'project:$projectId': { ...scopes['project:$projectId'], displayLabel: 'Project' },
       },
-    );
-
-    const { body } = await graph(h);
-    expect(body.edges).toHaveLength(0);
-    expect(body.outOfWindow).toHaveLength(0);
-    expect(body.unresolvedCapped.count).toBe(0);
-  });
-
-  // 5
-  it('reports a resolvable out-of-window target in outOfWindow, not as dangling', async () => {
-    const h = await createHarness({ limits: { maxNodes: 1 } });
-    // Equal updatedAt → name-asc tiebreak keeps 'A window entity' in the window.
-    const inWindow = await node(h.knowledge, 'A window entity', h.projectScope);
-    const outside = await node(h.knowledge, 'Z outside entity', h.projectScope);
-    await record(h.knowledge, inWindow, 'Links [[Z outside entity]].', h.projectScope);
-
-    const { body } = await graph(h);
-    expect(body.nodes.map(node => node.id)).toEqual([inWindow.id]);
-    expect(body.edges).toHaveLength(0);
-    expect(body.outOfWindow).toEqual([{ id: outside.id, name: 'Z outside entity' }]);
-    expect(body.unresolvedCapped.count).toBe(0);
-  });
-
-  // 6
-  it('enforces the payload bound and sets the truncated flag', async () => {
-    const h = await createHarness({ limits: { maxNodes: 2 } });
-    await node(h.knowledge, 'One', h.projectScope);
-    await node(h.knowledge, 'Two', h.projectScope);
-    await node(h.knowledge, 'Three', h.projectScope);
-
-    const { body } = await graph(h);
-    expect(body.nodes).toHaveLength(2);
-    expect(body.truncated).toBe(true);
-  });
-
-  // 7 (A9: multi-target pins mark their EDGES; single-target pins keep the node accent)
-  it('excludes the reserved pinned entity from nodes while pinned facts accent edges (multi-target) or nodes (single-target), per rung', async () => {
-    const h = await createHarness();
-    const accented = await node(h.knowledge, 'Critical Service', h.projectScope, 'service');
-    const relA = await node(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
-    const relB = await node(h.knowledge, 'Release Train', h.projectScope, 'process');
-    const threadAccented = await node(h.knowledge, 'Session Focus', h.threadScope('t-pin'));
-    const pinnedResource = await node(h.knowledge, 'pinned', h.projectScope, 'system');
-    const pinnedThread = await node(h.knowledge, 'pinned', h.threadScope('t-pin'), 'system');
-    // Single-target pin → node accent stays.
-    await record(h.knowledge, pinnedResource, 'Always check [[Critical Service]] health.', h.projectScope, 't-any');
-    // Multi-target pin → a pinned edge between the two mentioned entities, NO node accent.
-    const relPin = await record(
-      h.knowledge,
-      pinnedResource,
-      'Ship via [[Deploy Runbook]] on the [[Release Train]].',
-      h.projectScope,
-      't-any',
-    );
-    await record(h.knowledge, pinnedThread, 'This session tracks [[Session Focus]].', h.threadScope('t-pin'), 't-pin');
-
-    const defaultView = (await graph(h)).body;
-    expect(defaultView.nodes.some(node => node.name === 'pinned')).toBe(false);
-    expect(defaultView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
-    const pinnedEdge = defaultView.edges.find(edge => edge.pinned);
-    expect(pinnedEdge).toMatchObject({ source: relA.id, target: relB.id, recordId: relPin.id, pinned: true });
-    expect(defaultView.nodes.find(node => node.id === relA.id)?.pinned).toBe(false);
-    expect(defaultView.nodes.find(node => node.id === relB.id)?.pinned).toBe(false);
-    expect(defaultView.pinCensus).toEqual({ resource: 2, thread: null });
-    // The thread-scoped pin is invisible in the default view.
-    expect(defaultView.nodes.some(node => node.id === threadAccented.id)).toBe(false);
-
-    const threadView = (await graph(h, '?threadId=t-pin')).body;
-    expect(threadView.nodes.some(node => node.name === 'pinned')).toBe(false);
-    expect(threadView.nodes.find(node => node.id === threadAccented.id)?.pinned).toBe(true);
-    expect(threadView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
-    expect(threadView.pinCensus).toEqual({ resource: 2, thread: 1 });
-  });
-
-  // 7b (A11): knowledge records are first-class payload elements with per-record node sets
-  it('emits every windowed record with its in-window nodes, owner first; pins omit the reserved owner', async () => {
-    const h = await createHarness();
-    const owner = await node(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
-    const other = await node(h.knowledge, 'Release Train', h.projectScope, 'process');
-    const third = await node(h.knowledge, 'Rollback Plan', h.projectScope, 'doc');
-    const pinnedResource = await node(h.knowledge, 'pinned', h.projectScope, 'system');
-    const solo = await record(h.knowledge, owner, 'Runbook owner is the release captain.', h.projectScope, 't-1');
-    const pair = await record(h.knowledge, owner, 'Ships on the [[Release Train]].', h.projectScope, 't-1');
-    const trio = await record(
-      h.knowledge,
-      owner,
-      'Coordinates [[Release Train]] with [[Rollback Plan]].',
-      h.projectScope,
-      't-1',
-    );
-    const pin = await record(h.knowledge, pinnedResource, 'Always run [[Rollback Plan]] first.', h.projectScope, 't-1');
-
-    const { body } = await graph(h);
-    const byId = new Map(body.records.map(memory => [memory.id, memory]));
-    // Arity 1: dot material — just the owner.
-    expect(byId.get(solo.id)).toMatchObject({ nodeIds: [owner.id], pinned: false });
-    // Arity 2: line material — owner first, then the wikilink target.
-    expect(byId.get(pair.id)).toMatchObject({ nodeIds: [owner.id, other.id], pinned: false });
-    // Arity 3: junction material.
-    expect(byId.get(trio.id)).toMatchObject({ nodeIds: [owner.id, other.id, third.id] });
-    // Pins omit the hidden reserved owner — arity from wikilink targets only.
-    expect(byId.get(pin.id)).toMatchObject({ nodeIds: [third.id], pinned: true });
-    expect(byId.get(pin.id)?.text).toContain('Rollback Plan');
-  });
-
-  // 8
-  it('fails closed: a caller from another org cannot read the graph', async () => {
-    const h = await createHarness();
-    await node(h.knowledge, 'Secret Entity', h.projectScope);
-    const outsider = new Hono();
-    outsider.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'intruder', organizationId: OTHER_ORG } as never);
-      await next();
     });
-    // Same route module + storage, different caller org: the project lookup 404s.
-    const seed = await createFactoryStorageForTests();
-    mountApiRoutes(
-      outsider as never,
-      new KnowledgeRoutes({
-        auth: fakeRouteAuth(),
-        projects: seed.projects,
-        knowledge: async () => h.knowledge,
-      }).routes(),
-    );
-    const response = await outsider.request(`/web/factory/projects/${h.projectId}/knowledge/graph`);
-    expect(response.status).toBe(404);
-  });
-
-  // 9
-  it('404s the entity endpoint for an out-of-scope entityId (IDOR)', async () => {
-    const victim = await createHarness();
-    const secret = await node(victim.knowledge, 'Victim Entity', victim.projectScope);
-    // Attacker has their own valid project in another org but shares the store.
-    const attacker = await createHarness({
-      orgId: OTHER_ORG,
-      user: { workosId: 'intruder', organizationId: OTHER_ORG },
-      knowledge: victim.knowledge,
-    });
-    const { status } = await nodeDetail(attacker, secret.id);
-    expect(status).toBe(404);
-  });
-
-  // 10
-  it('merges listKnowledgeAbout/listKnowledgeMentioning deduped and returns metadata.reason', async () => {
-    const h = await createHarness();
-    const target = await node(h.knowledge, 'Target Entity', h.projectScope);
-    const other = await node(h.knowledge, 'Other Entity', h.projectScope);
-    const owned = await record(h.knowledge, target, 'Owned fact.', h.projectScope, 'thread-a', {
-      reason: 'costly to rediscover',
-    });
-    const mention = await record(h.knowledge, other, 'Mentions [[Target Entity]].', h.projectScope);
-
-    const { status, body } = await nodeDetail(h, target.id);
-    expect(status).toBe(200);
-    expect(body.records.map(f => f.id)).toEqual([owned.id, mention.id]);
-    expect(body.records[0]).toMatchObject({ relation: 'owned', metadata: { reason: 'costly to rediscover' } });
-    expect(body.records[1]).toMatchObject({ relation: 'mentions' });
-  });
-
-  // 11
-  it('excludes deleted facts', async () => {
-    const h = await createHarness();
-    const source = await node(h.knowledge, 'Source', h.projectScope);
-    await node(h.knowledge, 'Linked', h.projectScope);
-    const created = await record(h.knowledge, source, 'Links [[Linked]].', h.projectScope);
-    await h.knowledge.removeKnowledge({ id: created.id, deletedBy: 'test' });
-
-    const { body } = await graph(h);
-    expect(body.edges).toHaveLength(0);
-    expect(body.nodes.find(node => node.id === source.id)?.recordCount).toBe(0);
-  });
-
-  // 12
-  it('moves the change cursor when a fact is appended', async () => {
-    const h = await createHarness();
-    const source = await node(h.knowledge, 'Cursor Entity', h.projectScope);
-    const before = (await graph(h)).body.version;
-    await record(h.knowledge, source, 'New fact.', h.projectScope);
-    const after = (await graph(h)).body.version;
-    expect(after).not.toBeNull();
-    expect(after).not.toBe(before);
-  });
-
-  // 13
-  it('dedupes the resolution fallback per unique name and scope', async () => {
-    const h = await createHarness();
-    const source = await node(h.knowledge, 'Fallback Source', h.projectScope);
-    const hidden = { autoCreateScope: h.threadScope('t-hidden') };
-    await record(h.knowledge, source, 'First [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    await record(h.knowledge, source, 'Second [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    await record(h.knowledge, source, 'Third [[Mystery]].', h.projectScope, 'thread-a', undefined, hidden);
-    const spy = vi.spyOn(h.knowledge, 'resolveNode');
-
-    await graph(h);
-    const mysteryLookups = spy.mock.calls.filter(([input]) => input.name.toLocaleLowerCase() === 'mystery');
-    expect(mysteryLookups).toHaveLength(1);
-  });
-
-  // 14
-  it('resolves a name identically whether or not its target is in the window', async () => {
-    const db = new InMemoryDB();
-    const store = new InMemoryKnowledgeStorage({ db });
-    const wide = await createHarness({ knowledge: store, limits: { maxNodes: 10 } });
-    const source = await node(store, 'A source entity', wide.projectScope);
-    const target = await node(store, 'Z target entity', wide.projectScope);
-    await record(store, source, 'Links [[Z target entity]].', wide.projectScope);
-
-    const wideBody = (await graph(wide)).body;
-    expect(wideBody.edges).toEqual([
-      expect.objectContaining({ source: source.id, target: target.id, type: 'wikilink' }),
+    const labels = (pages: Array<{ name: string; displayLabel?: string }>) =>
+      pages.map(page => [page.name, page.displayLabel]).sort();
+    expect(labels((await h.get('/graph')).body.pages)).toEqual([
+      ['Deploy runbook', undefined],
+      ['Handbook', undefined],
+      ['Org one', `Organization ${ORG}`],
+      ['Project P', 'Project'],
     ]);
-    expect(wideBody.outOfWindow).toHaveLength(0);
-
-    // Same seeded fixture, narrow window: the target still RESOLVES (to the
-    // same entity), it just falls out of the node window.
-    const narrow = await createHarness({ knowledge: store, limits: { maxNodes: 1 } });
-    // narrow harness has its own project — reseed under its scope.
-    const narrowSource = await node(store, 'A source entity', narrow.projectScope);
-    const narrowTarget = await node(store, 'Z target entity', narrow.projectScope);
-    await record(store, narrowSource, 'Links [[Z target entity]].', narrow.projectScope);
-    const narrowBody = (await graph(narrow)).body;
-    expect(narrowBody.nodes.map(node => node.id)).toEqual([narrowSource.id]);
-    expect(narrowBody.edges).toHaveLength(0);
-    expect(narrowBody.outOfWindow).toEqual([{ id: narrowTarget.id, name: 'Z target entity' }]);
-    expect(narrowBody.unresolvedCapped.count).toBe(0);
+    expect(labels((await h.get('/tree')).body.pages)).toEqual([['Org one', `Organization ${ORG}`]]);
+    const page = await h.get(`/pages/${h.runbook.id}`);
+    expect(labels(page.body.ancestors)).toEqual([
+      ['Org one', `Organization ${ORG}`],
+      ['Project P', 'Project'],
+    ]);
   });
 
-  // 15
-  it('reports unique unknown names beyond the fallback cap as unresolvedCapped, not dangling', async () => {
-    const h = await createHarness({ limits: { maxFallbackLookups: 1 } });
-    const source = await node(h.knowledge, 'Capped Source', h.projectScope);
-    await record(h.knowledge, source, 'Sees [[Ghost One]] then [[Ghost Two]].', h.projectScope, 'thread-a', undefined, {
-      autoCreateScope: h.threadScope('t-hidden'),
+  it("shows a member the org and the viewed project's pages, never another project's, a session's or another org's", async () => {
+    const h = await createHarness();
+    const graph = await h.get('/graph');
+    expect(graph.status).toBe(200);
+    expect(names(graph.body.pages)).toEqual(['Deploy runbook', 'Handbook', 'Org one', 'Project P']);
+    expect(graph.body.edges).toContainEqual(expect.objectContaining({ kind: 'mention' }));
+
+    const roots = await h.get('/tree');
+    expect(names(roots.body.pages)).toEqual(['Org one']);
+    const underOrg = await h.get(`/tree?parentId=${h.org.id}`);
+    expect(names(underOrg.body.pages)).toEqual(['Handbook', 'Project P']);
+  });
+
+  it('reads the other project through its own route', async () => {
+    const h = await createHarness();
+    const graph = await h.get('/graph', h.otherProjectId);
+    expect(names(graph.body.pages)).toEqual(['Handbook', 'Org one', 'Project Q', 'Q secret']);
+  });
+
+  it('returns a readable page with its notes and 404s a page outside the read scope', async () => {
+    const h = await createHarness();
+    const page = await h.get(`/pages/${h.runbook.id}`);
+    expect(page.status).toBe(200);
+    expect(page.body.page.name).toBe('Deploy runbook');
+    expect(page.body.notes.map((note: { text: string }) => note.text)).toEqual([
+      'Follow the [[Handbook]] before deploying',
+    ]);
+    expect((await h.get(`/pages/${h.q.id}`)).status).toBe(404);
+    expect((await h.get(`/pages/${h.thread.id}`)).status).toBe(404);
+    expect((await h.get('/pages/missing')).status).toBe(404);
+  });
+
+  it('searches and lists activity within the read scope only', async () => {
+    const h = await createHarness();
+    const search = await h.get('/search?q=secret');
+    expect(search.body.results).toEqual([]);
+    const hits = await h.get('/search?q=runbook');
+    expect(hits.body.results.map((hit: { page: { name: string } }) => hit.page.name)).toEqual(['Deploy runbook']);
+    const activity = await h.get('/activity');
+    expect(activity.status).toBe(200);
+    for (const event of activity.body.events) {
+      expect([h.org.id, h.p.id]).toContain(event.scopeId);
+    }
+  });
+
+  it('404s a project in another org and a malformed project id, and 401s a signed-out caller', async () => {
+    const h = await createHarness();
+    expect((await h.get('/graph', h.foreignProjectId)).status).toBe(404);
+    expect((await h.get('/graph', 'not-a-uuid')).status).toBe(404);
+    const signedOut = await createHarness({ user: null });
+    expect((await signedOut.get('/graph')).status).toBe(401);
+  });
+
+  it('refuses a caller with no organization', async () => {
+    const h = await createHarness({ user: { workosId: 'user-1' } });
+    expect((await h.get('/graph')).status).toBe(403);
+  });
+
+  it('500s with the declaration error when the host does not declare project scopes', async () => {
+    // A host on the SDK's default declarations: org and thread, but no `project:` type.
+    const withoutProjects = {
+      'org:$orgId': scopes['org:$orgId'],
+      'thread:$threadId': { access: [{ principal: 'self' as const, role: 'owner' as const }] },
+    };
+    const h = await createHarness({ declarations: withoutProjects as unknown as typeof scopes });
+    const response = await h.get('/graph');
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe('knowledge_misconfigured');
+  });
+
+  it('returns grants between the scopes shown, only from principal scopes the member can read', async () => {
+    const h = await createHarness({
+      declarations: {
+        ...scopes,
+        'role:$orgId:admin': {},
+        'project:$projectId': {
+          ...scopes['project:$projectId'],
+          access: [
+            ...scopes['project:$projectId'].access,
+            { principal: 'org:$orgId' as const, role: 'contributor' as const },
+            { principal: 'role:$orgId:admin' as const, role: 'owner' as const },
+          ],
+        },
+      },
+    });
+    const graph = await h.get('/graph');
+    expect(graph.status).toBe(200);
+    // The org rule makes both projects readable, so both grants show; the unwritten admin role and the
+    // projects' own `self` rules draw nothing.
+    expect(graph.body.grants).toEqual(
+      expect.arrayContaining([
+        { principal: `org:${ORG}`, principalId: h.org.id, target: h.p.id, role: 'contributor' },
+        { principal: `org:${ORG}`, principalId: h.org.id, target: h.q.id, role: 'contributor' },
+      ]),
+    );
+    expect(graph.body.grants).toHaveLength(2);
+  });
+
+  it('rejects out-of-range limits', async () => {
+    const h = await createHarness();
+    expect((await h.get('/tree?limit=0')).status).toBe(400);
+    expect((await h.get('/graph?maxPages=100000')).status).toBe(400);
+  });
+
+  describe('change stream', () => {
+    /** Reads SSE frames from the events route until `count` change frames arrive, then disconnects. */
+    async function openStream(h: Awaited<ReturnType<typeof createHarness>>) {
+      const abort = new AbortController();
+      const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/events`, {
+        signal: abort.signal,
+      });
+      const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = '';
+      const next = async () => {
+        for (;;) {
+          const end = buffer.indexOf('\n\n');
+          if (end >= 0) {
+            const frame = buffer.slice(0, end);
+            buffer = buffer.slice(end + 2);
+            const data = frame.split('\n').find(line => line.startsWith('data: '));
+            if (data) return JSON.parse(data.slice(6));
+            continue;
+          }
+          const { value, done } = await reader.read();
+          if (done) throw new Error('stream ended');
+          buffer += value;
+        }
+      };
+      return { response, next, reader, close: () => abort.abort() };
+    }
+
+    it("streams the viewed project's changes and nothing from another project or a session", async () => {
+      const h = await createHarness();
+      const stream = await openStream(h);
+      expect(stream.response.status).toBe(200);
+      expect(stream.response.headers.get('content-type')).toContain('text/event-stream');
+
+      await h.store.createPage({ parentId: h.q.id, name: 'Another Q secret', provenance: host });
+      await h.store.createPage({ parentId: h.thread.id, name: 'More scratch', provenance: host });
+      await h.store.addNote({
+        pageId: h.runbook.id,
+        text: 'Roll back first',
+        stampScopeIds: [h.p.id],
+        mentions: [],
+        provenance: host,
+      });
+
+      const change = await stream.next();
+      expect(change).toMatchObject({ kind: 'note', op: 'add', pageId: h.runbook.id });
+      stream.close();
     });
 
-    const { body } = await graph(h);
-    expect(body.edges).toHaveLength(0);
-    expect(body.unresolvedCapped.count).toBe(1);
-    expect(body.unresolvedCapped.names).toEqual(['Ghost Two']);
-  });
-
-  // 16
-  it('thread view ADDS the thread rung without swapping the project baseline; the default view omits thread facts', async () => {
-    const h = await createHarness();
-    const baseline = await node(h.knowledge, 'Baseline Entity', h.projectScope);
-    const threadEntity = await node(h.knowledge, 'Thread Entity', h.threadScope('t-16'));
-    await record(h.knowledge, threadEntity, 'Thread-scoped capture.', h.threadScope('t-16'), 't-16');
-
-    const defaultView = (await graph(h)).body;
-    expect(defaultView.nodes.map(node => node.id)).toEqual([baseline.id]);
-
-    const threadView = (await graph(h, '?threadId=t-16')).body;
-    expect(threadView.nodes.map(node => node.id).sort()).toEqual([baseline.id, threadEntity.id].sort());
-    const baselineNode = threadView.nodes.find(node => node.id === baseline.id);
-    expect(baselineNode).toMatchObject({ name: 'Baseline Entity', rung: 'resource' });
-  });
-
-  // 17
-  it('404s an unknown threadId and a cross-org threadId with existing narrow-scoped facts', async () => {
-    const h = await createHarness();
-    await node(h.knowledge, 'Some Entity', h.projectScope);
-    expect((await graph(h, '?threadId=no-such-thread')).status).toBe(404);
-
-    // The cross-org thread's facts EXIST and are scoped project-level-or-narrower
-    // under the OTHER org — proving the scope guard, not an empty-fixture accident.
-    const foreign = await createHarness({
-      orgId: OTHER_ORG,
-      user: { workosId: 'other', organizationId: OTHER_ORG },
-      knowledge: h.knowledge,
+    it('closes after five minutes so the browser reconnects and the read scope is checked again', async () => {
+      const h = await createHarness();
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+      try {
+        const stream = await openStream(h);
+        const ended = (async () => {
+          for (;;) if ((await stream.reader.read()).done) return true;
+        })();
+        await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
+        expect(await Promise.race([ended, Promise.resolve(false)])).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await ended).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
-    const foreignEntity = await node(h.knowledge, 'Foreign Entity', foreign.projectScope);
-    await record(h.knowledge, foreignEntity, 'Foreign capture.', foreign.threadScope('t-foreign'), 't-foreign');
-    // Sanity: the fixture is non-empty in its own org.
-    expect((await graph(foreign, '?threadId=t-foreign')).status).toBe(200);
 
-    const { status, body } = await graph(h, '?threadId=t-foreign');
-    expect(status).toBe(404);
-    expect((body as unknown as { view?: string }).view).toBeUndefined(); // never a silent default-view fallback
-  });
-
-  // 18
-  it('validates a thread whose ONLY facts are thread-scoped (pins the candidate-scope lookup)', async () => {
-    const h = await createHarness();
-    const threadEntity = await node(h.knowledge, 'Solo Thread Entity', h.threadScope('t-solo'));
-    const created = await record(h.knowledge, threadEntity, 'Thread-only capture.', h.threadScope('t-solo'), 't-solo');
-
-    const { status, body } = await graph(h, '?threadId=t-solo');
-    expect(status).toBe(200);
-    expect(body.view).toBe('thread');
-    expect(body.nodes.map(node => node.id)).toContain(threadEntity.id);
-    expect(body.nodes.find(node => node.id === threadEntity.id)?.recordCount).toBe(1);
-    expect(created.scope).toEqual(h.threadScope('t-solo'));
-  });
-
-  // 19
-  it('entity endpoint: thread-scoped entity 404s without threadId, 200 with it, 404 with a cross-org threadId', async () => {
-    const h = await createHarness();
-    const threadEntity = await node(h.knowledge, 'Drilled Entity', h.threadScope('t-19'));
-    await record(h.knowledge, threadEntity, 'Thread-scoped fact.', h.threadScope('t-19'), 't-19');
-
-    expect((await nodeDetail(h, threadEntity.id)).status).toBe(404);
-
-    const withThread = await nodeDetail(h, threadEntity.id, '?threadId=t-19');
-    expect(withThread.status).toBe(200);
-    expect(withThread.body.records).toHaveLength(1);
-    expect(withThread.body.records[0]).toMatchObject({ rung: 'thread', sourceThreadId: 't-19' });
-
-    // Cross-org thread: seeded under the other org, requested from ours.
-    const foreign = await createHarness({
-      orgId: OTHER_ORG,
-      user: { workosId: 'other', organizationId: OTHER_ORG },
-      knowledge: h.knowledge,
+    it('refuses a project in another org before opening a stream', async () => {
+      const h = await createHarness();
+      const response = await h.app.request(`/web/factory/projects/${h.foreignProjectId}/knowledge/events`);
+      expect(response.status).toBe(404);
     });
-    const foreignEntity = await node(h.knowledge, 'Foreign Holder', foreign.projectScope);
-    await record(h.knowledge, foreignEntity, 'Foreign fact.', foreign.threadScope('t-x19'), 't-x19');
-    expect((await nodeDetail(h, threadEntity.id, '?threadId=t-x19')).status).toBe(404);
   });
 });

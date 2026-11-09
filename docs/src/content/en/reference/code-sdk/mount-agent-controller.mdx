@@ -7,12 +7,6 @@ packages:
 
 # mountAgentControllerOnMastra()
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 The `mountAgentControllerOnMastra()` function builds the Mastra Code agent controller (the coding agent behind [Mastra Code](https://code.mastra.ai), with its modes, tools, memory, and thread management) and registers it on a server-owned [Mastra](/reference/core/mastra-class) instance. Use it to serve the Mastra Code agent to your own UI (web app, editor, bot): each client creates or resumes its own isolated session through the returned [`AgentController`](/reference/agent-controller/agent-controller-class).
 
 To construct the `Mastra` instance yourself (for example in a deployable entry file), use `prepareAgentControllerMount()` from the same package, which returns the constructor args plus a `finalize()` callback.
@@ -87,8 +81,10 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
   {
     name: 'controllerId',
     type: 'string',
-    description: 'Id under which the controller is registered on the Mastra instance.',
+    description:
+      'Key the controller is registered under on the Mastra instance. Clients pass this key to `client.getAgentController()`.',
     isOptional: true,
+    defaultValue: 'controller.id',
   },
   {
     name: 'modes',
@@ -100,9 +96,10 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
   {
     name: 'subagents',
     type: 'AgentControllerSubagent[]',
-    description: 'Override or extend subagent definitions.',
+    description:
+      'Subagent definitions to register. None are registered by default. Pass `[...builtinSubagents]` (exported from `@mastra/code-sdk`) to enable the explore, plan, and execute subagents.',
     isOptional: true,
-    defaultValue: 'explore/plan/execute',
+    defaultValue: '[]',
   },
   {
     name: 'extraTools',
@@ -131,9 +128,31 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     isOptional: true,
   },
   {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      "Agent controller built-in tools (for example, 'submit_plan') removed from every session. Tool guidance skips disabled tools, and plan mode writes the plan file instead of calling 'submit_plan' when it's disabled.",
+    isOptional: true,
+  },
+  {
     name: 'storage',
-    type: 'StorageConfig',
-    description: 'Custom storage config instead of the auto-detected default.',
+    type: 'StorageConfig | MastraCompositeStore',
+    description:
+      'Custom storage config instead of the auto-detected default, or a pre-built store instance. An injected instance has no connection test or LibSQL fallback. In both cases the SDK wraps the store: scorer results are discarded unless `disableScoreStorage` is `false`, and local observability goes to a separate DuckDB store only when local tracing is enabled and that store opens; otherwise local observability is disabled. Cloud export runs independently when cloud credentials are configured.',
+    isOptional: true,
+  },
+  {
+    name: 'storageBackend',
+    type: "'libsql' | 'pg'",
+    description:
+      'Backend of an injected `storage` instance. Inferred for `LibSQLStore` and `PostgresStore`; required for any other injected store, otherwise mounting throws.',
+    isOptional: true,
+  },
+  {
+    name: 'vector',
+    type: 'MastraVector',
+    description:
+      "Pre-built vector store for recall search. Skips creating the default vector store. When `storage` is a pre-built instance, no default vector store is created, so pass `vector` to keep semantic recall search; without it, recall still browses history but can't search semantically.",
     isOptional: true,
   },
   {

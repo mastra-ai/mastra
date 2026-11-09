@@ -1,4 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
@@ -45,7 +47,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
-            className="relative rounded-full focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn('relative rounded-full disabled:cursor-not-allowed disabled:opacity-60', focusRing)}
             aria-label="Upload avatar"
             data-testid="agent-configure-avatar-trigger"
           >

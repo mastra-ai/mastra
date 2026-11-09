@@ -1,6 +1,13 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
-import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
+import type {
+  RetentionConfig,
+  StorageDomains,
+  ThreadQueryResponse,
+  TrustedThreadRowsQueryPlan,
+  TrustedThreadQueryPlan,
+  QueryThreadsResult,
+} from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
@@ -8,6 +15,15 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
+import {
+  aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
+  outcomeFeatures,
+  spanAggregateFeatures,
+  spanQueryFeatures,
+  threadQueryFeatures,
+  timingFeatures,
+} from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -15,19 +31,57 @@ const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 const DUCKDB_OBSERVABILITY_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'trace-query',
+  'trace-aggregate',
+  ...aggregateTimeToFirstFeatures,
+  ...spanQueryFeatures,
+  ...spanAggregateFeatures,
+  ...threadQueryFeatures,
+  'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
   'trace-query-tenant-scope',
+  'feedback',
+  'trace-query-context-ids',
+  ...contextFieldFeatures,
+  ...timingFeatures,
+  ...outcomeFeatures,
+  'trace-query-root-span-fields',
+  'trace-query-root-entity-id',
 ] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'delta-polling',
   'trace-query',
+  'trace-aggregate',
+  ...aggregateTimeToFirstFeatures,
+  ...spanQueryFeatures,
+  ...spanAggregateFeatures,
+  ...threadQueryFeatures,
+  'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
   'trace-query-tenant-scope',
+  'feedback',
+  'trace-query-context-ids',
+  ...contextFieldFeatures,
+  ...timingFeatures,
+  ...outcomeFeatures,
+  'trace-query-root-span-fields',
+  'trace-query-root-entity-id',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
@@ -62,6 +116,8 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   private delegate: ObservabilityStoreImpl | null = null;
   private loadPromise: Promise<ObservabilityStoreImpl | null> | null = null;
   private unavailableError: MastraError | null = null;
+  private pendingInits = new Set<Promise<void>>();
+  private closed = false;
 
   constructor(config: ObservabilityDuckDBConfig) {
     super();
@@ -142,12 +198,28 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
-    const delegate = await this.loadDelegate();
-    if (!delegate) {
-      return;
+    if (this.closed) {
+      throw new Error('DuckDB observability storage is closed');
     }
 
-    return delegate.init(...args);
+    const init = (async () => {
+      const delegate = await this.loadDelegate();
+      if (delegate && !this.closed) {
+        await delegate.init(...args);
+      }
+    })();
+    this.pendingInits.add(init);
+    try {
+      await init;
+    } finally {
+      this.pendingInits.delete(init);
+    }
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    await Promise.allSettled(this.pendingInits);
+    await this.db.close();
   }
 
   async migrateSpans(
@@ -230,6 +302,27 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.queryTraces(...args);
   }
 
+  async aggregateTraces(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateTraces']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateTraces']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateTraces(...args);
+  }
+
+  async aggregateSpans(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateSpans']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateSpans(...args);
+  }
+
+  async querySpans(
+    ...args: Parameters<ObservabilityStoreImpl['querySpans']>
+  ): ReturnType<ObservabilityStoreImpl['querySpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.querySpans(...args);
+  }
+
   async getTraceQueryObservedFields(
     ...args: Parameters<ObservabilityStoreImpl['getTraceQueryObservedFields']>
   ): ReturnType<ObservabilityStoreImpl['getTraceQueryObservedFields']> {
@@ -244,6 +337,11 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getTraceQueryValues(...args);
   }
 
+  async queryThreads(plan: TrustedThreadRowsQueryPlan): Promise<ThreadQueryResponse>;
+  async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  async queryThreads(
+    plan: TrustedThreadQueryPlan | TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | ThreadQueryResponse>;
   async queryThreads(
     ...args: Parameters<ObservabilityStoreImpl['queryThreads']>
   ): ReturnType<ObservabilityStoreImpl['queryThreads']> {
@@ -431,6 +529,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getScoreById(...args);
   }
 
+  async getFeedbackById(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackById']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackById']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackById(...args);
+  }
+
   async getScoreAggregate(
     ...args: Parameters<ObservabilityStoreImpl['getScoreAggregate']>
   ): ReturnType<ObservabilityStoreImpl['getScoreAggregate']> {
@@ -606,6 +711,6 @@ export class DuckDBStore extends MastraCompositeStore {
    * Safe to call more than once; subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    await this.db.close();
+    await this.observabilityStore.close();
   }
 }

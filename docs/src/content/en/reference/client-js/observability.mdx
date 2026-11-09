@@ -1,6 +1,6 @@
 ---
-title: "Reference: Observability API | Client SDK"
-description: "The Observability API provides methods to retrieve traces, monitor application performance, score traces for evaluation, and record feedback linked to traces and spans."
+title: 'Reference: Observability API | Client SDK'
+description: 'The Observability API provides methods to retrieve traces, monitor application performance, score traces for evaluation, and record feedback linked to traces and spans.'
 packages:
   - '@mastra/client-js'
 ---
@@ -48,7 +48,7 @@ const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId)
 
 ## Listing traces for a list view
 
-`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt.
+`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries short `inputPreview`, `outputPreview` and `errorPreview` strings instead (at most 100 characters, ending with `…` when cut), so a list can render preview columns without transferring the whole payload, plus `threadId` and `resourceId` for the memory context columns.
 
 Prefer it whenever you are rendering many traces at once, and fetch the full record only when a row is opened:
 
@@ -68,9 +68,178 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
-## Querying traces and threads
+## Querying spans
 
-`queryTraces()` finds completed logical traces using trace fields and conditions over related spans, scores, or feedback. Every query requires an ISO timestamp range of at most 31 days.
+`querySpans()` returns completed span summaries across traces. It requires a positive ISO timestamp range over span start time and supports cursor pagination:
+
+```typescript
+const result = await mastraClient.querySpans({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-123' } },
+      { op: 'gte', left: { path: 'durationMs' }, right: { literal: 1000 } },
+    ],
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+// Pass result.page.next as page.after to continue with the same filters and ordering.
+console.log(result.spans)
+```
+
+The response is `{ spans, page: { next } }`. Check `capabilities.spanQuery` before calling, and the field-specific capabilities before using optional filters. See [Query spans](/reference/observability/tracing/advanced-queries#query-spans) for fields, operators, defaults, capabilities, response details, and cursor handling.
+
+### Aggregate spans
+
+`aggregateSpans()` groups completed spans matching a direct span predicate. It returns one row per group, or per group and non-empty time bucket when `interval` is set. It counts spans at any depth, such as nested agent runs that trace aggregation misses:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanAggregate) {
+  const { rows, truncated } = await mastraClient.aggregateSpans({
+    timeRange: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    groupBy: ['status'],
+    interval: '1d',
+    measures: ['count', 'errorRate'],
+  })
+}
+```
+
+The request and response structure follows `aggregateTraces()`, with direct span predicates and span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling, and `capabilities.spanAggregateModelDimensions` before grouping or counting distinct values by `model` or `provider`. With an older adapter, those requests return `501`.
+
+Both `aggregateTraces()` and `aggregateSpans()` accept time to first token (TTFT) and time to first chunk (TTFC) measures, `timeToFirstToken.*` and `timeToFirstChunk.*`, when `capabilities.aggregateTimeToFirstMeasures` is `true`. Spans and traces without a recorded value are skipped, never counted as 0. See [Time to first chunk (TTFC)](/reference/observability/tracing/advanced-queries#time-to-first-chunk-ttfc) and [Time to first token (TTFT)](/reference/observability/tracing/advanced-queries#time-to-first-token-ttft).
+
+See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
+
+## Querying threads
+
+`queryTraceThreads()` returns thread summaries from completed traces through `POST /observability/threads/query`. Each row includes activity timestamps, trace counts, context and previews. Traces without a thread ID aren't included.
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  orderBy: [{ field: 'endedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+for (const thread of result.threads) {
+  console.log(thread.firstTraceId, thread.lastTraceId, thread.traceCount, thread.outputPreview)
+}
+```
+
+### Thread time ranges
+
+Choose exactly one time selector. Each range requires ISO timestamps with `from` earlier than `to`. The range includes `from` and excludes `to`.
+
+| Selector | Matches threads with |
+| - | - |
+| `timeRange.traces: { from, to }` | At least one trace that started in the window |
+| `timeRange.threads: { field: 'startedAt', from, to }` | Their first activity in the window |
+| `timeRange.threads: { field: 'endedAt', from, to }` | Their last activity in the window |
+
+For example, find threads whose most recent activity falls on October 1:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    threads: {
+      field: 'endedAt',
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+})
+```
+
+Rows include the full retained history within the authorized scope, including traces before and after the window. Filters apply to these complete rows. An `environment` filter checks the first trace's environment.
+
+### Thread filters
+
+Use `where` to filter thread rows. Combine predicates with `and`, `or` and `not`.
+
+| Fields | Operators |
+| - | - |
+| `threadId`, `organizationId`, `firstTraceId`, `lastTraceId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | Same string operators |
+| `status` | `eq`, `ne`, `in`, `notIn`, with values `success` or `error` |
+| `startedAt`, `endedAt`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
+| `traceCount` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte` |
+
+For example, filter for threads from selected agents with at least three traces:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'in', value: { path: 'entityId' }, set: ['support-agent', 'sales-agent'] },
+      { op: 'gte', left: { path: 'traceCount' }, right: { literal: 3 } },
+    ],
+  },
+})
+```
+
+Presence filters use `{ op: 'exists', path: 'userId' }` to check for a non-null value. Model/provider and previews are available in returned rows but aren't filterable.
+
+### Thread response
+
+The response is `{ threads, page: { next } }`, without a total count. Each entry in `threads` contains these fields:
+
+| Returned fields | Meaning |
+| - | - |
+| `threadId`, `organizationId` | Thread identity. Equal thread IDs in different organizations remain separate. |
+| `firstTraceId`, `lastTraceId` | Earliest and latest trace by start time. Equal start times use trace ID as a deterministic tie-breaker. |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | First-trace context, or `null` when missing. |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | First-trace entity. |
+| `startedAt`, `endedAt` | Earliest start and maximum end time across the thread. |
+| `status` | `error` when the last-started trace's root span has an error, otherwise `success`. |
+| `traceCount` | Number of logical traces in the thread. |
+| `inputPreview` | First trace's input preview. |
+| `outputPreview`, `errorPreview` | Last-started trace's previews. |
+| `timeToFirstChunkMs` | First trace's root agent time to first chunk, in milliseconds. `null` when unavailable or the root isn't an agent. |
+| `timeToFirstTokenMs` | First trace's root agent time to first token, in milliseconds, with the same `null` rules. Present only when the store supports it. |
+
+An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
+
+### Thread ordering and pagination
+
+Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 25 rows and allow at most 100. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
+
+To load the traces within a thread, use [`queryTraces()`](#querying-traces) with a `threadId` filter and a time range covering the thread's activity.
+
+### Thread query support
+
+Check `capabilities.threadQueryRows` from `getObservabilityCapabilities()` before using this contract. A missing or false value means full thread rows aren't available. Older core or storage packages return a structured `501` for these requests. Legacy identity requests remain supported for mixed package versions.
+
+ClickHouse rejects broad thread queries when the authorized history exceeds 250,000 stored trace-root rows, including duplicate copies. A narrower time range can still succeed by selecting fewer candidate threads. Rejected queries return `503 TRACE_QUERY_RESOURCE_LIMIT` without partial results.
+
+## Querying traces
+
+`queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.
 
 ```typescript
 const result = await mastraClient.queryTraces({
@@ -79,18 +248,20 @@ const result = await mastraClient.queryTraces({
     to: '2026-08-08T00:00:00.000Z',
   },
   where: {
-    scores: {
+    spans: {
       some: {
         op: 'and',
         args: [
-          { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
-          { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+          { op: 'exists', path: 'error' },
         ],
       },
     },
   },
 })
 ```
+
+See [Query traces](/reference/observability/tracing/advanced-queries#query-traces) for request fields, predicates, limits, response shapes, and errors.
 
 ### Load a page and poll for traces
 
@@ -117,7 +288,34 @@ const changes = await mastraClient.queryTraces({
 
 Merge `changes.traces` by `traceId`, retain `changes.deltaCursor`, and continue while `changes.delta.hasMore` is `true`. Keep the same time range and predicate across polls. Only completed traces are returned; polling doesn't guarantee notifications for related-record updates, deletions, or traces that stop matching.
 
-See [Delta polling](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop. `queryTraceThreads()` remains keyset-only.
+See [Delta polling](/reference/observability/tracing/advanced-queries#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop.
+
+### Aggregate traces
+
+`aggregateTraces()` groups the traces selected by a time range and optional `where` predicate, and returns one row per group, or per group and non-empty time bucket when `interval` is set. It accepts the same predicates as `queryTraces()`.
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.traceAggregate) {
+  const { rows, truncated } = await mastraClient.aggregateTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+    groupBy: ['entityName'],
+    interval: '1d',
+    measures: ['count', 'errorRate', 'duration.p95', 'cost.sum'],
+    orderBy: { field: 'count', direction: 'desc' },
+    limit: 10,
+  })
+}
+```
+
+Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`. Check `capabilities.traceAggregate` before calling. The client applies its configured retry policy, except for `4xx` responses, `501`, and `504` responses with code `TRACE_QUERY_EXECUTION_TIMEOUT`, which aren't retried. Ordinary gateway `504` responses remain retryable.
+
+See [Aggregate traces](/reference/observability/tracing/advanced-queries#aggregate-traces) for dimensions, measures, token and cost semantics, time buckets, limits, and errors.
 
 ### Discover trace-query fields and values
 
@@ -137,7 +335,9 @@ const fields = await mastraClient.getTraceQueryFields({
 })
 ```
 
-Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A global picker can fetch `trace`, `spans`, `scores`, and `feedback` in parallel.
+For the `trace` scope on a server that supports aggregation, the response also includes `aggregate`: the `dimensions` you can pass to `groupBy` and the `measures` you can request. See [Discover fields and values](/reference/observability/tracing/advanced-queries#discover-fields-and-values).
+
+Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A field picker can fetch the `trace` and `spans` scopes in parallel.
 
 Call `getTraceQueryValues()` only after selecting a field with `valueSuggestions: true`:
 
@@ -165,61 +365,6 @@ Suggestions are bounded and advisory. Manual values remain valid when suggestion
 
 A discovery timeout rejects with `504 TRACE_QUERY_EXECUTION_TIMEOUT`. Backend memory or resource exhaustion rejects with `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither error contains partial suggestions; truncation flags are only present on successful, completely ranked responses.
 
-`queryTraceThreads()` returns thread identities derived from observability traces after applying eligibility and cross-trace conditions. It doesn't read or return memory thread records or messages. In this example, one production trace can have the low factuality score while another production trace in the same thread has the clinician correction:
-
-```typescript
-const result = await mastraClient.queryTraceThreads({
-  traces: {
-    timeRange: {
-      from: '2026-08-01T00:00:00.000Z',
-      to: '2026-08-08T00:00:00.000Z',
-    },
-    where: {
-      op: 'eq',
-      left: { path: 'environment' },
-      right: { literal: 'production' },
-    },
-  },
-  where: {
-    op: 'and',
-    args: [
-      {
-        traces: {
-          some: {
-            scores: {
-              some: {
-                op: 'lt',
-                left: { path: 'score' },
-                right: { literal: 0.6 },
-              },
-            },
-          },
-        },
-      },
-      {
-        traces: {
-          some: {
-            feedback: {
-              some: {
-                op: 'eq',
-                left: { path: 'feedbackType' },
-                right: { literal: 'clinician-correction' },
-              },
-            },
-          },
-        },
-      },
-    ],
-  },
-})
-
-// { threads: [{ threadId: 'thread-123' }], page: { next: null } }
-```
-
-The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Cursor pages are deterministic but aren't a database snapshot, so signals written between requests can change later pages. PostgreSQL and ClickHouse trace and thread queries have a configurable 15-second execution timeout.
-
-See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, thread qualification semantics, cursor pagination, response shapes, and errors.
-
 ## Deleting traces
 
 Delete traces and their associated spans, metrics, logs, scores, and feedback:
@@ -232,7 +377,7 @@ const result = await mastraClient.deleteTraces({
 console.log(result.success)
 ```
 
-Each request accepts up to 1,000 trace IDs. Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
+Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
 
 ## Scoring traces
 
@@ -261,13 +406,54 @@ const scores = await mastraClient.listScoresBySpan({
 })
 ```
 
+## Get a score by ID
+
+Use `getScore()` to retrieve one observability score:
+
+```typescript
+const { score } = await mastraClient.getScore('score-id-123')
+```
+
+The response is `{ score: record | null }`. A missing score returns HTTP 200 with `{ score: null }`.
+The return type is `GetScoreResponse`, exported from `@mastra/client-js`.
+
+## Creating scores
+
+Create a score for a trace, optionally identifying a span within it:
+
+```typescript
+const response = await mastraClient.createScore({
+  score: {
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    scorerId: 'accuracy',
+    score: 0.95,
+  },
+})
+```
+
+`createScore()` requires a nonblank `score.traceId`, with an optional `spanId`. The client generates a missing `scoreId` and ISO `timestamp` once per call and preserves them across retries. Supply these fields to reuse an existing identity. See [signal write options](#signal-write-options) for context resolution and retry behavior.
+
 ## Feedback
 
-Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform Feedback API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the configured API server. Create methods support OSS and Platform. Full replacement uses Platform's PUT endpoint. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+
+### Get feedback by ID
+
+Use `getFeedback()` to retrieve one feedback record:
+
+```typescript
+const { feedback } = await mastraClient.getFeedback('feedback-id-123')
+```
+
+The response is `{ feedback: record | null }`. A missing record returns HTTP 200 with `{ feedback: null }`.
+The return type is `GetFeedbackResponse`, exported from `@mastra/client-js`.
+
+Both getters accept an unencoded ID and encode it as a URL path segment. They use the client's configured API prefix, credentials, and headers. Record timestamps are ISO strings in the JSON response.
 
 ### Creating feedback
 
-Create a feedback record linked to a trace or span:
+Create a feedback record for a trace, optionally identifying a span within it:
 
 ```typescript
 const response = await mastraClient.createFeedback({
@@ -281,6 +467,54 @@ const response = await mastraClient.createFeedback({
   },
 })
 ```
+
+`createFeedback()` requires a nonblank `feedback.traceId`, with an optional `spanId`. The client generates a missing `feedbackId` and ISO `timestamp` once per call and preserves them across retries. Set `feedbackUserId` to identify the feedback author. `userId` identifies the span's user. An authenticated OSS user takes precedence over a submitted feedback author.
+
+### Signal write options
+
+Both create methods accept an optional top-level `contextMode` alongside the `feedback` or `score` wrapper:
+
+- `"provided"` uses the record's flattened context fields without looking up spans. Missing context fields aren't enriched.
+- `"resolve"` derives context from the stored root and optional target span. Root tags are inherited. Record metadata overrides matching stored metadata keys. A missing root returns `TRACE_NOT_FOUND`. A missing target returns `SPAN_NOT_FOUND`.
+
+Omitting `contextMode` uses the server's default: `"provided"` on OSS and `"resolve"` on Platform. The client preserves omission. Select a mode explicitly when the same behavior is required on both servers. On OSS, each configured trusted scope field overrides caller input. In provided mode, other context fields remain caller-supplied. For example, a trusted organization ID overrides `organizationId` but doesn't clear `resourceId` when no trusted resource scope is configured.
+
+```typescript
+const result = await mastraClient.createFeedback({
+  contextMode: 'resolve',
+  feedback: {
+    traceId: 'trace-123',
+    feedbackUserId: 'reviewer-1',
+    feedbackType: 'thumbs',
+    value: 1,
+  },
+})
+```
+
+Use `retries` and `anchorRetryTimeoutMs` in the optional second argument to control retries. Network and server errors use the client's transport retry settings. Only 404s with `TRACE_NOT_FOUND` or `SPAN_NOT_FOUND` receive anchor retries, for at most 30 seconds after the first such response. Set `anchorRetryTimeoutMs` to a shorter window or `0` to disable them. Other 404s and authentication or validation errors are terminal.
+
+Create responses contain `success` and optional `data` with the generated or supplied `feedbackId`/`scoreId`, `traceId`, nullable `spanId`, and normalized UTC `timestamp`. The client also accepts success-only responses. Platform success confirms publication. The record may not be immediately visible to reads. Direct OSS HTTP callers can omit the ID and timestamp to have the server generate them.
+
+Explicit modes require server support. Older servers may ignore `contextMode`. Deploy Platform's supplied-context support before sending `"provided"` there.
+
+### Replacing feedback on Platform
+
+`replaceFeedback()` sends a full replacement to `PUT /api/observability/feedback/:feedbackId`. Include the original `feedbackId`, `traceId`, and normalized `timestamp`, along with all feedback fields to retain. This method targets Platform. OSS server doesn't implement this replacement endpoint.
+
+```typescript
+await mastraClient.replaceFeedback({
+  feedback: {
+    feedbackId: 'feedback-1',
+    traceId: 'trace-123',
+    timestamp: '2026-01-01T00:00:00.123Z',
+    feedbackType: 'thumbs',
+    value: -1,
+    feedbackUserId: 'reviewer-1',
+  },
+})
+```
+
+Use the normalized timestamp from the create response's `data` when available. A changed timestamp identifies a different Platform record. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
 
 ### Deleting feedback and scores
 
@@ -368,7 +602,7 @@ const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
 
 ## Related
 
-- [Advanced trace queries](/reference/observability/tracing/trace-query): Query completed traces with recursive predicates
+- [Query traces and spans](/reference/observability/tracing/advanced-queries): Filter and aggregate completed traces or spans
 - [Feedback guide](/docs/observability/feedback): Learn how to create, list, and query feedback
 - [Feedback reference](/reference/observability/feedback): Review feedback schemas and HTTP routes
 - [Agents API](./agents): Learn about agent interactions that generate traces

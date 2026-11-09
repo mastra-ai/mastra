@@ -21,6 +21,29 @@ afterEach(() => {
   processed.length = 0;
 });
 
+it('maps application versions on real converted spans and overrides the OTel service version', async () => {
+  const observability = new DefaultObservabilityInstance({ name: 'version-test', exporters: [] });
+  const root = observability.startSpan({
+    type: SpanType.AGENT_RUN,
+    name: 'versioned agent',
+    metadata: { version: 'my-app-2.3.1' },
+  });
+  root.end();
+  const exporter = new LangfuseExporter({
+    publicKey: 'pk-test',
+    secretKey: 'sk-test',
+    resourceAttributes: { 'service.version': 'my-app-2.3.1' },
+  });
+  await exporter.onTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: root.exportSpan() });
+
+  expect(processed).toHaveLength(1);
+  expect(processed[0]!.attributes['langfuse.version']).toBe('my-app-2.3.1');
+  expect(processed[0]!.attributes['langfuse.trace.version']).toBeUndefined();
+  expect(processed[0]!.resource.attributes['service.version']).toBe('my-app-2.3.1');
+  await exporter.shutdown();
+  await observability.shutdown();
+});
+
 describe.each(['root-first', 'child-first'] as const)('real session conversion: %s', order => {
   it.each([
     ['implicit caller session', 'caller-thread'],

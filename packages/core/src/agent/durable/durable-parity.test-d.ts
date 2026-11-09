@@ -49,6 +49,7 @@ type ConsumedDuringPreparation =
   // Memory is resolved during preparation; thread/resource/memoryConfig are
   // extracted and stored in workflow state + registry
   | 'memory'
+  | 'scopes'
   // savePerStep is extracted and stored in workflow state during preparation
   | 'savePerStep'
   // RunId is generated/used during preparation, not forwarded as an "option"
@@ -69,8 +70,14 @@ type ConsumedDuringPreparation =
   | 'experimentalTransform'
   // Applied to caller-local stream output, never serialized or used to filter generation.
   | 'hideSignals'
+  // Caller-local stream lifecycle; read by DurableAgent.stream()/resume(), never serialized.
+  | 'closeOnSuspend'
+  | '_detachObserverOnCancel'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
+  // Caller-local step-owner object for plain runs; durable registers its steps
+  // under the registry entry instead, so this is never serialized or read here
+  | 'stepOwner'
   // Toolsets and clientTools are resolved into the `tools` record during
   // getToolsForExecution() in preparation
   | 'toolsets'
@@ -88,6 +95,8 @@ type ConsumedDuringPreparation =
   // Serverless waitUntil is call-site only for non-durable generate/stream.
   // Durable execution manages its own finish lifecycle, so this is intentionally unused.
   | 'serverless'
+  // Explicitly rejected during durable preparation before any side effects.
+  | 'eagerToolExecution'
   // Observability context keys from Partial<ObservabilityContext>
   | 'tracing'
   | 'loggerVNext'
@@ -128,13 +137,17 @@ type PhantomSerializedKeys = Exclude<
   | keyof AgentExecutionOptionsBase<any>
   // These are durable-internal representations that don't map 1:1 to a
   // base option key but are derived from one:
-  | 'hasErrorProcessors' // derived from errorProcessors.length
+  | 'hasErrorProcessors' // derived from configured errorProcessors.length (no framework defaults)
+  | 'emptyErrorProcessorOverride' // derived from a call-time errorProcessors: [] (replaces the defaults)
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
+  | 'agentMaxRetries' // derived from the agent's maxRetries config
+  | 'agentMaxRetriesConfigured' // preserves omitted vs explicitly configured maxRetries
   | 'instructionsOverride' // derived from instructions
   | 'systemMessage' // derived from system
   | 'transform' // shadow of transform policy (targets only)
   | 'isTaskComplete' // shadow of isTaskComplete (scorer names only)
   | 'structuredOutput' // serialized form of structuredOutput
+  | 'toolsetToolNames' // names of call-time toolsets tools (cross-process detection)
 >;
 
 describe('DurableAgent ↔ Agent parity gate', () => {

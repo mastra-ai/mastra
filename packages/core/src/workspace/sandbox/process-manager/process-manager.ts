@@ -97,10 +97,10 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       const abortSignal = args[1]?.abortSignal;
       if (abortSignal) {
         const onAbort = () => {
-          handle.kill().catch(() => {});
+          handle.killForAbort().catch(() => {});
         };
         if (abortSignal.aborted) {
-          handle.kill().catch(() => {});
+          onAbort();
         } else {
           abortSignal.addEventListener('abort', onAbort, { once: true });
           // Clean up listener when process exits
@@ -126,8 +126,9 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       const handle = await impl.get(...args);
       // Prune exited processes when their output is read — this is the
       // only automatic cleanup path. Keeps output available until the
-      // consumer has seen it at least once.
-      if (handle?.exitCode !== undefined) {
+      // consumer has seen it at least once. `release: false` lets an
+      // observer (such as a UI) read without taking it from the agent.
+      if (handle?.exitCode !== undefined && args[1]?.release !== false) {
         this._tracked.delete(handle.pid);
         this._dismissed.add(handle.pid);
       }
@@ -146,8 +147,15 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     throw new Error(`${this.constructor.name} must implement list()`);
   }
 
-  /** Get a handle to a process by PID. Subclasses can override for fallback behavior. */
-  async get(pid: string): Promise<ProcessHandle | undefined> {
+  /**
+   * Get a handle to a process by PID. Subclasses can override for fallback behavior.
+   *
+   * Reading an exited process releases it by default: later calls return
+   * `undefined`. Pass `{ release: false }` to read it and leave it available,
+   * for example to show its output without taking it from the agent.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async get(pid: string, options?: { release?: boolean }): Promise<ProcessHandle | undefined> {
     return this._tracked.get(pid);
   }
 

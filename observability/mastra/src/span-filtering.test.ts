@@ -6,9 +6,9 @@ import { DefaultObservabilityInstance } from './instances';
 import { PricingRegistry } from './metrics/pricing-registry';
 import { SensitiveDataFilter } from './span_processors';
 
-const testPricingRegistry = PricingRegistry.fromText(`
-{"i":"mock-provider-mock-model-id","p":"mock-provider","m":"mock-model-id","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-7},"ot":{"c":2e-7}}}]}}}
-`);
+const testPricingRegistry = PricingRegistry.fromModelsDev({
+  'mock-provider': { models: { 'mock-model-id': { cost: { input: 0.1, output: 0.2 } } } },
+});
 
 // Mock console to avoid noise in test output
 const mockConsole = {

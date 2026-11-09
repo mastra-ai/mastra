@@ -616,6 +616,40 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     );
   });
 
+  it('skips a response another request is already resuming when a later exact target resumes', async () => {
+    vi.clearAllMocks();
+    mockAgent.resumeStream
+      .mockRejectedValueOnce(Object.assign(new Error('already claimed'), { id: 'AGENT_RESUME_ALREADY_CLAIMED' }))
+      .mockResolvedValueOnce(emptyStream);
+    const response = (runId: string, toolCallId: string) => ({
+      id: `msg-${runId}`,
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-myTool',
+          toolCallId,
+          state: 'approval-responded',
+          input: {},
+          approval: { id: `${runId}${APPROVAL_ID_SEPARATOR}${toolCallId}`, approved: true },
+        },
+      ],
+    });
+
+    const stream = await handleChatStream({
+      mastra: mockMastra as any,
+      agentId: 'test-agent',
+      version: 'v6',
+      params: { messages: [response('busy-run', 'busy-call'), response('new-run', 'new-call')] } as any,
+    });
+    await collectChunks(stream);
+
+    expect(mockAgent.resumeStream).toHaveBeenCalledTimes(2);
+    expect(mockAgent.resumeStream).toHaveBeenLastCalledWith(
+      { approved: true },
+      expect.objectContaining({ runId: 'new-run', toolCallId: 'new-call' }),
+    );
+  });
+
   it('surfaces the core error when no approval target can be resumed', async () => {
     vi.clearAllMocks();
     mockAgent.resumeStream.mockRejectedValueOnce(

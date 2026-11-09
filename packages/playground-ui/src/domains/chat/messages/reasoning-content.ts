@@ -1,11 +1,13 @@
 import type { ReasoningPart } from '@mastra/react/ui';
-import type { ReasoningProps } from './reasoning';
+import { hasVisibleReasoning } from '@/ds/components/ai/activity';
+import type { ReasoningContent } from '@/ds/components/ai/activity';
 
-export function getReasoningContent(part: ReasoningPart): ReasoningProps | undefined {
-  const text = 'text' in part && typeof part.text === 'string' ? part.text : part.reasoning;
-  const redacted = part.redacted === true;
-  const streaming = part.state === 'streaming';
-  const hasContent = text.trim().length > 0 || redacted || streaming;
+export function getReasoningContent(part: ReasoningPart): ReasoningContent | undefined {
+  const content = {
+    text: 'text' in part && typeof part.text === 'string' ? part.text : part.reasoning,
+    redacted: part.redacted === true,
+    streaming: part.state === 'streaming',
+  };
 
-  return hasContent ? { text, redacted, streaming } : undefined;
+  return hasVisibleReasoning(content) ? content : undefined;
 }

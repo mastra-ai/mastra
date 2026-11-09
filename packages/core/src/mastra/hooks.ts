@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { extractTrajectory, saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
-import { isScorerHookForMastra } from '../hooks/scorer-owner';
+import { getScorerHookEntry, isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import { resolveAgentById } from '../mastra/resolve-agent';
 import { EntityType, resolveExportedSpanId } from '../observability';
@@ -42,7 +42,9 @@ export function createOnScorerHook(mastra: Mastra) {
     }
 
     try {
-      const scorerToUse = await findScorer(mastra, entityId, entityType, scorerId);
+      // Prefer the scorer the run was configured with; only a hook raised
+      // through the public executeHook API has to be resolved by id.
+      const scorerToUse = getScorerHookEntry(hookData) ?? (await findScorer(mastra, entityId, entityType, scorerId));
 
       if (!scorerToUse) {
         throw new MastraError({
@@ -174,11 +176,19 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
       // Resolution or scorer listing failed — fall back to mastra-registered scorer
     }
   } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).listScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.id === scorerId) {
-        scorerToUse = scorer;
-        break;
+    let workflow: ReturnType<Mastra['getWorkflowById']> | undefined;
+    try {
+      workflow = mastra.getWorkflowById(entityId);
+    } catch {
+      // Nested workflows aren't registered on Mastra — fall back to mastra-registered scorer
+    }
+    if (workflow) {
+      const scorers = await workflow.listScorers();
+      for (const [_, scorer] of Object.entries(scorers)) {
+        if (scorer.scorer.id === scorerId) {
+          scorerToUse = scorer;
+          break;
+        }
       }
     }
   }

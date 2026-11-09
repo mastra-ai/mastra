@@ -31,7 +31,7 @@ Or run it without a global installation:
 npx mastracode
 ```
 
-On first launch, the onboarding wizard connects a model provider, configures model packs and Observational Memory, and asks whether tool calls should require approval. Run `/setup` to repeat onboarding later.
+On first launch, the onboarding wizard connects a model provider, configures main model packs, and asks whether tool calls should require approval. Run `/setup` to repeat onboarding later.
 
 ## Documentation
 

@@ -6,7 +6,7 @@ import { TABLE_LOG_EVENTS, TABLE_LOG_EVENTS_DELTA } from './ddl';
 import { buildLogsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, logRecordToRow, rowToLogRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 export async function batchCreateLogs(client: ClickHouseClient, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
@@ -111,6 +111,9 @@ async function queryLogsAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<LogDeltaRow[]> {
+  // log_events drives the scan and is narrowed to the delta keys by its full
+  // sort key; only the small delta slice is built into the hash table.
+  const deltaKeys = `SELECT timestamp, logId FROM ${TABLE_LOG_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64}`;
   return (await (
     await client.query({
       query: `
@@ -119,11 +122,15 @@ async function queryLogsAfterCursor(
           l.timestamp AS timestamp,
           l.logId AS logId,
           toString(d.cursorId) AS cursorId
-        FROM ${TABLE_LOG_EVENTS_DELTA} d
-        INNER JOIN ${TABLE_LOG_EVENTS} l
+        FROM ${TABLE_LOG_EVENTS} l
+        INNER JOIN (
+          SELECT cursorId, timestamp, logId
+          FROM ${TABLE_LOG_EVENTS_DELTA}
+          WHERE cursorId > {afterCursor:UInt64}
+        ) d
           ON l.timestamp = d.timestamp
          AND l.logId = d.logId
-        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ${appendWhere(whereClause, `(l.timestamp, l.logId) IN (${deltaKeys})`)}
         ORDER BY d.cursorId ASC
         LIMIT {fetchLimit:UInt32}
       `,
@@ -138,20 +145,28 @@ async function queryLogsAfterCursor(
   ).json()) as LogDeltaRow[];
 }
 
+/**
+ * Newest delta cursor whose log matches the filters. Without filters this is
+ * the stream head; with filters, the log scan is bounded below by the oldest
+ * `timestamp` still in the delta table.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = (await (
     await client.query({
       query: `
         SELECT toString(max(d.cursorId)) AS cursorId
         FROM ${TABLE_LOG_EVENTS_DELTA} d
-        INNER JOIN ${TABLE_LOG_EVENTS} l
-          ON l.timestamp = d.timestamp
-         AND l.logId = d.logId
-        ${whereClause}
+        WHERE (d.timestamp, d.logId) IN (
+          SELECT l.timestamp, l.logId
+          FROM ${TABLE_LOG_EVENTS} l
+          ${appendWhere(whereClause, `l.timestamp >= (SELECT min(timestamp) FROM ${TABLE_LOG_EVENTS_DELTA})`)}
+        )
       `,
       query_params: params,
       format: 'JSONEachRow',
@@ -164,15 +179,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = (await (
-    await client.query({
-      query: `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_LOG_EVENTS_DELTA}`,
-      format: 'JSONEachRow',
-      clickhouse_settings: CH_SETTINGS,
-    })
-  ).json()) as Array<{ cursorId?: string | null }>;
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {

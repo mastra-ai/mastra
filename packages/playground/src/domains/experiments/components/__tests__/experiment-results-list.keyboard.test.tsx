@@ -73,9 +73,9 @@ describe('ExperimentResultsList keyboard navigation', () => {
       renderList({ onResultClick });
 
       const rows = interactiveRows();
-      fireEvent.focus(rows[0] as HTMLElement);
-      fireEvent.keyDown(rows[0] as HTMLElement, { key: 'End' });
-      fireEvent.click(rows[2] as HTMLElement);
+      fireEvent.focus(rows[0]);
+      fireEvent.keyDown(rows[0], { key: 'End' });
+      fireEvent.click(rows[2]);
 
       expect(onResultClick).toHaveBeenCalledWith('r-3');
     });

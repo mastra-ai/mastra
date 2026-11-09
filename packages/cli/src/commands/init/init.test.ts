@@ -1,5 +1,9 @@
-import { fs, vol } from 'memfs';
+import { memfs } from 'memfs';
 import { describe, beforeEach, expect, vi, test } from 'vitest';
+
+// Explicit virtual volume: relative paths resolve against the live `process.cwd()`
+// rather than memfs's implicit `/` default.
+const { fs, vol } = memfs({}, { process: { ...process, cwd: () => process.cwd() } });
 
 beforeEach(() => {
   vol.reset();

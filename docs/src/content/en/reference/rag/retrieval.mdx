@@ -2,21 +2,8 @@
 title: "Retrieval, semantic search, reranking | RAG"
 description: "After storing embeddings, you need to retrieve relevant chunks to answer user queries."
 packages:
-  - "@mastra/astra"
-  - "@mastra/chroma"
   - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/mongodb"
-  - "@mastra/opensearch"
-  - "@mastra/oracledb"
-  - "@mastra/pg"
-  - "@mastra/pinecone"
-  - "@mastra/qdrant"
   - "@mastra/rag"
-  - "@mastra/s3vectors"
-  - "@mastra/upstash"
-  - "@mastra/vectorize"
-  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -70,22 +57,24 @@ console.log(results)
 
 The `topK` parameter specifies the maximum number of most similar results to return from the vector search.
 
-Results include both the text content and a similarity score:
+Each result includes an `id`, a similarity `score`, and the stored `metadata`. When you store chunk text in metadata, it's available as `metadata.text`:
 
 ```ts
 [
   {
-    text: 'Climate change poses significant challenges...',
+    id: 'chunk-1',
     score: 0.89,
-    metadata: { source: 'article1.txt' },
+    metadata: { text: 'Climate change poses significant challenges...', source: 'article1.txt' },
   },
   {
-    text: 'Rising temperatures affect crop yields...',
+    id: 'chunk-2',
     score: 0.82,
-    metadata: { source: 'article1.txt' },
+    metadata: { text: 'Rising temperatures affect crop yields...', source: 'article1.txt' },
   },
 ]
 ```
+
+Results can also include `vector` when you set `includeVector: true`, and `document` when the store returns the original document (Chroma only).
 
 ## Advanced retrieval options
 
@@ -271,7 +260,11 @@ const results = await pgVector.query({
 })
 ```
 
-Postgres vector indexes (HNSW and IVFFlat) can't restrict that search to rows matching a condition. When a filter is present, pgVector instead compares the query vector against every matching row and returns the closest `topK`. Results are exact, but the work grows with the number of rows the filter matches. Indexing the metadata column speeds up row retrieval. The distance comparisons still happen per row.
+With an HNSW index on pgvector 0.8.0 or newer, PostgreSQL searches the index and skips rows that don't match the filter. When the index search can't fill `topK`, pgVector reruns the query as an exact search.
+
+With IVFFlat, or HNSW on older pgvector versions, pgVector compares the query vector against every matching row. Results are exact, but the work grows with the number of matching rows.
+
+Indexing the metadata fields you filter on speeds up both cases and gives PostgreSQL the row counts it needs to choose between them.
 
 ### Vector Query Tool
 
@@ -405,6 +398,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="mongodb" label="MongoDB">
     ```ts title="vector-store.ts"
     import { MONGODB_PROMPT } from '@mastra/mongodb'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -439,6 +433,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="pinecone" label="Pinecone">
     ```ts title="vector-store.ts"
     import { PINECONE_PROMPT } from '@mastra/pinecone'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -456,6 +451,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="qdrant" label="Qdrant">
     ```ts title="vector-store.ts"
     import { QDRANT_PROMPT } from '@mastra/qdrant'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -473,6 +469,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="chroma" label="Chroma">
     ```ts title="vector-store.ts"
     import { CHROMA_PROMPT } from '@mastra/chroma'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -490,6 +487,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="astra" label="Astra">
     ```ts title="vector-store.ts"
     import { ASTRA_PROMPT } from '@mastra/astra'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -507,6 +505,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="libsql" label="libSQL">
     ```ts title="vector-store.ts"
     import { LIBSQL_PROMPT } from '@mastra/libsql'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -524,6 +523,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="upstash" label="Upstash">
     ```ts title="vector-store.ts"
     import { UPSTASH_PROMPT } from '@mastra/upstash'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -541,6 +541,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="vectorize" label="Vectorize">
     ```ts title="vector-store.ts"
     import { VECTORIZE_PROMPT } from '@mastra/vectorize'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -558,6 +559,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="opensearch" label="OpenSearch">
     ```ts title="vector-store.ts"
     import { OPENSEARCH_PROMPT } from '@mastra/opensearch'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -575,6 +577,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="oracledb" label="OracleDB">
     ```ts title="vector-store.ts"
     import { ORACLEDB_PROMPT } from '@mastra/oracledb'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',
@@ -592,6 +595,7 @@ When implementing filtering, these prompts are required in the agent's instructi
   <TabItem value="s3vectors" label="S3Vectors">
     ```ts title="vector-store.ts"
     import { S3VECTORS_PROMPT } from '@mastra/s3vectors'
+    import { Agent } from '@mastra/core/agent'
 
     export const ragAgent = new Agent({
       id: 'rag-agent',

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { AgentController } from './agent-controller';
 import type { Session } from './session';
@@ -19,7 +20,246 @@ async function createSession<TState extends Record<string, unknown>>(
   return { controller, session };
 }
 
+function retainState<TState>(session: Session<TState>) {
+  return (
+    session.state as typeof session.state & {
+      retain(): typeof session.state & { release(): void };
+    }
+  ).retain();
+}
+
 describe('AgentController session state', () => {
+  it.each(['set', 'update', 'setIf'] as const)(
+    'fences %s across async validation while preserving host writes',
+    async method => {
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const { session } = await createSession({
+        initialState: { thinkingLevel: 'low', count: 0 },
+        stateSchema: z.object({ thinkingLevel: z.string(), count: z.number() }).superRefine(async state => {
+          if (state.thinkingLevel === 'high') {
+            entered.resolve();
+            await release.promise;
+          }
+        }),
+      });
+      session.thread.set({ threadId: 'a' });
+      const events: AgentControllerEvent[] = [];
+      session.subscribe(event => {
+        events.push(event);
+      });
+      const updates = { thinkingLevel: 'high', count: 1 };
+      const write =
+        method === 'update'
+          ? session.state.update(() => ({ updates, events: [{ type: 'agent_end' }], result: undefined }))
+          : method === 'setIf'
+            ? session.state.setIf(updates, () => true)
+            : session.state.set(updates);
+      await entered.promise;
+      session.thread.set({ threadId: 'b' });
+      events.length = 0;
+      release.resolve();
+      await write;
+      expect(session.state.get()).toEqual({ thinkingLevel: 'low', count: 1 });
+      expect(events.filter(event => event.type === 'state_changed')).toEqual([
+        { type: 'state_changed', state: { thinkingLevel: 'low', count: 1 }, changedKeys: ['count'] },
+      ]);
+      expect(events.some(event => event.type === 'agent_end')).toBe(false);
+    },
+  );
+
+  it('uses source values for queued updaters and shares their order with active writes', async () => {
+    const { session } = await createSession({ initialState: { thinkingLevel: 'low', count: 0 } });
+    session.thread.set({ threadId: 'a' });
+    const source = retainState(session);
+    await session.state.set({ thinkingLevel: 'high' });
+    expect(source.get().thinkingLevel).toBe('high');
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const first = session.state.update(async () => {
+      entered.resolve();
+      await release.promise;
+      return { updates: { thinkingLevel: 'medium' }, result: undefined };
+    });
+    await entered.promise;
+    const seen: string[] = [];
+    const second = source.update(state => {
+      seen.push(state.thinkingLevel);
+      return { updates: { thinkingLevel: 'max', count: state.count + 1 }, result: undefined };
+    });
+    session.thread.set({ threadId: 'b' });
+    release.resolve();
+    await Promise.all([first, second]);
+    expect(seen).toEqual(['medium']);
+    expect(session.state.get()).toEqual({ thinkingLevel: 'low', count: 1 });
+    session.thread.set({ threadId: 'a' });
+    expect(session.state.get()).toEqual({ thinkingLevel: 'max', count: 1 });
+    await session.state.set({ thinkingLevel: 'high' });
+    expect(source.get().thinkingLevel).toBe('high');
+    source.release();
+  });
+
+  it('reattaches A during validation and publishes its latest committed state', async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { session } = await createSession({
+      initialState: { thinkingLevel: 'low' },
+      stateSchema: z.object({ thinkingLevel: z.string() }).superRefine(async state => {
+        if (state.thinkingLevel === 'high') {
+          entered.resolve();
+          await release.promise;
+        }
+      }),
+    });
+    session.thread.set({ threadId: 'a' });
+    const write = session.state.set({ thinkingLevel: 'high' });
+    await entered.promise;
+    session.thread.set({ threadId: 'b' });
+    session.thread.set({ threadId: 'a' });
+    release.resolve();
+    await write;
+    expect(session.state.get().thinkingLevel).toBe('high');
+  });
+
+  it('cancels a guarded write after validation without partially applying it', async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { session } = await createSession({
+      initialState: { thinkingLevel: 'low', count: 0 },
+      stateSchema: z.object({ thinkingLevel: z.string(), count: z.number() }).superRefine(async state => {
+        if (state.count === 1) {
+          entered.resolve();
+          await release.promise;
+        }
+      }),
+    });
+    let eligible = true;
+    const write = session.state.setIf({ thinkingLevel: 'high', count: 1 }, () => eligible);
+    await entered.promise;
+    eligible = false;
+    release.resolve();
+    await expect(write).resolves.toBe(false);
+    expect(session.state.get()).toEqual({ thinkingLevel: 'low', count: 0 });
+  });
+
+  it('rejects late validation without persisting or emitting a partial host update', async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { session } = await createSession({
+      initialState: { thinkingLevel: 'low', count: 0 },
+      stateSchema: z.object({ thinkingLevel: z.string(), count: z.number() }).superRefine(async (state, ctx) => {
+        if (state.count === 1) {
+          entered.resolve();
+          await release.promise;
+          ctx.addIssue({ code: 'custom', message: 'rejected after navigation' });
+        }
+      }),
+    });
+    session.thread.set({ threadId: 'a' });
+    const persist = vi.spyOn(session.thread, 'setSettingOn');
+    const listener = vi.fn();
+    session.subscribe(listener);
+    const write = session.state.set({ thinkingLevel: 'high', count: 1 });
+    const rejected = expect(write).rejects.toThrow('rejected after navigation');
+    await entered.promise;
+    session.thread.set({ threadId: 'b' });
+    listener.mockClear();
+    release.resolve();
+    await rejected;
+    expect(session.state.get()).toEqual({ thinkingLevel: 'low', count: 0 });
+    expect(persist).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'state_changed' }));
+    persist.mockRestore();
+  });
+
+  it('keeps model and thinking callbacks cancelled when navigation happens during commit', async () => {
+    const { session } = await createSession({ initialState: { thinkingLevel: 'low' } });
+    session.thread.set({ threadId: 'a' });
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const applyModel = vi.fn();
+    const state = session.state as typeof session.state & {
+      setWithCommit(
+        updates: { thinkingLevel: string },
+        commit: () => Promise<void>,
+        eligible: () => boolean,
+        apply: () => void,
+      ): Promise<boolean>;
+    };
+    const write = state.setWithCommit(
+      { thinkingLevel: 'high' },
+      async () => {
+        entered.resolve();
+        await release.promise;
+      },
+      () => session.thread.getId() === 'a',
+      applyModel,
+    );
+    await entered.promise;
+    session.thread.set({ threadId: 'b' });
+    release.resolve();
+    await expect(write).resolves.toBe(false);
+    expect(applyModel).not.toHaveBeenCalled();
+    expect(session.state.get().thinkingLevel).toBe('low');
+  });
+
+  it('validates transformed preferences against A, not the active B values', async () => {
+    const { session } = await createSession({
+      initialState: { thinkingLevel: 'low', notifications: false, count: 0 },
+      stateSchema: z
+        .object({
+          thinkingLevel: z.string().transform(value => value.toLowerCase()),
+          notifications: z.boolean(),
+          count: z.number(),
+        })
+        .refine(state => state.thinkingLevel !== 'high' || state.notifications, 'High requires notifications'),
+    });
+    session.thread.set({ threadId: 'a' });
+    await session.state.set({ notifications: true });
+    const source = retainState(session);
+    session.thread.set({ threadId: 'b' });
+    await source.set({ thinkingLevel: 'HIGH' });
+    expect(source.get()).toEqual({ thinkingLevel: 'high', notifications: true, count: 0 });
+    expect(session.state.get()).toEqual({ thinkingLevel: 'low', notifications: false, count: 0 });
+    await expect(source.set({ notifications: false, count: 2 })).rejects.toThrow('High requires notifications');
+    expect(source.get()).toEqual({ thinkingLevel: 'high', notifications: true, count: 0 });
+    expect(session.state.get().count).toBe(0);
+    source.release();
+  });
+
+  it('routes parked updater effects without ending or populating the active display', async () => {
+    const { session } = await createSession({ initialState: { thinkingLevel: 'low' } });
+    session.thread.set({ threadId: 'a' });
+    const source = retainState(session);
+    session.thread.set({ threadId: 'b' });
+    session.emit({ type: 'agent_start' });
+    const listener = vi.fn();
+    session.subscribe(listener);
+    await source.update(() => ({
+      result: undefined,
+      events: [
+        { type: 'agent_end' },
+        { type: 'tool_start', toolCallId: 'a-tool', toolName: 'test', args: {} },
+        {
+          type: 'tool_suspended',
+          toolCallId: 'a-prompt',
+          toolName: 'test',
+          args: {},
+          suspendPayload: {},
+          runId: 'a-run',
+        },
+        { type: 'workspace_ready', workspaceId: 'workspace', workspaceName: 'Shared workspace' },
+      ],
+    }));
+    expect(session.displayState.get().isRunning).toBe(true);
+    expect(session.displayState.get().activeTools.size).toBe(0);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tool_suspended', threadId: 'a', resourceId: session.identity.getResourceId() }),
+    );
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'workspace_ready' }));
+    source.release();
+  });
+
   it('initializes from schema defaults plus initialState', async () => {
     const { session } = await createSession<{ count: number; label: string }>({
       stateSchema: {

@@ -4,20 +4,51 @@
  * routes — no UI dependencies.
  */
 import type { OMPack } from './packs.js';
+import { resolveProviderOMDefault } from './packs.js';
 import type { GlobalSettings } from './settings.js';
 import { loadSettings, saveSettings } from './settings.js';
 
-/** Whether the user has already chosen any persisted OM model or pack. */
+/**
+ * Whether the user has already chosen any persisted OM model or pack.
+ *
+ * No longer called inside this repo — auto selection replaced the "seed a pack
+ * at login" flow — but part of the documented `@mastra/code-sdk/onboarding/om-settings`
+ * surface since 1.1.0, so it stays for external callers.
+ *
+ * @deprecated Observer and Reflector default to Auto; there is no default left to seed.
+ */
 export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
-  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
-  if (omModelOverride || observerModelOverride || reflectorModelOverride) return true;
+  const {
+    activeOmPackId,
+    omModelOverride,
+    observerModelOverride,
+    observerModelSelection,
+    reflectorModelOverride,
+    reflectorModelSelection,
+  } = settings.models;
+  if (
+    omModelOverride ||
+    observerModelOverride ||
+    (observerModelSelection && observerModelSelection !== 'auto') ||
+    reflectorModelOverride ||
+    (reflectorModelSelection && reflectorModelSelection !== 'auto')
+  ) {
+    return true;
+  }
 
   // 'custom' without a model is what onboarding persists when no provider was
   // reachable — a forced non-choice, not a preference worth preserving.
   return [settings.onboarding.omPackId, activeOmPackId].some(packId => packId && packId !== 'custom');
 }
 
-/** Seed a built-in OM pack unless the user already chose one; true when settings changed. */
+/**
+ * Seed a built-in OM pack unless the user already chose one; true when settings changed.
+ *
+ * The TUI stopped calling this when auto became the default; kept exported for
+ * external callers alongside {@link hasExplicitOMConfiguration}.
+ *
+ * @deprecated Seeding pins both roles to a fixed model. Leave them on Auto instead.
+ */
 export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMPack): boolean {
   if (hasExplicitOMConfiguration(settings)) return false;
 
@@ -28,37 +59,52 @@ export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMP
 }
 
 /**
+ * Seed the provider's built-in OM pack into saved settings unless the user already chose one.
+ *
+ * @deprecated Signing in no longer seeds memory models; seeding pins both roles instead of
+ * leaving them on Auto.
+ */
+export function seedProviderOMDefault(providerId: string): OMPack | undefined {
+  const pack = resolveProviderOMDefault(providerId);
+  // No cheap OM pack for this provider — leave OM open for a later login rather
+  // than pinning observation and reflection to a full-size coding model.
+  if (pack.id === 'custom') return undefined;
+
+  const settings = loadSettings();
+  if (!applyOMDefaultIfUnconfigured(settings, pack)) return undefined;
+
+  saveSettings(settings);
+  return pack;
+}
+
+/**
  * Apply a role-specific OM model override to an in-memory `GlobalSettings`.
  *
- * When switching `activeOmPackId` from a built-in pack to `'custom'` we also
- * snapshot the *other* role's currently-resolved model into its override
- * field. Without this, the other role would silently lose its model on next
- * startup because `resolveOmRoleModel` would no longer resolve it from the
- * (now-overridden) pack.
+ * Role intent outranks the pack in `resolveOmRoleModel`, so `activeOmPackId` is
+ * deliberately left alone: the other role keeps resolving from its built-in
+ * pack instead of being dragged along by this role's choice.
  *
  * Exported for unit testing; `persistOmRoleOverride` is the disk-backed wrapper.
  */
-export function applyOmRoleOverride(
-  settings: GlobalSettings,
-  role: 'observer' | 'reflector',
-  modelId: string,
-  otherRoleCurrentModelId: string | null,
-): void {
-  const wasBuiltinPack = settings.models.activeOmPackId !== null && settings.models.activeOmPackId !== 'custom';
-
+export function applyOmRoleOverride(settings: GlobalSettings, role: 'observer' | 'reflector', modelId: string): void {
   if (role === 'observer') {
-    if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.reflectorModelOverride) {
-      settings.models.reflectorModelOverride = otherRoleCurrentModelId;
-    }
     settings.models.observerModelOverride = modelId;
+    settings.models.observerModelSelection = modelId;
   } else {
-    if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.observerModelOverride) {
-      settings.models.observerModelOverride = otherRoleCurrentModelId;
-    }
     settings.models.reflectorModelOverride = modelId;
+    settings.models.reflectorModelSelection = modelId;
   }
+}
 
-  settings.models.activeOmPackId = 'custom';
+/** Reset one persisted OM role to dynamic auto selection without touching the other role. */
+export function applyOmRoleAuto(settings: GlobalSettings, role: 'observer' | 'reflector'): void {
+  if (role === 'observer') {
+    settings.models.observerModelOverride = null;
+    settings.models.observerModelSelection = 'auto';
+  } else {
+    settings.models.reflectorModelOverride = null;
+    settings.models.reflectorModelSelection = 'auto';
+  }
 }
 
 export function persistOmObserveAttachments(value: 'auto' | boolean): void {

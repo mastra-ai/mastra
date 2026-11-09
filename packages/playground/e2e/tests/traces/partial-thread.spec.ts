@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
+import { mockTraceQueryCapabilities } from '../__utils__/mock-trace-query-capabilities';
 import { resetStorage } from '../__utils__/reset-storage';
 
 const TRACE_ID = 'partial-thread-trace';
@@ -98,6 +99,7 @@ async function mockPartialThread(page: Page) {
 }
 
 async function openPartialThread(page: Page) {
+  await mockTraceQueryCapabilities(page);
   await mockPartialThread(page);
   await page.goto(`/traces?traceId=${TRACE_ID}`);
   await expect(page.getByTestId('messages-panel')).toBeVisible();
@@ -129,9 +131,9 @@ test.describe('Messages trace column', () => {
     test('keeps feedback submission in the dedicated Feedback tab', async ({ page }) => {
       await openPartialThread(page);
 
-      await expect(page.getByPlaceholder('Leave feedback...')).toHaveCount(0);
+      await expect(page.getByPlaceholder('Leave feedback')).toHaveCount(0);
       await page.getByRole('tab', { name: /^Feedback/ }).click();
-      await page.getByPlaceholder('Leave feedback...').fill(COMMENT);
+      await page.getByPlaceholder('Leave feedback').fill(COMMENT);
       await page.getByRole('button', { name: 'Send feedback' }).click();
 
       await expect(page.getByText(COMMENT)).toBeVisible();

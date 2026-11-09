@@ -2,13 +2,14 @@ import type { DatasetItem, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { format } from 'date-fns/format';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import {
   HashIcon,
   FileInputIcon,
@@ -23,7 +24,6 @@ import {
   X,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 export interface ItemDetailDialogProps {
   datasetId: string;
@@ -221,7 +221,6 @@ export function ItemDetailDialog({
         <TextAndIcon>
           <HashIcon /> {getShortId(item.id)}
         </TextAndIcon>
-        |
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
@@ -232,7 +231,7 @@ export function ItemDetailDialog({
               Delete
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
-              Purge Data
+              Purge data
             </Button>
           </div>
         )}
@@ -260,7 +259,6 @@ export function ItemDetailDialog({
         )}
       </SideDialog.Content>
 
-      {/* Delete confirmation - uses portal, renders above SideDialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialog.Content>
           <AlertDialog.Header>
@@ -272,7 +270,7 @@ export function ItemDetailDialog({
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
+              {deleteItem.isPending ? 'Deleting...' : 'Yes, delete'}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -300,7 +298,7 @@ export function ItemDetailDialog({
               onClick={() => void handlePurgeConfirm()}
               disabled={purgeItem.isPending}
             >
-              {purgeItem.isPending ? 'Purging...' : 'Purge Data'}
+              {purgeItem.isPending ? 'Purging...' : 'Purge data'}
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -333,7 +331,7 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           data={[
             {
               label: 'Created',
-              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
+              value: formatDate(item.createdAt, 'date-time') ?? '',
               key: 'createdAt',
             },
             ...(item.datasetVersion != null
@@ -415,57 +413,57 @@ function EditModeContent({
       </SideDialog.Header>
 
       <div className="space-y-6">
-        <div className="space-y-2">
-          <Label>Input (JSON) *</Label>
+        <Field>
+          <FieldLabel required>Input (JSON)</FieldLabel>
           <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Ground Truth (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
           <CodeEditor
             value={groundTruthValue}
             onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Expected Trajectory (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Request Context (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Request Context (JSON, optional)</FieldLabel>
           <CodeEditor
             value={requestContextValue}
             onChange={setRequestContextValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Metadata (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Metadata (JSON, optional)</FieldLabel>
           <CodeEditor
             value={metadataValue}
             onChange={setMetadataValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
         <div className="flex justify-end gap-2 pt-4">
           <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
           <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </div>

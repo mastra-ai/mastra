@@ -1,0 +1,63 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { RelativeTimestamp } from './relative-timestamp';
+
+const meta: Meta<typeof RelativeTimestamp> = {
+  title: 'Elements/RelativeTimestamp',
+  component: RelativeTimestamp,
+  parameters: {
+    layout: 'centered',
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof RelativeTimestamp>;
+
+const minutesAgo = (minutes: number) => Date.now() - minutes * 60_000;
+
+export const Default: Story = {
+  args: {
+    value: minutesAgo(3),
+  },
+};
+
+export const Labeled: Story = {
+  args: {
+    value: minutesAgo(60 * 12 + 4),
+    label: 'Deployed',
+  },
+};
+
+export const InText: Story = {
+  render: () => (
+    <div className="grid gap-2 text-caption text-muted-foreground">
+      {(
+        [
+          ['Deployed', 0.02],
+          ['Deployed', 0.5],
+          ['Updated', 3],
+          ['Deployed', 60],
+          ['Last run', 60 * 11],
+          ['Created', 60 * 26],
+          ['Deployed', 60 * 24 * 6],
+          ['Deployed', 60 * 24 * 9],
+          ['Created', 60 * 24 * 400],
+          ['Expires', -5],
+        ] as const
+      ).map(([label, minutes]) => (
+        <span key={minutes}>
+          {label} <RelativeTimestamp value={minutesAgo(minutes)} />
+        </span>
+      ))}
+    </div>
+  ),
+};
+
+export const Scale: Story = {
+  render: () => (
+    <div className="flex gap-6 text-body-sm">
+      {[0.5, 3, 90, 60 * 26, 60 * 24 * 9, 60 * 24 * 400, -5].map(minutes => (
+        <RelativeTimestamp key={minutes} value={minutesAgo(minutes)} />
+      ))}
+    </div>
+  ),
+};

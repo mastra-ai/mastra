@@ -52,7 +52,13 @@ test.describe('Datasets list infinite scroll', () => {
         await expect(page.getByRole('link', { name: new RegExp(`^${name}\\b`) })).toHaveCount(1);
       }
 
-      await page.getByPlaceholder('Filter by dataset name').fill('E2E Dataset 12');
+      const filterInput = page.getByRole('combobox', { name: 'Add filter' });
+      await filterInput.fill('E2E Dataset 12');
+      await expect(page.getByRole('option', { name: /contains "E2E Dataset 12"/ })).toBeVisible();
+      await filterInput.press('Enter');
+      await expect(page.getByRole('group', { name: 'Search E2E Dataset 12' })).toBeVisible();
+      // Committing a chip reopens the field picker, which hides the list from the a11y tree.
+      await filterInput.press('Escape');
 
       await expect(datasetLinks).toHaveCount(1);
       await expect(datasetLinks).toHaveText([/^E2E Dataset 12\b/]);

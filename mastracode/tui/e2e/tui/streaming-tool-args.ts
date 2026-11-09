@@ -24,12 +24,12 @@ export const streamingToolArgsScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     terminal.submit('Inspect the streaming args fixture file.');
 
-    await runtime.waitForScreenText(/view\s+src\/streaming-args\.ts/i, terminal, 8_000);
+    await runtime.waitForScreenText(/▐view▌src\/streaming-args\.ts/, terminal, 8_000);
     if (terminal.serialize().view.includes('src/streaming-args.ts:12-18')) {
       throw new Error('Expected partial streamed args before final view range appeared');
     }
     await runtime.waitForScreenText(/src\/streaming-args\.ts:12-18/i, terminal, 8_000);
-    await runtime.waitForScreenText(/export const line12 = 12/i, terminal, 8_000);
+    await runtime.waitForScreenText(/export const line18 = 18/i, terminal, 8_000);
     await runtime.waitForScreenText(/Streaming view tool e2e complete\./i, terminal, 8_000);
 
     terminal.keyCtrlC();

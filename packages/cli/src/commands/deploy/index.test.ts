@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
+import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -103,6 +104,46 @@ describe('project resolution', () => {
       projectId: 'project-1',
       projectName: 'project-1',
       projectSlug: 'project-1',
+    });
+  });
+
+  describe('project picker default', () => {
+    const projects = [
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel', organizationId: 'org-1' },
+      { id: 'proj-b', name: 'Other', slug: 'shared', organizationId: 'org-1' },
+      { id: 'proj-c', name: 'shared', slug: 'proj-c', organizationId: 'org-1' },
+    ];
+
+    beforeEach(() => {
+      selectMock.mockReset();
+      fetchProjectsMock.mockResolvedValue(projects);
+    });
+
+    it('preselects "Create new project" when no project matches the name', async () => {
+      selectMock.mockResolvedValue('__create_new__');
+
+      await expect(resolveProject('token', 'org-1', null, undefined, 'nov-2-factory')).resolves.toEqual({
+        existing: false,
+        projectName: 'nov-2-factory',
+      });
+      expect(selectMock.mock.calls[0]![0].initialValue).toBe('__create_new__');
+    });
+
+    it('preselects "Create new project" when several projects match the name or slug', async () => {
+      selectMock.mockResolvedValue('__create_new__');
+
+      await resolveProject('token', 'org-1', null, undefined, 'shared');
+      expect(selectMock.mock.calls[0]![0].initialValue).toBe('__create_new__');
+    });
+
+    it('preselects the single project that matches the name', async () => {
+      selectMock.mockResolvedValue('proj-a');
+
+      await expect(resolveProject('token', 'org-1', null, undefined, 'Daniel')).resolves.toMatchObject({
+        existing: true,
+        projectId: 'proj-a',
+      });
+      expect(selectMock.mock.calls[0]![0].initialValue).toBe('proj-a');
     });
   });
 });
@@ -248,6 +289,35 @@ describe('environment deploy upload', () => {
       'https://platform.example.com/v1/projects/project-1/workers',
       expect.anything(),
     );
+  });
+
+  it('sends artifactBytes and the signed content-length-range header', async () => {
+    const uploadUrl =
+      'https://storage.googleapis.com/b/o?X-Goog-SignedHeaders=content-type%3Bhost%3Bx-goog-content-length-range';
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ deploy: { id: 'deploy-1', uploadUrl } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip-data'), {
+      projectName: 'App',
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ artifactBytes: 8 });
+    expect(fetchMock.mock.calls[1]![1].headers).toEqual({
+      'Content-Type': 'application/zip',
+      'x-goog-content-length-range': '0,8',
+    });
+  });
+
+  it('surfaces a 413 detail verbatim and does not upload', async () => {
+    const detail = 'Deploy bundle is 662 MB, over the 500 MB limit. Check .mastra/output for stray files.';
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail }), { status: 413 }));
+
+    await expect(
+      uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), { projectName: 'App' }),
+    ).rejects.toThrow(new Error(detail));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -628,6 +698,51 @@ describe('deploy artifact', () => {
 
     expect(diagram).toContain(`\u001B[38;5;214m${boxTop}\u001B[39m`);
     expect(diagram).not.toContain(colors.yellow(boxTop));
+  });
+
+  // The deploy note wraps any line wider than the terminal, which scrambled the boxes on narrow terminals.
+  // Wide characters take two terminal cells each.
+  it.each([
+    [200, 'teammate-turso', '  │  ┌'],
+    [110, 'teammate-turso', 'production (US West)\n'],
+    [74, 'teammate-turso', '│ Turso · Connect… │'],
+    [74, 'チームメイトのデータベース', '│ チームメイトの…  │'],
+    [56, 'teammate-turso', '└─ ■ Observability  Mastra Platform'],
+    [56, 'チームメイトのデータベース', '├─ ■ チームメイトのデータベース  Turso · Connected'],
+  ])('fits the deployment overview into a %i-column note with database %s', (width, databaseName, expectedLayout) => {
+    const diagram = renderDeploymentArchitecture(
+      {
+        projectName: 'teammate',
+        environment: { id: 'env_1', name: 'production', region: 'us-west' },
+        serverLabel: 'Server',
+        workersEnabled: false,
+        workersConfig: null,
+        databases: [
+          {
+            id: 'db_1',
+            platformProjectId: 'project_1',
+            organizationId: 'org_1',
+            environmentId: null,
+            kind: 'turso',
+            name: databaseName,
+            status: 'ready',
+            region: null,
+            providerResourceId: null,
+            error: null,
+            createdAt: '2026-08-26T16:30:00.000Z',
+            updatedAt: '2026-08-26T16:30:00.000Z',
+            deletedAt: null,
+          },
+        ],
+        observabilityEnabled: true,
+        renderedAt: new Date('2026-08-26T16:30:00.000Z'),
+        width,
+      },
+      pc.createColors(false),
+    );
+
+    expect(diagram).toContain(expectedLayout);
+    for (const line of diagram.split('\n')) expect(fastStringWidth(line)).toBeLessThanOrEqual(width);
   });
 
   it.each([

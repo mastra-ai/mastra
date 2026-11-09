@@ -1,20 +1,23 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { X } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';
 import type { JSONImportValidation } from '../../utils/json-validation';
 import { JSONFormatPanel } from './json-format-panel';
@@ -44,8 +47,9 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   const [fileError, setFileError] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-  // Incremented whenever the selection changes so a slow file read can't restore a discarded file.
   const readIdRef = useRef(0);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const mountedRef = useRef(false);
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -97,12 +101,25 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
     setPastedText('');
   }, []);
 
+  // Reset after the close animation. Never schedule or keep the timer once unmounted, or it fires into a torn-down tree.
+  const scheduleReset = useCallback(() => {
+    clearTimeout(resetTimerRef.current);
+    if (!mountedRef.current) return;
+    resetTimerRef.current = setTimeout(resetState, 150);
+  }, [resetState]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
   const handleClose = useCallback(() => {
-    if (isImporting) return;
     onOpenChange(false);
-    // Reset after the close animation
-    setTimeout(resetState, 150);
-  }, [isImporting, onOpenChange, resetState]);
+    scheduleReset();
+  }, [onOpenChange, scheduleReset]);
 
   const handleImport = useCallback(async () => {
     if (validation.status !== 'ready') return;
@@ -113,31 +130,26 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
       toast.success(`Imported ${validation.total} item${validation.total !== 1 ? 's' : ''}`);
       onSuccess?.();
       onOpenChange(false);
-      setTimeout(resetState, 150);
+      scheduleReset();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to import items');
     } finally {
       setIsImporting(false);
     }
-  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, resetState]);
+  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, scheduleReset]);
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
-        <DialogHeader className="border-b border-border px-4 py-4">
+    <Dialog open={open} onOpenChange={handleClose} pending={isImporting}>
+      <DialogContent size="xl">
+        <DialogHeader>
           <DialogTitle>Import into dataset</DialogTitle>
-          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
-            Add items to{' '}
-            {datasetName ? (
-              <code className="rounded bg-card px-1 font-mono text-meta text-foreground">{datasetName}</code>
-            ) : (
-              'this dataset'
-            )}{' '}
-            from a JSON file or paste them directly.
+          <DialogDescription>
+            Add items to {datasetName ? <span className="text-foreground">{datasetName}</span> : 'this dataset'} from a
+            JSON file or paste them directly.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
+        <DialogBody flush>
           <div className="grid divide-y divide-border md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
             <div className="flex min-h-[360px] flex-col p-4">
               <JSONSourcePanel
@@ -158,19 +170,15 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           </div>
         </DialogBody>
 
-        <DialogFooter className="items-center border-t border-border px-4 py-3 sm:justify-between">
+        <DialogFooter>
           <JSONImportStatus validation={validation} />
-          <div className="flex gap-2">
-            <Button icon={<X />} onClick={handleClose} disabled={isImporting}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleImport} disabled={validation.status !== 'ready' || isImporting}>
-              {isImporting && <Spinner />}
-              {validation.status === 'ready'
-                ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
-                : 'Import'}
-            </Button>
-          </div>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={handleImport} disabled={validation.status !== 'ready'}>
+            {isImporting && <Spinner />}
+            {validation.status === 'ready'
+              ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
+              : 'Import'}
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -181,8 +189,8 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   const dotClassName = cn(
     'size-1.5 shrink-0 rounded-full',
     validation.status === 'idle' && 'bg-muted-foreground',
-    validation.status === 'ready' && 'bg-accent1',
-    validation.status === 'error' && 'bg-accent2',
+    validation.status === 'ready' && 'bg-success-indicator',
+    validation.status === 'error' && 'bg-destructive-indicator',
   );
 
   let message: React.ReactNode;
@@ -192,17 +200,23 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
       break;
     case 'ready':
       message = (
-        <>
-          <b className="font-medium text-foreground">{validation.total}</b> item{validation.total !== 1 ? 's' : ''}{' '}
-          ready
-          {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
-        </>
+        <Metadata singleLine>
+          <Metadata.Item className="shrink-0">
+            <Txt as="b" variant="label" tone="ink">
+              {validation.total}
+            </Txt>{' '}
+            item{validation.total !== 1 ? 's' : ''} ready
+          </Metadata.Item>
+          {validation.missingGroundTruthCount > 0 && (
+            <Metadata.Item>{validation.missingGroundTruthCount} without groundTruth</Metadata.Item>
+          )}
+        </Metadata>
       );
       break;
     case 'error':
       switch (validation.kind) {
         case 'parse':
-          message = `Not valid JSON — ${validation.message}`;
+          message = `Not valid JSON: ${validation.message}`;
           break;
         case 'not-array':
           message = 'Top level must be an array of items';
@@ -216,9 +230,12 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
         case 'missing-input':
           message = (
             <>
-              <b className="font-medium text-foreground">{validation.missingInputCount}</b> of {validation.total} item
+              <Txt as="b" variant="label" tone="ink">
+                {validation.missingInputCount}
+              </Txt>{' '}
+              of {validation.total} item
               {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
-              <code className="font-mono">input</code>
+              <InlineCode>input</InlineCode>
             </>
           );
           break;
@@ -227,9 +244,11 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
+    <div role="status" className="mr-auto flex min-w-0 items-center gap-2">
       <span className={dotClassName} />
-      <span className="truncate">{message}</span>
+      <Txt tone="muted" as="span" variant="caption" className="truncate">
+        {message}
+      </Txt>
     </div>
   );
 }

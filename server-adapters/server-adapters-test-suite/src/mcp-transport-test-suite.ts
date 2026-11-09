@@ -1,8 +1,10 @@
+import http from 'node:http';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
+import { LegacySSEFixture } from './legacy-sse-fixture';
 import { NativeMCPFixture } from './native-mcp-fixture';
 
 /**
@@ -122,10 +124,32 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       },
     });
 
+    // Waits until its abort signal fires (or 5s pass), recording when each happened.
+    const slowToolRuns: Array<{ abortedAt?: number; finishedAt?: number }> = [];
+    const slowTool = createTool({
+      id: 'slow',
+      description: 'Waits until aborted, optionally streaming a log notification first',
+      inputSchema: z.object({ streamFirst: z.boolean() }),
+      execute: async ({ streamFirst }, context) => {
+        const signal = context?.abortSignal;
+        const run: (typeof slowToolRuns)[number] = {};
+        slowToolRuns.push(run);
+        signal?.addEventListener('abort', () => (run.abortedAt = Date.now()), { once: true });
+        if (streamFirst) await context?.mcp?.log?.('info', 'started');
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 5000);
+          signal?.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true });
+        });
+        run.finishedAt = Date.now();
+        return { aborted: !!signal?.aborted };
+      },
+    });
+
     let httpServer: { close: () => void };
     let port: number;
     let mcpServer1: MCPServer;
     let mcpServer2: MCPServer;
+    let slowServer: MCPServer;
     let mcpClient: MCPClient;
     let mastra: Mastra;
 
@@ -148,11 +172,14 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         tools: {},
       });
 
+      slowServer = new MCPServer({ name: 'slow-server', version: '1.0.0', tools: { slow: slowTool } });
+
       // Create Mastra instance
       mastra = new Mastra({
         mcpServers: {
           'test-server-1': mcpServer1,
           'test-server-2': mcpServer2,
+          'slow-server': slowServer,
           'native-fixture': new NativeMCPFixture(),
         },
       });
@@ -180,6 +207,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       httpServer?.close();
       await mcpServer1?.close();
       await mcpServer2?.close();
+      await slowServer?.close();
     }, 30000);
 
     describe('native MCP v2 adapter dispatch', () => {
@@ -395,6 +423,184 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       });
     });
 
+    describe('HTTP Transport with server auth', () => {
+      // Reports what an MCP tool can see of the caller, so the test can check it
+      // matches what Mastra server auth resolved for the HTTP request.
+      const whoamiTool = createTool({
+        id: 'whoami',
+        description: 'Reports the caller identity the tool sees',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const requestContext = context?.requestContext;
+          const user = requestContext?.get('user') as { id?: string } | undefined;
+          return {
+            userId: user?.id ?? null,
+            permissions: requestContext?.get('mastra__userPermissions') ?? null,
+          };
+        },
+      });
+
+      let authedHttpServer: { close: () => void };
+      let authedPort: number;
+      let authedMcpServer: MCPServer;
+      let authedClient: MCPClient;
+      const legacySseServer = new LegacySSEFixture();
+      const users: Record<string, { id: string }> = {
+        'reader-token': { id: 'user-reader' },
+        'blocked-token': { id: 'user-blocked' },
+      };
+
+      beforeAll(async () => {
+        authedMcpServer = new MCPServer({ name: 'authed', version: '1.0.0', tools: { whoami: whoamiTool } });
+        const authedMastra = new Mastra({
+          mcpServers: { authed: authedMcpServer, legacySse: legacySseServer },
+          server: {
+            auth: {
+              authenticateToken: async (token: string) => users[token] ?? null,
+              // Server auth's own authorization decides before any MCP transport starts.
+              authorize: async (_path: string, _method: string, user: { id: string }) => user.id !== 'user-blocked',
+            },
+            rbac: {
+              getPermissions: async () => ['observability:read'],
+              getRoles: async () => ['reader'],
+            } as any,
+          },
+        });
+        const setup = await createServer(authedMastra);
+        authedHttpServer = setup.server;
+        authedPort = setup.port;
+        authedClient = new MCPClient({
+          servers: {
+            authed: {
+              url: new URL(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`),
+              requestInit: { headers: { Authorization: 'Bearer reader-token' } },
+            },
+          },
+        });
+      }, 30000);
+
+      afterAll(async () => {
+        await authedClient?.disconnect();
+        authedHttpServer?.close();
+        await authedMcpServer?.close();
+      }, 30000);
+
+      it('gives MCP tools the user and permissions server auth resolved', async () => {
+        const tools = await authedClient.listTools();
+        const whoami = tools['authed_whoami'];
+        if (!whoami?.execute) throw new Error('Expected authed_whoami tool');
+
+        const result = await whoami.execute({}, {} as any);
+
+        expectTextToolResult(result, { userId: 'user-reader', permissions: ['observability:read'] });
+      });
+
+      it('rejects MCP requests without credentials', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(401);
+      });
+
+      it('refuses MCP requests server auth does not authorize', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            Authorization: 'Bearer blocked-token',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(403);
+      });
+
+      it('hands the SSE transport the user and permissions server auth resolved', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${legacySseServer.id}/sse`, {
+          headers: { Authorization: 'Bearer reader-token' },
+        });
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          clientId: 'user-reader',
+          userId: 'user-reader',
+          permissions: ['observability:read'],
+        });
+      });
+
+      it('refuses SSE requests server auth does not authorize', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${legacySseServer.id}/sse`, {
+          headers: { Authorization: 'Bearer blocked-token' },
+        });
+        expect(response.status).toBe(403);
+      });
+    });
+
+    describe('HTTP Transport client disconnect', () => {
+      // Sends a raw tools/call and destroys the socket while the tool is running. The tool
+      // must observe the abort promptly, not only after it has run to completion.
+      it.each([
+        { name: 'before any response bytes are sent', streamFirst: false },
+        { name: 'after the response has started streaming', streamFirst: true },
+      ])(
+        'aborts the in-flight tool call when the client disconnects $name',
+        async ({ streamFirst }) => {
+          const runsBefore = slowToolRuns.length;
+          const body = JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name: 'slow',
+              arguments: { streamFirst },
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': { name: 'disconnect-test', version: '1.0.0' },
+                'io.modelcontextprotocol/clientCapabilities': {},
+                'io.modelcontextprotocol/logLevel': 'info',
+              },
+            },
+          });
+          let responseBytes = 0;
+          const req = http.request({
+            host: 'localhost',
+            port,
+            method: 'POST',
+            path: `/api/mcp/${slowServer.id}/mcp`,
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json, text/event-stream',
+              'mcp-protocol-version': '2026-07-28',
+              'mcp-method': 'tools/call',
+              'mcp-name': 'slow',
+              'content-length': Buffer.byteLength(body),
+            },
+          });
+          req.on('response', res => {
+            res.on('data', chunk => (responseBytes += chunk.length));
+            res.on('error', () => {});
+          });
+          req.on('error', () => {});
+          req.end(body);
+
+          await expect.poll(() => slowToolRuns.length, { timeout: 5000 }).toBe(runsBefore + 1);
+          if (streamFirst) await expect.poll(() => responseBytes, { timeout: 5000 }).toBeGreaterThan(0);
+          else expect(responseBytes).toBe(0);
+
+          const run = slowToolRuns[runsBefore]!;
+          const disconnectedAt = Date.now();
+          req.destroy();
+
+          await expect.poll(() => run.finishedAt, { timeout: 6000 }).toBeDefined();
+          expect(run.abortedAt).toBeDefined();
+          expect(run.abortedAt! - disconnectedAt).toBeLessThan(1000);
+        },
+        15000,
+      );
+    });
+
     describe('SSE Transport (/api/mcp/:serverId/sse)', () => {
       describe('Error handling (raw HTTP)', () => {
         it('should return 404 for non-existent server on GET /sse', async () => {
@@ -418,7 +624,8 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       });
 
       describe('MCP 2.x servers (MCPClient)', () => {
-        it('does not serve the legacy SSE transport for a 2.x MCPServer', async () => {
+        it('does not serve the legacy SSE transport for a 2.x MCPServer', async ctx => {
+          if ((mcpServer1 as { mcpVersion?: number }).mcpVersion !== 2) ctx.skip();
           const res = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`);
           expect(res.status).toBe(404);
 
@@ -430,7 +637,8 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           expect(messages.status).toBe(404);
         });
 
-        it('fails to connect through the SSE URL without downgrading', async () => {
+        it('fails to connect through the SSE URL without downgrading', async ctx => {
+          if ((mcpServer1 as { mcpVersion?: number }).mcpVersion !== 2) ctx.skip();
           const sseClient = new MCPClient({
             id: `sse-rejection-${port}`,
             servers: {

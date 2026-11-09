@@ -1,0 +1,85 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Goal: # E2E Active Goal Plan"
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The approved plan was implemented.\"}"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Goal: Produce an approved plan for the active goal e2e."
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The planning goal judged the implementation run.\"}"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "# E2E Active Goal Plan"
+      },
+      "response": {
+        "content": "Implemented the approved plan."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Produce an approved plan for the active goal e2e.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_active_goal_e2e_write",
+            "name": "write_file",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-active-goal-plan.md",
+              "content": "# E2E Active Goal Plan\n\n## Steps\n1. Implement the approved plan.\n\n## Verification\nThe implementation run is judged against this plan.\n",
+              "overwrite": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "turnIndex": 1
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_active_goal_e2e_submit",
+            "name": "submit_plan",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-active-goal-plan.md"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "turnIndex": 2
+      },
+      "response": {
+        "content": "Implemented the approved plan."
+      }
+    }
+  ]
+}

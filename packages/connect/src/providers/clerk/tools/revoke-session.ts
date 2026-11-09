@@ -1,10 +1,10 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const revokeSessionInputSchema = z.object({ session_id: z.string() });
+export const revokeSessionInputSchema = z.object({ session_id: z.string().min(1) });
 
 const ResourceSchema = z
   .object({
@@ -12,7 +12,10 @@ const ResourceSchema = z
     object: z.string().optional(),
     client_id: z.string().optional(),
     user_id: z.string(),
-    status: z.enum(['abandoned', 'active', 'ended', 'expired', 'removed', 'replaced', 'revoked']).optional(),
+    status: z
+      .enum(['abandoned', 'active', 'ended', 'expired', 'removed', 'replaced', 'revoked'])
+      .or(z.string())
+      .optional(),
     last_active_at: z.number().optional(),
     expire_at: z.number().optional(),
     abandon_at: z.number().optional(),

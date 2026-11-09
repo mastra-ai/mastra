@@ -277,6 +277,236 @@ describe('mapLangfuseSourceTrace', () => {
     expect(ignored.trace.spans[0]?.spanType).toBe('generic');
   });
 
+  it('names the owning primitive from Langfuse observation types', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({ type: 'AGENT', name: 'support-agent' }),
+        observation({ id: 'tool', parentObservationId: 'root', type: 'TOOL', name: 'lookup-order' }),
+        observation({ id: 'eval', parentObservationId: 'root', type: 'EVALUATOR', name: 'helpfulness' }),
+        observation({ id: 'plain', parentObservationId: 'root', type: 'SPAN', name: 'retry-loop' }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    const byName = (name: string) => record.trace.spans.find(span => span.name === name);
+    const [root, tool, evaluator, plain] = ['support-agent', 'lookup-order', 'helpfulness', 'retry-loop'].map(byName);
+    expect(root).toMatchObject({ spanType: 'agent_run', entityType: 'agent', entityName: 'support-agent' });
+    expect(tool).toMatchObject({ spanType: 'tool_call', entityType: 'tool', entityName: 'lookup-order' });
+    expect(evaluator).toMatchObject({ spanType: 'scorer_run', entityType: 'scorer', entityName: 'helpfulness' });
+    // A plain child inherits the primitive that owns it, like native spans do.
+    expect(plain).toMatchObject({ spanType: 'generic', entityType: 'agent', entityName: 'support-agent' });
+  });
+
+  it('recovers agent and tool spans from OpenTelemetry GenAI attributes on plain Langfuse spans', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({
+          name: 'invoke_agent Agent',
+          metadata: {
+            'attributes.gen_ai.operation.name': 'invoke_agent',
+            'attributes.gen_ai.agent.name': 'Agent',
+            'attributes.gen_ai.agent.id': 'agent-1',
+          },
+        }),
+        observation({
+          id: 'tool',
+          parentObservationId: 'root',
+          name: 'execute_tool get_weather',
+          metadata: {
+            'attributes.gen_ai.operation.name': 'execute_tool',
+            'attributes.gen_ai.tool.name': 'get_weather',
+          },
+        }),
+        observation({
+          id: 'chat',
+          parentObservationId: 'root',
+          name: 'chat gpt-4o',
+          metadata: { 'attributes.gen_ai.operation.name': 'chat' },
+        }),
+        observation({
+          id: 'unknown-op',
+          parentObservationId: 'root',
+          metadata: { 'attributes.gen_ai.operation.name': 'custom_thing' },
+        }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    const byName = (name: string) => record.trace.spans.find(span => span.name === name);
+    const [root, tool, chat, unknown] = ['invoke_agent Agent', 'execute_tool get_weather', 'chat gpt-4o', 'root'].map(
+      byName,
+    );
+    expect(root).toMatchObject({
+      spanType: 'agent_run',
+      entityType: 'agent',
+      entityId: 'agent-1',
+      entityName: 'Agent',
+    });
+    expect(tool).toMatchObject({
+      spanType: 'tool_call',
+      entityType: 'tool',
+      entityId: 'get_weather',
+      entityName: 'get_weather',
+    });
+    expect(chat).toMatchObject({ spanType: 'model_generation', entityType: 'agent', entityName: 'Agent' });
+    expect(unknown).toMatchObject({ spanType: 'generic' });
+  });
+
+  it('types the virtual trace root Langfuse creates for OTLP-ingested agent traces', () => {
+    // Real shape from Langfuse OTLP ingestion: metadata.attributes is a nested object, and the
+    // trace root is a plain SPAN named `t-<traceId>` above the typed AGENT observation.
+    const otel = {
+      scope: { name: 'openai-agents-sdk-like', version: '0.1.0' },
+      attributes: {
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.name': 'Agent',
+        'gen_ai.agent.id': 'agent-paul',
+      },
+    };
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({ id: 't-trace-1', name: 'invoke_agent Agent', metadata: otel }),
+        observation({
+          id: 'agent',
+          parentObservationId: 't-trace-1',
+          type: 'AGENT',
+          name: 'invoke_agent Agent',
+          metadata: otel,
+        }),
+        observation({
+          id: 'tool',
+          parentObservationId: 'agent',
+          type: 'TOOL',
+          name: 'execute_tool get_weather',
+          metadata: { attributes: { 'gen_ai.operation.name': 'execute_tool', 'gen_ai.tool.name': 'get_weather' } },
+        }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    const root = record.trace.spans.find(span => span.parentSpanId === null);
+    expect(root).toMatchObject({
+      spanType: 'agent_run',
+      entityType: 'agent',
+      entityId: 'agent-paul',
+      entityName: 'Agent',
+    });
+    expect(record.trace.spans.find(span => span.name === 'execute_tool get_weather')).toMatchObject({
+      entityType: 'tool',
+      entityName: 'get_weather',
+    });
+  });
+
+  it("drops Langfuse's placeholder environment and keeps environments the user set", () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({ environment: 'default' }),
+        observation({ id: 'staging', name: 'staging', parentObservationId: 'root', environment: 'staging' }),
+        observation({ id: 'unset', name: 'unset', parentObservationId: 'root', environment: null }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    const byName = (name: string) => record.trace.spans.find(span => span.name === name)!.metadata;
+    expect(byName('root')).not.toHaveProperty('environment');
+    expect(byName('root').langfuseMetadata).toBeUndefined();
+    expect(byName('staging').environment).toBe('staging');
+    expect(byName('unset')).not.toHaveProperty('environment');
+  });
+
+  it('gives the Langfuse virtual trace root the primitive of its single real root', () => {
+    // Langfuse SDK style: the typed AGENT is the real root; Langfuse adds a plain `t-<traceId>` above it.
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({ id: 't-trace-1', name: 'booking-agent', metadata: { scope: { name: 'langfuse-sdk' } } }),
+        observation({ id: 'agent', parentObservationId: 't-trace-1', type: 'AGENT', name: 'booking-agent' }),
+        observation({ id: 'tool', parentObservationId: 'agent', type: 'TOOL', name: 'find-restaurant' }),
+        observation({
+          id: 'llm',
+          parentObservationId: 'agent',
+          type: 'GENERATION',
+          name: 'llm-call',
+          model: 'gpt-4o-mini',
+        }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    const byName = (name: string) => record.trace.spans.find(span => span.name === name)!;
+    const root = record.trace.spans.find(span => span.parentSpanId === null)!;
+    expect(root).toMatchObject({ spanType: 'generic', entityType: 'agent', entityName: 'booking-agent' });
+    expect(byName('find-restaurant')).toMatchObject({ entityType: 'tool', entityName: 'find-restaurant' });
+    expect(byName('llm-call')).toMatchObject({ entityType: 'agent', entityName: 'booking-agent' });
+  });
+
+  it('leaves a virtual root untyped when it has several real roots or an untyped one', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({ id: 't-trace-1', name: 'two-roots' }),
+        observation({ id: 'a', parentObservationId: 't-trace-1', type: 'AGENT', name: 'a' }),
+        observation({ id: 'b', parentObservationId: 't-trace-1', type: 'AGENT', name: 'b' }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans.find(span => span.parentSpanId === null)).not.toHaveProperty('entityType');
+  });
+
+  it('keeps Mastra agent and workflow identity on traces exported by @mastra/langfuse', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({
+          type: 'AGENT',
+          metadata: {
+            'scope.name': '@mastra/langfuse',
+            spanType: 'agent_run',
+            agentName: 'Weather Agent',
+            agentId: 'weather-agent',
+            'attributes.gen_ai.operation.name': 'invoke_agent',
+          },
+        }),
+        observation({
+          id: 'workflow',
+          parentObservationId: 'root',
+          metadata: {
+            'scope.name': '@mastra/langfuse',
+            spanType: 'workflow_run',
+            workflowName: 'Daily Digest',
+            workflowId: 'daily-digest',
+            'attributes.gen_ai.operation.name': 'invoke_workflow',
+          },
+        }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans[0]).toMatchObject({
+      spanType: 'agent_run',
+      entityType: 'agent',
+      entityId: 'weather-agent',
+      entityName: 'Weather Agent',
+    });
+    expect(record.trace.spans[1]).toMatchObject({
+      spanType: 'workflow_run',
+      entityType: 'workflow_run',
+      entityId: 'daily-digest',
+      entityName: 'Daily Digest',
+    });
+  });
+
   it('derives Langfuse virtual root end time from the latest child', () => {
     const record = mapLangfuseSourceTrace(
       sourceTrace([
@@ -445,6 +675,7 @@ describe('LangfuseTraceImportProvider', () => {
       provider: 'langfuse',
       baseUrl: 'https://cloud.langfuse.com',
       projectId: 'project-1',
+      projectName: 'Demo',
       idAlgorithmVersion: 'langfuse-sha256-v1',
     });
   });

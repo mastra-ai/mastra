@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused word: '%s'. Name the specific action or object. Disable this rule for maritime or logistics writing."
+message: "AI overused word: '%s'. State the specific action or object. Disable this rule for maritime or logistics writing."
 level: error
 nonword: true
 ignorecase: true

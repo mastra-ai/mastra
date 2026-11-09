@@ -1,7 +1,8 @@
 import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { theme } from '../theme.js';
+import { displayModeColor, getContrastText, mastra, theme } from '../theme.js';
+import { PickerList } from './picker-list.js';
 
 export interface GithubPRPickerItem {
   owner?: string;
@@ -68,6 +69,7 @@ function formatUpdatedAt(value: string | undefined): string | undefined {
 export class GithubPRPickerDialog extends Box implements Focusable {
   private searchInput!: Input;
   private listContainer!: Container;
+  private list!: PickerList<GithubPRPickerItem>;
   private viewTabs!: Text;
   private currentView: PRView = 'mine';
   private myPullRequests: GithubPRPickerItem[];
@@ -159,6 +161,16 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     this.addChild(this.searchInput);
     this.addChild(new Spacer(1));
     this.listContainer = new Container();
+    this.list = new PickerList({
+      maxVisible: 12,
+      renderItem: (item, highlighted) => [this.renderPullRequest(item, highlighted)],
+      onActivate: index => {
+        this.highlightedIndex = index;
+        this.handleInput('\r');
+      },
+      emptyText: () =>
+        this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs',
+    });
     this.addChild(this.listContainer);
     this.updateList();
   }
@@ -166,8 +178,9 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private renderViewTabs(): void {
     const tabs = (['mine', 'search'] as PRView[]).map(view => {
       const tabText = `${VIEW_LABELS[view]} (${this.getViewPullRequests(view).length})`;
+      const active = displayModeColor(mastra.purple);
       return view === this.currentView
-        ? chalk.bgHex('#7f45e0').white.bold(` ${tabText} `)
+        ? chalk.bgHex(active).hex(getContrastText(active)).bold(` ${tabText} `)
         : theme.fg('muted', ` ${tabText} `);
     });
     this.viewTabs.setText(tabs.join(''));
@@ -238,54 +251,29 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     }
     if (this.errorMessage) this.listContainer.addChild(new Text(theme.fg('error', this.errorMessage), 0, 0));
 
-    const totalItems = this.filteredPullRequests.length;
-    const maxVisible = 12;
-    const startIndex = Math.max(
-      0,
-      Math.min(this.highlightedIndex - Math.floor(maxVisible / 2), totalItems - maxVisible),
-    );
-    const endIndex = Math.min(startIndex + maxVisible, totalItems);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const item = this.filteredPullRequests[i];
-      if (!item) continue;
-      const id = githubPRId(item);
-      const isHighlighted = i === this.highlightedIndex;
-      const isSelected = this.hasId(this.selectedIds, item);
-      const isSubscribed = this.hasId(this.subscribedIds, item);
-      const checkMark = isSelected ? chalk.green('✓') : ' ';
-      const title = item.title ? ` ${item.title}` : '';
-      const meta = [
-        item.author ? `@${item.author}` : undefined,
-        formatUpdatedAt(item.updatedAt),
-        item.headRefName && item.baseRefName ? `${item.headRefName}→${item.baseRefName}` : undefined,
-      ]
-        .filter(Boolean)
-        .join(' · ');
-      const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
-      const line = `${isHighlighted ? theme.fg('accent', '→') : ' '} [${checkMark}] ${id}${title}${meta ? theme.fg('muted', ` (${meta})`) : ''}${subscribedMark}`;
-      this.listContainer.addChild(new Text(line, 0, 0));
-    }
-
-    if (startIndex > 0 || endIndex < totalItems) {
-      this.listContainer.addChild(new Text(theme.fg('muted', `(${this.highlightedIndex + 1}/${totalItems})`), 0, 0));
-    }
-    if (totalItems === 0) {
-      this.listContainer.addChild(
-        new Text(
-          theme.fg(
-            'muted',
-            this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs',
-          ),
-          0,
-          0,
-        ),
-      );
-    }
+    this.list.setItems(this.filteredPullRequests, this.highlightedIndex);
+    this.listContainer.addChild(this.list);
     const selectedCount = this.getSelectedPullRequests().length;
     if (selectedCount > 0) {
       this.listContainer.addChild(new Text(theme.fg('accent', `\n${selectedCount} selected - Enter to confirm`), 0, 0));
     }
+  }
+
+  private renderPullRequest(item: GithubPRPickerItem, isHighlighted: boolean): string {
+    const id = githubPRId(item);
+    const isSelected = this.hasId(this.selectedIds, item);
+    const isSubscribed = this.hasId(this.subscribedIds, item);
+    const checkMark = isSelected ? chalk.green('✓') : ' ';
+    const title = item.title ? ` ${item.title}` : '';
+    const meta = [
+      item.author ? `@${item.author}` : undefined,
+      formatUpdatedAt(item.updatedAt),
+      item.headRefName && item.baseRefName ? `${item.headRefName}→${item.baseRefName}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
+    return `${isHighlighted ? theme.fg('accent', '→') : ' '} [${checkMark}] ${id}${title}${meta ? theme.fg('muted', ` (${meta})`) : ''}${subscribedMark}`;
   }
 
   handleInput(keyData: string): void {

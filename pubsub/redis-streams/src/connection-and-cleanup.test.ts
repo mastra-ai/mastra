@@ -48,6 +48,21 @@ function makeSeverableProxy(targetUrl: string) {
       for (const s of sockets) s.destroy();
       sockets.clear();
     },
+    /**
+     * Sever every connection and stop listening, so reconnects get
+     * ECONNREFUSED and clients sit in backoff as they would in an outage.
+     */
+    async refuse() {
+      await listening;
+      // close() stops accepting at once but calls back only after open sockets end.
+      const closed = new Promise<void>(r => server.close(() => r()));
+      this.sever();
+      await closed;
+    },
+    async accept() {
+      const port = await listening;
+      await new Promise<void>(r => server.listen(port, '127.0.0.1', () => r()));
+    },
     close() {
       this.sever();
       return new Promise<void>(r => server.close(() => r()));
@@ -158,6 +173,132 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
         await proxy.close();
       }
     }, 30_000);
+
+    // node-redis 5 quit() never settles on a client that is open but in
+    // reconnect backoff: it turns the reconnect loop off before QUIT can be
+    // written. close() used to quit every client unconditionally and hung
+    // forever, even after Redis came back.
+    function settlesWithin(promise: Promise<unknown>, ms: number) {
+      return Promise.race([
+        promise.then(() => 'settled' as const),
+        new Promise<'hung'>(r => setTimeout(() => r('hung'), ms)),
+      ]);
+    }
+
+    it('close() settles when a subscription reader is reconnecting', async () => {
+      const proxy = makeSeverableProxy(REDIS_URL);
+      try {
+        const port = await proxy.listening;
+        const prefix = `backoff-${randomUUID()}`;
+        const ps = new RedisStreamsPubSub({ url: `redis://127.0.0.1:${port}`, keyPrefix: prefix, blockMs: 200 });
+        const inspector = await createInspector();
+        await ps.subscribe('topic', (_event, ack) => void ack?.());
+        expect(await inspector.xInfoGroups(`${prefix}:topic`)).toHaveLength(1);
+
+        await proxy.refuse();
+        await new Promise(r => setTimeout(r, 500));
+        const close = ps.close();
+        await new Promise(r => setTimeout(r, 200));
+        // The fan-out group teardown needs Redis; let it back so only the
+        // quit-during-backoff behavior decides whether close() settles.
+        await proxy.accept();
+
+        expect(await settlesWithin(close, 10_000)).toBe('settled');
+        // Destroying the reconnecting reader must not skip the writer's
+        // queued fan-out group teardown.
+        expect(await inspector.xInfoGroups(`${prefix}:topic`)).toHaveLength(0);
+        await inspector.del(`${prefix}:topic`);
+      } finally {
+        await proxy.close();
+      }
+    }, 30_000);
+
+    it('close() settles while the writer is reconnecting and nothing is pending', async () => {
+      const proxy = makeSeverableProxy(REDIS_URL);
+      try {
+        const port = await proxy.listening;
+        const prefix = `backoff-${randomUUID()}`;
+        const ps = new RedisStreamsPubSub({ url: `redis://127.0.0.1:${port}`, keyPrefix: prefix });
+        await ps.publish('topic', makeEvent());
+
+        await proxy.refuse();
+        await new Promise(r => setTimeout(r, 500));
+
+        expect(await settlesWithin(ps.close(), 5_000)).toBe('settled');
+        const inspector = await createInspector();
+        await inspector.del(`${prefix}:topic`);
+      } finally {
+        await proxy.close();
+      }
+    }, 30_000);
+  });
+
+  describe('trimTopic', () => {
+    it("deletes only the given run's entries", async () => {
+      const ps = createPubSub();
+      const topic = `trim-${randomUUID()}`;
+      await ps.publish(topic, makeEvent({ runId: 'a', data: { n: 1 } }));
+      await ps.publish(topic, makeEvent({ runId: 'b', data: { n: 2 } }));
+      await ps.publish(topic, makeEvent({ runId: 'a', data: { n: 3 } }));
+
+      const inspector = await createInspector();
+      const streamKey = `mastra:topic:${topic}`;
+      expect(await inspector.xLen(streamKey)).toBe(3);
+
+      await ps.trimTopic(topic, { runId: 'a' });
+      expect(await inspector.xLen(streamKey)).toBe(1);
+
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([2]);
+    }, 15_000);
+
+    it('retains final outcomes but removes saved output and answered suspensions when requested (COR-1500)', async () => {
+      const ps = createPubSub();
+      const topic = `trim-outcomes-${randomUUID()}`;
+      for (const data of [
+        { type: 'stream-part' },
+        { type: 'run-registered' },
+        { type: 'run-completed', status: 'suspended' },
+        { type: 'run-completed', status: 'success' },
+        { type: 'run-failed', error: 'failed' },
+        { type: 'run-aborted' },
+      ])
+        await ps.publish(topic, makeEvent({ runId: 'a', data }));
+      await ps.publish(topic, makeEvent({ runId: 'b', data: { type: 'stream-part' } }));
+      await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
+      await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
+      const inspector = await createInspector();
+      const entries = await inspector.xRange(`mastra:topic:${topic}`, '-', '+');
+      expect(entries.map(entry => JSON.parse(entry.message.event).data.type)).toEqual([
+        'run-registered',
+        'run-completed',
+        'run-failed',
+        'run-aborted',
+        'stream-part',
+      ]);
+      await ps.trimTopic(topic, { runId: 'a' });
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(1);
+    }, 15_000);
+
+    it('pages through streams longer than one XRANGE page', async () => {
+      const ps = createPubSub();
+      const topic = `trim-paged-${randomUUID()}`;
+      for (let i = 0; i < 1_200; i++) {
+        await ps.publish(topic, makeEvent({ runId: i % 2 === 0 ? 'a' : 'b' }));
+      }
+      await ps.trimTopic(topic, { runId: 'a' });
+      const inspector = await createInspector();
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(600);
+    }, 30_000);
+
+    it('is a no-op for a topic that was never published to', async () => {
+      const ps = createPubSub();
+      await expect(ps.trimTopic(`never-${randomUUID()}`, { runId: 'a' })).resolves.toBeUndefined();
+    }, 15_000);
   });
 
   describe('clearTopic', () => {
@@ -240,14 +381,59 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       expect(pttl).toBeLessThanOrEqual(60_000);
     }, 15_000);
 
-    it('leaves streams persistent by default', async () => {
+    it('expires idle streams by default (7 days) on both publish- and subscribe-created keys', async () => {
+      // A deployment constructed with defaults must not accumulate immortal
+      // streams: under a volatile-* policy they can't be evicted, and under
+      // noeviction they grow until Redis rejects writes.
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
       const ps = createPubSub();
-      const topic = `nottl-${randomUUID()}`;
-      await ps.publish(topic, makeEvent());
+      const publishTopic = `default-ttl-pub-${randomUUID()}`;
+      const subscribeTopic = `default-ttl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      for (const topic of [publishTopic, subscribeTopic]) {
+        const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+        expect(pttl).toBeGreaterThan(sevenDays - 60_000);
+        expect(pttl).toBeLessThanOrEqual(sevenDays);
+      }
+    }, 15_000);
+
+    it('keeps delivering to a live subscriber after its idle stream expires', async () => {
+      // Expiry, unlike clearTopic(), happens while the reader is blocked in
+      // XREADGROUP with no local cursor reset; the read loop must recreate the
+      // group and keep delivering.
+      const ps = createPubSub({ streamIdleTtlMs: 300 });
+      const topic = `ttl-expire-live-${randomUUID()}`;
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
+
+      const inspector = await createInspector();
+      // The read loop recreates the stream right after it expires, so check that
+      // entry 1 is gone (XLEN 0) rather than racing to see the key missing.
+      await expect.poll(() => inspector.xLen(`mastra:topic:${topic}`), { timeout: 5000 }).toBe(0);
+
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
+    }, 20_000);
+
+    it('keeps streams persistent with streamIdleTtlMs: 0', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 0 });
+      const publishTopic = `nottl-pub-${randomUUID()}`;
+      const subscribeTopic = `nottl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
 
       const inspector = await createInspector();
       // -1 = key exists with no TTL.
-      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${publishTopic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${subscribeTopic}`)).toBe(-1);
     }, 15_000);
 
     it('rejects an invalid streamIdleTtlMs (negative, NaN, Infinity, or non-integer)', () => {

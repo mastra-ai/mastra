@@ -1,6 +1,6 @@
 import type { Component, Container } from '@earendil-works/pi-tui';
 import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
-import { getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
+import { PENDING_SHELL_GROUP_KEY, getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
 import type { CompactToolLabelColor } from './components/tool-execution-interface.js';
 
 interface CompactToolGroupingParticipant {
@@ -10,6 +10,11 @@ interface CompactToolGroupingParticipant {
   setCompactToolGroupLabelColor?(color: CompactToolLabelColor | undefined): void;
   setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;
   setCompactToolHasFollowingContinuation?(hasFollowingContinuation: boolean): void;
+  getShellNaturalWidth?(): number | undefined;
+  setShellGroupWidth?(width: number | undefined): void;
+  getShellPreviewLines?(): string[] | undefined;
+  setShellGroupPreview?(lines: string[] | undefined): void;
+  setShellHeld?(held: boolean): void;
 }
 
 /**
@@ -49,13 +54,28 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   const spacerPool = children.filter(isChatBoundarySpacer);
   let poolIndex = 0;
 
+  // A shell call still streaming its directory stays hidden below a shell box until it knows which
+  // box it belongs in. With no shell box above, it opens its own and fills in the directory later.
+  const compactToolGroupKeys = new Array<string | undefined>(components.length);
+  let previousSpacingGroupKey: string | undefined;
+  for (let i = 0; i < components.length; i++) {
+    const component = components[i]!;
+    const participant = component as CompactToolGroupingParticipant;
+    let key = participant.getCompactToolGroupKey?.();
+    const held = key === PENDING_SHELL_GROUP_KEY && !!previousSpacingGroupKey?.startsWith('$ ');
+    participant.setShellHeld?.(held);
+    if (held) key = undefined;
+    compactToolGroupKeys[i] = key;
+    if (getChatSpacingKind(component)) previousSpacingGroupKey = key;
+  }
+
   const nextCompactToolGroupKeys = new Array<string | undefined>(components.length);
   let nextSpacingComponentGroupKey: string | undefined;
   for (let i = components.length - 1; i >= 0; i--) {
     nextCompactToolGroupKeys[i] = nextSpacingComponentGroupKey;
     const component = components[i];
     if (component && getChatSpacingKind(component)) {
-      nextSpacingComponentGroupKey = (component as CompactToolGroupingParticipant).getCompactToolGroupKey?.();
+      nextSpacingComponentGroupKey = compactToolGroupKeys[i];
     }
   }
 
@@ -65,20 +85,30 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   let currentCompactRun: CompactToolGroupingParticipant[] = [];
   let previousSpacingComponent: Component | undefined;
 
-  const flushCompactRunColor = () => {
+  const flushCompactRun = () => {
     const color = getCompactRunLabelColor(currentCompactRun);
-    for (const participant of currentCompactRun) {
+    // Calls sharing a compact shell box must agree on its width: the widest row wins.
+    const widths = currentCompactRun
+      .map(participant => participant.getShellNaturalWidth?.())
+      .filter((width): width is number => width !== undefined);
+    const groupWidth = widths.length > 0 ? Math.max(...widths) : undefined;
+    // The box's first call draws its preview: the latest output of any call in the box.
+    const previews = currentCompactRun.map(participant => participant.getShellPreviewLines?.());
+    const preview = previews.findLast(lines => lines && lines.length > 0) ?? previews.find(lines => lines);
+    currentCompactRun.forEach((participant, index) => {
       participant.setCompactToolGroupLabelColor?.(color);
-    }
+      participant.setShellGroupWidth?.(groupWidth);
+      participant.setShellGroupPreview?.(index === 0 ? preview : undefined);
+    });
     currentCompactRun = [];
   };
 
   for (let i = 0; i < components.length; i++) {
     const component = components[i]!;
 
-    // --- compact-tool grouping (unchanged logic) --------------------------
+    // --- compact-tool grouping --------------------------------------------
     const participant = component as CompactToolGroupingParticipant;
-    const compactToolGroupKey = participant.getCompactToolGroupKey?.();
+    const compactToolGroupKey = compactToolGroupKeys[i];
     const compactToolGroupSummary = participant.getCompactToolGroupSummary?.();
     const nextCompactToolGroupKey = nextCompactToolGroupKeys[i];
     const isContinuation = !!compactToolGroupKey && compactToolGroupKey === previousCompactToolGroupKey;
@@ -87,10 +117,12 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
       !!compactToolGroupKey && compactToolGroupKey === nextCompactToolGroupKey,
     );
     if (compactToolGroupKey) {
-      if (!isContinuation) flushCompactRunColor();
+      if (!isContinuation) flushCompactRun();
       currentCompactRun.push(participant);
     } else {
-      flushCompactRunColor();
+      // Entries that take no space (e.g. a compact assistant message with only hidden thinking)
+      // don't break a run, matching the continuation check above.
+      if (getChatSpacingKind(component)) flushCompactRun();
       participant.setCompactToolGroupLabelColor?.(undefined);
     }
     if (getChatSpacingKind(component)) {
@@ -121,7 +153,7 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
     nextChildren.push(component);
   }
 
-  flushCompactRunColor();
+  flushCompactRun();
 
   const childrenChanged =
     children.length !== nextChildren.length || children.some((child, index) => child !== nextChildren[index]);

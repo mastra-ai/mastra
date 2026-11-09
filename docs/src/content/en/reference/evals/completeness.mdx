@@ -2,7 +2,6 @@
 title: "Reference: Completeness scorer | Evals"
 description: "The createCompletenessScorer() function evaluates how thoroughly an LLM's output covers the key elements present in the input."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -44,7 +43,7 @@ The `.run()` method returns a result in the following shape:
 ```typescript oxfmt:false
 {
   runId: string,
-  extractStepResult: {
+  preprocessStepResult: {
     inputElements: string[],
     outputElements: string[],
     missingElements: string[],
@@ -66,14 +65,13 @@ The scorer extracts and analyzes several types of elements:
 The extraction process includes:
 
 - Normalization of text (removing diacritics, converting to lowercase)
-- Splitting camelCase words
 - Handling of word boundaries
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
-### `extractStepResult`
+### `preprocessStepResult`
 
-From the `.run()` method, you can get the `extractStepResult` object with the following properties:
+From the `.run()` method, you can get the `preprocessStepResult` object with the following properties:
 
 - **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
 - **outputElements**: Key elements found in the output.
@@ -95,7 +93,11 @@ The scorer evaluates completeness through linguistic element coverage analysis.
    - Exact matches for short terms (≤3 chars)
    - Substantial overlap (>60%) for longer terms
 
-Final score: `(covered_elements / total_input_elements) * scale`
+When the input yields no elements, the scorer returns `1` if the output also has no elements and `0` otherwise.
+
+Final score: `covered_elements / total_input_elements`
+
+The completeness scorer has no `scale` option. The score is always between 0 and 1.
 
 ### Score interpretation
 

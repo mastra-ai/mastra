@@ -14,18 +14,22 @@ import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
+import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
+import { Txt } from '@/ds/components/Txt';
+import {
+  MENU_SIDE_OFFSET,
+  menuEmptyClass,
+  menuItemButtonClass,
+  menuItemTrailingIconClass,
+} from '@/ds/primitives/menu-item';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-// Plain <button>s navigated with roving focus (not Base UI): the fluid highlight follows focus.
-const filterItemClass = cn(menuItemClass, 'focus:text-foreground');
-
+// Plain <button>s navigated with roving focus (not Base UI).
 const FilterMenuButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => (
-  <button type="button" role="menuitem" data-filter-item="" ref={useFluidMenuItemRef(ref)} {...props} />
+  <button type="button" role="menuitem" data-filter-item="" ref={ref} {...props} />
 ));
 FilterMenuButton.displayName = 'FilterMenuButton';
 
@@ -63,7 +67,7 @@ export function PropertyFilterCreator({
   fields,
   tokens,
   onTokensChange,
-  label = 'Add Filter',
+  label = 'Add filter',
   disabled,
   size,
   onStartTextFilter,
@@ -75,7 +79,6 @@ export function PropertyFilterCreator({
     return fields.filter(f => !hidden.has(f.id));
   }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
-  const menu = useFluidMenu<HTMLDivElement>();
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();
@@ -173,7 +176,7 @@ export function PropertyFilterCreator({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        align="start"
         sideOffset={MENU_SIDE_OFFSET}
         className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
         initialFocus={false}
@@ -197,15 +200,14 @@ export function PropertyFilterCreator({
                 <ArrowLeftIcon className="size-4" />
               </button>
               <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="text-caption text-muted-foreground">{`${selectedField.label} · is`}</span>
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
 
           {!selectedField && (
             <div
               role="menu"
-              className={cn('max-h-[80dvh] overflow-auto', menu.containerClassName)}
-              {...menu.getContainerProps({})}
+              className="max-h-[80dvh] overflow-auto"
               onKeyDown={e => {
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
                 const buttons = Array.from(
@@ -223,7 +225,7 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              <FluidMenuItems menu={menu}>
+              <>
                 {visibleFields.length > 0 ? (
                   visibleFields.map(f => {
                     const used = singleUseFieldIds.has(f.id);
@@ -243,7 +245,7 @@ export function PropertyFilterCreator({
                     return (
                       <FilterMenuButton
                         key={f.id}
-                        className={cn(filterItemClass, 'group')}
+                        className={cn(menuItemButtonClass, 'group')}
                         disabled={used}
                         onClick={() => {
                           setError(undefined);
@@ -264,7 +266,7 @@ export function PropertyFilterCreator({
                           <span
                             className={cn(
                               menuItemTrailingIconClass,
-                              'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                              'text-muted-foreground opacity-0 group-hover:opacity-100 group-focus:opacity-100',
                             )}
                           >
                             <PlusIcon />
@@ -276,27 +278,28 @@ export function PropertyFilterCreator({
                 ) : (
                   <div className={menuEmptyClass}>No matching property.</div>
                 )}
-              </FluidMenuItems>
+              </>
             </div>
           )}
 
           {selectedField && (
-            <Combobox
-              multiple
-              options={selectedField.options ?? []}
-              value={multiValue}
-              onValueChange={v => {
-                setMultiValue(v);
-                setError(undefined);
-              }}
-              placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-              searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
-              emptyText={selectedField.emptyText ?? 'No option found.'}
-              size="md"
-              name={`property-filter-${selectedField.id}`}
-              aria-label={selectedField.label}
-              error={error}
-            />
+            <Field invalid={Boolean(error)}>
+              <Combobox
+                multiple
+                options={selectedField.options ?? []}
+                value={multiValue}
+                onValueChange={v => {
+                  setMultiValue(v);
+                  setError(undefined);
+                }}
+                placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}`}
+                emptyText={selectedField.emptyText ?? 'No option found.'}
+                size="md"
+                aria-label={selectedField.label}
+              />
+              <FieldError>{error}</FieldError>
+            </Field>
           )}
 
           {selectedField && (
@@ -346,7 +349,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
     >
       <PopoverTrigger asChild>
         <FilterMenuButton
-          className={filterItemClass}
+          className={menuItemButtonClass}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);

@@ -5,11 +5,15 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsRow,
   SettingsTitle,
 } from './index';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { Switch } from '@/ds/components/Switch';
 
 afterEach(cleanup);
 
@@ -63,16 +67,41 @@ describe('Settings', () => {
     });
   });
 
+  describe('SettingsContainer variants', () => {
+    it('defaults to the divided variant', () => {
+      render(
+        <SettingsContainer>
+          <SettingsRow label="Theme" />
+        </SettingsContainer>,
+      );
+
+      expect(document.querySelector('[data-slot="settings-container"]')?.getAttribute('data-variant')).toBe('default');
+    });
+
+    it('renders every row inside the inset variant', () => {
+      render(
+        <SettingsContainer variant="inset">
+          <SettingsRow label="Theme" />
+          <SettingsRow label="Notifications" />
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.getAttribute('data-variant')).toBe('inset');
+      expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
+    });
+  });
+
   describe('when a row labels an editable setting', () => {
     it('keeps the control accessible and includes its edited value in form data', () => {
       render(
-        <form aria-label="Connection settings">
+        <Form aria-label="Connection settings">
           <SettingsContainer>
-            <SettingsRow label="API prefix" description="Applied to API requests." htmlFor="prefix">
-              <input id="prefix" name="apiPrefix" defaultValue="/api" />
+            <SettingsRow label="API prefix" description="Applied to API requests.">
+              <Input name="apiPrefix" defaultValue="/api" />
             </SettingsRow>
           </SettingsContainer>
-        </form>,
+        </Form>,
       );
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });
@@ -80,6 +109,72 @@ describe('Settings', () => {
       expect(
         new FormData(screen.getByRole<HTMLFormElement>('form', { name: 'Connection settings' })).get('apiPrefix'),
       ).toBe('/custom-api');
+    });
+
+    it('toggles a switch when its label is clicked', () => {
+      render(
+        <SettingsRow label="Notifications">
+          <Switch />
+        </SettingsRow>,
+      );
+
+      fireEvent.click(screen.getByText('Notifications'));
+
+      expect(screen.getByRole('switch', { name: 'Notifications' }).getAttribute('aria-checked')).toBe('true');
+    });
+  });
+
+  describe('when a setting is required', () => {
+    it('announces the requirement in the control name', () => {
+      render(
+        <SettingsRow label="Model" required>
+          <Input />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByText('*', { selector: '[aria-hidden]' })).toBeTruthy();
+      expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
+    });
+  });
+
+  describe('when a setting has an error', () => {
+    it('shows the message as an alert the control can describe itself with', () => {
+      render(
+        <SettingsRow label="Model" errorMsg="Choose the model this agent runs on.">
+          <Input />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByRole('alert').textContent).toBe('Choose the model this agent runs on.');
+      const control = screen.getByRole('textbox', { name: 'Model' });
+      expect(control.getAttribute('aria-invalid')).toBe('true');
+      expect(control.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
+    });
+
+    it.each([false, ''])('renders no alert when the message is %j', errorMsg => {
+      render(
+        <SettingsRow label="Model" errorMsg={errorMsg}>
+          <Input />
+        </SettingsRow>,
+      );
+
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when one row holds several controls', () => {
+    it('names the group by the row and keeps each control apart', () => {
+      render(
+        <SettingsFieldsetRow label="Add label route" description="Pick a label and a board.">
+          <Input aria-label="Label" />
+          <Input aria-label="Board" />
+        </SettingsFieldsetRow>,
+      );
+
+      screen.getByRole('group', { name: 'Add label route', description: 'Pick a label and a board.' });
+      const label = screen.getByRole('textbox', { name: 'Label' });
+      const board = screen.getByRole('textbox', { name: 'Board' });
+      expect(label.id).not.toBe(board.id);
     });
   });
 

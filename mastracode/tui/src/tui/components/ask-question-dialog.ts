@@ -13,6 +13,8 @@ import { WrappingSelectList } from './wrapping-select-list.js';
 
 export interface AskQuestionDialogOptions {
   question: string;
+  /** Dialog heading. Defaults to "Question". */
+  title?: string;
   options?: Array<{ label: string; description?: string }>;
   /** Controls whether options are single- or multi-select. Defaults to single_select. */
   selectionMode?: AskQuestionSelectionMode;
@@ -78,7 +80,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.selectedOptionLabel = options.selectedOptionLabel;
 
     // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Question')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', options.title ?? 'Question')), 0, 0));
     this.addChild(new Spacer(1));
 
     // Question text (may be multi-line)
@@ -95,10 +97,17 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   }
 
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
-    const items: SelectItem[] = opts.map(opt => ({
-      value: opt.label,
-      label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
-    }));
+    // Each option renders as one row; a newline in a label or description (e.g. a
+    // multi-line schedule prompt) would spill the row out of the overlay.
+    const singleLine = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    const items: SelectItem[] = opts.map(opt => {
+      const label = singleLine(opt.label);
+      const description = opt.description ? singleLine(opt.description) : '';
+      return {
+        value: opt.label,
+        label: description ? `  ${label}  ${theme.fg('dim', description)}` : `  ${label}`,
+      };
+    });
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     if (this.allowCustomResponse && !this.multiSelect) {

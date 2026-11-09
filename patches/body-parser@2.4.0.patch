@@ -1,0 +1,12 @@
+diff --git a/lib/read.js b/lib/read.js
+--- a/lib/read.js
++++ b/lib/read.js
+@@ -12,7 +12,7 @@
+  */
+ 
+ const createError = require('http-errors')
+-const getBody = require('raw-body')
++const getBody = require('raw-body').default || require('raw-body')
+ const iconv = require('iconv-lite')
+ const onFinished = require('on-finished')
+ const zlib = require('node:zlib')

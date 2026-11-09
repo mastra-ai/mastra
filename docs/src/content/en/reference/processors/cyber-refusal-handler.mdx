@@ -1,0 +1,102 @@
+---
+title: "Reference: CyberRefusalHandler | Processors"
+description: "The CyberRefusalHandler retries once when an OpenAI or Anthropic cybersecurity safeguard refuses a step."
+packages:
+  - "@mastra/core"
+---
+
+# CyberRefusalHandler
+
+The `CyberRefusalHandler` retries a step once when a provider's cybersecurity safeguard refuses it. These safeguards can refuse ordinary coding work partway through a long agent run. Many of those refusals are false positives, and asking the model to continue usually gets past them. If the retried step is refused again, the refusal stands and surfaces as a normal error or stop.
+
+The handler covers two providers, which report refusals differently:
+
+- **OpenAI** fails the model call with a `cyber_policy` error ("This content was flagged for possible cybersecurity risk"). The handler matches the error code or the message, whether the refusal arrives as an HTTP error or as a failed stream. It's handled in `processAPIError`, which only runs for processors in `errorProcessors`.
+- **Anthropic** finishes the step with a `content-filter` finish reason and `stopDetails.category: 'cyber'` in the provider metadata. It's handled in `processOutputStep`, which runs for processors in `outputProcessors`. The refused step is rolled back, including any partial text, before the retry.
+
+## How it works
+
+For an OpenAI refusal:
+
+1. The model call fails with a `cyber_policy` error
+1. `CyberRefusalHandler` checks that this is the first retry attempt for the step
+1. It sends a `system-reminder` signal with `continue` as its contents
+1. It returns `{ retry: true }`, and the same model is called again
+
+For an Anthropic refusal:
+
+1. The step finishes with a `cyber` classifier refusal
+1. `CyberRefusalHandler` checks that this is the first retry attempt for the step
+1. It calls `abort('continue', { retry: true })`
+1. The refused step is rolled back and the model is called again with `continue` appended as a system reminder
+
+Only one retry runs per step. A successful step resets the count, so a refusal later in the same run is retried again.
+
+## Usage example
+
+Add `CyberRefusalHandler` to both `errorProcessors` and `outputProcessors` to cover both providers:
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { CyberRefusalHandler, StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  id: 'coding-agent',
+  name: 'Coding Agent',
+  instructions: 'You are a coding agent.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  errorProcessors: [new CyberRefusalHandler(), new StreamErrorRetryProcessor()],
+  outputProcessors: [new CyberRefusalHandler()],
+  maxProcessorRetries: 3,
+})
+```
+
+In `errorProcessors`, place it before [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor). Error processors stop at the first one that returns `{ retry: true }`, and a retry processor placed first would resend the refused request unchanged.
+
+Output-step retries count against `maxProcessorRetries`, and unlike the error lane they have no implicit default. Set it explicitly whether or not the agent has `errorProcessors`, or the Anthropic retry is treated as an abort.
+
+[`createCodingAgent()`](/reference/coding-agent/create-coding-agent) includes the handler in both lanes by default.
+
+## Constructor parameters
+
+The `CyberRefusalHandler` takes no constructor parameters.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'cyber-refusal-handler'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Cyber Refusal Handler'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+    description:
+      'Handles OpenAI cybersecurity refusals by sending a `continue` system reminder and signaling retry. Only triggers on the first retry attempt.',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputStep',
+    type: '(args: ProcessOutputStepArgs) => ProcessorMessageResult',
+    description:
+      'Handles Anthropic cybersecurity classifier refusals by aborting the step with `retry: true`. Only triggers on the first retry attempt.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Related
+
+- [Processor interface](/reference/processors/processor-interface)
+- [PrefillErrorHandler](/reference/processors/prefill-error-handler)
+- [StreamErrorRetryProcessor](/reference/processors/stream-error-retry-processor)
+- [Processors](/docs/agents/processors#retry-mechanism)

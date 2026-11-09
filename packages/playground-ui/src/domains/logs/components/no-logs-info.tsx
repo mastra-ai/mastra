@@ -1,8 +1,8 @@
-import { format } from 'date-fns';
 import { ExternalLinkIcon } from 'lucide-react';
 import type { LogsDatePreset } from '../log-filters';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { formatDate } from '@/utils/date-format';
 
 const PRESET_LABELS: Record<Exclude<LogsDatePreset, 'all' | 'custom'>, string> = {
   'last-24h': 'the last 24 hours',
@@ -18,9 +18,7 @@ export interface NoLogsInfoProps {
   dateTo?: Date;
 }
 
-const DATE_FORMAT = 'MMM d, yyyy HH:mm';
-
-const LEVEL_TIP = 'Pick a wider range or lower the logging level — verbose entries (debug, info) may be filtered out.';
+const LEVEL_TIP = 'Pick a wider range or lower the logging level. Verbose entries (debug, info) may be filtered out.';
 
 function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { title: string; description: string } {
   if (datePreset && datePreset !== 'all' && datePreset !== 'custom') {
@@ -31,13 +29,13 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { tit
   }
   if (dateFrom && dateTo) {
     return {
-      title: `No logs between ${format(dateFrom, DATE_FORMAT)} and ${format(dateTo, DATE_FORMAT)}`,
+      title: `No logs between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
       description: LEVEL_TIP,
     };
   }
   if (dateFrom) {
     return {
-      title: `No logs since ${format(dateFrom, DATE_FORMAT)}`,
+      title: `No logs since ${formatDate(dateFrom, 'date-time')}`,
       description: LEVEL_TIP,
     };
   }
@@ -61,7 +59,7 @@ export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {
           }
           icon={<ExternalLinkIcon />}
         >
-          Logging Documentation
+          Logging documentation
         </Button>
       }
       variant="fill"

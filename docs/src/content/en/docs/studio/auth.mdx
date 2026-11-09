@@ -12,6 +12,12 @@ When you configure [authentication](/docs/auth/overview) on your Mastra server, 
 Without authentication, Studio and all API routes are publicly accessible.
 
 :::note
+
+In production, the Studio sign-in screen with a third-party provider, role-based access control (RBAC), and fine-grained authorization (FGA) require a Mastra Enterprise Edition (EE) license. Simple Auth, JWT, and authentication on API routes don't. Every feature works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license). [Contact sales](https://mastra.ai/contact) for more information.
+
+:::
+
+:::note
 Studio deployed on Mastra platform works differently. By default, the platform injects its own auth so only your organization members can sign in, and your `server.auth` applies to API routes only. Set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` to opt out. See [Authentication on Mastra platform](/docs/mastra-platform/studio#authentication).
 :::
 
@@ -32,7 +38,7 @@ import { SimpleAuth } from '@mastra/core/server'
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({
-      users: {
+      tokens: {
         'my-api-key': {
           id: 'user-1',
           name: 'Alice',
@@ -71,7 +77,7 @@ Studio handles the token as follows:
 
 - It reads `auth_header` once on load and sends the value as the `Authorization` header on every API request in that session.
 - It removes `auth_header` from the address bar while preserving other query parameters and the hash.
-- It keeps the token in memory only and never writes it to local storage, so the token stays transient and doesn't persist across page reloads.
+- It keeps the token in memory only and never writes it to local storage, so it doesn't persist across page reloads.
 
 The token rides in a URL parameter, so the host application is responsible for how that URL is generated and transmitted. URL parameters can be exposed through browser history and referrer headers, plus server access logs.
 
@@ -86,7 +92,7 @@ Mastra includes four default roles. Import them from `@mastra/core/auth/ee`:
 | Role | Permissions |
 | - | - |
 | `owner` | Full access (`*`) |
-| `admin` | Read, write, and execute |
+| `admin` | Read, write, execute, publish, and share (no delete) |
 | `member` | Read and execute |
 | `viewer` | Read-only |
 
@@ -102,7 +108,7 @@ import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth/ee'
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({
-      users: {
+      tokens: {
         'admin-key': { id: 'user-1', name: 'Alice', role: 'admin' },
         'viewer-key': { id: 'user-2', name: 'Bob', role: 'viewer' },
       },
@@ -129,7 +135,7 @@ Permissions follow the pattern `{resource}:{action}`, with optional resource-lev
 | `agents:execute` | Execute agents only |
 | `agents:read:my-id` | Read a specific agent by ID |
 
-Resources include `agents`, `workflows`, `tools`, `datasets`, `memory`, `scores`, `observability`, and others. Actions are `read`, `write`, `execute`, and `delete`.
+Resources include `agents`, `workflows`, `tools`, `datasets`, `memory`, `scores`, `observability`, and others. Actions are `read`, `write`, `create`, `delete`, `execute`, `publish`, and `share`.
 
 ### Map external provider roles
 
@@ -159,10 +165,6 @@ Studio adapts its login screen based on the auth provider:
 | Both | SSO button and email/password form |
 
 Sign-up can be enabled or disabled per provider. When disabled, Studio hides the sign-up link and forces the sign-in form.
-
-## EE licensing
-
-Studio Auth features (SSO login, RBAC, permission-based UI) are part of the Mastra Enterprise Edition. A license is optional when using Simple Auth or running locally. Production deployments with third-party providers require a valid EE license from [Mastra sales](https://mastra.ai/contact).
 
 ## Related
 

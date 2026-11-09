@@ -33,12 +33,3 @@ export function toT(isoString: string, domain: TDomain): number {
 export function tToTimestamp(t: number, domain: TDomain): Date {
   return new Date(domain.tMin + t * (domain.tMax - domain.tMin));
 }
-
-export function formatTimeDisplay(date: Date): string {
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const h = String(date.getUTCHours()).padStart(2, '0');
-  const m = String(date.getUTCMinutes()).padStart(2, '0');
-  const s = String(date.getUTCSeconds()).padStart(2, '0');
-  return `${day}/${month} ${h}:${m}:${s}`;
-}

@@ -1,0 +1,290 @@
+---
+title: "Fly.io Sprites | Sandbox"
+description: "Run Mastra workspace commands in persistent Fly.io Sprites with filesystem reuse, streaming output, background processes, and checkpoint capture."
+packages:
+  - "@mastra/sprites"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Fly.io Sprites
+
+Executes commands in persistent [Fly.io Sprites](https://sprites.dev) through the official `@fly/sprites` SDK. A Sprite is a Linux VM that keeps its filesystem between runs and hibernates on its own when idle. `SpritesSandbox` gets or creates a Sprite by name, so a new process can reconnect to the same files. Supports command execution with streaming output, timeouts, cancellation, background processes with stdin, and checkpoint capture. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/sprites
+```
+
+:::note
+`@mastra/sprites` requires Node.js 24 or later because the `@fly/sprites` SDK does.
+:::
+
+Set your Sprites API token in one of three ways.
+
+<Tabs>
+  <TabItem value="shell-export" label="Shell export">
+    ```bash
+    export SPRITES_TOKEN=your-api-token
+    ```
+  </TabItem>
+
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    SPRITES_TOKEN=your-api-token
+    ```
+  </TabItem>
+
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new SpritesSandbox({ token: 'your-api-token' })
+    ```
+  </TabItem>
+</Tabs>
+
+## Usage
+
+Add a `SpritesSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { SpritesSandbox } from '@mastra/sprites'
+
+const workspace = new Workspace({
+  sandbox: new SpritesSandbox({
+    id: 'mastra-project',
+    // token read from SPRITES_TOKEN
+  }),
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate(
+  'Print "Hello, world!" and show the current working directory.',
+)
+
+console.log(response.text)
+```
+
+### Reusing a Sprite
+
+The `id` is the Sprite name. On `start()`, `SpritesSandbox` looks up a Sprite with that name and reconnects to it, or creates one when none exists. Files written in an earlier session are still there:
+
+```typescript
+const first = new SpritesSandbox({ id: 'mastra-project' })
+await first.executeCommand('sh', ['-c', 'echo hello > notes.txt'])
+await first.stop()
+
+// Later, possibly in another process
+const second = new SpritesSandbox({ id: 'mastra-project' })
+const result = await second.executeCommand('cat', ['notes.txt'])
+console.log(result.stdout) // hello
+```
+
+Any existing Sprite with the same name in your account is adopted, so choose names that are unique to the project. When `id` is omitted, a random name is generated.
+
+`spriteConfig` (RAM, CPUs, region, storage) is only applied when the Sprite is created.
+
+### Stopping and destroying
+
+`stop()` and `destroy()` do different things:
+
+- `stop()` kills background processes started by this instance and closes the SDK connection. The Sprite and its filesystem are kept. Sprites hibernate on their own when idle, so there is nothing to suspend.
+- `destroy()` permanently deletes the Sprite and its filesystem. It works without calling `start()` first, and a Sprite that no longer exists is treated as already deleted.
+
+```typescript
+const sandbox = new SpritesSandbox({ id: 'mastra-project' })
+
+// Remove the Sprite when the project is finished
+await sandbox.destroy()
+```
+
+### Checkpoints
+
+`snapshot()` captures a checkpoint of the Sprite's current state and waits for the capture to finish:
+
+```typescript
+await sandbox.snapshot()
+```
+
+Checkpoints live inside the Sprite. They can't be used to boot or seed another sandbox, so `supportsCheckpoints` is `false` and `SpritesSandbox` doesn't implement `clone()`. Use the `@fly/sprites` SDK through `sandbox.sprite` to list or restore checkpoints.
+
+### Streaming output
+
+Pass `onStdout` and `onStderr` to receive output as it arrives:
+
+```typescript
+await sandbox.executeCommand('npm', ['install'], {
+  onStdout: data => process.stdout.write(data),
+  onStderr: data => process.stderr.write(data),
+  timeout: 120_000,
+})
+```
+
+When a command times out or its `abortSignal` fires, the command is killed and the result reports `killed: true`.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Sprite name, also used as the sandbox ID. An existing Sprite with this name is reused; otherwise one is created.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'token',
+    type: 'string',
+    description: 'Sprites API token.',
+    isOptional: true,
+    defaultValue: 'SPRITES_TOKEN environment variable',
+  },
+  {
+    name: 'baseURL',
+    type: 'string',
+    description: 'Sprites API base URL.',
+    isOptional: true,
+    defaultValue: "'https://api.sprites.dev'",
+  },
+  {
+    name: 'spriteConfig',
+    type: 'SpriteConfig',
+    description: 'Machine configuration (ramMB, cpus, region, storageGB). Only applied when the Sprite is created.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default command timeout in milliseconds. A per-command timeout takes precedence.',
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables added to every command. Per-command env takes precedence.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description: 'Default working directory for commands. Defaults to the Sprite user home directory.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | (opts) => string',
+    description:
+      'Override the default agent instructions. A string replaces them entirely; a function receives the default instructions and returns the final text.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sprite name and sandbox identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('SpritesSandbox').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('sprites').",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: 'Current lifecycle status of the sandbox.',
+  },
+  {
+    name: 'sprite',
+    type: 'Sprite',
+    description:
+      'The underlying `@fly/sprites` Sprite for direct SDK access. Throws SandboxNotReadyError if the sandbox has not been started.',
+  },
+  {
+    name: 'processes',
+    type: 'SpritesProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+]}
+/>
+
+## Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'stop',
+    type: '() => Promise<void>',
+    description: 'Kill background processes and close the SDK connection. The Sprite and its filesystem are kept.',
+  },
+  {
+    name: 'destroy',
+    type: '() => Promise<void>',
+    description: 'Permanently delete the Sprite. Works without a prior start.',
+  },
+  {
+    name: 'snapshot',
+    type: '() => Promise<void>',
+    description: 'Capture a checkpoint of the Sprite. Throws if the capture fails.',
+  },
+]}
+/>
+
+## Background processes
+
+`SpritesSandbox` includes a process manager for spawning and managing background processes. Each process runs in its own Sprites exec session and supports stdin.
+
+```typescript
+const sandbox = new SpritesSandbox({ id: 'mastra-project' })
+await sandbox.start()
+
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+await handle.sendStdin('reload\n')
+await handle.kill()
+```
+
+Processes started by one `SpritesSandbox` instance are not visible to another instance, and `stop()` kills them.
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
+## Editor provider
+
+Register the provider with `MastraEditor` to hydrate stored sandbox configs into runtime instances:
+
+```typescript
+import { MastraEditor } from '@mastra/editor'
+import { spritesSandboxProvider } from '@mastra/sprites'
+
+const editor = new MastraEditor({
+  sandboxes: { [spritesSandboxProvider.id]: spritesSandboxProvider },
+})
+```
+
+See the [Sandbox provider reference](/reference/editor/sandbox-provider) for details on registering custom sandbox providers.

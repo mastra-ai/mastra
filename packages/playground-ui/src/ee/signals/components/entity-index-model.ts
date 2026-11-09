@@ -1,10 +1,10 @@
 import type { EntityLearningProgressStatus, ThemeLearningEntity } from '@mastra/client-js';
+import { formatDate } from '@/utils/date-format';
 
 export type TraceIntelligenceEntitySort = 'default' | 'entity-asc' | 'entity-desc';
 export type TraceIntelligenceEntityView = 'compact' | 'list';
 
 const numberFormatter = new Intl.NumberFormat('en-US');
-const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 
 export type EntityIndexMetadata = {
   traceCount: string;
@@ -40,11 +40,22 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
         ? '—'
         : `${readySignalCount} of ${enabledSignalCount}`,
     status: entity.status,
-    updatedAt: entity.updatedAt === undefined ? '—' : dateFormatter.format(new Date(entity.updatedAt)),
+    updatedAt: formatDate(entity.updatedAt, 'date-time') ?? '—',
   };
 }
 
 export function entityStatusLabel(status: EntityLearningProgressStatus | undefined): string {
   if (!status) return 'Unavailable';
+  if (status === 'collecting') return 'Analyzing';
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/**
+ * Collecting agents already have traces; none has finished analysis yet. The API
+ * reports traces collected, not analysis progress, so that is all the copy can say.
+ */
+export function analyzingDescription(traceCount: number | undefined): string {
+  const pending = 'Signals appear when analysis finishes.';
+  if (traceCount === undefined) return pending;
+  return `${numberFormatter.format(traceCount)} ${traceCount === 1 ? 'trace' : 'traces'} collected. ${pending}`;
 }

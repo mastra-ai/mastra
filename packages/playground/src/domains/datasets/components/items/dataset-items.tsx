@@ -16,12 +16,8 @@ import { DatasetItemsToolbar } from './dataset-items-toolbar';
 
 export interface DatasetItemsProps {
   items: DatasetItem[];
-  /** Page-level content rendered before the list actions in the toolbar row. */
-  leftSlot?: React.ReactNode;
-  /** Page-level actions rendered at the end of the toolbar row. */
-  rightSlot?: React.ReactNode;
-  /** Page-level content rendered on its own row, between the toolbar and the list. */
-  belowToolbarSlot?: React.ReactNode;
+  /** Page-level actions rendered in the toolbar, before the "New item" action. */
+  toolbarActionsSlot?: React.ReactNode;
   isLoading: boolean;
   onItemClick: (itemId: string) => void;
   /** Id of the item currently open in the URL-driven item panel, if any. */
@@ -62,9 +58,7 @@ export interface DatasetItemsProps {
  */
 export function DatasetItems({
   items,
-  leftSlot,
-  rightSlot,
-  belowToolbarSlot,
+  toolbarActionsSlot,
   isLoading,
   onItemClick,
   featuredItemId,
@@ -148,8 +142,6 @@ export function DatasetItems({
         onImportClick={onImportClick ?? (() => {})}
         onImportJsonClick={onImportJsonClick ?? (() => {})}
         hasItems={items.length > 0}
-        leftSlot={leftSlot}
-        rightSlot={rightSlot}
         searchQuery={searchQuery}
         onSearchChange={onSearchChange}
         selectedCount={selection.selectedCount}
@@ -162,9 +154,8 @@ export function DatasetItems({
         isViewingOldVersion={isViewingOldVersion}
         activeDatasetVersion={activeDatasetVersion}
         onReturnToLatestVersion={() => handleVersionChange(null)}
+        actionsSlot={toolbarActionsSlot}
       />
-
-      {belowToolbarSlot}
 
       <DatasetItemsList
         items={items}

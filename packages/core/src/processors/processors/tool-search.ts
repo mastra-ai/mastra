@@ -4,11 +4,11 @@ import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
-import { BM25Index } from '../../workspace/search/bm25';
+import { BM25Index, tokenize } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
 import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stores';
-import { LegacyMapLoadedToolStore, ContextLoadedToolStore } from './tool-search-stores';
+import { LegacyMapLoadedToolStore, ContextLoadedToolStore, deriveLoadedNamesFromMessages } from './tool-search-stores';
 
 export type ToolSearchFilterPhase = 'search' | 'load' | 'active';
 
@@ -77,7 +77,12 @@ export interface ToolSearchProcessorOptions {
     topK?: number;
 
     /**
-     * Minimum relevance score (0-1) for including a tool in search results
+     * Minimum relevance score for including a tool in search results.
+     * Scores are raw BM25 relevance plus name-match boosts (+5 exact ID term,
+     * +2 ID substring), are not normalized, and can exceed 1. Scores depend on
+     * the tool catalog, so thresholds may not carry over between tool sets.
+     * Tools scoring less than or equal to this value are excluded. Small values
+     * such as 0 to 0.5 require some term overlap.
      * @default 0
      */
     minScore?: number;
@@ -107,9 +112,13 @@ export interface ToolSearchProcessorOptions {
    *   anonymous requests share a `'default'` entry.
    * - `'context'`: derived from the conversation messages. A tool is loaded iff a
    *   prior `search_tools`/`load_tool` result naming it is still present in the
-   *   conversation. Restart-safe, requires no memory, and de-loads automatically
-   *   when the result block is no longer present in the messages — parity with
-   *   native provider tool-search.
+   *   conversation. Works without memory, but the loaded set then lasts only for the
+   *   current process and only for requests with a real thread ID — anonymous requests
+   *   retain nothing between calls unless the caller resends the relevant messages.
+   *   Survives a restart whenever the messages are available again: Agent memory with
+   *   message history, or the caller resending the conversation. De-loads automatically
+   *   when the result block is no longer present in the messages — parity with native
+   *   provider tool-search.
    *
    * @default 'in-memory'
    */
@@ -413,8 +422,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * Resolution:
    * - If `stepArgs` are supplied, resolve through the store with the live messages.
    * - Otherwise (resume path) resolve from the store using the thread ID derived
-   *   from the request context. The context store falls back to its same-process
-   *   supplemental set.
+   *   from the request context. The context store derives loaded names from the
+   *   thread messages returned by `getMessages` (e.g. after a restart, when no
+   *   in-process state survives) plus its same-process supplemental set.
    *
    * `tools` carries the resumed request's resolved tools. Without them a loaded
    * request-scoped tool has no entry in the static catalog, so the approved call
@@ -424,6 +434,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     requestContext?: RequestContext;
     stepArgs?: ProcessInputStepArgs;
     tools?: Record<string, unknown>;
+    getMessages?: () => Promise<ProcessInputStepArgs['messages']>;
+    /** Messages of an in-flight run not yet saved to memory (durable recovery in a fresh process). */
+    runMessages?: ProcessInputStepArgs['messages'];
   }): Promise<Record<string, Tool<any, any>>> {
     if (args?.stepArgs) {
       const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
@@ -437,7 +450,14 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     }
 
     const threadId = this.resolveThreadId(args?.requestContext);
-    const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
+    const messages =
+      this.store instanceof ContextLoadedToolStore && args?.getMessages ? await args.getMessages() : undefined;
+    const loadedNames = new Set(await this.store.getLoadedNames({ threadId, args: undefined, messages }));
+    // A non-context store loses its state with the process; tools this run loaded are still
+    // recorded in its own messages.
+    if (args?.runMessages?.length && !(this.store instanceof ContextLoadedToolStore)) {
+      for (const name of deriveLoadedNamesFromMessages({ messages: args.runMessages })) loadedNames.add(name);
+    }
     return this.getLoadedTools(this.catalogForStep(args?.tools), loadedNames, args?.requestContext);
   }
 
@@ -500,37 +520,46 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   ): Promise<SearchResult[]> {
     if (catalog.index.size === 0) return [];
 
-    // Get BM25 results (request more than topK to allow for re-ranking after boosting).
-    // When filtering is enabled, inspect every BM25 match so denied high-ranking tools
-    // do not prevent lower-ranking allowed tools from filling the result set.
-    const searchLimit = this.filter ? catalog.index.size : this.searchConfig.topK * 2;
-    const bm25Results = catalog.index.search(query, searchLimit, 0);
-
-    if (bm25Results.length === 0) return [];
-
-    // Apply name-match boosting on top of BM25 scores
-    const queryTokens = query
-      .toLowerCase()
-      .split(/[\s\-_.,;:!?()[\]{}'"]+/)
-      .filter(t => t.length > 1);
-
-    const boostedResults = bm25Results.map(result => {
-      let score = result.score;
-      const nameLower = result.id.toLowerCase();
-
-      for (const term of queryTokens) {
-        if (nameLower === term) {
-          score += 5;
-        } else if (nameLower.includes(term)) {
-          score += 2;
-        }
+    // Deduplicate only this search query; document term frequency and generic
+    // workspace BM25 query-frequency semantics remain unchanged.
+    const queryTokens = [...new Set(tokenize(query, TOOL_SEARCH_TOKENIZE_OPTIONS))];
+    const queryLower = query.toLowerCase();
+    const exactNames = new Set<string>();
+    for (const name of catalog.descriptions.keys()) {
+      const nameLower = name.toLowerCase();
+      if (!queryLower.includes(nameLower)) continue;
+      const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Hyphens and underscores belong to IDs: do not match a suffix or prefix
+      // of another identifier. Punctuation around a complete ID is allowed.
+      if (new RegExp(`(?:^|[^\\p{L}\\p{N}_-])${escapedName}(?=$|[^\\p{L}\\p{N}_-])`, 'u').test(queryLower)) {
+        exactNames.add(name);
       }
+    }
 
-      return { id: result.id, score };
+    // Retrieve all matches for exact names and filters so named tools retain their
+    // BM25 score and denied tools cannot crowd out allowed ones. Bound ordinary searches.
+    const searchLimit = this.filter || exactNames.size > 0 ? catalog.index.size : this.searchConfig.topK * 2;
+    const candidates = new Map(
+      catalog.index.search(queryTokens.join(' '), searchLimit, 0).map(result => [result.id, result.score]),
+    );
+    // A complete ID may have no indexed tokens (for example, a one-letter ID).
+    for (const name of exactNames) {
+      if (!candidates.has(name)) candidates.set(name, 0);
+    }
+
+    const boostedResults = [...candidates].map(([id, bm25Score]) => {
+      let score = bm25Score + (exactNames.has(id) ? 5 : 0);
+      const nameLower = id.toLowerCase();
+      for (const term of queryTokens) {
+        if (nameLower !== term && nameLower.includes(term)) score += 2;
+      }
+      return { id, score };
     });
 
     const filteredResults: typeof boostedResults = [];
-    for (const result of boostedResults.sort((a, b) => b.score - a.score)) {
+    for (const result of boostedResults.sort(
+      (a, b) => Number(exactNames.has(b.id)) - Number(exactNames.has(a.id)) || b.score - a.score,
+    )) {
       if (result.score <= this.searchConfig.minScore) continue;
 
       const tool = this.findToolById(catalog, result.id);
@@ -616,6 +645,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             score: z.number(),
           }),
         ),
+        loaded: z.array(z.string()).optional(),
         message: z.string(),
       }),
       execute: async ({ query }) => {
@@ -644,6 +674,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
           return {
             results,
+            loaded: results.map(r => r.name),
             message:
               `Found and loaded ${results.length} tool(s): ${results.map(r => r.name).join(', ')}. ` +
               `They are available on your next turn — call them directly.` +

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const updateGuildMemberInputSchema = z.object({
   guild_id: z.string().describe('Guild ID. Example: "1504364254634180618"'),
@@ -89,14 +90,7 @@ export function updateGuildMemberTool(proxy: PlatformProxy) {
     outputSchema: updateGuildMemberOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof updateGuildMemberOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken: string }>();
-
-      if (!metadata?.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please provide the bot token from your Discord application.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       const body: Record<string, unknown> = {};
 
@@ -123,7 +117,7 @@ export function updateGuildMemberTool(proxy: PlatformProxy) {
       }
 
       const headers: Record<string, string> = {
-        Authorization: `Bot ${metadata.botToken}`,
+        Authorization: `Bot ${botToken}`,
       };
 
       if (input.reason) {

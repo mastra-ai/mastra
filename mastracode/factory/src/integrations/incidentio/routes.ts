@@ -18,6 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { Intake } from '../../capabilities/intake.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
@@ -28,11 +29,6 @@ type RouteContext = Context;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ITEM_REF_RE = /^incidentio:(?:follow-up|incident):[\w-]+$/;
 const FOLLOW_UP_PREFIX = 'incidentio:follow-up:';
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every incident.io feature gate, mirroring
@@ -49,6 +45,11 @@ export interface MountIncidentioRoutesOptions {
    * for everything beyond the disabled `status` route.
    */
   incidentio?: { intake: Intake; id: string };
+  /**
+   * Credential mode reported on the status route so the SPA can tell a
+   * deployment-configured API key apart from Platform-managed connections.
+   */
+  mode?: 'api-key' | 'platform';
   /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
   auth: RouteAuth;
   /**
@@ -167,8 +168,9 @@ interface IncidentioIssuePayload {
  */
 export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { incidentio, auth, intake } = options;
+  const { incidentio, auth, intake, mode } = options;
   const enabled = Boolean(incidentio) && auth.enabled();
+  const modeField = mode ? { mode } : {};
   const diagnostics = (): IncidentioFeatureDiagnostics => ({
     incidentioConfigured: Boolean(incidentio),
     factoryAuthEnabled: auth.enabled(),
@@ -184,6 +186,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
           return c.json({
             enabled: false,
             configured: Boolean(incidentio),
+            ...modeField,
             reason: 'missing_config',
             diagnostics: diagnostics(),
           });
@@ -195,12 +198,13 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
           return c.json({
             enabled: true,
             configured: true,
+            ...modeField,
             organizationRequired: true,
             reason: 'organization_required',
             diagnostics: diagnostics(),
           });
         }
-        return c.json({ enabled: true, configured: true, reason: 'ready', diagnostics: diagnostics() });
+        return c.json({ enabled: true, configured: true, ...modeField, reason: 'ready', diagnostics: diagnostics() });
       },
     }),
   );

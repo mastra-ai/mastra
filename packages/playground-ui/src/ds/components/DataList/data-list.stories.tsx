@@ -6,7 +6,6 @@ import type { DataListSort } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Button } from '@/ds/components/Button';
 import { Status } from '@/ds/components/StatusIndicators';
-import { Txt } from '@/ds/components/Txt';
 import { useTableKeydown } from '@/lib/keyboard';
 
 const meta: Meta<typeof DataList> = {
@@ -77,11 +76,7 @@ function RunCells({ run }: { run: SampleRun }) {
               ? { label: statusLabel, tone: 'error', description: 'The run failed.' }
               : { label: statusLabel, tone: 'success', description: 'The run completed successfully.' }
           }
-        >
-          <Txt as="span" variant="body-sm">
-            {statusLabel}
-          </Txt>
-        </Status>
+        />
       </DataList.Cell>
       <DataList.DateCell timestamp={run.createdAt} />
       <DataList.TimeCell timestamp={run.createdAt} />
@@ -100,6 +95,42 @@ export const Default: Story = {
         </DataList.RowButton>
       ))}
     </DataList>
+  ),
+};
+
+/**
+ * `reorderable` lets users drag header cells (or press Alt+Arrow on a focused header) to move columns.
+ * The order persists in localStorage under the list `id`, which is required. Sticky columns stay pinned.
+ */
+export const Reorderable: Story = {
+  render: () => (
+    <div className="max-w-190">
+      <DataList
+        columns="minmax(12rem,auto) auto auto auto auto auto"
+        mask={{ left: false }}
+        reorderable
+        id="storybook-usage"
+      >
+        <DataList.Top>
+          <DataList.TopCell sticky="start">Resource</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Latency</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Runs</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+        </DataList.Top>
+        {Array.from({ length: 5 }, (_, index) => (
+          <DataList.RowButton key={index} onClick={() => {}}>
+            <DataList.RowHeaderCell>Resource {index + 1}</DataList.RowHeaderCell>
+            <DataList.NumberCell>{(index * 1300 + 6200).toLocaleString()}</DataList.NumberCell>
+            <DataList.NumberCell>{(index * 840 + 2100).toLocaleString()}</DataList.NumberCell>
+            <DataList.NumberCell>{180 + index * 24}ms</DataList.NumberCell>
+            <DataList.NumberCell>{(index + 1) * 17}</DataList.NumberCell>
+            <DataList.NumberCell highlight>${(index * 0.014 + 0.008).toFixed(3)}</DataList.NumberCell>
+          </DataList.RowButton>
+        ))}
+      </DataList>
+    </div>
   ),
 };
 
@@ -374,6 +405,29 @@ export const WithSubheaders: Story = {
           <RunCells run={run} />
         </DataList.RowButton>
       ))}
+    </DataList>
+  ),
+};
+
+export const WithGroups: Story = {
+  render: () => (
+    <DataList columns={COLUMNS}>
+      <RunsHeader />
+      <DataList.Group aria-label="Running" className="pb-4">
+        <DataList.Subheader>Running</DataList.Subheader>
+        {SAMPLE_RUNS.slice(0, 2).map(run => (
+          <DataList.RowButton key={run.id} onClick={() => {}}>
+            <RunCells run={run} />
+          </DataList.RowButton>
+        ))}
+        <Button variant="ghost" size="sm" className="justify-self-center">
+          Load more runs
+        </Button>
+      </DataList.Group>
+      <DataList.Group aria-label="Finished" className="pb-4">
+        <DataList.Subheader>Finished</DataList.Subheader>
+        <DataList.NoMatch message="Nothing finished yet" />
+      </DataList.Group>
     </DataList>
   ),
 };

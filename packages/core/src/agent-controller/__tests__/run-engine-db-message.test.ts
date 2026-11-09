@@ -30,11 +30,13 @@ function createHarness() {
   const machinery: SessionMachinery = {
     getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
     getRunScope: () => undefined,
+    releaseSuspendedRun: async () => {},
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these stream-folding tests');
     },
     buildStreamOptions: async () => ({}),
     buildSharedRunOptions: () => ({}),
+    resolveModeActiveTools: () => undefined,
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),
@@ -93,6 +95,40 @@ describe('SessionRunEngine compact message lifecycle', () => {
     const starts = assistantStarts(events);
     expect(starts).toHaveLength(2);
     for (const event of starts) expect(event.message.threadId).toBe('thread-1');
+  });
+
+  it('stamps the assistant message id on tool-input events so consumers can attribute arguments to a step', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    // Tool-call chunks arrive before this step's message_start, so the stamped id is the
+    // only thing that tells one step's streamed arguments from the next step's.
+    const toolCallId = 'call-1';
+    const toolName = 'view';
+    const chunks: StreamChunk[] = [
+      chunk({ type: 'tool-call-input-streaming-start', payload: { toolCallId, toolName } }),
+      chunk({ type: 'tool-call-delta', payload: { toolCallId, argsTextDelta: '{"path"' } }),
+      chunk({ type: 'tool-call-delta', payload: { toolCallId, argsTextDelta: ':"a.ts"}' } }),
+      chunk({ type: 'tool-call-input-streaming-end', payload: { toolCallId } }),
+      chunk({ type: 'tool-call', payload: { toolCallId, toolName, args: { path: 'a.ts' } } }),
+    ];
+    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+
+    const toolInputs = events.filter(
+      event =>
+        event.type === 'tool_input_start' || event.type === 'tool_input_delta' || event.type === 'tool_input_end',
+    );
+    expect(toolInputs.map(event => event.type)).toEqual([
+      'tool_input_start',
+      'tool_input_delta',
+      'tool_input_delta',
+      'tool_input_end',
+    ]);
+    for (const event of toolInputs) expect(event).toMatchObject({ messageId: 'msg-1' });
+    // The message the tool call belongs to opens only once the call itself arrives, so the
+    // stamped ids must agree with the assistant message that starts after the arguments.
+    expect(assistantStarts(events).map(event => event.message.id)).toEqual(['msg-1']);
   });
 
   it('emits one start, ordered text deltas, and one end when assistant text completes', async () => {
@@ -292,6 +328,7 @@ describe('SessionRunEngine compact message lifecycle', () => {
       toolCallId: 'tool-1',
       toolName: 'search',
       title: 'Search the web',
+      messageId: 'msg-1',
     });
     expect(events).toContainEqual({
       type: 'tool_start',
@@ -351,5 +388,33 @@ describe('SessionRunEngine compact message lifecycle', () => {
       },
     ]);
     expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
+  });
+});
+
+describe('SessionRunEngine command exits', () => {
+  it('tells clients how each command ended, not only its exit code', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    const chunks: StreamChunk[] = [
+      {
+        type: 'data-sandbox-exit',
+        data: { toolCallId: 'unreachable', exitCode: -1, success: false, error: 'sandbox disconnected' },
+      },
+      {
+        type: 'data-sandbox-exit',
+        data: { toolCallId: 'slow', exitCode: 124, success: false, killed: true, timedOut: true },
+      },
+      { type: 'data-sandbox-exit', data: { toolCallId: 'grep', exitCode: 1, success: false } },
+    ];
+    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+
+    const exits = events.filter(event => event.type === 'command_exit');
+    expect(exits).toEqual([
+      expect.objectContaining({ toolCallId: 'unreachable', exitCode: -1, error: 'sandbox disconnected' }),
+      expect.objectContaining({ toolCallId: 'slow', exitCode: 124, killed: true, timedOut: true }),
+      expect.objectContaining({ toolCallId: 'grep', exitCode: 1, killed: false, timedOut: false, error: undefined }),
+    ]);
   });
 });

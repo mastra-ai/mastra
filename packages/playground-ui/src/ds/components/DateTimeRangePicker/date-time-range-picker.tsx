@@ -1,12 +1,12 @@
-import { isValid, parse } from 'date-fns';
-import { CalendarIcon, Check } from 'lucide-react';
-import { useId, useState } from 'react';
-import type { ReactElement } from 'react';
-import { Button } from '@/ds/components/Button/Button';
-import type { ButtonProps } from '@/ds/components/Button/Button';
-import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
+import { startOfDay } from 'date-fns';
+import { CalendarIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
+import type { ReactNode, Ref } from 'react';
+import { CustomRangeEditor } from './custom-range-editor';
+import { Button, TriggerChevron } from '@/ds/components/Button/Button';
+import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup/buttons-group';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
 
@@ -22,11 +22,41 @@ const DATE_PRESETS: { value: DateRangePreset; label: string; ms?: number }[] = [
   { value: 'custom', label: 'Custom range...' },
 ];
 
-function buildDateWithTime(date: Date, timeStr: string): Date | null {
-  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const combined = parse(timeStr, 'h:mm a', dateOnly);
-  return isValid(combined) ? combined : null;
+const sameTime = (a: Date | undefined, b: Date | undefined) => a?.getTime() === b?.getTime();
+
+/**
+ * Whether a named range breaks the limits the custom editor enforces: it starts before
+ * `minDate`'s day, or spans more than `maxRangeMs` (an open end counts up to now).
+ */
+function outsideLimits(range: DateTimeRangePickerNamedRange, minDate?: Date, maxRangeMs?: number) {
+  const tooEarly = minDate !== undefined && range.from < startOfDay(minDate);
+  const span = (range.to ?? new Date()).getTime() - range.from.getTime();
+  const tooWide = maxRangeMs !== undefined && span > maxRangeMs;
+  return tooEarly || tooWide;
 }
+
+const fmtClock = (d: Date) =>
+  d.toLocaleTimeString('en-US', d.getMinutes() === 0 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * A custom range as day and time, kept short: `Oct 21, 2:05 PM – 4 PM` within one day,
+ * `Oct 20, 12 AM – Oct 27, 9:30 AM` across days, with years only outside the current one.
+ */
+function customRangeLabel(dateFrom: Date | undefined, dateTo: Date | undefined) {
+  const thisYear = new Date().getFullYear();
+  const withYear = [dateFrom, dateTo].some(d => d && d.getFullYear() !== thisYear);
+  const fmtDay = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear && { year: 'numeric' }) });
+  const fmtMoment = (d: Date) => `${fmtDay(d)}, ${fmtClock(d)}`;
+
+  const start = dateFrom ? fmtMoment(dateFrom) : 'Start';
+  if (!dateTo) return `${start} \u2013 End`;
+  const sameDay = dateFrom !== undefined && fmtDay(dateFrom) === fmtDay(dateTo);
+  return `${start} \u2013 ${sameDay ? fmtClock(dateTo) : fmtMoment(dateTo)}`;
+}
+
+/** A fixed range offered beside the presets, e.g. the current billing period. */
+export type DateTimeRangePickerNamedRange = { label: string; from: Date; to?: Date };
 
 export interface DateTimeRangePickerProps {
   preset?: DateRangePreset;
@@ -40,15 +70,28 @@ export interface DateTimeRangePickerProps {
    */
   onDateRangeChange?: (from: Date | undefined, to: Date | undefined) => void;
   disabled?: boolean;
+  /** Widest custom range that can be applied, in milliseconds. Presets are unaffected. */
+  maxRangeMs?: number;
+  /** Earliest day a custom range can start on, e.g. the oldest data still kept. Earlier days are disabled. */
+  minDate?: Date;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
-  /** Size passed through to the trigger Button. Defaults to 'md'. */
-  size?: ButtonProps['size'];
   /**
-   * Replace the default Button trigger. Receives the current label (preset name or
-   * custom range) and must return an element the menu/popover can attach to.
+   * Fixed ranges listed above the presets, e.g. `{ label: 'This period', from: periodStart }`.
+   * Picking one applies it as a custom range; while it's applied the trigger shows its label.
    */
-  renderTrigger?: (props: { label: string; disabled?: boolean }) => ReactElement;
+  namedRanges?: readonly DateTimeRangePickerNamedRange[];
+  /** Size of the trigger Button. Defaults to 'sm', the toolbar rung. */
+  size?: TextButtonSize;
+  /**
+   * The preset a custom range resets to. While a custom range is applied, a × joined to the
+   * trigger takes the chevron's place and switches back to it.
+   */
+  defaultPreset?: DateRangePreset;
+  /** Replaces what the reset × does, e.g. to undo a histogram zoom before falling back to `defaultPreset`. */
+  onReset?: () => void;
+  /** The trigger Button. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function DateTimeRangePicker({
@@ -59,32 +102,30 @@ export function DateTimeRangePicker({
   onDateChange,
   onDateRangeChange,
   disabled,
+  maxRangeMs,
+  minDate,
   presets,
-  size = 'md',
-  renderTrigger,
+  namedRanges = [],
+  size = 'sm',
+  defaultPreset,
+  onReset,
+  ref,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
-  const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
-  const [draftDateFrom, setDraftDateFrom] = useState<Date | undefined>(dateFrom);
-  const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(dateTo);
-  const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
-  const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
-  const [customRangeError, setCustomRangeError] = useState<string | undefined>();
-  const customRangeFieldName = useId();
+  const [presetMenuOpen, setPresetMenuOpen] = useState(false);
+  // The preset active before "Custom range..." was picked, until a range is applied.
+  // "← Presets" restores it instead of jumping to the first preset in the list.
+  const [presetBeforeCustom, setPresetBeforeCustom] = useState<DateRangePreset | undefined>();
 
-  const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
+  // "← Presets" restores the previous preset through the parent, which may apply it a
+  // render later (e.g. a router URL update). Show it right away instead of "custom".
+  const restoringPreset = presetMenuOpen && preset === 'custom' ? presetBeforeCustom : undefined;
+  const shownPreset = restoringPreset ?? preset;
+  const datePresetLabel = DATE_PRESETS.find(p => p.value === shownPreset)?.label ?? 'All';
 
-  const handlePresetSelect = (value: DateRangePreset) => {
+  const applyPreset = (value: DateRangePreset) => {
     onPresetChange?.(value);
-    if (value === 'custom') {
-      setDraftDateFrom(dateFrom);
-      setDraftDateTo(dateTo);
-      setDraftTimeFrom('12:00 AM');
-      setDraftTimeTo('11:59 PM');
-      setCustomRangeOpen(true);
-      return;
-    }
     const entry = DATE_PRESETS.find(p => p.value === value);
     if (entry?.ms) {
       onDateChange?.(new Date(Date.now() - entry.ms), 'from');
@@ -95,126 +136,155 @@ export function DateTimeRangePicker({
     }
   };
 
-  const applyCustomRange = () => {
-    const fromDate = draftDateFrom ? (buildDateWithTime(draftDateFrom, draftTimeFrom) ?? draftDateFrom) : undefined;
-    const toDate = draftDateTo ? (buildDateWithTime(draftDateTo, draftTimeTo) ?? draftDateTo) : undefined;
-    if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) {
-      setCustomRangeError('Start date/time must be before end date/time');
+  const handlePresetSelect = (value: DateRangePreset) => {
+    setPresetMenuOpen(false);
+    if (value === 'custom') {
+      if (preset !== 'custom') setPresetBeforeCustom(preset);
+      onPresetChange?.(value);
+      setCustomRangeOpen(true);
       return;
     }
-    setCustomRangeError(undefined);
+    setPresetBeforeCustom(undefined);
+    applyPreset(value);
+  };
+
+  const applyCustomRange = (fromDate: Date | undefined, toDate: Date | undefined) => {
     if (onDateRangeChange) {
       onDateRangeChange(fromDate, toDate);
     } else {
       onDateChange?.(fromDate, 'from');
       onDateChange?.(toDate, 'to');
     }
+    setPresetBeforeCustom(undefined);
     setCustomRangeOpen(false);
   };
 
-  if (preset === 'custom') {
-    const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
-    return (
-      <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
-        {renderTrigger ? (
-          <PopoverTrigger render={renderTrigger({ label: customLabel, disabled })} />
-        ) : (
-          <PopoverTrigger asChild>
-            <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
-              {customLabel}
-            </Button>
-          </PopoverTrigger>
-        )}
-        <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <div
-            role="group"
-            aria-label="Custom date range"
-            aria-invalid={customRangeError ? true : undefined}
-            aria-describedby={customRangeError ? fieldErrorId(customRangeFieldName) : undefined}
-          >
-            <div className={cn('flex')}>
-              <div className={cn('border-r border-border')}>
-                <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>Start</span>
-                <DatePicker
-                  mode="single"
-                  selected={draftDateFrom}
-                  month={draftDateFrom}
-                  onSelect={setDraftDateFrom}
-                  disabled={disabled}
-                  toDate={draftDateTo}
-                />
-                <TimePicker
-                  className="mx-4 mb-3 w-auto"
-                  defaultValue={draftTimeFrom}
-                  onValueChange={v => {
-                    if (!disabled) setDraftTimeFrom(v);
-                  }}
-                />
-              </div>
-              <div>
-                <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>End</span>
-                <DatePicker
-                  mode="single"
-                  selected={draftDateTo}
-                  month={draftDateTo}
-                  onSelect={setDraftDateTo}
-                  disabled={disabled}
-                  fromDate={draftDateFrom}
-                />
-                <TimePicker
-                  className="mx-4 mb-3 w-auto"
-                  defaultValue={draftTimeTo}
-                  onValueChange={v => {
-                    if (!disabled) setDraftTimeTo(v);
-                  }}
-                />
-              </div>
-            </div>
-            {customRangeError && (
-              <FieldBlock.ErrorMsg name={customRangeFieldName} className="px-4 pb-1">
-                {customRangeError}
-              </FieldBlock.ErrorMsg>
-            )}
-          </div>
-          <div className={cn('flex items-center justify-between px-4 pb-3')}>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => {
-                setCustomRangeError(undefined);
-                handlePresetSelect(fallbackPreset);
-              }}
-            >
-              &larr; Presets
-            </Button>
-            <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
-              Apply
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-  }
+  // Back to the preset list. Restores the preset the user came from; an applied custom
+  // range matches no preset, so it stays and the list shows "Custom range..." as current.
+  const showPresets = () => {
+    setCustomRangeOpen(false);
+    if (presetBeforeCustom) applyPreset(presetBeforeCustom);
+    setPresetMenuOpen(true);
+  };
+
+  // The applied custom range, when it is one of the named ranges.
+  const namedIndex =
+    shownPreset === 'custom' ? namedRanges.findIndex(r => sameTime(r.from, dateFrom) && sameTime(r.to, dateTo)) : -1;
+  const named = namedRanges[namedIndex];
+  const canReset = defaultPreset !== undefined && shownPreset === 'custom' && !named;
+  // A named range shows the preset list, unless "Custom range..." was picked to edit it.
+  const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen && (!named || customRangeOpen);
+  const label = named ? named.label : shownPreset === 'custom' ? customRangeLabel(dateFrom, dateTo) : datePresetLabel;
+
+  const applyNamedRange = (range: DateTimeRangePickerNamedRange) => {
+    setPresetMenuOpen(false);
+    onPresetChange?.('custom');
+    applyCustomRange(range.from, range.to);
+  };
+  const trigger = (
+    <Button
+      ref={ref}
+      size={size}
+      disabled={disabled}
+      icon={<CalendarIcon />}
+      iconEnd={canReset ? undefined : <TriggerChevron />}
+    >
+      {label}
+    </Button>
+  );
 
   return (
-    <DropdownMenu>
-      {renderTrigger ? (
-        <DropdownMenu.Trigger render={renderTrigger({ label: datePresetLabel, disabled })} />
-      ) : (
-        <DropdownMenu.Trigger asChild>
-          <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
-            {datePresetLabel}
-          </Button>
-        </DropdownMenu.Trigger>
+    <JoinReset
+      size={size}
+      reset={
+        canReset && (
+          <ResetRangeButton size={size} disabled={disabled} onReset={onReset ?? (() => applyPreset(defaultPreset))} />
+        )
+      }
+    >
+      {editingCustomRange && (
+        <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
+          <PopoverTrigger render={trigger} />
+          <PopoverContent align="start" className={cn('w-auto p-0')}>
+            <CustomRangeEditor
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              disabled={disabled}
+              maxRangeMs={maxRangeMs}
+              minDate={minDate}
+              onApply={applyCustomRange}
+              onShowPresets={showPresets}
+            />
+          </PopoverContent>
+        </Popover>
       )}
-      <DropdownMenu.Content align="start">
-        {visiblePresets.map(p => (
-          <DropdownMenu.Item key={p.value} onSelect={() => handlePresetSelect(p.value)}>
-            {p.label}
-          </DropdownMenu.Item>
-        ))}
-      </DropdownMenu.Content>
-    </DropdownMenu>
+      {!editingCustomRange && (
+        <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
+          <DropdownMenu.Trigger render={trigger} />
+          <DropdownMenu.Content align="start">
+            {/* Items select on click (not onValueChange) so re-picking the checked
+              "Custom range..." still reopens the range editor. */}
+            <DropdownMenu.RadioGroup value={named ? `named-${namedIndex}` : shownPreset}>
+              {namedRanges.map((r, i) => (
+                <DropdownMenu.RadioItem
+                  key={`named-${i}`}
+                  value={`named-${i}`}
+                  disabled={outsideLimits(r, minDate, maxRangeMs)}
+                  closeOnClick
+                  onClick={() => applyNamedRange(r)}
+                >
+                  {r.label}
+                </DropdownMenu.RadioItem>
+              ))}
+              {namedRanges.length > 0 && <DropdownMenu.Separator />}
+              {visiblePresets.map(p => (
+                <DropdownMenu.RadioItem
+                  key={p.value}
+                  value={p.value}
+                  closeOnClick
+                  onClick={() => handlePresetSelect(p.value)}
+                >
+                  {p.label}
+                </DropdownMenu.RadioItem>
+              ))}
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
+    </JoinReset>
+  );
+}
+
+/** Switches a custom range back to the picker's default preset. */
+function ResetRangeButton({
+  size,
+  disabled,
+  onReset,
+}: {
+  size: TextButtonSize;
+  disabled?: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size={`icon-${size}` as const}
+      tooltip="Reset time range"
+      disabled={disabled}
+      onClick={onReset}
+    >
+      <XIcon />
+    </Button>
+  );
+}
+
+/** The trigger alone, or joined with the reset × as one pill. */
+function JoinReset({ reset, size, children }: { reset: ReactNode; size: TextButtonSize; children: ReactNode }) {
+  if (!reset) return children;
+  return (
+    <ButtonsGroup size={size}>
+      {children}
+      {reset}
+    </ButtonsGroup>
   );
 }

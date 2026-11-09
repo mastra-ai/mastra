@@ -95,7 +95,7 @@ async function tableExists(db: DuckDBConnection, table: string): Promise<boolean
   return rows.length > 0;
 }
 
-async function hasPrimaryKey(db: DuckDBConnection, table: string): Promise<boolean> {
+export async function hasPrimaryKey(db: DuckDBConnection, table: string): Promise<boolean> {
   const rows = await db.query<{ constraint_type: string }>(
     `SELECT constraint_type FROM information_schema.table_constraints
      WHERE table_name = ? AND constraint_type = 'PRIMARY KEY'`,

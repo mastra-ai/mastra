@@ -13,6 +13,7 @@
             "id": "call_goal_duration_approval_one",
             "name": "execute_command",
             "arguments": {
+              "description": "Running the approval check command",
               "command": "node -e \"setTimeout(() => console.log('APPROVAL_ONE_DONE'), 250)\"",
               "timeout": 5,
               "cwd": null,
@@ -24,6 +25,7 @@
             "id": "call_goal_duration_approval_two",
             "name": "execute_command",
             "arguments": {
+              "description": "Running the approval check command",
               "command": "printf 'APPROVAL_TWO_SHOULD_NOT_RUN\\n'",
               "timeout": 5,
               "cwd": null,

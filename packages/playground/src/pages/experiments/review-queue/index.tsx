@@ -3,17 +3,20 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useExperimentsForDatasetFilter } from '@mastra/react/hooks/experiments';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { DatasetReview, type ReviewListFilters } from '@/domains/review/components/dataset-review';
-import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
+import type { ReviewListFilters } from '@/domains/review/components/dataset-review';
+import { ReviewQueueFilterBar } from '@/domains/review/components/review-queue-filter-bar';
+import type { ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
 import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
-import { useLinkComponent } from '@/lib/framework';
 
 const crumbs = [navCrumb('/experiments'), navCrumb('/experiments/review-queue')];
 
@@ -34,7 +37,9 @@ function ReviewQueuePage() {
   const featuredResultId = searchParams.get(REVIEW_PARAM);
 
   const { Link, paths } = useLinkComponent();
-  const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
+  // Servers without the trace-query API don't expose feedback either.
+  const traceQuery = useTraceQueryAvailable();
+  const { data, error } = useExperimentsForDatasetFilter({ datasetId: undefined, target: { targetType, targetId } });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
   const handleFiltersChange = (next: ReviewQueueFilters, list: ReviewListFilters) => {
@@ -97,6 +102,8 @@ function ReviewQueuePage() {
 
   return (
     <DatasetReview
+      withQueryTrace={traceQuery.enabled}
+      withFeedback={traceQuery.enabled}
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       datasetId={selected?.datasetId ?? undefined}
       experimentId={selectedId ?? undefined}

@@ -25,6 +25,32 @@ function SkeletonBar({ width, className }: { width: string; className?: string }
   );
 }
 
+export type DataListSkeletonRowsProps = {
+  columnCount: number;
+  numberOfRows?: number;
+};
+
+/**
+ * Placeholder rows only, for lists that keep their real root and header while
+ * loading (e.g. virtualized lists that must keep the same scroll container).
+ */
+export function DataListSkeletonRows({ columnCount, numberOfRows = 3 }: DataListSkeletonRowsProps) {
+  const getPseudoRandomWidth = (rowIdx: number, colIdx: number) => {
+    const index = (rowIdx + colIdx + columnCount + numberOfRows) % widths.length;
+    return widths[index] ?? widths[0];
+  };
+
+  return Array.from({ length: numberOfRows }).map((_, rowIdx) => (
+    <div key={rowIdx} className={cn('data-list-cells grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles)}>
+      {Array.from({ length: columnCount }).map((_, colIdx) => (
+        <DataListCell key={colIdx}>
+          <SkeletonBar width={getPseudoRandomWidth(rowIdx, colIdx)} />
+        </DataListCell>
+      ))}
+    </div>
+  ));
+}
+
 /**
  * Loading placeholder mirroring the real list: same root, a sticky header
  * band with one placeholder label per column, then rows of placeholder cells.
@@ -39,11 +65,6 @@ export function DataListSkeleton({
   const columnCount = columnParts.length;
   const skeletonColumns = columnParts.map(col => (col === 'auto' ? 'minmax(6rem, auto)' : col)).join(' ');
 
-  const getPseudoRandomWidth = (rowIdx: number, colIdx: number) => {
-    const index = (rowIdx + colIdx + columnCount + numberOfRows) % widths.length;
-    return widths[index] ?? widths[0];
-  };
-
   return (
     <DataListRoot columns={skeletonColumns} fit={fit} variant={variant}>
       <DataListTop>
@@ -53,15 +74,7 @@ export function DataListSkeleton({
           </DataListTopCell>
         ))}
       </DataListTop>
-      {Array.from({ length: numberOfRows }).map((_, rowIdx) => (
-        <div key={rowIdx} className={cn('grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles)}>
-          {Array.from({ length: columnCount }).map((_, colIdx) => (
-            <DataListCell key={colIdx}>
-              <SkeletonBar width={getPseudoRandomWidth(rowIdx, colIdx)} />
-            </DataListCell>
-          ))}
-        </div>
-      ))}
+      <DataListSkeletonRows columnCount={columnCount} numberOfRows={numberOfRows} />
     </DataListRoot>
   );
 }

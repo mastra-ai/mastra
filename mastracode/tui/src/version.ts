@@ -10,3 +10,8 @@ export function getCurrentVersion(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
   return pkg.version;
 }
+
+/** Whether the invocation is `mastracode --version` or `mastracode -v`. */
+export function isVersionCommand(argv: string[]): boolean {
+  return argv[2] === '--version' || argv[2] === '-v';
+}

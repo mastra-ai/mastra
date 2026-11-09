@@ -12,6 +12,7 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
     id: 'work',
     title: 'Work lifecycle fixture',
     initialPhase: 'intake',
+    sourceClosed: workBoard.sourceClosed,
     phases: Object.fromEntries(
       Object.entries(workBoard.phases).map(([stage, phase]) => {
         const leaves = Object.entries(handlers[stage] ?? {});
@@ -19,6 +20,9 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
           stage,
           {
             ...phase,
+            // Lifecycle tests jump straight to the phase whose handlers they exercise; the
+            // Work board's own topology is tested against workBoard itself.
+            nextPhases: Object.keys(workBoard.phases).filter(other => other !== stage),
             onEnter: {
               ...phase.onEnter,
               ...Object.fromEntries(
@@ -50,6 +54,7 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
     initialPhase: 'intake',
     phases: workBoard.phases,
     transitionPolicy: workBoard.transitionPolicy,
+    sourceClosed: workBoard.sourceClosed,
     tools: { ...tools },
   });
   return new Map<string, BoardDefinition<string, string>>([

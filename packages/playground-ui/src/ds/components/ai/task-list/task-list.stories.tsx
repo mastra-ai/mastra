@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useEffect, useState } from 'react';
 import { TaskList } from './task-list';
+import type { TaskListItem } from './task-list';
 
 const meta: Meta<typeof TaskList> = {
   title: 'AI/Task List',
@@ -82,10 +84,6 @@ export const LongList: Story = {
   },
 };
 
-export const Empty: Story = {
-  args: { tasks: [], hideWhenEmpty: false },
-};
-
 export const Completed: Story = {
   args: {
     hideWhenComplete: false,
@@ -93,5 +91,23 @@ export const Completed: Story = {
       { id: 'tests', content: 'Run tests', status: 'completed', activeForm: 'Running tests' },
       { id: 'build', content: 'Build package', status: 'completed', activeForm: 'Building package' },
     ],
+  },
+};
+
+const statusAtStep = (index: number, step: number): TaskListItem['status'] => {
+  if (index < step) return 'completed';
+  if (index === step) return 'in_progress';
+  return 'pending';
+};
+
+export const Live: Story = {
+  render: function LiveStory() {
+    const tasks = LongList.args?.tasks ?? [];
+    const [step, setStep] = useState(0);
+    useEffect(() => {
+      const interval = setInterval(() => setStep(current => (current + 1) % tasks.length), 1800);
+      return () => clearInterval(interval);
+    }, [tasks.length]);
+    return <TaskList tasks={tasks.map((task, index) => ({ ...task, status: statusAtStep(index, step) }))} />;
   },
 };

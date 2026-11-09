@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GlobeIcon } from 'lucide-react';
@@ -44,22 +45,18 @@ export const Browser = ({ editable = true }: BrowserProps) => {
           </Txt>
         </div>
 
-        <div className="mt-1 flex items-center gap-3">
+        <Field orientation="horizontal" disabled={!editable} className="mt-1 gap-3">
           <Switch
-            id={TOGGLE_ID}
             checked={browserEnabled}
             onCheckedChange={handleCheckedChange}
-            disabled={!editable}
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />
-          <label htmlFor={TOGGLE_ID} className="cursor-pointer text-column text-foreground">
-            Enable browser
-          </label>
-          <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">
+          <FieldLabel size="smaller">Enable browser</FieldLabel>
+          <Badge variant={browserEnabled ? 'success' : 'neutral'} size="sm" indicator="dot">
             {browserEnabled ? 'Enabled' : 'Disabled'}
           </Badge>
-        </div>
+        </Field>
       </div>
     </div>
   );

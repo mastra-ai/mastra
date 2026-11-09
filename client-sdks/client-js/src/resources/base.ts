@@ -1,6 +1,12 @@
 import type { RequestOptions, ClientOptions } from '../types';
 import { MastraClientError } from '../types';
-import { mergeAbortSignals, normalizeRoutePath } from '../utils';
+import {
+  isTerminalHttpError,
+  isTraceQueryTimeoutError,
+  mergeAbortSignals,
+  mergeHeaders,
+  normalizeRoutePath,
+} from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;
@@ -47,20 +53,20 @@ export class BaseResource {
       try {
         const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
           ...fetchOptions,
-          headers: {
-            ...(fetchOptions.body &&
-            !(fetchOptions.body instanceof FormData) &&
-            (fetchOptions.method === 'POST' ||
-              fetchOptions.method === 'PUT' ||
-              fetchOptions.method === 'PATCH' ||
-              fetchOptions.method === 'DELETE')
+          headers: mergeHeaders(
+            fetchOptions.body &&
+              !(fetchOptions.body instanceof FormData) &&
+              (fetchOptions.method === 'POST' ||
+                fetchOptions.method === 'PUT' ||
+                fetchOptions.method === 'PATCH' ||
+                fetchOptions.method === 'DELETE')
               ? { 'content-type': 'application/json' }
-              : {}),
-            ...headers,
-            ...fetchOptions.headers,
+              : undefined,
+            headers,
+            fetchOptions.headers,
             // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
-            // 'x-mastra-client-type': 'js',
-          },
+            // { 'x-mastra-client-type': 'js' },
+          ),
           signal,
           credentials: fetchOptions.credentials ?? credentials,
           body:
@@ -100,9 +106,9 @@ export class BaseResource {
           throw error;
         }
 
-        // Don't retry 4xx client errors - they won't resolve with retries
-        const status = (error as Error & { status?: number }).status;
-        if (status !== undefined && status >= 400 && status < 500) {
+        // Don't retry 4xx client errors, 501 Not Implemented, or trace query execution
+        // timeouts - they won't resolve with retries
+        if (isTerminalHttpError(error) || isTraceQueryTimeoutError(error)) {
           throw error;
         }
 

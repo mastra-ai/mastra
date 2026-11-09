@@ -1,3 +1,4 @@
+import type { Component } from '@earendil-works/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLoadSettings = vi.hoisted(() => vi.fn());
@@ -9,6 +10,9 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
     loadSettings: mockLoadSettings,
   };
 });
+
+const mockShowModalOverlay = vi.hoisted(() => vi.fn());
+vi.mock('../../overlay.js', () => ({ showModalOverlay: mockShowModalOverlay }));
 
 import { handleThinkCommand } from '../think.js';
 
@@ -112,8 +116,9 @@ describe('handleThinkCommand', () => {
     await handleThinkCommand(ctx, ['turbo']);
 
     expect(stateSet).not.toHaveBeenCalled();
-    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
-    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('max'));
+    expect(showInfo).toHaveBeenCalledWith(
+      "Invalid thinking level: turbo. Use one of: off, low, medium, high, xhigh, 'default', or 'status'.",
+    );
   });
 
   it('rejects trailing arguments consistently with other interfaces', async () => {
@@ -123,5 +128,17 @@ describe('handleThinkCommand', () => {
 
     expect(stateSet).not.toHaveBeenCalled();
     expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
+  });
+
+  it('marks and preselects the level a saved override runs at', async () => {
+    const { ctx } = makeCtx({ sessionThinkingLevel: 'max', modelId: 'anthropic/claude-haiku-4-5' });
+
+    const closed = handleThinkCommand(ctx);
+    const modal: Component & { handleInput: (data: string) => void } = mockShowModalOverlay.mock.lastCall![1];
+    const currentRows = modal.render(160).filter(line => line.includes('(current)'));
+    modal.handleInput('\x1b');
+    await closed;
+
+    expect(currentRows).toEqual([expect.stringMatching(/→\s+Very High/)]);
   });
 });

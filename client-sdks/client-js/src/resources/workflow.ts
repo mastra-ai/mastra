@@ -80,15 +80,17 @@ export class Workflow extends BaseResource {
     if (params?.status) {
       searchParams.set('status', params.status);
     }
+    if (params?.summary) {
+      searchParams.set('summary', 'true');
+    }
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
     }
 
     if (searchParams.size) {
       return this.request(`/workflows/${this.workflowId}/runs?${searchParams}`);
-    } else {
-      return this.request(`/workflows/${this.workflowId}/runs`);
     }
+    return this.request(`/workflows/${this.workflowId}/runs`);
   }
 
   /**
@@ -124,7 +126,7 @@ export class Workflow extends BaseResource {
     }
 
     const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    return this.request(`/workflows/${this.workflowId}/runs/${runId}${queryString}`);
+    return this.request(`/workflows/${this.workflowId}/runs/${encodeURIComponent(runId)}${queryString}`);
   }
 
   /**
@@ -133,7 +135,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing a success message
    */
   deleteRunById(runId: WorkflowRunId): Promise<RouteResponse<'DELETE /workflows/:workflowId/runs/:runId'>> {
-    return this.request(`/workflows/${this.workflowId}/runs/${runId}`, {
+    return this.request(`/workflows/${this.workflowId}/runs/${encodeURIComponent(runId)}`, {
       method: 'DELETE',
     });
   }
@@ -165,7 +167,7 @@ export class Workflow extends BaseResource {
   ) {
     const searchParams = new URLSearchParams();
 
-    if (!!params?.runId) {
+    if (params?.runId) {
       searchParams.set('runId', params.runId);
     }
 

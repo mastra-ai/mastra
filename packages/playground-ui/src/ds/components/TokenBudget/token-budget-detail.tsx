@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { formatCompactTokens } from './format-tokens';
 import { toneClass } from './tones';
 import type { TokenBudgetTone } from './tones';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 import './token-budget.css';
@@ -36,26 +37,32 @@ export function TokenBudgetDetail({
 
   return (
     <div className={cn('flex flex-col gap-1.5', toneClass[tone])}>
-      <p className="flex items-center justify-between gap-3 text-meta">
+      <div className="flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-1.5">
           {icon && (
             <span aria-hidden className="[&_svg]:size-3.5">
               {icon}
             </span>
           )}
-          <span className="text-foreground">{label}</span>
+          <Txt as="span" variant="meta" tone="ink">
+            {label}
+          </Txt>
         </span>
-        <span className="text-muted-foreground tabular-nums">
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
           {formatCompactTokens(tokens)}
           <span className="text-placeholder">/{formatCompactTokens(threshold)}k</span>
           {projected > 0 && <span className="text-placeholder"> −{formatCompactTokens(projected)}k</span>}
-        </span>
-      </p>
+        </Txt>
+      </div>
       <div className="flex h-1.5 overflow-hidden rounded-full bg-current/15">
         <div className="bg-current" style={{ width: `${used - freed}%` }} />
         <div className="token-budget-hatch" style={{ width: `${freed}%` }} />
       </div>
-      {description && <p className="text-meta text-placeholder">{description}</p>}
+      {description && (
+        <Txt variant="meta" tone="faint">
+          {description}
+        </Txt>
+      )}
     </div>
   );
 }

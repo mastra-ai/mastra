@@ -1,45 +1,43 @@
+import { EntityType } from '@mastra/core/observability';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
+import {
+  AgentRunsCard,
+  DistinctIdsCard,
+  LatencyCard,
+  MetricsGrid,
+  ScoresCard,
+  TokenUsageCard,
+  TraceVolumeCard,
+  BreakdownCard,
+  UsageCard,
+} from '@mastra/playground-ui/domains/metrics/components';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
+import { useMetricsLayout } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-layout';
 import {
   applyMetricsPropertyFilterTokens,
-  createMetricsPropertyFilterFields,
+  createMetricsFilterBarFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
   loadMetricsFiltersFromStorage,
+  saveMetricsFiltersToStorage,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
-import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
+import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { LatencyCard } from '@/domains/metrics/components/latency-card';
-import { MemoryCard } from '@/domains/metrics/components/memory-card';
-import {
-  ActiveResourcesKpiCard,
-  ActiveThreadsKpiCard,
-  AgentRunsKpiCard,
-  ModelCostKpiCard,
-  TotalTokensKpiCard,
-} from '@/domains/metrics/components/metrics-kpi-cards';
 import { MetricsPageLayout } from '@/domains/metrics/components/metrics-page-layout';
 import { MetricsStorageGate } from '@/domains/metrics/components/metrics-storage-gate';
-import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
-import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
-import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
-import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+import { useMetricsDrilldownNavigation } from '@/domains/metrics/hooks/use-metrics-drilldown-navigation';
 import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
@@ -130,6 +128,8 @@ export default function Metrics() {
         prev => {
           const params = new URLSearchParams(prev);
           applyMetricsPropertyFilterTokens(params, nextTokens);
+          // Every filter change is remembered for the next visit, as on Traces.
+          saveMetricsFiltersToStorage(params);
           return params;
         },
         { replace: true },
@@ -177,40 +177,21 @@ export default function Metrics() {
 
 /** Fetches and renders dashboard data only after the storage gate confirms metrics support. */
 function MetricsContent() {
-  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
+  const { error } = useAgentRunsKpiMetrics(useMetricsFilters());
 
   const { isInMemory } = useObservabilityStorageCapabilities();
 
-  const { data: tagsData, isLoading: isTagsLoading } = useTags();
-  const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
-  const { data: serviceNamesData, isLoading: isServiceNamesLoading } = useServiceNames();
-  const { data: environmentsData, isLoading: isEnvironmentsLoading } = useEnvironments();
+  const { data: tagsData } = useTags();
+  const { data: entityNamesData } = useEntityNames();
+  const { data: serviceNamesData } = useServiceNames();
+  const { data: environmentsData } = useEnvironments();
 
-  const filterFields = useMemo(
-    () =>
-      createMetricsPropertyFilterFields({
-        availableTags: tagsData ?? [],
-        availableEntityNames: entityNamesData ?? [],
-        availableServiceNames: serviceNamesData ?? [],
-        availableEnvironments: environmentsData ?? [],
-        loading: {
-          tags: isTagsLoading,
-          entityNames: isEntityNamesLoading,
-          serviceNames: isServiceNamesLoading,
-          environments: isEnvironmentsLoading,
-        },
-      }),
-    [
-      tagsData,
-      entityNamesData,
-      serviceNamesData,
-      environmentsData,
-      isTagsLoading,
-      isEntityNamesLoading,
-      isServiceNamesLoading,
-      isEnvironmentsLoading,
-    ],
-  );
+  const filterFields = createMetricsFilterBarFields({
+    availableTags: tagsData ?? [],
+    availableEntityNames: entityNamesData ?? [],
+    availableServiceNames: serviceNamesData ?? [],
+    availableEnvironments: environmentsData ?? [],
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -240,8 +221,8 @@ function MetricsContent() {
   }
 
   return (
-    <MetricsPageLayout filterFields={filterFields} isLoading={isMetricsLoading}>
-      <div className="grid content-start gap-4 pb-6">
+    <MetricsPageLayout filterFields={filterFields}>
+      <div className="grid content-start gap-4">
         {isInMemory && (
           <Notice variant="info" title="Metrics are not persisted">
             <Notice.Message>
@@ -251,23 +232,79 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsCardGroup>
-          <AgentRunsKpiCard />
-          <ModelCostKpiCard />
-          <TotalTokensKpiCard />
-          <ActiveThreadsKpiCard />
-          <ActiveResourcesKpiCard />
-        </MetricsCardGroup>
-
-        <MetricsFlexGrid>
-          <ModelUsageCostCard />
-          <TokenUsageByAgentCard />
-          <TokenUsageTimelineCard />
-          <MemoryCard />
-          <TracesVolumeCard />
-          <LatencyCard />
-        </MetricsFlexGrid>
+        <MetricsCards />
       </div>
     </MetricsPageLayout>
+  );
+}
+
+function MetricsCards() {
+  const { openTraces, openLogs } = useMetricsDrilldownNavigation();
+  const agent = EntityType.AGENT;
+  const layout = useMetricsLayout();
+
+  const agentRuns = (
+    <AgentRunsCard
+      onTimeRangeClick={range => openTraces({ rootEntityType: agent, window: range })}
+      onViewErrors={() => openLogs({ rootEntityType: agent, status: 'error' })}
+      onFailureTimeRangeClick={range => openTraces({ rootEntityType: agent, status: 'error', window: range })}
+    />
+  );
+  const latency = (
+    <LatencyCard
+      onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+      onTimeRangeClick={range => openTraces({ window: range })}
+    />
+  );
+  // Older servers (no trace and span aggregates): the cards before the unified layout.
+  const usage = (
+    <UsageCard
+      onViewTraces={() => openTraces()}
+      onAgentClick={entityName => openTraces({ rootEntityType: agent, entityName })}
+      onModelClick={model => openTraces({ model })}
+      onThreadClick={threadId => openTraces({ threadId })}
+    />
+  );
+
+  const tokenUsage = (
+    <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
+  );
+
+  // Four charts in two rows, then the breakdown: usage and health first, who caused them below.
+  if (layout === 'unified') {
+    return (
+      <div className="grid content-start gap-4 pb-6">
+        <MetricsGrid columns={2}>
+          <MetricsGrid.Item>{tokenUsage}</MetricsGrid.Item>
+          <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
+          <MetricsGrid.Item>{latency}</MetricsGrid.Item>
+          <MetricsGrid.Item>
+            <DistinctIdsCard onTimeRangeClick={openTraces} />
+          </MetricsGrid.Item>
+        </MetricsGrid>
+        <BreakdownCard onRowClick={openTraces} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid content-start gap-4 pb-6">
+      {tokenUsage}
+      <MetricsGrid columns={2}>
+        <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
+        <MetricsGrid.Item>{latency}</MetricsGrid.Item>
+      </MetricsGrid>
+      <MetricsGrid columns={2}>
+        <MetricsGrid.Item>
+          <TraceVolumeCard
+            onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+            onViewErrors={rootEntityType => openLogs({ rootEntityType, status: 'error' })}
+            onEntityClick={(rootEntityType, entityName) => openTraces({ rootEntityType, entityName })}
+          />
+        </MetricsGrid.Item>
+        <MetricsGrid.Item>{usage}</MetricsGrid.Item>
+      </MetricsGrid>
+      <ScoresCard />
+    </div>
   );
 }

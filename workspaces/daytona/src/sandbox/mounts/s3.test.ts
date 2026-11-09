@@ -215,3 +215,25 @@ describe('mountS3 credentials', () => {
     expect(ctx.writeFile).not.toHaveBeenCalled();
   });
 });
+
+describe('mountS3 s3fs options', () => {
+  const s3fsCommand = (ctx: ReturnType<typeof makeCtx>) =>
+    ctx.run.mock.calls.find(([cmd]) => cmd.startsWith('s3fs '))![0];
+
+  it('passes the region as the s3fs endpoint option', async () => {
+    const ctx = makeCtx();
+    await mountS3('/mnt/s3', { ...config, region: 'ap-south-1' }, ctx);
+    expect(s3fsCommand(ctx)).toMatch(/-o endpoint='?ap-south-1'?( |$)/);
+  });
+
+  it('adds compat_dir only when a prefix is configured', async () => {
+    const withPrefix = makeCtx();
+    await mountS3('/mnt/s3', { ...config, prefix: 'data/' }, withPrefix);
+    expect(s3fsCommand(withPrefix)).toContain('-o compat_dir');
+    expect(s3fsCommand(withPrefix)).toMatch(/test-bucket:\/data/);
+
+    const withoutPrefix = makeCtx();
+    await mountS3('/mnt/s3', config, withoutPrefix);
+    expect(s3fsCommand(withoutPrefix)).not.toContain('compat_dir');
+  });
+});

@@ -258,7 +258,7 @@ export function createAdvancedOperationsTest(config: VectorTestConfig) {
 
         await config.vector.deleteVectors({
           indexName: testIndexName,
-          ids: ['nonexistent-1', 'nonexistent-2'],
+          ids: ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'],
         });
 
         await waitForIndexing(testIndexName);

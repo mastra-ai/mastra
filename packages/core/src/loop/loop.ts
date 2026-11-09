@@ -1,11 +1,15 @@
 import { generateId } from '@internal/ai-sdk-v5';
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { createStoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { ConsoleLogger } from '../logger';
+import { createRunScope } from '../mastra/run-scope';
 import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
+import type { LanguageModelUsage } from '../stream/types';
+import { findSuspendedStreamState } from './suspended-stream-state';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
@@ -74,6 +78,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     threadId: _internal?.threadId,
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
+    fixedMemory: _internal?.fixedMemory,
     threadExists: _internal?.threadExists,
     transportRef: _internal?.transportRef ?? {},
     backgroundTaskManager: _internal?.backgroundTaskManager,
@@ -81,6 +86,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
     skipBgTaskWait: _internal?.skipBgTaskWait,
     drainPendingSignals: _internal?.drainPendingSignals,
+    subscribePendingSignals: _internal?.subscribePendingSignals,
     initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
     // Forward the tool payload transform policy. Every other consumed field is
     // rebuilt here and this bag is what hydrates the run scope, so omitting it
@@ -98,8 +104,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   };
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
-  const serializeStreamState = () => {
-    return modelOutput?.serializeState();
+  const serializeStreamState = (pendingSuspension?: { usage?: LanguageModelUsage }) => {
+    return modelOutput?.serializeState(pendingSuspension);
   };
   const deserializeStreamState = (state: any) => {
     modelOutput?.deserializeState(state);
@@ -108,6 +114,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   // Use the passed-in processorStates map if available, otherwise create a new one.
   // This map persists across loop iterations and is shared by all processor methods.
   const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
+
+  const tracingScope = rest.tracingScope ?? createRunScope();
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
@@ -125,6 +133,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     rotateResponseMessageId,
     agentId,
     requireToolApproval,
+    returnScorerData,
     toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
@@ -132,21 +141,16 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     },
     processorStates,
     ...rest,
+    tracingScope,
   };
 
-  const existingSnapshot = resumeContext?.snapshot;
-  let initialStreamState: any;
-
-  if (existingSnapshot) {
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
-        initialStreamState = step.suspendPayload?.__streamState;
-        break;
-      }
-    }
-  }
-  const baseStream = workflowLoopStream(workflowLoopProps);
+  const initialStreamState = findSuspendedStreamState(resumeContext?.snapshot)?.streamState;
+  let finalizeRun: (() => Promise<void>) | undefined;
+  const baseStream = workflowLoopStream(workflowLoopProps, {
+    register: cleanup => {
+      finalizeRun = cleanup;
+    },
+  });
 
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
@@ -173,14 +177,20 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
+      loadStoredMessages: returnScorerData ? createStoredMessageLoader(_internal?.memory) : undefined,
       ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,
+      agent: rest.agent,
       transportRef: internalToUse.transportRef,
       experimentalTransform,
       hideSignals,
     },
     initialState: initialStreamState,
+    onTracingTripwire: rest.onTracingTripwire,
+    onFinishComplete: async () => {
+      await finalizeRun?.();
+    },
   });
 
   return createDestructurableOutput(modelOutput);

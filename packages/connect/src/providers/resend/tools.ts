@@ -1,7 +1,7 @@
 // AUTO-GENERATED from rhysbalevicius/integration-templates @ ac255e042871 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addContactToSegmentTool } from './tools/add-contact-to-segment.js';
 import { cancelBroadcastTool } from './tools/cancel-broadcast.js';
 import { cancelEmailTool } from './tools/cancel-email.js';
@@ -167,5 +167,5 @@ export function createResendTools(options?: ProviderToolsOptions) {
     resend_verify_domain_claim: verifyDomainClaimTool(platformProxy),
     resend_verify_domain: verifyDomainTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

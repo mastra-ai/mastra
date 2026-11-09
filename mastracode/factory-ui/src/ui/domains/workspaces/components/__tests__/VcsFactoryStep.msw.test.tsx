@@ -1,7 +1,7 @@
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -29,6 +29,34 @@ const repo = {
 };
 
 describe('VCS Factory step', () => {
+  beforeEach(() => {
+    server.use(http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })));
+  });
+
+  it('requires an explicit selection and Continue, and clears selection when searching', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)));
+    const onSelectRepository = vi.fn();
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={onSelectRepository}
+      />,
+    );
+    const user = userEvent.setup();
+    const radio = await screen.findByRole('radio', { name: 'octo/hello' });
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(screen.getByText('octo/hello'));
+    expect(radio).toBeChecked();
+    expect(onSelectRepository).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onSelectRepository).toHaveBeenCalledExactlyOnceWith(repo);
+    await user.type(screen.getByLabelText('Search repositories'), 'other');
+    expect(radio).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  });
+
   it('debounces repository searches before requesting filtered results', async () => {
     const queries: string[] = [];
     server.use(
@@ -41,19 +69,13 @@ describe('VCS Factory step', () => {
 
     const { client } = renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Connect GitHub/ }));
     const search = await screen.findByLabelText('Search repositories');
     await waitForMutationsIdle(client);
     expect(queries).toEqual(['']);
@@ -68,7 +90,60 @@ describe('VCS Factory step', () => {
     expect(queries).toEqual(['jal']);
   });
 
-  it('shows matching provider choices before showing a repository filter', async () => {
+  it('offers Retry when the repository list fails to load', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ repos: [repo] });
+      }),
+    );
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('503');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it('offers Retry when GitLab status cannot be loaded', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ enabled: true, configured: false, reauthRequired: false, reason: 'not_connected' });
+      }),
+    );
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText("Couldn't load GitLab status.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry GitLab' }));
+    expect(await screen.findByRole('button', { name: /Connect GitLab/ })).toBeEnabled();
+    expect(screen.getByText('Projects, branches, and merge requests.')).toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it('opens connected repositories directly and lets the user switch providers', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
@@ -99,22 +174,20 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Connect GitLab/ })).toBeInTheDocument();
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'vertical');
+    expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change provider' }));
+    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continue with GitLab/ })).toBeInTheDocument();
     expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Continue with GitLab/ }));
 
     expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
     expect(await screen.findByText('group/project')).toBeInTheDocument();
@@ -139,23 +212,46 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={onConnect}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: /Connect GitHub/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect GitHub' }));
 
     expect(onConnect).toHaveBeenCalledOnce();
     expect(open).not.toHaveBeenCalled();
   });
 
-  it('offers Mastra Platform connection setup when GitLab has no active account yet', async () => {
+  it('asks to reconnect when the drafted repository’s provider was disconnected', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+      ),
+    );
+
+    renderWithProviders(
+      <VcsFactoryStep
+        initialRepository={repo}
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
+    expect(screen.queryByText('GitHub connected')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+  });
+
+  it('starts a Platform connect session when GitLab has no active account yet', async () => {
+    const connectSessions: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
@@ -169,28 +265,42 @@ describe('VCS Factory step', () => {
           reason: 'not_connected',
         }),
       ),
+      http.post(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connect-session`, () => {
+        connectSessions.push('gitlab');
+        return HttpResponse.json(
+          {
+            connectionId: 'conn-new',
+            integrationId: 'gitlab',
+            connectUrl: 'https://connect.nango.dev/session',
+            sessionToken: 'nango-session-token',
+            expiresAt: '2026-09-17T12:30:00.000Z',
+          },
+          { status: 201 },
+        );
+      }),
     );
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
 
-    expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
-    expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
+
+    // The button triggers a Nango connect session on the server, not a redirect to projects.mastra.ai.
+    await vi.waitFor(() => expect(connectSessions).toEqual(['gitlab']));
+    expect(open).not.toHaveBeenCalledWith('https://projects.mastra.ai', expect.anything(), expect.anything());
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
   });
 
-  it('falls back to Mastra Platform without exposing missing provider credentials', async () => {
+  it('disables both connect actions without exposing missing provider credentials', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({
@@ -213,14 +323,10 @@ describe('VCS Factory step', () => {
       ),
     );
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    open.mockClear();
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -229,14 +335,52 @@ describe('VCS Factory step', () => {
 
     const github = await screen.findByRole('button', { name: /Connect GitHub/ });
     const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
+    expect(github).toBeDisabled();
+    expect(gitlab).toBeDisabled();
     expect(screen.queryByText('GITHUB_APP_ID')).not.toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
 
-    await userEvent.click(github);
-    await userEvent.click(gitlab);
+    expect(open).not.toHaveBeenCalledWith('https://projects.mastra.ai', expect.anything(), expect.anything());
+  });
 
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(open).toHaveBeenCalledWith('https://projects.mastra.ai', '_blank', 'noopener,noreferrer');
+  it('disables the GitLab tile when the account is personal (organization_required)', async () => {
+    const connectSessions: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      // GitLab returns enabled:true, but the connect-session would 403 with
+      // organization_required, so the tile must not offer a doomed Nango start.
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: false,
+          mode: 'platform',
+          connections: [],
+          accounts: [],
+          reauthRequired: false,
+          reason: 'organization_required',
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/integrations/platform/gitlab/connect-session`, () => {
+        connectSessions.push('gitlab');
+        return HttpResponse.json({ error: 'organization_required' }, { status: 403 });
+      }),
+    );
+
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText('Join an organization to connect GitLab.')).toBeInTheDocument();
+    const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
+    expect(gitlab).toBeDisabled();
+    await userEvent.click(gitlab);
+    expect(connectSessions).toEqual([]);
   });
 
   it('does not show server environment variables when GitLab authorization must be renewed', async () => {
@@ -257,17 +401,15 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
 
-    expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN_TYPE')).not.toBeInTheDocument();
   });

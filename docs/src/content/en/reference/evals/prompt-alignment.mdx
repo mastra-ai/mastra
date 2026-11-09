@@ -165,11 +165,11 @@ Evaluates compliance with system guidelines only:
 
 #### Both Mode ('both' - default)
 
-Combines evaluation of both user and system alignment:
+Evaluates user and system alignment together in a single analysis:
 
-- **User alignment**: 70% of final score (using user mode weights)
-- **System compliance**: 30% of final score (using system mode weights)
-- Provides balanced assessment of user satisfaction and system adherence
+- The judge assesses each dimension against both the user prompt and the system guidelines
+- The resulting dimension scores are combined using the user mode weights
+- The scorer computes no separate system score, so the result isn't a blend of user mode and system mode scores
 
 ### Scoring Formula
 
@@ -192,17 +192,18 @@ Final Score = Weighted Score × scale
 **Both Mode (default):**
 
 ```
-User Score = (user dimensions with user weights)
-System Score = (system dimensions with system weights)
-Weighted Score = (User Score × 0.7) + (System Score × 0.3)
+Weighted Score = (intent_score × 0.4) + (requirements_score × 0.3) +
+                 (completeness_score × 0.2) + (appropriateness_score × 0.1)
 Final Score = Weighted Score × scale
 ```
+
+In both mode, each dimension score comes from the combined analysis of the user prompt and the system guidelines.
 
 **Weight Distribution Rationale**:
 
 - **User Mode**: Prioritizes intent (40%) and requirements (30%) for user satisfaction
 - **System Mode**: Balances behavioral compliance (35%) and constraints (35%) equally
-- **Both Mode**: 70/30 split ensures user needs are primary while maintaining system compliance
+- **Both Mode**: Uses the user mode weights over a combined analysis, so user needs stay primary while system guidelines are still assessed
 
 ### Score Interpretation
 
@@ -359,7 +360,7 @@ for (const agent of agents) {
 ### Basic Configuration
 
 ```typescript
-import { createPromptAlignmentScorerLLM } from '@mastra/evals'
+import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createPromptAlignmentScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -634,7 +635,7 @@ const result = await scorer.run({
 
 #### Both Mode - Combined Evaluation (Default)
 
-Evaluates both user intent fulfillment and system compliance with weighted scoring (70% user, 30% system):
+Evaluates user intent fulfillment and system compliance together in a single analysis:
 
 ```typescript title="src/example-both-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({

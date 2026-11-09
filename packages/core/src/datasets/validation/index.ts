@@ -1,4 +1,5 @@
-export { SchemaValidator, getSchemaValidator, createValidator } from './validator';
+export { SchemaValidator, getSchemaValidator, createValidator, assertSupportedPatterns } from './validator';
+export { UnsupportedSchemaPatternError } from './safe-regex';
 export {
   SchemaValidationError,
   SchemaUpdateValidationError,

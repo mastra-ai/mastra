@@ -1,4 +1,11 @@
-import type { FilterBarExpression, FilterBarGroup, FilterBarItem, FilterBarLogic, FilterBarNode } from './types';
+import type {
+  FilterBarExpression,
+  FilterBarGroup,
+  FilterBarItem,
+  FilterBarLogic,
+  FilterBarNode,
+  FilterBarOperator,
+} from './types';
 import { isFilterBarGroup } from './types';
 
 export type FilterBarValueInput = FilterBarItem[] | FilterBarExpression;
@@ -127,6 +134,28 @@ export const insertItem = (
 ): FilterBarExpression => {
   if (!groupId || groupId === ROOT_GROUP_ID) return { ...expr, nodes: [...expr.nodes, item] };
   return { ...expr, nodes: mapGroup(expr.nodes, groupId, group => ({ ...group, nodes: [...group.nodes, item] })) };
+};
+
+type FilterBarCondition = Pick<FilterBarItem, 'operatorId' | 'value'>;
+
+/**
+ * Folds a new filter into the one its field already holds. Both values join under the `many`
+ * operator they share (`is a` + `is b` → `is any of a, b`) when the field allows it; otherwise
+ * the new filter replaces the old one. `operators` are the ones the field allows.
+ */
+export const mergeCondition = (
+  existing: FilterBarCondition,
+  next: FilterBarCondition,
+  operators: FilterBarOperator[],
+): FilterBarCondition => {
+  const manyOf = (operatorId: string) => {
+    const operator = operators.find(o => o.id === operatorId);
+    return operator?.arity === 'many' ? operator.id : operator?.widensTo;
+  };
+  const many = manyOf(existing.operatorId);
+  if (!many || many !== manyOf(next.operatorId) || !operators.some(o => o.id === many)) return next;
+  const values = [existing.value, next.value].flat().filter(v => v !== '');
+  return { operatorId: many, value: values.filter((v, i) => values.indexOf(v) === i) };
 };
 
 export const setGroupLogic = (

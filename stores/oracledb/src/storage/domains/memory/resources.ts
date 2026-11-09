@@ -1,5 +1,5 @@
 import { MastraError } from '@mastra/core/error';
-import type { StorageResourceType } from '@mastra/core/storage';
+import type { RunFence, StorageResourceType } from '@mastra/core/storage';
 import { TABLE_RESOURCES } from '@mastra/core/storage';
 import type { Connection } from 'oracledb';
 
@@ -7,7 +7,14 @@ import { executeOptions, jsonBind, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
 import { toDate } from '../../domain-utils';
 import { RESOURCE_CREATED_AT, RESOURCE_UPDATED_AT, RESOURCE_WORKING_MEMORY } from './schema';
-import { optionalClobStringBind, parseJson, parseOptionalString, storageError, table } from './utils';
+import {
+  assertMemoryFence,
+  optionalClobStringBind,
+  parseJson,
+  parseOptionalString,
+  storageError,
+  table,
+} from './utils';
 import type { MemoryContext } from './utils';
 
 // Resource working memory: one row per resourceId, upserted the same way
@@ -95,26 +102,34 @@ export async function updateResource(
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   },
 ): Promise<StorageResourceType> {
   const existing = await ctx.getResourceById({ resourceId });
-  if (!existing) {
-    const resource: StorageResourceType = {
-      id: resourceId,
-      workingMemory,
-      metadata: metadata ?? {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    return ctx.saveResource({ resource });
-  }
+  const newResource = (): StorageResourceType => ({
+    id: resourceId,
+    workingMemory,
+    metadata: metadata ?? {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  // An unfenced create goes through `saveResource` so overrides of it apply;
+  // a fenced one has to run behind the fence check in a transaction.
+  if (!existing && !fence) return ctx.saveResource({ resource: newResource() });
 
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'updateResource');
+      if (!existing) {
+        const resource = newResource();
+        await mergeResourceRow(ctx, connection, resource);
+        return resource;
+      }
       // Re-read under FOR UPDATE so a concurrent updateResource on the same id
       // cannot interleave between this lock and the MERGE below, which would
       // otherwise let one writer's workingMemory/metadata clobber the other's.

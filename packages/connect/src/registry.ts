@@ -1,12 +1,14 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import type { ChannelProviderRegistration } from './providers/channel-provider.js';
+import { CHANNELS as CHANNELS_LIST } from './providers/channels.js';
 import { PROVIDERS as GENERATED_PROVIDERS } from './providers/index.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
 interface ProviderRegistrationBase {
   /** Platform catalog id used to match project connections. */
   integrationId: string;
-  /** Fallback connection-id environment variable when more than one active connection exists. */
+  /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
 }
 
@@ -29,6 +31,9 @@ export type ProviderRegistration = ProxyProviderRegistration | McpProviderRegist
  */
 export const PROVIDERS: readonly ProviderRegistration[] = GENERATED_PROVIDERS;
 
-export function findRegistration(integrationId: string): ProviderRegistration | undefined {
-  return PROVIDERS.find(p => p.integrationId === integrationId);
-}
+/**
+ * Channel-capable providers with a hand-maintained `channels()` registration.
+ * The launch ships three (Slack, Telegram, Discord); the provider generator
+ * grows to cover new entries when a fourth lands.
+ */
+export const CHANNELS: readonly ChannelProviderRegistration[] = CHANNELS_LIST;

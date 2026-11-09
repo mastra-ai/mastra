@@ -1,5 +1,5 @@
 import { dirname, posix } from 'node:path';
-import { noopLogger } from '@mastra/core/logger';
+import { noopLogger } from '@internal/core/logger';
 import * as pkg from 'empathic/package';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
@@ -28,13 +28,14 @@ export async function getInputOptions(
       externals: true,
     },
     analysisEntries = [entryFile],
-  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions; analysisEntries?: string[] } = {},
+    outputDir: outputDirOption,
+  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions; analysisEntries?: string[]; outputDir?: string } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
-  const outputDir = posix.join(process.cwd(), '.mastra', '.build');
+  const outputDir = outputDirOption ? slash(outputDirOption) : posix.join(process.cwd(), '.mastra', '.build');
 
   const analyzeEntryResult = await analyzeBundle(
     analysisEntries,

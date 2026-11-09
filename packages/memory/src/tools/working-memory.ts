@@ -20,6 +20,19 @@ const SET_WORKING_MEMORY_TOOL_NAME = 'setWorkingMemory';
  * - Primitive values are overwritten
  * - The returned object is always newly constructed and never aliases `update`
  */
+/**
+ * Parses stored JSON working memory. Invalid or empty data yields `null` (start fresh).
+ */
+export function parseWorkingMemoryJson(raw: unknown): Record<string, unknown> | null {
+  if (!raw) return null;
+  if (typeof raw !== 'string') return raw as Record<string, unknown>;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function deepMergeWorkingMemory(
   existing: Record<string, unknown> | null | undefined,
   update: Record<string, unknown> | null | undefined,
@@ -68,7 +81,21 @@ export function deepMergeWorkingMemory(
   return result;
 }
 
-function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>): unknown {
+/** `.nullable()` wraps a schema as `anyOf: [schema, { type: 'null' }]`; unwrap it so its declared fields are visible. */
+function resolveNullableBranch(value: unknown, schema: Record<string, unknown>): Record<string, unknown> {
+  const branches = schema.anyOf ?? schema.oneOf;
+  if (!Array.isArray(branches)) {
+    return schema;
+  }
+
+  const kind = Array.isArray(value) ? 'array' : 'object';
+  const matching = (branches as Record<string, unknown>[]).filter(branch => branch.type === kind);
+  return matching.length === 1 ? matching[0]! : schema;
+}
+
+export function stripNullsFromOptional(value: unknown, rawSchema: Record<string, unknown>): unknown {
+  const schema = resolveNullableBranch(value, rawSchema);
+
   if (Array.isArray(value)) {
     const itemSchema = (schema.items as Record<string, unknown>) ?? {};
     return value.map(item => stripNullsFromOptional(item, itemSchema));
@@ -80,7 +107,9 @@ function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>)
     const result: Record<string, unknown> = {};
 
     for (const [key, propertyValue] of Object.entries(value as Record<string, unknown>)) {
-      if (propertyValue === null && !required.includes(key)) {
+      // Only declared optional properties: an undeclared null key must still reach the schema validator, so strict
+      // schemas can reject it and record-style schemas keep it.
+      if (propertyValue === null && Object.hasOwn(properties, key) && !required.includes(key)) {
         continue;
       }
 
@@ -232,23 +261,6 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
       let workingMemory: string;
 
       if (usesMergeSemantics) {
-        // Schema-based: fetch existing, merge, save
-        const existingRaw = await memory.getWorkingMemory({
-          threadId,
-          resourceId,
-          memoryConfig,
-        });
-
-        let existingData: Record<string, unknown> | null = null;
-        if (existingRaw) {
-          try {
-            existingData = typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw;
-          } catch {
-            // If existing data is not valid JSON, start fresh
-            existingData = null;
-          }
-        }
-
         // Handle case where LLM passes empty object or no memory field
         const memoryInput = workingMemoryInput.memory;
         if (memoryInput === undefined || memoryInput === null) {
@@ -271,7 +283,31 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
           newData = memoryInput;
         }
 
-        const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
+        // Merge atomically in storage when possible so concurrent writers can't drop each other's fields
+        if (
+          scope === 'resource' &&
+          typeof memory.supportsAtomicWorkingMemoryMerge === 'function' &&
+          (await memory.supportsAtomicWorkingMemoryMerge())
+        ) {
+          await memory.mergeWorkingMemory({
+            threadId,
+            resourceId,
+            workingMemory: newData,
+            memoryConfig,
+          });
+          return { success: true };
+        }
+
+        // Fallback: fetch existing, merge, save
+        const existingRaw = await memory.getWorkingMemory({
+          threadId,
+          resourceId,
+          memoryConfig,
+        });
+        const mergedData = deepMergeWorkingMemory(
+          parseWorkingMemoryJson(existingRaw),
+          newData as Record<string, unknown>,
+        );
         workingMemory = JSON.stringify(mergedData);
       } else {
         // Template-based (Markdown): use existing replace semantics

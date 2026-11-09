@@ -1,5 +1,16 @@
 {
   "attachment": ["nvidia/Qwen3.8-27B-NVFP4"],
   "temperature": ["nvidia/Qwen3.8-27B-NVFP4"],
-  "structuredOutput": ["nvidia/Qwen3.8-27B-NVFP4"]
+  "structuredOutput": ["nvidia/Qwen3.8-27B-NVFP4"],
+  "reasoning": {
+    "nvidia/Qwen3.8-27B-NVFP4": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ]
+  }
 }

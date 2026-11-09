@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
+import { checkBundleSize } from '../../utils/deploy-bundle-size.js';
 import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
@@ -336,7 +337,7 @@ async function resolveProject(
     }
 
     const CREATE_NEW = '__create_new__';
-    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : projects[0]!.id;
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : CREATE_NEW;
     const selected = await p.select({
       message: 'Select a project to deploy to',
       initialValue,
@@ -635,9 +636,15 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
+  const zipBuffer = await readFile(zipPath);
+  await checkBundleSize({
+    artifactBytes: zipBuffer.byteLength,
+    outputDir: join(targetDir, '.mastra', 'output'),
+    warn: message => p.log.warn(message),
+  });
+
   t = performance.now();
   s.start('Uploading...');
-  const zipBuffer = await readFile(zipPath);
   const deployResult = await uploadDeploy(token, orgId, projectId, zipBuffer, {
     gitBranch: gitBranch ?? undefined,
     projectName,

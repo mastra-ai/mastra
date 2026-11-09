@@ -1,11 +1,14 @@
-import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
+import { isReservedRequestContextKey } from '../request-context';
 
 /**
  * Builds the JSON-safe requestContext snapshot persisted on score rows.
  *
  * Extracts primitive (string | number | boolean) values, flattening nested objects
  * into dotted keys. Non-primitive values (circular refs, buffers, functions, arrays)
- * are skipped, and the framework-managed bearer token is never included.
+ * are skipped. Reserved Mastra keys (`mastra__*`, `__mastra_*`) are never included:
+ * they hold framework state such as the bearer token and live channel adapters.
+ * Objects that define `serializeForSpan()` contribute that projection instead of
+ * their internals.
  */
 export function snapshotRequestContextForScore(requestContext: unknown): Record<string, string | number | boolean> {
   const safeContext: Record<string, string | number | boolean> = {};
@@ -22,7 +25,7 @@ export function snapshotRequestContextForScore(requestContext: unknown): Record<
       typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
     for (const [key, value] of entries) {
       const flatKey = prefix ? `${prefix}.${key}` : key;
-      if (key === MASTRA_AUTH_TOKEN_KEY) continue;
+      if (isReservedRequestContextKey(key)) continue;
       if (
         typeof value === 'string' ||
         typeof value === 'boolean' ||
@@ -30,10 +33,30 @@ export function snapshotRequestContextForScore(requestContext: unknown): Record<
       ) {
         Object.defineProperty(safeContext, flatKey, { value, enumerable: true, configurable: true, writable: true });
       } else if (value && typeof value === 'object' && !Array.isArray(value) && !ArrayBuffer.isView(value)) {
-        flatten(value as Record<string, unknown>, flatKey, depth + 1);
+        const projected = projectForSnapshot(value);
+        if (projected && typeof projected === 'object') {
+          flatten(projected as Record<string, unknown>, flatKey, depth + 1);
+        }
       }
     }
   };
   flatten(requestContext as Record<string, unknown>);
   return safeContext;
+}
+
+/**
+ * Uses a value's `serializeForSpan()` projection when it has one, so classes that
+ * define their trace shape (e.g. `Workspace`) don't have their internals persisted.
+ * Map-like values (including nested RequestContexts) keep their `entries()` path.
+ */
+function projectForSnapshot(value: object): unknown {
+  const candidate = value as { entries?: unknown; serializeForSpan?: unknown };
+  if (typeof candidate.entries === 'function' || typeof candidate.serializeForSpan !== 'function') {
+    return value;
+  }
+  try {
+    return (candidate.serializeForSpan as () => unknown).call(value);
+  } catch {
+    return undefined;
+  }
 }

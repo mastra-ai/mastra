@@ -1,19 +1,27 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import {
   anthropicStripEmptySignedReasoningContent,
+  anthropicToolIdFormat,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  chatCompletionsSingleSystemMessage,
+  ensureUserFirstTurn,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
   isMaybeGoogleWithoutTrailingModelTurn,
+  isMaybeRequiringUserFirstTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
+  toolCallEmptyInput,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -180,9 +188,9 @@ describe('ProviderHistoryCompat', () => {
     expect(result).toBeUndefined();
   });
 
-  it('should return undefined when retryCount > 0', async () => {
+  it('should return undefined once two repair passes have been spent (retryCount >= 2)', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makeArgs({ retryCount: 1 });
+    const args = makeArgs({ retryCount: 2 });
 
     const result = await handler.processAPIError(args);
 
@@ -431,6 +439,195 @@ describe('isMaybeAzure', () => {
   });
 });
 
+describe('isMaybeRequiringUserFirstTurn', () => {
+  it('matches Bedrock and Google/Vertex provider and gateway forms', () => {
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'amazon-bedrock', modelId: 'amazon.nova-lite-v1:0' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'gateway', modelId: 'amazon/nova-lite' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn('amazon-bedrock/anthropic.claude-sonnet-4-5')).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'google.vertex.chat', modelId: 'gemini-2.5-flash' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'openrouter', modelId: 'google/gemini-2.5-flash' })).toBe(true);
+  });
+
+  it('rejects providers that accept a leading assistant turn', () => {
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'openai.responses', modelId: 'gpt-4o-mini' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'anthropic.messages', modelId: 'claude-haiku-4-5' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'groq.chat', modelId: 'openai/gpt-oss-20b' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'mistral.chat', modelId: 'mistral-small-latest' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn(undefined)).toBe(false);
+  });
+});
+
+describe('chatCompletionsSingleSystemMessage', () => {
+  const user = { role: 'user', content: [{ type: 'text', text: 'hi' }] } as const;
+  const prompt: LanguageModelV2Prompt = [
+    { role: 'system', content: 'AGENT_RULE' },
+    { role: 'system', content: '' },
+    { role: 'system', content: 'PROCESSOR_RULE', providerOptions: { openaiCompatible: { cache: true } } },
+    user,
+    { role: 'system', content: 'MID_CONVERSATION' },
+  ];
+
+  it("merges the leading system messages, keeping the last one's providerOptions", () => {
+    expect(chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt, model: { provider: 'vllm.chat' } })).toEqual([
+      {
+        role: 'system',
+        content: 'AGENT_RULE\n\nPROCESSOR_RULE',
+        providerOptions: { openaiCompatible: { cache: true } },
+      },
+      user,
+      { role: 'system', content: 'MID_CONVERSATION' },
+    ]);
+  });
+
+  it('keys on the resolved API provider id over the model provider', () => {
+    // A router model reports its gateway provider (`groq`); the resolved id is `groq.chat`.
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({
+        prompt,
+        model: { provider: 'groq' },
+        apiProviderId: 'groq.chat',
+      }),
+    ).toHaveLength(3);
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({
+        prompt,
+        model: { provider: 'openai' },
+        apiProviderId: 'openai.responses',
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each(['openai.responses', 'anthropic.messages', 'google.generative-ai', 'amazon-bedrock'])(
+    'leaves %s prompts unchanged',
+    provider => {
+      expect(chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt, model: { provider } })).toBeUndefined();
+    },
+  );
+
+  it('leaves the prompt unchanged when an earlier system message has its own providerOptions', () => {
+    const cached: LanguageModelV2Prompt = [
+      { role: 'system', content: 'A', providerOptions: { openaiCompatible: { cache: true } } },
+      { role: 'system', content: 'B' },
+      user,
+    ];
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt: cached, model: { provider: 'vllm.chat' } }),
+    ).toBeUndefined();
+  });
+});
+
+describe('toolCallEmptyInput', () => {
+  const call = (input: unknown, toolCallId = 'c1') => ({
+    type: 'tool-call',
+    toolCallId,
+    toolName: 'team_status',
+    input,
+  });
+  const result = {
+    role: 'tool',
+    content: [
+      {
+        type: 'tool-result',
+        toolCallId: 'c1',
+        toolName: 'team_status',
+        output: { type: 'error-text', value: 'received invalid arguments' },
+      },
+    ],
+  };
+  const promptWith = (input: unknown) =>
+    [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [call(input)] },
+      result,
+    ] as unknown as LanguageModelV2Prompt;
+
+  it.each([undefined, null])('sends a call with input %j as {}, keeping its paired result', input => {
+    const next = toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: { provider: 'vllm.chat' } });
+    expect(next).toEqual(promptWith({}));
+  });
+
+  it('applies to every provider', () => {
+    for (const provider of ['anthropic.messages', 'openai.responses', 'google.generative-ai', 'amazon-bedrock']) {
+      expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(undefined), model: { provider } })).toEqual(
+        promptWith({}),
+      );
+    }
+  });
+
+  it('leaves real input, including an empty object and an empty string, unchanged', () => {
+    for (const input of [{}, { note: 'hi' }, '']) {
+      expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: {} })).toBeUndefined();
+    }
+  });
+
+  it('skips an assistant message whose content is not an array', () => {
+    const prompt = [{ role: 'assistant', content: 'plain text' }, ...promptWith(undefined)] as any;
+    const result = toolCallEmptyInput.applyToPrompt!({ prompt, model: {} } as any) as any[];
+    expect(result[0]).toEqual({ role: 'assistant', content: 'plain text' });
+    expect(toolCallEmptyInput.applyToPrompt!({ prompt: [prompt[0]], model: {} } as any)).toBeUndefined();
+  });
+
+  it('does not mutate the original prompt', () => {
+    const prompt = promptWith(undefined);
+    toolCallEmptyInput.applyToPrompt!({ prompt, model: {} });
+    expect((prompt[1] as any).content[0].input).toBeUndefined();
+  });
+
+  it('is part of the default ProviderHistoryCompat rule set', () => {
+    const out = new ProviderHistoryCompat().processLLMRequest({
+      prompt: promptWith(undefined),
+      model: { provider: 'anthropic.messages' },
+    } as any);
+    expect(out).toEqual({ prompt: promptWith({}) });
+  });
+});
+
+describe('ensureUserFirstTurn', () => {
+  const bedrock = { provider: 'amazon-bedrock', modelId: 'amazon.nova-lite-v1:0' };
+  const gemini = { provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' };
+  const openai = { provider: 'openai.responses', modelId: 'gpt-4o-mini' };
+  const greeting: LanguageModelV2Prompt = [
+    { role: 'system', content: 'Be terse.' },
+    { role: 'assistant', content: [{ type: 'text', text: 'Hi! How can I help?' }] },
+    { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
+  ];
+
+  it.each([
+    ['Bedrock', bedrock],
+    ['Gemini', gemini],
+  ])('inserts a user turn after system messages for %s', (_name, model) => {
+    const result = ensureUserFirstTurn.applyToPrompt({ prompt: greeting, model });
+
+    expect(result).toEqual([
+      greeting[0],
+      { role: 'user', content: [{ type: 'text', text: '.' }] },
+      greeting[1],
+      greeting[2],
+    ]);
+    expect(greeting).toHaveLength(3);
+  });
+
+  it('leaves the prompt alone for providers that accept a leading assistant turn', () => {
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting, model: openai })).toBeUndefined();
+  });
+
+  it('leaves user-first, system-only and empty prompts alone', () => {
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting.slice(2), model: bedrock })).toBeUndefined();
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting.slice(0, 1), model: bedrock })).toBeUndefined();
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: [], model: bedrock })).toBeUndefined();
+  });
+
+  it('runs as a default ProviderHistoryCompat rule', () => {
+    const handler = new ProviderHistoryCompat();
+
+    expect(handler.processLLMRequest(makeRequestArgs(greeting, bedrock))).toEqual({
+      prompt: [greeting[0], { role: 'user', content: [{ type: 'text', text: '.' }] }, greeting[1], greeting[2]],
+    });
+    expect(handler.processLLMRequest(makeRequestArgs(greeting, openai))).toBeUndefined();
+  });
+});
+
 describe('isMaybeCerebras', () => {
   it('matches the gateway-prefixed model id string', () => {
     expect(isMaybeCerebras('cerebras/zai-glm-4.7')).toBe(true);
@@ -606,6 +803,115 @@ describe('stripForeignProviderExecutedTools', () => {
   });
 });
 
+// #28190: hosted results live inside assistant messages after MessageList conversion.
+describe('model switches after hosted tool results', () => {
+  it.each([
+    ['openai', 'anthropic', false],
+    ['anthropic', 'openai', false],
+    ['openai', 'openai', false],
+    ['anthropic', 'anthropic', false],
+    ['openai', 'anthropic', true],
+    ['anthropic', 'openai', true],
+  ] as const)(
+    'replays complete tool pairs when switching from %s to %s (mixed history: %s) (#28190)',
+    async (source, destination, mixedHistory) => {
+      const sourceModel = new MockLanguageModelV2({
+        provider: 'vercel',
+        modelId: `${source}/source-model`,
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            ...['page-1', 'page-2'].flatMap((toolCallId, index) => [
+              {
+                type: 'tool-call' as const,
+                toolCallId,
+                toolName: 'web_fetch',
+                input: JSON.stringify({ url: `https://example.com/${toolCallId}` }),
+                providerExecuted: true,
+                providerMetadata: { [mixedHistory && index === 1 ? destination : source]: { itemId: toolCallId } },
+              },
+              {
+                type: 'tool-result' as const,
+                toolCallId,
+                toolName: 'web_fetch',
+                result: `Content of ${toolCallId}`,
+                providerExecuted: true,
+              },
+            ]),
+            { type: 'text-start', id: 'summary' },
+            { type: 'text-delta', id: 'summary', delta: 'Fetched both pages.' },
+            { type: 'text-end', id: 'summary' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+      const firstAgent = new Agent({
+        id: 'hosted-tools',
+        name: 'Hosted tools',
+        instructions: 'Fetch both pages.',
+        model: sourceModel,
+      });
+      const firstStream = await firstAgent.stream('Fetch two pages.', { maxSteps: 1 });
+      const first = await firstStream.getFullOutput();
+      expect(first.text).toBe('Fetched both pages.');
+      const history = first.messages;
+      const before = structuredClone(history);
+      const storedCalls = history
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(storedCalls).toHaveLength(2);
+      expect(storedCalls.every(part => part.toolInvocation.state === 'result')).toBe(true);
+
+      const prompts: LanguageModelV2Prompt[] = [];
+      const secondModel = new MockLanguageModelV2({
+        provider: 'vercel',
+        modelId: `${destination}/destination-model`,
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'answer' },
+              { type: 'text-delta', id: 'answer', delta: 'Follow-up accepted.' },
+              { type: 'text-end', id: 'answer' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      });
+      const secondAgent = new Agent({
+        id: 'hosted-tools',
+        name: 'Hosted tools',
+        instructions: 'Answer the follow-up.',
+        model: secondModel,
+      });
+      const secondStream = await secondAgent.stream([...history, { role: 'user', content: 'Summarize the pages.' }]);
+      const second = await secondStream.getFullOutput();
+      expect(second.text).toBe('Follow-up accepted.');
+      expect(prompts).toHaveLength(1);
+      for (const prompt of prompts) {
+        // Hosted pairs must stay embedded in the assistant message, not move to standalone tool messages.
+        expect(prompt.filter(message => message.role === 'tool')).toEqual([]);
+        const parts = prompt.flatMap(message => (message.role === 'assistant' ? message.content : []));
+        const calls = parts.filter(part => part.type === 'tool-call');
+        const results = parts.filter(part => part.type === 'tool-result');
+        // Every result crossing the provider boundary must still have its call.
+        expect(results.map(part => part.toolCallId)).toEqual(calls.map(part => part.toolCallId));
+        const expectedIds = source === destination ? ['page-1', 'page-2'] : mixedHistory ? ['page-2'] : [];
+        expect(calls.map(part => part.toolCallId)).toEqual(expectedIds);
+        expect(results.map(part => part.toolCallId)).toEqual(expectedIds);
+        if (mixedHistory) {
+          expect(results).toContainEqual(
+            expect.objectContaining({ toolCallId: 'page-2', output: { type: 'text', value: 'Content of page-2' } }),
+          );
+        }
+        expect(parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Fetched both pages.' }));
+      }
+      expect(history).toEqual(before);
+    },
+  );
+});
+
 describe('anthropicStripForeignReasoningContent', () => {
   it('strips foreign reasoning parts from assistant messages when model is Anthropic', () => {
     const result = anthropicStripForeignReasoningContent.applyToPrompt!({
@@ -740,27 +1046,6 @@ describe('trailing assistant message protection', () => {
     expect((result![1].content as any[]).map(p => p.type)).toEqual(['tool-call']);
   });
 
-  it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
-    const prompt = toolContinuationPrompt();
-    // Give the historical assistant an empty signed block so the rule has
-    // something to strip outside the protected message.
-    (prompt[1].content as any[]).unshift({
-      type: 'reasoning',
-      text: '',
-      providerOptions: { anthropic: { signature: 'sig-legacy' } },
-    });
-
-    const result = anthropicStripEmptySignedReasoningContent.applyToPrompt!({
-      prompt,
-      model: anthropicModel,
-    });
-
-    expect(result).toBeDefined();
-    expect((result![1].content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
-    // Trailing assistant keeps its empty signed block untouched
-    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
-  });
-
   it('still strips the last assistant message when a new user turn follows it', () => {
     const prompt = toolContinuationPrompt();
     prompt.push({ role: 'user', content: [{ type: 'text', text: 'next question' }] });
@@ -772,6 +1057,33 @@ describe('trailing assistant message protection', () => {
 
     expect(result).toBeDefined();
     expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
+  });
+
+  it('omits assistant messages that become empty after stripping foreign reasoning', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'foreign thinking only',
+            providerOptions: { openai: { itemId: 'rs_123' } },
+          },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'what is 2+2?' }] },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.length).toBe(2);
+    expect(result![0].role).toBe('user');
+    expect(result![1].role).toBe('user');
   });
 });
 
@@ -969,6 +1281,46 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(result).toEqual({ prompt: expect.any(Array) });
     const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+  });
+
+  it('keeps Claude 5.x signed thinking blocks with omitted (empty) text on every request (#28309)', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'roll' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-1' } } },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'roll', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'roll', output: { type: 'text', value: '4' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-2' } } },
+          { type: 'tool-call', toolCallId: 'call-2', toolName: 'roll', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-2', toolName: 'roll', output: { type: 'text', value: '5' } },
+        ],
+      },
+    ];
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(prompt, { provider: 'anthropic.messages', modelId: 'claude-sonnet-5-5' }),
+    );
+
+    // Any rewrite would change the cached prefix; the prompt must go out untouched.
+    expect(result).toBeUndefined();
   });
 
   it('strips foreign reasoning parts from the prompt on Anthropic', async () => {
@@ -1941,5 +2293,591 @@ describe('openaiOrphanItemId', () => {
       expect(namespace).not.toHaveProperty('itemId');
       expect(namespace).not.toHaveProperty('resultItemId');
     }
+  });
+});
+
+describe('anthropicOrphanedThinkingStep', () => {
+  /** The real Anthropic 400 from #22798. */
+  function createThinkingModifiedError() {
+    const message =
+      'messages.1.content.1: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.';
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+      isRetryable: false,
+    });
+  }
+
+  const reasoning = (signature: string) => ({
+    type: 'reasoning' as const,
+    reasoning: '',
+    details: [{ type: 'text' as const, text: `thinking ${signature}`, signature }],
+    providerMetadata: { anthropic: { signature } },
+  });
+  const toolInvocation = (toolCallId: string, toolName: string) => ({
+    type: 'tool-invocation' as const,
+    toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result: 'ok' },
+  });
+  const assistant = (id: string, parts: MastraDBMessage['content']['parts'], toolNames: string[] = []) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(),
+    content: {
+      format: 2 as const,
+      parts,
+      toolInvocations: toolNames.map((toolName, i) => toolInvocation(`call-${i}`, toolName).toolInvocation),
+    },
+  });
+
+  /** Stored by older @mastra/memory: the updateWorkingMemory call was stripped, its thinking kept. */
+  const corruptedAssistant = () =>
+    assistant(
+      'msg-corrupted',
+      [
+        { type: 'step-start' },
+        reasoning('SIG_A'),
+        { type: 'step-start' },
+        reasoning('SIG_B'),
+        { type: 'text', text: 'Done' },
+        toolInvocation('call-1', 'lookupWeather'),
+      ],
+      ['updateWorkingMemory', 'lookupWeather'],
+    );
+
+  function argsFor(build: (list: MessageList) => void, overrides: Partial<ProcessAPIErrorArgs> = {}) {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: createThinkingModifiedError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+      ...overrides,
+    } satisfies ProcessAPIErrorArgs;
+  }
+
+  const assistantPromptShapes = (list: MessageList) =>
+    list.get.all.aiV5
+      .prompt()
+      .flatMap(message =>
+        message.role === 'assistant' && Array.isArray(message.content)
+          ? [
+              message.content.map(part =>
+                part.type === 'reasoning'
+                  ? `reasoning:${(part.providerOptions?.anthropic as any)?.signature}`
+                  : part.type,
+              ),
+            ]
+          : [],
+      );
+
+  it('drops the orphaned thinking step and retries so the replay no longer merges it into the next step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([corruptedAssistant()], 'memory');
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text', 'tool-call'],
+    ]);
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text', 'tool-call']]);
+  });
+
+  it('treats whitespace-only text as empty when finding an orphaned thinking step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '\n\n' },
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text']]);
+  });
+
+  it('finds the orphaned thinking step after a tool part when its step-start marker is missing', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            reasoning('SIG_0'),
+            toolInvocation('call-0', 'lookupWeather'),
+            reasoning('SIG_A'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+  });
+
+  it('drops a trailing thinking-only step when the next stored message is also from the assistant', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([assistant('msg-a', [{ type: 'step-start' }, reasoning('SIG_A')])], 'memory');
+      list.add(
+        [assistant('msg-b', [{ type: 'step-start' }, reasoning('SIG_B'), { type: 'text', text: 'Done' }])],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(JSON.stringify(args.messageList.get.all.aiV5.prompt())).not.toContain('SIG_A');
+  });
+
+  it('leaves healthy thinking steps alone and does not retry', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-healthy', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            toolInvocation('call-0', 'lookupWeather'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('thanks')], 'input');
+    });
+    const before = JSON.stringify(args.messageList.get.all.db());
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(JSON.stringify(args.messageList.get.all.db())).toBe(before);
+  });
+
+  it('keeps a thinking-only step at the end of the conversation', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([assistant('msg-a', [{ type: 'step-start' }, reasoning('SIG_A')])], 'memory');
+      list.add([createUserMessage('still there?')], 'input');
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+  });
+
+  it('does not fire on other errors', async () => {
+    const args = argsFor(
+      list => {
+        list.add([createUserMessage('weather?')], 'input');
+        list.add([corruptedAssistant()], 'memory');
+      },
+      { error: createRateLimitError() },
+    );
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(JSON.stringify(args.messageList.get.all.db())).toContain('SIG_A');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropicToolIdFormat — preemptive (prompt-scoped) tool-ID repair
+// ---------------------------------------------------------------------------
+
+describe('anthropicToolIdFormat.applyToPrompt', () => {
+  const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+
+  function promptWithToolPair(ids: { call: string; result?: string }): LanguageModelV2Prompt {
+    return [
+      { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Searching.' },
+          { type: 'tool-call', toolCallId: ids.call, toolName: 'search', input: { query: 'Mastra' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: ids.result ?? ids.call,
+            toolName: 'search',
+            output: { type: 'text', value: 'result' },
+          },
+        ],
+      },
+    ];
+  }
+
+  const idsIn = (prompt: LanguageModelV2Prompt) =>
+    prompt
+      .flatMap(message => (message.content as any[]).map(part => (part as { toolCallId?: string }).toolCallId))
+      .filter((id): id is string => typeof id === 'string');
+
+  it('rewrites an invalid tool-call id for an Anthropic model and leaves valid ids alone', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    expect(result).toBeDefined();
+    expect(idsIn(result!)).toEqual(['call_abc_1', 'call_abc_1']);
+  });
+
+  it('preserves call/result pairing when rewriting', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    const [callId, resultId] = idsIn(result!);
+    expect(callId).toBe(resultId);
+    expect(callId).toMatch(/^[a-zA-Z0-9_-]+$/);
+  });
+
+  it('returns undefined for a non-Anthropic model', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: 'openai/gpt-5',
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when every id is already valid', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call_abc_1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not mutate the prompt it receives', () => {
+    const prompt = promptWithToolPair({ call: 'call.abc:1' });
+    const before = structuredClone(prompt);
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    expect(result).not.toBe(prompt);
+    expect(prompt).toEqual(before);
+  });
+
+  it('resolves collisions against ids already present, deterministically', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'a.b', toolName: 'one', input: {} },
+          { type: 'tool-call', toolCallId: 'a_b', toolName: 'two', input: {} },
+        ],
+      },
+    ];
+
+    const first = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+    const second = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    const ids = idsIn(first!);
+    // `a.b` sanitizes to `a_b`, which the prompt already claims, so it gets a suffix.
+    expect(ids).toEqual(['a_b_2', 'a_b']);
+    expect(new Set(ids).size).toBe(2);
+    for (const id of ids) expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    // Same input, same output — no dependence on Set/Map iteration timing.
+    expect(idsIn(second!)).toEqual(ids);
+  });
+
+  it('assigns distinct replacements when two calls share one invalid original id', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'one', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'dup.id', toolName: 'one', output: { type: 'text', value: 'first' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'two', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'dup.id', toolName: 'two', output: { type: 'text', value: 'second' } },
+        ],
+      },
+    ];
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    expect(result).toBeDefined();
+    const [firstCall, firstResult, secondCall, secondResult] = idsIn(result!);
+    // Every outbound tool_use.id is unique — Anthropic rejects duplicates.
+    expect(new Set([firstCall, secondCall]).size).toBe(2);
+    // Pairing is preserved: each result keeps the id of its call, in order.
+    expect(firstResult).toBe(firstCall);
+    expect(secondResult).toBe(secondCall);
+    for (const id of [firstCall, firstResult, secondCall, secondResult]) {
+      expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    }
+  });
+
+  it('is reached through ProviderHistoryCompat.processLLMRequest', async () => {
+    const handler = new ProviderHistoryCompat();
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(promptWithToolPair({ call: 'call.abc:1' }), ANTHROPIC_MODEL),
+    );
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    expect(idsIn((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual(['call_abc_1', 'call_abc_1']);
+  });
+
+  it('keeps the reactive fix working for direct callers', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createAssistantMessageWithToolCall('call:abc.123', 'searchTool', { query: 'test' })], 'response');
+
+    const changed = anthropicToolIdFormat.fix!(messageList.get.all.db());
+
+    expect(changed).toBe(true);
+    const ids = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => (part as any).toolInvocation.toolCallId);
+    expect(ids).toEqual(['call_abc_123']);
+  });
+});
+
+describe('anthropicToolIdFormat is prompt-scoped, not persisted', () => {
+  it('leaves the ids in the message list untouched', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('search for this')], 'input');
+    messageList.add([createAssistantMessageWithToolCall('call.abc:1', 'search', { query: 'Mastra' })], 'response');
+    messageList.add([createUserMessage('thanks')], 'input');
+
+    const result = await handler.processLLMRequest({
+      ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: 'anthropic.messages' }),
+      messageList,
+    });
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+
+    const persistedIds = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => (part as any).toolInvocation.toolCallId);
+    expect(persistedIds).toEqual(['call.abc:1']);
+  });
+});
+
+describe('anthropicStripEmptySignedReasoningContent (reactive)', () => {
+  const thinkingModifiedError = () => {
+    const message =
+      'messages.1.content.0: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.';
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+      isRetryable: false,
+    });
+  };
+
+  const reasoning = (signature: string, text: string) => ({
+    type: 'reasoning' as const,
+    reasoning: text,
+    details: text ? [{ type: 'text' as const, text, signature }] : [],
+    providerMetadata: { anthropic: { signature } },
+  });
+
+  const assistant = (id: string, parts: MastraDBMessage['content']['parts']) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(),
+    content: { format: 2 as const, parts },
+  });
+
+  const signatures = (list: MessageList) =>
+    list.get.all
+      .db()
+      .flatMap(m =>
+        m.role === 'assistant'
+          ? [
+              m.content.parts
+                .filter(p => p.type === 'reasoning')
+                .map(p => (p as any).providerMetadata.anthropic.signature),
+            ]
+          : [],
+      );
+
+  function argsFor(build: (list: MessageList) => void) {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: thinkingModifiedError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+    } satisfies ProcessAPIErrorArgs;
+  }
+
+  it('repairs an orphaned thinking step without dropping a valid empty signed block from an earlier message', async () => {
+    // Both rules match this 400 and the first one that changes history wins, so the orphaned-step
+    // repair has to run first: otherwise the strip rule removes the valid Claude 5.x block, the retry
+    // still fails on the orphaned step, and the retryCount guard turns it into a hard failure.
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('VALID_EMPTY', ''), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [
+          assistant('a2', [
+            { type: 'step-start' },
+            reasoning('ORPHANED', 'lost step thinking'),
+            { type: 'step-start' },
+            reasoning('NEXT', 'next step thinking'),
+            { type: 'text', text: 'two' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([['VALID_EMPTY'], ['NEXT']]);
+  });
+
+  it('recovers a history that needs both the orphaned-step repair and the empty-signed strip, within a bounded second pass', async () => {
+    // One legacy thread can hold an orphaned thinking step and a corrupted empty signed block. They
+    // raise the same 400, only the first repair that changes history runs per pass, so the retry
+    // fails again and needs a second pass. The pass count stays bounded.
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('LEGACY_EMPTY', ''), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [
+          assistant('a2', [
+            { type: 'step-start' },
+            reasoning('ORPHANED', 'lost step thinking'),
+            { type: 'step-start' },
+            reasoning('NEXT', 'next step thinking'),
+            { type: 'text', text: 'two' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    const compat = new ProviderHistoryCompat();
+
+    expect(await compat.processAPIError({ ...args, retryCount: 0 })).toEqual({ retry: true });
+    expect(await compat.processAPIError({ ...args, retryCount: 1 })).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([[], ['NEXT']]);
+    expect(await compat.processAPIError({ ...args, retryCount: 2 })).toBeUndefined();
+  });
+
+  it('drops legacy empty signed blocks from earlier messages after the 400, keeping valid ones and the trailing assistant', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [
+          assistant('a1', [
+            { type: 'step-start' },
+            reasoning('LEGACY', ''),
+            reasoning('VALID', 'real thinking'),
+            { type: 'text', text: 'one' },
+          ]),
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [assistant('a2', [{ type: 'step-start' }, reasoning('TRAILING', ''), { type: 'text', text: 'two' }])],
+        'memory',
+      );
+    });
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([['VALID'], ['TRAILING']]);
+  });
+
+  it('does nothing when the history has no empty signed blocks', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('VALID', 'thinking'), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+  });
+
+  it('is not triggered by unrelated errors', async () => {
+    const args = {
+      ...argsFor(list => {
+        list.add([createUserMessage('q1')], 'input');
+        list.add([assistant('a1', [reasoning('LEGACY', ''), { type: 'text', text: 'one' }])], 'memory');
+        list.add([createUserMessage('q2')], 'input');
+      }),
+      error: new Error('rate limited'),
+    };
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(signatures(args.messageList)).toEqual([['LEGACY']]);
   });
 });

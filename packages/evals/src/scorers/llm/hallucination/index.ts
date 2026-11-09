@@ -88,14 +88,16 @@ export function createHallucinationScorer({
       },
     })
     .generateScore(({ results }) => {
-      const totalStatements = results.analyzeStepResult.verdicts.length;
-      const contradictedStatements = results.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
+      const verdicts = results.analyzeStepResult.verdicts;
+      // Score against the extracted claims so verdicts the judge omitted are not dropped from the denominator
+      const totalStatements = results.preprocessStepResult?.claims?.length || verdicts.length;
+      const contradictedStatements = verdicts.filter(v => v.verdict.toLowerCase().trim() === 'yes').length;
 
       if (totalStatements === 0) {
         return 0;
       }
 
-      const score = (contradictedStatements / totalStatements) * (options?.scale || 1);
+      const score = Math.min(1, contradictedStatements / totalStatements) * (options?.scale || 1);
 
       return roundToTwoDecimals(score);
     })

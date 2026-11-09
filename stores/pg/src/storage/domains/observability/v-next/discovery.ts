@@ -38,6 +38,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import type { DbClient } from '../../../client';
+import { toPgJson } from '../../../db/sanitize-json';
 import {
   qualifiedTable,
   TABLE_DISCOVERY,
@@ -304,7 +305,7 @@ async function upsertCache(client: DbClient, schema: string, cacheKey: string, v
      ON CONFLICT ("cacheKey") DO UPDATE SET
        "refreshedAt" = EXCLUDED."refreshedAt",
        "values" = EXCLUDED."values"`,
-    [cacheKey, JSON.stringify(values)],
+    [cacheKey, toPgJson(values)],
   );
 }
 

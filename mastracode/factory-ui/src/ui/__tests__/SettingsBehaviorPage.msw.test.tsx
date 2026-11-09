@@ -12,6 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -45,21 +46,13 @@ function stubBehaviorPage() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
+            id: FACTORY_ID,
+            name: 'Mastra',
             repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/mastra',
-                repository: { slug: 'org/mastra', defaultBranch: 'main' },
-              },
+              listedRepository(REPO_ID, 'org/mastra', { branch: 'main', sandboxWorkdir: '/workspace/mastra' }),
             ],
           },
         ],
@@ -138,12 +131,16 @@ describe('Behavior settings page (factory scope)', () => {
 
     renderBehaviorSettings();
 
-    const readGroup = await screen.findByRole('group', { name: 'Read permission' });
-    const readAllow = within(readGroup).getByRole('button', { name: 'Allow' });
+    const readGroup = await screen.findByRole('radiogroup', { name: 'Read permission' });
+    const readAllow = within(readGroup).getByRole('radio', { name: 'Allow' });
     await waitFor(() => expect(readAllow).toBeEnabled());
     expect(seen.permissionResourceIds).toContain(FACTORY_RESOURCE_ID);
 
     await user.click(readAllow);
+
+    // Optimistic: selected right away, and the control never locks while the write is in flight.
+    expect(readAllow).toHaveAttribute('aria-checked', 'true');
+    expect(readAllow).toBeEnabled();
 
     await waitFor(() => expect(seen.permissionWrites).toHaveLength(1));
     expect(seen.permissionWrites[0]).toEqual({

@@ -2,7 +2,6 @@
 title: "PostgreSQL | Database"
 description: "Persist Mastra application data in PostgreSQL with PostgresStore, configure connections and pools, initialize schemas, and enable observability."
 packages:
-  - "@mastra/core"
   - "@mastra/memory"
   - "@mastra/pg"
 ---
@@ -229,6 +228,37 @@ const storage = new PostgresStoreVNext({
 
 Lower `lookbackSeconds` if refreshes are slow, and raise `ttlSeconds` if they run more often than your filter values change. Only one process refreshes a given cache entry at a time, so adding server instances doesn't multiply the work.
 
+#### Day partitions
+
+`PostgresStoreVNext` stores observability events in tables partitioned by day. If TimescaleDB or pg_partman is installed, that extension creates partitions for you. Without an extension, `init()` creates the partitions for yesterday, today, and the next `futureDays` days (default 14), and a write that lands on a day inside that window with no partition creates it before it retries, so writes keep working after the pre-created window runs out. Rows dated outside the window are still rejected.
+
+Creating a partition is DDL. If the role your app runs with cannot create tables, or does not own the observability tables, the write fails with an error that names the table and the missing day, and the exporter drops that batch after its retries. In that setup, call `ensurePartitions()` on a schedule, at least once every `futureDays` days, with a role that can create tables and owns the observability tables. It only extends the native day-partition window, and does nothing with TimescaleDB or pg_partman. You can also install TimescaleDB, or pg_partman with its background worker or a scheduled `run_maintenance()` call, so the database maintains the partitions itself.
+
+A larger `futureDays` gives the scheduled job more time between runs:
+
+```typescript
+import { PostgresStoreVNext } from '@mastra/pg'
+
+const storage = new PostgresStoreVNext({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  observability: {
+    connectionString: process.env.OBSERVABILITY_DATABASE_URL,
+    partitioning: {
+      futureDays: 60, // pre-create 60 days of partitions on init()
+    },
+  },
+})
+```
+
+Then call `ensurePartitions()` from the scheduled job:
+
+```typescript
+// OBSERVABILITY_DATABASE_URL connects as a role that owns the observability tables
+await storage.ensurePartitions()
+await storage.close()
+```
+
 ### Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
@@ -268,6 +298,52 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 :::warning
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
+
+### Managed PostgreSQL and connection poolers
+
+`PostgresStore` connects to managed PostgreSQL providers with the connection string they give you. No provider-specific package is required.
+
+`init()` runs all schema changes on a single connection, so it works through transaction-mode connection poolers such as PgBouncer. You can use the provider's pooled connection string and let Mastra create the schema on startup.
+
+#### Separate schema initialization
+
+If the runtime database role can't create tables or indexes, run `init()` once during deployment with a role that can:
+
+```typescript title="scripts/init-storage.ts"
+import { PostgresStore } from '@mastra/pg'
+
+const storage = new PostgresStore({
+  id: 'pg-storage-init',
+  connectionString: process.env.DATABASE_ADMIN_URL,
+})
+
+try {
+  await storage.init()
+  // Only needed if the application uses Knowledge
+  await storage.initKnowledge()
+} finally {
+  await storage.close()
+}
+```
+
+The runtime role needs read and write access to the tables this script creates. See [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html).
+
+Then set `disableInit: true` on the runtime store so it skips schema creation:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'pg-storage',
+    connectionString: process.env.DATABASE_URL,
+    disableInit: true,
+  }),
+})
+```
+
+`disableInit: true` also makes explicit `init()` calls a no-op, so leave it off the store in the deployment script.
 
 ### Using an Existing Pool
 
@@ -488,14 +564,14 @@ PostgreSQL storage provides index management to optimize query performance.
 PostgreSQL storage creates composite indexes during initialization for common query patterns:
 
 - `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
-- `mastra_messages_thread_id_createdat_idx`: (thread\_id, createdAt DESC)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
 - `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt DESC)
 - `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt DESC)
 - `mastra_ai_spans_name_startedat_idx`: (name, startedAt DESC)
 - `mastra_ai_spans_scope_startedat_idx`: (scope, startedAt DESC)
 - `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt DESC)
-- `mastra_workflow_snapshot_name_createdat_idx`: (workflow\_name, createdAt DESC)
-- `mastra_workflow_snapshot_name_status_createdat_idx`: (workflow\_name, snapshot->>'status', createdAt DESC), created only when the `snapshot` column is `jsonb`
+- `mastra_workflow_snapshot_name_createdat_idx`: (workflow_name, createdAt DESC)
+- `mastra_workflow_snapshot_name_status_createdat_idx`: (workflow_name, snapshot->>'status', createdAt DESC), created only when the `snapshot` column is `jsonb`
 
 These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries and Studio's workflow runs-list.
 

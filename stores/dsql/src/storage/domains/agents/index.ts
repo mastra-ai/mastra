@@ -61,6 +61,7 @@ export class AgentsDSQL extends AgentsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for agents domain
@@ -69,6 +70,11 @@ export class AgentsDSQL extends AgentsStorage {
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
+      ifNotExists: ['modelList'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -165,6 +171,7 @@ export class AgentsDSQL extends AgentsStorage {
     const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
     const now = new Date();
     const nowIso = now.toISOString();
+    let draftInserted = false;
 
     try {
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
@@ -188,6 +195,7 @@ export class AgentsDSQL extends AgentsStorage {
           ],
         ),
       );
+      draftInserted = true;
 
       // 2. Extract config fields from the flat input
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
@@ -214,17 +222,20 @@ export class AgentsDSQL extends AgentsStorage {
         updatedAt: now,
       };
     } catch (error) {
-      if (error instanceof MastraError) throw error;
-      // Best-effort cleanup to prevent orphaned draft records
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [agent.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [agent.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'CREATE_AGENT', 'FAILED'),
@@ -451,22 +462,23 @@ export class AgentsDSQL extends AgentsStorage {
         this.#db.client.none(
           `INSERT INTO ${tableName} (
               id, "agentId", "versionNumber",
-              name, description, instructions, model, tools,
+              name, description, instructions, model, "modelList", tools,
               "defaultOptions", workflows, agents, "integrationTools",
               "inputProcessors", "outputProcessors", memory, scorers,
               "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
               durable,
               "changedFields", "changeMessage",
               "createdAt", "createdAtZ"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
           [
             input.id,
             input.agentId,
             input.versionNumber,
             input.name,
             input.description ?? null,
-            this.serializeInstructions(input.instructions),
-            JSON.stringify(input.model),
+            this.serializeInstructions(input.instructions) ?? '',
+            JSON.stringify(input.model ?? {}),
+            input.modelList ? JSON.stringify(input.modelList) : null,
             input.tools ? JSON.stringify(input.tools) : null,
             input.defaultOptions ? JSON.stringify(input.defaultOptions) : null,
             input.workflows ? JSON.stringify(input.workflows) : null,
@@ -729,6 +741,7 @@ export class AgentsDSQL extends AgentsStorage {
       description: row.description as string | undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
       model: this.parseJson(row.model, 'model'),
+      modelList: this.parseJson(row.modelList, 'modelList'),
       tools: this.parseJson(row.tools, 'tools'),
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
       workflows: this.parseJson(row.workflows, 'workflows'),

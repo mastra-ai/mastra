@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { BadgeWrapper } from '../../components/badge-wrapper';
 import { SectionLabel } from '../../components/section-label';
 import type { MessageMetadata } from '../../messages/message-metadata';
 import type { CodeModeResult } from '../code-mode';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+import { Code } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { formatTypeScript } from '@/utils/formatting';
 
-export interface CodeModeBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+const CodeToolIcon = agentGlyph('inspecting');
+
+export interface CodeModeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
   code: string;
   result?: CodeModeResult;
@@ -54,9 +56,17 @@ export const CodeModeBadge = ({
   }, [code]);
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="code-mode-badge"
-      icon={<ToolCoinIcon className="text-accent6" />}
+      icon={<CodeToolIcon className="text-span-tool" />}
       title={toolName}
       initialCollapsed={!toolApprovalMetadata}
     >
@@ -71,14 +81,11 @@ export const CodeModeBadge = ({
         {error && (
           <div>
             <SectionLabel>Error</SectionLabel>
-            <pre
+            <Code
               data-testid="code-mode-error"
-              className="rounded-md bg-muted px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap text-error"
-            >
-              {error.name ? `${error.name}: ` : ''}
-              {error.message}
-              {typeof error.line === 'number' ? ` (line ${error.line})` : ''}
-            </pre>
+              className="rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap text-destructive-foreground"
+              code={`${error.name ? `${error.name}: ` : ''}${error.message}${typeof error.line === 'number' ? ` (line ${error.line})` : ''}`}
+            />
           </div>
         )}
 
@@ -86,12 +93,11 @@ export const CodeModeBadge = ({
           <div>
             <SectionLabel>Result</SectionLabel>
             {typeof resultValue === 'string' ? (
-              <pre
-                className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap"
+              <Code
+                className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
                 data-testid="code-mode-result"
-              >
-                {resultValue}
-              </pre>
+                code={resultValue}
+              />
             ) : (
               <CodeEditor data={resultValue as Record<string, unknown>} data-testid="code-mode-result" />
             )}
@@ -101,24 +107,14 @@ export const CodeModeBadge = ({
         {logs.length > 0 && (
           <div>
             <SectionLabel>Logs</SectionLabel>
-            <pre
+            <Code
               data-testid="code-mode-logs"
-              className="max-h-60 overflow-auto rounded-md bg-black px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap text-neutral-300"
-            >
-              {logs.join('\n')}
-            </pre>
+              className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
+              code={logs.join('\n')}
+            />
           </div>
         )}
-
-        <ToolApprovalButtons
-          toolCalled={toolCalled}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          toolName={toolName}
-          isNetwork={isNetwork}
-          isGenerateMode={metadata?.mode === 'generate'}
-        />
       </div>
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

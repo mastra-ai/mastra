@@ -114,6 +114,25 @@ export const backgroundTaskEntity = new Entity({
       type: 'string',
       required: false,
     },
+    // Execution ownership lease — see BackgroundTask.ownerId
+    ownerId: {
+      type: 'string',
+      required: false,
+    },
+    leaseExpiresAtIso: {
+      type: 'string',
+      required: false,
+    },
+    // Owner-defined retention deadline — see BackgroundTask.expiresAt
+    expiresAtIso: {
+      type: 'string',
+      required: false,
+    },
+    metadata: {
+      type: 'string',
+      required: false,
+      ...jsonSetGet,
+    },
   },
   indexes: {
     primary: {

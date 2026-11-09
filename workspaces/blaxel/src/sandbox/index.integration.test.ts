@@ -499,7 +499,8 @@ if (hasBlaxelCredentials) {
       supportsEnvVars: true,
       supportsWorkingDirectory: true,
       supportsTimeout: true,
-      supportsStdin: false, // Blaxel SDK does not support stdin
+      supportsStdin: true,
+      supportsCloseStdin: true,
       defaultCommandTimeout: 30000,
     },
     testTimeout: 60000,

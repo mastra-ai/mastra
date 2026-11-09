@@ -122,17 +122,22 @@ export class AssistantMessageComponent extends Container {
       nextOrder.push(node.key);
     }
 
-    const structureChanged =
-      nextOrder.length !== this.renderOrder.length || nextOrder.some((key, index) => key !== this.renderOrder[index]);
-    if (structureChanged) {
-      this.contentContainer.clear();
-      for (const key of nextOrder) {
-        this.contentContainer.addChild(nextNodes.get(key)!.component);
-      }
-    }
-
     this.renderNodes = nextNodes;
     this.renderOrder = nextOrder;
+    this.syncVisibleChildren();
+  }
+
+  private syncVisibleChildren(): void {
+    const visible = this.renderOrder.map(key => this.renderNodes.get(key)!.component);
+
+    const current = this.contentContainer.children;
+    const changed =
+      current.length !== visible.length || visible.some((component, index) => component !== current[index]);
+    if (!changed) return;
+    this.contentContainer.clear();
+    for (const component of visible) {
+      this.contentContainer.addChild(component);
+    }
   }
 
   private createRenderNode(node: RenderNode): OwnedRenderNode {
@@ -167,7 +172,6 @@ export class AssistantMessageComponent extends Container {
 
   private buildRenderNodes(): RenderNode[] {
     const nodes: RenderNode[] = [];
-    let hiddenThinkingRunStart: number | undefined;
 
     for (let index = 0; index < this.sourceParts.length; index++) {
       const part = this.sourceParts[index]!;
@@ -175,7 +179,6 @@ export class AssistantMessageComponent extends Container {
       if (!text) continue;
 
       if (part.kind === 'text') {
-        hiddenThinkingRunStart = undefined;
         nodes.push({
           key: `part:${index}:text`,
           kind: 'markdown',
@@ -184,32 +187,15 @@ export class AssistantMessageComponent extends Container {
         continue;
       }
 
-      if (!this.hideThinkingBlock) {
-        hiddenThinkingRunStart = undefined;
-        nodes.push({
-          key: `part:${index}:thinking`,
-          kind: 'thinking-markdown',
-          text: sanitizeAnsiForRendering(text),
-        });
-        nodes.push({ key: `part:${index}:thinking-spacer`, kind: 'spacer' });
-        continue;
-      }
+      // Hidden thinking stays out of the chat; the status line above the input shows "Thinking" instead.
+      if (this.hideThinkingBlock) continue;
 
-      if (hiddenThinkingRunStart === undefined) {
-        hiddenThinkingRunStart = index;
-        nodes.push({
-          key: `part:${index}:hidden-thinking`,
-          kind: 'text',
-          text: theme.italic(theme.fg('thinkingText', 'Thinking...')),
-        });
-      }
-
-      const nextRenderedIndex = this.sourceParts.findIndex((candidate, candidateIndex) => {
-        return candidateIndex > index && candidate.text.trim().length > 0;
+      nodes.push({
+        key: `part:${index}:thinking`,
+        kind: 'thinking-markdown',
+        text: sanitizeAnsiForRendering(text),
       });
-      if (nextRenderedIndex !== -1 && this.sourceParts[nextRenderedIndex]?.kind === 'text') {
-        nodes.push({ key: `part:${hiddenThinkingRunStart}:hidden-thinking-spacer`, kind: 'spacer' });
-      }
+      nodes.push({ key: `part:${index}:thinking-spacer`, kind: 'spacer' });
     }
 
     const { stopReason, errorMessage } = this.terminalStatus ?? {};

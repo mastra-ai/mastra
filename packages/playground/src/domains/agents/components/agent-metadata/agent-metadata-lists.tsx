@@ -1,13 +1,14 @@
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { useActivatedSkills } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
-import { useActivatedSkills } from '../../context/activated-skills-context';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useParams } from 'react-router';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
-import { useLinkComponent } from '@/lib/framework';
 
 const metadataLinkClassName =
   'pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center';
@@ -37,12 +38,14 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
 };
 
 export interface AgentMetadataToolListProps {
-  tools: GetToolResponse[];
   agentId: string;
+  tools: GetToolResponse[];
 }
 
-export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListProps) => {
+export const AgentMetadataToolList = ({ agentId, tools }: AgentMetadataToolListProps) => {
   const { Link, paths } = useLinkComponent();
+  // A tool opens in a drawer over the conversation you're in, so reading it doesn't leave the thread.
+  const { threadId } = useParams();
 
   if (tools.length === 0) {
     return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
@@ -53,7 +56,11 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       items={tools}
       getKey={tool => tool.id}
       renderItem={tool => (
-        <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge" className={metadataLinkClassName}>
+        <Link
+          href={paths.agentToolLink(agentId, tool.id, threadId)}
+          data-testid="tool-badge"
+          className={metadataLinkClassName}
+        >
           <Badge>{tool.id}</Badge>
         </Link>
       )}
@@ -152,7 +159,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
       renderItem={skill => {
         const isActivated = isSkillActivated(skill.name);
         const badge = (
-          <Badge variant={isActivated ? 'green' : 'neutral'}>
+          <Badge variant={isActivated ? 'success' : 'neutral'}>
             {skill.name}
             {isActivated && <span className="sr-only">Active</span>}
           </Badge>

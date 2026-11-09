@@ -29,6 +29,7 @@ import type {
   StoredProcessorGraph,
   StorageWorkspaceRef,
   StorageBrowserRef,
+  StorageMemoryRef,
 } from '@mastra/core/storage';
 import { convertSchemaToZod } from '@mastra/schema-compat';
 
@@ -48,13 +49,20 @@ import { EditorMCPNamespace } from './mcp';
 import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
 import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
-type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
+type AgentEditorConfig =
+  | false
+  | {
+      instructions?: boolean;
+      tools?: boolean | { description?: boolean };
+      model?: boolean;
+    };
 
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'name',
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -170,6 +178,15 @@ function getProvidedAgentRecordFields(input: StorageUpdateAgentInput): StorageUp
   if (status !== undefined) recordFields.status = status;
 
   return Object.keys(recordFields).length > 1 ? recordFields : null;
+}
+
+function isMemoryIdRef(ref: StorageMemoryRef | undefined): ref is { type: 'id'; memoryId: string } {
+  return !!ref && 'type' in ref && ref.type === 'id';
+}
+
+/** Tagged inline refs and legacy untagged configs both resolve to the serialized config. */
+function unwrapInlineMemory(ref: Exclude<StorageMemoryRef, { type: 'id' }>): SerializedMemoryConfig {
+  return 'type' in ref && ref.type === 'inline' ? ref.config : (ref as SerializedMemoryConfig);
 }
 
 // ============================================================================
@@ -335,6 +352,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return super.create(finalInput);
   }
 
+  /**
+   * Returns the registered agent when it is defined by the project, either in code (`'code'`) or in an
+   * `agents/<name>/` folder (`'fs'`). Stored records for these agents are overrides layered on top.
+   */
   private getCodeDefinedAgent(id: string): Agent | undefined {
     let agent: Agent | undefined;
     try {
@@ -342,7 +363,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     } catch {
       return undefined;
     }
-    return agent?.source === 'code' ? agent : undefined;
+    return agent?.source === 'code' || agent?.source === 'fs' ? agent : undefined;
   }
 
   private async ensureStoredWorkspaceRefs(
@@ -495,10 +516,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * from the stored config override the code agent's values (if explicitly set):
    * - `instructions` — system prompt
    * - `tools` — tool selection with description overrides (merged on top of code tools)
+   * - `modelList` — ordered serializable fallback settings matched to code entries by ID
    *
    * Fields that are absent or undefined in the stored config are left untouched.
-   * Model, workspace, memory, and other code-defined fields are never overridden —
-   * they may contain SDK instances or dynamic functions that cannot be safely serialized.
+   * Workspace, memory, and other code-defined fields are never overridden because they
+   * may contain SDK instances or dynamic functions that cannot be safely serialized.
    * Returns the (possibly mutated) agent.
    */
   async applyStoredOverrides(
@@ -514,6 +536,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     const instructionsEditable = editorConfig === undefined ? true : editorConfig.instructions === true;
+    const modelEditable = editorConfig !== undefined && editorConfig.model === true;
     const toolsConfig = editorConfig === undefined ? true : editorConfig.tools;
     const toolsEditable = toolsConfig === true;
     const toolDescriptionsEditable =
@@ -589,6 +612,69 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       if (resolved !== undefined) {
         fork.__updateInstructions(this.mergeInstructionEnvelope(agent, resolved));
       }
+    }
+
+    // --- Model list ---
+    if (modelEditable && storedConfig.modelList) {
+      const codeModel = fork.__getOverridableFields().model;
+      if (!Array.isArray(codeModel)) {
+        throw new Error(
+          `Agent "${agent.id}" delegates its model list to the editor but its code-defined model is not a static fallback list.`,
+        );
+      }
+
+      const codeModelsById = new Map(codeModel.map(model => [model.id, model]));
+      const appliedModelIds = new Set<string>();
+      const modelList = storedConfig.modelList.flatMap(storedModel => {
+        const codeModelEntry = codeModelsById.get(storedModel.id);
+        if (!codeModelEntry) {
+          this.logger?.warn(
+            `[applyStoredOverrides] Ignoring stale stored model-list entry "${storedModel.id}" for agent "${agent.id}"`,
+          );
+          return [];
+        }
+        appliedModelIds.add(storedModel.id);
+
+        const codeModelRef =
+          typeof codeModelEntry.model === 'string'
+            ? codeModelEntry.model
+            : 'id' in codeModelEntry.model && typeof codeModelEntry.model.id === 'string'
+              ? codeModelEntry.model.id
+              : 'provider' in codeModelEntry.model &&
+                  'modelId' in codeModelEntry.model &&
+                  typeof codeModelEntry.model.provider === 'string' &&
+                  typeof codeModelEntry.model.modelId === 'string'
+                ? `${codeModelEntry.model.provider}/${codeModelEntry.model.modelId}`
+                : undefined;
+        const storedModelRef = `${storedModel.provider}/${storedModel.modelId}`;
+
+        return [
+          {
+            ...codeModelEntry,
+            id: storedModel.id,
+            model: codeModelRef === storedModelRef ? codeModelEntry.model : storedModelRef,
+            enabled: storedModel.enabled,
+            maxRetries: storedModel.maxRetries,
+            maxRetriesConfigured: true,
+          },
+        ];
+      });
+      modelList.push(
+        ...codeModel.flatMap(model =>
+          model.id && !appliedModelIds.has(model.id)
+            ? [
+                {
+                  ...model,
+                  id: model.id,
+                  enabled: model.enabled ?? true,
+                  maxRetries: model.maxRetries ?? 0,
+                  maxRetriesConfigured: 'maxRetriesConfigured' in model ? (model.maxRetriesConfigured ?? false) : false,
+                },
+              ]
+            : [],
+        ),
+      );
+      fork.__updateModel({ model: modelList });
     }
 
     // --- Tools (merge: stored tools override code tools, code tools not in stored config are preserved) ---
@@ -780,6 +866,44 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return result;
   }
 
+  /**
+   * Accumulate matching memory variants. Inline configs shallow-merge like
+   * other object fields, but a registered-memory reference replaces whatever
+   * has accumulated (and a later inline variant replaces a reference), so the
+   * result is never a hybrid of a reference and inline config.
+   */
+  private accumulateMemoryVariants(
+    variants: StorageConditionalVariant<StorageMemoryRef>[],
+    context: Record<string, unknown>,
+  ): StorageMemoryRef | undefined {
+    let result: StorageMemoryRef | undefined;
+    for (const variant of variants) {
+      if (variant.rules && !evaluateRuleGroup(variant.rules, context)) continue;
+      if (isMemoryIdRef(variant.value)) {
+        result = variant.value;
+        continue;
+      }
+      const inline = unwrapInlineMemory(variant.value);
+      result = result && !isMemoryIdRef(result) ? { ...unwrapInlineMemory(result), ...inline } : { ...inline };
+    }
+    return result;
+  }
+
+  private resolveConditionalMemory(variants: StorageConditionalVariant<StorageMemoryRef>[]) {
+    const registeredMemory = new Map<string, MastraMemory>();
+    const usableVariants = variants.filter(variant => {
+      if (!isMemoryIdRef(variant.value)) return true;
+      const registered = this.resolveRegisteredMemory(variant.value.memoryId);
+      if (registered) registeredMemory.set(variant.value.memoryId, registered);
+      return Boolean(registered);
+    });
+
+    return ({ requestContext }: { requestContext: RequestContext }) => {
+      const resolved = this.accumulateMemoryVariants(usableVariants, requestContext.toJSON());
+      return isMemoryIdRef(resolved) ? registeredMemory.get(resolved.memoryId) : this.resolveStoredMemory(resolved);
+    };
+  }
+
   private async createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     if (!this.mastra) {
       throw new Error('MastraEditor is not registered with a Mastra instance');
@@ -936,17 +1060,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | string[] | undefined);
 
-    // Memory (object): accumulate by merging config from all matching variants
+    // Memory: inline variants merge; a registered-memory reference replaces the accumulated value.
+    // References are looked up once here. A conditional variant whose reference is not registered
+    // is skipped (with a warning), as if it were absent.
     const memory = hasConditionalMemory
-      ? ({ requestContext }: { requestContext: RequestContext }) => {
-          const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.memory as StorageConditionalVariant<SerializedMemoryConfig>[],
-            ctx,
-          );
-          return this.resolveStoredMemory(resolved as SerializedMemoryConfig | undefined);
-        }
-      : this.resolveStoredMemory(storedAgent.memory as SerializedMemoryConfig | undefined);
+      ? this.resolveConditionalMemory(storedAgent.memory as StorageConditionalVariant<StorageMemoryRef>[])
+      : this.resolveStoredMemory(storedAgent.memory as StorageMemoryRef | undefined);
 
     // Scorers (Record): accumulate by merging objects from all matching variants
     const scorers = hasConditionalScorers
@@ -1114,10 +1233,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     const skillsFormat = storedAgent.skillsFormat;
 
-    // Durable opt-in is persisted as a serializable subset (boolean or
-    // { maxSteps, cleanupTimeoutMs }). `cache`/`pubsub` are inherited from the
-    // Mastra instance by `createDurableAgent`, which `addAgent` invokes below
-    // whenever `agent.durable` is truthy.
+    // Stored durable options configure resumable streams on the plain Agent.
+    // Runtime cache and pubsub are inherited from Mastra when the stream bus is used.
     const durable = storedAgent.durable;
 
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
@@ -1569,8 +1686,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return resolvedAgents;
   }
 
-  private resolveStoredMemory(memoryConfig?: SerializedMemoryConfig): MastraMemory | undefined {
-    if (!memoryConfig) {
+  private resolveStoredMemory(memoryRef?: StorageMemoryRef): MastraMemory | undefined {
+    if (!memoryRef) {
       this.logger?.debug(`[resolveStoredMemory] No memory config provided`);
       return undefined;
     }
@@ -1578,6 +1695,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       this.logger?.warn('MastraEditor not registered with Mastra instance. Cannot instantiate memory.');
       return undefined;
     }
+
+    if (isMemoryIdRef(memoryRef)) {
+      return this.resolveRegisteredMemory(memoryRef.memoryId);
+    }
+
+    return this.buildInlineMemory(unwrapInlineMemory(memoryRef));
+  }
+
+  /**
+   * Look up a Memory instance registered on Mastra, by registry key first and
+   * then by the instance's own id. A missing reference is not fatal: the agent
+   * runs without memory and stored threads/messages are left untouched.
+   */
+  private resolveRegisteredMemory(memoryId: string): MastraMemory | undefined {
+    const registry = (this.mastra?.listMemory() ?? {}) as Record<string, MastraMemory>;
+    const memory = registry[memoryId] ?? Object.values(registry).find(m => m.id === memoryId);
+    if (!memory) {
+      this.logger?.warn(
+        `Memory "${memoryId}" referenced in stored agent but not registered in Mastra. The agent will run without memory.`,
+      );
+    }
+    return memory;
+  }
+
+  private buildInlineMemory(memoryConfig: SerializedMemoryConfig): MastraMemory | undefined {
+    if (!this.mastra) return undefined;
 
     try {
       let vector: MastraVectorProvider | undefined;
@@ -1751,9 +1894,17 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const agentsResolved = await agent.listAgents({ requestContext });
     const agentKeys = Object.keys(agentsResolved || {});
 
-    // 6. Extract memory config
+    // 6. Extract memory: keep a reference when the agent uses registered memory,
+    // otherwise snapshot the serializable config
     const memory = await agent.getMemory({ requestContext });
-    const memoryConfig = memory?.getConfig();
+    const registeredMemoryKey = memory
+      ? Object.entries((this.mastra?.listMemory() ?? {}) as Record<string, MastraMemory>).find(
+          ([, registered]) => registered === memory,
+        )?.[0]
+      : undefined;
+    const memoryConfig: StorageMemoryRef | undefined = registeredMemoryKey
+      ? { type: 'id', memoryId: registeredMemoryKey }
+      : memory?.getConfig();
 
     // 7. Processors from code-defined agents cannot be automatically serialized
     // to a StoredProcessorGraph (requires provider ID + config). Processors must

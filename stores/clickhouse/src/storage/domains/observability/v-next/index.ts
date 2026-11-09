@@ -13,6 +13,8 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   ObservabilityStorageStrategy,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -93,8 +95,12 @@ import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
+  SpanAggregateResponse,
+  TraceAggregateResponse,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedSpanAggregatePlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -132,7 +138,7 @@ import {
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export { TABLE_DELETION_REQUESTS } from './ddl';
-export { recordDeletionRequest } from './deletion-requests';
+export { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
@@ -175,9 +181,34 @@ import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
+
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function'
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
+    : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function'
+    ? ([
+        'span-aggregate',
+        // Core before the dimensions rejects `model`/`provider` in `groupBy`, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_AGGREGATE_DIMENSION_REGISTRY ?? {})
+          ? (['span-aggregate-model-dimensions'] as const)
+          : []),
+      ] as const)
+    : ([] as const);
+const threadQueryFeatures =
+  typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
@@ -590,11 +621,12 @@ async function detectDeltaCursorStrategy(
   }
 
   try {
-    await client.query({
+    const result = await client.query({
       query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
       query_params: { counterName: 'mastra_observability_delta_cursor_probe' },
       format: 'JSONEachRow',
     });
+    await result.json();
     return 'serial';
   } catch {
     return 'fallback';
@@ -810,11 +842,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // that the stream skips the value 0 (which carries no row).
       if (this.#deltaCursorStrategy === 'serial') {
         for (const counterName of DELTA_CURSOR_COUNTER_NAMES) {
-          await this.#client.query({
+          const result = await this.#client.query({
             query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
             query_params: { counterName },
             format: 'JSONEachRow',
           });
+          await result.json();
         }
       }
     } catch (error) {
@@ -938,21 +971,59 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       return [
         'metrics',
         'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
+        ...traceQueryOps.timingFeatures,
+        ...traceQueryOps.outcomeFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+        'trace-aggregate',
+        ...traceAggregateOps.aggregateTimeToFirstFeatures,
+        ...spanQueryFeatures,
+        ...spanAggregateFeatures,
+        ...threadQueryFeatures,
       ] as const;
     }
 
     return [
       'metrics',
       'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
       'delta-polling',
       'trace-query',
+      'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
+      'feedback',
+      'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
+      ...traceQueryOps.timingFeatures,
+      ...traceQueryOps.outcomeFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
+      'trace-aggregate',
+      ...traceAggregateOps.aggregateTimeToFirstFeatures,
+      ...spanQueryFeatures,
+      ...spanAggregateFeatures,
+      ...threadQueryFeatures,
     ] as const;
   }
 
@@ -1099,6 +1170,28 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    try {
+      return await spanQueryOps.querySpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryCursorError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     try {
       return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs, this.#deltaCursorStrategy);
@@ -1113,6 +1206,47 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    try {
+      return await traceAggregateOps.aggregateTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    try {
+      return await traceAggregateOps.aggregateSpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -1165,8 +1299,17 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
     try {
+      if (plan.result === 'threadRows')
+        return await threadQueryOps.queryThreadRows(this.#client, plan, this.#traceQueryTimeoutMs);
       return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
     } catch (error) {
       if (
@@ -1361,6 +1504,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scoreId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    try {
+      return await feedbackOps.getFeedbackById(this.#client, feedbackId);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_FEEDBACK_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId },
         },
         error,
       );

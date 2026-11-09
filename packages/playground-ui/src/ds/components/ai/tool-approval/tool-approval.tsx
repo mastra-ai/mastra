@@ -1,12 +1,40 @@
-import { Check, X } from 'lucide-react';
+import { Check, ShieldCheck, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Activity, ActivityContent, ActivityHeader, ActivityIcon, ActivityTrigger } from '../activity';
+import { presentTool, ToolCallArguments } from '../tool-call';
+import { Badge } from '@/ds/components/Badge';
+import type { BadgeVariant } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+
+type ToolApprovalDecision = 'approved' | 'declined';
+
+const approvalStates = {
+  pending: { label: 'Approval required', variant: 'warning', icon: ShieldCheck },
+  approved: { label: 'Approved', variant: 'success', icon: Check },
+  declined: { label: 'Declined', variant: 'neutral', icon: X },
+} satisfies Record<'pending' | ToolApprovalDecision, { label: string; variant: BadgeVariant; icon: LucideIcon }>;
+
+export interface ToolApprovalStatusProps {
+  status?: ToolApprovalDecision;
+}
+
+export function ToolApprovalStatus({ status }: ToolApprovalStatusProps) {
+  const { label, variant, icon: StatusIcon } = approvalStates[status ?? 'pending'];
+  return (
+    <span role="status" className="inline-flex shrink-0">
+      <Badge variant={variant} emphasis="subtle" size="sm" icon={<StatusIcon aria-hidden />}>
+        {label}
+      </Badge>
+    </span>
+  );
+}
 
 export interface ToolApprovalActionsProps {
   onApprove: () => void;
   onDecline: () => void;
   disabled?: boolean;
-  status?: 'approved' | 'declined';
   toolName?: string;
   autoFocus?: boolean;
 }
@@ -15,23 +43,19 @@ export function ToolApprovalActions({
   onApprove,
   onDecline,
   disabled = false,
-  status,
   toolName,
   autoFocus = false,
 }: ToolApprovalActionsProps) {
-  const actionsDisabled = disabled || status !== undefined;
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
         type="button"
-        variant={status ? 'default' : 'primary'}
+        variant="primary"
         size="sm"
-        icon={<Check />}
+        icon={<Check aria-hidden />}
         aria-label={toolName ? `Approve ${toolName}` : undefined}
         autoFocus={autoFocus}
-        disabled={actionsDisabled}
-        className={status === 'approved' ? 'text-accent1!' : undefined}
+        disabled={disabled}
         onClick={onApprove}
       >
         Approve
@@ -39,10 +63,9 @@ export function ToolApprovalActions({
       <Button
         type="button"
         size="sm"
-        icon={<X />}
+        icon={<X aria-hidden />}
         aria-label={toolName ? `Decline ${toolName}` : undefined}
-        disabled={actionsDisabled}
-        className={status === 'declined' ? 'text-accent2!' : undefined}
+        disabled={disabled}
         onClick={onDecline}
       >
         Decline
@@ -51,25 +74,33 @@ export function ToolApprovalActions({
   );
 }
 
-export interface ToolApprovalProps extends ToolApprovalActionsProps {
+export interface ToolApprovalProps extends ToolApprovalActionsProps, ToolApprovalStatusProps {
   toolName: string;
+  args?: unknown;
+  /** Custom details replace the default argument renderer. */
   children?: ReactNode;
 }
 
-export function ToolApproval({ toolName, children, ...actions }: ToolApprovalProps) {
+export function ToolApproval({ toolName, args, status, children, ...actions }: ToolApprovalProps) {
+  const { icon: ToolIcon } = presentTool(toolName, args);
+
   return (
-    <div
-      className="my-2 min-w-0 rounded-lg border border-l-4 border-border border-l-warning1 bg-fill px-4 py-3"
-      role="group"
-      aria-label={`Tool approval for ${toolName}`}
-    >
-      <div className="mb-1.5 text-subheading text-foreground">
-        Approve <code className="rounded bg-fill-hover px-1.5 py-px font-mono text-caption break-all">{toolName}</code>?
-      </div>
-      {children}
-      <div className="mt-2">
-        <ToolApprovalActions toolName={toolName} {...actions} />
-      </div>
-    </div>
+    <Activity open foldable={false} className="my-2" aria-label={`Tool approval for ${toolName}`}>
+      <ActivityTrigger>
+        <ActivityHeader className="flex-wrap">
+          <ActivityIcon>
+            <ToolIcon aria-hidden />
+          </ActivityIcon>
+          <Txt as="span" variant="caption" tone="muted" font="mono" className="min-w-0 break-all">
+            {toolName}
+          </Txt>
+          <ToolApprovalStatus status={status} />
+        </ActivityHeader>
+      </ActivityTrigger>
+      <ActivityContent>
+        {children ?? <ToolCallArguments toolName={toolName} args={args} showFullContent />}
+        {!status && <ToolApprovalActions toolName={toolName} {...actions} />}
+      </ActivityContent>
+    </Activity>
   );
 }

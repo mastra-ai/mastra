@@ -1,5 +1,5 @@
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
 import { useGitLabIssueDetail, useGitLabMergeRequestDetail } from '../../../../hooks/useGitLabData';
@@ -7,6 +7,7 @@ import { useIncidentioIssueDetail } from '../../../../hooks/useIncidentioData';
 import { useJiraIssueDetail } from '../../../../hooks/useJiraData';
 import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
 import {
+  changeRequestNumberForItem,
   githubNumberForItem,
   incidentioIssueRefForItem,
   jiraIdentifierForItem,
@@ -15,9 +16,10 @@ import {
   linearIssueIdForItem,
 } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
-type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
+type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'workItem' | 'metadata'>;
 
 function descriptionSource(
   item: SourceItem,
@@ -27,7 +29,7 @@ function descriptionSource(
     if (item.source === 'github-pr') return 'pull';
   }
   if (item.source === 'gitlab-issue' && item.sourceKey) return 'gitlab';
-  if (item.source === 'gitlab-pr' && typeof item.metadata.gitlabMergeRequestIid === 'number') return 'gitlab-pr';
+  if (item.source === 'gitlab-pr' && changeRequestNumberForItem(item) !== undefined) return 'gitlab-pr';
   if (linearIdentifierForItem(item) !== undefined) return 'linear';
   if (jiraIdentifierForItem(item) !== undefined && jiraIssueRefForItem(item) !== undefined) return 'jira';
   if (incidentioIssueRefForItem(item) !== undefined) return 'incidentio';
@@ -63,7 +65,7 @@ export function useSourceDescription(
   const gitlabPull = useGitLabMergeRequestDetail(
     source === 'gitlab-pr' ? factoryProjectId : undefined,
     source === 'gitlab-pr' ? projectRepositoryId : undefined,
-    source === 'gitlab-pr' ? (item.metadata.gitlabMergeRequestIid as number) : undefined,
+    source === 'gitlab-pr' ? changeRequestNumberForItem(item) : undefined,
   );
   const linear = useLinearIssueDetail(
     source === 'linear' ? factoryProjectId : undefined,
@@ -98,20 +100,26 @@ export function CardSourceDescription({
 
   if (query.isPending) {
     return (
-      <div className="flex flex-col gap-1.5" aria-hidden>
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-4/5" />
-        <Skeleton className="h-3 w-2/3" />
+      <div role="status" aria-label="Loading description">
+        <div aria-hidden>
+          <SkeletonText line="text-caption" className="w-full motion-reduce:before:animate-none" />
+          <SkeletonText line="text-caption" className="w-4/5 motion-reduce:before:animate-none" />
+          <SkeletonText line="text-caption" className="w-2/3 motion-reduce:before:animate-none" />
+        </div>
       </div>
     );
   }
   if (query.isError) {
-    return <p className="text-meta text-muted-foreground m-0">The description could not be loaded.</p>;
+    return (
+      <Txt variant="meta" tone="muted" className="m-0">
+        The description could not be loaded.
+      </Txt>
+    );
   }
   const description = query.data?.description ?? null;
   if (description === null || description.trim() === '') return null;
   return (
-    <MarkdownRenderer className="text-caption text-foreground max-w-none [&>*:first-child]:mt-0">
+    <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
       {description}
     </MarkdownRenderer>
   );

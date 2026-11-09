@@ -1,6 +1,6 @@
 import { Tool, MASTRA_TOOL_MARKER } from './tool';
 import type { ToolToConvert } from './tool-builder/builder';
-import type { NeedsApprovalFn, VercelTool } from './types';
+import type { BeforeApprovalFn, NeedsApprovalFn, VercelTool } from './types';
 
 /**
  * Checks if a tool is a Mastra Tool, using both instanceof and marker.
@@ -66,6 +66,21 @@ export function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
 }
 
+const APPROVAL_EXEMPT = Symbol.for('mastra.tool.approvalExempt');
+
+/**
+ * Marks a built tool as never requiring approval, overriding a global `requireToolApproval`
+ * (e.g. skill tools). Only the approval resolvers read this, so it does not affect
+ * tool-call concurrency or eager execution the way a `requireApproval` function would.
+ */
+export function markApprovalExempt(tool: object): void {
+  Object.defineProperty(tool, APPROVAL_EXEMPT, { value: true, enumerable: false });
+}
+
+export function isApprovalExempt(tool: unknown): boolean {
+  return typeof tool === 'object' && tool !== null && (tool as Record<symbol, unknown>)[APPROVAL_EXEMPT] === true;
+}
+
 /**
  * Reads a per-tool {@link NeedsApprovalFn} attached to a tool instance, if present.
  *
@@ -78,4 +93,27 @@ export function getNeedsApprovalFn(tool: unknown): NeedsApprovalFn | undefined {
   if (typeof tool !== 'object' || tool === null) return undefined;
   const fn = (tool as { needsApprovalFn?: unknown }).needsApprovalFn;
   return typeof fn === 'function' ? (fn as NeedsApprovalFn) : undefined;
+}
+
+/**
+ * Reads a per-tool {@link BeforeApprovalFn} attached to a tool instance, if present.
+ */
+export function getBeforeApprovalFn(tool: unknown): BeforeApprovalFn | undefined {
+  if (typeof tool !== 'object' || tool === null) return undefined;
+  const fn = (tool as { beforeApproval?: unknown }).beforeApproval;
+  return typeof fn === 'function' ? (fn as BeforeApprovalFn) : undefined;
+}
+
+const BUILT_BEFORE_APPROVAL = Symbol.for('mastra.builtBeforeApproval');
+
+/**
+ * Marks a {@link CoreToolBuilder} `beforeApproval` wrapper that expects trusted runtime values
+ * (request context and actor) as a third argument for its authorization check.
+ */
+export function markBuiltBeforeApproval<T extends BeforeApprovalFn>(fn: T): T {
+  return Object.assign(fn, { [BUILT_BEFORE_APPROVAL]: true });
+}
+
+export function isBuiltBeforeApproval(fn: BeforeApprovalFn): boolean {
+  return (fn as { [BUILT_BEFORE_APPROVAL]?: boolean })[BUILT_BEFORE_APPROVAL] === true;
 }

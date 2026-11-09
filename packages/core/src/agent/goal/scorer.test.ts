@@ -3,8 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY } from '../../processors/trailing-assistant-guard';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
+import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
@@ -125,6 +127,35 @@ describe('createGoalScorer latest user message text extraction', () => {
     expect(prompt).not.toContain('<system-reminder>Please continue naturally</system-reminder>');
   });
 
+  // The real-run path is covered by goal-judge-guard-continuation.scenario.test.ts.
+  // There the guard's turn is also removed from the list before the judge runs
+  // (#27568), so this filter is the backstop: it is proven here in isolation.
+  it('skips a marked TrailingAssistantGuard continuation when selecting the latest user content', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'Pick option B' }] }),
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'Working on option B' }] },
+      },
+      {
+        id: 'msg-continue',
+        role: 'user',
+        createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Continue.' }],
+          metadata: { [TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY]: true },
+        },
+      },
+    ]);
+
+    expect(prompt).toContain('Latest user message:\\nPick option B');
+    expect(prompt).toContain('Assistant steps since that user message: 1');
+    expect(prompt).not.toContain('Continue.');
+  });
+
   it('skips empty user rows when selecting the latest user content', async () => {
     const prompt = await captureJudgePromptForMessages([
       createUserMessage({ format: 2, parts: [{ type: 'text', text: 'actual human message' }] }),
@@ -173,33 +204,51 @@ describe('createGoalScorer tool support', () => {
 });
 
 describe('createGoalScorer provider history compatibility', () => {
-  it('gives the judge agent ProviderHistoryCompat by default (input + error lanes)', () => {
+  it('leaves the judge processor lanes unset so the Agent default applies', () => {
     const scorer = createGoalScorer({ judgeModel });
-    const input = scorer.config.judge?.inputProcessors ?? [];
-    const error = scorer.config.judge?.errorProcessors ?? [];
-    expect(input.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
-    expect(error.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
+    expect(scorer.config.judge?.inputProcessors).toBeUndefined();
+    expect(scorer.config.judge?.errorProcessors).toBeUndefined();
   });
 
-  it('lets a caller override the judge processor lanes', () => {
+  it('keeps caller-supplied judge processors and the defaults opt-out', () => {
     const custom = new ProviderHistoryCompat();
     const scorer = createGoalScorer({
       judgeModel,
       inputProcessors: [custom],
       errorProcessors: [],
+      errorProcessorDefaults: false,
     });
     expect(scorer.config.judge?.inputProcessors).toEqual([custom]);
     expect(scorer.config.judge?.errorProcessors).toEqual([]);
+    expect(scorer.config.judge?.errorProcessorDefaults).toBe(false);
+  });
+
+  it('gets ProviderHistoryCompat from the Agent when the judge is built the way the runtime builds it', async () => {
+    // Mirrors the judge construction in `evals/base.ts`: a bare `new Agent` with
+    // only the scorer's configured processor lanes spread in when set. The judge
+    // therefore inherits the Agent's default error processors, which is where
+    // provider-history repair now comes from.
+    const agent = new Agent({
+      id: 'judge',
+      name: 'judge',
+      model: judgeModel,
+      instructions: DEFAULT_GOAL_JUDGE_PROMPT,
+    });
+
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toContain('provider-history-compat');
   });
 });
 
+// Native-first tests need a model the bundled registry lists under `structuredOutput`; otherwise
+// `jsonPromptInjection: 'auto'` goes straight to inline JSON. Use a stable entry, since the
+// registry is regenerated automatically and small providers can disappear.
 describe('createGoalScorer native structured output', () => {
   it.each([undefined, 'Custom judge prompt.'])(
     'keeps native output on the first attempt without handwritten JSON instructions (prompt: %s)',
     async prompt => {
       const model = new MockLanguageModelV2({
-        provider: 'crof',
-        modelId: 'glm-5.3-flash',
+        provider: 'openai',
+        modelId: 'gpt-4o-mini',
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -246,8 +295,8 @@ describe('goal-only JSON fallback placement', () => {
     let calls = 0;
     const attemptLength = withTools ? 2 : 1;
     const model = new MockLanguageModelV2({
-      provider: 'crof',
-      modelId: 'glm-5.3-flash',
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
       doStream: async () => {
         calls++;
         const toolCall = withTools && calls % 2 === 1;
@@ -286,12 +335,15 @@ describe('goal-only JSON fallback placement', () => {
     });
     const stream = vi.spyOn(model, 'doStream');
     const tools = withTools ? { view: viewTool } : undefined;
+    // These cases assert where the fallback prompt is placed. The judge is an Agent, so it picks up
+    // the shared stability error processors; their retry would recover inside the first stream
+    // instead of letting the fallback run. Opt the judge out to keep the fallback path under test.
     const scorer = goal
-      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools })
+      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools, errorProcessorDefaults: false })
       : createScorer({
           id: 'ordinary-scorer',
           description: 'Review documentation',
-          judge: { model, instructions: 'Custom judge prompt.', tools },
+          judge: { model, instructions: 'Custom judge prompt.', tools, errorProcessorDefaults: false },
         })
           .analyze({
             description: 'Review the work',
@@ -335,8 +387,8 @@ describe('goal-only JSON fallback placement', () => {
     'rejects invalid fallback output without inventing a verdict: %s',
     async text => {
       const model = new MockLanguageModelV2({
-        provider: 'crof',
-        modelId: 'glm-5.3-flash',
+        provider: 'openai',
+        modelId: 'gpt-4o-mini',
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -348,7 +400,9 @@ describe('goal-only JSON fallback placement', () => {
         }),
       });
       const stream = vi.spyOn(model, 'doStream');
-      const scorer = createGoalScorer({ judgeModel: model });
+      // The default error processors would retry the invalid output before the JSON fallback runs,
+      // so opt out to keep the native-then-fallback flow under test.
+      const scorer = createGoalScorer({ judgeModel: model, errorProcessorDefaults: false });
       await expect(scorer.run({ input: 'Update docs', output: 'Done' })).rejects.toThrow(
         'Structured output validation failed',
       );

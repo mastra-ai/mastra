@@ -42,6 +42,9 @@ async function generateEmbeddings(values: string[], modelType: FastEmbedModelTyp
   }
 
   if (allResults.length === 0) throw new Error('No embeddings generated');
+  if (allResults.length !== values.length) {
+    throw new Error(`Expected ${values.length} embeddings but received ${allResults.length}`);
+  }
 
   return {
     embeddings: allResults,
@@ -49,15 +52,30 @@ async function generateEmbeddings(values: string[], modelType: FastEmbedModelTyp
 }
 
 // E5 models are asymmetric: queries and passages must be embedded with different prefixes.
-async function generatePrefixedEmbeddings(
+function applyPrefix(values: string[], prefix?: 'query' | 'passage') {
+  return prefix ? values.map(value => `${prefix}: ${value}`) : values;
+}
+
+// V3 models can report warnings, so surface inputs that the model's token window silently truncates.
+async function generateEmbeddingsWithWarnings(
   values: string[],
   modelType: FastEmbedModelType,
-  prefix: 'query' | 'passage',
+  prefix?: 'query' | 'passage',
 ) {
-  return generateEmbeddings(
-    values.map(value => `${prefix}: ${value}`),
-    modelType,
-  );
+  const inputs = applyPrefix(values, prefix);
+  const result = await generateEmbeddings(inputs, modelType);
+  const model = await getCachedModel(modelType);
+  const { count, maxLength } = await model.countTruncated(inputs);
+  const warnings =
+    count > 0
+      ? [
+          {
+            type: 'other' as const,
+            message: `${count} of ${inputs.length} inputs exceed the model's ${maxLength}-token window and were truncated; text beyond it does not affect the embedding. Use smaller chunks to embed the full text.`,
+          },
+        ]
+      : [];
+  return { ...result, warnings };
 }
 
 // Legacy v1 provider for backwards compatibility
@@ -122,8 +140,7 @@ const fastEmbedProviderV3 = customProviderV3({
       maxEmbeddingsPerCall: 256,
       supportsParallelCalls: true,
       async doEmbed({ values }) {
-        const result = await generateEmbeddings(values, 'BGESmallENV15');
-        return { ...result, warnings: [] };
+        return generateEmbeddingsWithWarnings(values, 'BGESmallENV15');
       },
     },
     'bge-base-en-v1.5': {
@@ -133,8 +150,7 @@ const fastEmbedProviderV3 = customProviderV3({
       maxEmbeddingsPerCall: 256,
       supportsParallelCalls: true,
       async doEmbed({ values }) {
-        const result = await generateEmbeddings(values, 'BGEBaseENV15');
-        return { ...result, warnings: [] };
+        return generateEmbeddingsWithWarnings(values, 'BGEBaseENV15');
       },
     },
     'multilingual-e5-large-query': {
@@ -144,8 +160,7 @@ const fastEmbedProviderV3 = customProviderV3({
       maxEmbeddingsPerCall: 256,
       supportsParallelCalls: true,
       async doEmbed({ values }) {
-        const result = await generatePrefixedEmbeddings(values, 'MLE5Large', 'query');
-        return { ...result, warnings: [] };
+        return generateEmbeddingsWithWarnings(values, 'MLE5Large', 'query');
       },
     },
     'multilingual-e5-large-passage': {
@@ -155,8 +170,7 @@ const fastEmbedProviderV3 = customProviderV3({
       maxEmbeddingsPerCall: 256,
       supportsParallelCalls: true,
       async doEmbed({ values }) {
-        const result = await generatePrefixedEmbeddings(values, 'MLE5Large', 'passage');
-        return { ...result, warnings: [] };
+        return generateEmbeddingsWithWarnings(values, 'MLE5Large', 'passage');
       },
     },
   },

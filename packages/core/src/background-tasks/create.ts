@@ -1,9 +1,11 @@
 import type { BackgroundTaskManager } from './manager';
 import type {
   BackgroundTaskHandle,
+  CheckIfExistingPayload,
   CheckIfRunningPayload,
   CheckIfSuspendedPayload,
   CreateBackgroundTaskOptions,
+  ResumeOptions,
 } from './types';
 
 /**
@@ -73,6 +75,29 @@ export function createBackgroundTask(
       return false;
     },
 
+    async checkIfExisting(args: CheckIfExistingPayload) {
+      const result = await manager.listTasks({
+        toolCallId: args.toolCallId,
+        runId: args.runId,
+        agentId: args.agentId,
+        threadId: args.threadId,
+        resourceId: args.resourceId,
+        toolName: args.toolName,
+      });
+      if (result.total > 1) {
+        throw new Error(`Multiple background tasks found for run "${args.runId}" and tool call "${args.toolCallId}"`);
+      }
+
+      const task = result.tasks[0];
+      if (task) {
+        taskId = task.id;
+        if (task.status === 'pending' || task.status === 'running' || task.status === 'suspended') {
+          manager.registerTaskContext(task.id, context);
+        }
+      }
+      return task;
+    },
+
     async checkIfRunning(args: CheckIfRunningPayload) {
       const result = await manager.listTasks({
         toolCallId: args.toolCallId,
@@ -94,11 +119,14 @@ export function createBackgroundTask(
       return false;
     },
 
-    async resume(resumeData?: unknown) {
+    async resume(resumeData?: unknown, resumeOptions?: ResumeOptions) {
       if (!taskId) throw new Error('Task has not been dispatched yet');
       manager.registerTaskContext(taskId, context);
       try {
-        return await manager.resume(taskId, resumeData);
+        // Only forward options when given, so existing callers see the same call.
+        return resumeOptions
+          ? await manager.resume(taskId, resumeData, resumeOptions)
+          : await manager.resume(taskId, resumeData);
       } catch (error) {
         manager.deregisterTaskContext(taskId);
         throw error;

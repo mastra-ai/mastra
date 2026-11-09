@@ -1,7 +1,7 @@
+import { useChannelPlatforms } from '@mastra/react/hooks/agents';
 import { useMemo } from 'react';
 import { useBuilderAgentFeatures } from './use-builder-agent-features';
 import { useBuilderModelPolicy } from './use-builder-settings';
-import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 
 export interface BuilderPaneGatesInput {
   /**

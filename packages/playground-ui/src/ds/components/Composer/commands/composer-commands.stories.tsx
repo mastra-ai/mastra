@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 import { CommandComposer } from '../../../../../.storybook/fixtures/command-composer';
 
 const meta = {
@@ -22,6 +23,15 @@ export const CommandOptions: Story = { args: { initialValue: '/review ' } };
 export const NoMatch: Story = { args: { initialValue: '/unknown' } };
 export const Disabled: Story = { args: { enabled: false } };
 export const LongList: Story = {
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByRole('listbox');
+    const viewport = list.closest<HTMLElement>('[role="presentation"]')?.parentElement;
+    if (!viewport) throw new Error('Expected the suggestion list scroll viewport');
+    await expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight);
+    await expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+    await expect(getComputedStyle(viewport).overscrollBehaviorX).toBe('auto');
+    await expect(getComputedStyle(viewport).overscrollBehaviorY).toBe('contain');
+  },
   args: {
     commands: Array.from({ length: 500 }, (_, index) => ({
       name: `command-${index + 1}`,

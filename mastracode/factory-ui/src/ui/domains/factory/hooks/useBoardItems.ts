@@ -11,36 +11,29 @@ import {
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard } from '../boardStages';
+import { belongsToBoard, itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
-/**
- * Column order, stated here rather than inherited from the list endpoint: a
- * card must keep its place when a sync or a run touches it, and the board is
- * the surface that decides what "first" means.
- */
-const byNewest = (left: WorkItem, right: WorkItem) =>
-  right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id);
-
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
-  /** Hands-off: stamp the card as pre-approving its plans before the move queues a run. */
-  preapprovePlans?: boolean;
+  repositorySlug?: string;
 }
 
 /** The board's persisted cards: the query behind them and the moves that rewrite them. */
 export function useBoardItems({
   factoryProjectId,
   kind,
+  currentUserId,
   onFailure,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
+  currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
@@ -49,7 +42,7 @@ export function useBoardItems({
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
-  const transition = useTransitionWorkItemMutation(factoryProjectId);
+  const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const [dropError, setDropError] = useState<Error>();
@@ -59,7 +52,7 @@ export function useBoardItems({
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
   const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
+  const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
@@ -91,11 +84,11 @@ export function useBoardItems({
 
   const move = (id: string, toStage: string, options: MoveOptions = {}) => {
     const item = all.find(candidate => candidate.id === id);
-    // Held in a ref, not in mutation state: two clicks land in the same render
-    // and both read the pre-click state, so the hands-off patch would run twice
-    // and queue two runs.
+    // Held in a ref, not in mutation state: two clicks can land in the same render
+    // and otherwise queue the same move twice.
     if (!item || movingRef.current.has(id)) return;
     const boardId = itemBoard(item);
+    if (!pullRequestMayEnter(boardId, item.source, toStage)) return;
     if (boardId !== 'work' && boardId !== 'review') {
       const definition = catalog.data?.find(board => board.id === boardId);
       const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
@@ -103,17 +96,24 @@ export function useBoardItems({
     }
     movingRef.current.add(id);
     const release = () => movingRef.current.delete(id);
-    if (!options.preapprovePlans) {
+    if (!options.repositorySlug) {
       requestTransition(item, toStage, options, release);
       return;
     }
     // The patch bumps the revision, so the move has to ride the item it returned.
     void update
-      .mutateAsync({ id, patch: { plansPreapproved: true } })
+      .mutateAsync({
+        id,
+        patch: {
+          metadata: item.workItem
+            ? { repository: options.repositorySlug }
+            : { ...item.metadata, repository: options.repositorySlug },
+        },
+      })
       .then(patched => requestTransition(patched, toStage, options, release))
       .catch(error => {
         release();
-        onFailure?.(error instanceof Error ? error.message : 'The card could not be stamped hands-off.');
+        onFailure?.(error instanceof Error ? error.message : 'The card could not be updated.');
       });
   };
 
@@ -147,7 +147,9 @@ export function useBoardItems({
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
+      if (!item.stages.includes(toStage) && pullRequestMayEnter(kind, source, toStage)) {
+        requestTransition(item, toStage, { cause });
+      }
     })().catch(error => {
       const failure = error instanceof Error ? error : new Error('The card could not be filed.');
       setDropError(failure);
@@ -162,7 +164,7 @@ export function useBoardItems({
     elsewhereSourceKeys,
     isPending: items.isPending,
     error: items.isError ? items.error : undefined,
-    mutationError: [upsert, update, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
+    mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
     refetch: items.refetch,

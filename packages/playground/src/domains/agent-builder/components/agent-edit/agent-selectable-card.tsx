@@ -38,15 +38,15 @@ export const AgentSelectableCard = ({
   const agentColor = useAgentColor();
 
   const containerStyle: CSSProperties = {
-    ['--agent-color-bg' as string]: agentColor.background,
-    ...(isSelected ? { borderColor: agentColor.background } : null),
+    ['--agent-color-bg' as string]: agentColor.tint,
+    ...(isSelected ? { borderColor: agentColor.tint } : null),
   };
 
   const checkStyle: CSSProperties | undefined = isSelected
     ? {
-        borderColor: agentColor.background,
-        backgroundColor: agentColor.background,
-        color: agentColor.foreground,
+        borderColor: agentColor.tint,
+        backgroundColor: agentColor.tint,
+        color: 'var(--background)',
       }
     : undefined;
 

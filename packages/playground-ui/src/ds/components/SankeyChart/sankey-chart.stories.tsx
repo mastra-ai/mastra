@@ -7,6 +7,9 @@ import { SankeyChart } from './sankey-chart';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const data = [
   { channel: 'Search', region: 'Europe', outcome: 'Won' },
@@ -58,14 +61,14 @@ function UserLandControls() {
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap items-center gap-2">
             {controlColumns.map(column => {
               const checkbox = (
-                <label className="flex items-center gap-2 text-caption">
+                <Field orientation="horizontal">
                   <Checkbox
                     checked={column.visible}
                     onCheckedChange={() => toggleColumn(column.id)}
                     aria-label={`Include ${column.label}`}
                   />
-                  <span>{column.label}</span>
-                </label>
+                  <FieldLabel size="smaller">{column.label}</FieldLabel>
+                </Field>
               );
 
               if (!column.visible) {
@@ -92,7 +95,7 @@ function UserLandControls() {
                       <button
                         type="button"
                         {...dragProvided.dragHandleProps}
-                        className="rounded-sm text-muted-foreground outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus"
+                        className={cn('rounded-sm text-muted-foreground', focusRing)}
                         aria-label={`Reorder ${column.label}`}
                       >
                         <GripVertical className="size-3.5" aria-hidden="true" />
@@ -176,6 +179,27 @@ export const Empty: Story = {
     <div className="w-full p-8">
       <Sankey data={[]} columns={columns}>
         <SankeyChart />
+      </Sankey>
+    </div>
+  ),
+};
+
+const semanticNodeColors = new Map([
+  ['Search', 'var(--chart-blue)'],
+  ['Referral', 'var(--chart-purple)'],
+  ['Partner', 'var(--chart-orange)'],
+  ['Europe', 'var(--chart-amber)'],
+  ['North America', 'var(--chart-green)'],
+  ['Asia Pacific', 'var(--chart-pink)'],
+  ['Won', 'var(--chart-blue)'],
+  ['Lost', 'var(--chart-red)'],
+]);
+
+export const SemanticColors: Story = {
+  render: () => (
+    <div className="w-full p-8">
+      <Sankey data={data} columns={columns}>
+        <SankeyChart getNodeColor={({ value }) => semanticNodeColors.get(String(value)) ?? 'var(--span-other)'} />
       </Sankey>
     </div>
   ),

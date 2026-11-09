@@ -1,0 +1,46 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Check the legacy upgrade fixture.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_legacy_view",
+            "name": "view",
+            "arguments": {
+              "path": "legacy-upgrade.txt"
+            }
+          },
+          {
+            "id": "call_legacy_shell",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'upgrade-line-1\\nupgrade-line-2\\nupgrade-line-3\\nupgrade-line-4\\nupgrade-line-5\\nupgrade-line-6\\n'",
+              "description": "Printing six upgrade lines",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_legacy_shell"
+      },
+      "response": {
+        "content": "Legacy upgrade check complete."
+      }
+    }
+  ]
+}

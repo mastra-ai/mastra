@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Textarea } from './textarea';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
@@ -20,9 +21,6 @@ const meta: Meta<typeof Textarea> = {
     disabled: {
       control: { type: 'boolean' },
     },
-    error: {
-      control: { type: 'boolean' },
-    },
   },
 };
 
@@ -31,7 +29,7 @@ type Story = StoryObj<typeof Textarea>;
 
 export const Default: Story = {
   args: {
-    placeholder: 'Type something...',
+    placeholder: 'Type something',
     className: 'w-75',
   },
 };
@@ -57,15 +55,20 @@ export const Sizes: Story = {
 
 export const Error: Story = {
   args: {
-    placeholder: 'Invalid input...',
-    error: true,
-    className: 'w-75',
+    placeholder: 'Invalid input',
   },
+  render: args => (
+    <Field invalid className="w-75">
+      <FieldLabel>Description</FieldLabel>
+      <Textarea {...args} />
+      <FieldError>Enter a description.</FieldError>
+    </Field>
+  ),
 };
 
 export const Disabled: Story = {
   args: {
-    placeholder: 'Disabled...',
+    placeholder: 'Disabled',
     disabled: true,
     className: 'w-75',
   },

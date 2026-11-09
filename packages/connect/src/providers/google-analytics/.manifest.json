@@ -1,0 +1,24 @@
+{
+  "providerId": "google-analytics",
+  "localId": "google-analytics",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-10-01T21:22:32.896Z",
+  "toolCount": 11,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "c610f59cd19fd8656be7726c21447b488ae65359ea6aa76ff198f877c7659aee",
+    "tools.ts": "5bdb9147446f4dba41be48bf9efe254b6e1fd47012d90d158cbc79e41d3c7c12",
+    "tools/archive-conversion-event.ts": "f9a04b3ac44879e6a87980131a994a35108a4cf03f6c93f3cedce173ae1138a6",
+    "tools/batch-run-reports.ts": "dd3dfe1edacb2939c9349e9cf758d01139e9f35c60a40e2e8e993e8aeea26df9",
+    "tools/create-conversion-event.ts": "b304778c3b3702fe9438e437dac20d52d1a71d2264d4e3ee9f2bfcdeded2228c",
+    "tools/create-data-stream.ts": "47c5e68ff6ef23e3a5416acdc71a2d2f19e09eb06bcc9fd2b48cf0108dd505fc",
+    "tools/create-property.ts": "e5faaa864fd498fe62e0a130c983b6b5b009651407c39de41b04b64a3aa420c6",
+    "tools/get-metadata.ts": "bf7212c2f9df8aa9e2b2c0c34ce08d275e6db5695d81b11856dc71b88e73a2eb",
+    "tools/run-pivot-report.ts": "c45dbc120f3bedc12f26fd37fa16923ac13efbac7f5cdb87f26ee1f32cc591e0",
+    "tools/run-realtime-report.ts": "2317b942ebc70e6f076bbb367ca014b343bfa398c1d5949fd27b37a4415d8cc0",
+    "tools/run-report.ts": "6951d2c5cd339ea476f12a6731ce094914b82bfe7811bcae5761068ac3b8214e",
+    "tools/update-data-stream.ts": "1e97e0e471b876e169a0f9671014f6596e7476fa088f84bbe7d521f803023044",
+    "tools/update-property.ts": "77cf2a7c6f49bd0211e72c9a629dcc6b4a72eb4ded69d8de602696ed438612c2"
+  }
+}

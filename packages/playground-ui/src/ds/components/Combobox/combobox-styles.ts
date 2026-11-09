@@ -3,7 +3,7 @@ import { buttonVariants, isIconButtonSize } from '../Button/Button';
 import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
-import { fieldTriggerStyle } from '@/ds/primitives/form-element';
+import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -38,12 +38,10 @@ function normalizeComboboxVariant(variant: ComboboxVariant): ComboboxVisualVaria
 export function comboboxTriggerClass({
   variant,
   size,
-  error,
   className,
 }: {
   variant: ComboboxVariant;
   size: ButtonSize;
-  error?: boolean;
   className?: string;
 }): string {
   const visualVariant = normalizeComboboxVariant(variant);
@@ -54,11 +52,11 @@ export function comboboxTriggerClass({
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
-    !isIconButtonSize(size) && 'justify-between text-body-sm',
+    !isIconButtonSize(size) && cn(fieldTriggerWidthStyle, 'justify-between'),
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
+    fieldTriggerErrorBorder,
     className,
   );
 }
@@ -76,12 +74,21 @@ export const comboboxItemClass = cva(menuItemClass, {
   },
 });
 
+/** Fixed popup widths a call site can pick; without one the popup takes the trigger's width. Never narrower than the trigger or wider than the screen. */
+export type ComboboxPopupWidth = 'sm' | 'md' | 'lg' | 'xl';
+
+export const comboboxPopupWidthClass: Record<ComboboxPopupWidth, string> = {
+  sm: 'w-48',
+  md: 'w-64',
+  lg: 'w-80',
+  xl: 'w-96',
+};
+
 export const comboboxStyles = {
-  /** Root wrapper */
+  /** @deprecated A `Field` lays out the combobox and its error. */
   root: 'flex flex-col gap-1.5',
 
   /** Chevron icon in trigger — decorative icon token shared by every field. */
-  chevron: 'ml-2 h-4 w-4 shrink-0 text-muted-foreground',
 
   /** Placeholder text color */
   placeholder: 'text-muted-foreground',
@@ -111,11 +118,14 @@ export const comboboxStyles = {
   // `empty:p-0` — Empty renders outside the List, so an empty List must not leave its padding behind.
   list: 'p-1 empty:p-0',
 
-  /** Scroll container around the List; hosts the fluid highlight so it scrolls with the rows. */
+  /** Scroll container around the List. */
   listScroller: 'max-h-dropdown overflow-y-auto overflow-x-hidden',
 
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),
+
+  /** An item's content beside its check: start slot, text, end slot. */
+  itemContent: 'flex min-w-0 flex-1 items-center gap-2',
 
   /** Multi-select item — same item rhythm with a right-aligned selected check. */
   itemMulti: comboboxItemClass({ multiple: true }),
@@ -132,15 +142,15 @@ export const comboboxStyles = {
   /** Option label/description wrapper */
   optionText: 'flex flex-col gap-0.5 min-w-0',
 
-  /** Option label */
-  optionLabel: 'truncate',
+  /** Option label: wraps (ids break anywhere) and clamps at two lines, so a long label stays readable without growing the row. */
+  optionLabel: 'line-clamp-2 whitespace-normal wrap-anywhere',
 
-  /** Option description */
-  optionDescription: 'text-caption text-muted-foreground truncate',
+  /** Option description: same two-line clamp as the label. */
+  optionDescription: 'text-caption text-muted-foreground line-clamp-2 whitespace-normal wrap-anywhere',
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
 
-  /** Error message */
-  error: 'text-caption text-accent2',
+  /** @deprecated A `FieldError` colors the error. */
+  error: 'text-body-sm text-destructive-foreground',
 } as const;

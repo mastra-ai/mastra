@@ -1,8 +1,13 @@
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  FACTORY_INTERACTIVE_KEY,
+  createFactoryInteractiveMarker,
+  ensureFactoryAuthUser,
+  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
@@ -23,6 +28,7 @@ const mockGetClearSessionHeaders = vi.fn(() => ({ 'Set-Cookie': 'wos_session=; P
 // the mock models "no org → org_new".
 const mockEnsureOrganization = vi.fn(async (_userId: string) => 'org_new');
 const mockIsOrganizationAdmin = vi.fn(async () => false);
+const mockConsumePendingResponseHeaders = vi.fn((_req: Request): Record<string, string> | undefined => undefined);
 
 vi.mock('@mastra/auth-workos', () => ({
   MastraAuthWorkos: class {
@@ -35,6 +41,7 @@ vi.mock('@mastra/auth-workos', () => ({
     getClearSessionHeaders = mockGetClearSessionHeaders;
     ensureOrganization = mockEnsureOrganization;
     isOrganizationAdmin = mockIsOrganizationAdmin;
+    consumePendingResponseHeaders = mockConsumePendingResponseHeaders;
   },
 }));
 
@@ -91,6 +98,40 @@ describe('env-implied WorkOS fallback', () => {
   });
 });
 
+describe('ensureFactoryAuthUser on ungated (requiresAuth: false) routes', () => {
+  async function buildUngatedApp() {
+    const { MastraAuthWorkos } = await import('@mastra/auth-workos');
+    const provider = new (MastraAuthWorkos as unknown as new () => IMastraAuthProvider)();
+    const app = new Hono();
+    app.get('/web/thing', async c => {
+      const user = await ensureFactoryAuthUser(provider, c);
+      return user ? c.json({ ok: true }) : c.json({ error: 'unauthorized' }, 401);
+    });
+    return app;
+  }
+
+  it('forwards a renewed session cookie on the handler response', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockReturnValue({ 'Set-Cookie': 'wos-session=v2; Path=/; Max-Age=1209600' });
+    const app = await buildUngatedApp();
+
+    const res = await app.request('/web/thing', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toBe('wos-session=v2; Path=/; Max-Age=1209600');
+  });
+
+  it('still authenticates when forwarding headers throws', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const app = await buildUngatedApp();
+
+    const res = await app.request('/web/thing', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('mountFactoryAuth (disabled)', () => {
   it('is a no-op and leaves routes ungated', async () => {
     const { app, enabled } = buildApp();
@@ -104,6 +145,28 @@ describe('mountFactoryAuth (disabled)', () => {
 
 describe('mountFactoryAuth gate (enabled)', () => {
   beforeEach(enableEnv);
+
+  it('forwards a renewed session cookie from the provider on authenticated requests', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockReturnValue({ 'Set-Cookie': 'wos-session=v2; Path=/; Max-Age=1209600' });
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agents', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toBe('wos-session=v2; Path=/; Max-Age=1209600');
+    expect(mockConsumePendingResponseHeaders).toHaveBeenCalledWith(expect.any(Request));
+  });
+
+  it('still serves authenticated requests when forwarding headers throws', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agents', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+  });
 
   it('redirects unauthenticated HTML navigation to /signin with returnTo', async () => {
     mockAuthenticate.mockResolvedValue(null);
@@ -388,6 +451,46 @@ describe('mountFactoryAuth gate (enabled)', () => {
     });
   });
 
+  it('marks requests a signed-in person makes as interactive, and signature-verified webhooks as not', async () => {
+    mockAuthenticate.mockImplementation(async (token: string | undefined) =>
+      token ? { workosId: 'user_123', organizationId: 'org_123' } : null,
+    );
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('requestContext' as never, new RequestContext() as never);
+      await next();
+    });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    const interactive = (c: { get(key: never): unknown }) =>
+      (c.get('requestContext' as never) as RequestContext).get(FACTORY_INTERACTIVE_KEY) === true;
+    app.get('/web/whoami', c => c.json({ interactive: interactive(c) }));
+    app.post('/web/github/webhook', c => c.json({ interactive: interactive(c) }));
+
+    const signedIn = await app.request('/web/whoami', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer cli-token' },
+    });
+    expect(await signedIn.json()).toEqual({ interactive: true });
+
+    const webhook = await app.request('/web/github/webhook', { method: 'POST' });
+    expect(await webhook.json()).toEqual({ interactive: false });
+  });
+
+  it('marks every request interactive when auth is disabled', async () => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('requestContext' as never, new RequestContext() as never);
+      await next();
+    });
+    app.use('*', createFactoryInteractiveMarker());
+    app.get('/web/whoami', c =>
+      c.json({
+        interactive: (c.get('requestContext' as never) as RequestContext).get(FACTORY_INTERACTIVE_KEY) === true,
+      }),
+    );
+    const res = await app.request('/web/whoami');
+    expect(await res.json()).toEqual({ interactive: true });
+  });
+
   it('selects a requested bearer organization proven by provider memberships', async () => {
     mockAuthenticate.mockResolvedValue({
       workosId: 'user_123',
@@ -434,6 +537,53 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  const jwtWithOrg = (orgId: string) =>
+    `h.${Buffer.from(JSON.stringify({ sub: 'user_123', org_id: orgId })).toString('base64url')}.s`;
+
+  it('selects the bearer token org_id claim when the user is a member', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1', 'org_2'] });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${jwtWithOrg('org_2')}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+  });
+
+  it('rejects a bearer token org_id claim the user is not a member of instead of using the default org', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1'] });
+    const { app } = buildApp();
+
+    const res = await app.request('/web/projects', {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${jwtWithOrg('org_other')}` },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_forbidden' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('lets an explicit organization header win over the token org_id claim', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1', 'org_2'] });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${jwtWithOrg('org_2')}`,
+        'X-Mastra-Organization-Id': 'org_1',
+      },
+    });
+
+    expect(await res.json()).toEqual({ orgId: 'org_1', userId: 'user_123' });
   });
 
   it('rejects a requested bearer organization not present in provider memberships', async () => {
@@ -660,6 +810,14 @@ describe('org-tenant identity', () => {
     expect(getFactoryAuthOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
     expect(getFactoryAuthOrgId({ workosId: 'user_1' })).toBeUndefined();
     expect(getFactoryAuthOrgId(undefined)).toBeUndefined();
+  });
+
+  it('factoryUserOrgId keys personal users on their own rung, never the shared local scope', () => {
+    expect(factoryUserOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
+    expect(factoryUserOrgId({ id: 'user_2' })).toBe('user:user_2');
+    // No user at all means no per-user rung; callers fall back to `local`.
+    expect(factoryUserOrgId(undefined)).toBeUndefined();
+    expect(factoryUserOrgId({ email: 'no-id@example.com' })).toBeUndefined();
   });
 
   it('gate stashes organizationId and factoryAuthTenant returns { orgId, userId }', async () => {

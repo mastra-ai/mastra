@@ -63,7 +63,8 @@ new MastraEditor({
 ## Implementing a provider
 
 ```typescript title="src/providers/my-sandbox.ts"
-import type { SandboxProvider, WorkspaceSandbox } from '@mastra/core/editor'
+import type { SandboxProvider } from '@mastra/core/editor'
+import type { WorkspaceSandbox } from '@mastra/core/workspace'
 
 export const mySandboxProvider: SandboxProvider<{ apiKey: string }> = {
   id: 'my-sandbox',

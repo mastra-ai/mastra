@@ -3,8 +3,8 @@
  * Validates mapped data before import, including schema validation
  */
 
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import type { ZodSchema, ZodError, ZodIssue } from 'zod';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 /** Column mapping configuration */
 export type ColumnMapping = Record<string, 'input' | 'groundTruth' | 'metadata' | 'ignore'>;

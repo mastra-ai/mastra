@@ -1,4 +1,5 @@
 import { createBarLogWriter } from '../../utils/clack-bar.js';
+import { uploadArtifact } from '../../utils/deploy-bundle-size.js';
 import type { LogCollector } from '../../utils/deploy-log-format.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { abortableDelay, withPollingRetries } from '../../utils/polling.js';
@@ -169,6 +170,7 @@ export async function uploadServerDeploy(
       projectId,
       projectName: meta?.projectName,
       envVars: meta?.envVars,
+      artifactBytes: zipBuffer.byteLength,
       ...(meta?.disablePlatformObservability !== undefined
         ? { disablePlatformObservability: meta.disablePlatformObservability }
         : {}),
@@ -195,20 +197,7 @@ export async function uploadServerDeploy(
 
   // Step 2: Upload artifact to the signed URL
   try {
-    if (uploadUrl.startsWith('file://')) {
-      const { writeFile } = await import('node:fs/promises');
-      const { fileURLToPath } = await import('node:url');
-      await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
-    } else {
-      const uploadResp = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/zip' },
-        body: new Uint8Array(zipBuffer),
-      });
-      if (!uploadResp.ok) {
-        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
-      }
-    }
+    await uploadArtifact(uploadUrl, zipBuffer);
   } catch (uploadError) {
     await cancel(client);
     throw uploadError;

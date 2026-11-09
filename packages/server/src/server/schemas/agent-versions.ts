@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { defaultOptionsSchema } from './default-options';
-import { serializedMemoryConfigSchema } from './memory-config';
+import { storedMemoryRefSchema } from './memory-config';
 import {
   scorerConfigSchema,
   instructionsSchema,
@@ -98,9 +98,9 @@ export const agentVersionSchema = z.object({
   outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
     .describe('Output processor graph — static or conditional'),
-  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+  memory: conditionalFieldSchema(storedMemoryRefSchema)
     .optional()
-    .describe('Memory configuration — static or conditional'),
+    .describe('Memory: registered memory reference or inline config — static or conditional'),
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),

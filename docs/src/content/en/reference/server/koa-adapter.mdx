@@ -41,6 +41,8 @@ app.listen(3000, () => {
 })
 ```
 
+`init()` doesn't start Mastra's background workers. To run [scheduled workflows](/docs/workflows/scheduled-workflows), agent schedules, or event listeners, call `await mastra.startWorkers()` after the server starts listening. See [Start background workers](/docs/server/server-adapters#start-background-workers).
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -62,7 +64,7 @@ app.listen(3000, () => {
     type: 'string',
     description: 'Route path prefix (e.g., `/api/v2`)',
     isOptional: true,
-    defaultValue: "''",
+    defaultValue: "'/api'",
   },
   {
     name: 'openapiPath',
@@ -145,6 +147,8 @@ await server.init()
 The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it's called before the error propagates to middleware, and its response is used directly:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 const mastra = new Mastra({
   server: {
     onError: (err, c) => {
@@ -155,7 +159,7 @@ const mastra = new Mastra({
 })
 ```
 
-When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention.
+When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention. Client errors (4xx) and `501` errors already logged by the route handler are only emitted as `error` events when you register your own `error` listener; otherwise they go to `errorMonitor` listeners only.
 
 ## Protecting raw routes
 

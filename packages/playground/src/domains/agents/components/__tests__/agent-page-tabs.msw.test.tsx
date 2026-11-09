@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -10,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentLayout } from '../../agent-layout';
 import { systemPackages } from './fixtures/channels';
 import { agentsResponse, v2Agent } from './fixtures/composer-model-settings';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -174,6 +174,61 @@ describe('AgentLayout tool tabs', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Editor' }));
 
       expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/editor');
+    });
+  });
+
+  describe('when the user is in a conversation', () => {
+    it('opens Traces filtered to that conversation', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/threads/thread-1');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Traces' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/traces?filterThreadId=thread-1');
+    });
+  });
+
+  describe('when the user is in a new conversation', () => {
+    it('opens Traces for the whole agent', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/threads/new');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Traces' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/traces');
+    });
+  });
+
+  describe('when Traces is filtered to a conversation', () => {
+    it('returns to that conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces?filterThreadId=thread-1');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/thread-1');
+    });
+  });
+
+  describe('when Traces excludes a conversation', () => {
+    it('opens a new conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces?filterThreadId=thread-1&filterThreadId.op=isNot');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/new');
+    });
+  });
+
+  describe('when Traces has no conversation filter', () => {
+    it('opens a new conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/new');
     });
   });
 

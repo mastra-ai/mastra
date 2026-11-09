@@ -1,18 +1,34 @@
-export { BoardDefinitionError, defineBoard } from './define-board.js';
+export { BoardDefinitionError, DEFAULT_PHASE_CONTEXT, defineBoard, FACTORY_AGENT_ID } from './define-board.js';
+export { cardRuleFacts } from './card-facts.js';
 export type {
   BoardDefinition,
+  BoardEventIntegration,
+  BoardEventRules,
+  BoardPhase,
   BoardPhaseDefinition,
+  BoardPhaseExitTool,
   BoardPhaseKind,
+  BoardPhaseRunner,
+  BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,
   BoardToolRules,
   BoardTransition,
 } from './define-board.js';
 export {
+  boardEventHandlers,
   boardForWorkItem,
+  eventBoardId,
+  isPullRequestCard,
   isTerminalWorkItem,
+  pullRequestReviewPhase,
+  resolveBoardClosure,
+  reviewsPullRequest,
   resolveBoardToolRule,
+  rulePhaseContext,
+  rulePhaseField,
   resolvePhaseSemantics,
+  withBoardClosure,
   workItemPhaseSemantics,
 } from './semantics.js';
 export type { PhaseSemantics } from './semantics.js';

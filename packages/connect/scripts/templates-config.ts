@@ -42,7 +42,56 @@ const PIN_677: TemplatePin = {
   sha: 'c3091db1e8a623113d581197a8ee0d5b1aa87136',
 };
 
+/**
+ * NangoHQ/integration-templates#708 (merged) fixes linear attachment tools
+ * rejecting null creator emails, surfaces GraphQL errors[] in linear
+ * cycle/project actions (including partial `data: { field: null }` responses),
+ * and accepts fireflies action_items as either an array or a newline-joined
+ * string. Pinned to upstream main at the merge commit; fold back into
+ * TEMPLATE_SHA on the next workspace-wide refresh.
+ */
+const PIN_708: TemplatePin = {
+  repo: 'NangoHQ/integration-templates',
+  sha: '4e61bff484f0ab28810e3f252be8bff1f49928a9',
+};
+
+/**
+ * NangoHQ/integration-templates#724 (merged) fixes fireflies get-transcript
+ * rejecting every real transcript: the API returns sentence speaker_id as a
+ * number and start_time/end_time as float seconds, but the template's schema
+ * declared all three as strings. The pinned commit is the upstream main merge
+ * commit of that PR. Fold back into TEMPLATE_SHA the next time the main pin
+ * is bumped past it.
+ */
+const PIN_724: TemplatePin = {
+  repo: 'NangoHQ/integration-templates',
+  sha: '9f836014ab8bd0043dfa5200ad15d298c7149dc6',
+};
+
+/**
+ * NangoHQ/integration-templates#723 fixes google-drive shared-drive writes:
+ * create-folder, move-file, and upload-document omitted
+ * supportsAllDrives=true, which the Drive API requires for requests that
+ * target shared (Team) drives, so those writes 404'd. The pinned commit is
+ * that PR's head — upstream main plus the change — served directly by the
+ * upstream repository. Fold back into TEMPLATE_SHA once #723 merges.
+ */
+const PIN_723: TemplatePin = {
+  repo: 'NangoHQ/integration-templates',
+  sha: 'a5dad336b416d450a5a1f17e85f5586df6a05408',
+};
+
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
+  // NangoHQ/integration-templates#670 fixed clerk_list_users and
+  // clerk_list_sessions, which previously parsed Clerk's bare-array
+  // responses with an envelope schema and 500'd on every call. Pinned to
+  // upstream main at the merge commit so we pick up the fix without
+  // regenerating every other provider. Fold back into TEMPLATE_SHA on the
+  // next workspace-wide refresh.
+  clerk: {
+    repo: 'NangoHQ/integration-templates',
+    sha: '23df553a789b6e30ba1640d4605cf5bfa7ca7cae',
+  },
   // NangoHQ/integration-templates#667
   resend: {
     repo: 'rhysbalevicius/integration-templates',
@@ -53,6 +102,19 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
     repo: 'rhysbalevicius/integration-templates',
     sha: 'c4fb0d5d5b2c677f794d836a470013da46c347a2',
   },
+  // NangoHQ/integration-templates#708 (merged) — linear: nullable attachment
+  // creator emails and GraphQL errors[] surfaced in cycle/project actions.
+  // Linear also picks up the #704 create-cycle and archive-cycle fixes by
+  // moving off TEMPLATE_SHA. Fold back into TEMPLATE_SHA on the next
+  // workspace-wide refresh.
+  linear: PIN_708,
+  // NangoHQ/integration-templates#724 — numeric sentence speaker_id and
+  // start/end times accepted in get-transcript. Based on upstream main, so it
+  // also carries the merged #708 action_items fix.
+  fireflies: PIN_724,
+  // NangoHQ/integration-templates#723 — supportsAllDrives on create-folder,
+  // move-file, and upload-document so shared-drive writes work.
+  'google-drive': PIN_723,
   // NangoHQ/integration-templates#677
   slack: PIN_677,
   github: PIN_677,
@@ -60,7 +122,6 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   stripe: PIN_677,
   'twitter-v2': PIN_677,
   hubspot: PIN_677,
-  fireflies: PIN_677,
   discord: PIN_677,
   'google-mail': PIN_677,
   'google-calendar': PIN_677,

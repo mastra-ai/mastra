@@ -46,6 +46,11 @@ export interface RunWithSecretsOptions {
    * values) stays in a throwaway build stage.
    */
   output: string;
+  /**
+   * Owner of the copied output, as `user[:group]` or `uid[:gid]`. Set this when
+   * the base image runs as a non-root `USER`; otherwise the output is owned by root.
+   */
+  owner?: string;
 }
 
 export type DockerTemplateOperation =
@@ -147,6 +152,15 @@ function renderSecretRun(command: string | string[], secrets: string[]): string 
   return `RUN ${[...mounts, ''].join(' ')}${[...prefix, ...toCommandList(command)].join(' && ')}`;
 }
 
+const OWNER_PATTERN = /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.-]+)?$/;
+
+/** Throws unless `owner` is a `user[:group]` or `uid[:gid]` usable in `COPY --chown`. */
+export function assertValidOwner(owner: unknown): asserts owner is string {
+  if (typeof owner !== 'string' || !OWNER_PATTERN.test(owner)) {
+    throw new TypeError(`owner must be user[:group] or uid[:gid], got ${JSON.stringify(owner)}`);
+  }
+}
+
 export function synthesizeDockerfile(definition: DockerTemplateDefinition): string {
   const lines: string[] = [];
   let mainIndex = 0;
@@ -169,13 +183,14 @@ export function synthesizeDockerfile(definition: DockerTemplateDefinition): stri
         lines.push(`RUN ${toCommandList(operation.args[0]).join(' && ')}`);
         break;
       case 'runWithSecrets': {
-        const [command, { secrets, output }] = operation.args;
+        const [command, { secrets, output, owner }] = operation.args;
+        if (owner !== undefined) assertValidOwner(owner);
         const snapshot = mainStageName(mainIndex);
         const stage = secretStageName(index);
         lines.push(`FROM ${snapshot} AS ${stage}`, renderSecretRun(command, secrets));
         mainIndex += 1;
         openMain(snapshot);
-        lines.push(`COPY --from=${stage} ${output} ${output}`);
+        lines.push(`COPY ${owner !== undefined ? `--chown=${owner} ` : ''}--from=${stage} ${output} ${output}`);
         break;
       }
       case 'aptInstall':
@@ -216,8 +231,11 @@ function canonicalOperation(operation: DockerTemplateOperation): unknown {
     case 'setEnvs':
       return { method: 'setEnvs', args: [sortedEntries(operation.args[0])] };
     case 'runWithSecrets': {
-      const [command, { secrets, output }] = operation.args;
-      return { method: 'runWithSecrets', args: [command, { secrets: [...secrets].sort(), output }] };
+      const [command, { secrets, output, owner }] = operation.args;
+      return {
+        method: 'runWithSecrets',
+        args: [command, { secrets: [...secrets].sort(), output, ...(owner !== undefined ? { owner } : {}) }],
+      };
     }
     default:
       return operation;

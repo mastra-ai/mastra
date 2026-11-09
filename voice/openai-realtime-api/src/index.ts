@@ -124,6 +124,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private transcriber: Realtime.AudioTranscriptionModel;
   private requestContext?: RequestContext;
   private connectionAbort?: AbortController;
+  private speakerStreams = new Map<string, StreamWithId>();
   /**
    * Creates a new instance of OpenAIRealtimeVoice.
    *
@@ -202,6 +203,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     if (!this.ws) return;
     this.ws.close();
     this.state = 'close';
+    this.closeSpeakerStreams();
   }
 
   /**
@@ -462,6 +464,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.state = 'close';
     this.sessionReady = false;
     this.client.removeAllListeners();
+    this.closeSpeakerStreams();
     const controller = new AbortController();
     this.connectionAbort = controller;
     this.setupEventListeners();
@@ -501,6 +504,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.state = 'close';
     this.connectionAbort?.abort(new Error('OpenAI realtime connection disconnected during handshake'));
     this.ws?.close();
+    this.closeSpeakerStreams();
   }
 
   /**
@@ -645,8 +649,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     }
   }
 
+  private closeSpeakerStreams(): void {
+    for (const stream of this.speakerStreams.values()) {
+      if (!stream.writableEnded) stream.end();
+    }
+    this.speakerStreams.clear();
+  }
+
   private setupEventListeners(): void {
-    const speakerStreams = new Map<string, StreamWithId>();
+    const speakerStreams = this.speakerStreams;
     const userTranscriptionDeltaItems = new Set<string>();
 
     if (!this.ws) {
@@ -664,6 +675,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       if (this.ws !== ws) return;
       this.state = 'close';
       this.sessionReady = false;
+      this.closeSpeakerStreams();
       this.emit('close', { code, reason: reason.toString() });
     });
     ws.on('message', message => {
@@ -756,9 +768,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('response.text.done', handleTextDone);
     this.client.on('response.output_text.done', handleTextDone);
     this.client.on('response.done', async ev => {
+      // Responses without audio (tool-call-only turns, text modality, or cancelled before any audio)
+      // never send output_audio.done, so end the stream here. Do it before running tools so a slow
+      // or failing tool cannot hold the stream open.
+      const stream = speakerStreams.get(ev.response.id);
+      if (stream && !stream.writableEnded) stream.end();
+      speakerStreams.delete(ev.response.id);
+
       await this.handleFunctionCalls(ev);
       this.emit('response.done', ev);
-      speakerStreams.delete(ev.response.id);
     });
     this.client.on('error', async ev => {
       this.emit('error', ev);
@@ -814,7 +832,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
         item: {
           type: 'function_call_output',
           call_id: output.call_id,
-          output: JSON.stringify(result),
+          output: JSON.stringify(result ?? null),
         },
       });
     } catch (e) {

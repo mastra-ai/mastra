@@ -1,11 +1,13 @@
 import type { Provider } from '@mastra/client-js';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { useMemo } from 'react';
-import { cleanProviderId } from '../utils';
 
 export interface ModelInfo {
   provider: string;
   providerName: string;
   model: string;
+  releaseDate?: string;
 }
 
 /**
@@ -18,6 +20,7 @@ export const useAllModels = (providers: Provider[]): ModelInfo[] => {
         provider: provider.id,
         providerName: provider.name,
         model: model,
+        releaseDate: provider.modelReleaseDates?.[model],
       })),
     );
   }, [providers]);
@@ -68,6 +71,8 @@ export const useFilteredModels = (
       filtered = filtered.filter(m => m.model.toLowerCase().includes(searchTerm.toLowerCase()));
     }
 
-    return [...filtered].sort((a, b) => a.model.localeCompare(b.model));
+    return [...filtered].sort(
+      (a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model),
+    );
   }, [allModels, searchTerm, currentProvider, isSearching]);
 };

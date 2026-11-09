@@ -1,66 +1,35 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { frameSurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-
-export type MetricsCardGroupVariant = 'default' | 'inset';
 
 export type MetricsCardGroupProps = {
   children: ReactNode;
-  /**
-   * `default` — raised cards sitting in a frame one step below them.
-   * `inset` — the DataList treatment: the group is the raised surface, and the
-   * cards are flat wells cut into it, so the frame reads as a thick border.
-   */
-  variant?: MetricsCardGroupVariant;
-  /**
-   * Base width each card grows from; a card wraps once the row can't fit it.
-   * Raise it for chart cards, which need more room than a KPI.
-   */
-  minItemWidth?: string;
   className?: string;
 };
 
 /**
- * Like DataList, the inset group is the only element that defines a color: it
- * repaints its cards as wells, whatever card is dropped in. `!` is needed to beat
- * `Card`'s pinned `hover:`/`active:` fills.
+ * A row of metrics cards (KPI, chart, …) held as one unit. No frame of its own: the cards
+ * sit directly on the page with the page's 16px gap, so there is never a card inside a card.
+ * Columns follow the group's own width (container queries), not the viewport, so a sidebar or
+ * a narrow pane never squeezes cards into one row. One column, then two. Up to four cards share
+ * one row from 56rem; five go 3 + 2 from 48rem and share one row from 72rem. Every card stays at
+ * least 12rem wide, room for its value, change badge and footer on one line each.
+ * The group owns their width, so each card's own `min-w-*` is neutralised.
  */
-const variantClasses: Record<MetricsCardGroupVariant, string> = {
-  default: frameSurfaceStyle,
-  // Wells swap the card's elevation for a bare 1px `--surface-rim`: the same edge
-  // every raised surface draws, with no lift, so they stay crisp against the frame
-  // in light, where `background` and `card` sit only a step apart.
-  inset: cn(raisedSurfaceStyle, '*:bg-background! *:shadow-rim!'),
-};
-
-/**
- * A frame that holds a row of metrics cards (KPI, chart, …) as one unit.
- * Cards flex to fill each row and wrap responsively; the group owns their width,
- * so each card's own `min-w-*` is neutralised.
- */
-export function MetricsCardGroup({
-  children,
-  variant = 'default',
-  minItemWidth = '16rem',
-  className,
-}: MetricsCardGroupProps) {
-  const style: CSSProperties & Record<'--metrics-card-group-basis', string> = {
-    '--metrics-card-group-basis': `min(100%, ${minItemWidth})`,
-  };
-
+// No base `grid-cols-1` and no display switch: an app that loads this package's CSS next to
+// its own Tailwind output can emit the same plain utility later in the cascade, which would
+// beat a container-query utility of equal specificity. The rows are grid track lists; the
+// five-card single row is important so it wins over the `has-*` three-column rule.
+export function MetricsCardGroup({ children, className }: MetricsCardGroupProps) {
   return (
-    <div
-      style={style}
-      // Cards grow from a shared basis and wrap, so a short last row stretches to
-      // fill instead of leaving empty columns.
-      // Outer radius = card radius (8px) + 4px inset so the corners stay concentric.
-      className={cn(
-        'flex flex-wrap gap-1 rounded-xl p-1 *:min-w-0! *:flex-1 *:basis-(--metrics-card-group-basis)',
-        variantClasses[variant],
-        className,
-      )}
-    >
-      {children}
+    <div className="@container">
+      <div
+        className={cn(
+          'grid gap-4 *:min-w-0! @xl:grid-cols-2 @3xl:has-[>:nth-child(5)]:grid-cols-3 @4xl:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] @6xl:has-[>:nth-child(5)]:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]!',
+          className,
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

@@ -14,12 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import {
-  FieldBlocksLayout,
-  SelectFieldBlock,
-  TextareaFieldBlock,
-  TextFieldBlock,
-} from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Input } from '@/ds/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
 
@@ -28,41 +26,59 @@ const regions = [
   { value: 'eu-west-1', label: 'EU West (Ireland)' },
 ];
 
-function Fields({ id }: { id: string }) {
+function Fields() {
   const [region, setRegion] = useState('us-east-1');
   const [owner, setOwner] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   return (
-    <FieldBlocksLayout>
-      <TextFieldBlock
-        name={`${id}-api-key`}
-        label="API key"
-        required
-        placeholder="Paste your API key"
-        errorMsg="API key is required"
-      />
-      <TextFieldBlock name={`${id}-account`} label="Account name" defaultValue="contoso-eu-west-production-tenant" />
-      <SelectFieldBlock
-        name={`${id}-region`}
-        label="Region"
-        value={region}
-        onValueChange={setRegion}
-        options={regions}
-      />
-      <Combobox
-        options={[
-          { value: 'platform', label: 'Platform team' },
-          { value: 'studio', label: 'Studio team' },
-        ]}
-        value={owner}
-        onValueChange={setOwner}
-        placeholder="Choose an owner"
-        error="Choose an owner"
-      />
+    <div className="grid gap-6">
+      <Field invalid>
+        <FieldLabel required>API key</FieldLabel>
+        <Input required placeholder="Paste your API key" />
+        <FieldError>API key is required</FieldError>
+      </Field>
+      <Field>
+        <FieldLabel>Account name</FieldLabel>
+        <Input defaultValue="contoso-eu-west-production-tenant" />
+      </Field>
+      <Field>
+        <FieldLabel>Region</FieldLabel>
+        <Select value={region} onValueChange={setRegion}>
+          <SelectTrigger size="md">
+            <SelectValue placeholder="Select an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {regions.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field invalid>
+        <FieldLabel>Owner</FieldLabel>
+        <Combobox
+          options={[
+            { value: 'platform', label: 'Platform team' },
+            { value: 'studio', label: 'Studio team' },
+          ]}
+          value={owner}
+          onValueChange={setOwner}
+          placeholder="Choose an owner"
+        />
+        <FieldError>Choose an owner</FieldError>
+      </Field>
       <DateTimePicker value={date} onValueChange={setDate} placeholder="Pick an expiry date" />
-      <TextareaFieldBlock name={`${id}-notes`} label="Notes" placeholder="Optional" />
-      <TextFieldBlock name={`${id}-token`} label="Legacy token" disabled defaultValue="sk-legacy-disabled" />
-    </FieldBlocksLayout>
+      <Field>
+        <FieldLabel>Notes</FieldLabel>
+        <Textarea placeholder="Optional" />
+      </Field>
+      <Field disabled>
+        <FieldLabel>Legacy token</FieldLabel>
+        <Input defaultValue="sk-legacy-disabled" />
+      </Field>
+    </div>
   );
 }
 
@@ -89,16 +105,16 @@ export const EverySurface: Story = {
   render: () => (
     <div className="grid min-h-dvh gap-8 bg-background p-8 lg:grid-cols-3">
       <Column title="Page">
-        <Fields id="page" />
+        <Fields />
       </Column>
       <Column title="Card">
         <Card className="p-5">
-          <Fields id="card" />
+          <Fields />
         </Card>
       </Column>
       <Column title="Dialog">
         <div className={`${dialogSurfaceStyle} rounded-xl p-5`}>
-          <Fields id="dialog" />
+          <Fields />
         </div>
       </Column>
     </div>
@@ -108,17 +124,17 @@ export const EverySurface: Story = {
 export const InDialog: Story = {
   render: () => (
     <div className="min-h-dvh bg-background p-8">
-      <Dialog variant="new" defaultOpen>
-        <DialogContent className="max-w-lg">
+      <Dialog defaultOpen>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Connect Anthropic</DialogTitle>
             <DialogDescription>Enter the details required to finish setting up this connection.</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <Fields id="modal" />
+            <Fields />
           </DialogBody>
           <DialogFooter>
-            <Button variant="default">Back</Button>
+            <Button>Back</Button>
             <Button variant="primary">Connect Anthropic</Button>
           </DialogFooter>
         </DialogContent>

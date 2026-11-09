@@ -187,12 +187,12 @@ export class OtelExporter extends BaseExporter {
     return resolved;
   }
 
-  /**
-   * Derive the endpoint for a specific signal from the resolved provider config.
-   * Strips trailing slashes and any existing signal-path suffix so we never
-   * produce a doubled "//v1/logs" or leave a stale "/v1/traces" on a logs URL.
-   */
-  private getSignalEndpoint(resolved: ResolvedProviderConfig, signal: 'traces' | 'logs'): string {
+  /** Use explicit signal endpoints unchanged, or derive paths for legacy collector configs. */
+  private getSignalEndpoint(resolved: ResolvedProviderConfig, signal: 'traces' | 'logs'): string | undefined {
+    if (resolved.endpoints) return resolved.endpoints[signal];
+    if (!resolved.endpoint) return undefined;
+    if (resolved.protocol === 'zipkin') return resolved.endpoint;
+
     const signalPaths: Record<string, string> = {
       traces: '/v1/traces',
       logs: '/v1/logs',
@@ -295,8 +295,11 @@ export class OtelExporter extends BaseExporter {
         this.exporter = this.config.exporter;
       } else {
         const headers = resolved.headers;
-        // Zipkin doesn't follow OTLP signal-path conventions; pass its endpoint through unchanged.
-        const endpoint = protocol === 'zipkin' ? resolved.endpoint : this.getSignalEndpoint(resolved, 'traces');
+        const endpoint = this.getSignalEndpoint(resolved, 'traces');
+        if (!endpoint) {
+          this.debugLog('Trace export disabled: no trace endpoint configured');
+          return;
+        }
 
         this.debugLog(`Setting up trace exporter: protocol=${protocol}, endpoint=${endpoint}`);
 
@@ -351,13 +354,18 @@ export class OtelExporter extends BaseExporter {
 
   private async setupLogs(resolved: ResolvedProviderConfig, protocol: ExportProtocol): Promise<void> {
     try {
+      const logEndpoint = this.getSignalEndpoint(resolved, 'logs');
+      if (!logEndpoint) {
+        this.debugLog('Log export disabled: no log endpoint configured');
+        return;
+      }
+
       const LogExporterClass = await loadSignalExporter('logs', protocol, this.providerName);
       if (!LogExporterClass) {
         this.debugLog(`Log exporter package not available for protocol "${protocol}". Log export disabled.`);
         return;
       }
 
-      const logEndpoint = this.getSignalEndpoint(resolved, 'logs');
       const headers = resolved.headers;
 
       this.debugLog(`Setting up log exporter: protocol=${protocol}, endpoint=${logEndpoint}`);
@@ -494,7 +502,7 @@ export class OtelExporter extends BaseExporter {
     const signals: string[] = [];
 
     if (this.processor) {
-      flushPromises.push(this.processor.forceFlush());
+      flushPromises.push(this.flushTraces());
       signals.push('traces');
     }
     if (this.loggerProvider) {
@@ -508,6 +516,21 @@ export class OtelExporter extends BaseExporter {
       this.debugLog('Flushed all pending data');
     } else {
       this.debugLog('Flush called but no active exporters');
+    }
+  }
+
+  /**
+   * The BatchSpanProcessor removes a batch from its queue before the export
+   * completes and its forceFlush() only exports what is still queued, so a
+   * timer- or size-triggered batch can still be in flight when it resolves.
+   * OTLP exporters wait for in-flight sends in forceFlush(); call it even when
+   * the processor flush rejects, so a failed batch doesn't skip the wait.
+   */
+  private async flushTraces(): Promise<void> {
+    try {
+      await this.processor!.forceFlush();
+    } finally {
+      await this.exporter?.forceFlush?.();
     }
   }
 

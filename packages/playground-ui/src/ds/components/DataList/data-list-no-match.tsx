@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type DataListNoMatchProps = ComponentPropsWithoutRef<'div'> & {
@@ -18,7 +19,7 @@ export function DataListNoMatch({
       )}
       {...props}
     >
-      <p className="text-body">{message}</p>
+      <Txt>{message}</Txt>
     </div>
   );
 }

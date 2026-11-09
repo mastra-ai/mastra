@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import type { CreateIndexOptions } from '@mastra/core/storage';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
@@ -58,10 +59,19 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
         ? row.completedAt
         : new Date(row.completedAt)
       : undefined,
+    ownerId: row.ownerId ?? undefined,
+    leaseExpiresAt: row.leaseExpiresAt
+      ? row.leaseExpiresAt instanceof Date
+        ? row.leaseExpiresAt
+        : new Date(row.leaseExpiresAt)
+      : undefined,
+    expiresAt: row.expiresAt ? (row.expiresAt instanceof Date ? row.expiresAt : new Date(row.expiresAt)) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   public pool: ConnectionPool;
   private db: MssqlDB;
   private schema?: string;
@@ -97,7 +107,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     await this.db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -182,6 +192,10 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
         startedAt: task.startedAt?.toISOString() ?? null,
         suspendedAt: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
+        ownerId: task.ownerId ?? null,
+        leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+        expiresAt: task.expiresAt?.toISOString() ?? null,
+        metadata: serializeJson(task.metadata),
       },
     });
   }
@@ -189,7 +203,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: Record<string, any> = {};
@@ -227,17 +241,58 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
       setClauses.push(`[completedAt] = @p${idx}`);
       params[`p${idx++}`] = update.completedAt?.toISOString() ?? null;
     }
+    if ('ownerId' in update) {
+      setClauses.push(`[ownerId] = @p${idx}`);
+      params[`p${idx++}`] = update.ownerId ?? null;
+    }
+    if ('leaseExpiresAt' in update) {
+      setClauses.push(`[leaseExpiresAt] = @p${idx}`);
+      params[`p${idx++}`] = update.leaseExpiresAt?.toISOString() ?? null;
+    }
+    if ('expiresAt' in update) {
+      setClauses.push(`[expiresAt] = @p${idx}`);
+      params[`p${idx++}`] = update.expiresAt?.toISOString() ?? null;
+    }
+    if ('metadata' in update) {
+      setClauses.push(`[metadata] = @p${idx}`);
+      params[`p${idx++}`] = serializeJson(update.metadata);
+    }
 
     if (setClauses.length === 0) return false;
 
     setClauses.push(`[id] = [id]`); // no-op to ensure valid SET
     params[`p${idx}`] = taskId;
     const taskIdParam = `p${idx++}`;
-    let statusPredicate = '';
+    const predicates: string[] = [];
     if (options?.expectedStatus) {
       params[`p${idx}`] = options.expectedStatus;
-      statusPredicate = ` AND [status] = @p${idx}`;
+      predicates.push(`[status] = @p${idx++}`);
     }
+    if (options?.expectedOwnerId !== undefined) {
+      if (options.expectedOwnerId === null) {
+        predicates.push(`[ownerId] IS NULL`);
+      } else {
+        params[`p${idx}`] = options.expectedOwnerId;
+        predicates.push(`[ownerId] = @p${idx++}`);
+      }
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      if (options.expectedLeaseExpiresAt === null) {
+        predicates.push(`[leaseExpiresAt] IS NULL`);
+      } else {
+        params[`p${idx}`] = options.expectedLeaseExpiresAt.toISOString();
+        predicates.push(`[leaseExpiresAt] = @p${idx++}`);
+      }
+    }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        predicates.push(`[suspendedAt] IS NULL`);
+      } else {
+        params[`p${idx}`] = options.expectedSuspendedAt.toISOString();
+        predicates.push(`[suspendedAt] = @p${idx++}`);
+      }
+    }
+    const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
 
     const request = this.pool.request();
     for (const [name, value] of Object.entries(params)) {
@@ -245,7 +300,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     }
 
     const result = await request.query(
-      `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @${taskIdParam}${statusPredicate}`,
+      `UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @${taskIdParam}${predicateSql}`,
     );
     return (result.rowsAffected[0] ?? 0) > 0;
   }
@@ -305,7 +360,12 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
           ? '[suspendedAt]'
           : filter.dateFilterBy === 'completedAt'
             ? '[completedAt]'
-            : '[createdAt]';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '[expiresAt]'
+              : '[createdAt]';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '[expiresAt] IS NOT NULL' : '[expiresAt] IS NULL');
+    }
     if (filter.fromDate) {
       params[`p${idx}`] = filter.fromDate.toISOString();
       conditions.push(`${dateCol} >= @p${idx++}`);
@@ -384,7 +444,12 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
           ? '[suspendedAt]'
           : filter.dateFilterBy === 'completedAt'
             ? '[completedAt]'
-            : '[createdAt]';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '[expiresAt]'
+              : '[createdAt]';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '[expiresAt] IS NOT NULL' : '[expiresAt] IS NULL');
+    }
     if (filter.fromDate) {
       params[`p${idx}`] = filter.fromDate.toISOString();
       conditions.push(`${dateCol} >= @p${idx++}`);

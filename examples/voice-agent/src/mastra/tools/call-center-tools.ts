@@ -31,7 +31,7 @@ function appointmentSummary(appointmentId: string) {
 export const lookupCustomer = createTool({
   id: 'lookupCustomer',
   description:
-    'Look up a customer record by phone number or name. Returns the profile, property type, notes, and any upcoming site visits.',
+    'Look up an existing customer by phone number or name when needed for an account or booking. Reuse previous results, including no match; only retry with new or corrected identifying information. Returns the profile and upcoming visits. If no match, collect a new lead or callback instead of repeatedly searching.',
   inputSchema: z.object({
     phone: z.string().optional().describe('Phone number, any format'),
     name: z.string().optional().describe('Full or partial name'),

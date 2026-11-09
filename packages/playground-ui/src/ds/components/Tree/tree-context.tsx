@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
 
 export interface TreeContextValue {
@@ -18,6 +19,7 @@ export function useTreeContext(): TreeContextValue | null {
 
 export interface TreeFolderContextValue {
   isFocused: boolean;
+  isOpen: boolean;
 }
 
 const TreeFolderContext = React.createContext<TreeFolderContextValue | null>(null);

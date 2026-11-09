@@ -101,14 +101,14 @@ console.log(item.id)
           },
           {
             name: 'scorerIds',
-            type: 'string[]',
+            type: 'string[] | null',
             isOptional: true,
             description:
               'Scorer IDs selected for this item. An empty array is an explicit override that runs no scorers.',
           },
           {
             name: 'metadata',
-            type: 'Record<string, unknown>',
+            type: 'Record<string, unknown> | null',
             isOptional: true,
             description: 'Item metadata.',
           },

@@ -21,9 +21,9 @@ workflow.sleepUntil(new Date(Date.now() + 5000))
   content={[
   {
     name: 'dateOrCallback',
-    type: 'Date | ((params: ExecuteFunctionParams) => Promise<Date>)',
+    type: 'Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>',
     description:
-      'Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.',
+      'Either a Date object or a step-style execute function that returns a Date. The callback receives the execution context typed to the workflow state and the previous step output, and can compute the target time dynamically based on input data.',
     isOptional: false,
   },
   {

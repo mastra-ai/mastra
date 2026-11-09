@@ -1,15 +1,18 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import type { ChatSendArgs } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
-import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { injectBufferingEnds } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
+import { toUntrustedAppContext } from '@mastra/playground-ui/utils/mcp-app-context';
 import { useMastraClient } from '@mastra/react';
+import {
+  memoryStatusQueryKey,
+  memoryThreadMessagesQueryKey,
+  observationalMemoryQueryKey,
+} from '@mastra/react/hooks/memory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { injectBufferingEnds } from '@/services/om-parts-converter';
 import {
   buildMaxStepsStreamErrorMessage,
   buildStreamErrorMessage,
@@ -56,7 +59,7 @@ const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined =>
 
 interface SendDeps {
   model?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
@@ -69,7 +72,7 @@ interface SendDeps {
 
 interface UseChatSendHandlerArgs {
   agentId: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: Record<string, any>;
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
@@ -105,6 +108,17 @@ const buildRequestContext = (deps: SendDeps) => {
     requestContextInstance.set('agentVersionId', deps.agentVersionId);
   }
   return requestContextInstance;
+};
+
+/**
+ * A server error (5xx) can come after the agent ran and stored the turn, as in generate mode where no
+ * chunk arrives first: putting the message back in the composer would invite sending it twice. A
+ * request that got no response, or that the server refused (4xx, such as a body too large), left
+ * nothing behind.
+ */
+const mayHaveBeenStored = (error: unknown) => {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === 'number' && status >= 500;
 };
 
 const didUpdateWorkingMemory = (chunk: any) =>
@@ -144,6 +158,15 @@ export const useChatSendHandler = ({
   const baseClient = useMastraClient();
   const queryClient = useQueryClient();
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Latest context per source (an MCP App's tool call, for instance), carried by the next send only.
+  const modelContextRef = useRef(new Map<string, string>());
+  const setModelContext = useCallback((sourceId: string, context: string | undefined) => {
+    if (context) {
+      modelContextRef.current.set(sourceId, context);
+    } else {
+      modelContextRef.current.delete(sourceId);
+    }
+  }, []);
   const sendDepsRef = useRef<SendDeps>({
     requestContext,
     agentVersionId,
@@ -244,21 +267,36 @@ export const useChatSendHandler = ({
   );
 
   const send = useCallback(
-    async ({ message, attachments = [] }: ChatSendArgs) => {
+    async ({ message, attachments = [] }: ChatSendArgs): Promise<boolean> => {
       const deps = sendDepsRef.current;
-      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return;
+      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
 
       setStreamErrors([]);
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const requestContextInstance = buildRequestContext(deps);
+      const heldContext = new Map(modelContextRef.current);
+      modelContextRef.current.clear();
+      // MCP App context is third-party content: it goes in the user turn as delimited data, never in the system prompt.
+      const appContext = heldContext.size
+        ? [
+            {
+              role: 'user' as const,
+              content: [{ type: 'text' as const, text: toUntrustedAppContext(heldContext.values()) }],
+            },
+          ]
+        : [];
+      const coreUserMessages = [...attachments, ...appContext];
+      // An error can still be thrown once the server has the message, by a chunk handler or a refresh.
+      // Those must not put the message back in the composer.
+      let delivered = false;
 
       try {
         if (deps.chatWithNetwork) {
           await sendMessage({
             message,
             mode: 'network',
-            coreUserMessages: attachments,
+            coreUserMessages,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
@@ -266,6 +304,7 @@ export const useChatSendHandler = ({
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
             onNetworkChunk: async (chunk: any) => {
+              delivered = true;
               if (didUpdateWorkingMemory(chunk)) {
                 void refreshWorkingMemory?.();
               }
@@ -279,7 +318,7 @@ export const useChatSendHandler = ({
           await sendMessage({
             message,
             mode: 'generate',
-            coreUserMessages: attachments,
+            coreUserMessages,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
@@ -287,20 +326,22 @@ export const useChatSendHandler = ({
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
           });
+          delivered = true;
           await refreshThreadList?.();
           refreshTimelinePanel(deps.threadId);
-          return;
+          return true;
         } else {
           await sendMessage({
             message,
             mode: 'stream',
-            coreUserMessages: attachments,
+            coreUserMessages,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
             model: deps.model,
             tracingOptions: deps.tracingOptions,
             onChunk: async (chunk: any) => {
+              delivered = true;
               if (chunk.type === 'finish') {
                 if (isMaxStepsFinishChunk(chunk)) {
                   setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
@@ -317,21 +358,31 @@ export const useChatSendHandler = ({
             signal: controller.signal,
           });
 
-          return;
+          return true;
         }
 
+        delivered = true;
         setTimeout(() => {
           void refreshThreadList?.();
         }, 500);
         refreshTimelinePanel(deps.threadId);
         completeObservationalMemoryBuffering(deps.threadId);
+        return true;
       } catch (error: any) {
         console.error('Error occurred in ChatProvider', error);
         if (error.name === 'AbortError') {
-          return;
+          return true;
         }
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
         resetObservationalMemoryStreamState();
+        const stored = delivered || mayHaveBeenStored(error);
+        if (!stored) {
+          // The message goes back to the composer, so its context waits for the retry.
+          heldContext.forEach((context, sourceId) => {
+            if (!modelContextRef.current.has(sourceId)) modelContextRef.current.set(sourceId, context);
+          });
+        }
+        return stored;
       } finally {
         abortControllerRef.current = null;
       }
@@ -358,5 +409,5 @@ export const useChatSendHandler = ({
     completeObservationalMemoryBuffering(sendDepsRef.current.threadId);
   }, [cancelRun, completeObservationalMemoryBuffering, resetObservationalMemoryStreamState]);
 
-  return { send, cancel };
+  return { send, cancel, setModelContext };
 };

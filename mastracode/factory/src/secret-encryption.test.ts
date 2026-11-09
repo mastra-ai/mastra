@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';
+import {
+  createFactorySecretEncryption,
+  createPlaintextFactorySecretEncryption,
+  FactorySecretDecryptionError,
+  secretKeyMismatchHint,
+} from './secret-encryption.js';
 
 const key = (fill: number) => new Uint8Array(32).fill(fill);
 
@@ -21,6 +26,28 @@ describe('createFactorySecretEncryption', () => {
     const legacy = { type: 'api-key', key: 'legacy' };
 
     await expect(encryption.decrypt(legacy)).resolves.toEqual({ value: legacy, needsReencryption: true });
+  });
+
+  it('decodes values written by the plaintext encryptor and marks them for encryption', async () => {
+    const plaintext = createPlaintextFactorySecretEncryption();
+    const encryption = createFactorySecretEncryption({ primary: { id: 'current', key: key(1) } });
+
+    for (const value of [{ type: 'api_key', key: 'sk-fake' }, 'sk-custom-key']) {
+      const decrypted = await encryption.decrypt(await plaintext.encrypt(value));
+      expect(decrypted).toEqual({ value, needsReencryption: true });
+
+      const migrated = await encryption.encrypt(decrypted.value);
+      await expect(encryption.decrypt(migrated)).resolves.toEqual({ value, needsReencryption: false });
+    }
+  });
+
+  it('keeps raw pre-encryption secret strings unchanged', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'current', key: key(1) } });
+
+    await expect(encryption.decrypt('sk-ant-raw-legacy')).resolves.toEqual({
+      value: 'sk-ant-raw-legacy',
+      needsReencryption: true,
+    });
   });
 
   it('decrypts previous keys and marks them for rotation', async () => {
@@ -51,6 +78,32 @@ describe('createFactorySecretEncryption', () => {
     await expect(
       encryption.decrypt(`${prefix}${Buffer.from(JSON.stringify(tampered)).toString('base64url')}`),
     ).rejects.toThrow('Unable to decrypt');
+  });
+
+  it("reports a key that can't read the value as a key mismatch, and nothing else", async () => {
+    const encrypted = await createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } }).encrypt('secret');
+    const keyMismatches = await Promise.all(
+      [
+        createFactorySecretEncryption({ primary: { id: 'v1', key: key(2) } }),
+        createFactorySecretEncryption({ primary: { id: 'v2', key: key(1) } }),
+        createPlaintextFactorySecretEncryption(),
+      ].map(encryption => encryption.decrypt(encrypted).catch((error: unknown) => error)),
+    );
+    for (const error of keyMismatches) {
+      expect(error).toBeInstanceOf(FactorySecretDecryptionError);
+      expect(secretKeyMismatchHint(error)).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
+    }
+    const [wrongKey, unknownKeyId, noKey] = keyMismatches;
+    expect(secretKeyMismatchHint(wrongKey)).toContain('The encryption key changed');
+    expect(secretKeyMismatchHint(unknownKeyId)).toContain('The encryption key changed');
+    expect(secretKeyMismatchHint(noKey)).toContain('No encryption key is set');
+    expect(secretKeyMismatchHint(wrongKey)).not.toContain('`');
+
+    const malformed = await createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } })
+      .decrypt('mastra:factory-secret:v1:not-json')
+      .catch((error: unknown) => error);
+    expect(secretKeyMismatchHint(malformed)).toBeUndefined();
+    expect(secretKeyMismatchHint(new Error('connection refused'))).toBeUndefined();
   });
 
   it('validates key length and unique ids', () => {
@@ -101,5 +154,57 @@ describe('createPlaintextFactorySecretEncryption', () => {
     const legacy = { type: 'api-key', key: 'legacy' };
 
     await expect(encryption.decrypt(legacy)).resolves.toEqual({ value: legacy, needsReencryption: false });
+  });
+
+  it('refuses encrypted envelopes instead of returning them as the secret', async () => {
+    const keyed = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    const envelope = await keyed.encrypt({ type: 'oauth', access: 'at' });
+
+    await expect(createPlaintextFactorySecretEncryption().decrypt(envelope)).rejects.toThrow(
+      /no secret encryption key configured/,
+    );
+  });
+
+  it('keeps a raw legacy secret that only starts with the envelope prefix', async () => {
+    const lookalike = 'mastra:factory-secret:v1:not-a-real-envelope';
+
+    await expect(createPlaintextFactorySecretEncryption().decrypt(lookalike)).resolves.toEqual({
+      value: lookalike,
+      needsReencryption: true,
+    });
+  });
+});
+
+describe('createFactorySecretEncryption nested envelopes', () => {
+  it('unwraps envelopes stored as JSON text or re-encrypted inside another envelope', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    const value = { type: 'oauth', access: 'at' };
+    const envelope = await encryption.encrypt(value);
+
+    await expect(encryption.decrypt(JSON.stringify(envelope))).resolves.toEqual({ value, needsReencryption: true });
+    await expect(encryption.decrypt(await encryption.encrypt(envelope))).resolves.toEqual({
+      value,
+      needsReencryption: true,
+    });
+  });
+
+  it('keeps secrets that only look like envelopes as literal values', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    const other = createFactorySecretEncryption({ primary: { id: 'other', key: key(2) } });
+    for (const lookalike of ['mastra:factory-secret:v1:not-a-real-envelope', await other.encrypt('foreign')]) {
+      await expect(encryption.decrypt(await encryption.encrypt(lookalike))).resolves.toEqual({
+        value: lookalike,
+        needsReencryption: false,
+      });
+    }
+  });
+
+  it('stops unwrapping after a bounded number of nested envelopes', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    let value: unknown = 'secret';
+    for (let i = 0; i < 10; i++) value = await encryption.encrypt(value);
+
+    const { value: result } = await encryption.decrypt<string>(value);
+    expect(result).toMatch(/^mastra:factory-secret:v1:/);
   });
 });

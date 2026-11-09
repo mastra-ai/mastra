@@ -85,6 +85,17 @@ function buildApp(
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 const projectA = '11111111-1111-4111-8111-111111111111';
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
@@ -131,6 +142,25 @@ describe('status route', () => {
     });
   });
 
+  it('surfaces the credential mode so the SPA can tell an API key from Platform connections', async () => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, org1() as never);
+      await next();
+    });
+    mountApiRoutes(
+      app,
+      buildIncidentioRoutes({
+        incidentio,
+        mode: 'api-key',
+        auth: fakeRouteAuth({ enabled: true }),
+        intake: seed.intake,
+      }),
+    );
+    const res = await app.request('/web/incidentio/status');
+    expect(await res.json()).toMatchObject({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' });
+  });
+
   it('requires an organization', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/incidentio/status');
     expect(await res.json()).toMatchObject({
@@ -148,7 +178,7 @@ describe('status route', () => {
 
 describe('issues route', () => {
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
   });
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
@@ -270,7 +300,7 @@ describe('issue detail route', () => {
   };
 
   beforeEach(async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-a' } });
+    await createProject(projectA);
   });
 
   it('returns the description for a follow-up from a source routed to the Factory', async () => {

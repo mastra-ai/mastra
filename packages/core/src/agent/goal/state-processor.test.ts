@@ -319,4 +319,20 @@ describe('GoalStateProcessor', () => {
 
     expect(result?.attributes).toMatchObject({ status: 'none' });
   });
+
+  it('resolves storage for a second instance registered under the same processor id', async () => {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ storage, logger: false });
+    const store = await storage.getStore('threadState');
+    await store!.setState({ threadId: THREAD_ID, type: GOAL_STATE_TYPE, value: objective() });
+    const first = new GoalStateProcessor();
+    const second = new GoalStateProcessor();
+    mastra.addProcessor(first);
+    mastra.addProcessor(second);
+
+    const result = await second.computeStateSignal(createArgs({ hasSnapshot: false }));
+
+    expect(result?.mode).toBe('snapshot');
+    expect(result?.contents).toContain('Ship the feature');
+  });
 });

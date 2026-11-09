@@ -1,17 +1,27 @@
 import { MessageMetadata } from './message';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { useClock } from '@/hooks/use-clock';
+import { formatDate, toDate } from '@/utils/date-format';
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
+/** `just now` for a message's first minute, then `7 minutes ago`, `yesterday`, `last week`. */
+function sentAgo(time: Date, now: number) {
+  return now - time.getTime() < 60_000 ? 'just now' : formatDate(time, 'relative-long', { now });
+}
 
+/** When a message was sent, as how long ago, kept current; the full date and time show on hover. */
 export function MessageTimestamp({ value }: { value: Date | string }) {
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return null;
+  const time = toDate(value);
+  const ago = useClock(now => time && sentAgo(time, now));
+  if (!time) return null;
 
   return (
-    <MessageMetadata>
-      <time dateTime={time.toISOString()} title={calendar.format(time)}>
-        {clock.format(time)}
-      </time>
-    </MessageMetadata>
+    <Tooltip>
+      <TooltipTrigger render={<MessageMetadata tabIndex={0} />}>
+        <time dateTime={time.toISOString()} className="whitespace-nowrap">
+          {ago}
+        </time>
+      </TooltipTrigger>
+      <TooltipContent>{formatDate(time, 'date-time')}</TooltipContent>
+    </Tooltip>
   );
 }

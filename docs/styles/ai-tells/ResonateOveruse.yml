@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name what connects and why, or disable this rule for physics or audio writing."
+message: "AI overused verb: '%s'. Say what connects and why, or disable this rule for physics or audio writing."
 level: error
 nonword: true
 ignorecase: true

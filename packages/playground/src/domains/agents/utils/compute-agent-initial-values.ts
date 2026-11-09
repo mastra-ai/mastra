@@ -22,7 +22,7 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
   // Parse requestContextSchema from stringified JSON to an object.
   // Code agents serialize with superjson.stringify(), so we use superjsonParse
   // to unwrap the {json: {...}} envelope. Stored agents provide a plain object.
-  let requestContextSchema: unknown;
+  let requestContextSchema: AgentDataSource['requestContextSchema'];
   if (agent.requestContextSchema) {
     try {
       requestContextSchema =
@@ -39,6 +39,7 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
     description: agent.description,
     instructions: agent.instructions,
     model: { provider: agent.provider, name: agent.modelId },
+    modelList: agent.modelList,
     tools: agent.tools,
     workflows: agent.workflows,
     agents: agent.agents,
@@ -56,6 +57,7 @@ export interface AgentDataSource {
   description?: string;
   instructions?: unknown;
   model?: unknown;
+  modelList?: unknown;
   tools?: unknown;
   integrationTools?: unknown;
   workflows?: unknown;
@@ -65,13 +67,14 @@ export interface AgentDataSource {
   mcpClients?: unknown;
   skills?: StoredAgentResponse['skills'];
   workspace?: StoredAgentResponse['workspace'];
-  requestContextSchema?: unknown;
+  requestContextSchema?: AgentFormValues['variables'];
 }
 
 export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<AgentFormValues> {
   const toolsRecord = normalizeToolsToRecord(dataSource.tools as Parameters<typeof normalizeToolsToRecord>[0]);
 
-  const memoryData = dataSource.memory as
+  const memoryRef = getMemoryIdRef(dataSource.memory);
+  const memoryData = unwrapInlineMemory(dataSource.memory) as
     | {
         vector?: string;
         embedder?: string;
@@ -100,9 +103,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
       }
     | undefined;
 
-  const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(
-    dataSource.instructions as Parameters<typeof mapInstructionBlocksFromApi>[0],
-  );
+  const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(dataSource.instructions);
 
   return {
     name: dataSource.name || '',
@@ -112,6 +113,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
       provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
       name: (dataSource.model as { provider?: string; name?: string })?.name || '',
     },
+    modelList: normalizeModelList(dataSource.modelList),
     tools: toolsRecord,
     integrationTools: normalizeIntegrationToolsToRecord(
       dataSource.integrationTools as Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
@@ -130,9 +132,52 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
           observationalMemory: parseObservationalMemoryFromApi(memoryData.observationalMemory),
         }
       : undefined,
+    memoryRef,
     instructionBlocks,
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
-    variables: dataSource.requestContextSchema as AgentFormValues['variables'],
+    variables: dataSource.requestContextSchema,
   };
+}
+
+function normalizeModelList(modelList: unknown): AgentFormValues['modelList'] {
+  if (!Array.isArray(modelList)) return undefined;
+
+  return modelList.flatMap(entry => {
+    if (!isRecord(entry) || typeof entry.id !== 'string') return [];
+
+    const nestedModel = isRecord(entry.model) ? entry.model : undefined;
+    const provider = typeof nestedModel?.provider === 'string' ? nestedModel.provider : entry.provider;
+    const modelId = typeof nestedModel?.modelId === 'string' ? nestedModel.modelId : entry.modelId;
+    if (typeof provider !== 'string' || typeof modelId !== 'string') return [];
+
+    return [
+      {
+        id: entry.id,
+        model: {
+          provider,
+          modelId,
+          modelVersion: typeof nestedModel?.modelVersion === 'string' ? nestedModel.modelVersion : '',
+        },
+        enabled: entry.enabled !== false,
+        maxRetries: typeof entry.maxRetries === 'number' ? entry.maxRetries : 0,
+      },
+    ];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getMemoryIdRef(memory: unknown): AgentFormValues['memoryRef'] {
+  if (!isRecord(memory) || memory.type !== 'id' || typeof memory.memoryId !== 'string') return undefined;
+  return { type: 'id', memoryId: memory.memoryId };
+}
+
+function unwrapInlineMemory(memory: unknown): unknown {
+  if (!isRecord(memory)) return memory;
+  if (memory.type === 'id') return undefined;
+  if (memory.type === 'inline') return memory.config;
+  return memory;
 }

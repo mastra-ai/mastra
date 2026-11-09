@@ -7,14 +7,20 @@
  * These unit tests focus on the bridge's core logic and API surface.
  */
 
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { CreateSpanOptions, LogEvent } from '@mastra/core/observability';
 import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
-import { DefaultObservabilityInstance } from '@mastra/observability';
+import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
+import { DefaultObservabilityInstance, Observability, TestExporter } from '@mastra/observability';
 import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { node, tracing } from '@opentelemetry/sdk-node';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OtelBridge } from './bridge.js';
 
 // OTEL invalid (no-op) IDs, returned when no SDK / tracer provider is registered
@@ -26,12 +32,12 @@ describe('OtelBridge', () => {
   // to produce valid span contexts. Without this, the OTEL API falls back to a
   // no-op tracer whose spans carry all-zero IDs (see issue #15589 regression
   // tests below).
-  let tracerProvider: tracing.BasicTracerProvider;
+  let tracerProvider: BasicTracerProvider;
   let loggerProvider: LoggerProvider;
   let logExporter: InMemoryLogRecordExporter;
 
   beforeAll(() => {
-    tracerProvider = new tracing.BasicTracerProvider();
+    tracerProvider = new BasicTracerProvider();
     trace.setGlobalTracerProvider(tracerProvider);
 
     logExporter = new InMemoryLogRecordExporter();
@@ -102,10 +108,10 @@ describe('OtelBridge', () => {
       // context.with() is a no-op there. Register a NodeTracerProvider for
       // its AsyncLocalStorage context manager; the global tracer provider
       // set in beforeAll stays in place (first registration wins).
-      let nodeProvider: InstanceType<typeof node.NodeTracerProvider>;
+      let nodeProvider: NodeTracerProvider;
 
       beforeAll(() => {
-        nodeProvider = new node.NodeTracerProvider();
+        nodeProvider = new NodeTracerProvider();
         nodeProvider.register();
       });
 
@@ -143,6 +149,74 @@ describe('OtelBridge', () => {
         await bridge.shutdown();
       });
 
+      it("keeps the initial run's ambient parent on a resume served under another ambient span", async () => {
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content:
+              ++calls === 1
+                ? [{ type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'confirm', input: '{}' }]
+                : [{ type: 'text' as const, text: 'Approved.' }],
+            finishReason: calls === 1 ? ('tool-calls' as const) : ('stop' as const),
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            warnings: [],
+          }),
+        });
+        const agent = new Agent({
+          id: 'ambient-resume',
+          name: 'Ambient resume',
+          instructions: 'Request approval, then answer.',
+          model,
+          tools: {
+            confirm: createTool({
+              id: 'confirm',
+              description: 'Request approval',
+              requireApproval: true,
+              execute: async () => ({ approved: true }),
+            }),
+          },
+        });
+        const exporter = new TestExporter();
+        const mastra = new Mastra({
+          agents: { agent },
+          storage: new InMemoryStore(),
+          logger: false,
+          observability: new Observability({
+            configs: { default: { serviceName: 'ambient-resume', bridge: new OtelBridge(), exporters: [exporter] } },
+          }),
+        });
+        const underAmbient = async <T>(name: string, fn: () => Promise<T>) => {
+          const ambient = trace.getTracer('ambient').startSpan(name);
+          try {
+            return { ambient, result: await context.with(trace.setSpan(context.active(), ambient), fn) };
+          } finally {
+            ambient.end();
+          }
+        };
+
+        try {
+          const start = await underAmbient('start request', () =>
+            agent.generate('Start.', { runId: 'ambient-resume' }),
+          );
+          expect(start.result.finishReason).toBe('suspended');
+          const resume = await underAmbient('resume request', () =>
+            agent.resumeGenerate({ approved: true }, { runId: 'ambient-resume', toolCallId: 'call-1' }),
+          );
+          expect(resume.result.text).toBe('Approved.');
+
+          const [initial, resumed] = exporter.getSpansByType(SpanType.AGENT_RUN);
+          expect(initial!.externalParentSpanId).toBe(start.ambient.spanContext().spanId);
+          expect(resumed).toMatchObject({
+            traceId: initial!.traceId,
+            parentSpanId: initial!.id,
+            resumedFromSpanId: initial!.id,
+            externalParentSpanId: start.ambient.spanContext().spanId,
+          });
+        } finally {
+          await mastra.shutdown();
+        }
+      });
+
       it('reports an ambient parent as external on a bridged root', async () => {
         const bridge = new OtelBridge();
         const instance = new DefaultObservabilityInstance({
@@ -166,6 +240,41 @@ describe('OtelBridge', () => {
         expect(exported.externalParentSpanId).toBe(ambient.spanContext().spanId);
 
         span.end();
+        await instance.flush();
+        await bridge.shutdown();
+      });
+
+      it('joins the trace an HTTP server span continued from the caller, and keeps the link to the caller', async () => {
+        // HTTP instrumentation continues the caller's `traceparent` header, so the
+        // request span starts under the HTTP server span, in the caller's trace.
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'served-request',
+          name: 'served-request-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+        const caller = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+        const remote = trace.setSpanContext(context.active(), { ...caller, traceFlags: 1, isRemote: true });
+        const httpSpan = trace.getTracer('http').startSpan('POST /mcp', {}, remote);
+
+        const span = context.with(trace.setSpan(remote, httpSpan), () =>
+          instance.startSpan({
+            type: SpanType.MCP_SERVER_REQUEST,
+            name: 'tools/call weather',
+            links: [caller],
+          }),
+        )!;
+
+        const exported = span.exportSpan();
+        expect(exported.traceId).toBe(caller.traceId);
+        expect(exported.externalParentSpanId).toBe(httpSpan.spanContext().spanId);
+        expect(exported.links).toEqual([caller]);
+        const otelSpan = (bridge as any).otelSpanMap.get(span.id).otelSpan;
+        expect(otelSpan.links).toEqual([{ context: { ...caller, traceFlags: 1, isRemote: true } }]);
+
+        span.end();
+        httpSpan.end();
         await instance.flush();
         await bridge.shutdown();
       });
@@ -297,6 +406,63 @@ describe('OtelBridge', () => {
       });
     });
 
+    describe('with span links', () => {
+      const startLink = { traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '1a2b3c4d5e6f7081' };
+      const lateLink = { traceId: 'b1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '2a2b3c4d5e6f7081' };
+
+      it('starts the OpenTelemetry span with links to valid linked spans, in a new trace when no context is active', () => {
+        const bridge = new OtelBridge();
+        const startSpan = vi.spyOn((bridge as any).otelTracer, 'startSpan');
+
+        const result = bridge.createSpan({
+          type: SpanType.MCP_SERVER_REQUEST,
+          name: 'tools/call weather',
+          attributes: {},
+          links: [startLink, { traceId: 'not-a-trace-id', spanId: 'nope' }],
+        });
+
+        const options = startSpan.mock.calls[0]![1] as { links?: Array<{ context: Record<string, unknown> }> };
+        expect(options.links).toEqual([{ context: { ...startLink, traceFlags: 1, isRemote: true } }]);
+        expect(result?.traceId).not.toBe(startLink.traceId);
+        expect(result?.externalParentSpanId).toBeUndefined();
+
+        startSpan.mockRestore();
+        bridge.shutdown();
+      });
+
+      it('adds links set after the span started when the span ends', async () => {
+        const bridge = new OtelBridge();
+        bridge.init({ config: { serviceName: 'late-links' } } as any);
+        const ids = bridge.createSpan({
+          type: SpanType.MCP_TOOL_CALL,
+          name: 'tool',
+          attributes: {},
+          links: [startLink],
+        })!;
+        const otelSpan = (bridge as any).otelSpanMap.get(ids.spanId).otelSpan;
+        const addLinks = vi.spyOn(otelSpan, 'addLinks');
+
+        await bridge.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: {
+            id: ids.spanId,
+            traceId: ids.traceId,
+            name: 'tool',
+            type: SpanType.MCP_TOOL_CALL,
+            startTime: new Date(),
+            endTime: new Date(),
+            isEvent: false,
+            isRootSpan: true,
+            links: [startLink, lateLink],
+          },
+        } as any);
+
+        expect(addLinks).toHaveBeenCalledTimes(1);
+        expect(addLinks.mock.calls[0]![0]).toEqual([{ context: { ...lateLink, traceFlags: 1, isRemote: true } }]);
+        await bridge.shutdown();
+      });
+    });
+
     // Regression tests for https://github.com/mastra-ai/mastra/issues/15589
     //
     // When no OTEL SDK / tracer provider is registered, `trace.getTracer(...)`
@@ -384,6 +550,94 @@ describe('OtelBridge', () => {
 
         bridge.shutdown();
       });
+
+      // Regression tests for https://github.com/mastra-ai/mastra/issues/24950
+      it('warns once, with an actionable message, across many createSpan calls', () => {
+        const bridge = new OtelBridge();
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        for (let i = 0; i < 3; i++) {
+          bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
+        }
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]![0]);
+        expect(message).toContain('No OpenTelemetry tracer provider is registered globally');
+        expect(message).toContain('new OtelBridge({ tracerProvider })');
+        expect(message).toContain('https://mastra.ai/reference/observability/tracing/bridges/otel#setup-requirements');
+
+        bridge.shutdown();
+      });
+
+      it('names the passed tracerProvider as the cause when it is a no-op', () => {
+        const bridge = new OtelBridge({ tracerProvider: trace.getTracerProvider() });
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        bridge.createSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', attributes: { agentId: 'test' } });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]![0])).toContain(
+          'The tracerProvider passed to OtelBridge returned a no-op span',
+        );
+
+        bridge.shutdown();
+      });
+
+      it('does not reuse the parent span ID when the no-op tracer has a valid parent', () => {
+        // The no-op tracer hands back a span wrapping the parent's span
+        // context. Its IDs are valid, but reusing them would give every
+        // Mastra span the parent's span ID.
+        const bridge = new OtelBridge();
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        const result = bridge.createSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'resumed-agent',
+          attributes: { agentId: 'test' },
+          traceId: '0af7651916cd43dd8448eb211c80319c',
+          parentSpanId: 'b7ad6b7169203331',
+        });
+
+        expect(result).toBeUndefined();
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        bridge.shutdown();
+      });
+
+      it('does not warn per span when those spans end', async () => {
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'no-sdk',
+          name: 'no-sdk-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+        const warn = vi.spyOn(bridge['logger'], 'warn');
+
+        const root = instance.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } })!;
+        root.createChildSpan({ type: SpanType.GENERIC, name: 'child' }).end();
+        root.end();
+        await instance.flush();
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      });
+    });
+
+    it('does not warn when a tracer provider is registered', () => {
+      const bridge = new OtelBridge();
+      const warn = vi.spyOn(bridge['logger'], 'warn');
+
+      const result = bridge.createSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'test' },
+      });
+
+      expect(result).toBeDefined();
+      expect(warn).not.toHaveBeenCalled();
+
+      bridge.shutdown();
     });
   });
 
@@ -484,6 +738,74 @@ describe('OtelBridge', () => {
 
       // Shutdown should not throw
       await expect(bridge.shutdown()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('flush with global providers', () => {
+    it('flushes the tracer provider registered globally through the API proxy', async () => {
+      // trace.getTracerProvider() returns the API's ProxyTracerProvider, which
+      // has no forceFlush of its own; the bridge must reach the delegate.
+      const forceFlush = vi.spyOn(tracerProvider, 'forceFlush');
+      try {
+        const bridge = new OtelBridge();
+        await bridge.flush();
+
+        expect(forceFlush).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      } finally {
+        forceFlush.mockRestore();
+      }
+    });
+
+    it('flushes a logger provider registered after the bridge was constructed', async () => {
+      otelLogs.disable();
+      const lateLoggerProvider = new LoggerProvider({
+        processors: [new SimpleLogRecordProcessor({ exporter: new InMemoryLogRecordExporter() })],
+      });
+      const forceFlush = vi.spyOn(lateLoggerProvider, 'forceFlush');
+      try {
+        const bridge = new OtelBridge();
+        otelLogs.setGlobalLoggerProvider(lateLoggerProvider);
+
+        await bridge.flush();
+
+        expect(forceFlush).toHaveBeenCalledTimes(1);
+        await bridge.shutdown();
+      } finally {
+        forceFlush.mockRestore();
+        await lateLoggerProvider.shutdown();
+        otelLogs.disable();
+        otelLogs.setGlobalLoggerProvider(loggerProvider);
+      }
+    });
+
+    it('ends leftover spans before flushing on shutdown', async () => {
+      const calls: string[] = [];
+      const customProvider = new BasicTracerProvider({
+        spanProcessors: [
+          {
+            onStart: () => {},
+            onEnd: () => calls.push('end'),
+            forceFlush: async () => {
+              calls.push('flush');
+            },
+            shutdown: async () => {},
+          },
+        ],
+      });
+      const bridge = new OtelBridge({ tracerProvider: customProvider });
+
+      const result = bridge.createSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'left-open',
+        attributes: { agentId: 'test' },
+      } as CreateSpanOptions<SpanType.AGENT_RUN>);
+      expect(result).toBeDefined();
+
+      await bridge.shutdown();
+
+      expect(calls).toEqual(['end', 'flush']);
+      await customProvider.shutdown();
     });
   });
 
@@ -692,7 +1014,7 @@ describe('OtelBridge', () => {
     it('should use a custom tracerProvider to create spans without touching the global', async () => {
       trace.disable();
       try {
-        const customProvider = new tracing.BasicTracerProvider();
+        const customProvider = new BasicTracerProvider();
         const bridge = new OtelBridge({ tracerProvider: customProvider });
 
         const result = bridge.createSpan({
@@ -748,7 +1070,7 @@ describe('OtelBridge', () => {
     });
 
     it('should flush the custom provider, not the global', async () => {
-      const customProvider = new tracing.BasicTracerProvider();
+      const customProvider = new BasicTracerProvider();
       let flushed = false;
       const originalFlush = customProvider.forceFlush.bind(customProvider);
       customProvider.forceFlush = async () => {
@@ -769,7 +1091,7 @@ describe('OtelBridge', () => {
       trace.disable();
       otelLogs.disable();
       try {
-        const customTracerProvider = new tracing.BasicTracerProvider();
+        const customTracerProvider = new BasicTracerProvider();
         const customLogExporter = new InMemoryLogRecordExporter();
         const customLoggerProvider = new LoggerProvider({
           processors: [new SimpleLogRecordProcessor({ exporter: customLogExporter })],
@@ -814,9 +1136,9 @@ describe('OtelBridge', () => {
     it('should export span attributes correctly through custom provider', async () => {
       trace.disable();
       try {
-        const spanExporter = new tracing.InMemorySpanExporter();
-        const customProvider = new tracing.BasicTracerProvider({
-          spanProcessors: [new tracing.SimpleSpanProcessor(spanExporter)],
+        const spanExporter = new InMemorySpanExporter();
+        const customProvider = new BasicTracerProvider({
+          spanProcessors: [new SimpleSpanProcessor(spanExporter)],
         });
 
         const bridge = new OtelBridge({ tracerProvider: customProvider });

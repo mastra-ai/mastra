@@ -48,7 +48,7 @@ function createClientToolModel(finalText: string) {
               toolCallType: 'function',
               toolCallId: TOOL_CALL_ID,
               toolName: 'client-tool',
-              args: '{"label":"Done"}',
+              input: '{"label":"Done"}',
             },
             { type: 'finish', finishReason: 'tool-calls', usage: USAGE },
           ]),

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
 import { SPAN_SCHEMA, TABLE_SPANS } from '@mastra/core/storage';
 import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -508,9 +509,10 @@ export function pgTests() {
       });
 
       beforeEach(async () => {
-        testThreadId = `thread-${Date.now()}`;
-        testResourceId = `resource-${Date.now()}`;
-        testMessageId = `msg-${Date.now()}`;
+        // Date.now() alone collides when consecutive tests start in the same millisecond.
+        testThreadId = `thread-${randomUUID()}`;
+        testResourceId = `resource-${randomUUID()}`;
+        testMessageId = `msg-${randomUUID()}`;
       });
 
       it('should use createdAtZ over createdAt for messages when both exist', async () => {
@@ -811,11 +813,19 @@ export function pgTests() {
         expect(schema).toContain('PRIMARY KEY ("traceId", "spanId")');
       });
 
-      it('should reject invalid schema names', () => {
-        // Schema names with special characters should throw an error
-        expect(() => exportSchemas('my-schema')).toThrow('Invalid schema name');
-        expect(() => exportSchemas('123schema')).toThrow('Invalid schema name');
-        expect(() => exportSchemas('schema with spaces')).toThrow('Invalid schema name');
+      it('should reject schema names that could break out of quoting', () => {
+        expect(() => exportSchemas('bad"name')).toThrow('Invalid schema name');
+        expect(() => exportSchemas("it's")).toThrow('Invalid schema name');
+        expect(() => exportSchemas('a$b')).toThrow('Invalid schema name');
+        expect(() => exportSchemas('back\\slash')).toThrow('Invalid schema name');
+      });
+
+      it('should accept schema names that need quoting', () => {
+        const schema = exportSchemas('my-schema');
+
+        expect(schema).toContain('CREATE SCHEMA IF NOT EXISTS "my-schema"');
+        expect(schema).toContain('"my-schema"."mastra_threads"');
+        expect(schema).toContain('"my_schema_idx_om_lookup_key"');
       });
 
       it('should accept valid schema names with underscores', () => {

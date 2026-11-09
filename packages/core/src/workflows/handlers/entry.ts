@@ -1,10 +1,15 @@
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
+import { getErrorFromUnknown } from '../../error';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
-import { resolveObservabilityContext } from '../../observability';
+import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/run-statuses';
+import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { workflowChildTermination as workflowTermination } from '../execution-outcome';
+import type { RunJournal } from '../run-journal';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -19,6 +24,7 @@ import type {
   WorkflowRunState,
 } from '../types';
 import { getSingleStepEntryId, isSingleStepEntry } from '../utils';
+import { getControlFlowIdentityAttributes, getControlFlowSpanName } from './control-flow';
 
 function publishStepEvent(
   engine: DefaultExecutionEngine,
@@ -158,6 +164,49 @@ export interface PersistStepUpdateParams {
    * compatibility with external callers.
    */
   phase?: string;
+  /**
+   * Persist the `running` update even if the last persisted status was `suspended`.
+   * Used when a resumed step starts, so its resume data survives a crash mid-step.
+   */
+  recordResumedStepStart?: boolean;
+  /**
+   * Storage v2: set by a step's start write, which can be in flight together with the start writes
+   * of other steps of a parallel or branch block. Only these steps' results are written, and no
+   * other write in flight may name them. Unset, the write sends every change.
+   */
+  stepIds?: string[];
+  /**
+   * Storage v2: set by a running foreach's progress write. The foreach's result differs from the
+   * one it last wrote only by these indices' `metadata.foreachProgress` entries, so the journal can
+   * send just those (see `RunJournal.write`).
+   */
+  foreachItems?: { stepId: string; indices: readonly number[] };
+  /**
+   * Storage v2: the journal of the execution this write belongs to, set by the engine's own writes,
+   * which aren't made from one of the execution's entries. Unset, the write uses the journal of the
+   * execution it is made from (see `getRunJournal`).
+   */
+  journal?: RunJournal;
+}
+
+// Every status but `canceled`, so only a persisted cancellation rejects the write.
+// Terminal statuses stay writable because restart and time travel re-run finished runs.
+const NOT_CANCELED_STATUSES = WORKFLOW_RUN_STATUSES.filter(
+  (status): status is Exclude<WorkflowRunStatus, 'canceled'> => status !== 'canceled',
+);
+
+export async function isWorkflowRunCanceled(
+  engine: DefaultExecutionEngine,
+  workflowId: string,
+  runId: string,
+): Promise<boolean> {
+  try {
+    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+    const status = await workflowsStore?.loadWorkflowRunStatus({ workflowName: workflowId, runId });
+    return status === 'canceled';
+  } catch {
+    return false;
+  }
 }
 
 export async function persistStepUpdate(
@@ -177,6 +226,9 @@ export async function persistStepUpdate(
     requestContext,
     tracingContext,
     phase,
+    recordResumedStepStart,
+    stepIds,
+    foreachItems,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
@@ -193,7 +245,7 @@ export async function persistStepUpdate(
     return;
   }
 
-  await engine.wrapDurableOperation(operationId, async () => {
+  const write = async () => {
     if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
       return;
     }
@@ -204,7 +256,7 @@ export async function persistStepUpdate(
     // otherwise clobber the suspend record before the resume actually
     // completes. The engine tracks its own last-persisted status for this
     // run (process-local) so we don't need an extra storage read per step.
-    if (workflowStatus === 'running') {
+    if (workflowStatus === 'running' && !recordResumedStepStart) {
       const lastPersisted = engine.getLastPersistedStatus(runId);
       if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
         return;
@@ -215,6 +267,7 @@ export async function persistStepUpdate(
 
     const snapshot: WorkflowRunState = {
       runId,
+      parentWorkflow: executionContext.parentWorkflow,
       status: workflowStatus,
       value: executionContext.state,
       context: stepResults as any,
@@ -233,15 +286,50 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
-    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
-    });
+    // A run canceled from another process must not be overwritten. Storage v2 stores and v1 stores
+    // that support it reject the write atomically; other v1 stores get a status read first.
+    const guardCancellation = workflowStatus !== 'canceled' && engine.honorsStoredCancellation(runId);
+    const journal = params.journal ?? engine.getRunJournal(runId);
+    if (journal) {
+      const written = await journal.write({
+        resourceId,
+        snapshot,
+        stepIds,
+        foreachItems,
+        ...(guardCancellation ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+      });
+      if (!written) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+        return;
+      }
+    } else {
+      const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+      const atomicGuard = guardCancellation && !!workflowsStore?.supportsGuardedSnapshotWrites?.();
+      if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+        return;
+      }
+
+      const written = await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+        resourceId,
+        snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+        ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+      });
+      if (atomicGuard && written === false) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+        return;
+      }
+    }
     engine.setLastPersistedStatus(runId, workflowStatus);
-  });
+  };
+
+  await engine.wrapDurableOperation(operationId, () =>
+    // Engines that replay memoized durable operations (Inngest) record each write as its own
+    // durable step, so only the in-process engine needs writes kept in call order.
+    engine.requiresDurableContextSerialization() ? write() : engine.serializeSnapshotWrite(runId, write),
+  );
 }
 
 export interface ExecuteEntryParams extends ObservabilityContext {
@@ -272,6 +360,52 @@ export interface ExecuteEntryParams extends ObservabilityContext {
 }
 
 export async function executeEntry(
+  engine: DefaultExecutionEngine,
+  params: ExecuteEntryParams,
+): Promise<EntryExecutionResult> {
+  const { entry, resume, executionContext, workflowId, runId } = params;
+  if (!resume?.resumePath?.length || (entry.type !== 'parallel' && entry.type !== 'conditional'))
+    return executeEntryBody(engine, params);
+
+  // Resume selects the suspended branch directly; it does not re-evaluate conditions
+  // or re-run completed branches. This invocation still owns a new block execution.
+  const context = resolveObservabilityContext(params);
+  const operationId = `workflow.${workflowId}.run.${runId}.${entry.type}.${executionContext.executionPath.join('-')}.resume.span`;
+  const span = await engine.createChildSpan({
+    parentSpan: context.tracingContext.currentSpan,
+    operationId: `${operationId}.start`,
+    options: {
+      type: entry.type === 'parallel' ? SpanType.WORKFLOW_PARALLEL : SpanType.WORKFLOW_CONDITIONAL,
+      name: getControlFlowSpanName(entry, `${entry.type}: resumed branch`),
+      outcome: null,
+      attributes: getControlFlowIdentityAttributes(entry),
+      tracingPolicy: engine.options?.tracingPolicy,
+    },
+    executionContext,
+  });
+  try {
+    const result = await executeEntryBody(engine, { ...params, ...createObservabilityContext({ currentSpan: span }) });
+    const settled = result.result;
+    const termination = workflowTermination(settled, params.abortController.signal);
+    if (settled.status === 'failed')
+      await engine.errorChildSpan({
+        span,
+        operationId: `${operationId}.error`,
+        errorOptions: { ...termination, error: getErrorFromUnknown(settled.error) },
+      });
+    else await engine.endChildSpan({ span, operationId: `${operationId}.end`, endOptions: termination });
+    return result;
+  } catch (error) {
+    await engine.errorChildSpan({
+      span,
+      operationId: `${operationId}.error`,
+      errorOptions: { ...workflowTermination({ status: 'failed', error }), error: getErrorFromUnknown(error) },
+    });
+    throw error;
+  }
+}
+
+async function executeEntryBody(
   engine: DefaultExecutionEngine,
   params: ExecuteEntryParams,
 ): Promise<EntryExecutionResult> {
@@ -311,11 +445,16 @@ export async function executeEntry(
     // off the entry id and is shared across all single-step kinds.
     const stepId = getSingleStepEntryId(entry);
     const isResumedStep = resume?.steps?.includes(stepId) ?? false;
+    // On crash-restart the running snapshot preserved this step's own payload
+    // (pruneRunningHistory exempts active steps), while terminal predecessors may
+    // have had fields like messageListState pruned. Prefer the step's recorded
+    // payload over the predecessor's pruned output. See #22636.
+    const isRestartedActiveStep = Boolean(restart?.activeStepsPath?.[stepId]);
     if (!isResumedStep) {
       executionContext.stepExecutionPath?.push(stepId);
     }
     const stepPrevOutput = getResumeStepPrevOutput({
-      isResumedStep,
+      isResumedStep: isResumedStep || isRestartedActiveStep,
       stepId,
       stepResults,
       prevOutput,
@@ -370,6 +509,7 @@ export async function executeEntry(
       executionContext: {
         workflowId,
         runId,
+        parentWorkflow: executionContext.parentWorkflow,
         executionPath: [...executionContext.executionPath, idx!],
         stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
         suspendedPaths: executionContext.suspendedPaths,
@@ -430,8 +570,9 @@ export async function executeEntry(
 
     let branchResult: EntryExecutionResult;
 
-    if (branchStep.type !== 'step') {
-      // Recurse through executeEntry for nested block types (parallel, conditional, etc.)
+    if (branchStep.type !== 'step' || engine.getRunJournal(runId)) {
+      // Through executeEntry for nested block types (parallel, conditional, etc.). Storage v2 takes a
+      // plain step this way too, like a resumed parallel branch, so its result is written when it ends.
       branchResult = await executeEntry(engine, {
         workflowId,
         runId,
@@ -444,6 +585,7 @@ export async function executeEntry(
         executionContext: {
           workflowId,
           runId,
+          parentWorkflow: executionContext.parentWorkflow,
           executionPath: [...executionContext.executionPath, idx!],
           stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
           suspendedPaths: executionContext.suspendedPaths,
@@ -483,6 +625,7 @@ export async function executeEntry(
         executionContext: {
           workflowId,
           runId,
+          parentWorkflow: executionContext.parentWorkflow,
           executionPath: [...executionContext.executionPath, idx!],
           stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
           suspendedPaths: executionContext.suspendedPaths,
@@ -822,7 +965,10 @@ export async function executeEntry(
   }
 
   if (abortController?.signal?.aborted) {
-    execResults = { ...execResults, status: 'canceled' };
+    execResults = {
+      ...execResults,
+      status: abortController.signal.reason === WORKFLOW_CANCELLED_SYMBOL ? 'canceled' : 'waiting',
+    };
   }
 
   await engine.persistStepUpdate({

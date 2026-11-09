@@ -1,14 +1,14 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 
 /**
  * `[` toggles the main sidebar. Lives inside `Layout` because it needs the
- * `MainSidebarProvider` context, which `GlobalShortcuts` sits outside of.
+ * `SidebarProvider` context, which `GlobalShortcuts` sits outside of.
  */
 export const SidebarShortcuts = () => {
-  const { toggleSidebar } = useMainSidebar();
+  const { toggleSidebar } = useSidebar();
 
-  useKeydown({ '[': toggleSidebar });
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
 
   return null;
 };

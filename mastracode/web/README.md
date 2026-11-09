@@ -11,10 +11,10 @@ From the repository root:
 ```shell
 pnpm install
 pnpm --dir mastracode/web install
-pnpm --dir mastracode/web run prebuild
+pnpm factory:build
 ```
 
-`prebuild` builds the linked packages required by the host.
+`factory:build` runs this package's `prebuild`, which builds the linked monorepo packages required by the host. `pnpm factory:dev` doesn't build them, so run `pnpm factory:build` again after pulling changes to those packages.
 
 ## Development
 
@@ -168,6 +168,43 @@ Add these values to `mastracode/web/.env` and restart the server:
 DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
 REDIS_URL=redis://localhost:63799
 ```
+
+### Amazon Bedrock
+
+Bedrock authenticates with the server's AWS credentials, not a key each account saves. With sign-in enabled, turn it on for every account by adding these values to `mastracode/web/.env`:
+
+```dotenv
+FACTORY_DEPLOYMENT_MODEL_PROVIDERS=amazon-bedrock
+AWS_REGION=us-east-1
+# A Bedrock API key, or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY, AWS_PROFILE, an ECS task role, or EKS IRSA
+AWS_BEARER_TOKEN_BEDROCK=...
+```
+
+On EC2, an instance profile alone isn't detected. Add a profile to `~/.aws/config` with `credential_source = Ec2InstanceMetadata` and set `AWS_PROFILE` to that profile.
+
+Every signed-in account can then run Bedrock models, billed to that AWS account. Settings show Bedrock as **From deployment** and offer no key field. Without `FACTORY_DEPLOYMENT_MODEL_PROVIDERS`, Bedrock stays hidden and runs fail with a message that tells the operator what to set. Local mode without sign-in uses any AWS credentials in the environment, as before.
+
+### Google Vertex AI
+
+Vertex AI authenticates with the server's Google Cloud Application Default Credentials (ADC). With sign-in enabled, add these values to `mastracode/web/.env`:
+
+```dotenv
+FACTORY_DEPLOYMENT_MODEL_PROVIDERS=google-vertex
+GOOGLE_VERTEX_PROJECT=my-google-cloud-project
+GOOGLE_VERTEX_LOCATION=us-central1
+```
+
+For local development, create ADC credentials with:
+
+```shell
+gcloud auth application-default login
+```
+
+Deployments can instead use a service account or a Google Cloud runtime identity. Every signed-in account can then run Vertex AI models using the configured project and location. Settings show Vertex AI as **From deployment** and offer no key field.
+
+### Mastra Connect tools
+
+Sessions in web chat, Slack and on work items get the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of every connection attached to your Platform project, MCP servers included, for example to answer questions about Linear in a Slack thread. Attach connections in Mastra Platform, on the project's **Connect** page. **Settings → Tools** shows which ones sessions get. Platform deploys already have the credentials. Locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` in `mastracode/web/.env`. Every user and organization on the server shares the project's connections. See `@mastra/factory`'s README for which tools are left out.
 
 ## Tests
 

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -249,7 +248,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const record: DatasetRecord = {
         id,
@@ -493,6 +492,11 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       const filterConditions: string[] = [];
       const filterParams: Record<string, any> = {};
+      if (args.filters?.datasetIds !== undefined) {
+        // IN UNNEST of an empty array is false, so [] matches no datasets.
+        filterConditions.push(`${quoteIdent('id', 'column name')} IN UNNEST(@datasetIds)`);
+        filterParams.datasetIds = args.filters.datasetIds;
+      }
       if (args.filters?.organizationId !== undefined) {
         filterConditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
         filterParams.organizationId = args.filters.organizationId;
@@ -528,11 +532,14 @@ export class DatasetsSpanner extends DatasetsStorage {
       }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
       // Spanner cannot infer the element type of empty arrays, so declare ARRAY<STRING>
-      // for `targetIds` whenever the filter is in play.
-      const filterTypes: Record<string, any> =
-        args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0
-          ? { targetIds: { type: 'array', child: { type: 'string' } } }
-          : {};
+      // for `targetIds` and `datasetIds` whenever those filters are in play.
+      const filterTypes: Record<string, any> = {};
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        filterTypes.targetIds = { type: 'array', child: { type: 'string' } };
+      }
+      if (args.filters?.datasetIds !== undefined) {
+        filterTypes.datasetIds = { type: 'array', child: { type: 'string' } };
+      }
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`,
@@ -622,7 +629,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   private async insertVersionRow(tx: Transaction, datasetId: string, version: number, now: Date): Promise<void> {
     await this.db.insert({
       tableName: TABLE_DATASET_VERSIONS,
-      record: { id: randomUUID(), datasetId, version, createdAt: now },
+      record: { id: globalThis.crypto.randomUUID(), datasetId, version, createdAt: now },
       transaction: tx,
     });
   }
@@ -660,7 +667,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
       const now = new Date();
-      const itemId = randomUUID();
+      const itemId = globalThis.crypto.randomUUID();
       let created: DatasetItem | null = null;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
@@ -1187,7 +1194,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion> {
     try {
       const now = new Date();
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       await this.db.insert({
         tableName: TABLE_DATASET_VERSIONS,
         record: { id, datasetId, version, createdAt: now },
@@ -1290,7 +1297,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
               historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
             }
-            const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+            const plan = this.planDatasetItemBatch(input.items, historyRows, () => globalThis.crypto.randomUUID());
             const resolved = new Map<string, DatasetItem>(
               [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
             );

@@ -10,7 +10,7 @@ export interface CmsEditHeaderActionsProps {
 export function CmsEditHeaderActions({ hasDraft, children }: CmsEditHeaderActionsProps) {
   return (
     <>
-      {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
+      {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
       {children}
     </>
   );

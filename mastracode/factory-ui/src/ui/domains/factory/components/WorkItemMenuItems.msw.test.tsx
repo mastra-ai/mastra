@@ -1,13 +1,14 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
-import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
+import type { BoardCardOwner } from '../boardCardState';
 import type { WorkItem } from '../services/workItems';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
@@ -30,7 +31,6 @@ const item: WorkItem = {
   triageType: null,
   acceptedAt: null,
   commentCount: 0,
-  feedActivityAt: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -39,7 +39,7 @@ const item: WorkItem = {
 function renderMenu(
   stage: string,
   boards: BoardCatalogResponse['boards'] = [releaseBoard],
-  proposal?: { proposal: WorkItemMenuProps['proposal']; proposedRunLabel?: string },
+  props: Partial<WorkItemMenuProps> = {},
 ) {
   server.use(
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
@@ -54,7 +54,8 @@ function renderMenu(
             item={{ ...item, stages: [stage] }}
             columnStage={stage}
             moves={[]}
-            {...proposal}
+            owner={{ kind: 'free' }}
+            {...props}
             onMove={onMove}
             onRemove={vi.fn()}
             onApproveProposal={vi.fn()}
@@ -102,5 +103,28 @@ describe('custom-board card menu', () => {
     const { client } = renderMenu('queued', []);
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('menuitem', { name: /Move to|Mark done/ })).toBeNull();
+  });
+});
+
+describe('held card menu', () => {
+  const held: WorkItem = {
+    ...item,
+    board: 'work',
+    stages: ['intake'],
+    sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+  };
+  const proposal = { id: 'd-1', role: 'plan' } as NonNullable<WorkItemMenuProps['proposal']>;
+  const choices = ['Accept and plan', 'Close', 'Dismiss suggested run', 'Remove'];
+
+  it.each<[string, BoardCardOwner, boolean[]]>([
+    ['a parked session', { kind: 'session', status: 'ready' }, [true, false, false, false]],
+    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, false, false, false]],
+    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true]],
+  ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {
+    const { client } = renderMenu('intake', builtinBoardCatalog.boards, { item: held, owner, proposal });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(
+      choices.map(name => screen.getByRole('menuitem', { name }).getAttribute('aria-disabled') === 'true'),
+    ).toEqual(disabled);
   });
 });

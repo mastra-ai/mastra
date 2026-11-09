@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -5,12 +6,15 @@ import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-val
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Settings2 } from 'lucide-react';
 
+import { toast } from '@mastra/playground-ui/components/Toaster';
+
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { useConnectPlatformProviderMutation } from '../../../../../hooks/usePlatformConnections';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { GitLabIcon } from '../../../../ui/icons';
-import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../../factory/services/gitlab';
+import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -26,13 +30,13 @@ export interface CreateFactoryRepositoryRowsProps {
 function connectionMessage(status: GithubStatus | undefined): string {
   switch (status?.reason) {
     case 'missing_config':
-      return 'Connect your GitHub account through Mastra Platform.';
+      return 'GitHub is not configured for this deployment.';
     case 'organization_required':
       return 'Join an organization to connect GitHub repositories.';
     case 'auth_required':
       return 'Sign in again to connect GitHub.';
     default:
-      return 'Browse the repositories your installations can reach.';
+      return 'Install the GitHub App to grant access to repositories.';
   }
 }
 
@@ -48,14 +52,25 @@ export function CreateFactoryRepositoryRows({
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
   const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured);
+  const gitlabConnect = useConnectPlatformProviderMutation('gitlab');
+  const gitlabConnecting = gitlabConnect.isPending;
+  const startGitlabConnect = async () => {
+    try {
+      await gitlabConnect.mutateAsync({});
+      toast.success('GitLab connected');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to connect GitLab');
+    }
+  };
 
   if (githubStatus.isPending || gitlabStatus.isPending) {
-    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading repositories" rows={3} />;
   }
 
   const githubRows = !connected ? (
     (() => {
-      const unavailable = githubStatus.data?.reason === 'organization_required';
+      const unavailable =
+        githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config';
 
       return (
         <CommandGroup heading="GitHub">
@@ -65,7 +80,7 @@ export function CreateFactoryRepositoryRows({
             subtitle={connectionMessage(githubStatus.data)}
             value="connect-github"
             disabled={unavailable || githubRedirecting}
-            onSelect={githubStatus.data?.enabled ? onConnect : openMastraPlatformIntegrations}
+            onSelect={onConnect}
           />
         </CommandGroup>
       );
@@ -100,20 +115,29 @@ export function CreateFactoryRepositoryRows({
           onSelectRepository={onSelectRepository}
         />
       ) : (
-        <CommandGroup heading="GitLab">
-          <CommandPaletteItem
-            icon={<GitLabIcon />}
-            title={gitlabStatus.data?.reason === 'organization_required' ? 'GitLab unavailable' : 'Connect GitLab'}
-            subtitle={
-              gitlabStatus.data?.reason === 'organization_required'
-                ? 'Join an organization to connect GitLab repositories.'
-                : 'Connect your GitLab account through Mastra Platform.'
-            }
-            value="connect-gitlab"
-            disabled={gitlabStatus.data?.reason === 'organization_required'}
-            onSelect={openMastraPlatformIntegrations}
-          />
-        </CommandGroup>
+        (() => {
+          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
+          // connect-session request answers 403 with `organization_required`, so gate the
+          // button here to keep it from starting a doomed Nango session.
+          const gitlabUnavailable = !gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required';
+          const gitlabSubtitle = !gitlabStatus.data?.enabled
+            ? 'GitLab is not available for this deployment.'
+            : gitlabStatus.data.reason === 'organization_required'
+              ? 'Join an organization to connect GitLab repositories.'
+              : 'Sign in to GitLab to grant access to your projects.';
+          return (
+            <CommandGroup heading="GitLab">
+              <CommandPaletteItem
+                icon={gitlabConnecting ? <Spinner size="sm" aria-label="Connecting to GitLab" /> : <GitLabIcon />}
+                title={gitlabUnavailable ? 'GitLab unavailable' : 'Connect GitLab'}
+                subtitle={gitlabSubtitle}
+                value="connect-gitlab"
+                disabled={gitlabUnavailable || gitlabConnecting}
+                onSelect={() => void startGitlabConnect()}
+              />
+            </CommandGroup>
+          );
+        })()
       )}
     </>
   );
@@ -127,7 +151,7 @@ function GithubRepositoryResults({
   const repos = useGithubReposQuery(debouncedQuery || undefined, true);
 
   if (repos.isPending) {
-    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading repositories" rows={3} />;
   }
   if (repos.isError) return <CreateFactoryPaletteAlert>{repos.error.message}</CreateFactoryPaletteAlert>;
   if (repos.data.length === 0) return <CreateFactoryPaletteMessage>No repositories found.</CreateFactoryPaletteMessage>;
@@ -139,7 +163,12 @@ function GithubRepositoryResults({
           key={repo.id}
           icon={<GithubIcon />}
           title={repo.fullName}
-          subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
+          subtitle={
+            <Metadata singleLine>
+              <Metadata.Item className="shrink-0">{repo.private ? 'Private' : 'Public'}</Metadata.Item>
+              <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+            </Metadata>
+          }
           value={`repo-${repo.id}`}
           onSelect={() => onSelectRepository(repo)}
         />
@@ -164,7 +193,7 @@ function GitLabRepositoryResults({
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (projects ?? []).filter(project => project.fullName.toLowerCase().includes(normalizedQuery));
   if (pending) {
-    return <SkeletonRows label="Loading GitLab repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading GitLab repositories" rows={3} />;
   }
   if (error) return <CreateFactoryPaletteAlert>{error.message}</CreateFactoryPaletteAlert>;
   return (
@@ -177,7 +206,12 @@ function GitLabRepositoryResults({
             key={repo.id}
             icon={<GitLabIcon />}
             title={repo.fullName}
-            subtitle={`GitLab · ${repo.defaultBranch}`}
+            subtitle={
+              <Metadata singleLine>
+                <Metadata.Item className="shrink-0">GitLab</Metadata.Item>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+              </Metadata>
+            }
             value={`gitlab-repo-${repo.id}`}
             onSelect={() => onSelectRepository(repo)}
           />

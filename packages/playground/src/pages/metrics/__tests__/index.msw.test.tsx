@@ -6,6 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 import Metrics from '..';
 import {
   aggregate,
+  aggregateStorage,
+  nestedAgentRuns,
+  emptyTraceAggregate,
+  traceAggregateOnlyStorage,
   breakdown,
   percentiles,
   supportedStorage,
@@ -14,6 +18,7 @@ import {
   emptyEntityNames,
   emptyEnvironments,
   emptyServiceNames,
+  emptyScores,
   emptyTags,
 } from './fixtures/metrics';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -26,6 +31,7 @@ function observeRequests() {
   const onMetrics = vi.fn();
   const onDiscovery = vi.fn();
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/scores`, () => HttpResponse.json(emptyScores)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/:operation`, ({ params }) => {
       onMetrics();
       switch (params.operation) {
@@ -60,7 +66,7 @@ function observeRequests() {
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.search}</output>;
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
 function renderPage(path = '/metrics') {
@@ -81,7 +87,7 @@ describe('Metrics storage support', () => {
   ] as const)('when the capability lookup returns HTTP %i', (status, title) => {
     it('shows the error without declaring the storage unsupported', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
           HttpResponse.json({ error: 'Capability lookup failed' }, { status }),
         ),
       );
@@ -99,7 +105,9 @@ describe('Metrics storage support', () => {
 
   describe('when storage does not support metrics', () => {
     it('shows the unavailable state without requesting metrics or filter discovery', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage();
@@ -112,30 +120,34 @@ describe('Metrics storage support', () => {
     });
 
     it('preserves the active URL filter without requesting discovery', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage('/metrics?filterEnvironment=production');
 
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
       expect(screen.getByText('production')).toBeTruthy();
-      expect(screen.getByTestId('location').textContent).toBe('?filterEnvironment=production');
+      expect(screen.getByTestId('location').textContent).toBe('/metrics?filterEnvironment=production');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
     });
 
     it('updates the date preset in the URL without requesting metrics', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage();
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 7 days' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
 
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('?period=7d'));
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/metrics?period=7d'));
       expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
@@ -146,19 +158,21 @@ describe('Metrics storage support', () => {
   describe('when a failed capability lookup recovers', () => {
     it('loads the supported dashboard after the next capability fetch', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
           HttpResponse.json({ error: 'Temporarily unavailable' }, { status: 500 }),
         ),
       );
       const { onMetrics } = observeRequests();
       const { queryClient } = renderPage();
       expect(await screen.findByText('Failed to load storage capabilities')).toBeTruthy();
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(supportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
 
-      await act(() => queryClient.invalidateQueries({ queryKey: ['mastra-packages'] }));
+      await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByText('Total Agent Runs')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Token usage' })).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -169,10 +183,10 @@ describe('Metrics storage support', () => {
       const pending = new Promise<void>(resolve => {
         release = resolve;
       });
-      const onPackages = vi.fn();
+      const onCapabilities = vi.fn();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, async () => {
-          onPackages();
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
+          onCapabilities();
           await pending;
           return HttpResponse.json(supportedStorage);
         }),
@@ -181,11 +195,11 @@ describe('Metrics storage support', () => {
 
       const { queryClient } = renderPage();
 
-      await waitFor(() => expect(onPackages).toHaveBeenCalled());
+      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
       try {
         expect(screen.getByRole('status', { name: 'Loading storage capabilities' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Add Filter' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('group', { name: 'Metrics filters' })).toBeTruthy();
         expect(onMetrics).not.toHaveBeenCalled();
         expect(onDiscovery).not.toHaveBeenCalled();
       } finally {
@@ -195,7 +209,124 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByText('Total Agent Runs')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Token usage' })).toBeTruthy();
+    });
+  });
+
+  describe('when the dashboard has data', () => {
+    it('opens traces with the dashboard filters from "View in traces"', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
+
+      renderPage('/metrics?period=7d&filterEnvironment=production');
+
+      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in traces' });
+      if (!tokenUsageTraces) throw new Error('No "View in traces" button');
+      fireEvent.click(tokenUsageTraces);
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
+      const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
+      expect(url.searchParams.get('datePreset')).toBe('last-7d');
+      expect(url.searchParams.get('filterEnvironment')).toBe('production');
+    });
+  });
+
+  describe('when the server answers trace and span aggregates', () => {
+    it('shows the Resources and threads card', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      expect(await screen.findByText('Resources and threads')).toBeTruthy();
+    });
+
+    it('folds Usage into Breakdown, with model and thread views', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Breakdown by agent' }));
+      expect(await screen.findByRole('menuitemradio', { name: 'Breakdown by model' })).toBeTruthy();
+      expect(screen.getByRole('menuitemradio', { name: 'Breakdown by thread' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Usage/ })).toBeNull();
+    });
+
+    it('replaces Trace volume with Breakdown, whose rows open the traces an agent ran in, nested or not', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      fireEvent.click(await screen.findByTitle('Explore Subagent'));
+      expect(screen.queryByRole('button', { name: 'Workflow runs' })).toBeNull();
+      expect(screen.getAllByRole('button', { name: 'Agent runs' })).toHaveLength(1);
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
+      const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
+      expect(JSON.parse(url.searchParams.get('filterGroup') ?? '{}')).toMatchObject({
+        logic: 'and',
+        nodes: [
+          { fieldId: 'spans.spanType', value: 'agent_run' },
+          { fieldId: 'spans.entityName', value: 'Explore Subagent' },
+        ],
+      });
+    });
+  });
+
+  describe('when the server answers trace aggregates but not span aggregates', () => {
+    it('keeps the page as it was, without Resources and threads', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      await screen.findAllByRole('button', { name: 'View in traces' });
+      expect(screen.queryByText('Resources and threads')).toBeNull();
+    });
+
+    it('keeps the Usage card', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      await screen.findAllByRole('button', { name: 'View in traces' });
+      expect(await screen.findByRole('button', { name: 'Usage by agent' })).toBeTruthy();
+    });
+
+    it('keeps Trace volume and shows no Breakdown', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      // Agent runs and Trace volume both open on agent runs; Trace volume's menu also offers tool calls.
+      const [, traceVolume] = await screen.findAllByRole('button', { name: 'Agent runs' });
+      if (!traceVolume) throw new Error('No Trace volume card');
+      fireEvent.click(traceVolume);
+      expect(await screen.findByRole('menuitemradio', { name: 'Tool calls' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Breakdown/ })).toBeNull();
     });
   });
 });

@@ -2,7 +2,6 @@
 title: "Reference: Context recall scorer | Evals"
 description: "The createContextRecallScorer() function creates a scorer that evaluates how well retrieved context covers the claims in a ground-truth reference answer."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -69,7 +68,7 @@ Use when running evaluations against curated test sets:
 ]}
 />
 
-Either `context` or `contextExtractor` must be provided. When both are provided, `contextExtractor` is used only if the run input and output are agent-shaped (`MastraDBMessage[]`); otherwise the scorer falls back to `context`.
+Either `context` or `contextExtractor` must be provided. When both are provided, `contextExtractor` is used only if the run input and output are agent-shaped: the input must be an agent run-input object (`{ inputMessages, rememberedMessages, systemMessages, taggedSystemMessages }`) and the output must be a `MastraDBMessage[]`. Otherwise the scorer falls back to `context`.
 
 ## `.run()` returns
 

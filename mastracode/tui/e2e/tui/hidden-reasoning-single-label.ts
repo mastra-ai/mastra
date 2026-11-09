@@ -156,8 +156,8 @@ function multiSpanReasoningResponse(): Response {
 export const hiddenReasoningSingleLabelScenario = {
   name: 'hidden-reasoning-single-label',
   description:
-    'Render exactly one hidden Thinking... label for a response with two consecutive reasoning items, not one per span.',
-  testName: 'collapses consecutive hidden reasoning spans into a single Thinking label',
+    'Render no in-chat Thinking... label for a response with two consecutive hidden reasoning items; Thinking shows only in the status line.',
+  testName: 'keeps consecutive hidden reasoning spans out of the chat',
   useOpenAIModel: true,
   async inProcessApp({ startMastraCodeApp }): Promise<McE2eInProcessApp> {
     const patches = createGlobalPatchScope();
@@ -206,9 +206,9 @@ export const hiddenReasoningSingleLabelScenario = {
     await new Promise(resolve => setTimeout(resolve, 500));
     const second = countLabels();
     for (const sample of [first, second]) {
-      if (sample.count !== 1) {
+      if (sample.count !== 0) {
         throw new Error(
-          `Expected exactly one Thinking... label for two consecutive reasoning spans, saw ${sample.count}:\n${sample.view}`,
+          `Expected no in-chat Thinking... label for two consecutive reasoning spans, saw ${sample.count}:\n${sample.view}`,
         );
       }
     }

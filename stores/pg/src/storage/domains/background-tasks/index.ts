@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import type {
   CreateIndexOptions,
@@ -14,9 +15,10 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -29,7 +31,7 @@ function getTableName(schemaName?: string) {
 }
 
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  if (typeof v === 'object' && v != null) return toPgJson(v);
   return v ?? null;
 }
 
@@ -50,6 +52,11 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
   const startedAt = row.startedAtZ || row.startedAt;
   const suspendedAt = row.suspendedAtZ || row.suspendedAt;
   const completedAt = row.completedAtZ || row.completedAt;
+  const leaseExpiresAt = row.leaseExpiresAtZ || row.leaseExpiresAt;
+  // `expiresAtZ` is added with `DEFAULT NOW()` like every Z twin, so rows that
+  // predate the column carry a value there. The nullable naive column is the
+  // source of truth for whether the row has an expiry at all.
+  const expiresAt = row.expiresAt != null ? row.expiresAtZ || row.expiresAt : undefined;
   return {
     id: row.id,
     status: row.status as BackgroundTaskStatus,
@@ -70,10 +77,22 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     startedAt: startedAt ? (startedAt instanceof Date ? startedAt : new Date(startedAt)) : undefined,
     suspendedAt: suspendedAt ? (suspendedAt instanceof Date ? suspendedAt : new Date(suspendedAt)) : undefined,
     completedAt: completedAt ? (completedAt instanceof Date ? completedAt : new Date(completedAt)) : undefined,
+    ownerId: row.ownerId ?? undefined,
+    // Read the timezone-aware mirror like every other timestamp on this row:
+    // the naive `leaseExpiresAt` column is round-tripped through the driver's
+    // process-local timezone, which would make the lease fence miss.
+    leaseExpiresAt: leaseExpiresAt
+      ? leaseExpiresAt instanceof Date
+        ? leaseExpiresAt
+        : new Date(leaseExpiresAt)
+      : undefined,
+    expiresAt: expiresAt ? (expiresAt instanceof Date ? expiresAt : new Date(expiresAt)) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksPG extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
@@ -108,7 +127,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -124,7 +143,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(BackgroundTasksPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -177,7 +196,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     statements.push(
@@ -197,7 +216,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return BackgroundTasksPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -254,6 +273,12 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         suspendedAtZ: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
         completedAtZ: task.completedAt?.toISOString() ?? null,
+        ownerId: task.ownerId ?? null,
+        leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+        leaseExpiresAtZ: task.leaseExpiresAt?.toISOString() ?? null,
+        expiresAt: task.expiresAt?.toISOString() ?? null,
+        expiresAtZ: task.expiresAt?.toISOString() ?? null,
+        metadata: serializeJson(task.metadata),
       },
     });
   }
@@ -261,7 +286,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: any[] = [];
@@ -305,6 +330,26 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       const val = update.completedAt?.toISOString() ?? null;
       params.push(val, val);
     }
+    if ('ownerId' in update) {
+      setClauses.push(`"ownerId" = $${paramIdx++}`);
+      params.push(update.ownerId ?? null);
+    }
+    if ('leaseExpiresAt' in update) {
+      setClauses.push(`"leaseExpiresAt" = $${paramIdx++}`);
+      setClauses.push(`"leaseExpiresAtZ" = $${paramIdx++}`);
+      const val = update.leaseExpiresAt?.toISOString() ?? null;
+      params.push(val, val);
+    }
+    if ('expiresAt' in update) {
+      setClauses.push(`"expiresAt" = $${paramIdx++}`);
+      setClauses.push(`"expiresAtZ" = $${paramIdx++}`);
+      const val = update.expiresAt?.toISOString() ?? null;
+      params.push(val, val);
+    }
+    if ('metadata' in update) {
+      setClauses.push(`"metadata" = $${paramIdx++}`);
+      params.push(serializeJson(update.metadata));
+    }
 
     if (setClauses.length === 0) return false;
 
@@ -312,8 +357,36 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     params.push(taskId);
     let where = `"id" = $${paramIdx++}`;
     if (options?.expectedStatus) {
-      where += ` AND "status" = $${paramIdx}`;
+      where += ` AND "status" = $${paramIdx++}`;
       params.push(options.expectedStatus);
+    }
+    if (options?.expectedOwnerId !== undefined) {
+      if (options.expectedOwnerId === null) {
+        where += ` AND "ownerId" IS NULL`;
+      } else {
+        where += ` AND "ownerId" = $${paramIdx++}`;
+        params.push(options.expectedOwnerId);
+      }
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      // Fence on the timezone-aware column, matching the read in `rowToTask`:
+      // the naive column would be re-parsed in the process-local timezone and
+      // never compare equal, silently blocking stale-task recovery.
+      if (options.expectedLeaseExpiresAt === null) {
+        where += ` AND "leaseExpiresAtZ" IS NULL`;
+      } else {
+        where += ` AND "leaseExpiresAtZ" = $${paramIdx++}`;
+        params.push(options.expectedLeaseExpiresAt.toISOString());
+      }
+    }
+    if (options?.expectedSuspendedAt !== undefined) {
+      // Timezone-aware column, for the same reason as the lease fence above.
+      if (options.expectedSuspendedAt === null) {
+        where += ` AND "suspendedAtZ" IS NULL`;
+      } else {
+        where += ` AND "suspendedAtZ" = $${paramIdx++}`;
+        params.push(options.expectedSuspendedAt.toISOString());
+      }
     }
     const result = await this.#db.client.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${where}`, params);
     return (result.rowCount ?? 0) > 0;
@@ -369,7 +442,17 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
           ? '"suspendedAt"'
           : filter.dateFilterBy === 'completedAt'
             ? '"completedAt"'
-            : '"createdAt"';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '"expiresAtZ"'
+              : '"createdAt"';
+    // Presence lives on the nullable naive column (see rowToTask); compare
+    // times on the timezone-aware twin.
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '"expiresAt" IS NOT NULL' : '"expiresAt" IS NULL');
+    }
+    if (filter.dateFilterBy === 'expiresAt' && (filter.fromDate || filter.toDate)) {
+      conditions.push('"expiresAt" IS NOT NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= $${paramIdx++}`);
       params.push(filter.fromDate.toISOString());
@@ -438,7 +521,17 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
           ? '"suspendedAt"'
           : filter.dateFilterBy === 'completedAt'
             ? '"completedAt"'
-            : '"createdAt"';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '"expiresAtZ"'
+              : '"createdAt"';
+    // Presence lives on the nullable naive column (see rowToTask); compare
+    // times on the timezone-aware twin.
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '"expiresAt" IS NOT NULL' : '"expiresAt" IS NULL');
+    }
+    if (filter.dateFilterBy === 'expiresAt' && (filter.fromDate || filter.toDate)) {
+      conditions.push('"expiresAt" IS NOT NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= $${paramIdx++}`);
       params.push(filter.fromDate.toISOString());

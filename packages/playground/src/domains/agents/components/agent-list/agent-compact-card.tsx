@@ -1,12 +1,12 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { CardContent, CardDescription, CardLink, CardTitle } from '@mastra/playground-ui/components/Card';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useId } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';
 import { AgentWorkflowDetails } from './agent-workflow-details';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentCompactCardProps {
   agent: GetAgentResponse;

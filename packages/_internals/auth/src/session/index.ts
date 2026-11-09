@@ -25,6 +25,15 @@ export interface ISessionProvider<TSession extends Session = Session> {
   getSessionIdFromRequest(request: Request): string | null;
   getSessionHeaders(session: TSession): Record<string, string>;
   getClearSessionHeaders(): Record<string, string>;
+  /**
+   * Optional: `Set-Cookie` values expiring legacy copies of the session cookie
+   * (for example one an earlier release scoped to a shared parent `Domain`).
+   * A browser only deletes a cookie whose exact `(name, Domain, Path)` match,
+   * so servers append these to every response that sets or clears the session
+   * cookie; otherwise a stale shared-domain copy keeps being sent to every
+   * sibling host until it expires.
+   */
+  getLegacySessionClearCookies?(): string[];
 }
 
 export { MemorySessionProvider, type MemorySessionProviderOptions } from './memory';

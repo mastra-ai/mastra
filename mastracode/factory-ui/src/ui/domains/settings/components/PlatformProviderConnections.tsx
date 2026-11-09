@@ -1,18 +1,9 @@
-/**
- * Connect / reconnect controls for Platform-managed provider accounts,
- * completed headlessly in the Factory SPA.
- *
- * OAuth providers open the provider's own consent popup; API-key providers
- * collect the key in a dialog and submit it directly — the same UX as Mastra
- * Platform's own settings, with no Nango-branded screens and no Platform
- * round trip.
- */
-
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -21,7 +12,8 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -29,10 +21,18 @@ import {
   useConnectPlatformProviderMutation,
   useReconnectPlatformProviderMutation,
 } from '../../../../hooks/usePlatformConnections';
-import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import { MASTRA_PLATFORM_URL, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
+import { IntegrationLabel } from './IntegrationLabel';
+import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 
-function connectionName(connection: PlatformProviderConnection): string {
+const platformIcons = {
+  gitlab: 'gitlab',
+  jira: 'jira',
+  'incident-io': 'incidentio',
+} as const satisfies Record<PlatformConnectProviderId, string>;
+
+export function connectionName(connection: PlatformProviderConnection): string {
   return connection.displayName?.trim() || connection.accountLabel?.trim() || 'Connected account';
 }
 
@@ -48,7 +48,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const [apiKey, setApiKey] = useState('');
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -57,7 +57,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
             reaches the browser again.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-3">
+        <DialogBody>
           <Input
             aria-label={`${meta.displayName} API key`}
             type="password"
@@ -67,14 +67,10 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
           />
         </DialogBody>
         <DialogFooter>
-          <ButtonsGroup>
-            <Button variant="ghost" onClick={onClose} disabled={pending}>
-              Cancel
-            </Button>
-            <Button onClick={() => onSubmit(apiKey.trim())} disabled={pending || !apiKey.trim()}>
-              {pending ? 'Connecting…' : 'Connect'}
-            </Button>
-          </ButtonsGroup>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
+            {pending ? 'Connecting…' : 'Connect'}
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -83,28 +79,25 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
 
 export interface ProviderConnectControlProps {
   provider: PlatformConnectProviderId;
-  /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
+  buttonLabel?: string;
   size?: 'sm' | 'md';
   variant?: 'default' | 'ghost' | 'primary';
-  /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
-  /** Called after the provider confirmed the authorization. */
+  className?: string;
   onCompleted?: () => void;
 }
 
-/**
- * One button driving the full connect or reconnect flow for a provider.
- * Owns its mutation: mint session → headless auth → wait for activation.
- */
 export function ProviderConnectControl({
   provider,
   reconnectConnectionId,
   label,
+  buttonLabel,
   size = 'sm',
   variant = 'default',
   icon,
+  className,
   onCompleted,
 }: ProviderConnectControlProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -125,7 +118,7 @@ export function ProviderConnectControl({
       if (connection) {
         toast.success(`${meta.displayName} connected`);
       } else {
-        toast.success(`${meta.displayName} authorization completed — the connection is activating`);
+        toast.success(`${meta.displayName} authorization completed. The connection is activating.`);
       }
       onCompleted?.();
     } catch (err) {
@@ -139,10 +132,12 @@ export function ProviderConnectControl({
         size={size}
         variant={variant}
         icon={icon}
+        className={className}
         disabled={pending}
+        aria-label={buttonLabel && !pending ? label : undefined}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
-        {pending ? 'Connecting…' : label}
+        {pending ? 'Connecting…' : (buttonLabel ?? label)}
       </Button>
       {collectingApiKey && (
         <ApiKeyDialog
@@ -157,41 +152,77 @@ export function ProviderConnectControl({
   );
 }
 
-export interface ProviderConnectionsListProps {
-  provider: PlatformConnectProviderId;
-  connections: PlatformProviderConnection[];
+export function PlatformLabel({ provider }: { provider: PlatformConnectProviderId }) {
+  return (
+    <IntegrationLabel provider={platformIcons[provider]} name={PLATFORM_CONNECT_PROVIDERS[provider].displayName} />
+  );
 }
 
-/**
- * Per-connection rows for organizations with multiple installed accounts.
- * Healthy connections show a quiet reconnect affordance; connections the
- * provider rejected surface it prominently.
- */
-export function ProviderConnectionsList({ provider, connections }: ProviderConnectionsListProps) {
-  if (connections.length === 0) return null;
+export function PlatformConnectButton({ provider }: { provider: PlatformConnectProviderId }) {
   return (
-    <ul className="flex flex-col">
-      {connections.map(connection => (
-        <li key={connection.id} className="flex items-center justify-between gap-2 px-4 py-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <Txt as="span" variant="caption" className="truncate">
-              {connectionName(connection)}
-            </Txt>
-            {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="meta" className="text-red-400">
-                Needs reauthorization
-              </Txt>
-            )}
-          </span>
-          <ProviderConnectControl
-            provider={provider}
-            reconnectConnectionId={connection.id}
-            label="Reconnect"
-            size="sm"
-            variant={connection.status === 'needs_reauth' ? 'default' : 'ghost'}
-          />
-        </li>
-      ))}
-    </ul>
+    <ProviderConnectControl
+      provider={provider}
+      label={`Connect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
+      buttonLabel="Connect"
+      icon={<Link2 />}
+    />
+  );
+}
+
+export function PlatformReconnectButton({
+  provider,
+  connectionId,
+}: {
+  provider: PlatformConnectProviderId;
+  connectionId: string;
+}) {
+  return (
+    <ProviderConnectControl
+      provider={provider}
+      reconnectConnectionId={connectionId}
+      label={`Reconnect ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
+      buttonLabel="Reconnect"
+      icon={<Link2 />}
+    />
+  );
+}
+
+export function PlatformManageLink({ provider }: { provider: PlatformConnectProviderId }) {
+  return (
+    <ConnectionManagementButton
+      aria-label={`Manage ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} connection`}
+      render={<a href={MASTRA_PLATFORM_URL} target="_blank" rel="noopener noreferrer" />}
+    >
+      Manage
+    </ConnectionManagementButton>
+  );
+}
+
+export function PlatformConnectionActions({
+  provider,
+  connections,
+}: {
+  provider: PlatformConnectProviderId;
+  connections: PlatformProviderConnection[];
+}) {
+  const expired = connections.find(connection => connection.status === 'needs_reauth');
+  return (
+    <>
+      {expired && <PlatformReconnectButton provider={provider} connectionId={expired.id} />}
+      <PlatformManageLink provider={provider} />
+    </>
+  );
+}
+
+export function AddPlatformAccountRow({ provider }: { provider: PlatformConnectProviderId }) {
+  return (
+    <SettingsRow label={<PlatformLabel provider={provider} />} description="Another account">
+      <ProviderConnectControl
+        provider={provider}
+        label={`Connect another ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} account`}
+        buttonLabel="Connect"
+        icon={<Link2 />}
+      />
+    </SettingsRow>
   );
 }

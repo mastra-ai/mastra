@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AvailableHooks, executeHook } from '../hooks';
-import { setScorerHookOwner } from '../hooks/scorer-owner';
+import { setScorerHookEntry, setScorerHookOwner } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { MastraScorerEntry } from './base';
@@ -145,5 +145,6 @@ export function runScorer({
   };
 
   setScorerHookOwner(payload, mastra);
+  setScorerHookEntry(payload, scorerObject);
   executeHook(AvailableHooks.ON_SCORER_RUN, payload);
 }

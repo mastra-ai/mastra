@@ -1,6 +1,7 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ProcessStepList, ProcessStepProgressBar } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
@@ -72,9 +73,13 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
     <Container className="mb-5 content-center space-y-6 text-muted-foreground">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-heading text-foreground">{getPhaseMessage()}</h3>
+        <Txt as="h3" variant="heading" tone="ink">
+          {getPhaseMessage()}
+        </Txt>
         {(streamResult?.runId || runId) && (
-          <div className="mt-2 text-caption text-muted-foreground">Run ID: {streamResult?.runId ?? runId}</div>
+          <Txt as="p" variant="caption" tone="muted" className="mt-2">
+            Run ID: {streamResult?.runId ?? runId}
+          </Txt>
         )}
       </div>
 
@@ -89,12 +94,15 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'flex items-center gap-3 rounded-lg bg-red-500/10 p-4 text-body text-foreground',
-            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-red-500 [&>svg]:opacity-70',
+            'text-foreground',
+            'flex items-center gap-3 rounded-lg bg-destructive-subtle p-4',
+            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-foreground [&>svg]:opacity-70',
           )}
         >
           <OctagonXIcon />
-          {error || 'Something went wrong'}
+          <Txt as="span" variant="body" className="block">
+            {error || 'Something went wrong'}
+          </Txt>
         </div>
       )}
 
@@ -103,9 +111,11 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="grid justify-items-center gap-4 text-center text-body text-muted-foreground">
+        <div className={cn('text-muted-foreground', 'grid justify-items-center gap-4 text-center')}>
           <Spinner />
-          <p>This may take some time...</p>
+          <Txt as="p" variant="body">
+            This may take some time...
+          </Txt>
         </div>
       )}
     </Container>

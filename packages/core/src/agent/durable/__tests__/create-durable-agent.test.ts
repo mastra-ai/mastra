@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
 import { createDurableAgent, isLocalDurableAgent } from '../create-durable-agent';
 
@@ -74,6 +75,30 @@ describe('createDurableAgent factory', () => {
 
       expect(durableAgent.id).toBe('custom-id');
       expect(durableAgent.name).toBe('Custom Name');
+    });
+
+    it('should not resolve a dynamic model while wrapping the agent', async () => {
+      const model = createMockModel();
+      const resolveModel = vi.fn(({ requestContext }) => {
+        expect(requestContext.get('model-id')).toBe('dynamic-model');
+        return model;
+      });
+      const dynamicAgent = new Agent({
+        id: 'dynamic-agent',
+        name: 'Dynamic Agent',
+        instructions: 'You are a test agent',
+        model: resolveModel as any,
+      });
+
+      const durableAgent = createDurableAgent({ agent: dynamicAgent });
+
+      expect(resolveModel).not.toHaveBeenCalled();
+
+      const requestContext = new RequestContext();
+      requestContext.set('model-id', 'dynamic-model');
+      await durableAgent.getModel({ requestContext });
+
+      expect(resolveModel).toHaveBeenCalledOnce();
     });
 
     it('should pass isLocalDurableAgent type guard', () => {

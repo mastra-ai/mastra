@@ -1,9 +1,9 @@
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type {
   FactoryIncidentioEventName,
   FactoryIncidentioRuleContext,
   FactoryRuleHandler,
 } from '../../rules/types.js';
-import { incidentioClaimKey } from './claim.js';
 
 export type IncidentioRuleOverrides = Partial<
   Record<FactoryIncidentioEventName, FactoryRuleHandler<FactoryIncidentioRuleContext> | null | undefined>
@@ -18,14 +18,13 @@ function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:follow-up-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise Work auto-triages the new follow-up.
+    // otherwise the follow-up waits in Work Intake.
     board: context.intake?.board ?? 'work',
     source: 'incidentio-follow-up',
     sourceKey: context.issue.id,
-    claimKey: incidentioClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'triage',
+    stage: context.intake?.initialPhase ?? 'intake',
     metadata: {
       identifier: context.issue.identifier,
       issueRef: context.issue.id,
@@ -47,22 +46,24 @@ function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
 
 function incidentioFollowUpClosed(context: FactoryIncidentioRuleContext) {
   if (!context.item || context.item.source !== 'incidentio-follow-up') return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
   const stateType = context.issue.stateType;
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
-  return {
-    type: 'transition',
+  const target = canceled ? closure.canceled : closure.completed;
+  return closedByRoutes(canceled, {
     idempotencyKey: `${context.ingress.id}:follow-up-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
-      text: `incident.io follow-up ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+      text: `incident.io follow-up ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
-  } as const;
+  });
 }
 
 export const defaultIncidentioRules = Object.freeze({
@@ -93,5 +94,5 @@ export function resolveIncidentioRules(overrides?: IncidentioRuleOverrides): Inc
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as IncidentioEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as IncidentioEventRules, overrides);
 }

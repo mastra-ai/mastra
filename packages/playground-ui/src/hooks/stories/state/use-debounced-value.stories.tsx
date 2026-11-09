@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -10,10 +11,10 @@ function DebouncedValueDemo({ delay }: { delay: number }) {
   const debouncedQuery = useDebouncedValue(query, delay);
   return (
     <HookDemo>
-      <Txt as="label" htmlFor="debounced-query">
-        Search query
-      </Txt>
-      <Input id="debounced-query" value={query} onChange={event => setQuery(event.target.value)} />
+      <Field>
+        <FieldLabel>Search query</FieldLabel>
+        <Input value={query} onChange={event => setQuery(event.target.value)} />
+      </Field>
       <Txt>Input: {query || '(empty)'}</Txt>
       <Txt role="status">Debounced: {debouncedQuery || '(empty)'}</Txt>
     </HookDemo>

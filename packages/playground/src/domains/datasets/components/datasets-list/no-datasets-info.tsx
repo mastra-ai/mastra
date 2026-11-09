@@ -19,7 +19,7 @@ export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
       <div className="flex flex-col items-center gap-2">
         {onCreateClick && (
           <Button variant="primary" onClick={onCreateClick} icon={<Plus />}>
-            Create Dataset
+            New dataset
           </Button>
         )}
         <Button
@@ -28,7 +28,7 @@ export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
 
           icon={<ExternalLinkIcon />}
         >
-          Datasets Documentation
+          Datasets documentation
         </Button>
       </div>
     }

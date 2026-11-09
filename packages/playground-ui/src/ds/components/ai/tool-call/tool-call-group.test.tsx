@@ -30,20 +30,25 @@ describe('ToolCallGroup', () => {
     const incomplete: ToolCallGroupStep = { ...view('c.ts'), hasResult: false };
 
     it.each([
-      { steps: [success, success, success], summary: '3 OK' },
-      { steps: [success, failure, failure], summary: '1 OK · 2 failed' },
-      { steps: [failure, failure, failure], summary: '3 failed' },
-      { steps: [success, incomplete, incomplete], summary: '1 OK · 2 incomplete' },
-      { steps: [success, failure, incomplete], summary: '1 OK · 1 failed · 1 incomplete' },
-      { steps: [incomplete, incomplete, incomplete], summary: '3 incomplete' },
-    ])('shows $summary without expanding', ({ steps, summary }) => {
+      { steps: [success, success, success], outcomes: ['3 OK'] },
+      { steps: [success, failure, failure], outcomes: ['1 OK', '2 failed'] },
+      { steps: [failure, failure, failure], outcomes: ['3 failed'] },
+      { steps: [success, incomplete, incomplete], outcomes: ['1 OK', '2 incomplete'] },
+      { steps: [success, failure, incomplete], outcomes: ['1 OK', '1 failed', '1 incomplete'] },
+      { steps: [incomplete, incomplete, incomplete], outcomes: ['3 incomplete'] },
+    ])('shows $outcomes without expanding', ({ steps, outcomes }) => {
       render(
         <ToolCallGroup steps={steps}>
           <span>details</span>
         </ToolCallGroup>,
       );
-      expect(screen.getByText(summary)).toBeTruthy();
-      expect(screen.queryByRole('img', { name: 'Failed' }) !== null).toBe(summary.includes('failed'));
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(Array.from(group.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual(
+        outcomes,
+      );
+      expect(within(group).queryByRole('img', { name: 'Failed' }) !== null).toBe(
+        outcomes.some(outcome => outcome.includes('failed')),
+      );
       expect(screen.queryByText('details')).toBeNull();
     });
   });
@@ -99,7 +104,12 @@ describe('ToolCallGroup', () => {
           <span />
         </ToolCallGroup>,
       );
-      expect(screen.getByText('1 OK · 1 failed · 1 incomplete')).toBeTruthy();
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(Array.from(group.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
+        '1 OK',
+        '1 failed',
+        '1 incomplete',
+      ]);
       expect(screen.queryByText('1/3')).toBeNull();
     });
   });
@@ -127,6 +137,29 @@ describe('ToolCallGroup', () => {
 
     fireEvent.click(within(group).getByRole('button'));
     expect(screen.getByText('step cards')).toBeTruthy();
+  });
+
+  it('names a running command by its description, keeping it grouped under Run', () => {
+    const steps = [
+      view('a.ts'),
+      {
+        toolName: 'execute_command',
+        args: { description: 'Running the unit tests', command: 'pnpm test' },
+        status: 'running' as const,
+      },
+      view('b.ts'),
+    ];
+    render(
+      <ToolCallGroup steps={steps}>
+        <span>step cards</span>
+      </ToolCallGroup>,
+    );
+
+    const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+    // Prose, like the row; monospace is for commands and paths.
+    expect(within(group).getByText('Running the unit tests').className).not.toContain('font-mono');
+    expect(within(group).queryByText('pnpm test')).toBeNull();
+    expect(within(group).getByRole('img', { name: 'Read, Run' })).toBeTruthy();
   });
 
   it('marks a settled group as failed when any step failed', () => {

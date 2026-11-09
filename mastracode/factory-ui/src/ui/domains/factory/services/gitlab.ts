@@ -1,13 +1,3 @@
-/** Browser-side helpers for the GitLab intake source. */
-
-export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
-
-export function openMastraPlatformIntegrations(): void {
-  window.open(MASTRA_PROJECTS_URL, '_blank', 'noopener,noreferrer');
-}
-
-export const manageGitLabConnection = openMastraPlatformIntegrations;
-
 export interface GitLabConnection {
   id: string;
   integrationId: string;
@@ -22,7 +12,7 @@ export interface GitLabStatus {
   connections?: GitLabConnection[];
   accounts?: string[];
   reauthRequired: boolean;
-  reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
+  reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
 }
 
 export interface GitLabIssue {
@@ -67,6 +57,7 @@ export interface GitLabMergeRequest {
   author: string | null;
   assignees: string[];
   requestedReviewers: string[];
+  labels?: string[];
   baseBranch: string;
   headBranch: string;
   createdAt: string;
@@ -95,7 +86,6 @@ export interface GitLabProject {
   sandboxWorkdir?: string;
 }
 
-/** Provider-neutral repository pick used by Factory onboarding and linking. */
 export interface GitLabRepository {
   provider: 'gitlab';
   /** Opaque Intake source id. */
@@ -140,10 +130,13 @@ export async function fetchGitLabStatus(baseUrl: string): Promise<GitLabStatus> 
     if (res.status === 401) {
       return { enabled: false, configured: false, reauthRequired: false, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, configured: false, reauthRequired: false };
+    if (res.status === 404) {
+      return { enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' };
+    }
+    if (!res.ok) return { enabled: false, configured: false, reauthRequired: false, reason: 'unavailable' };
     return (await res.json()) as GitLabStatus;
   } catch {
-    return { enabled: false, configured: false, reauthRequired: false };
+    return { enabled: false, configured: false, reauthRequired: false, reason: 'unavailable' };
   }
 }
 

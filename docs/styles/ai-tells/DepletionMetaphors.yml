@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI depletion metaphor: '%s'. Say what ran out, failed, or slowed, and name the limit. Disable this rule for prose about engines or nutrition."
+message: "AI depletion metaphor: '%s'. Say what ran out, failed, or slowed, and give the limit. Disable this rule for prose about engines or nutrition."
 level: error
 nonword: true
 ignorecase: true

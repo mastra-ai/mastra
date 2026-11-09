@@ -57,7 +57,7 @@ Inside [Studio](/docs/studio/overview), go to **Settings** and under **Headers**
 
 ## Configuring `MastraClient`
 
-When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
+When `auth` is enabled, requests to protected routes made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts"
 import { MastraClient } from '@mastra/client-js'

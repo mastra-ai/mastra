@@ -1,0 +1,17 @@
+/* Syntax highlight roles the CodeMirror themes read, one chromatic ramp step per role. */
+
+:root {
+  --syntax-string: var(--green-300);
+  --syntax-keyword: var(--red-400);
+  --syntax-literal: var(--amber-300);
+  --syntax-name: var(--cyan-300);
+  --syntax-link: var(--blue-400);
+}
+
+html.light {
+  --syntax-string: var(--green-700);
+  --syntax-keyword: var(--red-600);
+  --syntax-literal: var(--amber-800);
+  --syntax-name: var(--cyan-800);
+  --syntax-link: var(--blue-600);
+}

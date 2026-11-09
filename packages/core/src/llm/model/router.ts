@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
@@ -126,15 +126,19 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
   readonly gatewayId: string;
+  /** Full `provider/model` router ID, when the ID alone resolves this model's route. */
+  id?: string;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGatewayInterface;
   private _supportedUrlsPromise: Promise<Record<string, RegExp[]>> | null = null;
   private readonly instanceGatewayCache = createGatewayModelCache();
+  private readonly hasCustomGateways: boolean;
   #lastStreamTransport: StreamTransport | undefined;
   #manager: GatewayManager;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGatewayInterface[]) {
+    this.hasCustomGateways = Boolean(customGateways?.length);
     // Normalize config to always have an 'id' field for routing
     let normalizedConfig: {
       id: `${string}/${string}`;
@@ -193,6 +197,17 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
     this.modelId = parsedConfig.id;
     this.config = parsedConfig;
+    // Only expose the ID when it alone can resolve the same route again: custom endpoints,
+    // credentials, headers, and gateways are not carried by the ID.
+    if (
+      !this.hasCustomGateways &&
+      !parsedConfig.url &&
+      !parsedConfig.apiKey &&
+      !parsedConfig.headers &&
+      !parsedConfig.api
+    ) {
+      this.id = parsedConfig.routerId;
+    }
 
     // Create a lazy PromiseLike for supportedUrls that resolves the underlying model's supportedUrls
     // This allows providers like Mistral to expose their native URL support (e.g., PDF URLs)
@@ -261,6 +276,29 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     }
 
     return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
+  }
+
+  /**
+   * Resolves the provider id of the model this router calls, e.g. `groq.chat` or `openai.responses`.
+   * `provider` only names the gateway's provider (`groq`, `openai`), which doesn't tell a Chat
+   * Completions endpoint from a Responses one. Returns `undefined` when the model can't be resolved
+   * (e.g. a missing API key); the model call reports that error itself.
+   */
+  async resolveApiProviderId(): Promise<string | undefined> {
+    try {
+      const resolved = this.#manager.resolveModelId(this.config.routerId);
+      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+      const model = await this.resolveLanguageModel({
+        apiKey: auth.apiKey ?? '',
+        auth,
+        headers: mergeHeaders(this.config.headers, auth.headers),
+        trackStreamTransport: false,
+        ...resolved,
+      });
+      return model.provider;
+    } catch {
+      return undefined;
+    }
   }
 
   /** @internal */
@@ -510,7 +548,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     authScopeKey: string;
     api: 'chat' | 'responses';
   }): string {
-    cacheKeyHmacSecret ??= randomBytes(32);
+    cacheKeyHmacSecret ??= Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32)));
     return createHmac('sha256', cacheKeyHmacSecret)
       .update(
         JSON.stringify([
@@ -537,6 +575,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     headers,
     transport,
     responsesWebSocket,
+    trackStreamTransport = true,
   }: {
     modelId: string;
     providerId: string;
@@ -545,6 +584,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     headers?: Record<string, string>;
     transport?: OpenAITransport;
     responsesWebSocket?: ResponsesWebSocketOptions;
+    /** Set false to resolve without replacing the transport handle the next stream reads. */
+    trackStreamTransport?: boolean;
   }): Promise<GatewayLanguageModel> {
     const resolvedTransport: OpenAITransport = transport ?? 'fetch';
     const websocketKey =
@@ -553,6 +594,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         : '';
     const useInstanceCache = this.shouldUseInstanceGatewayCache(auth);
     const cache = useInstanceCache ? this.instanceGatewayCache : this.getGatewayCache();
+    // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string coercion at the model-cache key boundary.
     const authScopeKey = useInstanceCache ? `${auth.source ?? ''}` : '';
     const key = ModelRouterLanguageModel.computeModelCacheKey({
       gatewayId: this.gatewayId,
@@ -567,7 +609,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       api: this.config.api || 'chat',
     });
     if (cache.modelInstances.has(key)) {
-      this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
+      if (trackStreamTransport) this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
       return cache.modelInstances.get(key)!;
     }
 
@@ -590,7 +632,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
               supportsStructuredOutputs: true,
             }).chatModel(modelId);
       cache.modelInstances.set(key, modelInstance);
-      this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
+      if (trackStreamTransport) this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
       return modelInstance;
     }
 
@@ -625,7 +667,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     if (gatewayTransport) {
       cache.gatewayStreamTransports.set(key, gatewayTransport);
     }
-    this.setStreamTransportHandle({ resolvedTransport, transport: gatewayTransport, responsesWebSocket });
+    if (trackStreamTransport) {
+      this.setStreamTransportHandle({ resolvedTransport, transport: gatewayTransport, responsesWebSocket });
+    }
     return modelInstance;
   }
 
@@ -664,4 +708,15 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
 function readGatewayStreamTransport(model: GatewayLanguageModel): GatewayStreamTransportHandle | undefined {
   return (model as GatewayLanguageModelWithStreamTransport)[MASTRA_GATEWAY_STREAM_TRANSPORT];
+}
+
+/**
+ * Returns the provider id of the API a model sends requests to, e.g. `openai.chat` or
+ * `anthropic.messages`. Router models resolve the model they will call; other models report
+ * their own `provider`.
+ */
+export async function resolveApiProviderId(model: unknown): Promise<string | undefined> {
+  if (model instanceof ModelRouterLanguageModel) return model.resolveApiProviderId();
+  const provider = (model as { provider?: unknown } | null | undefined)?.provider;
+  return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
 }

@@ -39,6 +39,23 @@ export {
   type ClassifierProcessorRegisteredOptions,
   type ClassifierResultContext,
 } from './classifier';
+export {
+  type ClassifierOnDecision,
+  type ClassifierProcessorDecision,
+  type ClassifierProcessorErrorMetadata,
+} from './classifier-decision';
+export {
+  ModelSelectionProcessor,
+  type ModelSelectionProcessorOptions,
+  type ModelSelectionSelectOptions,
+  type ModelSelectionInstanceOptions,
+  type ModelSelectionRegisteredOptions,
+  type ModelSelectionSelect,
+  type ModelSelectionChoicesOptions,
+  type ModelChoice,
+  type ModelSelectionDecision,
+  type SelectableModel,
+} from './model-selection';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,
@@ -93,6 +110,16 @@ export {
 export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
+export {
+  FileUploadProcessor,
+  FILE_UPLOAD_ERROR_CODES,
+  type FileUploadErrorCode,
+  type FileUploadFileInfo,
+  type FileUploadFilter,
+  type FileUploadMaxFileSize,
+  type FileUploadProcessorOptions,
+  type FileUploadTripwireMetadata,
+} from './file-upload';
 export {
   ResponseCache,
   DEFAULT_RESPONSE_CACHE_TTL_SECONDS,

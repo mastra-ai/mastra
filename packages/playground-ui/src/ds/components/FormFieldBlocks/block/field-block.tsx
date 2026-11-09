@@ -5,6 +5,7 @@ import { FieldBlockLabel } from './field-block-label';
 import { FieldBlockLayout } from './field-block-layout';
 import { FieldBlockMessage } from './field-block-message';
 
+/** @deprecated Use `Field` with `FieldLabel`, `FieldDescription` and `FieldError`. */
 export const FieldBlock = Object.assign(
   {},
   {

@@ -43,6 +43,7 @@ function createCtx(options?: {
     ui: { requestRender: vi.fn() },
     controller,
     session: controller.session,
+    local: { controller, session: controller.session },
   };
 
   return {
@@ -69,12 +70,13 @@ describe('handleSkillCommand', () => {
         ]),
       },
     };
+    const controller = {
+      hasWorkspace: vi.fn(() => true),
+      resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+    };
     const ctx = {
-      state: { session: {} },
-      controller: {
-        hasWorkspace: vi.fn(() => true),
-        resolveWorkspace: vi.fn().mockResolvedValue(workspace),
-      },
+      state: { session: {}, local: { controller, session: {} } },
+      controller,
       getResolvedWorkspace: vi.fn(() => undefined),
       showInfo: vi.fn(),
       showError: vi.fn(),

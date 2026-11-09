@@ -147,22 +147,15 @@ print('5 cross-scope operations denied')
         expect(await parent.exists(`${peer.name}/cross.txt`)).toBe(false);
       }
 
-      // A seeded prefix without its directory marker must not report a successful mount.
+      // compat_dir lets a seeded prefix mount without a directory marker object.
       const scope = scopes[0]!;
       await parent.writeFile(`${scope.name}/missing-marker/seed.txt`, 'seed');
       const missingMarker = new S3Filesystem({
         ...scope.filesystem.getMountConfig(),
         prefix: `${scope.prefix}missing-marker/`,
       });
-      const failedMount = await scope.sandbox.mount(missingMarker, '/missing-marker');
-      expect(failedMount.success).toBe(false);
-      expect(failedMount.error).toMatch(/S3 mount is not readable|Failed to mount S3 bucket/);
-      await command(scope.sandbox, 'test -z "$(find /tmp -maxdepth 1 -name ".mastra-s3-*")"');
-      await command(scope.sandbox, "! grep -Fq -- ' /missing-marker ' /proc/mounts");
-
-      await parent.mkdir(`${scope.name}/missing-marker`);
-      const retriedMount = await scope.sandbox.mount(missingMarker, '/missing-marker');
-      expect(retriedMount.success, retriedMount.error).toBe(true);
+      const markerFreeMount = await scope.sandbox.mount(missingMarker, '/missing-marker');
+      expect(markerFreeMount.success, markerFreeMount.error).toBe(true);
       expect(await command(scope.sandbox, 'timeout 15 cat /missing-marker/seed.txt')).toBe('seed');
       expect(await command(scope.sandbox, 'timeout 15 cat /s3-data/sentinel.txt')).toBe(`original-${scope.name}`);
 

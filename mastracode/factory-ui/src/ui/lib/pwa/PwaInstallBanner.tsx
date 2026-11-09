@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -8,6 +9,9 @@ import { usePwaInstall } from './usePwaInstall';
  * Mobile-only banner offering to install the app as a PWA. Self-aware: renders
  * nothing unless an install path exists (native prompt or iOS manual install)
  * and the user hasn't recently dismissed it. Hidden on desktop via CSS.
+ *
+ * Renders in normal flow, so the host layout must give it a row above the page
+ * instead of letting it overlay content.
  */
 export function PwaInstallBanner() {
   const { canInstall, installationMethod, install, dismiss } = usePwaInstall();
@@ -28,32 +32,24 @@ export function PwaInstallBanner() {
         <div
           role="region"
           aria-label="Install app"
-          className="border-border bg-card fixed inset-x-0 bottom-0 z-50 border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
+          className="border-border bg-card shrink-0 border-b pt-[env(safe-area-inset-top)] lg:hidden"
         >
           <div className="flex items-center gap-3 px-4 py-3">
             <img src="/pwa-192.png" alt="" className="size-10 shrink-0 rounded-lg" />
             <div className="min-w-0 flex-1">
-              <Txt as="p" variant="subheading" className="text-foreground">
+              <Txt tone="ink" as="p" variant="subheading">
                 Install app
               </Txt>
-              <Txt as="p" variant="caption" className="text-muted-foreground truncate">
+              <Txt tone="muted" as="p" variant="caption" className="truncate">
                 Get faster access from your home screen
               </Txt>
             </div>
-            <button
-              type="button"
-              onClick={dismiss}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-accent1 text-caption shrink-0 rounded-md px-3 py-1.5 focus-visible:ring-2 focus-visible:outline-none"
-            >
+            <Button variant="ghost" size="sm" className="shrink-0" onClick={dismiss}>
               Not now
-            </button>
-            <button
-              type="button"
-              onClick={onInstall}
-              className="bg-accent1 text-column focus-visible:ring-accent1 shrink-0 rounded-md px-3 py-1.5 text-black focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
+            </Button>
+            <Button variant="primary" size="sm" className="shrink-0" onClick={onInstall}>
               Install
-            </button>
+            </Button>
           </div>
         </div>
       )}

@@ -26,12 +26,8 @@ import { auditRequestContext } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /** The invokeSkill payload this route commits, matched against a prior replay. */
 interface AutomationInvokeSkillDecision {
@@ -235,7 +231,9 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
 
           if (commit.status === 'missing') return c.json({ error: 'Work item not found' }, 404);
 
-          const result = commit.result as {
+          // A stale commit persists nothing, so the caller can retry the same
+          // requestId once it has re-read the work item's revision.
+          const result = (commit.status === 'stale' ? { status: 'rejected', code: 'stale' } : commit.result) as {
             status?: string;
             code?: string;
             itemId?: string | null;

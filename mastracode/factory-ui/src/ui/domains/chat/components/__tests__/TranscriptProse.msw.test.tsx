@@ -20,8 +20,22 @@ function assistant(parts: MastraDBMessage['content']['parts'], streaming?: boole
   };
 }
 
-function renderEntries(entries: TimelineEntry[]) {
-  return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
+function entriesView(entries: TimelineEntry[], running = false) {
+  return <TranscriptEntries entries={entries} running={running} onApprove={() => {}} onRespond={() => {}} />;
+}
+
+function renderEntries(entries: TimelineEntry[], running = false) {
+  return renderWithProviders(entriesView(entries, running));
+}
+
+function openReasoning(name: 'Thought' | 'Thinking' = 'Thought') {
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
+/** A streaming passage gets its toggle once the first words are paced in. */
+function openStreamingReasoning() {
+  act(() => void vi.advanceTimersByTime(100));
+  openReasoning('Thinking');
 }
 
 afterEach(() => {
@@ -29,7 +43,17 @@ afterEach(() => {
 });
 
 describe('assistant prose', () => {
-  it('lets the reader collapse and reopen reasoning without hiding the answer', () => {
+  it('ignores malformed empty message parts', () => {
+    const parts: MastraDBMessage['content']['parts'] = [{ type: 'text', text: 'The valid answer remains visible.' }];
+    Reflect.set(parts, 0, undefined);
+    parts.push({ type: 'text', text: 'The valid answer remains visible.' });
+
+    renderEntries([assistant(parts)]);
+
+    expect(screen.getByText('The valid answer remains visible.')).toBeTruthy();
+  });
+
+  it('starts reasoning collapsed, and lets the reader open and close it without hiding the answer', () => {
     renderEntries([
       assistant([
         { type: 'reasoning', reasoning: 'Check `agent.stream()` first.', details: [] },
@@ -37,20 +61,23 @@ describe('assistant prose', () => {
       ]),
     ]);
 
-    expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
-    const toggle = screen.getByRole('button', { name: 'Reasoning' });
-
-    fireEvent.click(toggle);
+    const toggle = screen.getByRole('button', { name: 'Thought' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('agent.stream()')).toBeNull();
     expect(screen.getByText('Here is the answer.')).toBeTruthy();
 
     fireEvent.click(toggle);
-    expect(screen.getByText('agent.stream()')).toBeTruthy();
+    expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
+
+    fireEvent.click(toggle);
+    expect(screen.queryByText('agent.stream()')).toBeNull();
+    expect(screen.getByText('Here is the answer.')).toBeTruthy();
   });
 
   it('shows a redaction notice without exposing the reasoning text', () => {
     const part = { type: 'reasoning' as const, reasoning: 'Private thought', details: [], redacted: true };
     renderEntries([assistant([part])]);
+    openReasoning();
 
     expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
     expect(screen.queryByText('Private thought')).toBeNull();
@@ -59,19 +86,19 @@ describe('assistant prose', () => {
   it('shows a redaction notice when no reasoning text was supplied', () => {
     const part = { type: 'reasoning' as const, reasoning: '', details: [], redacted: true };
     renderEntries([assistant([part])]);
+    openReasoning();
 
     expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
   });
 
   it('shows waiting reasoning and removes it if the stream finishes without text', () => {
     const part = { type: 'reasoning' as const, reasoning: '', details: [], state: 'streaming' as const };
-    const { rerender } = renderEntries([assistant([part], true)]);
-    expect(screen.getByText('Reasoning...')).toBeTruthy();
+    const { rerender } = renderEntries([assistant([part], true)], true);
+    expect(screen.getByRole('group', { name: 'Thinking' }).getAttribute('aria-busy')).toBe('true');
 
     const finished = { ...part, state: 'done' as const };
-    rerender(<TranscriptEntries entries={[assistant([finished])]} onApprove={() => {}} onRespond={() => {}} />);
-    expect(screen.queryByText('Reasoning...')).toBeNull();
-    expect(screen.queryByRole('button', { name: /reasoning/i })).toBeNull();
+    rerender(entriesView([assistant([finished])]));
+    expect(document.querySelector('[data-slot="activity-stretch"]')).toBeNull();
   });
 
   it('reads a reply cut into parts as one markdown document', () => {
@@ -90,7 +117,11 @@ describe('assistant prose', () => {
   it('paces a thinking passage word by word instead of landing it whole', () => {
     vi.useFakeTimers();
     const thought = Array.from({ length: 30 }, (_, index) => `thought${index + 1}`).join(' ');
-    const { container } = renderEntries([assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)]);
+    const { container } = renderEntries(
+      [assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)],
+      true,
+    );
+    openStreamingReasoning();
 
     expect(container.textContent).not.toContain('thought5');
 
@@ -110,21 +141,16 @@ describe('assistant prose', () => {
       { type: 'reasoning', reasoning: 'Need the core first.', details: [] },
       { type: 'text', text },
     ];
-    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)]);
+    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)], true);
 
     act(() => void vi.advanceTimersByTime(4000));
+    openReasoning();
     const thinking = () =>
       [...container.querySelectorAll('.mastra-markdown')].find(node => node.textContent?.includes('Need the core'));
     const settled = thinking();
     expect(container.textContent).toContain('Need the core first.');
 
-    rerender(
-      <TranscriptEntries
-        entries={[assistant(parts('Let me look at the core package now.'), true)]}
-        onApprove={() => {}}
-        onRespond={() => {}}
-      />,
-    );
+    rerender(entriesView([assistant(parts('Let me look at the core package now.'), true)], true));
     act(() => void vi.advanceTimersByTime(4000));
 
     expect(thinking()).toBe(settled);
@@ -147,5 +173,47 @@ describe('assistant prose', () => {
 
     expect(container.querySelectorAll('.mastra-markdown')).toHaveLength(1);
     expect(container.textContent).toContain('first half second half');
+  });
+});
+
+describe('handing the run indicator from the tail to a stretch', () => {
+  const tail = (stretchLive: boolean) => (stretchLive ? null : <p>The tail is thinking</p>);
+  const liveView = (entries: TimelineEntry[]) => (
+    <TranscriptEntries entries={entries} running onApprove={() => {}} onRespond={() => {}} tail={tail} />
+  );
+  const liveStretch = () => document.querySelector('[data-slot="activity-stretch"]');
+
+  it('draws the stretch before the beat of the running call it opens on', () => {
+    vi.useFakeTimers();
+    const { rerender } = renderWithProviders(liveView([]));
+    const view = {
+      type: 'tool-invocation' as const,
+      toolInvocation: { state: 'call' as const, toolCallId: 'call-view', toolName: 'view', args: { path: 'a.ts' } },
+    };
+
+    rerender(liveView([assistant([view], true)]));
+
+    expect(screen.queryByText('The tail is thinking')).toBeNull();
+    expect(liveStretch()?.querySelector('.agent-indicator[data-state="reading"]')).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Reading a.ts' })).toBeTruthy();
+  });
+
+  it('keeps the prose before that stretch on its own pace', () => {
+    vi.useFakeTimers();
+    const prose = Array.from({ length: 30 }, (_, index) => `word${index + 1}`).join(' ');
+    const view = {
+      type: 'tool-invocation' as const,
+      toolInvocation: { state: 'call' as const, toolCallId: 'call-view', toolName: 'view', args: { path: 'a.ts' } },
+    };
+
+    const { container } = renderWithProviders(liveView([assistant([{ type: 'text', text: prose }, view], true)]));
+
+    expect(screen.getByRole('group', { name: 'Reading a.ts' })).toBeTruthy();
+    expect(container.textContent).not.toContain('word30');
+
+    act(() => void vi.advanceTimersByTime(4000));
+
+    expect(container.textContent).toContain('word30');
+    expect(screen.getByRole('group', { name: 'Reading a.ts' })).toBeTruthy();
   });
 });

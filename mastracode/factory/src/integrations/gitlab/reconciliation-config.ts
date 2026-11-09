@@ -7,9 +7,7 @@ function configuredValue(primary: string | undefined, legacy: string | undefined
 export function gitlabReconciliationEnabled(): boolean {
   const primary = process.env.MASTRACODE_GITLAB_RECONCILE_ENABLED;
   const value = configuredValue(primary, process.env.MASTRACODE_GITLAB_ISSUE_RECONCILE_ENABLED);
-  const name = primary?.trim()
-    ? 'MASTRACODE_GITLAB_RECONCILE_ENABLED'
-    : 'MASTRACODE_GITLAB_ISSUE_RECONCILE_ENABLED';
+  const name = primary?.trim() ? 'MASTRACODE_GITLAB_RECONCILE_ENABLED' : 'MASTRACODE_GITLAB_ISSUE_RECONCILE_ENABLED';
   return optionalBoolean(name, value, 'gitlab') ?? true;
 }
 

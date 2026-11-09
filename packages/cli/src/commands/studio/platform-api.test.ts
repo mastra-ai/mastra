@@ -152,7 +152,7 @@ describe('uploadDeploy', () => {
     expect(mockPOST).toHaveBeenCalledWith(
       '/v1/studio/deploys',
       expect.objectContaining({
-        body: { envVars: { FOO: 'bar' }, disablePlatformObservability: true },
+        body: { envVars: { FOO: 'bar' }, artifactBytes: 8, disablePlatformObservability: true },
       }),
     );
     expect(mockPOST).toHaveBeenCalledWith('/v1/studio/deploys/{id}/upload-complete', {
@@ -183,7 +183,7 @@ describe('uploadDeploy', () => {
     expect(mockPOST).toHaveBeenCalledWith(
       '/v1/studio/deploys',
       expect.objectContaining({
-        body: { envVars: undefined },
+        body: { envVars: undefined, artifactBytes: 8 },
       }),
     );
     expect(mockPOST.mock.calls[0]![1].body).not.toHaveProperty('disablePlatformObservability');
@@ -218,8 +218,40 @@ describe('uploadDeploy', () => {
 
     const { uploadDeploy } = await import('./platform-api.js');
     await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
-      'Artifact upload failed: 403',
+      'Upload of 3 B bundle failed: 403 Forbidden',
     );
+  });
+
+  it('surfaces a 413 detail verbatim without uploading', async () => {
+    const detail = 'Deploy bundle is 662 MB, over the 500 MB limit. Check .mastra/output for stray files.';
+    mockPOST.mockResolvedValueOnce({ data: undefined, error: { detail }, response: { status: 413 } });
+    const mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { uploadDeploy } = await import('./platform-api.js');
+    await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(new Error(detail));
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('sends the content-length-range header when the upload URL signs it', async () => {
+    const uploadUrl =
+      'https://storage.googleapis.com/b/o?X-Goog-SignedHeaders=content-type%3Bhost%3Bx-goog-content-length-range';
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { deploy: { id: 'dep-1', status: 'starting', uploadUrl } },
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({ data: { status: 'ok' }, response: { status: 200 } });
+    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { uploadDeploy } = await import('./platform-api.js');
+    await uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip-data'));
+
+    expect(mockFetch.mock.calls[0]![1].headers).toEqual({
+      'Content-Type': 'application/zip',
+      'x-goog-content-length-range': '0,8',
+    });
   });
 });
 

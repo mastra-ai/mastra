@@ -7,6 +7,7 @@ import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 
 const {
   confirmMock,
+  selectMock,
   cancelMock,
   logErrorMock,
   logSuccessMock,
@@ -17,6 +18,7 @@ const {
   fetchDatabaseCatalogMock,
 } = vi.hoisted(() => ({
   confirmMock: vi.fn(),
+  selectMock: vi.fn(),
   cancelMock: vi.fn(),
   logErrorMock: vi.fn(),
   logSuccessMock: vi.fn(),
@@ -29,6 +31,7 @@ const {
 
 vi.mock('@clack/prompts', () => ({
   confirm: (args: unknown) => confirmMock(args),
+  select: (args: unknown) => selectMock(args),
   cancel: (args: unknown) => cancelMock(args),
   isCancel: (v: unknown) => v === Symbol.for('clack.cancel'),
   spinner: () => spinnerMock,
@@ -51,6 +54,11 @@ const FULL_CATALOG = [
   { kind: 'redis', name: 'Redis', status: 'available' },
   { kind: 'mongodb', name: 'MongoDB', status: 'coming_soon' },
 ];
+
+// The Railway-hosted VPC Postgres provider is opt-in per org, so it isn't in
+// the default fixture — tests that exercise the neon-vs-postgres choice add
+// it explicitly.
+const CATALOG_WITH_VPC_POSTGRES = [...FULL_CATALOG, { kind: 'postgres', name: 'Postgres (VPC)', status: 'available' }];
 
 function makeCtx(overrides: Partial<AutoProvisionContext> = {}): AutoProvisionContext {
   return {
@@ -114,6 +122,7 @@ describe('maybeAutoProvisionDatabases', () => {
 
   beforeEach(() => {
     confirmMock.mockReset();
+    selectMock.mockReset();
     cancelMock.mockReset();
     logErrorMock.mockReset();
     logSuccessMock.mockReset();
@@ -355,5 +364,63 @@ describe('maybeAutoProvisionDatabases', () => {
       'proj-1',
       expect.objectContaining({ name: 'my-app-turso' }),
     );
+  });
+
+  describe('multi-candidate providers (DATABASE_URL: neon vs postgres)', () => {
+    it('presents a choice between Neon and the VPC Postgres when both are in the catalog', async () => {
+      fetchDatabaseCatalogMock.mockResolvedValue(CATALOG_WITH_VPC_POSTGRES);
+      selectMock.mockResolvedValue('postgres');
+      attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-postgres', kind: 'postgres' });
+      pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-postgres', kind: 'postgres' });
+
+      const result = await maybeAutoProvisionDatabases([neonIssue()], makeCtx());
+
+      // The single-provider confirm() is not used when there's a real choice.
+      expect(confirmMock).not.toHaveBeenCalled();
+      expect(selectMock).toHaveBeenCalledTimes(1);
+      const selectArgs = selectMock.mock.calls[0]![0] as { options: { value: string; label: string }[] };
+      expect(selectArgs.options.map(o => o.value)).toEqual(['neon', 'postgres', 'skip']);
+      // The user picked postgres — that's what's attached, not the primary neon.
+      expect(attachDatabaseMock).toHaveBeenCalledWith('t', 'org-1', 'proj-1', {
+        kind: 'postgres',
+        name: 'my-app-postgres',
+        environmentId: 'env-prod',
+      });
+      expect(result.provisioned.map(d => d.kind)).toEqual(['postgres']);
+      expect(result.newlyManagedEnvVarNames).toEqual(['DATABASE_URL']);
+      expect(result.issues).toEqual([]);
+    });
+
+    it('falls back to the yes/no confirm when the VPC Postgres is not offered', async () => {
+      // FULL_CATALOG has neon but no postgres — the choice collapses back to
+      // the single-provider prompt.
+      confirmMock.mockResolvedValue(true);
+      attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-pg', kind: 'neon' });
+      pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-pg', kind: 'neon' });
+
+      const result = await maybeAutoProvisionDatabases([neonIssue()], makeCtx());
+
+      expect(selectMock).not.toHaveBeenCalled();
+      expect(confirmMock).toHaveBeenCalledTimes(1);
+      expect(attachDatabaseMock).toHaveBeenCalledWith(
+        't',
+        'org-1',
+        'proj-1',
+        expect.objectContaining({ kind: 'neon' }),
+      );
+      expect(result.provisioned.map(d => d.kind)).toEqual(['neon']);
+    });
+
+    it('leaves the issue in place when the user picks "skip" in the choice prompt', async () => {
+      fetchDatabaseCatalogMock.mockResolvedValue(CATALOG_WITH_VPC_POSTGRES);
+      selectMock.mockResolvedValue('skip');
+
+      const issues = [neonIssue()];
+      const result = await maybeAutoProvisionDatabases(issues, makeCtx());
+
+      expect(attachDatabaseMock).not.toHaveBeenCalled();
+      expect(result.issues).toBe(issues);
+      expect(result.provisioned).toEqual([]);
+    });
   });
 });

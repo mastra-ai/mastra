@@ -183,7 +183,7 @@ describe('runStorageMaintenance', () => {
     await runStorageMaintenance({ maintenance, vacuum: false, log: line => lines.push(line) });
 
     expect(lines.join('\n')).toContain('Nothing to prune');
-    expect(lines.join('\n')).toContain('Run /prune vacuum to reclaim disk space.');
+    expect(lines.join('\n')).toContain('Run /prune vacuum (or mastracode prune --vacuum) to reclaim disk space.');
     expect(maintenance.reclaimDisk).not.toHaveBeenCalled();
   });
 
@@ -306,6 +306,25 @@ describe('reclaimLibSQLDisk', () => {
     const rows = await verify.execute('SELECT COUNT(*) AS n FROM blobs');
     expect(Number(rows.rows[0]!.n)).toBe(100);
     verify.close();
+  });
+
+  it('compacts after our own connection closed with unfinalized statements (libsql-js#228)', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-reclaim-own-'));
+    const dbFile = path.join(dir, 'test.db');
+    await seedDb(dbFile, { keepRows: true });
+
+    // Mirror a closed storage connection: prepared statements outlive close()
+    // and hold the WAL lock until GC finalizes them.
+    (() => {
+      const own = new Database(dbFile);
+      own.exec('PRAGMA journal_mode = WAL');
+      own.prepare('SELECT COUNT(*) FROM blobs').get();
+      own.close();
+    })();
+
+    const results = await reclaimLibSQLDisk([dbFile]);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.bytesAfter).toBeLessThan(results[0]!.bytesBefore);
   });
 
   it('refuses to compact while another connection has the file open', async () => {

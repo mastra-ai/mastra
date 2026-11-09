@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
-import { NOTIFICATION_DISPATCH_WORKFLOW_ID, createNotificationDispatchWorkflow } from './workflow';
+import type { createNotificationDispatchWorkflow } from './workflow';
+import { NOTIFICATION_DISPATCH_WORKFLOW_ID } from './workflow';
 
 const activeInstances: Mastra[] = [];
 function track(mastra: Mastra): Mastra {

@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryRouteAuth,
   getWorkOSProvider,
@@ -173,9 +174,9 @@ describe('Factory route auth organization selection', () => {
 });
 
 describe('mountFactoryAuth with an explicit custom provider', () => {
-  function buildApp(provider: IMastraAuthProvider) {
+  function buildApp(provider: IMastraAuthProvider, publicUrl?: string) {
     const app = new Hono();
-    const enabled = mountFactoryAuth(app, { provider });
+    const enabled = mountFactoryAuth(app, { provider, publicUrl });
     app.get('*', c => c.text('ok'));
     return { app, enabled };
   }
@@ -187,6 +188,70 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     const res = await app.request('/auth/login?returnTo=/dashboard');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('https://fake.example/login');
+  });
+
+  it('blocks Mastra platform login on a custom domain before calling the provider', async () => {
+    const getLoginUrl = vi.fn(async () => 'https://platform.mastra.ai/v1/auth/login');
+    const provider = fakeProvider({ name: 'mastra-studio', ...ssoCapability({ getLoginUrl }) });
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/login?returnTo=/dashboard');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/signin?error=custom_domain_unsupported&returnTo=%2Fdashboard');
+    expect(getLoginUrl).not.toHaveBeenCalled();
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('allows Mastra platform login on a Mastra-hosted domain', async () => {
+    const getLoginUrl = vi.fn(async () => 'https://platform.mastra.ai/v1/auth/login');
+    const provider = fakeProvider({ name: 'mastra-studio', ...ssoCapability({ getLoginUrl }) });
+    const { app } = buildApp(provider, 'https://acme.factory.mastra.cloud');
+
+    const res = await app.request('/auth/login');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://platform.mastra.ai/v1/auth/login');
+    expect(getLoginUrl).toHaveBeenCalledOnce();
+  });
+
+  it('allows a non-platform provider on a custom domain', async () => {
+    const getLoginUrl = vi.fn(async () => 'https://fake.example/login');
+    const provider = fakeProvider(ssoCapability({ getLoginUrl }));
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/login');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://fake.example/login');
+    expect(getLoginUrl).toHaveBeenCalledOnce();
+  });
+
+  it('reports unsupported custom-domain platform auth from /auth/me', async () => {
+    const provider = fakeProvider({
+      name: 'mastra-studio',
+      authenticateToken: vi.fn(async () => null),
+      ...ssoCapability(),
+    });
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/me');
+
+    expect(await res.json()).toEqual({
+      authenticated: false,
+      user: null,
+      provider: 'mastra-studio',
+      customDomainUnsupported: true,
+    });
+  });
+
+  it('does not report custom-domain blocking for another provider', async () => {
+    const provider = fakeProvider({ authenticateToken: vi.fn(async () => null), ...ssoCapability() });
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/me');
+
+    expect(await res.json()).toEqual({ authenticated: false, user: null, provider: 'fake' });
   });
 
   it('proxies /auth/api/* to an HTTP-handler-shaped provider', async () => {
@@ -270,6 +335,26 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     });
   });
 
+  it('SSO callback also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/callback?code=abc');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=abc', ...legacy]));
+  });
+
+  it('SSO logout also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/logout');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=; Path=/; Max-Age=0', ...legacy]));
+  });
+
   it('logout for a handler-shaped provider revokes the session and clears the cookie', async () => {
     const handleAuthRequest = vi.fn(
       async () => new Response(null, { status: 200, headers: { 'Set-Cookie': 'fake_session=revoked; Max-Age=0' } }),
@@ -304,5 +389,25 @@ describe('buildAuthRoutes', () => {
   it('a bare provider still gets /auth/me', () => {
     const routes = buildAuthRoutes(fakeProvider());
     expect(routes.map(r => r.path)).toEqual(['/auth/me']);
+  });
+});
+
+describe('buildAuthDisabledRoutes', () => {
+  it('registers only an unauthenticated GET /auth/me', () => {
+    const routes = buildAuthDisabledRoutes();
+    expect(routes.map(r => [r.method, r.path, r.requiresAuth])).toEqual([['GET', '/auth/me', false]]);
+  });
+
+  it('answers /auth/me with 404 JSON so the UI reads auth as disabled', async () => {
+    const [route] = buildAuthDisabledRoutes();
+    if (!route || !('handler' in route)) throw new Error('Missing /auth/me route');
+    const app = new Hono();
+    app.get(route.path, c => route.handler(c as never, async () => {}));
+
+    const res = await app.request('/auth/me');
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(await res.json()).toEqual({ authEnabled: false, authenticated: false });
   });
 });

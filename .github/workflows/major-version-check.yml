@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   check-major-bump:
-    runs-on: starsling-ubuntu-24.04-2
+    runs-on: starsling-ubuntu-26.04-2
     # Only run for PR events or comments that can add/remove the approval command.
     if: |
       github.repository == 'mastra-ai/mastra' &&

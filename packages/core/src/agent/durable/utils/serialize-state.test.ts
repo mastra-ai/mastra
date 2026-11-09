@@ -5,9 +5,13 @@
  * no mocking required. The suite covers every exported utility that can be
  * exercised without a live LLM or message-list object.
  */
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { MessageList } from '../../message-list';
+import type { TripwireData } from '../../trip-wire';
 
 import {
+  createWorkflowInput,
   deserializeDate,
   serializeDate,
   serializeDurableOptions,
@@ -15,10 +19,70 @@ import {
   serializeError,
   serializeModelConfig,
   serializeModelList,
+  serializeModelSettings,
   serializeScorersConfig,
   serializeToolMetadata,
   serializeToolsMetadata,
 } from './serialize-state';
+
+describe('createWorkflowInput input tripwires (COR-1481)', () => {
+  function serializeTripwire(inputTripwire: TripwireData) {
+    return createWorkflowInput({
+      runId: 'blocked-run',
+      agentId: 'preflight-agent',
+      messageId: 'blocked-message',
+      messageList: new MessageList(),
+      tools: {},
+      model: new MockLanguageModelV2(),
+      options: {},
+      state: {},
+      inputTripwire,
+    });
+  }
+
+  const rejection = { reason: 'Invalid deploy target', retry: false, processorId: 'preflight' };
+
+  it('detaches JSON metadata from the live registry payload before crossing processes', () => {
+    const metadata = { target: { environment: 'staging' }, failures: ['not-authorized'] };
+    const liveTripwire = { ...rejection, metadata };
+    const input = serializeTripwire(liveTripwire);
+    const persisted = JSON.parse(JSON.stringify(input));
+    metadata.target.environment = 'production';
+    metadata.failures.push('later-mutation');
+
+    expect(input.inputTripwire).toEqual({
+      ...rejection,
+      metadata: { target: { environment: 'staging' }, failures: ['not-authorized'] },
+    });
+    expect(persisted.inputTripwire).toEqual(input.inputTripwire);
+    expect(liveTripwire.metadata).toBe(metadata);
+    expect(liveTripwire.metadata.target.environment).toBe('production');
+  });
+
+  it.each(['cyclic', 'bigint'] as const)('keeps the rejection when %s metadata cannot cross processes', kind => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const metadata = kind === 'cyclic' ? cyclic : { value: 1n };
+    const liveTripwire = { ...rejection, metadata };
+    const input = serializeTripwire(liveTripwire);
+
+    expect(JSON.parse(JSON.stringify(input)).inputTripwire).toEqual(rejection);
+    expect(input.inputTripwire).not.toHaveProperty('metadata');
+    expect(liveTripwire.metadata).toBe(metadata);
+  });
+
+  it('snapshots metadata once even when toJSON returns different values on subsequent reads', () => {
+    let reads = 0;
+    const metadata = { toJSON: () => ({ read: ++reads }) };
+    const liveTripwire = { ...rejection, metadata };
+    const input = serializeTripwire(liveTripwire);
+
+    expect(JSON.parse(JSON.stringify(input)).inputTripwire).toEqual({ ...rejection, metadata: { read: 1 } });
+    expect(JSON.parse(JSON.stringify(input)).inputTripwire?.metadata).toEqual({ read: 1 });
+    expect(reads).toBe(1);
+    expect(liveTripwire.metadata).toBe(metadata);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // serializeError
@@ -346,6 +410,52 @@ describe('serializeDurableOptions', () => {
     expect(serialized).not.toContain('sk-secret');
     expect(serialized).not.toContain('sk-leaked');
     expect(serialized).not.toContain('custom-value');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeModelSettings — timeout budgets (#21724)
+// ---------------------------------------------------------------------------
+
+describe('serializeModelSettings timeout', () => {
+  it('retains timeout budgets so cold recovery re-arms the run-level deadline', () => {
+    const result = serializeModelSettings({
+      temperature: 0.5,
+      timeout: { totalMs: 30_000, stepMs: 5_000, firstChunkMs: 1_000 },
+    });
+    expect(result?.timeout).toEqual({ totalMs: 30_000, stepMs: 5_000, firstChunkMs: 1_000 });
+    expect(result?.temperature).toBe(0.5);
+  });
+
+  it('retains a totalMs-only timeout', () => {
+    const result = serializeModelSettings({ timeout: { totalMs: 30_000 } });
+    expect(result?.timeout).toEqual({ totalMs: 30_000 });
+  });
+
+  it('drops non-finite and non-positive timeout values', () => {
+    const result = serializeModelSettings({
+      temperature: 0.5,
+      timeout: { totalMs: Number.POSITIVE_INFINITY, stepMs: -1, firstChunkMs: 0 },
+    });
+    expect(result?.timeout).toBeUndefined();
+    expect(result?.temperature).toBe(0.5);
+  });
+
+  it('drops non-numeric timeout values while keeping valid siblings', () => {
+    const result = serializeModelSettings({
+      timeout: { totalMs: '30000', stepMs: 5_000 } as any,
+    });
+    expect(result?.timeout).toEqual({ stepMs: 5_000 });
+  });
+
+  it('drops a non-object timeout', () => {
+    const result = serializeModelSettings({ temperature: 0.5, timeout: 30_000 as any });
+    expect(result?.timeout).toBeUndefined();
+  });
+
+  it('omits the timeout key entirely when absent', () => {
+    const result = serializeModelSettings({ temperature: 0.5 });
+    expect(result).not.toHaveProperty('timeout');
   });
 });
 

@@ -7,15 +7,11 @@ packages:
 
 # TaskSignalProvider
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
+**Added in:** `@mastra/core@1.42.0`
 
 Bundles the built-in task tools (`task_write`, `task_update`, `task_complete`, `task_check`) and the `TaskStateProcessor` behind a single agent registration. Use it to add a structured, durable task list to an agent without wiring the tools and processor separately.
 
-Extends [`SignalProvider`](/reference/signals/signal-provider). The task list is stored in the thread-scoped `tasks` storage domain (the source of truth) and projected onto the agent state-signal lane by the processor, so it survives observational-memory truncation without invalidating the prompt cache.
+Extends [`SignalProvider`](/reference/signals/signal-provider). The task list is stored under the `task` state type in the thread-scoped `threadState` storage domain, which is the source of truth, and projected onto the `tasks` agent state-signal lane by the processor, so it survives observational-memory truncation without invalidating the prompt cache.
 
 ## Usage example
 
@@ -37,7 +33,7 @@ const agent = new Agent({
 
 The Agent automatically merges the four task tools into its toolset and registers the processor on its input-processor chain. No other wiring is required.
 
-Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the task tools no-op and return a result explaining that task tracking requires agent memory. The `tasks` storage domain is wired in-memory by default, so task tracking works without configuring a storage backend.
+Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the task tools no-op and return a result explaining that task tracking requires agent memory. The `threadState` storage domain is wired in-memory by default, so task tracking works without configuring a storage backend.
 
 ## Constructor parameters
 
@@ -74,7 +70,7 @@ Returns: `Record<string, Tool>`
 
 #### `getInputProcessors()`
 
-Returns the provider's `TaskStateProcessor` instance. The Agent registers it on the input-processor chain, which propagates the Mastra instance so the processor can resolve the `tasks` store.
+Returns the provider's `TaskStateProcessor` instance. The Agent registers it on the input-processor chain, which propagates the Mastra instance so the processor can resolve the `threadState` store.
 
 ```typescript
 const [processor] = new TaskSignalProvider().getInputProcessors()

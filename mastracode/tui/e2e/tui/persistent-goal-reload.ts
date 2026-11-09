@@ -53,7 +53,7 @@ values
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Seeded goal reload assistant turn/i, terminal, 8_000);
-    await runtime.waitForScreenText(/▐[^▌]+▌.*\bgoal\s+1m/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\b(?:build|plan|fast) · .*\bgoal\s+1m/i, terminal, 8_000);
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(

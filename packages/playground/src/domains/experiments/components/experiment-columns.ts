@@ -5,7 +5,9 @@ export const EXPERIMENT_NAME_COLUMN = 'minmax(9rem,1fr)';
 // description is truncated to a single line; cap it so it never crowds the metric columns
 export const EXPERIMENT_DESCRIPTION_COLUMN = 'minmax(8rem,16rem)';
 export const EXPERIMENT_DATASET_COLUMN = '1fr';
-export const EXPERIMENT_DETAIL_COLUMNS = 'auto auto auto auto auto auto auto';
+export const EXPERIMENT_DETAIL_COLUMNS = 'auto auto auto auto auto auto auto auto';
+// avg duration, tokens and cost: only shown when the observability store serves metrics
+export const EXPERIMENT_USAGE_COLUMNS = 'auto auto auto';
 
 export const experimentColumnLabels = {
   experiment: 'Experiment',
@@ -16,6 +18,10 @@ export const experimentColumnLabels = {
   items: 'Items',
   succeeded: 'Processed',
   failed: 'Errored',
+  duration: 'Duration',
+  avgDuration: 'Avg duration',
+  tokens: 'Tokens',
+  cost: 'Cost',
   review: 'Review',
   date: 'Date',
 };
@@ -23,8 +29,8 @@ export const experimentColumnLabels = {
 // A completed run is neutral, not a success: it says the run finished, not that the scores are good.
 export const STATUS_VARIANT: Record<string, BadgeVariant> = {
   completed: 'neutral',
-  running: 'yellow',
-  failed: 'red',
+  running: 'warning',
+  failed: 'destructive',
   pending: 'neutral',
 };
 
@@ -35,9 +41,3 @@ export const STATUS_LABEL: Record<string, string> = {
   failed: 'Run failed',
   pending: 'Run queued',
 };
-
-export function formatExperimentDate(dateStr: string | Date | undefined | null): string {
-  if (!dateStr) return '—';
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}

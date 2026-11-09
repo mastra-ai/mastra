@@ -195,6 +195,20 @@ function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
   return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
+/**
+ * Append the provider's expiring cookies for legacy copies of the session
+ * cookie (see `ISessionProvider.getLegacySessionClearCookies`). Best-effort:
+ * never fails the response.
+ */
+function appendLegacySessionClearCookies(headers: Headers, auth: unknown) {
+  try {
+    const cookies = (auth as Partial<ISessionProvider>).getLegacySessionClearCookies?.();
+    for (const cookie of cookies ?? []) headers.append('Set-Cookie', cookie);
+  } catch {
+    // ignore
+  }
+}
+
 // ============================================================================
 // GET /auth/capabilities
 // ============================================================================
@@ -322,7 +336,7 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
         }
       }
 
-      return {
+      const result = {
         id: user.id,
         email: user.email,
         name: user.name,
@@ -330,6 +344,20 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
         roles,
         permissions,
       };
+
+      // This route is public, so the auth middleware doesn't run and can't
+      // forward a session cookie the provider renewed while verifying.
+      // Best-effort: never fail the request over header forwarding.
+      try {
+        const pending = (
+          auth as { consumePendingResponseHeaders?: (r: Request) => Record<string, string> | undefined }
+        ).consumePendingResponseHeaders?.(request);
+        if (pending && Object.keys(pending).length > 0) (result as any).__refreshHeaders = pending;
+      } catch {
+        // ignore
+      }
+
+      return result;
     } catch (error) {
       return handleError(error, 'Error getting current user');
     }
@@ -518,6 +546,8 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+      // Signing in also expires legacy (e.g. shared parent-domain) session cookies.
+      appendLegacySessionClearCookies(headers, auth);
 
       return new Response(null, {
         status: 302,
@@ -591,6 +621,7 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+      appendLegacySessionClearCookies(headers, auth);
 
       return new Response(JSON.stringify({ success: true, redirectTo }), {
         status: 200,
@@ -649,6 +680,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+      appendLegacySessionClearCookies(headers, auth);
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,

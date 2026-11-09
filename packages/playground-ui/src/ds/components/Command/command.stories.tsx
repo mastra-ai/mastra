@@ -1,9 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Calculator, Calendar, CreditCard, GitBranch, Rocket, Settings, Shield, Smile, User } from 'lucide-react';
+import {
+  BarChart3,
+  Bot,
+  Box,
+  Calculator,
+  Calendar,
+  CreditCard,
+  Folder,
+  GitBranch,
+  LifeBuoy,
+  ListTree,
+  MessageSquare,
+  Rocket,
+  Settings,
+  Shield,
+  Smile,
+  User,
+  Wrench,
+} from 'lucide-react';
 import * as React from 'react';
 
+import { Badge } from '../Badge';
 import { Button } from '../Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../Dialog';
 import { Kbd } from '../Kbd';
+import { Txt } from '../Txt';
 import {
   Command,
   CommandDialog,
@@ -40,8 +61,8 @@ const InlineResult = ({
   subtitle: string;
   value: string;
 }) => (
-  <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
-    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground">
+  <CommandItem value={value} className="group h-auto items-start gap-3 px-2.5 py-2">
+    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:size-4">
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
@@ -54,7 +75,7 @@ const InlineResult = ({
 export const Default: Story = {
   render: () => (
     <Command className="w-100 rounded-lg shadow-raised">
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput placeholder="Type a command or search" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
@@ -99,7 +120,7 @@ export const InlineVercelStyle: Story = {
     <div className="w-sm overflow-hidden rounded-xl bg-card shadow-raised">
       <Command className="rounded-none bg-background">
         <CommandInput
-          placeholder="Find..."
+          placeholder="Find"
           rightSlot={<Kbd className="min-w-0 rounded bg-muted px-1.5 py-0 text-meta text-muted-foreground">Esc</Kbd>}
         />
         <CommandList
@@ -180,9 +201,9 @@ export const WithDialog: Story = {
           </kbd>{' '}
           or click the button below
         </p>
-        <Button onClick={() => setOpen(true)}>Open Command Palette</Button>
+        <Button onClick={() => setOpen(true)}>Open command palette</Button>
         <CommandDialog open={open} onOpenChange={setOpen}>
-          <CommandInput placeholder="Type a command or search..." />
+          <CommandInput placeholder="Type a command or search" />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup heading="Suggestions">
@@ -227,7 +248,7 @@ export const WithDialog: Story = {
 export const Empty: Story = {
   render: () => (
     <Command className="w-100 rounded-lg shadow-raised">
-      <CommandInput placeholder="Search..." />
+      <CommandInput placeholder="Search" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
       </CommandList>
@@ -238,7 +259,7 @@ export const Empty: Story = {
 export const WithShortcuts: Story = {
   render: () => (
     <Command className="w-100 rounded-lg shadow-raised">
-      <CommandInput placeholder="Type a command..." />
+      <CommandInput placeholder="Type a command" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Actions">
@@ -297,7 +318,7 @@ export const SearchOnly: Story = {
 
     return (
       <Command className="w-100 rounded-lg shadow-raised">
-        <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
+        <CommandInput placeholder="Search fruits" value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>
           <CommandGroup heading="Fruits">
@@ -311,4 +332,147 @@ export const SearchOnly: Story = {
       </Command>
     );
   },
+};
+
+export const InDialogWithDisabledRows: Story = {
+  render: function InDialogWithDisabledRowsStory() {
+    const [picked, setPicked] = React.useState('Nothing yet');
+
+    return (
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add connection</DialogTitle>
+          </DialogHeader>
+          <Command loop label="Integrations">
+            <CommandInput placeholder="Search integrations" />
+            <CommandList className="p-2">
+              <CommandGroup heading="Available">
+                {['Slack', 'GitHub', 'Linear'].map(name => (
+                  <CommandItem key={name} onSelect={() => setPicked(name)}>
+                    <Calendar className={iconClassName} />
+                    <span className="flex-1">{name}</span>
+                    <Badge size="sm" variant="purple" icon={<Wrench />}>
+                      Tools
+                    </Badge>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandGroup heading="Coming soon">
+                {['HubSpot', 'Discord'].map(name => (
+                  <CommandItem key={name} disabled onSelect={() => setPicked(name)}>
+                    <MessageSquare className={iconClassName} />
+                    <span className="flex-1">{name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          <Txt as="p" variant="caption" tone="muted" className="px-4 pb-4">
+            Picked: {picked}
+          </Txt>
+        </DialogContent>
+      </Dialog>
+    );
+  },
+};
+
+const InsetFooter = () => (
+  <>
+    <Button variant="ghost" size="sm" icon={<MessageSquare />}>
+      Send feedback
+    </Button>
+    <span className="flex items-center gap-1.5">
+      <Kbd size="sm">↑</Kbd>
+      <Kbd size="sm">↓</Kbd>
+      <Kbd size="sm">↵</Kbd>
+      <Kbd size="sm">Esc</Kbd>
+    </span>
+  </>
+);
+
+const InsetResults = ({ search }: { search: string }) => (
+  <CommandList scrollArea scrollAreaViewportClassName="max-h-dropdown">
+    <CommandEmpty>No pages, projects, or commands match.</CommandEmpty>
+    <CommandGroup heading="Observability">
+      <CommandItem>
+        <BarChart3 />
+        Metrics
+      </CommandItem>
+      <CommandItem>
+        <ListTree />
+        Traces
+      </CommandItem>
+    </CommandGroup>
+    <CommandGroup heading="Infrastructure">
+      <CommandItem>
+        <Box />
+        Deploys
+      </CommandItem>
+      <CommandItem>
+        <Settings />
+        Settings
+      </CommandItem>
+    </CommandGroup>
+    <CommandGroup heading="Projects">
+      <CommandItem>
+        <Folder />
+        Support agent
+        <CommandShortcut>Current</CommandShortcut>
+      </CommandItem>
+      <CommandItem>
+        <Folder />
+        Research workflow
+      </CommandItem>
+    </CommandGroup>
+    <CommandGroup heading="Help" forceMount={search.length > 0}>
+      {search && (
+        <CommandItem forceMount value={`ask ai ${search}`}>
+          <Bot />
+          Ask AI: “{search}”<CommandShortcut>⌘ ↵</CommandShortcut>
+        </CommandItem>
+      )}
+      <CommandItem forceMount={search.length > 0} value="help contact support">
+        <LifeBuoy />
+        Contact support
+      </CommandItem>
+    </CommandGroup>
+  </CommandList>
+);
+
+const InsetStory = ({ initialSearch }: { initialSearch: string }) => {
+  const [open, setOpen] = React.useState(true);
+  const [search, setSearch] = React.useState(initialSearch);
+
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>Open command menu</Button>
+      <CommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        variant="inset"
+        size="lg"
+        showOverlay
+        footer={<InsetFooter />}
+        title="Search"
+        description="Go to a page, switch projects, or run a command."
+        commandLabel="Search pages, projects, and commands"
+      >
+        <CommandInput placeholder="Search pages, projects, and commands" value={search} onValueChange={setSearch} />
+        <InsetResults search={search.trim()} />
+      </CommandDialog>
+    </>
+  );
+};
+
+export const Inset: Story = {
+  render: () => <InsetStory initialSearch="" />,
+};
+
+export const InsetFiltered: Story = {
+  render: () => <InsetStory initialSearch="trace" />,
+};
+
+export const InsetNoResults: Story = {
+  render: () => <InsetStory initialSearch="how do I add memory" />,
 };

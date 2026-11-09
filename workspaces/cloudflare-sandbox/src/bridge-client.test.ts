@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  CloudflareSandboxBridgeClient,
-  CloudflareSandboxBridgeError,
-  type CloudflareCommandEvent,
-} from './bridge-client';
+import { CloudflareSandboxBridgeClient, CloudflareSandboxBridgeError } from './bridge-client';
+import type { CloudflareCommandEvent } from './bridge-client';
 import { createFakeBridge } from './testing/fake-bridge';
 
 const BASE_URL = 'https://bridge.example.com';
@@ -218,6 +215,23 @@ describe('CloudflareSandboxBridgeClient', () => {
     expect(decode(events, 'stdout')).toBe('hello world\n');
     expect(decode(events, 'stderr')).toBe('warn\n');
     expect(events.at(-1)).toEqual({ type: 'exit', exitCode: 3 });
+  });
+
+  it.each([
+    ['an empty payload', '{}'],
+    ['a non-numeric exit_code', '{"exit_code":"0"}'],
+    ['invalid JSON', 'not-json'],
+  ])('treats an exit event with %s as a failure', async (_label, payload) => {
+    const fetch = (async () =>
+      new Response(`event: exit\ndata: ${payload}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+    const client = new CloudflareSandboxBridgeClient({ baseUrl: BASE_URL, apiToken: 'secret', fetch });
+
+    const events: CloudflareCommandEvent[] = [];
+    await client.exec('sbx', { argv: ['true'] }, { onEvent: event => events.push(event) });
+
+    expect(events).toEqual([{ type: 'exit', exitCode: -1 }]);
   });
 
   it('surfaces terminal error events', async () => {

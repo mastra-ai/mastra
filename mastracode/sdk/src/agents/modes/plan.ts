@@ -4,14 +4,16 @@
 import type { AgentControllerMode } from '@mastra/core/agent-controller';
 import { PLAN_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
 
-export const planMode: AgentControllerMode = {
-  id: 'plan',
-  name: 'Plan',
-  transitionsTo: 'build',
-  defaultModelId: 'openai/gpt-5.5',
-  description:
-    "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
-  instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
+/** Plan mode; pass `false` when the host removed `submit_plan` so the mode never asks for it. */
+export function createPlanMode(submitPlanAvailable = true): AgentControllerMode {
+  return {
+    id: 'plan',
+    name: 'Plan',
+    transitionsTo: 'build',
+    defaultModelId: 'openai/gpt-5.5',
+    description:
+      "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
+    instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
 
 ## Rules
 - You have READ-ONLY access to the project. You cannot modify project files or run commands.
@@ -26,22 +28,25 @@ export const planMode: AgentControllerMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to a markdown file in the session-specific plan directory identified in your system prompt using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
+- Write your plan to a markdown file in the session-specific plan directory identified in your system prompt using \`write_file\`, ${submitPlanAvailable ? 'then call `submit_plan({ path })` with the path to that file (never the plan body).' : 'then hand off the plan file as described in your system prompt (never the plan body).'}
 - Start the file with a \`# Title\` heading describing the plan.
 - Reuse the same file while iterating on the same plan; only create a new file for a genuinely different plan so each plan stays available to review.
 - Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.
+- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, ${submitPlanAvailable ? 'and call `submit_plan` again with the same path.' : 'then hand off the same file again.'}
 
 ## Workflows
 - You can INSPECT saved workflows via \`list-workflows\` and \`get-workflow\`.
 - You CANNOT build, run, or delete workflows in this mode.
-- If the user asks for a workflow design, include it in the implementation plan stored at the session-specific plan path, then call \`submit_plan({ path })\` as required above. After approval, build mode can save and run it.`,
+- If the user asks for a workflow design, include it in the implementation plan stored at the session-specific plan path, ${submitPlanAvailable ? 'then call `submit_plan({ path })` as required above. After approval, build mode can save and run it.' : 'then hand off the plan file as described in your system prompt.'}`,
 
-  metadata: {
-    default: false,
-  },
+    metadata: {
+      default: false,
+    },
 
-  availableTools: [...PLAN_MODE_AVAILABLE_TOOLS],
-};
+    availableTools: [...PLAN_MODE_AVAILABLE_TOOLS],
+  };
+}
+
+export const planMode: AgentControllerMode = createPlanMode();
