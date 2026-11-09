@@ -200,7 +200,7 @@ describe('Computers', () => {
     ).rejects.toThrow('still being enforced');
   });
 
-  it('hydrates persistent attachments and human control across a process restart', async () => {
+  it('restores persistent control when attaching after restart', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();
     const first = new Computers({ provider: provider(), secret: 'secret' });
@@ -211,9 +211,34 @@ describe('Computers', () => {
 
     const second = new Computers({ provider: provider(), secret: 'secret' });
     new Mastra({ logger: false, storage, computers: second });
-    await expect(second.controlState(created.computer.id, { resourceId: 'resource', threadId: 'thread' })).resolves.toMatchObject({
+    const otherContext = { agent: { resourceId: 'resource', threadId: 'other-thread' } };
+    await (second.tools().mastra_workspace_computer_attach as any).execute({ id: created.computer.id }, otherContext);
+    await expect(second.controlState(created.computer.id, { resourceId: 'resource', threadId: 'other-thread' })).resolves.toMatchObject({
       holder: 'human',
       revision: 1,
+    });
+  });
+
+  it('does not let an older thread pointer regress live persistent control', async () => {
+    const storage = new InMemoryStore();
+    storage.stores.computers = new InMemoryComputersStorage();
+    const first = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: first });
+    const created = await (first.tools().mastra_workspace_computer_create as any).execute({ persist: true }, context);
+    await first.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'take' });
+
+    const second = new Computers({ provider: provider(), secret: 'secret' });
+    new Mastra({ logger: false, storage, computers: second });
+    const otherScope = { resourceId: 'resource', threadId: 'other-thread' };
+    await (second.tools().mastra_workspace_computer_attach as any).execute(
+      { id: created.computer.id },
+      { agent: otherScope },
+    );
+    await second.control(created.computer.id, otherScope, { action: 'release' });
+
+    await expect(second.controlState(created.computer.id, { resourceId: 'resource', threadId: 'thread' })).resolves.toMatchObject({
+      holder: 'agent',
+      revision: 2,
     });
   });
 

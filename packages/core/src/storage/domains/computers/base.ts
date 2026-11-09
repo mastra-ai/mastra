@@ -10,6 +10,12 @@ export interface StoredComputerRecord {
   name: string;
   template: 'desktop';
   checkpointId?: string;
+  control?: {
+    holder: 'agent' | 'human';
+    reason?: string;
+    revision: number;
+    enforcedRevision: number;
+  };
   createdAt: number;
 }
 

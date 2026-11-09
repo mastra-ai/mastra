@@ -185,8 +185,19 @@ export class Computers implements MastraComputers {
 
   async #persistAttachment(scope: Scope, entry: Entry): Promise<void> {
     if (!entry.persistent) return;
-    const { threadState } = await this.#stores();
-    if (!threadState) throw new Error('persistent computers require thread-state storage');
+    const { computers, threadState } = await this.#stores();
+    if (!computers || !threadState) throw new Error('persistent computers require computers and thread-state storage');
+    const record = await computers.getComputer(entry.id);
+    if (!record) throw new Error('persistent computer record not found');
+    await computers.setComputer({
+      ...record,
+      control: {
+        holder: entry.control.holder,
+        ...(entry.control.reason ? { reason: entry.control.reason } : {}),
+        revision: entry.control.revision,
+        enforcedRevision: entry.control.enforcedRevision,
+      },
+    });
     const value: StoredAttachment = {
       schemaVersion: 1,
       computerId: entry.id,
@@ -400,8 +411,15 @@ export class Computers implements MastraComputers {
         ownerResourceId,
         queue: Promise.resolve(),
         destroyed: false,
-        control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
-      extensionState: new Map(),
+        control: stored?.control
+          ? {
+              holder: stored.control.holder,
+              ...(stored.control.reason ? { reason: stored.control.reason } : {}),
+              revision: stored.control.revision,
+              enforcedRevision: stored.control.enforcedRevision,
+            }
+          : { holder: 'agent', revision: 0, enforcedRevision: 0 },
+        extensionState: new Map(),
       };
       entry.queue = entry.ready.catch(() => {});
       entry.ready.then(
@@ -464,6 +482,7 @@ export class Computers implements MastraComputers {
           ownerResourceId: scope.resourceId,
           name: entry.name,
           template: 'desktop',
+          control: { holder: 'agent', revision: 0, enforcedRevision: 0 },
           createdAt: Date.now(),
         };
         await stores.computers!.setComputer(record);
@@ -750,12 +769,15 @@ export class Computers implements MastraComputers {
       await this.#deleteAttachment(scope);
       return undefined;
     }
-    entry.control = {
-      holder: pointer.control.holder,
-      ...(pointer.control.reason ? { reason: pointer.control.reason } : {}),
-      revision: pointer.control.revision,
-      enforcedRevision: pointer.control.enforcedRevision,
-    };
+    if (pointer.control.revision > entry.control.revision) {
+      entry.control = {
+        holder: pointer.control.holder,
+        ...(pointer.control.reason ? { reason: pointer.control.reason } : {}),
+        revision: pointer.control.revision,
+        enforcedRevision: pointer.control.enforcedRevision,
+      };
+      await this.#persistAttachment(scope, entry);
+    }
     await entry.ready;
     this.#attachments.set(scope.key, entry.id);
     return entry;
