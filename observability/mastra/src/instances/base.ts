@@ -469,7 +469,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
     this.logger.warn(
-      'Storage exporter skipped on Mastra Platform. Set allowStorageOnPlatform: true on this observability config to enable storage export.',
+      'Storage exporter skipped on Mastra Platform. Set allowStorageOnPlatform: true on this observability config to allow remote storage export.',
       {
         exporterName: exporter.name,
         serviceName: this.config.serviceName,

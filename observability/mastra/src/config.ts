@@ -78,6 +78,8 @@ export interface ObservabilityInstanceConfig {
    * and the deprecated DefaultExporter are skipped. Set to true to persist to
    * your own storage alongside Platform observability. Applies to this instance,
    * including exporters registered later; does not add an exporter automatically.
+   * Storage domains reporting local persistence remain disabled on Platform,
+   * with a warning during exporter initialization, even when this is true.
    */
   allowStorageOnPlatform?: boolean;
   /** Observability bridge (e.g., OpenTelemetry bridge for context extraction) */

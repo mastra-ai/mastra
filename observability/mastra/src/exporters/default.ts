@@ -25,6 +25,7 @@ import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
+import { skipLocalStorageOnPlatform } from './storage-platform-policy';
 
 /**
  * Configuration for the DefaultExporter's batching, retry, and strategy behavior.
@@ -144,6 +145,12 @@ export class DefaultExporter extends BaseExporter {
         this.logger.warn(
           'DefaultExporter disabled: Observability storage not available. Traces will not be persisted.',
         );
+        return;
+      }
+
+      if (skipLocalStorageOnPlatform(this.#observabilityStorage, this.logger)) {
+        this.#observabilityStorage = undefined;
+        this.#storage = undefined;
         return;
       }
 
