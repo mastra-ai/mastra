@@ -3502,6 +3502,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const allResults: Record<string, any> = {};
     const suspendedPaths: Record<string, number[]> = {};
     const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+    const suspendedBranches: { idx: number; result: any }[] = [];
 
     branchEntry.steps.forEach((branch, idx) => {
       if (!isSingleStepEntry(branch)) {
@@ -3533,6 +3534,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedCount++;
         suspendedPaths[branchId] = [parentIdx, idx];
         Object.assign(resumeLabels, res.suspendPayload?.__workflow_meta?.resumeLabels ?? {});
+        const result =
+          idx === finishedBranchIdx && latestBranchResult?.status === 'suspended' ? latestBranchResult : res;
+        suspendedBranches.push({ idx, result });
       }
       // failed / canceled branches short-circuit the workflow before reaching here
     });
@@ -3571,17 +3575,32 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
       }
+      // Hand a parent workflow a branch that is still suspended (the one that just
+      // finished if it suspended, else the first), with its suspend() payload and every
+      // suspended branch's resume labels.
+      const reportedBranch =
+        suspendedBranches.find(branch => branch.idx === finishedBranchIdx) ?? suspendedBranches[0]!;
+      const reportedResult = reportedBranch.result;
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.suspend',
         runId,
         data: {
           workflowId,
           runId,
-          executionPath: branchExecutionPath,
+          executionPath: [parentIdx, reportedBranch.idx],
           resumeSteps,
           parentWorkflow,
           stepResults: { ...stepResults, __state: currentState },
-          prevResult: { status: 'suspended' } as any,
+          prevResult: {
+            ...reportedResult,
+            suspendPayload: {
+              ...reportedResult.suspendPayload,
+              __workflow_meta: {
+                ...(reportedResult.suspendPayload?.__workflow_meta ?? {}),
+                resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
+              },
+            },
+          },
           activeStepsPath,
           requestContext,
           actor,
