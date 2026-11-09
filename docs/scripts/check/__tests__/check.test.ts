@@ -274,6 +274,15 @@ describe('routes and links', () => {
     expect(redirect?.alsoFixes?.ruleId).toBe('mastra/no-self-host-url')
   })
 
+  it('keeps line numbers on model pages after skipping the generated models table', async () => {
+    const file = page(
+      'models/providers/acme.mdx',
+      '# Acme\n\n<ProviderModelsTable\n  models={[\n    { id: "a" },\n  ]}\n/>\n\n[a](/docs/agents/overveiw)',
+    )
+    const [item] = checkLinks(file, await tree(file), index).findings
+    expect(item.line).toBe(file.source.split('\n').findIndex(l => l.includes('overveiw')) + 1)
+  })
+
   it('keeps self-hosted links to static files absolute', async () => {
     const file = page(
       'docs/a.mdx',

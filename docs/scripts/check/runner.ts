@@ -13,6 +13,8 @@ import {
   CATEGORIES,
   type Category,
   type Check,
+  type CheckContext,
+  type CheckResult,
   type CheckReport,
   type ContentFile,
   type Finding,
@@ -106,26 +108,34 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
     check: 'files',
     reason: `${file} is not a docs content page (src/content/en/**/*.mdx), so it was not checked`,
   }))
-  const ran: string[] = []
-  let fixed = 0
+  const selected = CHECKS.filter(
+    check =>
+      check.categories.some(category => categories.includes(category)) &&
+      !(check.scope === 'files' && files.length === 0) &&
+      // Vale is slow, so skip it when no --rule filter can select a Vale rule.
+      !(
+        check === valeCheck &&
+        (options.skipVale || (rules.length > 0 && !rules.some(filter => couldMatchPrefix(filter, 'mastra/vale-'))))
+      ),
+  )
+  const fix = options.fix ?? false
+  const ctx: CheckContext = {
+    rootDir,
+    files,
+    scoped,
+    fix,
+    categories,
+    allFiles,
+    isRuleActive: (ruleId, file, line) => ruleSelected(ruleId) && !suppressed(ruleId, file?.path, line),
+  }
+  // Checks overlap their subprocesses (Vale, oxfmt) with in-process parsing. With --fix they run one at a time
+  // because the formatter and link fixes write the same files.
+  const results: CheckResult[] = []
+  if (fix) for (const check of selected) results.push(await check.run(ctx))
+  else results.push(...(await Promise.all(selected.map(check => check.run(ctx)))))
 
-  for (const check of CHECKS) {
-    if (!check.categories.some(category => categories.includes(category))) continue
-    if (check === valeCheck && options.skipVale) continue
-    // Vale is slow, so skip it when no --rule filter can select a Vale rule.
-    if (check === valeCheck && rules.length > 0 && !rules.some(filter => couldMatchPrefix(filter, 'mastra/vale-')))
-      continue
-    if (check.scope === 'files' && files.length === 0) continue
-    ran.push(check.name)
-    const result = await check.run({
-      rootDir,
-      files,
-      scoped,
-      fix: options.fix ?? false,
-      categories,
-      allFiles,
-      isRuleActive: (ruleId, file, line) => ruleSelected(ruleId) && !suppressed(ruleId, file?.path, line),
-    })
+  let fixed = 0
+  for (const result of results) {
     fixed += result.fixed ?? 0
     skipped.push(...(result.skipped ?? []))
     for (const item of result.findings) {
@@ -156,7 +166,7 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
       fixable: findings.filter(f => f.fixable).length,
       fixed,
       filesChecked: files.length,
-      checks: ran,
+      checks: selected.map(check => check.name),
       skipped,
       durationMs: Date.now() - started,
     },

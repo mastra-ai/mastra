@@ -30,183 +30,50 @@ export const RULE_FAMILIES: RuleDefinition[] = [
   },
 ]
 
-export const RULES: RuleDefinition[] = [
+type RuleRow = [id: string, category: Category, severity: Severity, description: string, fixable?: true]
+
+// prettier-ignore
+const RULE_ROWS: RuleRow[] = [
   // frontmatter
-  {
-    id: 'mastra/frontmatter-missing',
-    category: 'frontmatter',
-    severity: 'error',
-    fixable: false,
-    description: 'The page has no `---` frontmatter block.',
-  },
-  {
-    id: 'mastra/frontmatter-parse',
-    category: 'frontmatter',
-    severity: 'error',
-    fixable: false,
-    description: 'The frontmatter is not valid YAML.',
-  },
-  {
-    id: 'mastra/frontmatter-title',
-    category: 'frontmatter',
-    severity: 'error',
-    fixable: false,
-    description: 'The frontmatter has no non-empty `title`.',
-  },
-  {
-    id: 'mastra/description-required',
-    category: 'frontmatter',
-    severity: 'warn',
-    fixable: false,
-    description: 'The frontmatter has no non-empty `description`.',
-  },
-  {
-    id: 'mastra/description-length',
-    category: 'frontmatter',
-    severity: 'warn',
-    fixable: false,
-    description: 'The `description` is shorter than 50 or longer than 200 characters.',
-  },
-  {
-    id: 'mastra/frontmatter-packages',
-    category: 'frontmatter',
-    severity: 'error',
-    fixable: false,
-    description: 'The `packages` field is missing, empty, or lists an invalid package name.',
-  },
-  {
-    id: 'mastra/frontmatter-packages-max',
-    category: 'frontmatter',
-    severity: 'warn',
-    fixable: false,
-    description: 'The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.',
-  },
-  {
-    id: 'mastra/lint-comment-invalid',
-    category: 'structure',
-    severity: 'error',
-    fixable: false,
-    description: 'An inline `lint disable`, `enable`, or `ignore` comment names an unknown rule ID.',
-  },
+  ['mastra/frontmatter-missing', 'frontmatter', 'error', 'The page has no `---` frontmatter block.'],
+  ['mastra/frontmatter-parse', 'frontmatter', 'error', 'The frontmatter is not valid YAML.'],
+  ['mastra/frontmatter-title', 'frontmatter', 'error', 'The frontmatter has no non-empty `title`.'],
+  ['mastra/description-required', 'frontmatter', 'warn', 'The frontmatter has no non-empty `description`.'],
+  ['mastra/description-length', 'frontmatter', 'warn', 'The `description` is shorter than 50 or longer than 200 characters.'],
+  ['mastra/frontmatter-packages', 'frontmatter', 'error', 'The `packages` field is missing, empty, or lists an invalid package name.'],
+  ['mastra/frontmatter-packages-max', 'frontmatter', 'warn', 'The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.'],
+  ['mastra/lint-comment-invalid', 'structure', 'error', 'An inline `lint disable`, `enable`, or `ignore` comment names an unknown rule ID.'],
   // sidebar
-  {
-    id: 'mastra/sidebar-unlinked-page',
-    category: 'sidebar',
-    severity: 'error',
-    fixable: false,
-    description: 'An MDX page is not linked from its section sidebar.',
-  },
-  {
-    id: 'mastra/sidebar-reference-sort',
-    category: 'sidebar',
-    severity: 'error',
-    fixable: true,
-    description: 'The reference sidebar is not sorted alphabetically.',
-  },
-  {
-    id: 'mastra/sidebar-duplicate-id',
-    category: 'sidebar',
-    severity: 'error',
-    fixable: false,
-    description: 'A doc ID appears more than once in the reference sidebar.',
-  },
-  {
-    id: 'mastra/sidebar-reference-item',
-    category: 'sidebar',
-    severity: 'warn',
-    fixable: false,
-    description: 'A reference sidebar item has an unknown type, or a property the sort fixer would drop.',
-  },
-  {
-    id: 'mastra/sidebar-new-tag-stale',
-    category: 'sidebar',
-    severity: 'warn',
-    fixable: false,
-    description: 'A sidebar `new` tag was added more than 30 days ago.',
-  },
+  ['mastra/sidebar-unlinked-page', 'sidebar', 'error', 'An MDX page is not linked from its section sidebar.'],
+  ['mastra/sidebar-reference-sort', 'sidebar', 'error', 'The reference sidebar is not sorted alphabetically.', true],
+  ['mastra/sidebar-duplicate-id', 'sidebar', 'error', 'A doc ID appears more than once in the reference sidebar.'],
+  ['mastra/sidebar-reference-item', 'sidebar', 'warn', 'A reference sidebar item has an unknown type, or a property the sort fixer would drop.'],
+  ['mastra/sidebar-new-tag-stale', 'sidebar', 'warn', 'A sidebar `new` tag was added more than 30 days ago.'],
   // structure
-  {
-    id: 'mastra/single-h1',
-    category: 'structure',
-    severity: 'warn',
-    fixable: false,
-    description: 'The page must have exactly one `#` heading.',
-  },
-  {
-    id: 'mastra/code-block-lang',
-    category: 'structure',
-    severity: 'warn',
-    fixable: false,
-    description: 'A fenced code block has no language, e.g. ` ```typescript `.',
-  },
+  ['mastra/single-h1', 'structure', 'warn', 'The page must have exactly one `#` heading.'],
+  ['mastra/code-block-lang', 'structure', 'warn', 'A fenced code block has no language, e.g. ` ```typescript `.'],
   // links
-  {
-    id: 'mastra/internal-link',
-    category: 'links',
-    severity: 'warn',
-    fixable: false,
-    description: 'An internal link points to a route that does not exist.',
-  },
-  {
-    id: 'mastra/redirected-link',
-    category: 'links',
-    severity: 'warn',
-    fixable: true,
-    description: 'An internal link points to a redirect source. The fix rewrites it to the destination.',
-  },
-  {
-    id: 'mastra/no-self-host-url',
-    category: 'links',
-    severity: 'warn',
-    fixable: true,
-    description: 'A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.',
-  },
+  ['mastra/internal-link', 'links', 'warn', 'An internal link points to a route that does not exist.'],
+  ['mastra/redirected-link', 'links', 'warn', 'An internal link points to a redirect source. The fix rewrites it to the destination.', true],
+  ['mastra/no-self-host-url', 'links', 'warn', 'A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.', true],
   // prose
-  {
-    id: 'mastra/bare-url',
-    category: 'prose',
-    severity: 'warn',
-    fixable: false,
-    description: 'A URL appears as plain text instead of a Markdown link.',
-  },
+  ['mastra/bare-url', 'prose', 'warn', 'A URL appears as plain text instead of a Markdown link.'],
   // format
-  {
-    id: 'mastra/format',
-    category: 'format',
-    severity: 'error',
-    fixable: true,
-    description: 'The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).',
-  },
+  ['mastra/format', 'format', 'error', 'The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).', true],
   // redirects
-  {
-    id: 'mastra/redirect-duplicate',
-    category: 'redirects',
-    severity: 'error',
-    fixable: false,
-    description: '`vercel.redirects.json` has two redirects with the same source.',
-  },
-  {
-    id: 'mastra/redirect-chain',
-    category: 'redirects',
-    severity: 'error',
-    fixable: false,
-    description: 'A redirect points to the source of another redirect.',
-  },
-  {
-    id: 'mastra/redirect-destination',
-    category: 'redirects',
-    severity: 'error',
-    fixable: false,
-    description: 'An internal redirect destination does not resolve to a page.',
-  },
-  {
-    id: 'mastra/redirect-generated-drift',
-    category: 'redirects',
-    severity: 'error',
-    fixable: true,
-    description: '`vercel.json` is out of date with `vercel.redirects.json`. The fix regenerates it.',
-  },
+  ['mastra/redirect-duplicate', 'redirects', 'error', '`vercel.redirects.json` has two redirects with the same source.'],
+  ['mastra/redirect-chain', 'redirects', 'error', 'A redirect points to the source of another redirect.'],
+  ['mastra/redirect-destination', 'redirects', 'error', 'An internal redirect destination does not resolve to a page.'],
+  ['mastra/redirect-generated-drift', 'redirects', 'error', '`vercel.json` is out of date with `vercel.redirects.json`. The fix regenerates it.', true],
 ]
+
+export const RULES: RuleDefinition[] = RULE_ROWS.map(([id, category, severity, description, fixable]) => ({
+  id,
+  category,
+  severity,
+  description,
+  fixable: fixable ?? false,
+}))
 
 const RULES_BY_ID = new Map(RULES.map(rule => [rule.id, rule]))
 

@@ -29,6 +29,12 @@ function loadPreset(): Promise<Preset> {
 
 const cache = new WeakMap<ContentFile, Promise<ParsedMdx>>()
 
+// Generated model pages embed a ~1,500-line `models={[...]}` prop. No rule inspects it, and acorn parsing it took
+// ~20s of a full run, so blank it out. Keeping newlines keeps every line and offset unchanged.
+const MODEL_TABLE = /^<ProviderModelsTable\b[\s\S]*?^\/>$/gm
+const sourceForLint = (file: ContentFile) =>
+  file.section === 'models' ? file.source.replace(MODEL_TABLE, block => block.replace(/[^\n]/g, ' ')) : file.source
+
 /** Parses an MDX file with the docs remark preset and runs its lint rules. Results are cached per file. */
 export function parseMdx(file: ContentFile): Promise<ParsedMdx> {
   let parsed = cache.get(file)
@@ -37,7 +43,7 @@ export function parseMdx(file: ContentFile): Promise<ParsedMdx> {
       preset =>
         new Promise<ParsedMdx>((resolve, reject) => {
           const processor = remark().use(preset as never)
-          const input = { path: file.absolutePath, value: file.source }
+          const input = { path: file.absolutePath, value: sourceForLint(file) }
           let tree: Root
           try {
             tree = processor.parse(input) as Root
