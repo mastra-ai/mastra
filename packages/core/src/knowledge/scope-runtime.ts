@@ -34,9 +34,6 @@ type HeldPrincipals = Map<string, Array<{ principal: string; params: ScopeMatch[
 type KnownScopes = { byAddress: Map<string, KnowledgePage>; byId: Map<string, KnowledgePage>; written: Set<string> };
 type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
 
-/** Most scope addresses one write-run start lookup query carries. */
-export const KNOWLEDGE_SCOPE_LOOKUP_CHUNK = 1000;
-
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
   readonly compiled: CompiledKnowledgeScopes;
@@ -239,13 +236,9 @@ export class KnowledgeScopeRuntime {
       else for (const child of match?.compiled.children ?? []) wanted.add(`${address}/${child.child!.name}`);
     }
     const known: KnownScopes = { byAddress: new Map(), byId: new Map(), written: new Set() };
-    const lookup = [...wanted];
-    // One query per chunk, in turn, so a large principal set neither grows one query nor holds several connections.
-    for (let i = 0; i < lookup.length; i += KNOWLEDGE_SCOPE_LOOKUP_CHUNK) {
-      for (const row of await storage.getScopesByAddress(lookup.slice(i, i + KNOWLEDGE_SCOPE_LOOKUP_CHUNK))) {
-        known.byAddress.set(row.address!, row);
-        known.byId.set(row.id, row);
-      }
+    for (const row of await storage.getScopesByAddress([...wanted])) {
+      known.byAddress.set(row.address!, row);
+      known.byId.set(row.id, row);
     }
     const run = { held: this.#held(principals), known };
     for (const address of addresses) await this.#materialize(address, principals, provenance, [], run);

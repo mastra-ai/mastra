@@ -4,7 +4,7 @@ import { RequestContext } from '../../request-context';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
 import { KnowledgeRun } from '../run';
-import { KNOWLEDGE_SCOPE_LOOKUP_CHUNK, KnowledgeScopeRuntime } from '../scope-runtime';
+import { KnowledgeScopeRuntime } from '../scope-runtime';
 
 const provenance = { author: 'host' };
 
@@ -193,28 +193,5 @@ describe('Knowledge write-run start matches per-scope materialization', () => {
       ['b:y', 'a:y'],
     ]);
     expect(warnings.length).toBeGreaterThan(0);
-  });
-});
-
-describe('Knowledge write-run start scope lookup chunking', () => {
-  async function lookups(count: number) {
-    const store = (await new InMemoryStore().getStore('knowledge'))!;
-    await store.init();
-    const runtime = new KnowledgeScopeRuntime(
-      { 'project:$projectId': {} },
-      async () => store,
-      () => {},
-    );
-    const principals = Array.from({ length: count }, (_, i) => `project:p${i}`);
-    await runtime.materializeScopes(principals, principals, provenance);
-    const calls = counted(store);
-    await runtime.materializeScopes(principals, principals, provenance);
-    expect(calls.materialize).toEqual([]);
-    return calls.lookups;
-  }
-
-  it(`uses one lookup up to ${KNOWLEDGE_SCOPE_LOOKUP_CHUNK} addresses and one per chunk beyond`, async () => {
-    expect(await lookups(KNOWLEDGE_SCOPE_LOOKUP_CHUNK)).toBe(1);
-    expect(await lookups(2500)).toBe(3);
   });
 });
