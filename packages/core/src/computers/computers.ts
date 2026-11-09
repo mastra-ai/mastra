@@ -61,6 +61,7 @@ export interface ComputerProvider {
   readonly macContext: string;
   create(options: { sandboxId?: string; reattach?: 'required' }): ComputerSandbox;
   viewer(sandbox: ComputerSandbox, scope: MastraComputerScope): Promise<MastraComputerViewer | null>;
+  release?(sandbox: ComputerSandbox): void;
   embed?(
     sandbox: ComputerSandbox,
     options: { origin: string; mode: 'watch' | 'control' },
@@ -621,6 +622,7 @@ export class Computers implements MastraComputers {
       this.#attachments.delete(scope.key);
       await this.#deleteAttachment(scope);
       if (!entry) return NOT_ATTACHED;
+      if (entry.sandbox) this.#provider.release?.(entry.sandbox);
       this.#handsExtension?.release?.(entry.id, scope.threadId);
       await this.#emit(context, entry, scope.threadId, 'released');
       return { computer: this.#describe(entry, 'released') };
@@ -957,8 +959,21 @@ export class Computers implements MastraComputers {
     options: { origin: string; mode: 'watch' | 'control' },
   ): Promise<string | null> {
     if (!this.#provider.embed) return null;
-    const sandbox = (await this.#attached(computerId, scope)).sandbox!;
-    return this.#provider.embed(sandbox, options);
+    const entry = await this.#attached(computerId, scope);
+    const run = entry.queue.then(async () => {
+      const mode = options.mode === 'control' && entry.control.holder === 'human' ? 'control' : 'watch';
+      const url = await this.#provider.embed!(entry.sandbox!, { origin: options.origin, mode });
+      if (!url) return null;
+      entry.control.enforcedRevision = Math.min(entry.control.enforcedRevision, entry.control.revision - 1);
+      await this.#enforceWithinDeadline(entry, scope);
+      await this.#persistAttachment({ ...scope, key: JSON.stringify([scope.resourceId, scope.threadId]) }, entry);
+      return url;
+    });
+    entry.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   async #attached(computerId: string, scope: MastraComputerScope): Promise<Entry> {

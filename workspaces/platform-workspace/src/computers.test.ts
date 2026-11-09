@@ -59,6 +59,7 @@ class FakeBackend {
   embedCalls: { origin: string; mode: 'watch' | 'control' }[] = [];
   embedModeCalls: ('view' | 'control')[] = [];
   failEmbedMode = false;
+  embedGate?: Gate;
   #n = 0;
 
   create = (options: PlatformSandboxOptions): ComputerSandbox => {
@@ -126,6 +127,12 @@ class FakeBackend {
       },
       async createComputerEmbed(origin: string, mode: 'watch' | 'control') {
         backend.embedCalls.push({ origin, mode });
+        const gate = backend.embedGate;
+        if (gate) {
+          backend.embedGate = undefined;
+          gate.enter();
+          await gate.opened;
+        }
         return `https://embed.test/${id}/${backend.embedCalls.length}`;
       },
       async setComputerEmbedMode(mode: 'view' | 'control') {
@@ -660,12 +667,45 @@ describe('viewer', () => {
     );
     expect(backend.embedCalls).toEqual([
       { origin: 'https://app.slack.com', mode: 'watch' },
-      { origin: 'https://app.slack.com', mode: 'control' },
+      { origin: 'https://app.slack.com', mode: 'watch' },
     ]);
 
     await computers.control(computer.id, scope, { action: 'take' });
     await computers.control(computer.id, scope, { action: 'release' });
-    expect(backend.embedModeCalls).toEqual(['control', 'view']);
+    expect(backend.embedModeCalls).toEqual(['view', 'view', 'control', 'view']);
+  });
+
+  it('reprojects the latest holder when control changes during embed minting', async () => {
+    const computers = make();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    const mint = gate();
+    backend.embedGate = mint;
+
+    const embedding = computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'control' });
+    await mint.entered;
+    const taking = computers.control(computer.id, scope, { action: 'take' });
+    mint.open();
+
+    await expect(embedding).resolves.toBe('https://embed.test/sbx-1/1');
+    await expect(taking).resolves.toMatchObject({ holder: 'human' });
+    expect(backend.embedCalls).toEqual([{ origin: 'https://app.slack.com', mode: 'watch' }]);
+    expect(backend.embedModeCalls.at(-1)).toBe('control');
+    await expect(computers.controlState(computer.id, scope)).resolves.toMatchObject({ holder: 'human', enforced: true });
+  });
+
+  it('removes destroyed sandboxes from embed mode enforcement', async () => {
+    const computers = make();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const first = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await computers.embed(first.computer.id, scope, { origin: 'https://app.slack.com', mode: 'watch' });
+    await call(computers, 'mastra_workspace_computer_destroy', { id: first.computer.id }, ctx('r1', 't1'));
+
+    backend.nextSandboxId = 'sbx-1';
+    const second = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    backend.embedModeCalls.length = 0;
+    await computers.control(second.computer.id, scope, { action: 'take' });
+    expect(backend.embedModeCalls).toEqual([]);
   });
 
   it('leaves agent control pending when Platform cannot close embed input', async () => {

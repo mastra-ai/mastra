@@ -78,15 +78,12 @@ class PlatformComputerEmbedControlSubscriber implements ComputerControlSubscribe
   readonly id = 'platform-computer-embed-control';
   readonly required = true;
 
-  constructor(
-    private readonly sandboxes: Set<PlatformComputerSandbox>,
-    private readonly embedded: WeakSet<PlatformComputerSandbox>,
-  ) {}
+  constructor(private readonly embedded: Map<string, PlatformComputerSandbox>) {}
 
   async enforce(input: Parameters<ComputerControlSubscriber['enforce']>[0]) {
     const sandboxId = (input.identity as { sandboxId?: unknown })?.sandboxId;
-    const sandbox = [...this.sandboxes].find(candidate => candidate.sandboxId === sandboxId);
-    if (!sandbox || !this.embedded.has(sandbox) || !sandbox.setComputerEmbedMode) {
+    const sandbox = typeof sandboxId === 'string' ? this.embedded.get(sandboxId) : undefined;
+    if (!sandbox?.setComputerEmbedMode) {
       return { status: 'enforced' as const, enforcedRevision: input.control.revision };
     }
     try {
@@ -100,8 +97,7 @@ class PlatformComputerEmbedControlSubscriber implements ComputerControlSubscribe
 
 function platformProvider(
   options: PlatformComputersOptions,
-  sandboxes: Set<PlatformComputerSandbox>,
-  embedded: WeakSet<PlatformComputerSandbox>,
+  embedded: Map<string, PlatformComputerSandbox>,
 ): ComputerProvider {
   const semantic = options.hands === 'semantic';
   if (semantic && options.template === false) {
@@ -131,7 +127,11 @@ function platformProvider(
         ...(input.sandboxId !== undefined && { sandboxId: input.sandboxId }),
         ...(input.reattach !== undefined && { reattach: input.reattach }),
       }) as PlatformComputerSandbox;
-      sandboxes.add(sandbox);
+      const destroy = sandbox.destroy.bind(sandbox);
+      sandbox.destroy = async () => {
+        if (sandbox.sandboxId) embedded.delete(sandbox.sandboxId);
+        await destroy();
+      };
       return sandbox;
     },
     async viewer(sandbox: ComputerSandbox, _scope: MastraComputerScope): Promise<MastraComputerViewer | null> {
@@ -150,12 +150,21 @@ function platformProvider(
       const headers: Record<string, string> = cookie ? { cookie: `${cookie.name}=${cookie.value}` } : {};
       return { url, headers };
     },
+    release(sandbox) {
+      const sandboxId = sandbox.sandboxId;
+      if (sandboxId) embedded.delete(sandboxId);
+    },
     async embed(sandbox, request) {
       const platformSandbox = sandbox as PlatformComputerSandbox;
-      if (!platformSandbox.createComputerEmbed) return null;
-      const url = await platformSandbox.createComputerEmbed(request.origin, request.mode);
-      if (url) embedded.add(platformSandbox);
-      return url;
+      const sandboxId = platformSandbox.sandboxId;
+      if (!sandboxId || !platformSandbox.createComputerEmbed) return null;
+      embedded.set(sandboxId, platformSandbox);
+      try {
+        return await platformSandbox.createComputerEmbed(request.origin, request.mode);
+      } catch (error) {
+        embedded.delete(sandboxId);
+        throw error;
+      }
     },
   };
 }
@@ -167,10 +176,9 @@ export class PlatformComputers extends Computers {
 
   constructor(options: PlatformComputersOptions = {}) {
     assertExperimentalComputerEnabled();
-    const sandboxes = new Set<PlatformComputerSandbox>();
-    const embedded = new WeakSet<PlatformComputerSandbox>();
+    const embedded = new Map<string, PlatformComputerSandbox>();
     const generic: ComputersOptions = {
-      provider: platformProvider(options, sandboxes, embedded),
+      provider: platformProvider(options, embedded),
       secret: computerSecret(options),
       ...(options.screenshotAfterAction !== undefined && { screenshotAfterAction: options.screenshotAfterAction }),
       ...(options.hands === 'semantic' && {
@@ -178,7 +186,7 @@ export class PlatformComputers extends Computers {
       }),
     };
     super(generic);
-    this.registerControlSubscriber(new PlatformComputerEmbedControlSubscriber(sandboxes, embedded));
+    this.registerControlSubscriber(new PlatformComputerEmbedControlSubscriber(embedded));
     if (options.controlEnforcement) {
       this.#controlSubscriber = new PlatformComputerControlSubscriber(options.controlEnforcement);
       this.#disposeControlSubscriber = this.registerControlSubscriber(this.#controlSubscriber);
