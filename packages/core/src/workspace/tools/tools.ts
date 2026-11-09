@@ -271,15 +271,25 @@ const COMPUTER_MUTATION_TOOLS = new Set<string>([
 ]);
 
 const COMPUTER_REQUEST_CONTEXTS = new WeakMap<RequestContext, RequestContext>();
+const COMPUTER_IDENTITY_MISMATCH = 'computer identity mismatch between Agent and reserved request context';
 
 function computerExecutionContext(context: any, workspace: Workspace): any {
   if (!workspace.resolvesComputerTools()) return context;
 
-  const threadId = context?.agent?.threadId;
-  const resourceId = context?.agent?.resourceId;
-  if (!threadId && !resourceId) return context;
+  const agentThreadId = context?.agent?.threadId as string | undefined;
+  const agentResourceId = context?.agent?.resourceId as string | undefined;
+  if (!agentThreadId && !agentResourceId) return context;
 
   const source = context.requestContext as RequestContext | undefined;
+  const reservedThreadId = source?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+  const reservedResourceId = source?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  if (
+    (reservedThreadId && agentThreadId && reservedThreadId !== agentThreadId) ||
+    (reservedResourceId && agentResourceId && reservedResourceId !== agentResourceId)
+  ) {
+    throw new Error(COMPUTER_IDENTITY_MISMATCH);
+  }
+
   const inputSource = getRequestContextInputSource(source);
   let requestContext = inputSource ? COMPUTER_REQUEST_CONTEXTS.get(inputSource) : undefined;
   if (!requestContext) {
@@ -289,8 +299,16 @@ function computerExecutionContext(context: any, workspace: Workspace): any {
       COMPUTER_REQUEST_CONTEXTS.set(inputSource, requestContext);
     }
   }
-  if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
-  if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  const derivedThreadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+  const derivedResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  if (
+    (derivedThreadId && agentThreadId && derivedThreadId !== agentThreadId) ||
+    (derivedResourceId && agentResourceId && derivedResourceId !== agentResourceId)
+  ) {
+    throw new Error(COMPUTER_IDENTITY_MISMATCH);
+  }
+  if (!derivedThreadId && agentThreadId) requestContext.set(MASTRA_THREAD_ID_KEY, agentThreadId);
+  if (!derivedResourceId && agentResourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, agentResourceId);
   return { ...context, requestContext };
 }
 

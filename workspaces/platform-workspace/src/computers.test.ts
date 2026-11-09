@@ -352,16 +352,19 @@ describe('attachment', () => {
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r2', 't1'))).toBe(NOT_ATTACHED);
   });
 
-  it('falls back to request context ids, preferring context.agent', async () => {
+  it('uses reserved request context identity and refuses conflicting Agent identity', async () => {
     const computers = make();
     const rc = new RequestContext();
     rc.set(MASTRA_RESOURCE_ID_KEY, 'r-rc');
     rc.set(MASTRA_THREAD_ID_KEY, 't-rc');
     await call(computers, 'mastra_workspace_computer_create', {}, { requestContext: rc });
     expect(await call(computers, 'computer_click', { x: 1, y: 1 }, ctx('r-rc', 't-rc'))).toBe('clicked at (1, 1)');
-    expect(
-      await call(computers, 'computer_click', { x: 1, y: 1 }, { ...ctx('r-agent', 't-agent'), requestContext: rc }),
-    ).toBe(NOT_ATTACHED);
+    await expect(
+      computers.tools().mastra_workspace_computer_list.execute(
+        {},
+        { ...ctx('r-agent', 't-agent'), requestContext: rc },
+      ),
+    ).rejects.toThrow('computer identity mismatch between Agent and reserved request context');
   });
 
   it('replaces the thread attachment; the old computer stays listable and reattachable', async () => {
@@ -856,6 +859,29 @@ describe('ordering through a real agent at default tool concurrency', () => {
     expect(seen.every(context => context === requestContext)).toBe(true);
     expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
     expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+  });
+
+  it('refuses a Workspace computer action when reserved and Agent identities conflict', async () => {
+    const computers = make();
+    const authorized = new RequestContext();
+    authorized.set(MASTRA_THREAD_ID_KEY, 'trusted-thread');
+    authorized.set(MASTRA_RESOURCE_ID_KEY, 'trusted-resource');
+    await computers.tools().mastra_workspace_computer_create.execute({}, { requestContext: authorized });
+    const workspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    const tools = await createWorkspaceTools(workspace);
+    backend.actions = [];
+
+    await expect(
+      tools[WORKSPACE_TOOLS.COMPUTER.CLICK]!.execute(
+        { x: 1, y: 2 },
+        {
+          agent: { threadId: 'memory-thread', resourceId: 'memory-resource' },
+          requestContext: authorized,
+          mastra: new Mastra({ logger: false, computers }),
+        },
+      ),
+    ).rejects.toThrow('computer identity mismatch between Agent and reserved request context');
+    expect(backend.actions).toEqual([]);
   });
 
   it('reaches the desktop in model order even when earlier actions are slower', async () => {

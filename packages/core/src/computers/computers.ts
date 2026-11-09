@@ -337,8 +337,19 @@ export class Computers implements MastraComputers {
 
   #scope(context: Context): Scope | undefined {
     const rc = context?.requestContext;
-    const resourceId = firstNonEmpty(context?.agent?.resourceId, rc?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
-    const threadId = firstNonEmpty(context?.agent?.threadId, rc?.get(MASTRA_THREAD_ID_KEY) as string | undefined);
+    const reservedResourceId = firstNonEmpty(rc?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined);
+    const reservedThreadId = firstNonEmpty(rc?.get(MASTRA_THREAD_ID_KEY) as string | undefined);
+    const agentResourceId = firstNonEmpty(context?.agent?.resourceId);
+    const agentThreadId = firstNonEmpty(context?.agent?.threadId);
+    // Authenticated reserved identity wins; disagreement is a fail-closed boundary, never an Agent-memory fallback.
+    if (
+      (reservedResourceId && agentResourceId && reservedResourceId !== agentResourceId) ||
+      (reservedThreadId && agentThreadId && reservedThreadId !== agentThreadId)
+    ) {
+      throw new Error('computer identity mismatch between Agent and reserved request context');
+    }
+    const resourceId = reservedResourceId ?? agentResourceId;
+    const threadId = reservedThreadId ?? agentThreadId;
     if (!resourceId || !threadId) return undefined;
     const key = JSON.stringify([resourceId, threadId]);
     const agentId = context?.agent?.agentId;
