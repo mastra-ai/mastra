@@ -238,7 +238,9 @@ export class MouseController {
       }
     }
 
-    if (!isMouseReport(data)) return undefined;
+    // Reports we didn't ask for (e.g. another program left tracking on) pass through untouched;
+    // pi-tui ignores them, so Mouse set to Off behaves exactly as if this controller weren't here.
+    if (!this.tracking || !isMouseReport(data)) return undefined;
     const event = parseSgrMouse(data);
     if (!event) {
       // A report we can't decode (e.g. a terminal without SGR mouse support) would leave

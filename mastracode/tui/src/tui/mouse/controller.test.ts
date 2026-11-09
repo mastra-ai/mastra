@@ -322,6 +322,19 @@ describe('MouseController on the real pi-tui renderer', () => {
     expect(list.getSelectedItem()?.value).toBe('item-2');
   });
 
+  it('leaves stray mouse reports alone when it has not turned tracking on', async () => {
+    // e.g. another program left tracking on in this terminal: reports must reach pi-tui
+    // untouched (it ignores them), not turn into arrow keys that scroll the list.
+    harness = createHarness({ dialogMouseEnabled: false });
+    const { list } = modalWithList(harness.ui, 5);
+    await harness.render();
+    expect(harness.screen.modes.mouseTrackingMode).toBe('none');
+
+    harness.send('\x1b[<65;50;10M');
+    harness.send('\x1b[<65;50;10M');
+    expect(list.getSelectedItem()?.value).toBe('item-0');
+  });
+
   it('turns tracking off when the TUI stops (shutdown or Ctrl+Z) so the shell never receives mouse reports', async () => {
     harness = createHarness();
     modalWithList(harness.ui, 3);
