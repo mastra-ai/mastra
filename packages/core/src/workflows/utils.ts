@@ -541,6 +541,11 @@ export const createTimeTravelExecutionParams = (params: {
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
+        // The evented engine reuses the recorded nested run (and its snapshot) only when this id survives.
+        metadata:
+          typeof stepContext?.metadata?.nestedRunId === 'string'
+            ? { nestedRunId: stepContext.metadata.nestedRunId }
+            : undefined,
       };
       const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (
