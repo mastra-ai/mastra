@@ -9,7 +9,33 @@ packages:
 
 Sandboxes that run a desktop environment can expose screenshot, mouse, and keyboard control. The workspace registers computer tools when a statically configured sandbox supports the computer capability.
 
-[`DaytonaSandbox`](/integrations/sandboxes/daytona) and [`E2BDesktopSandbox`](/integrations/sandboxes/e2b-desktop) support this capability. Other sandbox backends don't register the computer tools. Resolver-backed sandboxes don't register them because the workspace can't inspect the resolved sandbox's capabilities when it creates the tool list.
+[`DaytonaSandbox`](/integrations/sandboxes/daytona) and [`E2BDesktopSandbox`](/integrations/sandboxes/e2b-desktop) support this capability. Other statically configured sandbox backends don't register the computer tools.
+
+## Dynamic sandboxes
+
+A sandbox resolver can return a different desktop sandbox for each request. Mastra can't inspect the resolved sandbox when it creates the tool list, so resolver-backed computer tools require an experimental opt-in.
+
+Set `MASTRA_EXPERIMENTAL_COMPUTER=true` before constructing the workspace, then set `computerTools` to `'resolve'`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace } from '@mastra/core/workspace'
+import { E2BDesktopSandbox } from '@mastra/e2b-desktop'
+
+const workspace = new Workspace({
+  sandbox: async ({ requestContext }) => {
+    const userId = requestContext.get('user-id') as string
+    const sandbox = new E2BDesktopSandbox({ metadata: { userId } })
+    await sandbox.start()
+    return sandbox
+  },
+  sandboxCacheKey: ({ requestContext }) => requestContext.get('user-id') as string,
+  computerTools: 'resolve',
+})
+```
+
+The workspace registers all computer tools and resolves the sandbox from the current request context when a tool runs. If the resolved sandbox doesn't support the computer capability, the tool fails with `SandboxFeatureNotSupportedError`.
+
+Without `computerTools: 'resolve'`, resolver-backed workspaces don't register computer tools. A workspace configured with this option fails construction unless `MASTRA_EXPERIMENTAL_COMPUTER` is exactly `true`.
 
 ## Computer tools
 

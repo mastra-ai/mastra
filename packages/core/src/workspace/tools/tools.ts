@@ -51,6 +51,7 @@ import { listFilesTool } from './list-files';
 import { lspInspectTool } from './lsp-inspect';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
+import { resolvesComputerTools } from './resolver-computer-tools';
 import { searchInputSchema, searchTool } from './search';
 import type {
   WorkspaceToolsConfig,
@@ -727,7 +728,7 @@ export async function createWorkspaceTools(
     await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, () => killProcessTool, { targets: { sandbox: true } });
 
     // Resolver capability is unknown until execution, so registration requires an explicit opt-in.
-    if (workspace.hasSandboxResolver() && workspace.resolvesComputerTools()) {
+    if (workspace.hasSandboxResolver() && resolvesComputerTools(workspace)) {
       await addComputerTools();
     }
   }

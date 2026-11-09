@@ -70,6 +70,7 @@ import {
   SKILL_SCOPE_DOCUMENT_PREFIX,
 } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
+import { enableResolverComputerTools } from './tools/resolver-computer-tools';
 import type { WorkspaceStatus } from './types';
 
 /** Workspace instructions for a resolver-backed sandbox in `'placeholder'` mode. */
@@ -636,6 +637,9 @@ export class Workspace<
     this.lastAccessedAt = new Date();
 
     this._config = config;
+    if (config.computerTools === 'resolve') {
+      enableResolverComputerTools(this);
+    }
 
     if (typeof config.sandbox === 'function') {
       this._sandboxResolver = config.sandbox as WorkspaceSandboxResolver;
@@ -915,11 +919,6 @@ export class Workspace<
    */
   hasSandboxResolver(): boolean {
     return this._sandboxResolver !== undefined;
-  }
-
-  /** Whether resolver-backed computer tools were explicitly enabled. @experimental */
-  resolvesComputerTools(): boolean {
-    return this._config.computerTools === 'resolve';
   }
 
   /**

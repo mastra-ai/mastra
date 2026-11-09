@@ -63,6 +63,13 @@ const workspace = new Workspace({
     isOptional: true,
   },
   {
+    name: 'computerTools',
+    type: "'resolve'",
+    description:
+      "Experimental. Registers computer tools for a resolver-backed sandbox and validates support when each tool runs. Requires `MASTRA_EXPERIMENTAL_COMPUTER=true`. See [dynamic sandboxes](/docs/sandbox/computer#dynamic-sandboxes).",
+    isOptional: true,
+  },
+  {
     name: 'instructions.dynamicSandbox',
     type: "'placeholder' | 'resolve' | (({ requestContext }) => string)",
     description:

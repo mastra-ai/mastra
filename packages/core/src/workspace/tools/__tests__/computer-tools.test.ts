@@ -183,14 +183,18 @@ describe('createWorkspaceTools computer gating', () => {
     }
   });
 
-  it('resolves the computer sandbox from each tool call request context', async () => {
+  it('resolves concurrent computer calls from each request context', async () => {
     const firstComputer = createMockComputer();
     const secondComputer = createMockComputer();
+    const resolver = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => {
+      if (requestContext.get('sandbox') === 'first') {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return createMockSandbox({ computer: firstComputer });
+      }
+      return createMockSandbox({ computer: secondComputer });
+    });
     const workspace = new Workspace({
-      sandbox: ({ requestContext }) =>
-        requestContext.get('sandbox') === 'first'
-          ? createMockSandbox({ computer: firstComputer })
-          : createMockSandbox({ computer: secondComputer }),
+      sandbox: resolver,
       computerTools: 'resolve',
       tools: {
         [WORKSPACE_TOOLS.COMPUTER.CLICK]: { screenshotAfterAction: false },
@@ -199,11 +203,16 @@ describe('createWorkspaceTools computer gating', () => {
     const tools = await createWorkspaceTools(workspace);
     const click = tools[WORKSPACE_TOOLS.COMPUTER.CLICK];
 
-    await click.execute({ x: 1, y: 2 }, { requestContext: new RequestContext([['sandbox', 'first']]) });
-    await click.execute({ x: 3, y: 4 }, { requestContext: new RequestContext([['sandbox', 'second']]) });
+    await Promise.all([
+      click.execute({ x: 1, y: 2 }, { requestContext: new RequestContext([['sandbox', 'first']]) }),
+      click.execute({ x: 3, y: 4 }, { requestContext: new RequestContext([['sandbox', 'second']]) }),
+    ]);
 
+    expect(resolver).toHaveBeenCalledTimes(2);
     expect(firstComputer.leftClick).toHaveBeenCalledWith(1, 2);
+    expect(firstComputer.leftClick).toHaveBeenCalledTimes(1);
     expect(secondComputer.leftClick).toHaveBeenCalledWith(3, 4);
+    expect(secondComputer.leftClick).toHaveBeenCalledTimes(1);
   });
 
   it('respects per-tool enabled config', async () => {
