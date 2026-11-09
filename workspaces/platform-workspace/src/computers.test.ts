@@ -723,6 +723,24 @@ describe('viewer', () => {
     await expect(computers.controlState(computer.id, scope)).resolves.toMatchObject({ holder: 'human', enforced: true });
   });
 
+  it('keeps a human control embed when a concurrent release is refused', async () => {
+    const computers = make();
+    const scope = { resourceId: 'r1', threadId: 't1' };
+    const { computer } = await call(computers, 'mastra_workspace_computer_create', {}, ctx('r1', 't1'));
+    await computers.control(computer.id, scope, { action: 'take' });
+    const mint = gate();
+    backend.embedGate = mint;
+
+    const embedding = computers.embed(computer.id, scope, { origin: 'https://app.slack.com', mode: 'control' });
+    await mint.entered;
+    const releasing = call(computers, 'mastra_workspace_computer_release', {}, ctx('r1', 't1'));
+    mint.open();
+
+    await expect(releasing).resolves.toBe(HUMAN_HAS_CONTROL);
+    await expect(embedding).resolves.toBe('https://embed.test/sbx-1/1');
+    expect(backend.embedCalls).toEqual([{ origin: 'https://app.slack.com', mode: 'control' }]);
+  });
+
   it('fails embed closed and unregisters it when post-mint projection fails', async () => {
     const computers = make();
     const scope = { resourceId: 'r1', threadId: 't1' };

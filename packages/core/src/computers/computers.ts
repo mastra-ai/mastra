@@ -33,6 +33,7 @@ export const HUMAN_HAS_CONTROL = 'the user has control of this computer; wait fo
 export const CONTROL_NOT_ENFORCED = 'computer control change is still being enforced; try again';
 const NOTE_MAX = 500;
 const CONTROL_ENFORCEMENT_TIMEOUT_MS = 10_000;
+const CONTROL_NOTIFICATION_TIMEOUT_MS = 10_000;
 
 const ID_PATTERN = /^cmp_([pe])_([A-Za-z0-9-]{1,128})_([A-Za-z0-9_-]{22})$/;
 const PERSISTENT_ID_PATTERN = /^cmp_p2_([0-9a-f]{32})_([A-Za-z0-9_-]{22})$/;
@@ -619,7 +620,12 @@ export class Computers implements MastraComputers {
   #release(context: Context) {
     const requestedScope = this.#scope(context);
     if (!requestedScope) return Promise.resolve(MISSING_IDENTITY);
-    this.#releaseRequests.set(requestedScope.key, (this.#releaseRequests.get(requestedScope.key) ?? 0) + 1);
+    const requestedEntryId = this.#attachments.get(requestedScope.key);
+    const requestedEntry = requestedEntryId ? this.#computers.get(requestedEntryId) : undefined;
+    const countsAsPending = requestedEntry?.control.holder !== 'human';
+    if (countsAsPending) {
+      this.#releaseRequests.set(requestedScope.key, (this.#releaseRequests.get(requestedScope.key) ?? 0) + 1);
+    }
     const release = this.#serial(context, async scope => {
       const id = this.#attachments.get(scope.key);
       const entry = id ? this.#computers.get(id) : undefined;
@@ -644,6 +650,7 @@ export class Computers implements MastraComputers {
       );
       return run;
     });
+    if (!countsAsPending) return release;
     return release.finally(() => {
       const remaining = (this.#releaseRequests.get(requestedScope.key) ?? 1) - 1;
       if (remaining > 0) this.#releaseRequests.set(requestedScope.key, remaining);
@@ -1106,31 +1113,40 @@ export class Computers implements MastraComputers {
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, target.resourceId);
       requestContext.set(MASTRA_THREAD_ID_KEY, target.threadId);
-      const result = await agent.sendNotificationSignal(
-        {
-          source: 'computer',
-          kind: released ? 'control-returned' : 'control-taken',
-          // `urgent` delivers into an active run and wakes an idle one; `high` can be
-          // summarized with a non-waking signal while the thread is active.
-          priority: 'urgent',
-          summary: released
-            ? `The user handed control back${note ? `: ${note}` : ''}`
-            : 'The user took control of the computer',
-          attributes: { computerId: entry.id },
-        },
-        {
-          resourceId: target.resourceId,
-          threadId: target.threadId,
-          ifIdle: {
-            behavior: 'wake',
-            streamOptions: {
-              memory: { thread: target.threadId, resource: target.resourceId },
-              requestContext,
+      const delivery = (async () => {
+        const result = await agent.sendNotificationSignal(
+          {
+            source: 'computer',
+            kind: released ? 'control-returned' : 'control-taken',
+            // `urgent` delivers into an active run and wakes an idle one; `high` can be
+            // summarized with a non-waking signal while the thread is active.
+            priority: 'urgent',
+            summary: released
+              ? `The user handed control back${note ? `: ${note}` : ''}`
+              : 'The user took control of the computer',
+            attributes: { computerId: entry.id },
+          },
+          {
+            resourceId: target.resourceId,
+            threadId: target.threadId,
+            ifIdle: {
+              behavior: 'wake',
+              streamOptions: {
+                memory: { thread: target.threadId, resource: target.resourceId },
+                requestContext,
+              },
             },
           },
-        },
-      );
-      const accepted = await result.accepted;
+        );
+        return result.accepted;
+      })();
+      let timeout: number | undefined;
+      const accepted = await Promise.race([
+        delivery,
+        new Promise<undefined>(resolve => {
+          timeout = setTimeout(resolve, CONTROL_NOTIFICATION_TIMEOUT_MS);
+        }),
+      ]).finally(() => clearTimeout(timeout));
       if (accepted?.action === 'wake' || accepted?.action === 'deliver') return { notified: true };
       reason = 'not-delivered';
     } catch (error) {

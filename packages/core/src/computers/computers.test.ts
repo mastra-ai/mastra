@@ -290,6 +290,39 @@ describe('Computers', () => {
     }
   });
 
+  it('bounds notification acceptance after control is enforced and persisted', async () => {
+    vi.useFakeTimers();
+    try {
+      const agent = {
+        sendNotificationSignal: vi.fn(async () => ({ accepted: new Promise(() => {}) })),
+      };
+      const mastra = { getAgentById: vi.fn(() => agent), getLogger: vi.fn(() => ({ warn: vi.fn() })) };
+      const agentContext = {
+        agent: { resourceId: 'resource', threadId: 'thread', agentId: 'agent-1' },
+        mastra,
+      } as any;
+      const computers = new Computers({ provider: provider(), secret: 'secret' });
+      const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, agentContext);
+
+      let settled = false;
+      const change = computers
+        .control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'take' })
+        .then(result => {
+          settled = true;
+          return result;
+        });
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(settled).toBe(true);
+      await expect(change).resolves.toEqual({ holder: 'human', revision: 1, notified: false, reason: 'not-delivered' });
+      await expect(
+        computers.controlState(created.computer.id, { resourceId: 'resource', threadId: 'thread' }),
+      ).resolves.toMatchObject({ holder: 'human', revision: 1, enforced: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('persists request_human control across restart and refuses agent pixel actions', async () => {
     const storage = new InMemoryStore();
     storage.stores.computers = new InMemoryComputersStorage();

@@ -290,6 +290,48 @@ describe('websocket proxy', () => {
     control.ws!.close();
   });
 
+  it('closes when serialized relay input exceeds the queued-byte cap', async () => {
+    const resolvers: ((value: { holder: 'human' }) => void)[] = [];
+    const { origin } = await start({
+      getControl: () => new Promise(resolve => resolvers.push(resolve)),
+    });
+    const control = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'control' })).url, { origin });
+    await completeHandshake(control.ws!);
+    const keyDown = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
+    const chunk = Buffer.concat(Array.from({ length: 76_800 }, () => keyDown));
+    const closed = nextClose(control.ws!);
+
+    control.ws!.send(chunk);
+    control.ws!.send(chunk);
+    await waitFor(() => resolvers.length === 1);
+
+    await expect(Promise.race([closed, new Promise<number>(resolve => setTimeout(() => resolve(-1), 50))])).resolves.toBe(1009);
+  });
+
+  it('drops serialized relay input that remains queued after the client closes', async () => {
+    const resolvers: ((value: { holder: 'human' }) => void)[] = [];
+    const { origin } = await start({
+      getControl: () => new Promise(resolve => resolvers.push(resolve)),
+    });
+    const control = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'control' })).url, { origin });
+    await completeHandshake(control.ws!);
+    const keyDown = Buffer.from([4, 1, 0, 0, 0, 0, 0, 1]);
+    const keyUp = Buffer.from([4, 0, 0, 0, 0, 0, 0, 1]);
+
+    control.ws!.send(keyDown);
+    control.ws!.send(keyUp);
+    await waitFor(() => resolvers.length === 1);
+    const closed = nextClose(control.ws!);
+    control.ws!.close();
+    await closed;
+    await waitFor(() => upstream.upstreamSockets.size === 0);
+    resolvers[0]!({ holder: 'human' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(resolvers).toHaveLength(1);
+    expect(upstream.upstreamMessages).toEqual([]);
+  });
+
   it('re-checks the attachment when the socket opens', async () => {
     const { origin } = await start();
     const { url } = await mintSocketUrl(origin, 'c1');
