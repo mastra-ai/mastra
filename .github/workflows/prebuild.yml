@@ -444,7 +444,8 @@ jobs:
         id: plan
         if: steps.compute.outputs.has_unit_tests == 'true'
         env:
-          TIMINGS: ${{ runner.temp }}/test-timings.json
+          # Benchmark only: timings recorded from an earlier run of this branch.
+          TIMINGS: .github/data/bench-test-timings.json
         run: |
           shards=$(node .github/scripts/test-shards.cjs /tmp/affected-outputs/unit_test_files.txt /tmp/affected-outputs/shards "$TIMINGS")
           echo "unit_shards=$shards" >> "$GITHUB_OUTPUT"
