@@ -11,7 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsFieldsetRow,
+  SettingsRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 import { useId, useState } from 'react';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
@@ -208,7 +213,6 @@ function PhaseEditor({
   onChange: (phase: StoredPhaseInfo) => void;
   onRuleProblem: (field: string, problem: string | undefined) => void;
 }) {
-  const id = useId();
   const working = phase.kind === 'working';
   const next = nextPhasesOf(phase, phases);
   const required = new Set(code?.requiredNextPhases ?? []);
@@ -221,10 +225,10 @@ function PhaseEditor({
   };
 
   return (
-    <SettingsContainer>
-      <section aria-label={`${phase.name} phase`} className="flex flex-col gap-4">
+    <SettingsContainer role="region" aria-label={`${phase.name} phase`}>
+      <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Txt tone="ink" as="h4" variant="body" className="m-0">
+          <Txt tone="ink" as="h3" variant="label" className="m-0">
             {phase.name}
           </Txt>
           <Txt font="mono" tone="muted" as="span" variant="caption">
@@ -239,200 +243,182 @@ function PhaseEditor({
             are the moves code makes from it. Its instructions, automation and other next phases are yours to change.
           </Txt>
         )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field>
-            <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
-            <Input
-              id={`${id}-name`}
-              value={phase.name}
-              disabled={disabled}
-              onChange={event => onChange({ ...phase, name: event.target.value })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${id}-description`}>Description</FieldLabel>
-            <Input
-              id={`${id}-description`}
-              value={phase.description ?? ''}
-              disabled={disabled}
-              onChange={event => onChange({ ...phase, description: event.target.value || null })}
-            />
-          </Field>
-        </div>
+      </div>
+      <SettingsRow label="Name">
+        <Input
+          value={phase.name}
+          disabled={disabled}
+          onChange={event => onChange({ ...phase, name: event.target.value })}
+        />
+      </SettingsRow>
+      <SettingsRow label="Description">
+        <Input
+          value={phase.description ?? ''}
+          disabled={disabled}
+          onChange={event => onChange({ ...phase, description: event.target.value || null })}
+        />
+      </SettingsRow>
 
-        {working && (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor={`${id}-skill`}>Skill</FieldLabel>
-                <Select
-                  value={phase.runner?.skill ?? NO_SKILL}
-                  disabled={disabled || code?.handlers}
-                  onValueChange={value => setRunner({ skill: value === NO_SKILL ? undefined : String(value) })}
-                >
-                  <SelectTrigger id={`${id}-skill`} size="sm" aria-label={`${phase.name} skill`}>
-                    {phase.runner?.skill ?? (code?.handlers ? 'Chosen by code' : 'None')}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_SKILL}>None</SelectItem>
-                    {skills.map(skill => (
-                      <SelectItem key={skill} value={skill}>
-                        {skill}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor={`${id}-context`}>Runner context</FieldLabel>
-                <Input
-                  id={`${id}-context`}
-                  value={phase.runner?.context ?? ''}
-                  placeholder="work"
-                  disabled={disabled || code?.handlers}
-                  onChange={event => setRunner({ context: event.target.value })}
-                />
-              </Field>
-            </div>
-            <Field invalid={instructions.length > MAX_INSTRUCTIONS}>
-              <FieldLabel htmlFor={`${id}-instructions`}>Instructions</FieldLabel>
-              <FieldDescription>
-                Added to what the agent is told when this phase starts. {instructions.length}/{MAX_INSTRUCTIONS}
-              </FieldDescription>
-              <Textarea
-                id={`${id}-instructions`}
-                value={instructions}
-                maxLength={MAX_INSTRUCTIONS}
-                rows={3}
-                disabled={disabled}
-                onChange={event => setRunner({ instructions: event.target.value })}
-              />
-            </Field>
+      {working && (
+        <>
+          <SettingsRow label="Skill" description="The playbook the phase's agent follows.">
+            <Select
+              value={phase.runner?.skill ?? NO_SKILL}
+              disabled={disabled || code?.handlers}
+              onValueChange={value => setRunner({ skill: value === NO_SKILL ? undefined : String(value) })}
+            >
+              <SelectTrigger size="sm" aria-label={`${phase.name} skill`}>
+                {phase.runner?.skill ?? (code?.handlers ? 'Chosen by code' : 'None')}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SKILL}>None</SelectItem>
+                {skills.map(skill => (
+                  <SelectItem key={skill} value={skill}>
+                    {skill}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+          <SettingsRow label="Runner context">
+            <Input
+              value={phase.runner?.context ?? ''}
+              placeholder="work"
+              disabled={disabled || code?.handlers}
+              onChange={event => setRunner({ context: event.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow
+            label="Instructions"
+            description={`Added to what the agent is told when this phase starts. ${instructions.length}/${MAX_INSTRUCTIONS}`}
+            errorMsg={instructions.length > MAX_INSTRUCTIONS ? `Keep it to ${MAX_INSTRUCTIONS} characters.` : undefined}
+            controlPlacement="below"
+            // The row's `sm:justify-between` would shrink the grid's one column to the textarea's own width.
+            className="sm:justify-normal"
+          >
+            <Textarea
+              value={instructions}
+              maxLength={MAX_INSTRUCTIONS}
+              rows={3}
+              disabled={disabled}
+              onChange={event => setRunner({ instructions: event.target.value })}
+            />
+          </SettingsRow>
 
-            <Field orientation="horizontal" className="items-start gap-4">
-              <div className="flex flex-1 flex-col gap-1">
-                <FieldLabel htmlFor={`${id}-auto-start`}>Start on its own</FieldLabel>
-                <FieldDescription>Run this phase without waiting for a person to approve it.</FieldDescription>
-              </div>
+          <SettingsRow
+            label="Start on its own"
+            description="Run this phase without waiting for a person to approve it."
+          >
+            <Switch
+              aria-label={`${phase.name}: start on its own`}
+              checked={phase.autoStart ?? false}
+              disabled={disabled}
+              onCheckedChange={checked => {
+                onChange({ ...phase, autoStart: checked, autoStartWhen: checked ? phase.autoStartWhen : null });
+                if (!checked) onRuleProblem('autoStartWhen', undefined);
+              }}
+            />
+          </SettingsRow>
+          {phase.autoStart && (
+            <RuleEditor
+              label={`${phase.name}: start only when`}
+              description="Leave empty to start every card on its own."
+              rule={phase.autoStartWhen}
+              disabled={disabled}
+              onChange={(rule, problem) => {
+                onChange({ ...phase, autoStartWhen: rule });
+                onRuleProblem('autoStartWhen', problem);
+              }}
+            />
+          )}
+
+          <SettingsRow
+            label="Exit tool"
+            description={
+              code?.exitToolId
+                ? 'Factory waits for this tool in code, so it stays.'
+                : code?.handlers
+                  ? 'Factory moves cards on from this phase in code, without an exit tool.'
+                  : 'The tool whose success ends the phase. Leave empty for none.'
+            }
+          >
+            <Input
+              value={exitToolId}
+              disabled={disabled || code?.exitToolId != null || code?.handlers}
+              onChange={event => {
+                const value = event.target.value.trim();
+                onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
+                if (!value) onRuleProblem('autoApproveWhen', undefined);
+              }}
+            />
+          </SettingsRow>
+          {exitToolId !== '' && (
+            <SettingsRow
+              label="Approve on its own"
+              description={`Approve ${exitToolId} without a person, such as a submitted plan.`}
+            >
               <Switch
-                id={`${id}-auto-start`}
-                aria-label={`${phase.name}: start on its own`}
-                checked={phase.autoStart ?? false}
+                aria-label={`${phase.name}: approve ${exitToolId} on its own`}
+                checked={phase.exitTool?.autoApprove ?? false}
                 disabled={disabled}
                 onCheckedChange={checked => {
-                  onChange({ ...phase, autoStart: checked, autoStartWhen: checked ? phase.autoStartWhen : null });
-                  if (!checked) onRuleProblem('autoStartWhen', undefined);
-                }}
-              />
-            </Field>
-            {phase.autoStart && (
-              <RuleEditor
-                label={`${phase.name}: start only when`}
-                description="Leave empty to start every card on its own."
-                rule={phase.autoStartWhen}
-                disabled={disabled}
-                onChange={(rule, problem) => {
-                  onChange({ ...phase, autoStartWhen: rule });
-                  onRuleProblem('autoStartWhen', problem);
-                }}
-              />
-            )}
-
-            <Field>
-              <FieldLabel htmlFor={`${id}-exit-tool`}>Exit tool</FieldLabel>
-              <FieldDescription>
-                {code?.exitToolId
-                  ? 'Factory waits for this tool in code, so it stays.'
-                  : code?.handlers
-                    ? 'Factory moves cards on from this phase in code, without an exit tool.'
-                    : 'The tool whose success ends the phase. Leave empty for none.'}
-              </FieldDescription>
-              <Input
-                id={`${id}-exit-tool`}
-                value={exitToolId}
-                disabled={disabled || code?.exitToolId != null || code?.handlers}
-                onChange={event => {
-                  const value = event.target.value.trim();
-                  onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
-                  if (!value) onRuleProblem('autoApproveWhen', undefined);
-                }}
-              />
-            </Field>
-            {exitToolId !== '' && (
-              <Field orientation="horizontal" className="items-start gap-4">
-                <div className="flex flex-1 flex-col gap-1">
-                  <FieldLabel htmlFor={`${id}-auto-approve`}>Approve on its own</FieldLabel>
-                  <FieldDescription>Approve {exitToolId} without a person, such as a submitted plan.</FieldDescription>
-                </div>
-                <Switch
-                  id={`${id}-auto-approve`}
-                  aria-label={`${phase.name}: approve ${exitToolId} on its own`}
-                  checked={phase.exitTool?.autoApprove ?? false}
-                  disabled={disabled}
-                  onCheckedChange={checked => {
-                    onChange({
-                      ...phase,
-                      exitTool: {
-                        id: exitToolId,
-                        autoApprove: checked,
-                        autoApproveWhen: checked ? phase.exitTool?.autoApproveWhen : undefined,
-                      },
-                    });
-                    if (!checked) onRuleProblem('autoApproveWhen', undefined);
-                  }}
-                />
-              </Field>
-            )}
-            {exitToolId !== '' && phase.exitTool?.autoApprove && (
-              <RuleEditor
-                label={`${phase.name}: approve only when`}
-                description="Leave empty to approve for every card."
-                rule={phase.exitTool.autoApproveWhen}
-                disabled={disabled}
-                onChange={(rule, problem) => {
                   onChange({
                     ...phase,
-                    exitTool: { id: exitToolId, autoApprove: true, autoApproveWhen: rule ?? undefined },
+                    exitTool: {
+                      id: exitToolId,
+                      autoApprove: checked,
+                      autoApproveWhen: checked ? phase.exitTool?.autoApproveWhen : undefined,
+                    },
                   });
-                  onRuleProblem('autoApproveWhen', problem);
+                  if (!checked) onRuleProblem('autoApproveWhen', undefined);
                 }}
               />
-            )}
-          </>
-        )}
+            </SettingsRow>
+          )}
+          {exitToolId !== '' && phase.exitTool?.autoApprove && (
+            <RuleEditor
+              label={`${phase.name}: approve only when`}
+              description="Leave empty to approve for every card."
+              rule={phase.exitTool.autoApproveWhen}
+              disabled={disabled}
+              onChange={(rule, problem) => {
+                onChange({
+                  ...phase,
+                  exitTool: { id: exitToolId, autoApprove: true, autoApproveWhen: rule ?? undefined },
+                });
+                onRuleProblem('autoApproveWhen', problem);
+              }}
+            />
+          )}
+        </>
+      )}
 
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend>
-            <Txt as="span" variant="caption" tone="ink">
-              Next phases
-            </Txt>
-          </legend>
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {phases
-              .filter(other => other.key !== phase.key)
-              .map(other => (
-                <label key={other.key} className="flex items-center gap-2">
-                  <Checkbox
-                    aria-label={`${phase.name} moves to ${other.name}`}
-                    checked={next.includes(other.key)}
-                    disabled={disabled || required.has(other.key)}
-                    onCheckedChange={checked =>
-                      onChange({
-                        ...phase,
-                        nextPhases: checked
-                          ? phases.filter(p => p.key === other.key || next.includes(p.key)).map(p => p.key)
-                          : next.filter(key => key !== other.key),
-                      })
-                    }
-                  />
-                  <Txt as="span" variant="caption">
-                    {other.name}
-                  </Txt>
-                </label>
-              ))}
-          </div>
-        </fieldset>
-      </section>
+      <SettingsFieldsetRow label="Next phases" controlPlacement="below">
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {phases
+            .filter(other => other.key !== phase.key)
+            .map(other => (
+              <label key={other.key} className="flex items-center gap-2">
+                <Checkbox
+                  aria-label={`${phase.name} moves to ${other.name}`}
+                  checked={next.includes(other.key)}
+                  disabled={disabled || required.has(other.key)}
+                  onCheckedChange={checked =>
+                    onChange({
+                      ...phase,
+                      nextPhases: checked
+                        ? phases.filter(p => p.key === other.key || next.includes(p.key)).map(p => p.key)
+                        : next.filter(key => key !== other.key),
+                    })
+                  }
+                />
+                <Txt as="span" variant="caption">
+                  {other.name}
+                </Txt>
+              </label>
+            ))}
+        </div>
+      </SettingsFieldsetRow>
     </SettingsContainer>
   );
 }
@@ -457,7 +443,6 @@ function BoardEditor({
   const save = useSaveBoardMutation(factoryId, WORK_BOARD);
   const reset = useResetBoardMutation(factoryId, WORK_BOARD);
   const skills = (useFactorySkillsQuery(factoryId).data?.skills ?? []).map(skill => skill.name);
-  const id = useId();
   const readOnly = !canEdit || !board.editable;
   const changed = JSON.stringify(draft) !== JSON.stringify({ name: board.name, phases: board.phases });
   const blocked = Object.keys(ruleProblems).length > 0;
@@ -489,20 +474,15 @@ function BoardEditor({
           {problem}
         </Notice>
       ))}
-      <div className="flex flex-wrap items-end gap-4">
-        <Field className="min-w-60 flex-1">
-          <FieldLabel htmlFor={`${id}-board-name`}>Board name</FieldLabel>
+      <SettingsContainer>
+        <SettingsRow label="Board name" description={`Revision ${board.revision}`}>
           <Input
-            id={`${id}-board-name`}
             value={draft.name}
             disabled={readOnly}
             onChange={event => setDraft(current => ({ ...current, name: event.target.value }))}
           />
-        </Field>
-        <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
-          Revision {board.revision}
-        </Txt>
-      </div>
+        </SettingsRow>
+      </SettingsContainer>
       <div className="flex flex-col gap-3">
         {draft.phases.map(phase => (
           <PhaseEditor
@@ -583,9 +563,9 @@ export function WorkBoardSection({ factoryId }: { factoryId?: string }) {
       description="How cards move through this Factory's Work board: when each phase starts on its own, what its agent is told, when its plan is approved without a person, and where cards go next. Changes apply to this Factory only."
     >
       {query.isPending && factoryId && (
-        <Txt tone="muted" as="p" variant="caption" role="status">
-          Loading the Work board…
-        </Txt>
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading the Work board" rows={3} />
+        </SettingsContainer>
       )}
       {!factoryId && <Notice variant="info">Open a Factory to edit its Work board.</Notice>}
       {query.error && <Notice variant="destructive">{query.error.message}</Notice>}
