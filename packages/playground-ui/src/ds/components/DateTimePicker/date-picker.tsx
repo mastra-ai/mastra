@@ -19,7 +19,8 @@ export function DatePicker({ className, classNames, showOutsideDays = true, comp
       showOutsideDays={showOutsideDays}
       className={cn('w-full p-3 [--cell-size:--spacing(8)]', className)}
       classNames={{
-        root: cn('w-full', defaults.root),
+        // Width lives on className alone so a caller's width class can replace it.
+        root: defaults.root,
         months: cn('relative flex flex-col gap-6 sm:flex-row', defaults.months),
         month: cn('flex w-full flex-col gap-2', defaults.month),
         // The nav overlays the caption row, so a two-month grid gets one ‹ on the far
