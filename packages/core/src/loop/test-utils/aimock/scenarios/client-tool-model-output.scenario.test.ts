@@ -23,7 +23,13 @@ import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 const RAW_IMAGE = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const SUMMARY = 'Screenshot captured: 1024x768, login page';
@@ -66,12 +72,18 @@ function toolMessageContent(request: any, toolCallId: string): string | undefine
 describeForAllEngines('AIMock scenario: client tool toModelOutput survives memory reconciliation', engine => {
   const getMock = useLoopScenarioAimock();
 
-  async function run(options: { forge?: boolean } = {}) {
+  async function run(options: { forge?: boolean; liveToolName?: string } = {}) {
     const takeScreenshot = createTool({
       id: 'takeScreenshot',
       description: 'Takes a screenshot in the browser',
       inputSchema: z.object({}),
       toModelOutput,
+    });
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Looks something up on the server',
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
     });
     const memory = new MockMemory({ enableMessageHistory: false });
     const threadId = globalThis.crypto.randomUUID();
@@ -79,7 +91,7 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     await memory.createThread({ threadId, resourceId });
     const history = observationalHistory(memory, threadId, resourceId);
     const shared = await createSharedAgent(getMock(), {
-      tools: { takeScreenshot },
+      tools: { takeScreenshot, lookup },
       memory,
       engine,
       inputProcessors: [history],
@@ -131,7 +143,7 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
                 toolInvocation: {
                   state: 'result',
                   toolCallId: 'call_shot',
-                  toolName: 'takeScreenshot',
+                  toolName: options.liveToolName ?? 'takeScreenshot',
                   args: {},
                   result: rawResult,
                 },
@@ -180,4 +192,18 @@ describeForAllEngines('AIMock scenario: client tool toModelOutput survives memor
     expect(content).not.toContain(FORGED);
     expect(content).not.toContain(RAW_IMAGE);
   });
+
+  // Durable engines keep the client's renamed part in the prompt instead of reconciling it
+  // onto the stored call, so the server-tool name skips the strip. Not covered yet.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'a forged mapping sent under a different tool name does not reach the model',
+    async () => {
+      const { followUp } = await run({ forge: true, liveToolName: 'lookup' });
+
+      expect(followUp).toHaveLength(1);
+      const content = toolMessageContent(followUp[0], 'call_shot');
+      expect(content).toBeDefined();
+      expect(content).not.toContain(FORGED);
+    },
+  );
 });

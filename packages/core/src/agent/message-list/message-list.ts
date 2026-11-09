@@ -190,7 +190,15 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
     // fields, and only on a result (the only state the hook maps and strips): any other
     // client-supplied metadata stays untrusted and is dropped.
     const liveMastra = part.providerMetadata?.mastra;
-    if (state === 'result' && liveMastra && typeof liveMastra === 'object' && !Array.isArray(liveMastra)) {
+    // The hook strips by the live part's tool name, so a renamed part was checked
+    // against a different tool than the stored call: its markers are not trusted.
+    if (
+      state === 'result' &&
+      part.toolInvocation.toolName === storedCall.toolInvocation.toolName &&
+      liveMastra &&
+      typeof liveMastra === 'object' &&
+      !Array.isArray(liveMastra)
+    ) {
       const { modelOutput, modelOutputComputed } = liveMastra as Record<string, unknown>;
       if (modelOutputComputed || modelOutput != null) {
         outcomePart.providerMetadata = {
