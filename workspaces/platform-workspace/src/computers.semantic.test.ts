@@ -7,8 +7,8 @@ import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { WORKSPACE_TOOLS, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
-import { PlatformComputers, Template, serializeSandboxTemplate } from '@mastra/platform-workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PlatformComputers } from './computers.js';
 import type { DaemonSocket } from './semantic.js';
 import {
   BOOT_SEMANTIC_SCRIPT,
@@ -22,6 +22,7 @@ import {
   SEMANTIC_NO_NETWORK,
   SEMANTIC_UNAVAILABLE,
 } from './semantic.js';
+import { Template, serializeSandboxTemplate } from './template.js';
 
 /** The first bytes of a PNG with the given IHDR size, base64. */
 function png(width: number, height: number) {
