@@ -18,8 +18,8 @@ import type { CardContextSession, ContextPhase } from '../boardItems';
 import { itemBoard } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
-import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
-import { isPullRequestSource } from '../services/workItems';
+import type { CardPullRequestLink, WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { cardPullRequestLinks, isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
@@ -48,6 +48,15 @@ function externalWorkItemLabel(item: WorkItem): string {
     return linearIdentifierForItem(item) ?? number ?? 'Linear issue';
   }
   return 'Work item';
+}
+
+function pullRequestLinkLabel(pullRequest: CardPullRequestLink): string {
+  const kind = pullRequest.provider === 'gitlab' ? 'MR' : 'PR';
+  const reference =
+    pullRequest.number === undefined
+      ? kind
+      : `${kind} ${pullRequest.provider === 'gitlab' ? '!' : '#'}${pullRequest.number}`;
+  return pullRequest.state === 'open' ? reference : `${reference} ${pullRequest.state}`;
 }
 
 function activeWorkItem(
@@ -226,6 +235,10 @@ function WorkItemActions({
 }) {
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
+  const relatedItems = relatedWorkItemIndex(allItems)(item);
+  // A pull request with its own Review card already has a link, as does the card's own.
+  const linkedUrls = new Set([externalItemUrl, ...relatedItems.map(related => related.url)]);
+  const pullRequests = cardPullRequestLinks(item).filter(pullRequest => !linkedUrls.has(pullRequest.url));
 
   return (
     <>
@@ -243,7 +256,25 @@ function WorkItemActions({
           {externalItemLabel}
         </Button>
       ) : null}
-      {relatedWorkItemIndex(allItems)(item).map(related => {
+      {pullRequests.map(pullRequest => {
+        const label = pullRequestLinkLabel(pullRequest);
+        return (
+          <Button
+            key={pullRequest.url}
+            as="a"
+            variant="ghost"
+            size="sm"
+            href={pullRequest.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${label}`}
+          >
+            <SourceIcon source={pullRequest.provider === 'gitlab' ? 'gitlab-pr' : 'github-pr'} className="size-3.5" />
+            {label}
+          </Button>
+        );
+      })}
+      {relatedItems.map(related => {
         const label = relationshipLabel(related);
         const session = latestLiveSession(related, livePaths);
 

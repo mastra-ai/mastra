@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { workBoardCatalog } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+
 import type { BoardCatalogResponse } from '../../../../api/types';
 import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
 import { FactorySessionPage } from '../components/RelatedFactorySessions';
@@ -349,6 +351,102 @@ describe('FactorySessionPage', () => {
       await screen.findByText('Issue #7: Fix sandbox setup');
       await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Review$/));
       expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
+    });
+  });
+  describe('when the card carries pull requests', () => {
+    const ISSUE_URL = 'https://github.com/acme/app/issues/7';
+
+    function pullRequestSource(number: number, state: 'open' | 'merged'): NonNullable<WorkItemRow['sources']>[number] {
+      return {
+        id: `source-pr-${number}`,
+        workItemId: 'work-item-1',
+        provider: 'github',
+        integrationId: 'github',
+        sourceType: 'pull-request',
+        workspaceId: null,
+        externalId: `pull-request:github-pr:${number}`,
+        sourceKey: `github:pull-request:github-pr:${number}`,
+        key: `acme/app#${number}`,
+        url: `https://github.com/acme/app/pull/${number}`,
+        state: state === 'merged' ? 'closed' : 'open',
+        labels: [],
+        author: 'factory-bot',
+        metadata: { number, state, merged: state === 'merged', factoryAuthored: true },
+        revision: 1,
+        syncedAt: null,
+        createdAt: new Date('2026-07-29T00:00:00.000Z'),
+        updatedAt: new Date('2026-07-29T00:00:00.000Z'),
+      };
+    }
+
+    function cardWithSources(sources: NonNullable<WorkItemRow['sources']>) {
+      const item = workItem(ISSUE_URL);
+      return {
+        ...item,
+        workItem: {
+          provider: 'github' as const,
+          key: 'acme/app#7',
+          url: ISSUE_URL,
+          title: item.title,
+          state: 'open',
+          labels: [],
+          author: 'octocat',
+          metadata: {},
+          sources,
+        },
+      };
+    }
+
+    it('links each pull request next to the issue, the open one first and a merged one marked', async () => {
+      stubHeader(cardWithSources([pullRequestSource(4, 'merged'), pullRequestSource(5, 'open')]));
+      renderHeader();
+
+      expect(await screen.findByRole('link', { name: 'Open Issue #7' })).toHaveAttribute('href', ISSUE_URL);
+      const open = await screen.findByRole('link', { name: 'Open PR #5' });
+      const merged = screen.getByRole('link', { name: 'Open PR #4 merged' });
+      expect(open).toHaveAttribute('href', 'https://github.com/acme/app/pull/5');
+      expect(open.compareDocumentPosition(merged) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("leaves a pull request that has its own Review card to that card's link", async () => {
+      const card = cardWithSources([pullRequestSource(5, 'open')]);
+      const reviewCard = {
+        ...workItem('https://github.com/acme/app/pull/5'),
+        id: 'review-card-5',
+        parentWorkItemId: card.id,
+        title: 'Review the fix',
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:5',
+          url: 'https://github.com/acme/app/pull/5',
+        },
+        sessions: {},
+        metadata: { number: 5 },
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
+          HttpResponse.json({ session: workspaceSession }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+          HttpResponse.json({ sessions: [workspaceSession] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ workItems: [card, reviewCard] }),
+        ),
+      );
+      renderHeader();
+
+      await screen.findByRole('link', { name: 'Open Review: PR #5: Review the fix' });
+      expect(screen.queryByRole('link', { name: 'Open PR #5' })).not.toBeInTheDocument();
+    });
+
+    it('shows only the issue when the card has no pull request', async () => {
+      stubHeader(cardWithSources([]));
+      renderHeader();
+
+      await screen.findByRole('link', { name: 'Open Issue #7' });
+      expect(screen.queryByRole('link', { name: /^Open (PR|MR) / })).not.toBeInTheDocument();
     });
   });
 });
