@@ -8,6 +8,8 @@ import type { CardAction } from '../cardPrimaryAction';
 import { sourceMetadata, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import { reviewVerdict, selfReviewVerdict } from '../reviewVerdict';
+import { reasonSummary } from '../reworkReason';
+import type { ReworkReason } from '../reworkReason';
 import type { ReviewVerdict } from '../reviewVerdict';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
@@ -37,6 +39,7 @@ export function WorkItemCardRows({
   beforeStart,
   controls,
   open,
+  rework,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -52,6 +55,7 @@ export function WorkItemCardRows({
   controls: ReactNode;
   /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
+  rework?: ReworkReason;
 }) {
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const verdict = columnReviewVerdict(item, columnStage);
@@ -104,10 +108,11 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || verdict) && (
+      {(status.kind !== 'idle' || verdict || rework) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
           {verdict && <ReviewVerdictBadge verdict={verdict} />}
+          {rework && <ReworkLine rework={rework} />}
         </div>
       )}
       <CardActions
@@ -124,6 +129,21 @@ export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId) {
   if (columnStage === 'pr-review') return reviewVerdict(item.metadata);
   if (columnStage === 'execute') return selfReviewVerdict(item.metadata);
   return undefined;
+}
+
+/** "Back from Review: <first line of why>", the whole reason on hover. */
+export function ReworkLine({ rework }: { rework: ReworkReason }) {
+  const text = `Back from ${rework.fromLabel}${rework.reason ? `: ${reasonSummary(rework.reason)}` : ''}`;
+  return (
+    <Txt
+      as="span"
+      variant="caption"
+      className="text-badge-orange-indicator max-w-full min-w-0 truncate"
+      title={rework.reason ?? text}
+    >
+      {text}
+    </Txt>
+  );
 }
 
 export function ReviewVerdictBadge({ verdict }: { verdict: ReviewVerdict }) {

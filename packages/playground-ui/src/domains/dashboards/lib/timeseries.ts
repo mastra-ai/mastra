@@ -65,6 +65,7 @@ export const timeseriesOptionsSchema = z
       })
       .strict()
       .optional(),
+    /** @deprecated Accepted so saved definitions still parse; every empty chart shows the same message. */
     emptyMessage: z.string().optional(),
     /** Empty when this is zero over the range; by default, when every plotted value is zero. */
     emptyWhenZero: valueExprSchema.optional(),

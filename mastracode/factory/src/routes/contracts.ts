@@ -3,8 +3,9 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
+import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
-import { cardRuleGroupSchema } from '../rules/rule-group.js';
+import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
@@ -101,13 +102,23 @@ const intakeRouteTargetSchema = z
     phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
   })
   .strict();
+const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
 const intakeRouteFields = {
   name: nonEmptyTrimmed(120),
   enabled: z.boolean(),
-  /** Which new cards the route applies to; null matches every card. */
-  when: cardRuleGroupSchema.nullable(),
-  /** Where matching new cards land. */
+  /** Which cards the route applies to; null matches every card. Event routes can test `event.type` and `event.reason`. */
+  when: intakeRouteWhenSchema.nullable(),
+  /** Where matching cards land. */
   target: intakeRouteTargetSchema,
+  /** The status events the route handles. `work_item.created` places new cards; the others move existing ones. */
+  on: z
+    .array(z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
+    .superRefine((on, ctx) => {
+      const problem = routeEventsProblem(on, null);
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    }),
+  /** Lets an event move an existing card into a working phase, such as Triage. */
+  allowWorkingPhase: z.boolean(),
 };
 export const intakeRouteInputSchema = z
   .object({
@@ -115,6 +126,8 @@ export const intakeRouteInputSchema = z
     enabled: intakeRouteFields.enabled.default(true),
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
+    on: intakeRouteFields.on.optional(),
+    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -124,6 +137,8 @@ export const intakeRoutePatchSchema = z
     enabled: intakeRouteFields.enabled.optional(),
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
+    on: intakeRouteFields.on.optional(),
+    allowWorkingPhase: intakeRouteFields.allowWorkingPhase.optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -146,8 +161,10 @@ const intakeRouteSchema = z.object({
   enabled: z.boolean(),
   /** 0 is evaluated first. */
   position: z.number().int(),
-  when: cardRuleGroupSchema.nullable(),
+  when: intakeRouteWhenSchema.nullable(),
   target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
+  on: z.array(z.enum(STATUS_EVENTS)),
+  allowWorkingPhase: z.boolean(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),

@@ -174,6 +174,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 
+    let readerCanceled = false;
+    const cancelReader = (reason: string) => {
+      if (readerCanceled) return;
+      readerCanceled = true;
+      void reader.cancel(reason).catch(() => {});
+    };
+    const cancelReaderOnClose = () => cancelReader('request aborted');
+    res.on('close', cancelReaderOnClose);
+    // The client may have dropped while the handler was still running, in which case 'close' already fired.
+    if (res.destroyed) cancelReaderOnClose();
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -210,6 +221,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
+      res.off('close', cancelReaderOnClose);
       res.end();
     }
   }
@@ -355,13 +367,24 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
 
+        let readerCanceled = false;
+        const cancelReader = (reason: string) => {
+          if (readerCanceled) return;
+          readerCanceled = true;
+          void reader.cancel(reason).catch(() => {});
+        };
+        const cancelReaderOnClose = () => cancelReader('request aborted');
+
         const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error').catch(() => {});
+          cancelReader('response write error');
         };
         response.once('error', onResError);
+        response.on('close', cancelReaderOnClose);
+        // The client may have dropped while the handler was still running, in which case 'close' already fired.
+        if (response.destroyed) cancelReaderOnClose();
 
         try {
           while (true) {
@@ -375,6 +398,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
         } finally {
           response.off('error', onResError);
+          response.off('close', cancelReaderOnClose);
           response.end();
         }
       } else {
