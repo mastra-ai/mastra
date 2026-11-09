@@ -1,5 +1,177 @@
 # @mastra/playground-ui
 
+## 69.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.83.0-alpha.2
+  - @mastra/client-js@1.60.0-alpha.2
+  - @mastra/react@1.15.0-alpha.2
+
+## 69.0.0-alpha.2
+
+### Patch Changes
+
+- Fixed phones zooming the page when you tap a text field. On a touch screen, every design system text field now shows its text at 16px, which is the size iOS Safari needs to skip the zoom. That covers Input, InputGroup, InputNumber, SearchInput, ListSearch, Textarea, the Combobox field and its popup search, Command, Composer, the comment editor, Tree rename, saved-view rename and the FilterBar input. Desktop sizes are unchanged. ([#29662](https://github.com/mastra-ai/mastra/pull/29662))
+
+## 69.0.0-alpha.1
+
+### Minor Changes
+
+- Dashboard cards can now offer a Create alert button. Pass the new optional `alert` prop to `DashboardRenderer` to turn it on. ([#29533](https://github.com/mastra-ai/mastra/pull/29533))
+
+  For each card, `alert.action` gets the widget, the open view, that view's queries with the page's filters applied, and its `sources`: each distinct number the view shows, read from one query. A source has a `label` (the series, column or KPI), its `query` and a `ref` (`measure`, `field`, `percentile`, `groups` or `notGroups`). A value that combines several queries, such as a ratio or a sum, is listed as one source per part.
+
+  `alert.action` returns one of:
+
+  - `{ href }`: the button links there, through `alert.LinkComponent`, so your router handles it.
+  - `{ disabled }`: the button is disabled and shows this reason.
+  - An array aligned with `sources`, one `{ href }`, `{ disabled }` or `undefined` (left out) per source. A card with several sources you can link opens a menu of them, each disabled one showing its reason. With one to link, the button links straight to it. With none, the button is disabled with their reasons.
+  - `undefined`: the card shows no button.
+
+  When the page's filters block a card, or exclude everything it shows, its button is disabled and says why. A source whose own query the page's filters exclude is disabled in the menu, and isn't passed to `alert.action`.
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    alert={{
+      action: ({ sources }) =>
+        sources.map(source =>
+          source.ref.percentile === undefined
+            ? { href: `/alerts/new?query=${encodeURIComponent(JSON.stringify(source.query))}` }
+            : { disabled: 'Percentile alerts are not supported yet.' },
+        ),
+      LinkComponent: RouterLink,
+    }}
+  />
+  ```
+
+  `pageQuery(query, page)` is also exported. It applies the page's filters to a dashboard query the same way the cards' requests do, without the time window.
+
+  `DropdownMenu.LinkItem` is a new menu row that navigates; pass `render` to route it through your framework's link.
+
+- Improved the Knowledge explorer. The graph now fills the explorer, with the page tree and the selected page's details in panels that slide in over its edges instead of squeezing it. Graph and Page switch with tabs, the graph's controls use the shared button group, and fits, the legend and the zoom controls stay clear of both panels. Narrow screens keep the stacked layout. ([#29495](https://github.com/mastra-ai/mastra/pull/29495))
+
+  `KnowledgePageExplorer` also takes two optional props. `toolbarEnd` adds your own actions to the end of the toolbar, and `flush` drops the graph's border when the page around it already frames it.
+
+  ```tsx
+  <KnowledgePageExplorer
+    graph={graph}
+    source={source}
+    selectedPageId={selectedPageId}
+    onSelect={setSelectedPageId}
+    view={view}
+    onViewChange={setView}
+    toolbarEnd={<Button>Importers</Button>}
+    flush
+  />
+  ```
+
+- Added host feedback options to trace, span, and thread composers so integrations can select context and hide unsupported delete or review actions. ([#29528](https://github.com/mastra-ai/mastra/pull/29528))
+
+  ```tsx
+  <TracesExplorer
+    {...explorerProps}
+    feedbackOptions={{ contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false }}
+  >
+    {children}
+  </TracesExplorer>
+  ```
+
+  The same options are available on standalone feedback tabs and thread panels. Omitted options preserve existing behavior. Failed submissions now show an error while preserving the draft.
+
+- Added `StatelessWidget` and `planWidget` so a dashboard widget can be rendered by a host that does its own fetching, such as an MCP App. ([#29545](https://github.com/mastra-ai/mastra/pull/29545))
+
+  **Why:** every built-in widget used to fetch its data and hold its view, sort, and compared column internally, so it only worked inside Studio's React Query and client providers. Widgets now split into a pure plan (which requests to send) and a component that renders the answers it is given. `DashboardRenderer` works as before.
+
+  **Rendering a widget from your own data**
+
+  ```tsx
+  import {
+    BUILT_IN_WIDGET_KINDS,
+    StatelessWidget,
+    planWidget,
+    prepareWidget,
+    sendRequest,
+  } from '@mastra/playground-ui/domains/dashboards';
+
+  const registry = new Map(BUILT_IN_WIDGET_KINDS.map(kind => [kind.kind, kind]));
+  const prepared = prepareWidget(widget, registry, 'project');
+
+  // `env` is plain data the host provides: { window, filters, comparisonLabel, gates }.
+  // Plan once, send `plan.discover`, then plan again with those answers and send `plan.requests`.
+  const plan = planWidget(prepared, env, state, discovered);
+  if (plan.status === 'ready') {
+    const answers = await Promise.all(plan.requests.map(request => request && sendRequest(client, request)));
+  }
+
+  // `results` must answer `plan.requests` from the planWidget call made with this same `state` and
+  // `discovered`, in the same order. Re-plan and re-send when either changes.
+
+  <StatelessWidget
+    prepared={prepared}
+    env={env}
+    state={state}
+    onStateChange={setState}
+    discovered={discovered}
+    results={results}
+    onRetry={retryFailed}
+    scope="project"
+  />;
+  ```
+
+  **Custom widget kinds** can add optional `discover` and `requests` planners and read `gate`, `state`, `onStateChange`, `results`, and `onRetry` from their props. A kind whose views read different sources can add `gatedQueries` so only the views it shows are checked against the server's capabilities and filters. Kinds that keep fetching with hooks inside `component` keep working in `DashboardRenderer`.
+
+  **Breaking for code that renders `kind.component` directly:** `WidgetKindProps` now requires `gate`, `state`, `onStateChange`, `results`, and `onRetry`. Render through `DashboardRenderer` or `StatelessWidget`, which pass them, instead.
+
+- Added `McpAppHostProvider` to `@mastra/playground-ui/domains/mcps`, so a chat can extend the MCP Apps shown in its tool cards. Its value can send extra host context to each app and receive every `ui/update-model-context` the app sends. `McpAppViewer` also accepts the matching `hostContext` and `onModelContext` props directly. ([#29557](https://github.com/mastra-ai/mastra/pull/29557))
+
+### Patch Changes
+
+- `StatelessWidget` now passes the widget definition to `pin.onPin`, the same way `DashboardRenderer` does, so a host can save which chart or widget was pinned or unpinned. ([#29587](https://github.com/mastra-ai/mastra/pull/29587))
+
+  ```tsx
+  <StatelessWidget
+    prepared={prepared}
+    pin={{
+      name: 'Agent runs',
+      isPinned,
+      onPin: (widget, isPinned) => savePin(widget, isPinned),
+    }}
+    {...props}
+  />
+  ```
+
+- Polished the Knowledge explorer. ([#29505](https://github.com/mastra-ai/mastra/pull/29505))
+
+  - Imported scopes show their source and icon, such as Linear, instead of a raw connection id.
+  - Page headers show a version chip and relative timestamps. Hover a timestamp for the exact time.
+  - A page's child pages open in place as a tree.
+  - Loading states show skeletons shaped like the content.
+  - Graph and page controls have tooltips.
+  - Search results float over the layout and fade when they scroll.
+
+- Fixed chat messages showing raw MCP App context. When a user interacted with an MCP App (for example, drilling into a dashboard chart), the context the app sent to the model appeared in the user's message bubble, the conversation timeline, and copied text. It is now hidden from the UI and still sent to the model. ([#29500](https://github.com/mastra-ai/mastra/pull/29500))
+
+- The Knowledge explorer now names Notion, Confluence, Zendesk and Fireflies imported scopes by their source, with an icon for each source that has one, instead of showing the raw scope address. ([#29556](https://github.com/mastra-ai/mastra/pull/29556))
+
+- Improved Knowledge explorer notes. A note now shows a linked page's title instead of its `[[scope#path]]` ref, with the ref on hover. This applies to a page's Notes and Mentioned in lists and the graph's mention popup. ([#29580](https://github.com/mastra-ai/mastra/pull/29580))
+
+  Fixed links to pages under parents the explorer hasn't loaded, such as imported Notion pages. Mentions and body links to these pages now link correctly.
+
+  Fixed long refs, page names and scope addresses running past their note card. They now wrap or truncate inside it.
+
+- MCP Apps in Studio now get a JSON-RPC invalid-params error (`-32602`) when they call a tool the app's MCP server doesn't have or keeps for the model. That's the same error an MCP server gives for an unknown tool, so apps can spot a missing tool the same way whichever host they run in. Before, Studio threw a generic internal error. ([#29491](https://github.com/mastra-ai/mastra/pull/29491))
+
+- The tripwire notice now shows its metadata with the read-only code view instead of the code editor. A chat view that uses no other code editor no longer downloads it. ([#29554](https://github.com/mastra-ai/mastra/pull/29554))
+
+- Updated dependencies [[`a0068a9`](https://github.com/mastra-ai/mastra/commit/a0068a9ad1fb0a31ae60a07ecbeae41a32ea4081), [`bb0fcd6`](https://github.com/mastra-ai/mastra/commit/bb0fcd6211a416cece10c20e11f6f3cb70b4c93b), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`ea37ef0`](https://github.com/mastra-ai/mastra/commit/ea37ef03867044002e532fc423c382c34ea17db3), [`8960f55`](https://github.com/mastra-ai/mastra/commit/8960f55dec7ebf39b460ee8664509d2924065b86), [`b518fc9`](https://github.com/mastra-ai/mastra/commit/b518fc9abeb05093aff4b1bb3e74f018e3612078), [`68869db`](https://github.com/mastra-ai/mastra/commit/68869dbb53034aee5868bccef4691af61bf6656e), [`cd369c3`](https://github.com/mastra-ai/mastra/commit/cd369c334cf5af81597d7d61e7419b390f92365b), [`f94beac`](https://github.com/mastra-ai/mastra/commit/f94beac86288cb94e2973c9ed492c8f0d68b919d), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`23308f9`](https://github.com/mastra-ai/mastra/commit/23308f9c193ef852c28f6ec1c6e872f75363c5f7), [`8d07b0b`](https://github.com/mastra-ai/mastra/commit/8d07b0b293812d84c3f45c2806eb53ed45f58324), [`36bbc29`](https://github.com/mastra-ai/mastra/commit/36bbc291292170e68774d6e9a7c76b6a5d930dd8), [`2572609`](https://github.com/mastra-ai/mastra/commit/25726091b3bfd6bd08df3cb6b501ab0c49c5571a), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`f7320ab`](https://github.com/mastra-ai/mastra/commit/f7320abd205aa865e3ae467b7bf82373af30a6aa), [`d6a5f98`](https://github.com/mastra-ai/mastra/commit/d6a5f98df3a1f6d11743e0bdf150358d7db4dd40), [`459757f`](https://github.com/mastra-ai/mastra/commit/459757f07de6905c6abdfc3b08a7f48a808dcc6b), [`2f93851`](https://github.com/mastra-ai/mastra/commit/2f93851c37410a9d9740263a636e802ef9ee2f8d), [`75983cd`](https://github.com/mastra-ai/mastra/commit/75983cdb05ffa4f70aac528220c7fbe5cfa2baf3)]:
+  - @mastra/core@1.83.0-alpha.1
+  - @mastra/client-js@1.60.0-alpha.1
+  - @mastra/react@1.15.0-alpha.1
+
 ## 69.0.0-alpha.0
 
 ### Minor Changes

@@ -862,30 +862,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
-    "model": "llmgateway-providers/azure-ai-foundry/grok-4-1-fast-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 30000,
-    "inputCost": 0.2,
-    "outputCost": 0.5
-  },
-  {
-    "model": "llmgateway-providers/azure-ai-foundry/grok-4-3",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 20000,
-    "maxOutput": 8192,
-    "inputCost": 1.25,
-    "outputCost": 2.5
-  },
-  {
     "model": "llmgateway-providers/azure-anthropic/claude-fable-5",
     "imageInput": true,
     "audioInput": false,
@@ -1028,6 +1004,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 2.5,
     "outputCost": 10
+  },
+  {
+    "model": "llmgateway-providers/azure/gpt-4o-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "llmgateway-providers/azure/gpt-4o-mini-transcribe",
@@ -2588,6 +2576,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.09,
     "outputCost": 0.28
+  },
+  {
+    "model": "llmgateway-providers/inference.net/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "llmgateway-providers/inference.net/llama-3.2-11b-instruct",
@@ -4190,8 +4190,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 384000,
     "inputCost": 0.135,

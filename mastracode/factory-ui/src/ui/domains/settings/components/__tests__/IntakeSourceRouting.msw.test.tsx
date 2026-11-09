@@ -45,8 +45,8 @@ const renderRouting = () =>
       addLabel="Add project or team"
       groups={[{ id: 'linear', items: [{ id: 'proj-1', label: 'Releases' }] }]}
       selectedIds={['proj-1']}
-      pending={false}
-      onToggleItem={async () => {}}
+      saving={false}
+      onToggleItem={() => {}}
     />,
   );
 
@@ -118,6 +118,37 @@ describe('RoutedSourcePicker', () => {
 
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
+  });
+
+  it('shows the picked Factory at once and puts the previous route back when the server refuses it', async () => {
+    stub([]);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/bindings`, async () => {
+        await gate;
+        return HttpResponse.json({ error: 'factory_project_not_found' }, { status: 404 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderRouting();
+
+    const factory = await screen.findByRole('combobox', { name: 'Factory for Releases' });
+    await waitFor(() => expect(factory).toBeEnabled());
+    await user.click(factory);
+    await user.click(await screen.findByRole('option', { name: 'Acme' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Factory for Releases' })).toHaveTextContent('Acme'),
+    );
+
+    release();
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Factory for Releases' })).toHaveTextContent('Not routed'),
+    );
   });
 
   it('offers a retry instead of editable routes when the routes fail to load', async () => {
