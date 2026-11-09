@@ -322,8 +322,10 @@ export class BillingService implements BillingProvider {
       // a retired driver. Legacy direct calls still need driver validation.
       const outbox = (await tx.execute({ sql: 'SELECT id FROM billing_outbox WHERE id = ?', args: [event.id] }))
         .rows[0];
-      if (previous?.delivered === 1n && (retained || outbox))
+      if (previous?.delivered === 1n && (retained || outbox)) {
+        await lifecycle.recoverAcknowledgedUsage(tx, event.account.id, event.account.provider, event.id);
         return { delivered: true as const, payload: String(previous.payload), effect: null };
+      }
       const driver = this.driver(event.account.provider);
       const link = (
         await tx.execute({
@@ -399,6 +401,7 @@ export class BillingService implements BillingProvider {
             args: [event.id, claim.payload],
           });
         await lifecycle.finishEffectInTransaction(tx, claim.effect, accepted);
+        if (accepted) await lifecycle.recoverAcknowledgedUsage(tx, event.account.id, event.account.provider, event.id);
       });
       return result;
     } catch (error) {

@@ -3,6 +3,9 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
 import { join } from 'node:path';
+import { fork } from 'node:child_process';
+import { once } from 'node:events';
+import { PolarBillingDriver } from '../../src/billing/providers/polar.js';
 import { pathToFileURL } from 'node:url';
 import { MastraBilling } from '../../src/billing/mastra.js';
 import { workflowResource } from '../../src/billing/mastra-resources.js';
@@ -14,7 +17,7 @@ import { polarFixture } from '../support/polar.js';
 import { createHmac } from 'node:crypto';
 import { BillingRecovery } from '../../src/billing/recovery.js';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
-import { removeLifecycleMigration } from '../support/billing.js';
+import { removeEffectOwnershipMigration, removeLifecycleMigration } from '../support/billing.js';
 import { referenceDriver } from '../support/reference-driver.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -746,4 +749,250 @@ it('retains the provider for interrupted workflow claims even before an accounti
   await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
   await storage.transition(record.id, claim.record.version, 'uncertain');
   await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
+});
+
+async function interruptedDispatch(kind: 'usage' | 'checkout' = 'usage') {
+  const f = await polarFixture();
+  cleanups.push(f.close);
+  await f.execute('charged-before-sender-death');
+  const event = JSON.parse(String((await f.observer.execute('SELECT payload FROM billing_outbox')).rows[0].payload));
+  if (kind === 'checkout') await f.commercial.provider.reportUsage(event);
+  let signalReached!: () => void;
+  let releasePost!: () => void;
+  const reached = new Promise<void>(resolve => {
+    signalReached = resolve;
+  });
+  const release = new Promise<void>(resolve => {
+    releasePost = resolve;
+  });
+  f.wire.data.pause = {
+    path: kind === 'usage' ? '/v1/events/ingest' : '/v1/checkouts/',
+    reached: signalReached,
+    release,
+  };
+  const child = fork(
+    new URL('../support/usage-delivery-worker.mjs', import.meta.url),
+    [
+      JSON.stringify({
+        url: f.database.url,
+        configuration: f.configuration.polar,
+        catalog: f.configuration.catalog,
+        event,
+        kind,
+        request: {
+          account: event.account,
+          product: f.configuration.catalog.offers[0].key,
+          returnUrl: 'https://app.example.test/billing',
+        },
+      }),
+    ],
+    { execPath: process.execPath, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] },
+  );
+  let stderr = '';
+  child.stderr!.on('data', data => {
+    stderr += data;
+  });
+  const exited = once(child, 'exit');
+  cleanups.push(async () => {
+    releasePost();
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+      await exited;
+    }
+  });
+  await Promise.race([
+    reached,
+    exited.then(() => {
+      throw new Error(`Sender exited before POST: ${stderr}`);
+    }),
+  ]);
+  const reference = await referenceDriver(f.configuration.catalog);
+  cleanups.push(reference.close);
+  const polar = new PolarBillingDriver(
+    f.configuration.polar!,
+    f.configuration.catalog,
+    'loopback-test-token',
+    async () => ({ email: 'trusted@example.test' }),
+  );
+  const next = await BillingService.connect({
+    url: f.database.url,
+    catalog: f.configuration.catalog,
+    activeProvider: 'reference',
+    drivers: [polar, reference.driver],
+  });
+  cleanups.push(() => next.close());
+  for (const grant of f.wire.data.grants) {
+    grant.is_granted = false;
+    grant.is_revoked = true;
+  }
+  for (const subscription of f.wire.data.subscriptions) subscription.status = 'canceled';
+  await next.switchProvider({ workspaceId: f.owner.workspaceId, expectedProvider: 'polar' });
+  const retire = () =>
+    next.retireProvider({
+      workspaceId: f.owner.workspaceId,
+      provider: 'polar',
+      evidence: 'operator:closed-sales',
+      externalSalesClosed: true,
+    });
+  const kill = async () => {
+    child.kill('SIGKILL');
+    await exited;
+    releasePost();
+  };
+  return { f, event, child, reference, next, retire, kill, releasePost, exited };
+}
+
+it.each(['retry', 'replay', 'retirement'] as const)(
+  'recovers a killed usage sender through %s without changing financial history',
+  async recovery => {
+    const { f, event, reference, retire, kill } = await interruptedDispatch();
+    const tables = [
+      'billing_ledger',
+      'billing_outbox',
+      'billing_usage_events',
+      'billing_usage_bindings',
+      'billing_admitted_accounts',
+      'billing_source_owners',
+      'grant_allocations',
+      'billing_catalog',
+      'billing_provider_links',
+    ];
+    const history = () =>
+      Promise.all([
+        ...tables.map(async table => (await f.observer.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows),
+        f.observer
+          .execute('SELECT id, account_id, payload FROM provider_usage ORDER BY rowid')
+          .then(result => result.rows),
+        f.observer
+          .execute(
+            'SELECT id, account_id, source_key, fingerprint, provenance, meter, kind, original_units, consumed_units, valid_from, valid_until FROM credit_grants ORDER BY rowid',
+          )
+          .then(result => result.rows),
+      ]);
+    const before = await history();
+    if (recovery !== 'retry') {
+      expect(await f.commercial.provider.reportUsage(event)).toMatchObject({ status: 'accepted' });
+      // A competing ACK must never clear a sender that can still finish its POST.
+      await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
+    }
+    await kill();
+    if (recovery === 'retry') {
+      await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
+      expect((await f.observer.execute('SELECT delivered FROM provider_usage')).rows).toEqual([{ delivered: 0n }]);
+      expect(['accepted', 'duplicate']).toContain((await f.commercial.provider.reportUsage(event)).status);
+    }
+    if (recovery === 'replay') {
+      const withoutPolar = await BillingService.connect({
+        url: f.database.url,
+        catalog: f.configuration.catalog,
+        activeProvider: 'reference',
+        drivers: [reference.driver],
+      });
+      cleanups.push(() => withoutPolar.close());
+      for (const changed of [
+        { ...event, units: event.units + 1 },
+        { ...event, account: { ...event.account, provider: 'reference' } },
+        { ...event, account: { ...event.account, id: 'another-account' } },
+      ])
+        await expect(withoutPolar.reportUsage(changed)).rejects.toMatchObject({ code: 'conflict' });
+      expect(
+        (await f.observer.execute("SELECT state FROM billing_external_effects WHERE kind = 'usage' ORDER BY rowid"))
+          .rows,
+      ).toEqual([{ state: 'pending' }, { state: 'complete' }]);
+      expect(await withoutPolar.reportUsage(event)).toMatchObject({ status: 'duplicate' });
+    }
+    await retire();
+    expect(
+      (await f.observer.execute("SELECT state FROM billing_external_effects WHERE kind = 'usage' ORDER BY rowid")).rows,
+    ).toEqual([{ state: 'complete' }, { state: 'complete' }]);
+    expect(await history()).toEqual(before);
+    expect((await f.observer.execute('SELECT delivered FROM provider_usage')).rows).toEqual([{ delivered: 1n }]);
+    expect(f.wire.data.events.size).toBe(1);
+    const requests = f.wire.data.requests.filter(request => request.path === '/v1/events/ingest');
+    expect(requests).toHaveLength(2);
+    expect(requests[0].body).toEqual(requests[1].body);
+    const reopened = await BillingService.connect({
+      url: f.database.url,
+      catalog: f.configuration.catalog,
+      activeProvider: 'reference',
+      drivers: [reference.driver],
+    });
+    cleanups.push(() => reopened.close());
+    expect(await reopened.reportUsage(event)).toMatchObject({ status: 'duplicate' });
+    expect(await history()).toEqual(before);
+  },
+);
+
+it('preserves ownerless schema13 dispatches and all original migration checksums after upgrade', async () => {
+  const { f, event, retire, kill } = await interruptedDispatch();
+  await kill();
+  const checksums = (await f.observer.execute('SELECT * FROM billing_migrations WHERE version <= 13 ORDER BY version'))
+    .rows;
+  const effects = (await f.observer.execute('SELECT * FROM billing_external_effects ORDER BY rowid')).rows;
+  const claims = (await f.observer.execute('SELECT * FROM provider_usage')).rows;
+  await removeEffectOwnershipMigration(f.observer);
+  await f.observer.execute('PRAGMA user_version = 13');
+  const upgraded = await BillingService.connect({
+    url: f.database.url,
+    catalog: f.configuration.catalog,
+    activeProvider: 'polar',
+    drivers: [
+      new PolarBillingDriver(f.configuration.polar!, f.configuration.catalog, 'loopback-test-token', async () => ({
+        email: 'trusted@example.test',
+      })),
+    ],
+  });
+  cleanups.push(() => upgraded.close());
+  expect(
+    (await f.observer.execute('SELECT * FROM billing_migrations WHERE version <= 13 ORDER BY version')).rows,
+  ).toEqual(checksums);
+  expect((await f.observer.execute('SELECT * FROM billing_external_effects ORDER BY rowid')).rows).toEqual(effects);
+  expect((await f.observer.execute('SELECT * FROM provider_usage')).rows).toEqual(claims);
+  expect((await f.observer.execute('SELECT * FROM billing_external_effect_owners')).rows).toEqual([]);
+  expect(['accepted', 'duplicate']).toContain((await upgraded.reportUsage(event)).status);
+  expect(await upgraded.reportUsage(event)).toMatchObject({ status: 'duplicate' });
+  await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
+  expect((await f.observer.execute('SELECT state FROM billing_external_effects ORDER BY rowid')).rows).toEqual([
+    { state: 'pending' },
+    { state: 'complete' },
+  ]);
+  await expect(
+    f.observer.execute("UPDATE billing_external_effect_owners SET runtime_id = 'another-owner'"),
+  ).rejects.toThrow();
+  await expect(f.observer.execute('DELETE FROM billing_external_effect_owners')).rejects.toThrow();
+  await expect(f.observer.execute('UPDATE billing_runtimes SET pid = 1')).rejects.toThrow();
+  await expect(f.observer.execute('DELETE FROM billing_runtimes')).rejects.toThrow();
+});
+
+it('retains a killed hosted sender despite unrelated acknowledged usage', async () => {
+  const { f, child, retire, kill } = await interruptedDispatch('checkout');
+  const owner = (
+    await f.observer.execute(
+      "SELECT r.pid FROM billing_external_effect_owners o JOIN billing_runtimes r ON r.id = o.runtime_id JOIN billing_external_effects e ON e.id = o.effect_id WHERE e.kind = 'checkout'",
+    )
+  ).rows;
+  expect(owner).toEqual([{ pid: BigInt(child.pid!) }]);
+  await kill();
+  await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
+  expect((await f.observer.execute("SELECT state FROM billing_external_effects WHERE kind = 'checkout'")).rows).toEqual(
+    [{ state: 'pending' }],
+  );
+});
+
+it.each(['usage', 'checkout'] as const)('retains an uncertain %s result after its sender exits', async kind => {
+  const { f, event, retire, releasePost, exited } = await interruptedDispatch(kind);
+  if (kind === 'usage') f.wire.data.lostUsage = true;
+  else f.wire.data.lostHosted = true;
+  releasePost();
+  await exited;
+  await expect(retire()).rejects.toMatchObject({ code: 'conflict' });
+  expect(
+    (await f.observer.execute({ sql: 'SELECT state FROM billing_external_effects WHERE kind = ?', args: [kind] })).rows,
+  ).toEqual([{ state: 'uncertain' }]);
+  if (kind === 'usage') {
+    expect((await f.observer.execute('SELECT delivered FROM provider_usage')).rows).toEqual([{ delivered: 0n }]);
+    expect(await f.commercial.provider.reportUsage(event)).toMatchObject({ status: 'duplicate' });
+    await retire();
+    expect(f.wire.data.events.size).toBe(1);
+  }
 });

@@ -440,6 +440,17 @@ const lifecycleStatements = [
   `CREATE TRIGGER billing_external_effects_no_delete BEFORE DELETE ON billing_external_effects BEGIN SELECT RAISE(ABORT, 'External effect history is retained'); END`,
 ];
 
+const effectOwnershipStatements = [
+  `CREATE TABLE billing_external_effect_owners (
+    effect_id TEXT PRIMARY KEY REFERENCES billing_external_effects(id),
+    runtime_id TEXT NOT NULL REFERENCES billing_runtimes(id)
+  ) STRICT`,
+  ...['billing_external_effect_owners', 'billing_runtimes'].flatMap(table => [
+    `CREATE TRIGGER ${table}_no_update BEFORE UPDATE ON ${table} BEGIN SELECT RAISE(ABORT, 'Runtime ownership is immutable'); END`,
+    `CREATE TRIGGER ${table}_no_delete BEFORE DELETE ON ${table} BEGIN SELECT RAISE(ABORT, 'Runtime ownership is retained'); END`,
+  ]),
+];
+
 const migrations = [
   { version: 1, statements: initialStatements },
   { version: 2, statements: organizationStatements },
@@ -454,6 +465,7 @@ const migrations = [
   { version: 11, statements: driverStatements },
   { version: 12, statements: webhookStatements },
   { version: 13, statements: lifecycleStatements },
+  { version: 14, statements: effectOwnershipStatements },
 ].map(migration => ({
   ...migration,
   checksum: createHash('sha256').update(migration.statements.join('\n')).digest('hex'),
@@ -526,6 +538,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     ...commercialCatalogStatements,
     ...driverStatements.filter(sql => sql.startsWith('CREATE')),
     ...lifecycleStatements,
+    ...effectOwnershipStatements,
   ]
     .map(normalizedSql)
     .sort();

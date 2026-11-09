@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Transaction } from '@libsql/client/node';
-import { BillingError } from '../contracts.js';
+import { BillingError, usageEventSchema } from '../contracts.js';
 import type { ProviderAccount } from '../contracts.js';
 import type { DriverObservation } from '../driver.js';
 import { BillingDatabase } from './database.js';
 import { accountFromRow } from './accounts.js';
+// Each process registers its own immutable identity before committing a dispatch.
+const runtimeId = randomUUID();
 const opaqueId = (value: string) => createHash('sha256').update(value).digest('hex');
 
 export async function isRetired(tx: Transaction, accountId: string, provider: string) {
@@ -154,6 +156,7 @@ export class ProviderLifecycleStorage {
           (row.valid_until === null || Date.parse(String(row.valid_until)) > now)
         )
           throw new BillingError('conflict');
+      await this.recoverAcknowledgedUsage(tx, account.id, account.provider);
       // Account-wide uncertain activity is deliberately conservative: an active
       // provider execution can still hold a historical provider's grant.
       const blockers = await tx.execute({
@@ -227,7 +230,62 @@ export class ProviderLifecycleStorage {
       sql: "INSERT INTO billing_external_effects VALUES (?, ?, ?, ?, ?, 'pending')",
       args: [id, account.id, account.provider, kind, externalKey],
     });
+    await tx.execute({
+      sql: 'INSERT INTO billing_runtimes VALUES (?, ?) ON CONFLICT DO NOTHING',
+      args: [runtimeId, process.pid],
+    });
+    await tx.execute({
+      sql: 'INSERT INTO billing_external_effect_owners VALUES (?, ?)',
+      args: [id, runtimeId],
+    });
     return id;
+  }
+  // An ACK resolves the logical event, but a live sender can still POST after
+  // retirement. Only proven-dead owners may release an unfinished dispatch.
+  async recoverAcknowledgedUsage(tx: Transaction, accountId: string, provider: string, eventId?: string) {
+    const candidates = (
+      await tx.execute({
+        sql: `SELECT e.id, e.external_key, r.pid, v.payload AS event, o.payload AS outbox
+        FROM billing_external_effects e
+        JOIN billing_external_effect_owners owner ON owner.effect_id = e.id
+        JOIN billing_runtimes r ON r.id = owner.runtime_id
+        JOIN provider_usage u ON u.id = e.external_key AND u.account_id = e.account_id AND u.delivered = 1
+        LEFT JOIN billing_usage_events v ON v.id = u.id
+        LEFT JOIN billing_outbox o ON o.id = u.id
+        WHERE e.account_id = ? AND e.provider = ? AND e.kind = 'usage' AND e.state = 'pending'
+        AND (? IS NULL OR e.external_key = ?)`,
+        args: [accountId, provider, eventId ?? null, eventId ?? null],
+      })
+    ).rows;
+    for (const candidate of candidates) {
+      const payload = candidate.event ?? candidate.outbox;
+      if (payload === null) continue;
+      let original;
+      try {
+        original = usageEventSchema.safeParse(JSON.parse(String(payload)));
+      } catch {
+        continue;
+      }
+      if (
+        !original.success ||
+        original.data.id !== candidate.external_key ||
+        original.data.account.id !== accountId ||
+        original.data.account.provider !== provider
+      )
+        continue;
+      if (candidate.event !== null && candidate.outbox !== null && candidate.event !== candidate.outbox) continue;
+      // No TTL: EPERM, reused/live PIDs and unknown ownership stay fenced.
+      try {
+        process.kill(Number(candidate.pid), 0);
+        continue;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
+      }
+      await tx.execute({
+        sql: "UPDATE billing_external_effects SET state = 'complete' WHERE id = ? AND state = 'pending'",
+        args: [candidate.id],
+      });
+    }
   }
   finishEffect(id: string, complete: boolean) {
     return this.database.write(tx => this.finishEffectInTransaction(tx, id, complete));
