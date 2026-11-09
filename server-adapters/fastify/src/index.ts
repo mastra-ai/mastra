@@ -226,6 +226,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
     reply.raw.on('close', cancelReaderOnResponseClose);
     request?.raw.on('close', cancelReaderOnRequestClose);
+    // The client may have dropped while the handler was still running, in which case 'close' already fired.
+    if (reply.raw.destroyed) cancelReaderOnResponseClose();
 
     try {
       while (true) {
@@ -440,6 +442,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         reply.raw.once('error', onResError);
         reply.raw.on('close', cancelReaderOnResponseClose);
         request?.raw.on('close', cancelReaderOnRequestClose);
+        // The client may have dropped while the handler was still running, in which case 'close' already fired.
+        if (reply.raw.destroyed) cancelReaderOnResponseClose();
 
         try {
           while (true) {
