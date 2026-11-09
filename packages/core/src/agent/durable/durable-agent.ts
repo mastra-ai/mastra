@@ -2842,13 +2842,45 @@ export class DurableAgent<
     }
     if (super.abortRunStream(runId)) {
       this.#abortDurableRun(runId);
+      await this.#cancelParkedRun(runId);
       return true;
     }
     try {
-      return await requestAcknowledgedAbort(this.pubsub, runId);
+      const canceled = await this.#cancelParkedRun(runId);
+      return (await requestAcknowledgedAbort(this.pubsub, runId)) || canceled;
     } finally {
       this.#abortLocalController(runId);
     }
+  }
+
+  /**
+   * Record the abort of a parked run in shared storage, so a resume on any server
+   * refuses it. The in-process resume fence only covers this process. The status
+   * moves from `suspended` to `canceled` with a guarded write: a resume that claimed
+   * the run first has already moved it to `running`, and that run is stopped by the
+   * abort request instead. Stores that cannot enforce the guard atomically get the
+   * same check on a best-effort basis, so a finished or running run is never marked
+   * canceled. Resolves whether this call canceled the parked run. Storage errors
+   * propagate: an abort acknowledged without this write would not stop another
+   * server from resuming the run.
+   */
+  async #cancelParkedRun(runId: string): Promise<boolean> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return false;
+    const workflowName = DurableStepIds.AGENTIC_LOOP;
+    if ((await workflowsStore.loadWorkflowRunStatus({ workflowName, runId })) !== 'suspended') return false;
+    const updated = await workflowsStore.updateWorkflowState({
+      workflowName,
+      runId,
+      opts: { status: 'canceled', expectedStatus: 'suspended' },
+    });
+    return updated !== undefined;
+  }
+
+  async #isRunCanceledInStorage(runId: string): Promise<boolean> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const status = await workflowsStore?.loadWorkflowRunStatus({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
+    return status === 'canceled';
   }
 
   /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
@@ -3356,10 +3388,11 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
+    const fencedHere = agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub());
+    if (fencedHere || (await this.#isRunCanceledInStorage(runId))) {
       // The fenced run can never continue, so the rejected caller must not find it in
       // listSuspendedRuns() afterwards (#27619).
-      await this.#deleteFencedSuspendedRun(runId);
+      if (fencedHere) await this.#deleteFencedSuspendedRun(runId);
       throw new MastraError({
         id: 'AGENT_RESUME_ABORTED_RUN',
         domain: ErrorDomain.AGENT,

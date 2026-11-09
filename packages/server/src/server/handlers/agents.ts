@@ -339,8 +339,11 @@ async function validateDurableToolCallAccess({
       !!snapshot &&
       snapshot.status === 'suspended' &&
       (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
+    // An aborted parked run is final: pass it on after the ownership checks so the agent
+    // refuses the resume with its aborted-run conflict instead of waiting out the deadline.
+    const aborted = !!workflowRun && snapshot?.status === 'canceled';
 
-    if (ready || Date.now() >= deadline || abortSignal?.aborted) {
+    if (ready || aborted || Date.now() >= deadline || abortSignal?.aborted) {
       if (!workflowRun) {
         throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
       }
@@ -350,7 +353,7 @@ async function validateDurableToolCallAccess({
         throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
       }
 
-      if (!ready || input?.agentId !== agent.id) {
+      if ((!ready && !aborted) || input?.agentId !== agent.id) {
         throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
       }
       await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra, requestContext);
