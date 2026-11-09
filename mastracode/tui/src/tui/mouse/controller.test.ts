@@ -28,9 +28,15 @@ const COLS = 100;
  */
 function createHarness({
   rowOffset = 0,
+  dialogMouseEnabled = true,
   inputMouseModeEnabled = false,
   answerCursorQueries = true,
-}: { rowOffset?: number; inputMouseModeEnabled?: boolean; answerCursorQueries?: boolean } = {}) {
+}: {
+  rowOffset?: number;
+  dialogMouseEnabled?: boolean;
+  inputMouseModeEnabled?: boolean;
+  answerCursorQueries?: boolean;
+} = {}) {
   const screen = new xterm.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
   let onInput: ((data: string) => void) | undefined;
   let output = Promise.resolve();
@@ -69,7 +75,7 @@ function createHarness({
   const editor = new CustomEditor(ui, getEditorTheme());
   ui.addChild(editor);
   ui.setFocus(editor);
-  const controller = new MouseController(ui, editor, { inputMouseModeEnabled });
+  const controller = new MouseController(ui, editor, { dialogMouseEnabled, inputMouseModeEnabled });
   ui.start();
 
   const render = async () => {
@@ -169,6 +175,20 @@ describe('MouseController on the real pi-tui renderer', () => {
     handle.hide();
     await harness.render();
     expect(harness.screen.modes.mouseTrackingMode).toBe('none');
+  });
+
+  it('leaves dialogs to the terminal unless opted in, and picks up an open dialog once opted in', async () => {
+    harness = createHarness({ dialogMouseEnabled: false });
+    const { selected } = modalWithList(harness.ui, 3);
+    await harness.render();
+    expect(harness.screen.modes.mouseTrackingMode).toBe('none');
+
+    harness.controller.setDialogMouseEnabled(true);
+    await harness.render();
+    expect(harness.screen.modes.mouseTrackingMode).toBe('any');
+    const item = harness.find('item-2');
+    await harness.click(item.row, item.col);
+    expect(selected).toEqual(['item-2']);
   });
 
   it('swallows a cursor position reply that arrives after the query timed out', async () => {
@@ -607,6 +627,24 @@ describe('input box mouse mode', () => {
     await h.render();
     expect(h.controller.isInputMouseMode()).toBe(false);
     expect(h.editor.getText()).toBe('hello!');
+  });
+
+  it('with only the input box opted in, an open dialog hands the mouse back to the terminal until it closes', async () => {
+    harness = createHarness({ dialogMouseEnabled: false, inputMouseModeEnabled: true });
+    const h = harness;
+    h.editor.setText('hello');
+    await h.render();
+    h.send(RIGHT);
+    await h.render();
+    expect(h.screen.modes.mouseTrackingMode).toBe('any');
+
+    const { handle } = modalWithList(h.ui, 3);
+    await h.render();
+    expect(h.screen.modes.mouseTrackingMode).toBe('none');
+
+    handle.hide();
+    await h.render();
+    expect(h.screen.modes.mouseTrackingMode).toBe('any');
   });
 
   it('a click moves the cursor to the clicked character', async () => {

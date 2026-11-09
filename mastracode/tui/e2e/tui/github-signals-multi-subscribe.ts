@@ -5,6 +5,7 @@ import {
   githubSignalsInProcessApp,
   prepareGithubSignalsMultiFixture,
 } from './github-signals-e2e-utils.js';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 export const githubSignalsMultiSubscribeScenario = {
@@ -17,6 +18,7 @@ export const githubSignalsMultiSubscribeScenario = {
     mkdirSync(context.projectDir, { recursive: true });
     enableGithubSignals(context);
     prepareGithubSignalsMultiFixture(context);
+    enableMouseSettings(context.appDataDir, { dialogs: true, input: false });
   },
   env({ projectDir }) {
     return githubSignalsEnv(projectDir, process.env.PATH);

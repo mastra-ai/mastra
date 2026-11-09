@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 import { typeTextSlowly } from './typing-utils.js';
 
@@ -49,6 +50,7 @@ export const mouseModalAndAutocompleteScenario = {
     mkdirSync(commandsDir, { recursive: true });
     writeFileSync(join(commandsDir, 'mouse-alpha.md'), '---\ndescription: Mouse alpha command\n---\nAlpha.\n');
     writeFileSync(join(commandsDir, 'mouse-bravo.md'), '---\ndescription: Mouse bravo command\n---\nBravo.\n');
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

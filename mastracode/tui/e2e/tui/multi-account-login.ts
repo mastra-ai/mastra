@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { anthropicOAuthProvider } from '@mastra/code-sdk/auth/providers/anthropic';
 import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { createGlobalPatchScope } from './global-patches.js';
-import { readMutableSettingsFixture } from './settings-fixture.js';
+import { enableMouseSettings, readMutableSettingsFixture } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 let scenarioAppDataDir = '';
@@ -41,6 +41,7 @@ export const multiAccountLoginScenario = {
     };
     writeFileSync(join(appDataDir, 'settings.json'), JSON.stringify(settings, null, 2));
     mkdirSync(projectDir, { recursive: true });
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();

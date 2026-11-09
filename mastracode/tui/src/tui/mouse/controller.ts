@@ -1,8 +1,9 @@
 /**
  * Mouse support scoped to where Mastra Code owns the interaction: capturing
- * modal overlays and the slash autocomplete list. Mouse tracking is enabled
- * only while one of those is on screen, so the transcript keeps native wheel
- * scrollback and text selection the rest of the time.
+ * modal overlays and the slash autocomplete list (opt-in through the
+ * `mouseDialogs` setting). Mouse tracking is enabled only while one of those
+ * is on screen, so the transcript keeps native wheel scrollback and text
+ * selection the rest of the time.
  *
  * - Wheel events become ↑/↓ key input for whichever component has focus.
  * - Left clicks on a modal activate the target found by walking the component
@@ -16,7 +17,7 @@
  *   Autocomplete rows are resolved relative to the cursor; modals are shifted
  *   by the measured offset.
  *
- * Input mouse mode (opt-in through the `inputMouseMode` setting) also
+ * Input mouse mode (opt-in through the `mouseInput` setting) also
  * captures the mouse while no dialog is open, for the input box: a press
  * places the cursor, a drag selects, and the release copies the selection
  * through OSC 52. It turns on when you type or edit in the input box and off
@@ -58,6 +59,8 @@ export class MouseController {
     | { event: TerminalMouseEvent; action: MouseAction; timer: ReturnType<typeof setTimeout> }
     | undefined;
   private lastHoverCell: string | undefined;
+  /** Whether the user opted in to mouse support for dialogs and slash suggestions in /settings. */
+  private dialogMouseEnabled: boolean;
   /** Whether the user opted in to input mouse mode in /settings. */
   private inputMouseModeEnabled: boolean;
   /** Whether input mouse mode is currently capturing the mouse. */
@@ -86,8 +89,9 @@ export class MouseController {
   constructor(
     private readonly ui: TUI,
     private readonly editor: CustomEditor,
-    options: { inputMouseModeEnabled?: boolean } = {},
+    options: { dialogMouseEnabled?: boolean; inputMouseModeEnabled?: boolean } = {},
   ) {
+    this.dialogMouseEnabled = options.dialogMouseEnabled ?? false;
     this.inputMouseModeEnabled = options.inputMouseModeEnabled ?? false;
     this.removeInputListener = ui.addInputListener(data => this.handleInput(data));
     editor.onAction('editInput', () => {
@@ -138,6 +142,14 @@ export class MouseController {
     this.onInputMouseModeChange?.();
   }
 
+  /** Applies the /settings opt-in for dialogs and slash suggestions. */
+  setDialogMouseEnabled(enabled: boolean): void {
+    if (this.dialogMouseEnabled === enabled) return;
+    this.dialogMouseEnabled = enabled;
+    // The render re-syncs tracking for whatever is on screen.
+    this.ui.requestRender();
+  }
+
   setInputMouseMode(enabled: boolean): void {
     if (enabled && !this.inputMouseModeEnabled) return;
     if (this.inputMouseMode === enabled) return;
@@ -152,11 +164,17 @@ export class MouseController {
   }
 
   private wantsTracking(): boolean {
-    return (
-      this.inputMouseMode ||
-      tuiInternals(this.ui).getTopmostVisibleOverlay() !== undefined ||
-      this.editor.isShowingAutocomplete()
-    );
+    return this.inputOwnsPointer() || this.dialogOverlay() !== undefined || this.suggestionsOwnPointer();
+  }
+
+  /** The topmost dialog, when dialogs are opted in to mouse support. */
+  private dialogOverlay(): OverlayEntry | undefined {
+    return this.dialogMouseEnabled ? tuiInternals(this.ui).getTopmostVisibleOverlay() : undefined;
+  }
+
+  /** True when the slash suggestion list is open and opted in to mouse support. */
+  private suggestionsOwnPointer(): boolean {
+    return this.dialogMouseEnabled && this.editor.isShowingAutocomplete();
   }
 
   /** True when pointer events belong to the input box rather than a dialog or suggestion list. */
@@ -228,7 +246,7 @@ export class MouseController {
     const inputOwnsPointer = this.inputOwnsPointer();
     if (event.kind === 'wheelUp' || event.kind === 'wheelDown') {
       // Outside dialogs and suggestions, the first tick hands the wheel back to the terminal.
-      if (inputOwnsPointer && !this.editor.isShowingAutocomplete()) {
+      if (inputOwnsPointer && !this.suggestionsOwnPointer()) {
         this.setInputMouseMode(false);
         return { consume: true };
       }
@@ -270,8 +288,7 @@ export class MouseController {
    * longer reaches the bottom of the screen, or a multiplexer pane offset).
    */
   private handlePointer(event: TerminalMouseEvent, action: MouseAction): void {
-    const overlay = tuiInternals(this.ui).getTopmostVisibleOverlay();
-    if (!overlay && !this.editor.isShowingAutocomplete() && action !== 'inputPress') return;
+    if (!this.dialogOverlay() && !this.suggestionsOwnPointer() && action !== 'inputPress') return;
 
     const pending = this.pendingPointer;
     if (pending) {
@@ -295,7 +312,7 @@ export class MouseController {
       this.resolveInputPress(event, cursorRow);
       return;
     }
-    const overlay = tuiInternals(this.ui).getTopmostVisibleOverlay();
+    const overlay = this.dialogOverlay();
     if (overlay) {
       const shifted = { ...event, row: event.row - (cursorRow === undefined ? 0 : this.overlayRowShift(cursorRow)) };
       // Pointer events outside the modal are ignored; the modal stays in control.
@@ -310,7 +327,7 @@ export class MouseController {
       }
       return;
     }
-    if (cursorRow === undefined || !this.editor.isShowingAutocomplete()) return;
+    if (cursorRow === undefined || !this.suggestionsOwnPointer()) return;
     if (this.editor.pointAutocompleteRow(event.row - cursorRow, action)) this.ui.requestRender();
   }
 
@@ -320,7 +337,7 @@ export class MouseController {
       this.endInputDrag();
       return;
     }
-    if (this.editor.isShowingAutocomplete() && this.editor.pointAutocompleteRow(event.row - cursorRow, 'click')) {
+    if (this.suggestionsOwnPointer() && this.editor.pointAutocompleteRow(event.row - cursorRow, 'click')) {
       this.endInputDrag();
       this.ui.requestRender();
       return;

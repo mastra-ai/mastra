@@ -2,12 +2,13 @@
 '@mastra/code-sdk': minor
 ---
 
-Added an `inputMouseMode` preference to global settings (`GlobalSettings.preferences.inputMouseMode`). It defaults to `false` and controls whether the Mastra Code TUI input box captures the mouse while you type.
+Added `mouseDialogs` and `mouseInput` preferences to global settings (`GlobalSettings.preferences`). Both default to `false` and control whether the Mastra Code TUI uses the mouse in dialogs and slash suggestions, and in the input box while you type.
 
 ```ts
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 
 const settings = loadSettings();
-settings.preferences.inputMouseMode = true;
+settings.preferences.mouseDialogs = true;
+settings.preferences.mouseInput = true;
 saveSettings(settings);
 ```

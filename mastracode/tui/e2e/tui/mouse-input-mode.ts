@@ -13,7 +13,7 @@ function expectTracking(terminal: Parameters<McE2eScenario['run']>[0]['terminal'
 export const mouseInputModeScenario = {
   name: 'mouse-input-mode',
   description:
-    'With the opt-in input mouse mode setting on, typing or editing captures the mouse for the input box (clicks place the cursor, a drag selects and copies); a wheel tick, an outside click or submitting hands it back.',
+    'With the Mouse setting at "Input box only", typing or editing captures the mouse for the input box (clicks place the cursor, a drag selects and copies); a wheel tick, an outside click or submitting hands it back.',
   testName:
     'opts in through /settings, edits the prompt with the mouse and hands the mouse back on wheel, outside click and submit',
   prepare({ appDataDir }) {
@@ -58,13 +58,22 @@ export const mouseInputModeScenario = {
     for (let i = 0; i < 5; i++) terminal.write('\x7f');
     await runtime.waitForScreenTextAbsent(/→ draft/, terminal, 8_000);
 
-    // Opt in through /settings.
+    // Opt in through /settings with the keyboard: dialogs are not opted in, so /settings leaves the mouse alone.
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Input mouse mode/, terminal, 8_000);
-    terminal.clickText?.('Input mouse mode');
-    await runtime.waitForScreenText(/The terminal keeps the mouse/, terminal, 8_000);
-    terminal.clickText?.('Typing or editing captures the mouse');
-    await runtime.waitForScreenText(/Input mouse mode\s+On/, terminal, 8_000);
+    await runtime.waitForScreenText(/Mouse\s+Off/, terminal, 8_000);
+    await terminal.flushInput?.();
+    expectTracking(terminal, 'none', 'while /settings is open with dialog mouse off');
+    for (let i = 0; i < 20 && !/→\s*Mouse\b/.test(terminal.serialize().view); i++) {
+      terminal.write('\x1b[B');
+      await terminal.flushInput?.();
+      await runtime.sleep(50);
+    }
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Dialogs \+ input box/, terminal, 8_000);
+    terminal.write('\x1b[B\x1b[B\r');
+    await runtime.waitForScreenText(/Mouse\s+Input box only/, terminal, 8_000);
+    await terminal.flushInput?.();
+    expectTracking(terminal, 'none', 'in /settings after opting in to the input box only');
     terminal.write('\x1b');
     await runtime.waitForScreenText(OFF, terminal, 8_000);
     await terminal.flushInput?.();

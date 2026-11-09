@@ -346,8 +346,10 @@ export interface GlobalSettings {
      * honored while its API key is configured.
      */
     webSearchProvider: WebSearchProviderSetting;
+    /** Opt-in mouse support for TUI dialogs and slash suggestions: clicks, hover and wheel scrolling. */
+    mouseDialogs: boolean;
     /** Opt-in mouse mode for the TUI input box: clicks and drags edit the prompt while typing. */
-    inputMouseMode: boolean;
+    mouseInput: boolean;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -522,7 +524,8 @@ const DEFAULTS: GlobalSettings = {
     subagentsEnabled: false,
     previewLines: 2,
     webSearchProvider: 'auto',
-    inputMouseMode: false,
+    mouseDialogs: false,
+    mouseInput: false,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -710,7 +713,8 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
       typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
     previewLines: parsePreviewLines(raw),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
-    inputMouseMode: raw.inputMouseMode === true,
+    mouseDialogs: raw.mouseDialogs === true,
+    mouseInput: raw.mouseInput === true,
   };
 }
 

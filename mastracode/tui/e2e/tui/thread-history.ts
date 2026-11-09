@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject } from '@mastra/code-sdk/utils/project';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 const PACK_NAME = 'Thread Resume E2E';
@@ -68,6 +69,7 @@ values
   ('msg-mc-e2e-seeded-assistant', ${quoteSql(threadId)}, ${quoteSql(assistantContent)}, 'assistant', 'v2', ${quoteSql(new Date(nowMs + 1000).toISOString())}, ${quoteSql(resourceId)});
 `;
     execFileSync('sqlite3', [dbPath], { input: sql });
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 export const webSearchProviderSettingsScenario = {
@@ -20,6 +21,7 @@ export const webSearchProviderSettingsScenario = {
       webSearchProvider: 'auto',
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
