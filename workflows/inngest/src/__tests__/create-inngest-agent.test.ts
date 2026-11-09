@@ -379,6 +379,13 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
   });
 
+  // A run whose frames cannot be published still has to outlive the durable
+  // reader's pending-frame deadline (`LOGGED_EVENT_DELIVERY_TIMEOUT_MS`, 10s in
+  // `packages/core/src/agent/durable/stream-adapter.ts`) before it closes. Keep
+  // this budget above that deadline so the assertion tests termination rather
+  // than the reader's watchdog, while still bounding a genuine hang.
+  const PUBLISH_FAILURE_TERMINATION_BUDGET_MS = 15_000;
+
   it.each(['stream', 'generate'] as const)(
     '%s terminates when the opening event and error event cannot be published',
     async method => {
@@ -424,7 +431,10 @@ describe('createInngestAgent observe-replay wiring', () => {
         await Promise.race([
           run(),
           new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error('Stream did not terminate after publish failure')), 1000);
+            timer = setTimeout(
+              () => reject(new Error('Stream did not terminate after publish failure')),
+              PUBLISH_FAILURE_TERMINATION_BUDGET_MS,
+            );
           }),
         ]);
       } finally {
@@ -901,6 +911,14 @@ describe('InngestAgent parity surface', () => {
 
   async function publishStreamEvent(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string, event: any) {
     await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
+  }
+
+  // Durable delivery stamps each chunk with its pubsub log index so late
+  // subscribers can order frames. The parity checks below assert the chunk
+  // sequence itself, so drop the index before comparing.
+  function withoutLogIndex<T extends { index?: number }>(chunk: T) {
+    const { index: _index, ...rest } = chunk;
+    return rest;
   }
 
   it.each([
@@ -1734,7 +1752,7 @@ describe('InngestAgent parity surface', () => {
       const received = [];
       for await (const chunk of result.fullStream) received.push(chunk);
 
-      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      expect(received.map(withoutLogIndex)).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
       expect(received).not.toContainEqual(originalToolCall);
       expect(received).not.toContainEqual(originalSuspension);
     } finally {
@@ -1820,7 +1838,7 @@ describe('InngestAgent parity surface', () => {
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
-      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolResults.map(withoutLogIndex)).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
       expect(result.toolCalls).toEqual([]);
     } finally {
       globalRunRegistry.delete(runId);
