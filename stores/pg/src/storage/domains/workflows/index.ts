@@ -7,6 +7,7 @@ import {
   assertWorkflowStepGuard,
   isWorkflowStepConflictError,
   latestStepResults,
+  WorkflowStepConflictError,
   normalizePerPage,
   pickStateKeys,
   stateBaseOf,
@@ -744,6 +745,27 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   /**
+   * A jsonb array of {@link EntryRow} with the entries of the steps `stepIdsParam` names in the run
+   * `alias` refers to: each step's latest entry (up to `upToSeqParam`, when given) and the step
+   * patches after it.
+   */
+  #stepEntriesSql(alias: string, stepIdsParam: string, upToSeqParam?: string): string {
+    const upTo = upToSeqParam ? `AND (${upToSeqParam}::int IS NULL OR e.seq <= ${upToSeqParam}::int)` : '';
+    return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', x.payload
+        ) ORDER BY x.seq), '[]'::jsonb)
+      FROM (
+        SELECT e.seq, e.kind, e.step_id, e.payload,
+          MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq
+        FROM ${this.#entriesTable()} e
+        WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
+          AND e.kind IN ('step', 'step-patch') AND e.step_id = ANY(${stepIdsParam}::text[])
+          ${upTo}
+      ) x
+      WHERE x.seq >= x.step_seq)`;
+  }
+
+  /**
    * A jsonb array of {@link EntryRow} with the entries `materializeState` uses for the state of the
    * storage v2 run `alias` refers to as of a version: `seqParam` its `seq` (latest when null),
    * `draftParam` whether it is a draft. For a draft, every state entry up to it, as the drafts it is
@@ -1002,20 +1024,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       // One statement, so the header checked and the steps read are the same version of the run:
       // each step's latest entry (up to `upToSeq`) and the step patches after it.
       const run = await this.#db.client.oneOrNone<{ lastSeq: number; runToken: string; entries: EntryRow[] }>(
-        `SELECT r."lastSeq", r."runToken", (
-           SELECT COALESCE(jsonb_agg(jsonb_build_object(
-               'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', x.payload
-             ) ORDER BY x.seq), '[]'::jsonb)
-           FROM (
-             SELECT e.seq, e.kind, e.step_id, e.payload,
-               MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq
-             FROM ${this.#entriesTable()} e
-             WHERE e.workflow_name = r.workflow_name AND e.run_id = r.run_id
-               AND e.kind IN ('step', 'step-patch') AND e.step_id = ANY($3::text[])
-               AND ($4::int IS NULL OR e.seq <= $4::int)
-           ) x
-           WHERE x.seq >= x.step_seq
-         ) AS entries
+        `SELECT r."lastSeq", r."runToken", ${this.#stepEntriesSql('r', '$3', '$4')} AS entries
          FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
         [workflowName, runId, stepIds, upToSeq ?? null],
       );
@@ -1331,16 +1340,31 @@ export class WorkflowsPG extends WorkflowsStorage {
     let snapshot: WorkflowRunState | null = null;
     if (run) {
       if (!matchesExpectedWorkflowStatus(run.header.status, expected)) return null;
-      // The run's lock is held, so this read sees every append committed before it.
+      // The run's lock is held, so this read sees every append committed before it. The guard and
+      // the write below only read the guarded step and its predecessor, so the snapshot holds just
+      // those, and the read under the lock doesn't grow with the run.
+      const stepIds = [stepId, ...(startGuard?.previousStep ? [startGuard.previousStep.stepId] : [])];
+      const { entries } = await t.one<{ entries: EntryRow[] }>(
+        `SELECT ${this.#stepEntriesSql('r', '$3')} AS entries FROM ${this.#runsTable()} r
+         WHERE r.workflow_name = $1 AND r.run_id = $2`,
+        [workflowName, runId, stepIds],
+      );
+      snapshot = materializeWorkflowRun(run.header, toEntries(entries));
+    }
+    try {
+      // Throws when the run isn't stored.
+      assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
+    } catch (error) {
+      if (!run || !isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+      // Recovering from a completed delivery takes the whole run as stored.
       const { entries } = await t.one<{ entries: EntryRow[] }>(
         `SELECT ${this.#entriesSql('r')} AS entries FROM ${this.#runsTable()} r
          WHERE r.workflow_name = $1 AND r.run_id = $2`,
         [workflowName, runId],
       );
-      snapshot = await this.#materializeRun(t, run.header, entries);
+      const stored = await this.#materializeRun(t, run.header, entries);
+      throw new WorkflowStepConflictError('completed', error.storedResult, stored.requestContext, stored);
     }
-    // Throws when the run isn't stored.
-    assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
     if (!snapshot) return null;
 
     const result = steps[stepId]!;
