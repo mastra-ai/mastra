@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Reuse core's stream-bus and caller-abort setup in Inngest agents while preserving the Inngest transport, replay-cache identity, and existing stream delivery.
+Preserve existing stream replay and cancellation behavior for Inngest agents, including agents configured with a custom replay cache.
