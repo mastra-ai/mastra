@@ -174,7 +174,7 @@ describe('AppLayout', () => {
     renderApp();
 
     const alert = await screen.findByRole('alert');
-    expect(within(alert).getByRole('heading', { name: 'Factory needs its encryption key' })).toBeInTheDocument();
+    expect(within(alert).getByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
     expect(within(alert).getByText('This deployment is using a different one than before.')).toBeInTheDocument();
     expect(within(alert).getByText('FACTORY_CREDENTIAL_ENCRYPTION_KEY').tagName).toBe('CODE');
     expect(within(alert).getByRole('button', { name: 'Copy FACTORY_CREDENTIAL_ENCRYPTION_KEY' })).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe('AppLayout', () => {
     renderApp();
 
     expect(
-      await screen.findByRole('heading', { name: 'Factory needs its encryption key' }, { timeout: 5000 }),
+      await screen.findByRole('heading', { name: 'Factory needs its encryption key.' }, { timeout: 5000 }),
     ).toBeInTheDocument();
     expect(calls).toBe(2);
   });
@@ -241,7 +241,7 @@ describe('AppLayout', () => {
       focusManager.setFocused(false);
       focusManager.setFocused(true);
 
-      expect(await screen.findByRole('heading', { name: 'Factory needs its encryption key' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
     } finally {
       focusManager.setFocused(undefined);
     }
