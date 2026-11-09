@@ -83,4 +83,47 @@ describe('MessageList.cloneWithCompletedSteps', () => {
       structuredOutput: { answer: 1 },
     });
   });
+  const settledTool = {
+    type: 'tool-invocation',
+    toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'search', args: {}, result: { ok: true } },
+  } as const;
+  const responseText = (list: MessageList) =>
+    list.get.response.db().flatMap(m => m.content.parts.flatMap(p => (p.type === 'text' ? [p.text] : [])));
+
+  it('adds the streamed text when a settled step holds only a recovered tool result', () => {
+    const list = new MessageList({ threadId: 't' });
+    list.markStepCompleted();
+    // Recovered eager work commits the tool call and its result; the text streamed since is only buffered.
+    list.add(
+      [
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: { format: 2, parts: [settledTool] },
+          createdAt: new Date(),
+        } as MastraDBMessage,
+      ],
+      'response',
+    );
+
+    expect(responseText(list.cloneWithCompletedSteps('Partial answer.'))).toEqual(['Partial answer.']);
+  });
+
+  it('does not repeat streamed text a settled step already holds', () => {
+    const list = new MessageList({ threadId: 't' });
+    list.markStepCompleted();
+    list.add(
+      [
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Partial answer.' }, settledTool] },
+          createdAt: new Date(),
+        } as MastraDBMessage,
+      ],
+      'response',
+    );
+
+    expect(responseText(list.cloneWithCompletedSteps('Partial answer.'))).toEqual(['Partial answer.']);
+  });
 });

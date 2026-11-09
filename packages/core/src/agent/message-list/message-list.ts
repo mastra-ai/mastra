@@ -1133,7 +1133,7 @@ export class MessageList {
    * messages a step still in flight added since the last {@link markStepCompleted} are left out.
    * A step whose tool calls all have results (an aborted call records a notice) counts as completed
    * even though the loop never reached its step-finish, and is kept whole. When the step is cut,
-   * `inFlightText` (the text it already streamed) is added as its own assistant message.
+   * or kept whole without the text it already streamed, `inFlightText` is added as its own assistant message.
    * @internal
    */
   public cloneWithCompletedSteps(inFlightText = ''): MessageList {
@@ -1143,8 +1143,14 @@ export class MessageList {
       .db()
       .flatMap(message => (message.content.parts ?? []).slice(completed?.get(message.id) ?? 0));
     const toolCalls = pending.filter(part => part.type === 'tool-invocation');
-    if (toolCalls.length > 0 && toolCalls.every(part => isTerminalToolInvocationState(part.toolInvocation.state)))
+    if (toolCalls.length > 0 && toolCalls.every(part => isTerminalToolInvocationState(part.toolInvocation.state))) {
+      // Recovered eager work commits only the tool call and its result; the text streamed since is not in the list yet.
+      const keptText = pending.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
+      if (inFlightText.trim().length > 0 && !keptText.includes(inFlightText.trim())) {
+        clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
+      }
       return clone;
+    }
     for (const message of clone.get.response.db()) {
       const length = completed?.get(message.id);
       if (length === undefined) clone.removeByIds([message.id]);

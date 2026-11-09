@@ -351,8 +351,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
           // A read-only run saves nothing at the deadline. MessageHistory only reads the request
           // context's config, so a per-run readOnly has to stop the pass here.
           if (memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return false;
-          const threadId = memoryContext?.thread?.id ?? memoryData.thread?.id ?? result.threadId;
-          if (threadId) {
+          // MessageHistory creates the request context's thread, but the saved rows keep the thread
+          // they were added under, so check every thread the pass can write.
+          const threadIds = new Set(
+            [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
+          );
+          for (const threadId of threadIds) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
           }
         },

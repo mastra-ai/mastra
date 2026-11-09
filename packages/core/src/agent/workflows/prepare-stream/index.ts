@@ -116,9 +116,11 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   // workflow registers. Prepare-stream and the agentic loop deliberately do
   // not share runtime state — each owns its own per-run scratch space.
   const runScope = createRunScope();
-  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  // Keyed by permission and thread: approval for one thread must not cover another.
+  const memoryAuthorizationChecks = new Map<string, Promise<void>>();
   const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string) => {
-    const existingCheck = memoryAuthorizationChecks.get(permission);
+    const key = JSON.stringify([permission, threadId]);
+    const existingCheck = memoryAuthorizationChecks.get(key);
     if (existingCheck) return existingCheck;
 
     const check = checkThreadFGA({
@@ -131,10 +133,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       permission,
       actor,
     }).catch(error => {
-      memoryAuthorizationChecks.delete(permission);
+      memoryAuthorizationChecks.delete(key);
       throw error;
     });
-    memoryAuthorizationChecks.set(permission, check);
+    memoryAuthorizationChecks.set(key, check);
     return check;
   };
 
