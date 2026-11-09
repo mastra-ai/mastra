@@ -109,6 +109,20 @@ describe.each(engines)('$engine engine: nested branch/parallel suspend', ({ crea
     });
   });
 
+  it('resumes the step a label names inside a nested .parallel()', async () => {
+    const { run } = await setup(buildParallel());
+    const r = await run();
+    await r.start({ inputData: { n: 0 } });
+
+    let result: any = await r.resume({ label: 'approve-b', resumeData: { approver: 'alice' } });
+    expect(result.status).toBe('suspended');
+    expect(result.suspended[0]).toEqual(['review', 'a']);
+
+    result = await r.resume({ label: 'approve-a', resumeData: { approver: 'bob' } });
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ a: { approvedBy: 'bob' }, b: { approvedBy: 'alice' } });
+  });
+
   it('reports the suspend payload and resume label of a nested .branch()', async () => {
     const ask = createStep({
       id: 'ask',
