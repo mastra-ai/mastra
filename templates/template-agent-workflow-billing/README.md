@@ -1,6 +1,6 @@
 # Agent & Workflow Billing
 
-Charge for Mastra agents and workflows through subscriptions, prepaid credits, per-task charges, or measured usage. This template shows how to integrate billing with Polar, using a simple weather agent and an approval workflow as examples. Try the billing flow locally without payment credentials, then connect Polar for purchases, subscriptions, and usage reporting.
+Charge for Mastra agents and workflows through subscriptions, prepaid credits, per-task charges, or measured usage. This template shows how to integrate billing with Polar, using a simple weather agent and an approval workflow as examples. Run billed actions in Mastra Studio without payment credentials, then connect Polar for purchases, subscriptions, and usage reporting.
 
 ## Why we built this
 
@@ -12,6 +12,7 @@ We built this template to provide a straightforward starting point for billing i
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the weather agent. Model usage is billed to your OpenAI account.
 - Local mode needs no payment credentials or weather service. Keep `BILLING_MODE=local` and `BILLING_PROVIDER=local`. The agent summarizes observations you supply; it does not fetch a live forecast.
+- Set `BILLING_STUDIO_ENABLED=true` to enable the billing tools in Studio. Authentication uses an `Authorization` header; local setup creates the credential and workspace ID used below.
 - To connect Polar, follow the [billing configuration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/docs/billing.md#polar). It covers credentials, products, identity, and billing contacts.
 
 ## Quickstart 🚀
@@ -19,25 +20,43 @@ We built this template to provide a straightforward starting point for billing i
 1. **Clone the template**
    - Run `npx create-mastra@latest billing-weather --template agent-workflow-billing`.
    - Run `cd billing-weather`, then `npm install`.
-2. **Add your API key**
-   - Run `cp .env.example .env` and fill in the key described under Prerequisites.
+2. **Configure the local Studio demo**
+   - Run `cp .env.example .env`, add `OPENAI_API_KEY`, and set `BILLING_STUDIO_ENABLED=true` as described under Prerequisites.
 3. **Prepare local billing**
    - Run `npm run setup` to create the example profiles and shared allowance: 30 credits and 10 tasks.
-4. **Start the dev server**
-   - Run `npm run dev`. The billing API listens at `http://127.0.0.1:4111`.
-   - To use Studio, set `BILLING_STUDIO_ENABLED=true` before starting and follow the [Studio guide](docs/studio.md) to authenticate and run billed actions in **Tools**.
-   - In another terminal, run the command below. Expect a weather summary and a billing receipt with `billedUnits: 3`. The CLI authenticates using the local profile created during setup.
+4. **Open Mastra Studio**
+   - Run `npm run dev`, then open [Studio Tools](http://127.0.0.1:4111/tools).
+   - In **Settings → Headers**, add `Authorization` with value `Bearer <credential>`, replacing `<credential>` with `profiles.owner.credential` from the private `data/local-profiles.json`. Save the headers and return to **Tools**. Keep credentials out of recordings.
+5. **Run the weather agent through billing**
+   - Open **billing-weather-summary → Playground → JSON** and paste the input below. Replace `OWNER_WORKSPACE_ID` with `profiles.owner.workspaceId` from the same file.
+   - Run the tool. Expect a weather summary in `result.text` and a receipt with `billing.billedUnits: 3` and `billing.executionStatus: "completed"`. A tool result containing `error` means the action failed, even if Studio shows a successful HTTP request.
 
-```sh
-npm run weather -- generate --key first-weather --json '{"location":"Porto Alegre","observedAt":"2026-11-08T12:00:00Z","temperatureC":24,"feelsLikeC":26,"humidityPercent":70,"windKph":18,"precipitationChancePercent":60,"conditions":"Cloudy with showers possible"}'
+```json
+{
+  "workspaceId": "OWNER_WORKSPACE_ID",
+  "idempotencyKey": "first-weather",
+  "observations": {
+    "location": "Porto Alegre",
+    "observedAt": "2026-11-09T12:00:00Z",
+    "temperatureC": 24,
+    "feelsLikeC": 26,
+    "humidityPercent": 70,
+    "windKph": 18,
+    "precipitationChancePercent": 60,
+    "conditions": "Cloudy with showers possible"
+  }
+}
 ```
+
+The Studio demo runs through **Tools → Playground**. These tools call the weather agent and workflow through the billing gateway; native agent chat and native workflow execution remain closed. The [Studio guide](docs/studio.md) covers Polar authentication and all tool inputs. Local mode simulates billing and does not send usage to Polar.
 
 ## Try it out
 
-- Repeat the same command and key to retrieve the saved result without another model call or charge. Use a new key for new work.
-- Run `npm run weather -- account` to inspect the shared balance. Add `--profile member` to a new generation command to spend the same workspace's allowance, or `--profile outsider` to see access denied before execution.
-- Save the observation JSON to `observations.json`, then run `npm run weather -- start --input observations.json --key report-one`. The workflow drafts a report and pauses for approval. Run `npm run weather -- resume <executionId> --json '{"approved":true}' --key approve-one` to finish it for one task unit, even after restarting the server.
-- Run `npm run weather -- status <executionId>` to inspect your report, or `npm run weather -- cancel <executionId> --key cancel-one` while it is paused. Cancellation releases reserved credit without charging. Other members cannot read or resume your report.
+- Run **billing-account** with `{"workspaceId":"OWNER_WORKSPACE_ID"}`, replacing the placeholder with the owner's workspace ID. For a fresh local setup, the first summary leaves 27 of 30 credits. Provider balance reflection can take about 30 seconds. Setup preserves the balance on subsequent runs.
+- Run **billing-weather-summary** again with the exact same input and key. The receipt sets `replayed: true` and keeps its original `billedUnits: 3`, without another charge. Change the key for a new summary.
+- In **Settings → Headers**, use `profiles.member.credential` and run a new summary against the same owner's workspace ID to spend the shared allowance. Use `profiles.outsider.credential` to see access denied. Restore the owner credential for **billing-account**, which requires billing-owner access.
+- Open **billing-weather-report-start** and use the summary input with a new key, such as `first-report`. The workflow drafts a report and pauses for approval. Copy `result.executionId` into **billing-weather-report-approve**, together with the same `workspaceId`, a new `idempotencyKey`, and `"approval": {"approved": true}`. Successful completion costs one task unit under the default local policy.
+- Use **billing-weather-report-status** with `workspaceId` and `executionId` to inspect your report, including after restarting the server. For a suspended report, use **billing-weather-report-cancel** with those fields and a new `idempotencyKey` to release its reservation without charging. Other members cannot read or resume your report.
 
 ## Customization
 
