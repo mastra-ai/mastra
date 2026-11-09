@@ -14,6 +14,7 @@ import {
   describeForAllEngines,
   isDurableEngineVariant,
 } from '../aimock-scenario';
+import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 
 /**
  * Regression classes: the end-to-end background-task lifecycle driven by real
@@ -212,6 +213,56 @@ describeForAllEngines(
         );
         // Steps that write the result into their own transcript reuse the hook's output.
         expect(toModelOutput.mock.calls.filter(([output]) => output.summary !== undefined)).toHaveLength(1);
+      },
+      30_000,
+    );
+
+    // Waiting for a finished task's result reads the task again. A failing read only skips that
+    // wait: the follow-up model call still runs, with the placeholder if the result isn't in yet.
+    it.runIf(isDurableEngineVariant(engine))(
+      'keeps the run going when reading a task fails while waiting for its result',
+      async () => {
+        const getTask = vi
+          .spyOn(BackgroundTaskManager.prototype, 'getTask')
+          .mockRejectedValue(new Error('storage unavailable'));
+        try {
+          const research = createTool({
+            id: 'research',
+            description: 'Research a topic in the background',
+            inputSchema: z.object({ topic: z.string() }),
+            outputSchema: z.object({ summary: z.string() }),
+            background: { enabled: true },
+            execute: async ({ topic }) => ({ summary: `Research complete on "${topic}"` }),
+            // Holds the result hook up, so the check reads the finished task.
+            toModelOutput: async (output: { summary?: string }) => {
+              if (output.summary !== undefined) await new Promise(resolve => setTimeout(resolve, 300));
+              return { type: 'text', value: output.summary ?? 'Research running.' };
+            },
+          });
+
+          const { output } = await runLoopScenario({
+            engine,
+            llm: getMock(),
+            prompt: 'Research a flaky store',
+            tools: { research },
+            agentBackgroundTasks: { tools: { research: true } },
+            backgroundTasks: BG_CONFIG,
+            stopWhen: stepCountIs(3),
+            fixtures: llm => {
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 0 },
+                { toolCalls: [{ id: 'call-bg-flaky', name: 'research', arguments: { topic: 'flaky store' } }] },
+              );
+              llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research reported.' });
+            },
+          });
+
+          expect(getTask).toHaveBeenCalled();
+          expect(await output.text).toBe('Research reported.');
+          expect(getMock().getRequests()).toHaveLength(2);
+        } finally {
+          getTask.mockRestore();
+        }
       },
       30_000,
     );

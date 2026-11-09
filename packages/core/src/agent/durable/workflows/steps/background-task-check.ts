@@ -85,7 +85,8 @@ export function createDurableBackgroundTaskCheckStep() {
         await settleFinishedBackgroundResults(
           registryEntry,
           async taskId => {
-            const status = (await bgManager.getTask(taskId))?.status;
+            // A failed read only skips the wait for this task; its result still folds in if its hook has run.
+            const status = (await bgManager.getTask(taskId).catch(() => undefined))?.status;
             return status === 'completed' || status === 'failed' || status === 'timed_out';
           },
           waitTimeoutMs ?? 1000,
