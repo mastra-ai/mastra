@@ -6,8 +6,8 @@
 import { ITEMS_FROM_THREAD_ROUTE, PREVIEW_REPLAY_ROUTE } from '@mastra/server/handlers/datasets';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { goldenThreadFixture } from './fixtures/golden-thread';
 import { MastraServer } from '../index';
+import { goldenThreadFixture } from './fixtures/golden-thread';
 
 /** Bearer token = role id; the RBAC provider grants that role's permissions. */
 const roles: Record<string, string[]> = {
