@@ -81,6 +81,10 @@ jobs:
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
       - name: Run changed tests (Shard ${{ matrix.shard }}/8)
+        env:
+          # Keeps isolate: false packages on one shard (scripts/vitest-timing-sequencer.ts). There
+          # are no timings here (this run records them), so files split by count.
+          VITEST_TEST_TIMINGS: none
         run: |
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
@@ -151,10 +155,9 @@ jobs:
         # One vitest run for the whole list. xargs would split a long list into several runs
         # that overwrite each other's blob report.
         run: |
-          # With recorded timings, --shard balances by duration (scripts/vitest-timing-sequencer.ts).
-          if [ -f /tmp/affected-outputs/test-timings.json ]; then
-            export VITEST_TEST_TIMINGS=/tmp/affected-outputs/test-timings.json
-          fi
+          # --shard balances by recorded duration and keeps isolate: false packages together
+          # (scripts/vitest-timing-sequencer.ts); without timings, it splits by file count.
+          export VITEST_TEST_TIMINGS=/tmp/affected-outputs/test-timings.json
           mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
@@ -339,12 +342,13 @@ jobs:
             --reporter=json --outputFile.json=.vitest-reports/merged.json \
             --passWithNoTests
 
+      # Only from a complete run: a shard that failed before reporting would leave its files out.
       - name: Record unit test timings
-        if: ${{ !cancelled() && inputs.run_full != 'false' }}
+        if: ${{ !cancelled() && inputs.run_full != 'false' && needs.unit-test.result == 'success' }}
         run: node .github/scripts/test-timings.cjs .vitest-reports/merged.json "$RUNNER_TEMP/test-timings.json"
 
       - name: Save unit test timings
-        if: ${{ !cancelled() && inputs.run_full != 'false' }}
+        if: ${{ !cancelled() && inputs.run_full != 'false' && needs.unit-test.result == 'success' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/test-timings.json

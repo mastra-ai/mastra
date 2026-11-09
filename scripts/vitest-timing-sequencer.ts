@@ -1,5 +1,6 @@
 // Splits and orders CI unit-test shards by how long each test file took last time. Active when
-// VITEST_TEST_TIMINGS points at the recorded timings (.github/scripts/test-timings.cjs).
+// VITEST_TEST_TIMINGS is set; it points at the recorded timings (.github/scripts/test-timings.cjs),
+// and a missing file counts every test file as average.
 //
 // shard(): `vitest --shard=k/N` normally hashes file paths and gives every shard the same number
 // of files, so one shard can draw all the slow ones. This balances the shards by recorded
@@ -18,13 +19,15 @@ import testShards from '../.github/scripts/test-shards.cjs';
 
 const SLOW_MS = 30_000;
 
-function readTimings(): Record<string, number> | undefined {
+// No timings yet (the cache is empty or missed): every file costs the same, so the split is by
+// file count, but non-isolated projects still stay together.
+function readTimings(): Record<string, number> {
   const path = process.env.VITEST_TEST_TIMINGS;
-  if (!path) return undefined;
+  if (!path) return {};
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -34,9 +37,8 @@ export class TimingSequencer extends BaseSequencer {
   }
 
   override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
-    const timings = readTimings();
     const { index, count } = this.ctx.config.shard ?? {};
-    if (!timings || !index || !count) return super.shard(files);
+    if (!index || !count) return super.shard(files);
 
     // Grouped by the project's directory, not its name: a package can define several projects over
     // the same files (schema-compat runs its tests once per Zod version), and they all stay together.
@@ -46,7 +48,7 @@ export class TimingSequencer extends BaseSequencer {
     }
     const { shards } = testShards.assignShards({
       files: files.map(spec => this.pathOf(spec)),
-      timings,
+      timings: readTimings(),
       count,
       groupOf: (file: string) => groups.get(file),
     });
@@ -57,7 +59,6 @@ export class TimingSequencer extends BaseSequencer {
   override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
     const sorted = await super.sort(files);
     const timings = readTimings();
-    if (!timings) return sorted;
 
     const durationOf = (spec: TestSpecification) =>
       spec.project.config.isolate === false ? 0 : (timings[this.pathOf(spec)] ?? 0);
