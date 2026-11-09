@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser, AgentBrowserThreadManager } from '@mastra/agent-browser';
@@ -7,9 +6,9 @@ import { createRequire } from 'node:module';
 import { dirname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
 import 'playwright-chromium';
+import { webSearchTool } from '../tools/web-search';
 
 const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5-mini';
-const usesOpenAI = /^(mastra\/)?openai\//.test(agentModel);
 
 const require = createRequire(import.meta.url);
 let installDepsPromise: Promise<void> | undefined;
@@ -119,7 +118,9 @@ export const browserAgent = new Agent({
     maxSteps: 100,
   },
   browser,
-  tools: usesOpenAI ? { web_search: openai.tools.webSearch({}) } : {},
+  tools: {
+    web_search: webSearchTool,
+  },
   memory: new Memory({
     options: {
       lastMessages: 10,
