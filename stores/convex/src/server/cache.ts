@@ -256,8 +256,12 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
         return { ok: false, error: `${request.counterKey} exists but is not a number` };
       }
 
-      const index = existingCounter?.counter ?? 0;
-      const position = existingList?.counter ?? 0;
+      // The list's own length is the index, so the payload index always matches
+      // the stored position even if the counter document drifted or expired
+      // separately. The counter document is still written because `clear` and
+      // the non-atomic fallback's `increment` use it.
+      const index = existingList?.counter ?? 0;
+      const position = index;
       // The list and its counter share one deadline so they expire together.
       await writeCacheDoc(ctx, request.counterKey, existingCounter, {
         kind: 'counter',

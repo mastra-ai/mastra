@@ -620,6 +620,70 @@ describe('mastraCache server handler', () => {
       }),
     ).resolves.toEqual({ ok: false, error: 'mastra:cache:other exists but is not a number' });
   });
+
+  describe('takes the index from the list when the counter document has drifted', () => {
+    const seedList = async (ctx: ReturnType<typeof createCtx>, length: number) => {
+      for (let i = 0; i < length; i++) {
+        await handleCacheOperation(ctx as any, {
+          op: 'listPush',
+          key: 'mastra:cache:log',
+          keyPrefix: 'mastra:cache:',
+          value: { id: `seed-${i}`, index: i },
+          expiresAt: null,
+        });
+      }
+    };
+    const pushAndReadLast = async (ctx: ReturnType<typeof createCtx>) => {
+      const pushed = await handleCacheOperation(ctx as any, {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value: { id: 'next' },
+        expiresAt: null,
+      });
+      const rows = ctx.tables.get('mastra_cache_list_items')!;
+      return { pushed, row: rows[rows.length - 1]! };
+    };
+
+    it('when the counter document is ahead of the list', async () => {
+      const ctx = createCtx();
+      await seedList(ctx, 2);
+      for (let i = 0; i < 3; i++) {
+        await handleCacheOperation(ctx as any, {
+          op: 'increment',
+          key: 'mastra:cache:log:counter',
+          keyPrefix: 'mastra:cache:',
+          expiresAt: null,
+        });
+      }
+
+      const { pushed, row } = await pushAndReadLast(ctx);
+
+      expect(pushed).toEqual({ ok: true, result: 2 });
+      expect(row).toMatchObject({ index: 2 });
+      expect(JSON.parse(row.value as string)).toEqual({ id: 'next', index: 2 });
+      await expect(
+        handleCacheOperation(ctx as any, {
+          op: 'increment',
+          key: 'mastra:cache:log:counter',
+          keyPrefix: 'mastra:cache:',
+          expiresAt: null,
+        }),
+      ).resolves.toEqual({ ok: true, result: 4 });
+    });
+
+    it('when the list is live but the counter document is missing', async () => {
+      const ctx = createCtx();
+      await seedList(ctx, 3);
+
+      const { pushed, row } = await pushAndReadLast(ctx);
+
+      expect(pushed).toEqual({ ok: true, result: 3 });
+      expect(row).toMatchObject({ index: 3 });
+      expect(JSON.parse(row.value as string)).toEqual({ id: 'next', index: 3 });
+    });
+  });
 });
 
 describe('CachingPubSub replay over ConvexServerCache', () => {
