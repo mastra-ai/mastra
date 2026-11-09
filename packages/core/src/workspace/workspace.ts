@@ -161,6 +161,12 @@ export interface WorkspaceConfig<
   sandbox?: TSandbox | WorkspaceSandboxResolver;
 
   /**
+   * Register computer tools for resolver-backed sandboxes and validate capability at execution time.
+   * @experimental
+   */
+  computerTools?: 'resolve';
+
+  /**
    * Controls how a resolver-backed `sandbox` contributes to workspace instructions.
    * Defaults to `dynamicSandbox: 'placeholder'`. No effect on a static sandbox.
    * See {@link DynamicSandboxInstructions}.
@@ -619,6 +625,11 @@ export class Workspace<
   private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
+    if (config.computerTools === 'resolve' && process.env.MASTRA_EXPERIMENTAL_COMPUTER !== 'true') {
+      throw new Error(
+        'Workspace computer tools are experimental; set MASTRA_EXPERIMENTAL_COMPUTER=true to enable them',
+      );
+    }
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
     this.createdAt = new Date();
@@ -904,6 +915,11 @@ export class Workspace<
    */
   hasSandboxResolver(): boolean {
     return this._sandboxResolver !== undefined;
+  }
+
+  /** Whether resolver-backed computer tools were explicitly enabled. @experimental */
+  resolvesComputerTools(): boolean {
+    return this._config.computerTools === 'resolve';
   }
 
   /**

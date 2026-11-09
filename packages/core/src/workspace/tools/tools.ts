@@ -602,6 +602,22 @@ export async function createWorkspaceTools(
     tools[exposedName] = wrapped;
   };
 
+  const addComputerTools = async () => {
+    // Computer tools drive one desktop, so a step's calls run one at a time in emitted order.
+    const computerTool = { targets: { sandbox: true }, orderedGroup: COMPUTER_ORDERED_TOOL_GROUP };
+    await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, () => computerScreenshotTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, () => computerClickTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, () => computerDoubleClickTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, () => computerRightClickTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, () => computerMoveMouseTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, () => computerDragTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, () => computerTypeTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, () => computerPressKeyTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, () => computerScrollTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, () => computerGetScreenInfoTool, computerTool);
+    await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, () => computerWaitTool, computerTool);
+  };
+
   // Filesystem tools — add when filesystem is available (static instance or resolver function)
   if (hasFilesystemConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE, () => readFileTool, { readTrackerMode: 'read' });
@@ -697,23 +713,9 @@ export async function createWorkspaceTools(
       await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, () => killProcessTool, { targets: { sandbox: true } });
     }
 
-    // Computer (desktop) tools — only when the sandbox supports the computer
-    // capability. Not offered for dynamic sandbox resolvers (no static
-    // instance) since the capability can't be detected at tool-listing time.
+    // Static capability is known at tool-listing time.
     if (supportsComputer(workspace.sandbox)) {
-      // Computer tools drive one desktop, so a step's calls run one at a time in emitted order.
-      const computerTool = { targets: { sandbox: true }, orderedGroup: COMPUTER_ORDERED_TOOL_GROUP };
-      await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, () => computerScreenshotTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, () => computerClickTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, () => computerDoubleClickTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, () => computerRightClickTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, () => computerMoveMouseTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, () => computerDragTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, () => computerTypeTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, () => computerPressKeyTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, () => computerScrollTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, () => computerGetScreenInfoTool, computerTool);
-      await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, () => computerWaitTool, computerTool);
+      await addComputerTools();
     }
   } else if (hasSandboxConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, () => backgroundExecuteCommandTool, {
@@ -723,6 +725,11 @@ export async function createWorkspaceTools(
       targets: { sandbox: true },
     });
     await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, () => killProcessTool, { targets: { sandbox: true } });
+
+    // Resolver capability is unknown until execution, so registration requires an explicit opt-in.
+    if (workspace.hasSandboxResolver() && workspace.resolvesComputerTools()) {
+      await addComputerTools();
+    }
   }
 
   // LSP tools — only when LSP is configured and initialized on this workspace.

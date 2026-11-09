@@ -7,9 +7,11 @@
  * approval config resolution.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
+import { RequestContext } from '../../../request-context';
 import { WORKSPACE_TOOLS } from '../../constants';
+import { SandboxFeatureNotSupportedError } from '../../errors';
 import type { SandboxComputer, WorkspaceSandbox } from '../../sandbox';
 import { Workspace } from '../../workspace';
 import { computerScreenshotTool } from '../computer-screenshot';
@@ -88,12 +90,23 @@ async function setup(computer: SandboxComputer, tools?: WorkspaceToolsConfig) {
 // ---------------------------------------------------------------------------
 
 describe('createWorkspaceTools computer gating', () => {
-  it('emits all computer tools when the sandbox supports the capability', async () => {
+  let previousExperimentalComputer: string | undefined;
+
+  beforeEach(() => {
+    previousExperimentalComputer = process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+  });
+
+  afterEach(() => {
+    if (previousExperimentalComputer === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    else process.env.MASTRA_EXPERIMENTAL_COMPUTER = previousExperimentalComputer;
+  });
+
+  it('preserves the exact static sandbox tool list when computer support is present', async () => {
     const workspace = new Workspace({ sandbox: createMockSandbox({ computer: createMockComputer() }) });
     const tools = await createWorkspaceTools(workspace);
-    for (const name of ALL_COMPUTER_TOOL_NAMES) {
-      expect(tools[name], `expected ${name} to be emitted`).toBeDefined();
-    }
+
+    expect(Object.keys(tools)).toEqual([WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, ...ALL_COMPUTER_TOOL_NAMES]);
   });
 
   it('emits no computer tools when the sandbox lacks the capability', async () => {
@@ -125,6 +138,72 @@ describe('createWorkspaceTools computer gating', () => {
     for (const name of ALL_COMPUTER_TOOL_NAMES) {
       expect(tools[name], `expected ${name} to be absent`).toBeUndefined();
     }
+  });
+
+  it('emits all computer tools for opted-in dynamic sandbox resolvers', async () => {
+    const workspace = new Workspace({
+      sandbox: async () => createMockSandbox({ computer: createMockComputer() }),
+      computerTools: 'resolve',
+    });
+    const tools = await createWorkspaceTools(workspace);
+    for (const name of ALL_COMPUTER_TOOL_NAMES) {
+      expect(tools[name], `expected ${name} to be emitted`).toBeDefined();
+    }
+  });
+
+  it('returns the existing unsupported error for every computer tool when the resolved sandbox lacks computer support', async () => {
+    const workspace = new Workspace({
+      sandbox: async () => createMockSandbox(),
+      computerTools: 'resolve',
+    });
+    const tools = await createWorkspaceTools(workspace);
+    const inputs: Record<string, unknown> = {
+      [WORKSPACE_TOOLS.COMPUTER.SCREENSHOT]: {},
+      [WORKSPACE_TOOLS.COMPUTER.CLICK]: { x: 1, y: 2 },
+      [WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK]: { x: 1, y: 2 },
+      [WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK]: { x: 1, y: 2 },
+      [WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE]: { x: 1, y: 2 },
+      [WORKSPACE_TOOLS.COMPUTER.DRAG]: { startX: 1, startY: 2, endX: 3, endY: 4 },
+      [WORKSPACE_TOOLS.COMPUTER.TYPE]: { text: 'hello' },
+      [WORKSPACE_TOOLS.COMPUTER.PRESS_KEY]: { key: 'Enter' },
+      [WORKSPACE_TOOLS.COMPUTER.SCROLL]: { direction: 'down' },
+      [WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO]: {},
+      [WORKSPACE_TOOLS.COMPUTER.WAIT]: { seconds: 0.1 },
+    };
+
+    for (const name of ALL_COMPUTER_TOOL_NAMES) {
+      await expect(
+        tools[name].execute(inputs[name], { requestContext: new RequestContext() }),
+        `expected ${name} to preserve the computer unsupported error`,
+      ).rejects.toMatchObject({
+        name: SandboxFeatureNotSupportedError.name,
+        code: 'FEATURE_NOT_SUPPORTED',
+        message: 'Sandbox does not support computer',
+      });
+    }
+  });
+
+  it('resolves the computer sandbox from each tool call request context', async () => {
+    const firstComputer = createMockComputer();
+    const secondComputer = createMockComputer();
+    const workspace = new Workspace({
+      sandbox: ({ requestContext }) =>
+        requestContext.get('sandbox') === 'first'
+          ? createMockSandbox({ computer: firstComputer })
+          : createMockSandbox({ computer: secondComputer }),
+      computerTools: 'resolve',
+      tools: {
+        [WORKSPACE_TOOLS.COMPUTER.CLICK]: { screenshotAfterAction: false },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+    const click = tools[WORKSPACE_TOOLS.COMPUTER.CLICK];
+
+    await click.execute({ x: 1, y: 2 }, { requestContext: new RequestContext([['sandbox', 'first']]) });
+    await click.execute({ x: 3, y: 4 }, { requestContext: new RequestContext([['sandbox', 'second']]) });
+
+    expect(firstComputer.leftClick).toHaveBeenCalledWith(1, 2);
+    expect(secondComputer.leftClick).toHaveBeenCalledWith(3, 4);
   });
 
   it('respects per-tool enabled config', async () => {
