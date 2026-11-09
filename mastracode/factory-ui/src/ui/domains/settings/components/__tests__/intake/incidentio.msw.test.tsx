@@ -44,19 +44,8 @@ describe('IntakeSection incidentio', () => {
         integrationId: 'incidentio',
         sourceId: 'incidentio-source:follow-ups',
         factoryProjectId: FACTORY_A,
-        board: null,
       });
-
-      await userEvent.click(await screen.findByLabelText('Board for Incident follow-ups (acme)'));
-      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
-
-      await waitFor(() => expect(savedBindings).toHaveLength(2));
-      expect(savedBindings[1]).toEqual({
-        integrationId: 'incidentio',
-        sourceId: 'incidentio-source:follow-ups',
-        factoryProjectId: FACTORY_A,
-        board: 'work',
-      });
+      expect(screen.queryByLabelText('Board for Incident follow-ups (acme)')).not.toBeInTheDocument();
     });
   });
 
@@ -203,7 +192,6 @@ describe('IntakeSection incidentio', () => {
                 integrationId: 'incidentio',
                 sourceId: 'incidentio-source:follow-ups',
                 factoryProjectId: FACTORY_A,
-                board: 'work',
               },
             ],
           });
@@ -236,7 +224,6 @@ describe('IntakeSection incidentio', () => {
             integrationId: 'incidentio',
             sourceId: 'incidentio-source:follow-ups',
             factoryProjectId: FACTORY_A,
-            board: 'work',
           },
         ],
       });

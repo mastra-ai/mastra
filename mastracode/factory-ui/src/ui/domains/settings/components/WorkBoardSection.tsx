@@ -1,13 +1,10 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
-import type { RuleBuilderProps } from '@mastra/playground-ui/components/RuleBuilder';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -19,6 +16,7 @@ import type { StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useBoardQuery, useResetBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
+import { RuleEditor } from './RuleEditor';
 import { SettingsSubsection } from './SettingsSubsection';
 
 const WORK_BOARD = DEFAULT_BOARD_ID;
@@ -27,7 +25,6 @@ const MAX_OBJECTIVE = 2000;
 const MAX_GOAL_RUNS = 50;
 const NO_SKILL = '__none__';
 
-type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 type CodeBehaviour = NonNullable<StoredBoardInfo['codeBehaviour']>[string];
 type PhaseTool = NonNullable<StoredPhaseInfo['tools']>[number];
 
@@ -36,32 +33,6 @@ const PHASE_TOOLS: { id: PhaseTool; label: string }[] = [
   { id: 'factory_record_review_verdict', label: 'Record a review verdict' },
   { id: 'factory_review_source', label: 'Review the source of a change request' },
 ];
-
-/** The card facts a phase rule can test (`CARD_RULE_FIELDS`), as the rule builder's field tree. */
-const CARD_FACTS: RuleBuilderProps['schema'] = {
-  type: 'object',
-  properties: {
-    item: {
-      type: 'object',
-      title: 'Card',
-      properties: {
-        labels: { type: 'string', title: 'Labels' },
-        title: { type: 'string', title: 'Title' },
-        author: { type: 'string', title: 'Author' },
-        pullRequest: { type: 'number', title: 'Open pull request' },
-      },
-    },
-    author: { type: 'object', title: 'Author', properties: { trusted: { type: 'boolean', title: 'Trusted' } } },
-    source: {
-      type: 'object',
-      title: 'Source',
-      properties: {
-        kind: { type: 'string', title: 'Kind' },
-        integration: { type: 'string', title: 'Integration' },
-      },
-    },
-  },
-};
 
 interface Draft {
   name: string;
@@ -72,134 +43,6 @@ interface Draft {
 function nextPhasesOf(phase: StoredPhaseInfo, phases: StoredPhaseInfo[]): string[] {
   if (phase.nextPhases != null) return phase.nextPhases;
   return phase.kind === 'terminal' ? [] : phases.filter(other => other.key !== phase.key).map(other => other.key);
-}
-
-type RuleIssue = { path: PropertyKey[]; message: string; code: string; errors?: RuleIssue[][] };
-
-/** Zod issues as `path: message`, following the closest branch of a condition-or-group union. */
-function describeIssues(issues: RuleIssue[], prefix: PropertyKey[] = []): string[] {
-  return issues.flatMap(issue => {
-    const path = [...prefix, ...issue.path];
-    if (issue.code === 'invalid_union' && issue.errors?.length) {
-      const closest = issue.errors.reduce((best, branch) => (branch.length < best.length ? branch : best));
-      return describeIssues(closest, path);
-    }
-    return [`${path.map(String).join('.') || 'rule'}: ${issue.message}`];
-  });
-}
-
-/** Why the server would refuse this rule, if it would. */
-function validateRule(value: unknown): { rule: CardRule } | { problem: string } {
-  const parsed = cardRuleGroupSchema.safeParse(value);
-  if (parsed.success) return { rule: parsed.data };
-  return { problem: describeIssues(parsed.error.issues).join('; ') };
-}
-
-function ruleProblem(rule: CardRule | null | undefined): string | undefined {
-  if (rule == null) return undefined;
-  const checked = validateRule(rule);
-  return 'problem' in checked ? checked.problem : undefined;
-}
-
-/**
- * A phase condition, edited with the rule builder or as raw JSON. Unset means "every card".
- * Reports a rule the server would refuse, so the form can hold back the save.
- */
-function RuleEditor({
-  label,
-  description,
-  rule,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  rule: CardRule | null | undefined;
-  disabled: boolean;
-  onChange: (rule: CardRule | null, problem: string | undefined) => void;
-}) {
-  const [raw, setRaw] = useState<string | undefined>(undefined);
-  const [rawProblem, setRawProblem] = useState<string | undefined>(undefined);
-  const id = useId();
-  const problem = raw === undefined ? ruleProblem(rule) : rawProblem;
-
-  const editRaw = (text: string) => {
-    setRaw(text);
-    if (text.trim() === '') {
-      setRawProblem(undefined);
-      onChange(null, undefined);
-      return;
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(text);
-    } catch {
-      setRawProblem('Not valid JSON.');
-      onChange(rule ?? null, 'Not valid JSON.');
-      return;
-    }
-    const checked = validateRule(value);
-    if ('problem' in checked) {
-      setRawProblem(checked.problem);
-      onChange(rule ?? null, checked.problem);
-      return;
-    }
-    setRawProblem(undefined);
-    onChange(checked.rule, undefined);
-  };
-
-  return (
-    <Field invalid={problem !== undefined}>
-      <div className="flex items-center justify-between gap-2">
-        <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={disabled}
-          onClick={() => {
-            setRawProblem(undefined);
-            if (raw === undefined) {
-              setRaw(rule ? JSON.stringify(rule, null, 2) : '');
-              return;
-            }
-            setRaw(undefined);
-            // The builder edits the last valid rule, so JSON that never parsed no longer holds the save.
-            onChange(rule ?? null, ruleProblem(rule));
-          }}
-        >
-          {raw === undefined ? 'Edit as JSON' : 'Use rule builder'}
-        </Button>
-      </div>
-      <FieldDescription>{description}</FieldDescription>
-      {raw !== undefined ? (
-        <Textarea
-          id={id}
-          aria-label={`${label} JSON`}
-          value={raw}
-          disabled={disabled}
-          rows={6}
-          onChange={event => editRaw(event.target.value)}
-        />
-      ) : disabled ? (
-        <Txt id={id} as="p" variant="caption" tone="muted">
-          {rule ? JSON.stringify(rule) : 'Every card.'}
-        </Txt>
-      ) : (
-        <div id={id}>
-          <RuleBuilder
-            schema={CARD_FACTS}
-            // Factory's rule groups have the builder's shape; the server validates the depth.
-            ruleGroup={(rule ?? undefined) as RuleBuilderProps['ruleGroup']}
-            onChange={next => {
-              const value = (next ?? null) as CardRule | null;
-              onChange(value, ruleProblem(value));
-            }}
-          />
-        </div>
-      )}
-      {problem && <FieldError>{problem}</FieldError>}
-    </Field>
-  );
 }
 
 function PhaseEditor({

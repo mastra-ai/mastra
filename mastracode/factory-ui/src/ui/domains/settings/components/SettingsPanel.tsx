@@ -17,6 +17,7 @@ import { AccountSettingsSection } from './AccountSettingsSection';
 import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
+import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { WorkBoardSection } from './WorkBoardSection';
@@ -62,7 +63,12 @@ export function SettingsPanel() {
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
-      {section === 'intake' && <IntakeSection />}
+      {section === 'intake' && (
+        <>
+          <IntakeSection />
+          <IntakeRoutesSection factoryId={factoryId} />
+        </>
+      )}
       {section === 'board' && <WorkBoardSection factoryId={factoryId} />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && (

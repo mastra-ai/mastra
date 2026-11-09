@@ -296,6 +296,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(await list(replicaA.send, base, MEMBER)).toEqual([
       expect.objectContaining({ id: route.id, name: 'Docs', enabled: true, revision: 1 }),
     ]);
+    expect((await replicaA.send('GET', base, undefined, MEMBER)).body).toMatchObject({ canEdit: false });
+    expect((await replicaA.send('GET', base)).body).toMatchObject({ canEdit: true });
   });
 
   it("hides another organization's project and refuses a signed-out request", async () => {
