@@ -97,7 +97,7 @@ export function ThinkingLevelPicker<T extends string>({
   }
 
   const levelLabel = options.find(option => option.value === value)?.label ?? value;
-  const triggerLabel = origin ? `${label}: ${levelLabel} · ${origin}` : `${label}: ${levelLabel}`;
+  const triggerLabel = origin ? `${label}: ${levelLabel} (${origin})` : `${label}: ${levelLabel}`;
 
   return (
     <Popover>

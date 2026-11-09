@@ -466,6 +466,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/mcp/:serverId/tasks/find',
       '/mcp/:serverId/tasks/:taskKey/cancel',
       '/mcp/:serverId/tasks/:taskKey/input',
+      // Resuming a background task needs a suspended task with a parked workflow
+      // snapshot; the generic test context seeds a running task, so the route
+      // correctly answers 409. Covered by
+      // packages/server/src/server/handlers/background-tasks.test.ts.
+      '/background-tasks/:backgroundTaskId/resume',
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',

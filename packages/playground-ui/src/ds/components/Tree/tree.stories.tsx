@@ -274,7 +274,7 @@ function WithInlineCreationExample() {
               {creating && (
                 <Tree.Input
                   type={creating}
-                  placeholder={creating === 'folder' ? 'Folder name…' : 'File name…'}
+                  placeholder={creating === 'folder' ? 'Folder name' : 'File name'}
                   onSubmit={handleSubmit}
                   onCancel={handleCancel}
                 />

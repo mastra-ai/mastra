@@ -20,7 +20,7 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
-import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages } from './pages';
+import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages, upgradeKnowledgePinKinds } from './pages';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -91,6 +91,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
+      supportsPinKinds: true,
     } as const;
   }
 
@@ -131,6 +132,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const inspection = await this.#inspectPages(tx);
       if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
+      await upgradeKnowledgePinKinds(tx);
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
         args: [KNOWLEDGE_PAGES_SCHEMA_VERSION],
@@ -141,10 +143,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
-        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences].map(table => ({
-          sql: `DROP TABLE IF EXISTS "${table}"`,
-          args: [],
-        })),
+        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
+          table => ({
+            sql: `DROP TABLE IF EXISTS "${table}"`,
+            args: [],
+          }),
+        ),
         'write',
       );
     });
@@ -177,6 +181,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['listChildScopes']>[0],
   ): ReturnType<KnowledgePageStore['listChildScopes']> {
     return this.#pages.listChildScopes(input);
+  }
+
+  override countChildScopes(
+    input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return this.#pages.countChildScopes(input);
   }
 
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
@@ -243,6 +253,36 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['listNotes']>[0],
   ): ReturnType<KnowledgePageStore['listNotes']> {
     return this.#pages.listNotes(input);
+  }
+
+  override countChildPages(
+    input: Parameters<KnowledgePageStore['countChildPages']>[0],
+  ): ReturnType<KnowledgePageStore['countChildPages']> {
+    return this.#pages.countChildPages(input);
+  }
+
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pages.replacePageBodyLinks(input);
+  }
+
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pages.listPageBodyLinkSources(input);
+  }
+
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pages.countPageLinks(input);
+  }
+
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pages.listPageLinks(input);
   }
 
   override countNotes(

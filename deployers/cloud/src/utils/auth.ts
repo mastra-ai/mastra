@@ -1,22 +1,21 @@
 export function getAuthEntrypoint() {
-  const tokensObject: Record<string, { id: string; role: string }> = {};
-
-  if (process.env.PLAYGROUND_JWT_TOKEN) {
-    tokensObject[process.env.PLAYGROUND_JWT_TOKEN] = { id: 'business-api', role: 'api' };
-  }
-  if (process.env.BUSINESS_JWT_TOKEN) {
-    tokensObject[process.env.BUSINESS_JWT_TOKEN] = { id: 'business-api', role: 'api' };
-  }
-
   return `
   import { SimpleAuth, CompositeAuth } from '@mastra/core/server';
   import { MastraCloudAuthProvider, MastraRBACCloud } from '@mastra/auth-cloud';
 
-  // Service token auth (for business-api, playground internal calls)
+  // Service token auth (for business-api, playground internal calls).
+  // Read at runtime so tokens aren't baked into the build output.
+  const serviceTokens = {};
+  for (const name of ['PLAYGROUND_JWT_TOKEN', 'BUSINESS_JWT_TOKEN']) {
+    if (process.env[name]) {
+      serviceTokens[process.env[name]] = { id: 'business-api', role: 'api' };
+    }
+  }
+
   class MastraCloudServiceAuth extends SimpleAuth {
     constructor() {
       super({
-        tokens: ${JSON.stringify(tokensObject)}
+        tokens: serviceTokens
       });
     }
 

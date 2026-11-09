@@ -210,7 +210,7 @@ export function OMSection({
               models={models}
               value={config.observer.model}
               auto={{ effectiveModelId: config.observer.effectiveModelId }}
-              placeholder="Select observer model…"
+              placeholder="Select observer model"
               aria-label="Observer model"
               size="sm"
               disabled={busy}
@@ -233,7 +233,7 @@ export function OMSection({
               models={models}
               value={config.reflector.model}
               auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-              placeholder="Select reflector model…"
+              placeholder="Select reflector model"
               aria-label="Reflector model"
               size="sm"
               disabled={busy}

@@ -21,7 +21,7 @@ import { isTraceFilterGroup, scalarPredicate } from '../traces/trace-query-filte
 import type { TraceFilterGroup, TraceFilterOperatorId, TraceFilterToken } from '../traces/trace-query-filters';
 import type { FilterBarField, FilterBarOption, FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
 
-/** Span query fields every store accepts. `startedAt`/`endedAt` are left to the time-range chip. */
+/** Span query fields every store accepts. `startedAt`/`endedAt` are left to the time range. */
 export const SPAN_CORE_FILTER_FIELD_IDS = [
   'name',
   'spanType',

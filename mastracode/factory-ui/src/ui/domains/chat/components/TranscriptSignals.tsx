@@ -41,7 +41,7 @@ export type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
   | { kind: 'pinned'; pinned: PinnedKnowledge }
   | { kind: 'divider'; label: string }
-  | { kind: 'reminder'; text: string }
+  | { kind: 'reminder'; text: string; loadedFile?: string }
   | { kind: 'reactive'; tagName?: string; text: string };
 
 export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
@@ -51,7 +51,7 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
 
   const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
   const text = signalPartsText(entry);
-  const reminder: SignalRowView = { kind: 'reminder', text };
+  const reminder: SignalRowView = { kind: 'reminder', text, loadedFile: loadedFile(signal.attributes) };
 
   if (signal.type === 'state') {
     const pinned = pinnedKnowledgeFromSignal(signal);
@@ -72,6 +72,11 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   if (signal.type === 'reactive' && tagName === SESSION_OWNER_SIGNAL_TAG) return { kind: 'divider', label: text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
+}
+
+function loadedFile(attributes: unknown): string | undefined {
+  if (!isRecord(attributes) || attributes.type !== 'dynamic-agents-md') return undefined;
+  return typeof attributes.path === 'string' ? attributes.path : undefined;
 }
 
 function environmentWorkingDirectory(entry: TimelineEntry): string | undefined {

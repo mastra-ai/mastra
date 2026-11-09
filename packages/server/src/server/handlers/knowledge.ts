@@ -18,6 +18,10 @@ import {
   knowledgePathParams,
   knowledgeSearchQuerySchema,
   knowledgeSearchResponseSchema,
+  knowledgeLinkCountsQuerySchema,
+  knowledgeLinkCountsResponseSchema,
+  knowledgePageLinksQuerySchema,
+  knowledgePageLinksResponseSchema,
   knowledgeTreeQuerySchema,
   knowledgeTreeResponseSchema,
   listKnowledgeResponseSchema,
@@ -273,6 +277,66 @@ export const GET_KNOWLEDGE_PAGE_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error reading Knowledge page');
+    }
+  },
+});
+
+/**
+ * The link readers are newer than the page readers, so a core without them answers these routes with 501
+ * and the explorer falls back to counting the pages it has loaded.
+ */
+function requireLinkReaders() {
+  const { readKnowledgePageLinkCounts, readKnowledgePageLinks } = coreKnowledge as Partial<typeof coreKnowledge>;
+  if (!readKnowledgePageLinkCounts || !readKnowledgePageLinks) {
+    throw new HTTPException(501, { message: 'Knowledge link counts need a newer @mastra/core.' });
+  }
+  return { readKnowledgePageLinkCounts, readKnowledgePageLinks };
+}
+
+export const GET_KNOWLEDGE_LINK_COUNTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/knowledge/:knowledgeKey/link-counts',
+  responseType: 'json',
+  pathParamSchema: knowledgePathParams,
+  queryParamSchema: knowledgeLinkCountsQuerySchema,
+  responseSchema: knowledgeLinkCountsResponseSchema,
+  summary: 'Count the links into and out of pages',
+  description:
+    'Returns, for each page id, how many distinct other pages link to it and it links to, by body [[ref]] or note mention, counted over the whole store and not only pages the caller has loaded. A page the caller cannot read counts as no links, the same as one that does not exist. 501 when the store has no link index.',
+  tags: ['Knowledge'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, knowledgeKey, pageId }) => {
+    try {
+      const { store, read } = await resolveStore(mastra, requestContext, knowledgeKey);
+      const counts = await requireLinkReaders().readKnowledgePageLinkCounts(store, { pageIds: pageId, read });
+      if (!counts) throw new HTTPException(501, { message: 'This Knowledge store has no link index.' });
+      return { counts };
+    } catch (error) {
+      return handleError(error, 'Error counting Knowledge page links');
+    }
+  },
+});
+
+export const GET_KNOWLEDGE_PAGE_LINKS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/knowledge/:knowledgeKey/pages/:pageId/links',
+  responseType: 'json',
+  pathParamSchema: knowledgePagePathParams,
+  queryParamSchema: knowledgePageLinksQuerySchema,
+  responseSchema: knowledgePageLinksResponseSchema,
+  summary: "List a Knowledge page's links",
+  description:
+    'Returns the links into and out of one page, bounded, with the readable pages at their other ends. A page the caller cannot read has none. 501 when the store has no link index.',
+  tags: ['Knowledge'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, knowledgeKey, pageId, direction }) => {
+    try {
+      const { instance, store, read } = await resolveStore(mastra, requestContext, knowledgeKey);
+      const links = await requireLinkReaders().readKnowledgePageLinks(store, { pageId, read, direction });
+      if (!links) throw new HTTPException(501, { message: 'This Knowledge store has no link index.' });
+      return { ...links, pages: links.pages.map(page => ({ ...withDisplayLabel(instance, page) })) };
+    } catch (error) {
+      return handleError(error, 'Error reading Knowledge page links');
     }
   },
 });

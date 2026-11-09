@@ -16,6 +16,10 @@ import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
 export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
 export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGet.responseSchema>;
+export type StoredBoardInfo = StoredBoardResponse['board'];
+export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
+export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 
 import type {
   CustomProviderInfo,
@@ -41,6 +45,7 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
@@ -61,6 +66,7 @@ export type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 };
+export type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 
@@ -95,10 +101,18 @@ export interface FactorySkillInfo {
   builtIn?: boolean;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
   error?: string;
+  /** Frontmatter fields besides name and description, kept when the skill is saved from the editor. */
+  frontmatter?: Record<string, unknown>;
+  /** Set when the project has an edited copy; description and content then come from the edit. */
+  edited?: { updatedBy: string; updatedAt: string };
+  /** True when the original SKILL.md changed since the project's edit was made. */
+  originalChanged?: boolean;
 }
 
 export interface FactorySkillsResponse {
   skills: FactorySkillInfo[];
+  /** Whether the caller may edit this project's skills. Present when the catalog is read for a project. */
+  canEdit?: boolean;
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────
@@ -177,3 +191,5 @@ export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
+
+export type VoiceChoice = NonNullable<VoiceSettingsResponse['selected']>;

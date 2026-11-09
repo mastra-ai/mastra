@@ -93,6 +93,7 @@ import type {
   GetScorePercentilesResponse,
   ListFeedbackArgs,
   CreateFeedbackBody,
+  ReplaceFeedbackBody,
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
@@ -128,8 +129,11 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './resources/observability-route-types.js';
+import type { SignalWriteOptions } from './resources/signal-writes';
 import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
   ListFeedbackResponse,
   ClientOptions,
   McpServerEventStreamFrame,
@@ -1426,14 +1430,19 @@ export class MastraClient extends BaseResource {
   // Scores
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.observability.getScore(id);
+  }
+
   /** Retrieves a paginated list of observability scores. */
   listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
     return this.observability.listScores(params);
   }
 
   /** Creates a single score record in the observability store. */
-  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
-    return this.observability.createScore(params);
+  createScore(params: CreateScoreBody, options?: SignalWriteOptions): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params, options);
   }
 
   /** Deletes score records by scoreId, optionally scoped to a tenant. */
@@ -1465,14 +1474,24 @@ export class MastraClient extends BaseResource {
   // Feedback
   // --------------------------------------------------------------------------
 
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.observability.getFeedback(id);
+  }
+
   /** Retrieves a paginated list of feedback records. */
   listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
     return this.observability.listFeedback(params);
   }
 
   /** Creates a single feedback record in the observability store. */
-  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
-    return this.observability.createFeedback(params);
+  createFeedback(params: CreateFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params, options);
+  }
+
+  /** Full replacement on Platform. Preserve the original identity/timestamp; each accepted retry is a new replacement. */
+  replaceFeedback(params: ReplaceFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.replaceFeedback(params, options);
   }
 
   /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
@@ -2744,6 +2763,24 @@ export class MastraClient extends BaseResource {
    */
   public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
     return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Answers a suspended background task with `resumeData`. Pass the task's
+   * `suspendedAt` to have the server reject the answer (409) when the task has
+   * resumed or suspended again since you read it.
+   */
+  public resumeBackgroundTask(
+    backgroundTaskId: string,
+    resumeData: unknown,
+    options: { suspendedAt?: Date | string | number } = {},
+  ): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/resume`, {
+      method: 'POST',
+      body: { resumeData, suspendedAt: options.suspendedAt },
+      // A retry after a lost response could deliver this answer to a later suspension.
+      retries: 0,
+    });
   }
 
   /**

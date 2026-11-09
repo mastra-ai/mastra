@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   knowledgePageKeyProblem,
+  KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
@@ -13,12 +14,17 @@ import type {
   KnowledgePage,
   KnowledgePageActivityAction,
   KnowledgePageActivityEvent,
+  KnowledgePageBodyLink,
+  KnowledgePageLinkCounts,
+  KnowledgePageLinkEdge,
+  KnowledgePageLinkKind,
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
   KnowledgePageTemplateInput,
   KnowledgePageStore,
   KnowledgeListedPin,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
   KnowledgeScopeDeclarationCount,
@@ -55,6 +61,7 @@ export const PG_KNOWLEDGE_PAGES_TABLES = {
   pins: 'mastra_knowledge_pins',
   activity: 'mastra_knowledge_activity',
   state: 'mastra_knowledge_access_state',
+  links: 'mastra_knowledge_page_links',
 } as const;
 
 /**
@@ -115,7 +122,9 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     )`,
     `CREATE TABLE IF NOT EXISTS ${q(t.pins)} (
       "id" text PRIMARY KEY,
-      "pageId" text NOT NULL UNIQUE REFERENCES ${q(t.pages)} ("id"),
+      "pageId" text NOT NULL REFERENCES ${q(t.pages)} ("id"),
+      "kind" text NOT NULL DEFAULT 'page',
+      "depth" integer,
       "audience" text[] NOT NULL,
       "createdBy" text NOT NULL,
       "createdAt" timestamptz NOT NULL,
@@ -154,6 +163,22 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     index('mastra_knowledge_mentions_page_idx', t.mentions, '"pageId"'),
     `CREATE INDEX IF NOT EXISTS "mastra_knowledge_pins_audience_gin" ON ${q(t.pins)} USING gin ("audience")`,
     index('mastra_knowledge_pins_created_idx', t.pins, '"createdAt","id"'),
+    // Pin kinds arrived after schema 4 shipped: a page holds one pin per kind. Additive, idempotent,
+    // no version bump; pins from before kinds stay page pins.
+    `ALTER TABLE ${q(t.pins)} ADD COLUMN IF NOT EXISTS "kind" text NOT NULL DEFAULT 'page'`,
+    `ALTER TABLE ${q(t.pins)} ADD COLUMN IF NOT EXISTS "depth" integer`,
+    `ALTER TABLE ${q(t.pins)} DROP CONSTRAINT IF EXISTS "${t.pins}_pageId_key"`,
+    index('mastra_knowledge_pins_page_kind_idx', t.pins, '"pageId","kind"', '', true),
+    // Body links arrived after schema 4 shipped: additive, idempotent, no version bump.
+    `CREATE TABLE IF NOT EXISTS ${q(t.links)} (
+      "fromPageId" text NOT NULL,
+      "ref" text COLLATE "C" NOT NULL,
+      "toPageId" text,
+      "count" integer NOT NULL,
+      PRIMARY KEY ("fromPageId", "ref")
+    )`,
+    index('mastra_knowledge_page_links_to_idx', t.links, '"toPageId"', '"toPageId" IS NOT NULL'),
+    index('mastra_knowledge_page_links_ref_idx', t.links, '"ref"', '"toPageId" IS NULL'),
     index('mastra_knowledge_activity_page_idx', t.activity, '"pageId","createdAt","id"'),
     index('mastra_knowledge_activity_created_idx', t.activity, '"createdAt","id"'),
   ];
@@ -345,6 +370,8 @@ function toPin(row: Row): KnowledgePin {
   return {
     id: String(row.id),
     pageId: String(row.pageId),
+    kind: String(row.kind) as KnowledgePinKind,
+    ...(row.depth == null ? {} : { depth: Number(row.depth) }),
     audience: (row.audience as string[]) ?? [],
     createdBy: String(row.createdBy),
     createdAt: new Date(row.createdAt as string | Date),
@@ -398,6 +425,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
   get #pins() {
     return this.#q(PG_KNOWLEDGE_PAGES_TABLES.pins);
+  }
+  get #links() {
+    return this.#q(PG_KNOWLEDGE_PAGES_TABLES.links);
   }
   get #activity() {
     return this.#q(PG_KNOWLEDGE_PAGES_TABLES.activity);
@@ -740,6 +770,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   async listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
@@ -748,6 +779,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const params = new Params();
     const where = [`"isScope"`, `"deletedAt" IS NULL`];
     where.push(input.parentId === null ? `"parentId" IS NULL` : `"parentId" = ${params.add(input.parentId)}`);
+    if (input.read && input.read !== 'all') {
+      where.push(`"id" IN (${new ReadFilter(input.read, params, this.#pages).readableIds()})`);
+    }
     if (input.cursor) {
       const [position, id] = decodeCursor(input.cursor, 2);
       where.push(`("position", "id") > (${params.add(position)}, ${params.add(id)})`);
@@ -1120,17 +1154,21 @@ export class PgKnowledgePages implements KnowledgePageStore {
       );
       await tx.query(`UPDATE ${this.#mentions} SET "pageId" = $2 WHERE "pageId" = $1`, [source.id, target.id]);
 
-      const sourcePin = (
-        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [source.id])
-      )[0];
-      if (sourcePin) {
-        await this.#upsertPinAudience(
-          tx,
-          target.id,
-          (sourcePin.audience as string[]) ?? [],
-          String(sourcePin.createdBy),
+      const sourcePins = await this.#rows(
+        tx,
+        `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 ORDER BY "kind" FOR UPDATE`,
+        [source.id],
+      );
+      for (const sourcePin of sourcePins) {
+        await this.#upsertPinAudience(tx, {
+          pageId: target.id,
+          kind: String(sourcePin.kind) as KnowledgePinKind,
+          depth: sourcePin.depth == null ? null : Number(sourcePin.depth),
+          audience: (sourcePin.audience as string[]) ?? [],
+          createdBy: String(sourcePin.createdBy),
           now,
-        );
+          keepDepth: true,
+        });
         await tx.query(`DELETE FROM ${this.#pins} WHERE "id" = $1`, [String(sourcePin.id)]);
       }
 
@@ -1217,6 +1255,170 @@ export class PgKnowledgePages implements KnowledgePageStore {
       params.values,
     );
     return this.#noteOutput(rows, limit);
+  }
+
+  async countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT s."parentId" AS "parentId", count(*)::int AS "count" FROM ${this.#pages} s
+       WHERE s."parentId" = ANY(${params.add(ids)}::text[]) AND s."isScope" AND s."deletedAt" IS NULL AND ${filter.readable('s')}
+       GROUP BY s."parentId"`,
+      params.values,
+    );
+    for (const row of rows) counts[row.parentId as string] = Number(row.count);
+    return counts;
+  }
+
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT p."parentId" AS "parentId", count(*)::int AS "count" FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
+       WHERE p."parentId" = ANY(${params.add(ids)}::text[]) AND NOT p."isScope" AND p."deletedAt" IS NULL AND ${filter.readable('s')}
+       GROUP BY p."parentId"`,
+      params.values,
+    );
+    for (const row of rows) counts[row.parentId as string] = Number(row.count);
+    return counts;
+  }
+
+  async replacePageBodyLinks(input: { pageId: string; links: KnowledgePageBodyLink[] }): Promise<void> {
+    await this.#tx(async tx => {
+      await tx.query(`DELETE FROM ${this.#links} WHERE "fromPageId" = $1`, [input.pageId]);
+      if (!input.links.length) return;
+      await tx.query(
+        `INSERT INTO ${this.#links} ("fromPageId","ref","toPageId","count") SELECT $1, r, t, c FROM unnest($2::text[], $3::text[], $4::int[]) AS x(r, t, c)`,
+        [input.pageId, input.links.map(l => l.ref), input.links.map(l => l.toPageId), input.links.map(l => l.count)],
+      );
+    });
+  }
+
+  async listPageBodyLinkSources(input: { refs?: string[]; toPageIds?: string[] }): Promise<string[]> {
+    const refs = [...new Set(input.refs ?? [])];
+    const targets = [...new Set(input.toPageIds ?? [])];
+    if (!refs.length && !targets.length) return [];
+    const parts: string[] = [];
+    const params = new Params();
+    if (refs.length) {
+      parts.push(`("toPageId" IS NULL AND "ref" = ANY(${params.add(refs)}::text[]))`);
+    }
+    if (targets.length) {
+      parts.push(`"toPageId" = ANY(${params.add(targets)}::text[])`);
+    }
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT DISTINCT "fromPageId" FROM ${this.#links} WHERE ${parts.join(' OR ')}`,
+      params.values,
+    );
+    return rows.map(row => String(row.fromPageId));
+  }
+
+  /**
+   * Every resolved link touching `ids` whose both ends are live and readable, one row per
+   * (from, to, kind); no self-links. Note links go through the same visible-note rule as listNotes.
+   */
+  #visibleLinkEdges(
+    filter: ReadFilter,
+    params: Params,
+    ids: string[],
+    direction: 'in' | 'out' | 'both',
+    kinds: KnowledgePageLinkKind[] | undefined,
+  ): string {
+    const wanted = new Set(kinds ?? ['body', 'note']);
+    const idsParam = `${params.add(ids)}::text[]`;
+    const touch = (from: string, to: string) =>
+      direction === 'out'
+        ? `${from} = ANY(${idsParam})`
+        : direction === 'in'
+          ? `${to} = ANY(${idsParam})`
+          : `(${from} = ANY(${idsParam}) OR ${to} = ANY(${idsParam}))`;
+    const branches: string[] = [];
+    if (wanted.has('body')) {
+      branches.push(`SELECT l."fromPageId" AS "fromPageId", l."toPageId" AS "toPageId", 'body'::text AS "kind", sum(l."count")::int AS "count"
+        FROM ${this.#links} l
+        JOIN ${this.#pages} fp ON fp."id" = l."fromPageId" AND fp."deletedAt" IS NULL
+        JOIN ${this.#pages} fs ON fs."id" = fp."scopeId"
+        JOIN ${this.#pages} tp ON tp."id" = l."toPageId" AND tp."deletedAt" IS NULL
+        JOIN ${this.#pages} ts ON ts."id" = tp."scopeId"
+        WHERE l."toPageId" IS NOT NULL AND l."fromPageId" <> l."toPageId" AND ${touch('l."fromPageId"', 'l."toPageId"')}
+          AND ${filter.readable('fs')} AND ${filter.readable('ts')}
+        GROUP BY l."fromPageId", l."toPageId"`);
+    }
+    if (wanted.has('note')) {
+      branches.push(`SELECT vn."pageId" AS "fromPageId", mn."pageId" AS "toPageId", 'note'::text AS "kind", count(*)::int AS "count"
+        FROM (SELECT n."id", n."pageId" FROM ${this.#visibleNotes(filter)}
+          AND n."deletedAt" IS NULL AND np."deletedAt" IS NULL
+          AND (n."pageId" = ANY(${idsParam}) OR n."id" IN (SELECT mm."noteId" FROM ${this.#mentions} mm WHERE mm."pageId" = ANY(${idsParam})))) vn
+        JOIN ${this.#mentions} mn ON mn."noteId" = vn."id"
+        JOIN ${this.#pages} tp ON tp."id" = mn."pageId" AND tp."deletedAt" IS NULL
+        JOIN ${this.#pages} ts ON ts."id" = tp."scopeId"
+        WHERE mn."pageId" <> vn."pageId" AND ${touch('vn."pageId"', 'mn."pageId"')} AND ${filter.readable('ts')}
+        GROUP BY vn."pageId", mn."pageId"`);
+    }
+    return branches.length
+      ? branches.join(' UNION ALL ')
+      : `SELECT NULL::text AS "fromPageId", NULL::text AS "toPageId", NULL::text AS "kind", NULL::int AS "count" WHERE FALSE`;
+  }
+
+  async countPageLinks(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    kinds?: KnowledgePageLinkKind[];
+  }): Promise<Record<string, KnowledgePageLinkCounts>> {
+    const ids = [...new Set(input.pageIds)];
+    const counts: Record<string, KnowledgePageLinkCounts> = Object.fromEntries(ids.map(id => [id, { in: 0, out: 0 }]));
+    if (!ids.length) return counts;
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const edges = this.#visibleLinkEdges(filter, params, ids, 'both', input.kinds);
+    const rows = await this.#rows(
+      this.#client,
+      `WITH e AS (${edges}), r AS (
+         SELECT "fromPageId" AS "id", count(DISTINCT "toPageId")::int AS "out", 0 AS "in" FROM e WHERE "fromPageId" = ANY(${params.add(ids)}::text[]) GROUP BY "fromPageId"
+         UNION ALL
+         SELECT "toPageId", 0, count(DISTINCT "fromPageId")::int FROM e WHERE "toPageId" = ANY(${params.add(ids)}::text[]) GROUP BY "toPageId")
+       SELECT "id", sum("out")::int AS "out", sum("in")::int AS "in" FROM r GROUP BY "id"`,
+      params.values,
+    );
+    for (const row of rows) counts[String(row.id)] = { in: Number(row.in), out: Number(row.out) };
+    return counts;
+  }
+
+  async listPageLinks(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    direction?: 'in' | 'out' | 'both';
+    kinds?: KnowledgePageLinkKind[];
+    limit?: number;
+  }): Promise<KnowledgePageLinkEdge[]> {
+    const limit = input.limit ?? 1_000;
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const core = await loadPagesCore();
+    const ids = [...new Set(input.pageIds)];
+    if (!ids.length) return [];
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const edges = this.#visibleLinkEdges(filter, params, ids, input.direction ?? 'both', input.kinds);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT * FROM (${edges}) e ORDER BY "fromPageId" COLLATE "C", "toPageId" COLLATE "C", CASE "kind" WHEN 'body' THEN 0 ELSE 1 END LIMIT ${Math.min(limit, core.MAX_KNOWLEDGE_PAGE_LINKS)}`,
+      params.values,
+    );
+    return rows.map(row => ({
+      fromPageId: String(row.fromPageId),
+      toPageId: String(row.toPageId),
+      kind: row.kind as KnowledgePageLinkKind,
+      count: Number(row.count),
+    }));
   }
 
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
@@ -1376,7 +1578,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async removeNote(input: { id: string; deletedBy: string; provenance: KnowledgeProvenance }): Promise<KnowledgeNote> {
     return this.#tx(async tx => {
       const note = await this.#noteById(tx, input.id, true);
-      if (note.deletedAt) return note;
+      if (note.deletedAt) throw new KnowledgeNotFoundError('note', input.id);
       const now = new Date();
       await tx.query(
         `UPDATE ${this.#notes} SET "deletedAt" = $2, "deletedBy" = $3, "version" = "version" + 1, "updatedAt" = $2 WHERE "id" = $1`,
@@ -1432,14 +1634,26 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const phrasePattern = params.add(`%${escapeLike(phrase)}%`);
       const where = [`p."deletedAt" IS NULL`, `NOT p."isScope"`, filter.readable('s')];
       if (input.scopeIds?.length) where.push(`p."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
-      for (const pattern of patterns) {
-        where.push(`(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`);
-      }
-      const nameHasAll = patterns.map(pattern => `p."name" ILIKE ${pattern}`).join(' AND ');
-      const tier = `CASE WHEN p."canonicalName" LIKE ${phrasePattern} THEN 0 WHEN ${nameHasAll} THEN 1 ELSE 2 END`;
+      const anyField = patterns
+        .map(pattern => `(p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern})`)
+        .join(' OR ');
+      where.push(`(${anyField})`);
+      const score = patterns
+        .map(
+          pattern =>
+            `(CASE WHEN p."name" ILIKE ${pattern} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.name} WHEN p."description" ILIKE ${pattern} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.description} WHEN p."body" ILIKE ${pattern} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.body} ELSE 0 END)`,
+        )
+        .join(' + ');
+      const count = patterns
+        .map(
+          pattern =>
+            `(CASE WHEN p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern} THEN 1 ELSE 0 END)`,
+        )
+        .join(' + ');
+      const tier = `CASE WHEN p."canonicalName" LIKE ${phrasePattern} THEN 0 ELSE 1 END`;
       const rows = await this.#rows(
         this.#client,
-        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY ${tier}, p."updatedAt" DESC, p."id" ASC LIMIT ${limit}`,
+        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY ${tier}, (${count}) DESC, (${score}) DESC, p."updatedAt" DESC, p."id" ASC LIMIT ${limit}`,
         params.values,
       );
       for (const row of rows) hits.push({ type: 'page', page: toPage(row) });
@@ -1451,10 +1665,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const filter = new ReadFilter(input.read, params, this.#pages);
       const extra = [`n."deletedAt" IS NULL`, `np."deletedAt" IS NULL`];
       if (input.scopeIds?.length) extra.push(`np."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
-      for (const word of words) extra.push(`n."text" ILIKE ${params.add(`%${escapeLike(word)}%`)}`);
+      const noteHas = words.map(word => `n."text" ILIKE ${params.add(`%${escapeLike(word)}%`)}`);
+      extra.push(`(${noteHas.join(' OR ')})`);
+      const noteScore = noteHas.map(has => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ');
       const rows = await this.#rows(
         this.#client,
-        `SELECT ${this.#noteColumns()}, row_to_json(np) AS "pageJson" FROM ${this.#visibleNotes(filter)} AND ${extra.join(' AND ')} ORDER BY n."updatedAt" DESC, n."id" DESC LIMIT ${limit - hits.length}`,
+        `SELECT ${this.#noteColumns()}, row_to_json(np) AS "pageJson" FROM ${this.#visibleNotes(filter)} AND ${extra.join(' AND ')} ORDER BY (${noteScore}) DESC, n."updatedAt" DESC, n."id" DESC LIMIT ${limit - hits.length}`,
         params.values,
       );
       for (const row of rows) {
@@ -1508,11 +1724,19 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   // Pins -----------------------------------------------------------------------------------------
 
-  async addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
+  async addPinAudience(input: Parameters<KnowledgePageStore['addPinAudience']>[0]): Promise<KnowledgePin> {
+    const kind = input.kind ?? 'page';
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.pageId, false);
       const now = new Date();
-      const { pin, changed } = await this.#upsertPinAudience(tx, page.id, input.audience, input.createdBy, now);
+      const { pin, changed } = await this.#upsertPinAudience(tx, {
+        pageId: page.id,
+        kind,
+        depth: kind === 'list' ? (input.depth ?? 1) : null,
+        audience: input.audience,
+        createdBy: input.createdBy,
+        now,
+      });
       if (changed) {
         await this.#logActivity(tx, {
           action: 'pin-added',
@@ -1526,41 +1750,51 @@ export class PgKnowledgePages implements KnowledgePageStore {
     });
   }
 
+  /** `keepDepth` (merges) leaves an existing pin's depth as it is instead of setting `depth`. */
   async #upsertPinAudience(
     db: Queryable,
-    pageId: string,
-    audience: string[],
-    createdBy: string,
-    now: Date,
+    input: {
+      pageId: string;
+      kind: KnowledgePinKind;
+      depth: number | null;
+      audience: string[];
+      createdBy: string;
+      now: Date;
+      keepDepth?: boolean;
+    },
   ): Promise<{ pin: KnowledgePin; changed: boolean }> {
-    const existing = (await this.#rows(db, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [pageId]))[0];
+    const { pageId, kind, audience, now } = input;
+    const existing = (
+      await this.#rows(db, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 AND "kind" = $2 FOR UPDATE`, [pageId, kind])
+    )[0];
     if (!existing) {
       const rows = await this.#rows(
         db,
-        `INSERT INTO ${this.#pins} ("id","pageId","audience","createdBy","createdAt","updatedAt") VALUES ($1,$2,$3::text[],$4,$5,$5) RETURNING *`,
-        [createKnowledgeUlid(), pageId, [...new Set(audience)], createdBy, iso(now)],
+        `INSERT INTO ${this.#pins} ("id","pageId","kind","depth","audience","createdBy","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5::text[],$6,$7,$7) RETURNING *`,
+        [createKnowledgeUlid(), pageId, kind, input.depth, [...new Set(audience)], input.createdBy, iso(now)],
       );
       return { pin: toPin(rows[0]!), changed: true };
     }
     const current = (existing.audience as string[]) ?? [];
     const merged = [...new Set([...current, ...audience])];
-    if (merged.length === current.length) return { pin: toPin(existing), changed: false };
+    const currentDepth = existing.depth == null ? null : Number(existing.depth);
+    const depth = input.keepDepth ? currentDepth : input.depth;
+    if (merged.length === current.length && depth === currentDepth) return { pin: toPin(existing), changed: false };
     const rows = await this.#rows(
       db,
-      `UPDATE ${this.#pins} SET "audience" = $2::text[], "updatedAt" = $3 WHERE "id" = $1 RETURNING *`,
-      [String(existing.id), merged, iso(now)],
+      `UPDATE ${this.#pins} SET "audience" = $2::text[], "depth" = $3, "updatedAt" = $4 WHERE "id" = $1 RETURNING *`,
+      [String(existing.id), merged, depth, iso(now)],
     );
     return { pin: toPin(rows[0]!), changed: true };
   }
 
-  async removePinAudience(input: {
-    pageId: string;
-    audience: string[];
-    removedBy: string;
-  }): Promise<KnowledgePin | null> {
+  async removePinAudience(input: Parameters<KnowledgePageStore['removePinAudience']>[0]): Promise<KnowledgePin | null> {
     return this.#tx(async tx => {
       const existing = (
-        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [input.pageId])
+        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 AND "kind" = $2 FOR UPDATE`, [
+          input.pageId,
+          input.kind ?? 'page',
+        ])
       )[0];
       if (!existing) return null;
       const current = (existing.audience as string[]) ?? [];
@@ -1592,7 +1826,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
   /** Deletes every row but keeps the tables and the schema-version marker. */
   async clearAll(): Promise<void> {
     const t = PG_KNOWLEDGE_PAGES_TABLES;
-    const tables = [t.activity, t.pins, t.mentions, t.stamps, t.notes, t.pages].map(name => this.#q(name)).join(', ');
+    const tables = [t.activity, t.pins, t.mentions, t.stamps, t.notes, t.links, t.pages]
+      .map(name => this.#q(name))
+      .join(', ');
     await this.#client.query(`TRUNCATE ${tables}`);
   }
 
@@ -1613,6 +1849,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
+    kind?: KnowledgePinKind;
     pageIds?: string[];
     excludePageIds?: string[];
     withBody?: boolean;
@@ -1626,9 +1863,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const filter = new ReadFilter(input.read, params, this.#pages);
     const where = [`p."deletedAt" IS NULL`, filter.readable('s')];
     if (input.audience !== 'all') where.push(`pn."audience" && ${params.add(input.audience)}::text[]`);
+    if (input.kind) where.push(`pn."kind" = ${params.add(input.kind)}`);
     if (input.pageIds) where.push(`pn."pageId" = ANY(${params.add(input.pageIds)}::text[])`);
-    if (input.excludePageIds?.length) where.push(`pn."pageId" <> ALL(${params.add(input.excludePageIds)}::text[])`);
-    if (input.withBody) where.push(`p."body" ~ '\\S'`);
+    // Page exclusions and the body check concern page pins; a listing pin stands for the tree below.
+    if (input.excludePageIds?.length) {
+      where.push(`(pn."kind" <> 'page' OR pn."pageId" <> ALL(${params.add(input.excludePageIds)}::text[]))`);
+    }
+    if (input.withBody) where.push(`(pn."kind" <> 'page' OR p."body" ~ '\\S')`);
     const from = `FROM ${this.#pins} pn JOIN ${this.#pages} p ON p."id" = pn."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"`;
     // The total ignores the cursor and the limit; it shares every other condition and parameter.
     const totalWhere = where.join(' AND ');

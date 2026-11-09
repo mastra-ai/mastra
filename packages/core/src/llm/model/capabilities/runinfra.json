@@ -21,6 +21,11 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "ornith-ai/Ornith-1.5-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
       {
         "type": "effort",
@@ -44,12 +49,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
@@ -61,9 +60,10 @@
         "type": "toggle"
       }
     ],
-    "ornith-ai/Ornith-1.5-35B-A3B": [
+    "Qwen/Qwen3.8-27B": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

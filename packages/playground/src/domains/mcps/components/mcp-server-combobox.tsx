@@ -15,6 +15,7 @@ export interface MCPServerComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -23,13 +24,14 @@ export interface MCPServerComboboxProps {
 export function MCPServerCombobox({
   value,
   onValueChange,
-  placeholder = 'Select an MCP server...',
-  searchPlaceholder = 'Search MCP servers...',
+  placeholder = 'Select an MCP server',
+  searchPlaceholder = 'Search MCP servers',
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
   container,
@@ -69,6 +71,7 @@ export function MCPServerCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
       container={container}

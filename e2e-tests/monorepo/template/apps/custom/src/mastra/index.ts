@@ -15,6 +15,7 @@ import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
 import { excelSubpathRoute } from '@/api/route/excel-subpath';
 import { modelUsageRoute } from '@/api/route/model-usage';
 import { stackRoute } from '@/api/route/stack';
+import { pinoTransportRoute } from '@/api/route/pino-transport';
 import { myAgent } from '@inner/hello-world/agent';
 import { calculatorMcpServer } from '@/mcp';
 import 'nodemailer';
@@ -41,6 +42,7 @@ export const mastra = new Mastra({
       excelSubpathRoute,
       modelUsageRoute,
       stackRoute,
+      pinoTransportRoute,
     ],
   },
   bundler: {

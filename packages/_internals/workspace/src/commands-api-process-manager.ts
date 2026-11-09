@@ -16,6 +16,24 @@ export interface CommandsApiStreamOptions {
   timeoutMs?: number;
 }
 
+const KILL_DESCENDANTS_TIMEOUT_MS = 10_000;
+
+/**
+ * A shell command that kills every process `pid` started, at any depth, but
+ * not `pid` itself. It pauses `pid` first: a wrapper like npm exits on its own
+ * once its child dies, and `kill(pid)` would then report it wasn't running.
+ */
+function killDescendants(pid: number): string {
+  return [
+    `kill -STOP ${pid}`,
+    // Pause each child before going deeper, so nothing can start new processes
+    // meanwhile. The recursion runs in a subshell so it can't overwrite `child`.
+    'kill_children() { for child in $(pgrep -P "$1"); do kill -STOP "$child"; (kill_children "$child"); kill -KILL "$child"; done; }',
+    `kill_children ${pid}`,
+    'true',
+  ].join('\n');
+}
+
 /** The envd commands calls the process manager makes (E2B's `sandbox.commands`). */
 export interface CommandsApi {
   run(
@@ -162,7 +180,20 @@ export class CommandsApiProcessHandle extends ProcessHandle {
 
   async kill(): Promise<boolean> {
     if (this.exitCode !== undefined) return false;
-    return this.manager.runCommands('kill', commands => commands.kill(this.inner.pid));
+    return this.manager.runCommands('kill', async commands => {
+      // envd signals only the process itself, so a wrapper like `npm run dev`
+      // would leave the dev server it started running. Take those down first.
+      // Best effort: failing to reach them mustn't stop the kill itself.
+      try {
+        const descendants = await commands.run(killDescendants(this.inner.pid), {
+          background: true,
+          stdin: false,
+          timeoutMs: KILL_DESCENDANTS_TIMEOUT_MS,
+        });
+        await descendants.wait();
+      } catch {}
+      return commands.kill(this.inner.pid);
+    });
   }
 
   async sendStdin(data: string): Promise<void> {

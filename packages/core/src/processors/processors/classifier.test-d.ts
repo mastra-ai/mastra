@@ -1,4 +1,4 @@
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf, test } from 'vitest';
 
 import type { TripWireOptions } from '../../agent/trip-wire';
 import { Classifier } from '../../classifier';
@@ -71,3 +71,6 @@ new ClassifierProcessor<{ unsafe: { type: 'boolean' } }>({
     if (answers.unsafe.type === 'boolean' && answers.unsafe.probability > 0.5) abort('blocked');
   },
 });
+
+// Vitest 5 fails typecheck files without a test; the assertions above are still checked file-wide.
+test('classifier types', () => {});

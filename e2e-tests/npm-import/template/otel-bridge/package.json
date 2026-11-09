@@ -1,0 +1,9 @@
+{
+  "name": "npm-import-otel-bridge",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "e2e-test",
+    "@mastra/otel-bridge": "e2e-test"
+  }
+}

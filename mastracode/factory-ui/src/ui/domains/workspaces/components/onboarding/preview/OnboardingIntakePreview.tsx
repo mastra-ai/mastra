@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { Check, CircleDashed, Code2 } from 'lucide-react';
@@ -54,7 +55,10 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       </SketchLabel>
       <SketchLabel x={38} y={58} width={128}>
         <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
-          {id} · {kind}
+          <Metadata>
+            <Metadata.Item>{id}</Metadata.Item>
+            <Metadata.Item>{kind}</Metadata.Item>
+          </Metadata>
         </Txt>
         <Txt variant="meta" tone="muted" className="min-[900px]:hidden">
           {kind}

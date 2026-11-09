@@ -17,24 +17,19 @@ import type { Context } from 'hono';
 
 import { isTerminalWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
-import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { linearClaimKey } from './claim.js';
-import type { LinearIntegration } from './integration.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { LinearIntegration, LinearProject, LinearTeam } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Linear feature gate, mirroring the
@@ -46,7 +41,23 @@ export interface LinearFeatureDiagnostics {
   appDbConfigured: boolean;
 }
 
+export interface LinearWorkspaceListingError {
+  workspaceId: string;
+  name: string;
+}
+
+/** Platform connection inventory entry, including disconnected workspaces. Never contains tokens. */
+export interface LinearConnectionWorkspace {
+  id: string;
+  name: string;
+  urlKey: string | null;
+  connected: boolean;
+}
+
 export interface MountLinearRoutesOptions {
+  listProjectsWithStatus?: () => Promise<{ projects: LinearProject[]; workspaceErrors: LinearWorkspaceListingError[] }>;
+  listTeamsWithStatus?: () => Promise<{ teams: LinearTeam[]; workspaceErrors: LinearWorkspaceListingError[] }>;
+  listConnectionWorkspaces?: () => Promise<LinearConnectionWorkspace[]>;
   /**
    * The integration instance providing OAuth + GraphQL access. Required for
    * everything beyond the disabled `status` route.
@@ -84,7 +95,7 @@ export interface MountLinearRoutesOptions {
    * already holds after the issue's winning source was routed elsewhere. When
    * absent, details resolve only through sources routed to the Factory.
    */
-  workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'getByClaimKey'>;
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'listShared'>;
   /** Installed boards, so a held card's terminal status follows its own board. */
   boards?: BoardRegistry;
 }
@@ -170,26 +181,28 @@ function winningLinearSourceId(
 }
 
 /**
- * The card this Factory holds for an issue, if any: by the stable issue id when
- * the SPA sent one, else by the identifier the card was filed under.
+ * Whether this Factory holds a live card for an issue: under the identifier it
+ * was filed with, or by the stable issue id when the SPA sent one.
  */
-async function findHeldCard(
+async function holdsLiveCardFor(
   options: MountLinearRoutesOptions,
   orgId: string,
   factoryProjectId: string,
   identifier: string,
   issueId: string | undefined,
 ) {
-  if (!options.workItems) return null;
-  if (issueId) {
-    const claimant = await options.workItems.getByClaimKey({ orgId, claimKey: linearClaimKey(issueId) });
-    if (claimant) return claimant.factoryProjectId === factoryProjectId ? claimant : null;
-  }
-  return options.workItems.getByProjectSource({
+  if (!options.workItems) return false;
+  const isLive = (item: Card) =>
+    !(options.boards ? isTerminalWorkItem(options.boards, item) : isTerminalFactoryRuleStage(item.stages));
+  const byIdentifier = await options.workItems.getByProjectSource({
     orgId,
     factoryProjectId,
     source: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}` },
   });
+  if (byIdentifier && isLive(byIdentifier)) return true;
+  if (!issueId) return false;
+  const items = await options.workItems.listShared({ orgId, factoryProjectId });
+  return items.some(item => item.workItem.metadata?.linearIssueId === issueId && isLive(item));
 }
 
 /** Map a Linear read failure to the API response for the SPA. */
@@ -247,6 +260,19 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           });
         }
 
+        if (options.listConnectionWorkspaces) {
+          const workspaces = await options.listConnectionWorkspaces();
+          const active = workspaces.find(workspace => workspace.connected);
+          return c.json({
+            enabled: true,
+            connected: Boolean(active),
+            mode: 'platform',
+            workspace: active ? { name: active.name, urlKey: active.urlKey } : null,
+            workspaces,
+            reason: active ? 'ready' : 'not_connected',
+            diagnostics: diagnostics(),
+          });
+        }
         const connection = await linear.loadConnection(tenant.orgId);
         return c.json({
           enabled: true,
@@ -344,6 +370,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         try {
+          if (options.listProjectsWithStatus) return c.json(await options.listProjectsWithStatus());
           const accessToken = await linear.getFreshAccessToken(connection);
           const projects = await linear.listProjects(accessToken);
           return c.json({ projects });
@@ -369,6 +396,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         try {
+          if (options.listTeamsWithStatus) return c.json(await options.listTeamsWithStatus());
           const accessToken = await linear.getFreshAccessToken(connection);
           const teams = await linear.listTeams(accessToken);
           return c.json({ teams });
@@ -519,10 +547,13 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         // every selected source (never beyond the selection), and the routing
         // check is waived for that card alone. Without a live card, the strict
         // routed-source rule applies.
-        const held = await findHeldCard(options, resolved.tenant.orgId, factoryProjectId, identifier, issueId);
-        const holdsLiveCard =
-          held != null &&
-          !(options.boards ? isTerminalWorkItem(options.boards, held) : isTerminalFactoryRuleStage(held.stages));
+        const holdsLiveCard = await holdsLiveCardFor(
+          options,
+          resolved.tenant.orgId,
+          factoryProjectId,
+          identifier,
+          issueId,
+        );
         if (routedSourceIds.length === 0 && !holdsLiveCard) return c.json({ error: 'issue_not_found' }, 404);
         const fetchSourceIds = holdsLiveCard ? selectedIds : routedSourceIds;
 

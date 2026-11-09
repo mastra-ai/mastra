@@ -1,0 +1,26 @@
+diff --git a/node_modules/@ai-sdk/amazon-bedrock/dist/index.js b/node_modules/@ai-sdk/amazon-bedrock/dist/index.js
+index edd2809..bfb1bcc 100644
+--- a/node_modules/@ai-sdk/amazon-bedrock/dist/index.js
++++ b/node_modules/@ai-sdk/amazon-bedrock/dist/index.js
+@@ -1390,7 +1390,7 @@ var BedrockAdditionalModelResponseFieldsSchema = import_v44.z.object({
+ var BedrockToolUseSchema = import_v44.z.object({
+   toolUseId: import_v44.z.string(),
+   name: import_v44.z.string(),
+-  input: import_v44.z.unknown()
++  input: import_v44.z.unknown().optional()
+ });
+ var BedrockReasoningTextSchema = import_v44.z.object({
+   signature: import_v44.z.string().nullish(),
+diff --git a/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs b/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
+index e27d8bc..158c57a 100644
+--- a/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
++++ b/node_modules/@ai-sdk/amazon-bedrock/dist/index.mjs
+@@ -1386,7 +1386,7 @@ var BedrockAdditionalModelResponseFieldsSchema = z4.object({
+ var BedrockToolUseSchema = z4.object({
+   toolUseId: z4.string(),
+   name: z4.string(),
+-  input: z4.unknown()
++  input: z4.unknown().optional()
+ });
+ var BedrockReasoningTextSchema = z4.object({
+   signature: z4.string().nullish(),

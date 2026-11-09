@@ -14,7 +14,7 @@
         "!**/*.spec.ts",
         "!**/__tests__/**"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/docs/**"]
     },
     "test": {
       "dependsOn": ["^build"],

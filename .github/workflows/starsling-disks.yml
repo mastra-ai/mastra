@@ -1,0 +1,60 @@
+# StarSling Disks: publishes the pnpm store and pnpm cache that every StarSling job granted
+# `id-token: write` gets mounted before its first step (see .github/actions/setup-pnpm-node).
+# Only a successful job on the default branch publishes; "on-change" publishes only what changed.
+name: StarSling Disks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - .github/workflows/starsling-disks.yml
+      - .github/actions/setup-pnpm-node/action.yaml
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: starsling-disks
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish the pnpm disks
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+
+      # Before pnpm writes anything: what is written to a disk after its step is what it publishes.
+      - name: pnpm store disk
+        id: store
+        uses: starslingdev/disks@v0
+        with:
+          preset: pnpm-store
+          publish: on-change
+
+      - name: pnpm cache disk
+        id: cache
+        uses: starslingdev/disks@v0
+        with:
+          name: pnpm-cache
+          path: ~/.cache/pnpm
+          publish: on-change
+
+      - name: Install
+        uses: ./.github/actions/setup-pnpm-node
+
+      # Only some StarSling runners carry Disks. On one that does not, the disk steps skip and nothing is
+      # published; say so, so a re-run (workflow_dispatch) can pick it up.
+      - name: Check the disks can publish
+        if: steps.store.outputs.publish-status != 'pending'
+        env:
+          MOUNT: ${{ steps.store.outputs.mount }}
+          STATUS: ${{ steps.store.outputs.publish-status }}
+          REASON: ${{ steps.store.outputs.reason }}
+        run: echo "::warning::The pnpm store disk was not mounted for publishing (mount '$MOUNT', status '$STATUS', reason '$REASON'). Nothing new is published; re-run this workflow."

@@ -1,6 +1,7 @@
 import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
 
 import type { BoardCandidate } from './boardCandidates';
+import { sourceMetadata } from './boardItems';
 import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
@@ -69,6 +70,7 @@ export function withPeopleUnfolded(filters: BoardFilterState, personId: PersonId
 }
 
 interface RelatedCard {
+  workItem?: WorkItem['workItem'];
   source: WorkItem['source'];
   metadata: Record<string, unknown>;
 }
@@ -117,13 +119,13 @@ function externalCreator(card: RelatedCard): string | undefined {
     card.source === 'gitlab-issue' ||
     card.source === 'gitlab-pr'
   ) {
-    return metadataString(card.metadata, 'author');
+    return metadataString(sourceMetadata(card), 'author');
   }
   if (card.source === 'linear-issue' || card.source === 'jira-issue' || card.source === 'incidentio-follow-up') {
     return (
-      metadataString(card.metadata, 'creator') ??
-      metadataString(card.metadata, 'linearCreator') ??
-      metadataString(card.metadata, 'author')
+      metadataString(sourceMetadata(card), 'creator') ??
+      metadataString(sourceMetadata(card), 'linearCreator') ??
+      metadataString(sourceMetadata(card), 'author')
     );
   }
   return undefined;
@@ -136,12 +138,13 @@ function externalAssignees(card: RelatedCard): string[] {
     card.source === 'gitlab-issue' ||
     card.source === 'gitlab-pr'
   ) {
-    const assignees = metadataStrings(card.metadata, 'assignees');
-    const assignee = metadataString(card.metadata, 'assignee');
+    const assignees = metadataStrings(sourceMetadata(card), 'assignees');
+    const assignee = metadataString(sourceMetadata(card), 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
   }
   if (card.source === 'linear-issue' || card.source === 'jira-issue' || card.source === 'incidentio-follow-up') {
-    const assignee = metadataString(card.metadata, 'assignee') ?? metadataString(card.metadata, 'linearAssignee');
+    const assignee =
+      metadataString(sourceMetadata(card), 'assignee') ?? metadataString(sourceMetadata(card), 'linearAssignee');
     return assignee ? [assignee] : [];
   }
   return [];
@@ -149,7 +152,7 @@ function externalAssignees(card: RelatedCard): string[] {
 
 function requestedReviewers(card: RelatedCard): string[] {
   if (card.source !== 'github-pr' && card.source !== 'gitlab-pr') return [];
-  return metadataStrings(card.metadata, 'requestedReviewers');
+  return metadataStrings(sourceMetadata(card), 'requestedReviewers');
 }
 
 function externalIds(source: RelatedCard['source'], names: readonly string[]): Set<string> {

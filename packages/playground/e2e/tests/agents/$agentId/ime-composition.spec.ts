@@ -47,7 +47,7 @@ test.describe('Chat input IME composition', () => {
       await page.click('text=Stream');
       await page.keyboard.press('Escape');
 
-      const chatInput = page.getByPlaceholder('Enter your message...');
+      const chatInput = page.getByPlaceholder('Enter your message');
       await chatInput.click();
       await chatInput.pressSequentially('hello', { delay: 10 });
 
@@ -123,7 +123,7 @@ test.describe('Chat input IME composition', () => {
       await page.click('text=Stream');
       await page.keyboard.press('Escape');
 
-      const chatInput = page.getByPlaceholder('Enter your message...');
+      const chatInput = page.getByPlaceholder('Enter your message');
       await chatInput.click();
       await chatInput.pressSequentially('hello', { delay: 10 });
 

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   Command,
@@ -127,7 +128,7 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command loop>
-          <CommandInput placeholder="Search models…" />
+          <CommandInput placeholder="Search models" />
           <CommandList className="max-h-80">
             <CommandEmpty>No matching model.</CommandEmpty>
             {groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => (
@@ -213,10 +214,13 @@ export function ModelPicker() {
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
-    const unavailableLabel = `${label} · model list unavailable`;
+    const unavailableLabel = `${label}: model list unavailable`;
     return (
       <span className="text-destructive-foreground" aria-label={unavailableLabel} title={modelsQuery.error.message}>
-        {unavailableLabel}
+        <Metadata>
+          <Metadata.Item>{label}</Metadata.Item>
+          <Metadata.Item>model list unavailable</Metadata.Item>
+        </Metadata>
       </span>
     );
   }
@@ -224,10 +228,14 @@ export function ModelPicker() {
     if (notConfigured && organizationScoped && factoryId) {
       return (
         <span className="text-destructive-foreground" title={selectedModelId}>
-          {label} ·{' '}
-          <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
-            needs an organization credential
-          </Link>
+          <Metadata>
+            <Metadata.Item>{label}</Metadata.Item>
+            <Metadata.Item>
+              <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
+                needs an organization credential
+              </Link>
+            </Metadata.Item>
+          </Metadata>
         </span>
       );
     }
@@ -237,8 +245,10 @@ export function ModelPicker() {
         aria-label={notConfigured ? `${label} is not configured` : undefined}
         title={selectedModelId}
       >
-        {label}
-        {notConfigured ? ' · not configured' : null}
+        <Metadata>
+          <Metadata.Item>{label}</Metadata.Item>
+          {notConfigured && <Metadata.Item>not configured</Metadata.Item>}
+        </Metadata>
       </span>
     );
   }
@@ -250,10 +260,10 @@ export function ModelPicker() {
         triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
         triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
       >
-        <span className="max-w-48 truncate">
-          {label}
-          {notConfigured ? ' · not configured' : null}
-        </span>
+        <Metadata singleLine className="max-w-48">
+          <Metadata.Item>{label}</Metadata.Item>
+          {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
+        </Metadata>
       </ModelMenu>
     </ModelThinkingGroup>
   );

@@ -32,7 +32,10 @@ const LAYOUTS = [
     // Tools sit in the Input tab, under the input they were offered with.
     renderSpan: (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} activeTab="input" />,
     toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
-    toolsHeading: (count: number) => `Available tools · ${count}`,
+    toolsHeading: (tools: HTMLElement, count: number) => {
+      const heading = within(tools).getByText('Available tools');
+      return within(heading).getByText(String(count));
+    },
     inputSection: () => screen.getByRole('tabpanel', { name: 'Input' }),
   },
   {
@@ -43,7 +46,7 @@ const LAYOUTS = [
       if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
       return found;
     },
-    toolsHeading: (count: number) => `Available tools (${count})`,
+    toolsHeading: (tools: HTMLElement, count: number) => within(tools).getByText(`Available tools (${count})`),
     inputSection: section('[data-slot="span-payload-section"]', 'Input'),
   },
 ] as const;
@@ -59,7 +62,7 @@ describe.each(LAYOUTS)('Tools section ($layout)', ({ renderSpan, toolsSection, t
       renderWithLinks(processorToolsSpan);
 
       const tools = toolsSection();
-      expect(tools.textContent).toContain(toolsHeading(2));
+      expect(toolsHeading(tools, 2)).toBeTruthy();
       expect(within(tools).getByText('Suggests a recipe from what is in the fridge.')).toBeTruthy();
       expect(within(tools).getByText('Reads a workspace file.')).toBeTruthy();
     });

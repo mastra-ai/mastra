@@ -6,6 +6,7 @@ import type { useTracesListSource } from '../../hooks/use-traces-list-source';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../trace-list-columns';
 import type { SpanTab, TraceDatePreset } from '../../types';
+import type { FeedbackOptions } from '../feedback-options';
 import type { TraceSpanView } from '../trace-data-panel-view';
 import type { TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 
@@ -32,6 +33,7 @@ export type TracesConfigContextValue = {
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   /** The span query API is on, so the host can offer a spans view next to the traces list. */
   withSpanQuery: boolean;
   /** The thread rows API is on, so the host can offer a threads view next to the traces list. */

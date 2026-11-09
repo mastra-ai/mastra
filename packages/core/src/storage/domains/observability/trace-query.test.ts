@@ -991,7 +991,17 @@ describe('planTraceQuery', () => {
   });
 
   it('keeps correlation fields queryable and does not infer authorization fields', () => {
-    for (const field of ['resourceId', 'threadId', 'runId', 'sessionId', 'userId', 'organizationId'] as const) {
+    for (const field of [
+      'resourceId',
+      'threadId',
+      'runId',
+      'sessionId',
+      'userId',
+      'organizationId',
+      'requestId',
+      'serviceName',
+      'experimentId',
+    ] as const) {
       expect(
         planTraceQuery(
           parsed({
@@ -1044,6 +1054,47 @@ describe('planTraceQuery', () => {
       ],
     });
     for (const field of ['runId', 'sessionId', 'userId', 'organizationId']) {
+      expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
+      expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
+    }
+  });
+
+  it('plans request, service and experiment predicates on traces and related spans', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'in', value: { path: 'requestId' }, set: ['request-1', 'request-2'] },
+            { op: 'ne', left: { path: 'experimentId' }, right: { literal: 'exp-1' } },
+            { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } } } },
+            { spans: { none: { op: 'exists', path: 'experimentId' } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'membership', field: 'requestId', operator: 'in', values: ['request-1', 'request-2'] },
+        { type: 'comparison', field: 'experimentId', operator: 'ne', value: 'exp-1' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'serviceName', operator: 'eq', value: 'checkout' },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'none',
+          predicate: { type: 'presence', field: 'experimentId', operator: 'exists' },
+        },
+      ],
+    });
+    for (const field of ['requestId', 'serviceName', 'experimentId']) {
       expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
       expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
     }

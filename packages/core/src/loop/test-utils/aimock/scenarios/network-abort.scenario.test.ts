@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
+import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
+import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { createStep, createWorkflow } from '../../../../workflows';
 import { describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
@@ -246,54 +248,81 @@ describeForAllEngines(
       expect(abortChunks(chunks).map(c => c.type)).toEqual(['tool-execution-abort']);
     });
 
-    it('reports a workflow abort raised inside a step', async () => {
-      const llm = getMock();
-      const controller = new AbortController();
-      llm.on(
-        { endpoint: 'chat', predicate: isRoutingRequest },
-        routeTo('abortWorkflow', 'workflow', JSON.stringify({ city: 'Paris' })),
-      );
-      llm.on({ endpoint: 'chat', predicate: isCompletionRequest }, complete('Done'));
-      const step = createStep({
-        id: 'slow-step',
-        inputSchema: z.object({ city: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
-        execute: async ({ inputData }) => {
-          controller.abort();
-          return { result: `Researched ${inputData.city}` };
-        },
-      });
-      const abortWorkflow = createWorkflow({
-        id: 'abortWorkflow',
-        description: 'Gets aborted',
-        inputSchema: z.object({ city: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
-      })
-        .then(step)
-        .commit();
-      const events: unknown[] = [];
-      const network = new Agent({
-        id: 'workflow-abort-network',
-        name: 'workflow-abort-network',
-        instructions: 'Route.',
-        model: scenarioModel(llm),
-        workflows: { abortWorkflow },
-        memory: new MockMemory(),
-      });
+    it.each([1, 2] as const)(
+      'reports a workflow abort without loading step history (storage v%s)',
+      async storageVersion => {
+        const llm = getMock();
+        const controller = new AbortController();
+        llm.on(
+          { endpoint: 'chat', predicate: isRoutingRequest },
+          routeTo('abortWorkflow', 'workflow', JSON.stringify({ city: 'Paris' })),
+        );
+        llm.on({ endpoint: 'chat', predicate: isCompletionRequest }, complete('Done'));
+        const step = createStep({
+          id: 'slow-step',
+          inputSchema: z.object({ city: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData }) => {
+            controller.abort();
+            return { result: `Researched ${inputData.city}` };
+          },
+        });
+        const abortWorkflow = createWorkflow({
+          id: 'abortWorkflow',
+          description: 'Gets aborted',
+          inputSchema: z.object({ city: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { storageVersion },
+        })
+          .then(
+            createStep({
+              id: 'prepare',
+              inputSchema: z.object({ city: z.string() }),
+              outputSchema: z.object({ city: z.string() }),
+              execute: async ({ inputData }) => inputData,
+            }),
+          )
+          .then(step)
+          .commit();
+        const events: unknown[] = [];
+        const network = new Agent({
+          id: 'workflow-abort-network',
+          name: 'workflow-abort-network',
+          instructions: 'Route.',
+          model: scenarioModel(llm),
+          workflows: { abortWorkflow },
+          memory: new MockMemory(),
+        });
 
-      const chunks = await drain(
-        await forEngine(network, engine).network('Research Paris', {
-          abortSignal: controller.signal,
-          onAbort: event => void events.push(event),
-          memory: { thread: 'wa-t', resource: 'wa-r' },
-        }),
-      );
+        const storage = new InMemoryStore();
+        const workflows = (await storage.getStore('workflows'))!;
+        const loadSteps = workflows.loadWorkflowRunSteps.bind(workflows);
+        let resultStepReads = 0;
+        workflows.loadWorkflowRunSteps = async args => {
+          if (args.expectedLastSeq !== undefined) resultStepReads++;
+          return loadSteps(args);
+        };
+        const agent = new Mastra({
+          agents: { network: forEngine(network, engine) },
+          workflows: { abortWorkflow },
+          storage,
+        }).getAgent('network');
 
-      expect(events).toContainEqual({ primitiveType: 'workflow', primitiveId: 'abortWorkflow', iteration: 0 });
-      expect(abortChunks(chunks)).toEqual([
-        { type: 'workflow-execution-abort', payload: { primitiveType: 'workflow', primitiveId: 'abortWorkflow' } },
-      ]);
-    });
+        const chunks = await drain(
+          await agent.network('Research Paris', {
+            abortSignal: controller.signal,
+            onAbort: event => void events.push(event),
+            memory: { thread: 'wa-t', resource: 'wa-r' },
+          }),
+        );
+
+        expect(events).toContainEqual({ primitiveType: 'workflow', primitiveId: 'abortWorkflow', iteration: 0 });
+        expect(abortChunks(chunks)).toEqual([
+          { type: 'workflow-execution-abort', payload: { primitiveType: 'workflow', primitiveId: 'abortWorkflow' } },
+        ]);
+        expect(resultStepReads).toBe(0);
+      },
+    );
 
     // Known gap #27618: network() forwards onAbort into the inner agent runs (which
     // call it with { steps, text }) and fires it twice for workflows.

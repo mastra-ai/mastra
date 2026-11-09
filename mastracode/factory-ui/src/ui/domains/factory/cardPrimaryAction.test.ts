@@ -1,15 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
 import { boardCardState } from './boardCardState';
+import { itemBoard } from './boardStages';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
+const plan: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };
 const build: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
 const review: CardMove = { label: 'Review', role: 'review', stage: 'review' };
 
 function sessionRef(role: string): WorkItemSessionRef {
   return { sessionId: `session-${role}`, branch: 'factory/pr-1', threadId: `thread-${role}`, startedBy: 'user-1' };
+}
+
+function stageEntry(stage: string) {
+  return { stage, enteredAt: '2026-10-01T00:00:00.000Z', by: 'user-1' };
+}
+
+/** Triage ran and sent the card back to Intake. */
+function triaged(): WorkItem {
+  return {
+    ...item({ triage: sessionRef('triage') }),
+    stageHistory: [stageEntry('intake'), stageEntry('triage'), stageEntry('intake')],
+  };
 }
 
 function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
@@ -30,7 +44,6 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-08-30T00:00:00.000Z',
     updatedAt: '2026-08-30T00:00:00.000Z',
@@ -45,25 +58,97 @@ describe('cardMoves', () => {
     },
   );
 
-  it('offers an issue its two lanes, and a needs-approval issue only the decision', () => {
+  it('offers an issue its lanes for its column, and a needs-approval issue only the decision', () => {
     const issue = { source: 'github-issue' as const, metadata: {} };
-    expect(cardMoves(issue, 'intake')).toEqual([investigate, build]);
+    expect(cardMoves(issue, 'intake')).toEqual([investigate, plan]);
+    expect(cardMoves(issue, 'triage')).toEqual([investigate, plan]);
+    // Building comes only after Planning: from there Build approves the plan, and in Building it re-runs the lane.
+    expect(cardMoves(issue, 'planning')).toEqual([plan, build]);
+    expect(cardMoves(issue, 'execute')).toEqual([build, plan]);
     expect(cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] } }, 'intake')).toEqual([
       { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
     ]);
-    // Accepted, so the label is stale until the source catches up.
+    const normalizedIssue: WorkItem = {
+      ...item({}),
+      source: 'github-issue',
+      metadata: { labels: ['stale-label'] },
+      workItem: {
+        provider: 'github',
+        key: 'acme/repo#42',
+        url: null,
+        title: 'Needs approval',
+        state: 'open',
+        labels: ['Status: Needs Approval'],
+        author: 'reporter',
+        metadata: null,
+      },
+    };
+    expect(cardMoves(normalizedIssue, 'intake')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+    ]);
     expect(
       cardMoves(
-        { ...issue, metadata: { labels: ['Status: Needs Approval'] }, acceptedAt: '2026-08-30T00:00:00.000Z' },
-        'triage',
+        {
+          ...normalizedIssue,
+          metadata: { labels: ['Status: Needs Approval'] },
+          workItem: { ...normalizedIssue.workItem!, labels: [] },
+        },
+        'intake',
       ),
-    ).toEqual([investigate, build]);
+    ).toEqual([investigate, plan]);
+    // A person moved it on, so the label is stale until the source catches up.
+    expect(
+      cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] }, stages: ['planning'] }, 'planning'),
+    ).toEqual([plan, build]);
   });
+
+  const normalizedIssue = {
+    source: 'github-issue' as const,
+    metadata: { labels: ['stale-board-label'] },
+    workItem: {
+      provider: 'github',
+      key: 'acme/repo#42',
+      url: null,
+      title: 'Needs approval',
+      state: 'open',
+      labels: ['Status: Needs Approval'],
+      author: 'reporter',
+      metadata: null,
+    },
+    stages: ['intake'],
+  };
+
+  it('holds a persisted issue for its normalized approval label, not stale board labels', () => {
+    expect(cardMoves(normalizedIssue, 'intake')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+    ]);
+    const legacyAcceptedIssue = { ...normalizedIssue, acceptedAt: '2026-08-30T00:00:00.000Z' };
+    expect(cardMoves(legacyAcceptedIssue, 'triage')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+    ]);
+    expect(cardMoves({ ...normalizedIssue, stages: ['planning'] }, 'planning')).toEqual([plan, build]);
+  });
+
+  it.each([{ labels: [] }, { labels: ['bug'] }])(
+    'does not restore stale approval labels when normalized labels are $labels',
+    ({ labels }) => {
+      expect(
+        cardMoves(
+          {
+            ...normalizedIssue,
+            metadata: { labels: ['Status: Needs Approval'] },
+            workItem: { ...normalizedIssue.workItem, labels },
+          },
+          'intake',
+        ),
+      ).toEqual([investigate, plan]);
+    },
+  );
 
   it.each(['linear-issue', 'jira-issue', 'incidentio-follow-up'] as const)(
     'offers a %s the same issue lanes',
     source => {
-      expect(cardMoves({ source, metadata: {} }, 'intake')).toEqual([investigate, build]);
+      expect(cardMoves({ source, metadata: {} }, 'intake')).toEqual([investigate, plan]);
     },
   );
 
@@ -75,6 +160,18 @@ describe('cardMoves', () => {
     expect(cardMoves(mergeRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
     expect(cardMoves(mergeRequest, 'review')).toEqual([review]);
   });
+
+  it.each(['github-pr', 'gitlab-pr'] as const)(
+    'offers a %s card on the Work board Review into PR review from intake, and Re-review once merged-open in Done',
+    source => {
+      expect(cardMoves({ source, board: 'work', metadata: {} }, 'intake')).toEqual([
+        { label: 'Review', role: 'review', stage: 'pr-review' },
+      ]);
+      expect(cardMoves({ source, board: 'work', metadata: { state: 'open' }, stages: ['done'] }, 'done')).toEqual([
+        { label: 'Re-review', role: 'review', stage: 'pr-review' },
+      ]);
+    },
+  );
 
   it('offers a Work card in Review no lane, so its session is the action', () => {
     expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);
@@ -99,22 +196,58 @@ describe('resumeStage', () => {
     // Planning and Building share the `work` session, so the lane comes from the stage history.
     expect(
       resumeStage('intake', {
+        board: 'work',
         sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
         stageHistory: history('intake', 'triage', 'planning', 'intake'),
       }),
     ).toBe('planning');
     expect(
       resumeStage('intake', {
+        board: 'work',
         sessions: { work: sessionRef('work') },
         stageHistory: history('triage', 'planning', 'execute', 'intake'),
       }),
-    ).toBe('execute');
+    ).toBe('planning');
+    // Intake does not lead to Building: a card self-review parked resumes in Planning.
+    expect(
+      resumeStage('intake', {
+        board: 'work',
+        sessions: { work: sessionRef('work'), review: sessionRef('review') },
+        stageHistory: history('triage', 'planning', 'execute', 'review', 'intake'),
+      }),
+    ).toBe('planning');
+    // A pull request card set aside from PR review resumes its review there.
+    expect(
+      resumeStage('intake', {
+        board: 'work',
+        sessions: { review: sessionRef('review') },
+        stageHistory: history('pr-review', 'intake'),
+      }),
+    ).toBe('pr-review');
+  });
+
+  it('resumes a Review-board card set aside in Intake back into Reviewing, which has no Planning', () => {
+    const resume = (card: WorkItem) =>
+      resumeStage('intake', { board: itemBoard(card), sessions: card.sessions, stageHistory: card.stageHistory });
+    const reviewed = {
+      ...item({ review: sessionRef('review') }),
+      stageHistory: [stageEntry('review'), stageEntry('intake')],
+    };
+    expect(resume({ ...reviewed, board: 'review' })).toBe('review');
+    // A pull request card with no board predates persisted boards and sits on Review too.
+    expect(resume({ ...reviewed, board: null })).toBe('review');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
-    expect(resumeStage('intake', { sessions: {}, stageHistory: history('triage', 'intake') })).toBeUndefined();
     expect(
-      resumeStage('done', { sessions: { review: sessionRef('review') }, stageHistory: history('review', 'done') }),
+      resumeStage('intake', { board: 'work', sessions: {}, stageHistory: history('triage', 'intake') }),
+    ).toBeUndefined();
+    expect(
+      resumeStage('done', {
+        board: 'work',
+        sessions: { review: sessionRef('review') },
+        stageHistory: history('review', 'done'),
+      }),
     ).toBeUndefined();
   });
 });
@@ -131,7 +264,7 @@ describe('cardPrimaryAction', () => {
     const action = cardPrimaryAction({
       ...handlers,
       item: item({ plan: sessionRef('plan') }),
-      move: build,
+      move: plan,
       resumeStage: 'planning',
       hasSession: true,
       onMove,
@@ -157,14 +290,14 @@ describe('cardPrimaryAction', () => {
     expect(onMove).toHaveBeenCalledWith('preparing');
   });
 
-  it('asks for the maintainer decision on a held non-bug card instead of offering its lane', () => {
+  it('asks for the maintainer decision on a card triage left in Intake instead of offering its lane', () => {
     const onMove = vi.fn();
-    const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
+    const held = triaged();
     const action = cardPrimaryAction({
       ...handlers,
       item: held,
-      columnStage: 'triage',
-      move: build,
+      columnStage: 'intake',
+      move: plan,
       hasSession: true,
       onMove,
     });
@@ -178,12 +311,12 @@ describe('cardPrimaryAction', () => {
   it('keeps the maintainer decision ahead of a suggested run on a held card', () => {
     const onMove = vi.fn();
     const onApproveProposal = vi.fn();
-    const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
+    const held = triaged();
     const action = cardPrimaryAction({
       ...handlers,
       item: held,
-      columnStage: 'triage',
-      move: build,
+      columnStage: 'intake',
+      move: plan,
       waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
@@ -196,14 +329,22 @@ describe('cardPrimaryAction', () => {
     expect(onApproveProposal).not.toHaveBeenCalled();
   });
 
-  it('offers the lane again once the card is accepted, and never holds bugs', () => {
-    const base = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
-    const args = { ...handlers, columnStage: 'triage' as const, move: build, hasSession: true };
-    expect(cardPrimaryAction({ ...args, item: { ...base, acceptedAt: '2026-08-30T00:00:00.000Z' } })?.label).toBe(
-      'Build',
+  it('holds only a Work card triage left in Intake, not one still triaging, past Triage since, or never triaged', () => {
+    const args = { ...handlers, move: plan, hasSession: true };
+    expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'intake' })?.label).toBe('Accept');
+    // Still in Triage: the run decides where it goes.
+    expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'triage' })?.label).toBe('Plan');
+    // Parked back in Intake after building: resume, don't re-decide.
+    const parked = {
+      ...triaged(),
+      sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
+      stageHistory: [...triaged().stageHistory, stageEntry('planning'), stageEntry('execute'), stageEntry('intake')],
+    };
+    expect(cardPrimaryAction({ ...args, item: parked, columnStage: 'intake' })?.label).toBe('Plan');
+    expect(cardPrimaryAction({ ...args, item: item({}), columnStage: 'intake' })?.label).toBe('Plan');
+    expect(cardPrimaryAction({ ...args, item: { ...triaged(), board: 'review' }, columnStage: 'intake' })?.label).toBe(
+      'Plan',
     );
-    expect(cardPrimaryAction({ ...args, item: { ...base, triageType: 'bug' } })?.label).toBe('Build');
-    expect(cardPrimaryAction({ ...args, item: base, columnStage: 'planning' })?.label).toBe('Build');
   });
 
   it('still releases a proposed run first: the suggestion beats resuming beside it', () => {
@@ -270,9 +411,7 @@ describe('cardActions', () => {
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
     expect(lit(cardActions({ ...running, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...running, session, retry, run }))).toEqual([]);
-    expect(lit(cardActions({ state: boardCardState({ heldAs: 'feature request' }), session, run }))).toEqual([
-      'Investigate',
-    ]);
+    expect(lit(cardActions({ state: boardCardState({ held: true }), session, run }))).toEqual(['Investigate']);
   });
 
   it('replaces the run with a disabled progress action until there is a session to open', () => {

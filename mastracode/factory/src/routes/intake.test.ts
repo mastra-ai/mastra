@@ -9,6 +9,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -357,6 +358,56 @@ describe('intake configuration', () => {
       expect(await back.json()).toMatchObject({ relocated: { moved: 2, skipped: 0 } });
       const again = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
       expect(again.find(i => i.id === resting.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+    });
+
+    it('leaves a card an intake route placed when its source is rebound', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const create = (externalId: string, metadata: Record<string, unknown>) =>
+        seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: {
+            board: 'work',
+            title: externalId,
+            stages: ['intake'],
+            sessions: {},
+            metadata,
+            externalSource: {
+              integrationId: 'linear',
+              type: 'issue',
+              externalId,
+              url: `https://linear.app/acme/issue/${externalId}`,
+            },
+          },
+        });
+      const routed = (await create('linear:ENG-20', { intakeRouteId: 'route-1' })).item;
+      const bound = (await create('linear:ENG-21', {})).item;
+      const issue = (identifier: string) => ({
+        source: { type: 'issue', externalId: `uuid-${identifier}` },
+        sourceId: 'team-2',
+        title: identifier,
+        metadata: { identifier },
+      });
+      vi.mocked(linear.listItems).mockResolvedValueOnce({
+        items: [issue('ENG-20'), issue('ENG-21')],
+        nextCursor: null,
+      });
+      await put({ integrationId: 'linear', sourceId: 'team-2', factoryProjectId: project.id });
+
+      const response = await put({
+        integrationId: 'linear',
+        sourceId: 'team-2',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
+
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 1 } });
+      const byId = new Map(
+        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
+      );
+      expect(byId.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(byId.get(bound.id)).toMatchObject({ board: 'release', stages: ['queued'] });
     });
 
     it('preserves selected project precedence when rebinding an unselected team', async () => {
@@ -903,6 +954,95 @@ describe('intake configuration', () => {
       expect(items.get(parked.id)).toMatchObject({ board: 'work', stages: ['intake'] });
     });
 
+    it('leaves a labelled card an intake route placed when a label route is added', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const create = (externalId: string, metadata: Record<string, unknown>) =>
+        seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: {
+            board: 'work',
+            title: externalId,
+            stages: ['intake'],
+            sessions: {},
+            metadata,
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId,
+              url: `https://github.com/acme/app/${externalId}`,
+            },
+          },
+        });
+      const routed = (await create('github-issue:30', { labels: ['release'], intakeRouteId: 'route-1' })).item;
+      const labelled = (await create('github-issue:31', { labels: ['release'] })).item;
+
+      const response = await put({
+        integrationId: 'github',
+        factoryProjectId: project.id,
+        label: 'release',
+        board: 'release',
+      });
+
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 1 } });
+      const items = new Map(
+        (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
+      );
+      expect(items.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(items.get(labelled.id)).toMatchObject({ board: 'release', stages: ['queued'] });
+    });
+
+    it("doesn't mark a card as route-placed when filing its source again reuses it", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const input = {
+        title: 'Fix login',
+        metadata: { labels: ['release'] },
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue' as const,
+          externalId: 'github-issue:32',
+          url: 'https://github.com/acme/app/issues/32',
+        },
+      };
+      const existing = (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: { ...input, board: 'work', stages: ['intake'], sessions: {} },
+        })
+      ).item;
+      // The default route matches this unstamped GitHub issue, so filing it anew without a board would route it.
+      const again = await createFactoryWorkItem({
+        workItems: seed.workItems,
+        boards: boardRegistry,
+        transitionService: undefined,
+        audit: async () => {},
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: project.id,
+        input,
+        intakeRoutes: seed.boards,
+      });
+      expect(again).toMatchObject({ status: 'reused', item: { id: existing.id } });
+      if (again.status !== 'reused') return;
+      expect(again.item.metadata).toEqual(existing.metadata);
+
+      const response = await put({
+        integrationId: 'github',
+        factoryProjectId: project.id,
+        label: 'release',
+        board: 'release',
+      });
+
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 0 } });
+      expect(await seed.workItems.getForProject('org1', project.id, existing.id)).toMatchObject({
+        board: 'release',
+        stages: ['queued'],
+      });
+    });
+
     it.each([
       ['internal repository id', 'repo-1'],
       ['repository slug', 'Acme/App'],
@@ -1060,6 +1200,15 @@ describe('aggregated intake', () => {
       ],
       failures: [],
     });
+  });
+
+  it("lists only the requested integration's sources without asking the others", async () => {
+    const response = await buildApp(orgUser).request('/web/intake/sources?integrationId=github');
+    expect(await response.json()).toEqual({
+      sources: [{ integrationId: 'github', id: 'repo-1', name: 'acme/app', type: 'repository' }],
+      failures: [],
+    });
+    expect(vi.mocked(linear.listSources)).not.toHaveBeenCalled();
   });
 
   it('lists selected items with generic external-source references and per-integration cursors', async () => {

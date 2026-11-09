@@ -29,6 +29,15 @@ import {
 } from '../utils/instruction-blocks-runtime';
 import type { PromptBlockPublicationStatus, UnresolvedPromptBlock } from '../utils/instruction-blocks-runtime';
 
+const mapModelListToApi = (modelList: AgentFormValues['modelList']) =>
+  modelList?.map(({ id, model, enabled, maxRetries }) => ({
+    id,
+    provider: model.provider,
+    modelId: model.modelId,
+    enabled,
+    maxRetries,
+  }));
+
 type CreateOptions = {
   mode: 'create';
   onSuccess: (agentId: string) => void;
@@ -64,7 +73,10 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
 
   // Derive which fields are owned by the user (vs by code). See getEditorOwnership for the rules —
   // they mirror the server's getCodeAgentOwnership, which strips unowned fields on save.
-  const { ownsInstructions, ownsTools, ownsToolDescriptions } = getEditorOwnership(isCodeAgentOverride, editorConfig);
+  const { ownsInstructions, ownsTools, ownsToolDescriptions, ownsModel } = getEditorOwnership(
+    isCodeAgentOverride,
+    editorConfig,
+  );
 
   // Track whether we've already created a stored override for a code agent in this session
   const [overrideCreated, setOverrideCreated] = useState(false);
@@ -180,6 +192,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
                 mcpClients: mcpClientsParam,
               }
             : {}),
+          ...(ownsModel ? { modelList: mapModelListToApi(values.modelList) } : {}),
         };
       }
 
@@ -219,6 +232,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
         description: values.description || undefined,
         instructions: mapInstructionBlocksToApi(values.instructionBlocks),
         model: values.model,
+        modelList: mapModelListToApi(values.modelList),
         tools: Object.keys(registryTools).length > 0 ? registryTools : {},
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
@@ -230,7 +244,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
     },
-    [isEdit, isCodeAgentOverride, ownsInstructions, ownsTools, ownsToolDescriptions, client],
+    [isEdit, isCodeAgentOverride, ownsInstructions, ownsTools, ownsToolDescriptions, ownsModel, client],
   );
 
   const buildMemoryParams = useCallback((values: AgentFormValues) => {

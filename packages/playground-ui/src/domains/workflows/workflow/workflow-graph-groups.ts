@@ -10,8 +10,7 @@ export function getWorkflowGraphGroups(nodes: WorkflowGraphNode[]): WorkflowGrap
     const { id, pathCount } = node.data.parallelGroup;
     const group = groups.get(id);
     if (group) group.nodeIds.push(node.id);
-    else
-      groups.set(id, { id, label: 'Parallel', description: `${pathCount} paths · Run together`, nodeIds: [node.id] });
+    else groups.set(id, { id, label: 'Parallel', description: `${pathCount} paths run together`, nodeIds: [node.id] });
   }
   return [...groups.values()];
 }
