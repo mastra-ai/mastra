@@ -273,6 +273,24 @@ describe('routes and links', () => {
     ])
   })
 
+  it('checks self-hosted links for redirects and broken routes', async () => {
+    const file = page(
+      'docs/a.mdx',
+      '# A\n\n[a](https://mastra.ai/docs/agents#tools) [b](https://mastra.ai/docs/agents/overveiw)',
+    )
+    const { findings, edits } = checkLinks(file, await tree(file), index)
+    expect(findings.map(f => f.ruleId)).toEqual([
+      'mastra/no-self-host-url',
+      'mastra/redirected-link',
+      'mastra/no-self-host-url',
+      'mastra/internal-link',
+    ])
+    const redirect = edits.find(edit => edit.ruleId === 'mastra/redirected-link')
+    expect(redirect?.text).toBe('/docs/agents/overview#tools')
+    expect(file.source.slice(redirect!.start, redirect!.end)).toBe('https://mastra.ai/docs/agents#tools')
+    expect(redirect?.alsoFixes?.ruleId).toBe('mastra/no-self-host-url')
+  })
+
   it('keeps self-hosted links to static files absolute', async () => {
     const file = page(
       'docs/a.mdx',
@@ -425,6 +443,20 @@ describe('runChecks', () => {
     expect(report.findings.map(f => f.ruleId)).toEqual(['mastra/internal-link'])
     const source = await fs.readFile(path.join(rootDir, 'src/content/en/docs/bad.mdx'), 'utf8')
     expect(source).toContain('[old](/docs/good)')
+  })
+
+  it('fixes a self-hosted link that also redirects in one edit', async () => {
+    const file = path.join(rootDir, 'src/content/en/docs/good.mdx')
+    await fs.writeFile(file, `${VALID_FRONTMATTER}\n\n# Good\n\nSee [old](https://mastra.ai/docs/old#x).\n`)
+    const report = await runChecks({
+      rootDir,
+      categories: ['links'],
+      files: ['src/content/en/docs/good.mdx'],
+      fix: true,
+    })
+    expect(report.summary.fixed).toBe(1)
+    expect(report.findings).toEqual([])
+    expect(await fs.readFile(file, 'utf8')).toContain('[old](/docs/good#x)')
   })
 })
 

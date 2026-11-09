@@ -107,6 +107,8 @@ function urlEdit(file: ContentFile, node: Node, url: string, text: string): Omit
 
 export interface LinkEdit extends TextEdit {
   finding: Finding
+  /** Another finding on the same URL that this edit also fixes (a self-hosted URL that also redirects). */
+  alsoFixes?: Finding
 }
 
 export function checkLinks(
@@ -122,32 +124,34 @@ export function checkLinks(
     const url = (node as unknown as Link | Definition).url
     const location = at(file, node)
 
+    let localUrl = url
+    let selfHostFinding: Finding | undefined
     const selfHost = url.match(SELF_HOST)
     // Files like /docs/llms.txt or *.md are served as static assets, not Docusaurus routes, so keep them absolute.
     if (selfHost && !/\.[a-z0-9]+$/i.test(splitUrl(selfHost[1]).pathname)) {
-      const replacement = selfHost[1]
-      const edit = urlEdit(file, node, url, replacement)
-      const item = finding('mastra/no-self-host-url', `Use a root-relative link instead of ${url}`, location, {
-        suggestion: replacement,
+      localUrl = selfHost[1]
+      const edit = urlEdit(file, node, url, localUrl)
+      selfHostFinding = finding('mastra/no-self-host-url', `Use a root-relative link instead of ${url}`, location, {
+        suggestion: localUrl,
         fixable: edit !== undefined,
       })
-      findings.push(item)
-      if (edit) edits.push({ ...edit, ruleId: item.ruleId, finding: item })
-      return
+      findings.push(selfHostFinding)
+      if (edit) edits.push({ ...edit, ruleId: selfHostFinding.ruleId, finding: selfHostFinding })
     }
 
-    if (!url.startsWith('/') || url.startsWith('//')) return
-    const { pathname, suffix } = splitUrl(url)
+    if (!localUrl.startsWith('/') || localUrl.startsWith('//')) return
+    const { pathname, suffix } = splitUrl(localUrl)
     const route = normalizeRoute(pathname)
     if (!isSectionPath(route) || index.routes.has(route)) return
 
     const destination = findRedirect(index, route)
     if (destination && index.routes.has(normalizeRoute(splitUrl(destination).pathname))) {
       const replacement = destination.includes('#') ? destination : `${destination}${suffix}`
+      // Replaces the whole original URL, so it also fixes a self-hosted prefix.
       const edit = urlEdit(file, node, url, replacement)
       const item = finding(
         'mastra/redirected-link',
-        `${url} redirects to ${destination}; link to the destination`,
+        `${localUrl} redirects to ${destination}; link to the destination`,
         location,
         {
           suggestion: replacement,
@@ -155,7 +159,7 @@ export function checkLinks(
         },
       )
       findings.push(item)
-      if (edit) edits.push({ ...edit, ruleId: item.ruleId, finding: item })
+      if (edit) edits.push({ ...edit, ruleId: item.ruleId, finding: item, alsoFixes: selfHostFinding })
       return
     }
 
@@ -163,7 +167,7 @@ export function checkLinks(
     findings.push(
       finding(
         'mastra/internal-link',
-        `${url} does not resolve to a page${suggestion ? `. Did you mean ${suggestion}?` : ''}`,
+        `${localUrl} does not resolve to a page${suggestion ? `. Did you mean ${suggestion}?` : ''}`,
         location,
         suggestion ? { suggestion: `${suggestion}${suffix}` } : {},
       ),
@@ -214,10 +218,15 @@ export const mdxCheck: Check = {
       }
       if (index) {
         const result = checkLinks(file, tree, index)
-        const edits = ctx.fix ? result.edits.filter(edit => ctx.isRuleActive(edit.ruleId, file, edit.finding.line)) : []
+        const active = ctx.fix
+          ? result.edits.filter(edit => ctx.isRuleActive(edit.ruleId, file, edit.finding.line))
+          : []
+        // A redirect edit on a self-hosted URL rewrites the same range, so it replaces the self-host edit.
+        const superseded = new Set(active.flatMap(edit => (edit.alsoFixes ? [edit.alsoFixes] : [])))
+        const edits = active.filter(edit => !superseded.has(edit.finding))
         if (edits.length > 0) {
           fixed += await applyEdits(file, edits)
-          const applied = new Set<Finding>(edits.map(edit => edit.finding))
+          const applied = new Set<Finding>([...edits.map(edit => edit.finding), ...superseded])
           findings.push(...result.findings.filter(item => !applied.has(item)))
         } else {
           findings.push(...result.findings)
