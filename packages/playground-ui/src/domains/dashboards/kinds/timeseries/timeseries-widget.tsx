@@ -83,6 +83,7 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
       : [{ label: s.label, value: format.value(s.rangeTotal), color: chartColor(s.color) }],
   );
   const withRangeTotals = options.series.some(s => s.rangeTotal !== undefined);
+  const failed = sent.filter(r => r.isError);
 
   const layout = {
     ...heading,
@@ -94,8 +95,14 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
     ) : (
       heading.actions
     ),
-    // Range totals per series; with no series in the range, one plain 0.
-    total: withRangeTotals ? (rangeTotals.length ? rangeTotals : format.value(0)) : undefined,
+    // Range totals per series; with no series in the range, one plain 0 (none while a request failed).
+    total: withRangeTotals
+      ? rangeTotals.length
+        ? rangeTotals
+        : failed.length
+          ? undefined
+          : format.value(0)
+      : undefined,
     isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -104,7 +111,6 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
     ),
   };
 
-  const failed = sent.filter(r => r.isError);
   if (failed.length) {
     return (
       <ChartCard {...layout}>
