@@ -1,5 +1,4 @@
 ---
-'@mastra/mcp-apps-components': patch
 '@mastra/playground-ui': patch
 ---
 
