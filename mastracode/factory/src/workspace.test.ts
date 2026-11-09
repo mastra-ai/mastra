@@ -585,6 +585,7 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('**Before moving to Done:**');
     // A push to an open change request sends the card back to PR review so it is reviewed again.
     expect(build).toContain('push to that branch, then move the card to PR review');
+    expect(build).toContain('leave this card where it is: that hand-off finishes Building.');
     // Only this session's change request: another author's on the same card is never pushed to.
     expect(build).toContain('belongs to someone else: never push to it');
     // A manual card's change request is not under Sources: look it up by branch first.
