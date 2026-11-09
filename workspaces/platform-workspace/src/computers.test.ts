@@ -934,6 +934,35 @@ describe('ordering through a real agent at default tool concurrency', () => {
     expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
   });
 
+  it('uses the effective Workspace when deciding whether to seed computer identity', async () => {
+    const computers = make();
+    const wrappedWorkspace = new Workspace({ sandbox: computers.sandboxResolver(), computerTools: 'resolve' });
+    const seen: RequestContext[] = [];
+    const overrideWorkspace = new Workspace({
+      sandbox: async ({ requestContext }) => {
+        seen.push(requestContext);
+        throw new Error('stop after context capture');
+      },
+    });
+    const tools = await createWorkspaceTools(wrappedWorkspace);
+    const requestContext = new RequestContext();
+
+    await expect(
+      tools[WORKSPACE_TOOLS.COMPUTER.SCREENSHOT]!.execute(
+        {},
+        {
+          agent: { threadId: 't1', resourceId: 'r1' },
+          requestContext,
+          workspace: overrideWorkspace,
+        },
+      ),
+    ).rejects.toThrow('stop after context capture');
+
+    expect(seen).toEqual([requestContext]);
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+  });
+
   it('refuses a Workspace computer action when reserved and Agent identities conflict', async () => {
     const computers = make();
     const authorized = new RequestContext();

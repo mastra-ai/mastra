@@ -10,6 +10,7 @@
 import { posix as posixPath } from 'node:path';
 import { z } from 'zod/v4';
 import type { ToolBackgroundConfig } from '../../background-tasks/types';
+import { resolveComputerIdentity } from '../../computers/identity.js';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../../request-context/input-source';
 import { COMPUTER_ORDERED_TOOL_GROUP, markOrderedTool } from '../../tools/ordered-tools';
@@ -271,7 +272,6 @@ const COMPUTER_MUTATION_TOOLS = new Set<string>([
 ]);
 
 const COMPUTER_REQUEST_CONTEXTS = new WeakMap<RequestContext, Map<string, RequestContext>>();
-const COMPUTER_IDENTITY_MISMATCH = 'computer identity mismatch between Agent and reserved request context';
 
 class ComputerRequestContextView extends RequestContext {
   readonly #source: RequestContext;
@@ -373,16 +373,13 @@ function computerExecutionContext(context: any, workspace: Workspace): any {
 
   const current = context.requestContext as RequestContext | undefined;
   const source = getRequestContextInputSource(current) ?? current ?? new RequestContext();
-  const reservedThreadId = source.getRaw(MASTRA_THREAD_ID_KEY) as string | undefined;
-  const reservedResourceId = source.getRaw(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  if (
-    (reservedThreadId && agentThreadId && reservedThreadId !== agentThreadId) ||
-    (reservedResourceId && agentResourceId && reservedResourceId !== agentResourceId)
-  ) {
-    throw new Error(COMPUTER_IDENTITY_MISMATCH);
-  }
-
-  const identityKey = JSON.stringify([agentThreadId ?? '', agentResourceId ?? '']);
+  const { threadId, resourceId } = resolveComputerIdentity({
+    reservedThreadId: source.getRaw(MASTRA_THREAD_ID_KEY) as string | undefined,
+    reservedResourceId: source.getRaw(MASTRA_RESOURCE_ID_KEY) as string | undefined,
+    agentThreadId,
+    agentResourceId,
+  });
+  const identityKey = JSON.stringify([threadId ?? '', resourceId ?? '']);
   let views = COMPUTER_REQUEST_CONTEXTS.get(source);
   if (!views) {
     views = new Map();
@@ -392,7 +389,7 @@ function computerExecutionContext(context: any, workspace: Workspace): any {
   if (existing) return { ...context, requestContext: existing };
 
   // Identity is overlaid per run while every non-identity value remains a live view of the source.
-  const requestContext = new ComputerRequestContextView(source, agentThreadId, agentResourceId);
+  const requestContext = new ComputerRequestContextView(source, threadId, resourceId);
   views.set(identityKey, requestContext);
   return { ...context, requestContext };
 }
@@ -401,12 +398,9 @@ function wrapTool(tool: any, workspace: Workspace, targets: ResolveTargets): any
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      const executionContext = computerExecutionContext(context, workspace);
-      const effectiveWorkspace = await resolveEffectiveWorkspace(
-        executionContext?.workspace ?? workspace,
-        executionContext,
-        targets,
-      );
+      const workspaceForExecution = context?.workspace ?? workspace;
+      const executionContext = computerExecutionContext(context, workspaceForExecution);
+      const effectiveWorkspace = await resolveEffectiveWorkspace(workspaceForExecution, executionContext, targets);
       const enrichedContext = { ...executionContext, workspace: effectiveWorkspace };
       const execute = () => tool.execute(input, enrichedContext);
       const sandbox = effectiveWorkspace.sandbox;

@@ -13,6 +13,7 @@ export {
   type ComputerSandbox,
   type ComputersOptions,
 } from './computers.js';
+export { COMPUTER_IDENTITY_MISMATCH } from './identity.js';
 export type {
   ComputerHandsExtension,
   ComputerHandsHost,
