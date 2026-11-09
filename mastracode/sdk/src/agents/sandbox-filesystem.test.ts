@@ -71,6 +71,34 @@ describe('SandboxFilesystem', () => {
     expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/src/index.ts'`))).toBe(true);
   });
 
+  it('explains a miss on an absolute path that exists outside the workdir', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return { exitCode: 20, stdout: '', stderr: '' };
+      if (script === `test -e '/tmp/x/a.ts'`) return { exitCode: 0, stdout: '', stderr: '' };
+      return { exitCode: 20, stdout: '', stderr: '' };
+    });
+    const error = await fs.readFile('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toBe(
+      `File not found: /tmp/x/a.ts (resolved to ${WORKDIR}/tmp/x/a.ts). File tools only reach files under ${WORKDIR}; absolute paths are workspace-relative. Put scratch worktrees under ${WORKDIR}/.worktrees/.`,
+    );
+  });
+
+  it('keeps the plain not-found error when the path exists nowhere', async () => {
+    const { fs } = makeFs(script => ({ exitCode: script.startsWith('test -e') ? 1 : 20, stdout: '', stderr: '' }));
+    for (const path of ['/src/missing.ts', '/tmp/nope.ts']) {
+      const error = await fs.readFile(path).catch(e => e);
+      expect(error).toBeInstanceOf(FileNotFoundError);
+      expect(error.message).toBe(`File not found: ${path}`);
+    }
+  });
+
+  it('tells agents where scratch worktrees go and how to install their dependencies', () => {
+    const { fs } = makeFs();
+    expect(fs.getInstructions()).toContain(`${WORKDIR}/.worktrees/`);
+    expect(fs.getInstructions()).toContain('pnpm install --offline --frozen-lockfile');
+  });
+
   it('asks the sandbox to retain all command output', async () => {
     // Sandboxes keep only the newest 1 MiB of output by default; a base64 file
     // read or a long listing must not lose its head.
@@ -1001,6 +1029,19 @@ describe('with a native sandbox filesystem', () => {
     const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
     const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
     await expect(fs.readFile('/missing')).rejects.toBeInstanceOf(FileNotFoundError);
+  });
+
+  it('explains a native miss on an absolute path that exists outside the workdir', async () => {
+    const { native } = makeNative();
+    native.readFile = async () => {
+      throw new FileNotFoundError(`${WORKDIR}/tmp/x/a.ts`);
+    };
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
+    const error = await fs.readFile('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
+    expect(sandbox.calls).toEqual([`test -e '/tmp/x/a.ts'`]);
   });
 
   describe('verifySymlinks', () => {
