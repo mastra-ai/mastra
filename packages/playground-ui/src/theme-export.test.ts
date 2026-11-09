@@ -354,12 +354,24 @@ describe('theme.css export', () => {
     const variables = parseVariables(themeCss);
     expect(variables.get('text-display-lg')).toBe('1.75rem');
     expect(variables.get('text-display-lg--line-height')).toBe('127%');
-    expect(variables.get('text-display-lg--font-weight')).toBe('500');
+    expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
     expect(variables.get('text-display')).toBe('1.375rem');
     expect(variables.get('text-display--line-height')).toBe('127%');
-    expect(variables.get('text-display--font-weight')).toBe('500');
+    expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
+  });
+
+  it('gives text roles two weights, regular 450 and strong 500', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('font-weight-normal')).toBe('450');
+    expect(variables.get('font-weight-medium')).toBe('500');
+    for (const role of ['body', 'body-sm', 'caption', 'lead', 'menu']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
+    }
+    for (const role of ['label', 'column', 'eyebrow', 'meta', 'subheading', 'heading', 'title']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-medium)');
+    }
   });
 
   it('generates the field and dialog fill utilities', async () => {

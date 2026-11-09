@@ -31,7 +31,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, comp
         button_previous: cn(navButton, defaults.button_previous),
         button_next: cn(navButton, defaults.button_next),
         month_caption: cn('flex h-(--cell-size) items-center justify-center', defaults.month_caption),
-        caption_label: cn('text-label font-medium text-foreground select-none', defaults.caption_label),
+        caption_label: cn('text-label text-foreground select-none', defaults.caption_label),
         month_grid: cn('w-full border-collapse', defaults.month_grid),
         weekdays: cn('flex', defaults.weekdays),
         weekday: cn(

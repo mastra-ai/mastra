@@ -214,7 +214,7 @@ function ChartCardTitleLink({
     <Anchor
       href={href}
       className={cn(
-        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-body font-medium text-foreground hover:bg-fill-subtle',
+        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-subheading text-foreground hover:bg-fill-subtle',
         'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid',
       )}
     >
