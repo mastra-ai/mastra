@@ -31,7 +31,7 @@ import type { DeepCleanOptions } from './serialization';
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
 type AnyBaseSpan = AnySpan & {
   getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined;
-  /** True when the span is dropped before export (excludeSpanTypes / internal / alwaysExcluded) */
+  /** True when the span is dropped before export (excludeSpanTypes / spanFilter / internal / alwaysExcluded) */
   readonly isExcluded?: boolean;
 };
 
@@ -242,7 +242,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * both the deepClean cost and holding references to large payloads for
    * the lifetime of the span. Set when excludeSpanTypes drops the type,
    * when the span is internal and includeInternalSpans is false, or when
-   * the subclass is always excluded (e.g., NoOpSpan).
+   * the subclass is always excluded (e.g., NoOpSpan). The observability
+   * instance also sets it right after creation when `spanFilter` drops the
+   * span; that span keeps recording its fields so metrics still read them.
    *
    * Public so parent-chain walks (`getParentSpan`) can skip ancestors that
    * exporters will never receive — otherwise descendants export a
@@ -329,8 +331,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     this.links = validLinks(options.links);
     this.resumedFromSpanId = options.resumedFromSpanId;
-    // Entity identification - inherit from closest non-internal parent if not explicitly provided
-    const entityParent = this.getParentSpan(false);
+    // Entity identification - inherit from closest non-internal parent if not explicitly provided.
+    // A parent dropped from export still owns its children, so excluded parents are not skipped.
+    let entityAncestor: AnySpan | undefined = this.parent;
+    while (entityAncestor?.isInternal) entityAncestor = entityAncestor.parent;
+    const entityParent = entityAncestor;
     this.entityType = options.entityType ?? entityParent?.entityType;
     this.entityId = options.entityId ?? entityParent?.entityId;
     this.entityName = options.entityName ?? entityParent?.entityName;
@@ -530,8 +535,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /**
    * Get the closest parent span.
-   * Always skips ancestors dropped by `excludeSpanTypes` (`isExcluded`), so
-   * exported `parentSpanId` values never point at spans exporters omit.
+   * Always skips ancestors dropped at creation (`isExcluded`: `excludeSpanTypes`
+   * or `spanFilter`), so exported `parentSpanId` values never point at spans
+   * exporters omit.
    * When `includeInternalSpans` is false/undefined, also skips `isInternal`
    * ancestors.
    */
@@ -553,11 +559,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * or NoOpSpan), resolves to the nearest exportable ancestor instead.
    * Returns undefined when no exportable ancestor exists.
    *
-   * Only covers exclusions known when the span is created (`isExcluded`). A
-   * `spanFilter` or a span output processor can still drop a span at export
-   * time — both run on the exported span data after the span ends, so their
-   * verdict isn't knowable while signals are being stamped. Signals emitted
-   * inside a span dropped that way still reference its own id.
+   * Only covers exclusions known when the span is created (`isExcluded`,
+   * including the `spanFilter` verdict). A span output processor can still
+   * drop a span at export time, so its verdict isn't knowable while signals
+   * are being stamped. Signals emitted inside a span dropped that way still
+   * reference its own id.
    */
   public getExportedSpanId(): string | undefined {
     if (!this.isExcluded) {
@@ -638,7 +644,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Build and cache the canonical correlation context for this live span.
    *
    * Parent entity: the nearest ancestor that is not internal or excluded, the
-   * same rule used for entity inheritance. Root entity: the top of the
+   * span exported `parentSpanId` names. Root entity: the top of the
    * in-process parent chain, which is not necessarily the distributed trace's
    * root when the trace continues from another service. The root walk does not
    * skip internal spans, so the root can name an entity whose span is not

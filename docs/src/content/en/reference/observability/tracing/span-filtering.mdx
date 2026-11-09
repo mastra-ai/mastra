@@ -32,7 +32,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter(), new LangfuseExporter()],
         excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
         spanFilter: span => {
-          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+          if (span.type === SpanType.TOOL_CALL && span.entityId === 'heartbeat') {
             return false
           }
 
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
     name: 'spanFilter',
     type: '(span: AnyExportedSpan) => boolean',
     description:
-      'Receives the exported span and returns true to keep it or false to drop it. Use this when filtering depends on attributes, metadata, timing, or entity identifiers.',
+      'Receives the span as it starts and returns true to keep it or false to drop it. Use this when filtering depends on attributes, metadata, or entity identifiers known at creation.',
     isOptional: true,
   },
 ]}
@@ -86,7 +86,7 @@ import { SpanType } from '@mastra/core/observability'
 
 spanFilter: span => {
   if (span.type === SpanType.MODEL_CHUNK) return false
-  if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false
+  if (span.type === SpanType.TOOL_CALL && span.entityId === 'heartbeat') return false
 
   return true
 }
@@ -104,12 +104,14 @@ spanFilter: span => span.entityId !== 'noisy-agent'
 
 ## Processing order
 
-Span filtering happens at export time in this order:
+Span filtering happens in this order:
 
 1. Internal spans are dropped unless `includeInternalSpans` is `true`.
 1. `excludeSpanTypes` removes matching span types.
 1. `spanOutputProcessors` transform the remaining spans.
-1. `spanFilter` decides whether to keep the final exported span.
+1. `spanFilter` decides whether to keep the span.
+
+Mastra runs `spanFilter` once, when the span starts, on the data known at that point: type, name, entity, metadata, and the attributes and input set at creation. A dropped span sends no start, update, or end event, and its child spans attach to the nearest exported ancestor, the same way `excludeSpanTypes` works.
 
 If `spanFilter` throws an error, Mastra keeps the span and logs the error to avoid silent data loss.
 

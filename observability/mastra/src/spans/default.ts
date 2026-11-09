@@ -53,9 +53,15 @@ function apiCallErrorDetails(error: Error): Record<string, unknown> | undefined 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
+  /**
+   * Spans excluded at creation never attach end-time payloads. A span that
+   * `spanFilter` drops later keeps them, since metrics still read them.
+   */
+  readonly #excludedAtCreation: boolean;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     super(options, observabilityInstance);
+    this.#excludedAtCreation = this.isExcluded;
 
     // If spanId and traceId are provided, this is a rebuilt span - use provided IDs directly
     if (options.spanId && options.traceId) {
@@ -140,7 +146,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
         ...deepClean(this.prepareSpanMetadata(options.metadata), this.deepCleanOptions),
       };
     }
-    if (this.isExcluded) {
+    if (this.#excludedAtCreation) {
       // Span is filtered before export; skip attaching heavy fields.
       return;
     }
@@ -171,7 +177,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       };
     }
 
-    if (!this.isExcluded) {
+    if (!this.#excludedAtCreation) {
       const apiDetails = apiCallErrorDetails(error);
       this.errorInfo = deepClean(
         error instanceof MastraError
@@ -231,7 +237,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
         ...deepClean(this.prepareSpanMetadata(options.metadata), this.deepCleanOptions),
       };
     }
-    if (this.isExcluded) {
+    if (this.#excludedAtCreation) {
       return;
     }
     if (options.input !== undefined) {

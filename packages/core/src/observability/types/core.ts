@@ -483,18 +483,19 @@ export interface ObservabilityInstanceConfig {
   excludeSpanTypes?: SpanType[];
   /**
    * Filter function to control which spans are exported. Return `true` to keep
-   * the span, `false` to drop it. This runs after `excludeSpanTypes` and
-   * `spanOutputProcessors`, giving you access to the final exported span data
-   * for fine-grained filtering by type, attributes, entity, metadata, or any
-   * combination.
+   * the span, `false` to drop it. It runs once, when the span is created, after
+   * `excludeSpanTypes` and `spanOutputProcessors`, and sees the span's creation
+   * data: type, name, entity, metadata, and the attributes and input known at
+   * start. A dropped span is dropped whole, and its descendants attach to the
+   * nearest exported ancestor.
    *
    * @example
    * ```typescript
    * spanFilter: (span) => {
    *   // Drop all model chunks
    *   if (span.type === SpanType.MODEL_CHUNK) return false;
-   *   // Only keep tool calls that failed
-   *   if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+   *   // Drop calls to one noisy tool
+   *   if (span.type === SpanType.TOOL_CALL && span.entityId === 'heartbeat') return false;
    *   return true;
    * }
    * ```

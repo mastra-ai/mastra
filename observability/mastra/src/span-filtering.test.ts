@@ -297,6 +297,33 @@ describe('Span Filtering', () => {
       expect(orphans).toEqual([]);
     });
 
+    it('should drop every span of an entity when the filter drops it by entityId', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: (span: AnyExportedSpan) => span.entityId !== 'noisy-agent',
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        entityId: 'noisy-agent',
+        entityName: 'noisy-agent',
+      });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+      modelSpan.end();
+      agentSpan.end();
+
+      expect(modelSpan.entityId).toBe('noisy-agent');
+      expect(testExporter.events).toEqual([]);
+    });
+
     it('should decide once at creation so a span is exported whole or not at all', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
