@@ -119,6 +119,7 @@ export const isolatedTestFiles = [
   'src/skills/validate.test.ts', // global
   'src/storage/base.test.ts', // env
   'src/storage/storageWithInit.test.ts', // env
+  'src/stream/smooth-stream.test.ts', // timers
   'src/telemetry/context.test.ts', // vi.mock,env
   'src/telemetry/feature-telemetry.test.ts', // vi.mock,env
   'src/telemetry/model-usage-telemetry.test.ts', // vi.mock,env
