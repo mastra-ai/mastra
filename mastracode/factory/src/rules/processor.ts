@@ -76,10 +76,6 @@ function isApprovedPlanResult(result: CompletedToolResult): boolean {
   return typeof content === 'string' && content.startsWith('Plan approved.');
 }
 
-/**
- * The phase this result finishes: the card's phase whose exit tool succeeded (for `submit_plan`,
- * with an approved plan) in the session that works the card there. Undefined otherwise.
- */
 const STAMP_ATTEMPTS = 3;
 
 /** When the card's current visit to `stage` began, if it is in `stage` alone. */
@@ -88,6 +84,10 @@ function openEntry(item: Card, stage: string): string | undefined {
   return item.stageHistory?.findLast(entry => entry.stage === stage && entry.exitedAt === undefined)?.enteredAt;
 }
 
+/**
+ * The phase this result finishes: the card's phase whose exit tool succeeded (for `submit_plan`,
+ * with an approved plan) in the session that works the card there. Undefined otherwise.
+ */
 function finishedPhase(
   boards: BoardRegistry,
   board: string,
