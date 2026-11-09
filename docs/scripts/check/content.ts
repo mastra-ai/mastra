@@ -48,7 +48,6 @@ export function parseContentFile(rootDir: string, relativePath: string, raw: str
     source,
     frontmatter: null,
     bodyStartLine: bounds ? bounds.endLine + 1 : 1,
-    lintDisable: [],
   }
   if (!bounds) return file
 
@@ -62,10 +61,6 @@ export function parseContentFile(rootDir: string, relativePath: string, raw: str
     return file
   }
 
-  const lintDisable = file.frontmatter.lintDisable
-  if (Array.isArray(lintDisable)) {
-    file.lintDisable = lintDisable.filter((v): v is string => typeof v === 'string')
-  }
   return file
 }
 

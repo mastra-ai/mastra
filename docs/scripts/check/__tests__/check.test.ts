@@ -12,6 +12,7 @@ import { parseMdx } from '../mdx'
 import { buildRouteIndex, routeForFile } from '../routes'
 import { isKnownRuleId, matchesRuleFilter, RULE_FAMILIES, RULES, slugifyRuleName } from '../rules'
 import { runChecks } from '../runner'
+import { isSuppressed, parseSuppressions } from '../suppress'
 
 const ROOT = '/repo'
 const VALID_FRONTMATTER = `---
@@ -83,20 +84,55 @@ describe('frontmatter rules', () => {
       expect.arrayContaining(['mastra/frontmatter-title', 'mastra/description-length', 'mastra/frontmatter-packages']),
     )
   })
+})
 
-  it('validates lintDisable entries', () => {
-    const good = page(
+describe('inline lint comments', () => {
+  const lineOf = (file: ReturnType<typeof page>, text: string) =>
+    file.source.split('\n').findIndex(l => l.includes(text)) + 1
+
+  it('disables a rule until it is re-enabled', () => {
+    const file = page(
       'docs/a.mdx',
-      '# A',
-      `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/bare-url\n  - mastra/vale-mastra-headings\n---`,
+      '# A\n\n{/* lint disable mastra/bare-url */}\n\nhttps://one.example\n\n{/* lint enable mastra/bare-url */}\n\nhttps://two.example',
     )
-    expect(good.lintDisable).toEqual(['mastra/bare-url', 'mastra/vale-mastra-headings'])
-    expect(checkFrontmatter(good)).toEqual([])
+    const s = parseSuppressions(file)
+    expect(s.invalid).toEqual([])
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'one.example'))).toBe(true)
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'two.example'))).toBe(false)
+    expect(isSuppressed(s, 'mastra/internal-link', lineOf(file, 'one.example'))).toBe(false)
+  })
 
-    const bad = page('docs/a.mdx', '# A', `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/nope\n---`)
-    const [item] = checkFrontmatter(bad)
-    expect(item.ruleId).toBe('mastra/lint-disable-invalid')
-    expect(item.message).toContain('mastra/nope')
+  it('ignores a rule for the next block only', () => {
+    const file = page(
+      'docs/a.mdx',
+      '# A\n\n{/* lint ignore mastra/code-block-lang */}\n\`\`\`\nfirst\n\n\`\`\`\n\n\`\`\`\nsecond\n\`\`\`',
+    )
+    const s = parseSuppressions(file)
+    expect(isSuppressed(s, 'mastra/code-block-lang', lineOf(file, 'first') - 1)).toBe(true)
+    expect(isSuppressed(s, 'mastra/code-block-lang', lineOf(file, 'second') - 1)).toBe(false)
+  })
+
+  it('applies a leading disable to the whole file, including frontmatter and line-less findings', () => {
+    const file = page('docs/a.mdx', '{/* lint disable mastra/description-length mastra/vale-* */}\n\n# A')
+    const s = parseSuppressions(file)
+    expect(isSuppressed(s, 'mastra/description-length', 3)).toBe(true)
+    expect(isSuppressed(s, 'mastra/description-length')).toBe(true)
+    expect(isSuppressed(s, 'mastra/vale-mastra-headings', 99)).toBe(true)
+  })
+
+  it('treats a comment without IDs as all rules and skips comments in code', () => {
+    const file = page(
+      'docs/a.mdx',
+      '# A\n\n\`\`\`mdx\n{/* lint disable mastra/nope */}\n\`\`\`\n\n{/* lint ignore */}\nhttps://x.example',
+    )
+    const s = parseSuppressions(file)
+    expect(s.invalid).toEqual([])
+    expect(isSuppressed(s, 'mastra/bare-url', lineOf(file, 'x.example'))).toBe(true)
+  })
+
+  it('reports unknown rule IDs', () => {
+    const file = page('docs/a.mdx', '# A\n\n{/* lint disable mastra/nope */}')
+    expect(parseSuppressions(file).invalid).toEqual([{ id: 'mastra/nope', line: lineOf(file, 'mastra/nope') }])
   })
 })
 
@@ -278,7 +314,7 @@ describe('runChecks', () => {
     await write('docs/good.mdx', `${VALID_FRONTMATTER}\n\n# Good\n\nSee [the bad page](/docs/bad).\n`)
     await write(
       'docs/bad.mdx',
-      `${VALID_FRONTMATTER.slice(0, -3)}lintDisable:\n  - mastra/code-block-lang\n---\n\n# Bad\n\n[old](/docs/old) and [missing](/docs/nowhere).\n\n\`\`\`\nno language\n\`\`\`\n`,
+      `${VALID_FRONTMATTER}\n\n# Bad\n\n[old](/docs/old) and [missing](/docs/nowhere).\n\n{/* lint ignore mastra/code-block-lang */}\n\`\`\`\nno language\n\`\`\`\n`,
     )
   })
 

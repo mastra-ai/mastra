@@ -16,7 +16,7 @@ Relevant guidance:
 - @styleguides/COMPONENTS.md
 - @styleguides/DIAGRAM.md: Mermaid diagram style and accessibility
 - @styleguides/AUTHORING_WORKFLOW.md
-- @styleguides/CHECKS.md: `pnpm check` usage, rule IDs, and per-page `lintDisable`
+- @styleguides/CHECKS.md: `pnpm check` usage, rule IDs, and inline `lint` comments for disabling rules
 - @CONTRIBUTING.md: Setup, frontmatter, and MDX syntax
 - .claude/skills/docs-diagrams: Existing image-to-Mermaid conversions
 

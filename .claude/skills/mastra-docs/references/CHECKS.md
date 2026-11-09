@@ -55,21 +55,25 @@ With file arguments, file-level checks (frontmatter, structure, links, prose, fo
 
 `file` is relative to `docs/` and is omitted for repo-wide findings.
 
-## Disabling a rule on one page
+## Disabling a rule
 
-List rule IDs in the page's `lintDisable` frontmatter. Unknown IDs are reported as `mastra/lint-disable-invalid`.
+Fix the finding where you can. When a page needs an exception, add an inline MDX comment next to the content, the same way you would with ESLint or remark-lint. Always name the rule IDs. A comment without IDs applies to every rule.
 
-```yaml
----
-title: 'Example'
-description: 'An example page that intentionally shows bare URLs in prose.'
-packages:
-  - '@mastra/core'
-lintDisable:
-  - mastra/bare-url
-  - mastra/vale-mastra-headings
----
+```mdx
+{/* lint ignore mastra/bare-url */}
+Send requests to https://api.example.com/v1.
+
+{/* lint disable mastra/code-block-lang */}
+...
+{/* lint enable mastra/code-block-lang */}
 ```
+
+- `lint ignore <ids>` turns the rules off for the next block (paragraph, list, or code fence).
+- `lint disable <ids>` turns them off until a matching `lint enable <ids>` or the end of the file. If it comes before any page content, it also covers the frontmatter, so use that form for frontmatter rules such as `mastra/description-length`.
+- IDs accept the same `*` prefix patterns as `--rule`, for example `mastra/vale-*`.
+- Unknown IDs are reported as `mastra/lint-comment-invalid`.
+
+Vale also honors its own `{/* vale off */}` and `{/* vale on */}` comments.
 
 ## Rules
 
@@ -82,13 +86,13 @@ lintDisable:
 | `mastra/description-length`       | frontmatter | warn     | No      | The `description` is shorter than 50 or longer than 200 characters.                                                                                   |
 | `mastra/frontmatter-packages`     | frontmatter | error    | No      | The `packages` field is missing, empty, or lists an invalid package name.                                                                             |
 | `mastra/frontmatter-packages-max` | frontmatter | warn     | No      | The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.                                                         |
-| `mastra/lint-disable-invalid`     | frontmatter | error    | No      | `lintDisable` is not a list of known rule IDs.                                                                                                        |
 | `mastra/sidebar-unlinked-page`    | sidebar     | error    | No      | An MDX page is not linked from its section sidebar.                                                                                                   |
 | `mastra/sidebar-reference-sort`   | sidebar     | error    | Yes     | The reference sidebar is not sorted alphabetically.                                                                                                   |
 | `mastra/sidebar-duplicate-id`     | sidebar     | error    | No      | A doc ID appears more than once in the reference sidebar.                                                                                             |
 | `mastra/sidebar-reference-item`   | sidebar     | warn     | No      | A reference sidebar item has an unknown type, or a property the sort fixer would drop.                                                                |
 | `mastra/sidebar-new-tag-stale`    | sidebar     | warn     | No      | A sidebar `new` tag was added more than 30 days ago.                                                                                                  |
 | `mastra/single-h1`                | structure   | warn     | No      | The page must have exactly one `#` heading.                                                                                                           |
+| `mastra/lint-comment-invalid` | structure | error | No | An inline `lint disable`, `enable`, or `ignore` comment names an unknown rule ID. |
 | `mastra/code-block-lang`          | structure   | warn     | No      | A fenced code block has no language, e.g. ` ```typescript `.                                                                                          |
 | `mastra/internal-link`            | links       | warn     | No      | An internal link points to a route that does not exist.                                                                                               |
 | `mastra/redirected-link`          | links       | warn     | Yes     | An internal link points to a redirect source. The fix rewrites it to the destination.                                                                 |

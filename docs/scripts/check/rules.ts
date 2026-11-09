@@ -82,11 +82,11 @@ export const RULES: RuleDefinition[] = [
     description: 'The `packages` field lists more than 4 packages. Each package embeds a full copy of the page.',
   },
   {
-    id: 'mastra/lint-disable-invalid',
-    category: 'frontmatter',
+    id: 'mastra/lint-comment-invalid',
+    category: 'structure',
     severity: 'error',
     fixable: false,
-    description: '`lintDisable` is not a list of known rule IDs.',
+    description: 'An inline `lint disable`, `enable`, or `ignore` comment names an unknown rule ID.',
   },
   // sidebar
   {

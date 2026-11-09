@@ -214,7 +214,7 @@ export const mdxCheck: Check = {
       }
       if (index) {
         const result = checkLinks(file, tree, index)
-        const edits = ctx.fix ? result.edits.filter(edit => ctx.isRuleActive(edit.ruleId, file)) : []
+        const edits = ctx.fix ? result.edits.filter(edit => ctx.isRuleActive(edit.ruleId, file, edit.finding.line)) : []
         if (edits.length > 0) {
           fixed += await applyEdits(file, edits)
           const applied = new Set<Finding>(edits.map(edit => edit.finding))

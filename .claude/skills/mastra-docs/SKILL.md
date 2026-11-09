@@ -16,7 +16,7 @@ Follow the most specific `AGENTS.md` and use these references:
 4. `references/COMPONENTS.md`: Shared MDX components and llms-txt markup.
 5. `references/DIAGRAM.md`: Mermaid diagram shapes, colors, layout, labels, and accessibility.
 6. `references/AUTHORING_WORKFLOW.md`: Editing, moves, deletions, redirects, and verification.
-7. `references/CHECKS.md`: The `pnpm check` command, rule IDs, JSON output, and per-page `lintDisable`.
+7. `references/CHECKS.md`: The `pnpm check` command, rule IDs, JSON output, and inline `lint` comments for disabling rules.
 
 To replace an existing diagram image with Mermaid, use the `docs-diagrams` skill.
 

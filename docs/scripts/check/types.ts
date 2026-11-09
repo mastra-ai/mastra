@@ -57,8 +57,6 @@ export interface ContentFile {
   frontmatterError?: { message: string; line?: number }
   /** Line where the MDX body starts (1-based). 1 when the file has no frontmatter. */
   bodyStartLine: number
-  /** Rule IDs disabled via `lintDisable` frontmatter. */
-  lintDisable: string[]
 }
 
 export interface CheckContext {
@@ -71,8 +69,8 @@ export interface CheckContext {
   fix: boolean
   /** Categories selected by `--category` (all categories when none were given). */
   categories: Category[]
-  /** False when a rule is excluded by `--rule` filters or disabled for `file` via `lintDisable`. Fixes must check this. */
-  isRuleActive: (ruleId: string, file?: ContentFile) => boolean
+  /** False when a rule is excluded by `--rule` filters or suppressed by an inline `lint` comment in `file` (at `line`, or file-wide). Fixes must check this. */
+  isRuleActive: (ruleId: string, file?: ContentFile, line?: number) => boolean
   /** Lazily loads every MDX file in the content sections, regardless of scope. */
   allFiles: () => Promise<ContentFile[]>
 }

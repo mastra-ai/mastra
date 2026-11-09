@@ -1,7 +1,6 @@
 import { DEFAULT_CONFIG, shouldSkipPath, validateFileContent } from '../../validate-frontmatter'
 import { CONTENT_ROOT, frontmatterKeyLine, isPartial } from '../content'
 import { finding } from '../finding'
-import { isKnownRuleId } from '../rules'
 import type { Check, ContentFile, Finding } from '../types'
 
 export const DESCRIPTION_MIN = 50
@@ -26,20 +25,6 @@ export function checkFrontmatter(file: ContentFile): Finding[] {
     ]
   }
   const data = file.frontmatter ?? {}
-
-  // lintDisable is validated on every page, including partials.
-  if (data.lintDisable !== undefined) {
-    const line = frontmatterKeyLine(file, 'lintDisable')
-    if (!Array.isArray(data.lintDisable) || data.lintDisable.some(v => typeof v !== 'string')) {
-      findings.push(finding('mastra/lint-disable-invalid', '`lintDisable` must be a list of rule IDs', at(line)))
-    } else {
-      for (const id of data.lintDisable as string[]) {
-        if (!isKnownRuleId(id)) {
-          findings.push(finding('mastra/lint-disable-invalid', `Unknown rule ID in \`lintDisable\`: ${id}`, at(line)))
-        }
-      }
-    }
-  }
 
   if (isPartial(file)) return findings
 

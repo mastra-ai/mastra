@@ -6,7 +6,9 @@ import { redirectsCheck } from './checks/redirects'
 import { sidebarCheck } from './checks/sidebar'
 import { valeCheck } from './checks/vale'
 import { CONTENT_ROOT, CONTENT_SECTIONS, loadAllContentFiles, loadContentFile, toPosix } from './content'
+import { finding } from './finding'
 import { matchesRuleFilter, RULE_FAMILIES, RULES } from './rules'
+import { isSuppressed, parseSuppressions } from './suppress'
 import {
   CATEGORIES,
   type Category,
@@ -73,11 +75,22 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
   }
 
   const ruleSelected = (ruleId: string) => rules.length === 0 || rules.some(filter => matchesRuleFilter(ruleId, filter))
-  const disabledFor = (ruleId: string, file?: ContentFile) =>
-    file !== undefined && file.lintDisable.some(id => matchesRuleFilter(ruleId, id))
-  const filesByPath = new Map(files.map(file => [file.path, file]))
+  const suppressions = new Map(files.map(file => [file.path, parseSuppressions(file)]))
+  const suppressed = (ruleId: string, file?: string, line?: number) => {
+    const entry = file === undefined ? undefined : suppressions.get(file)
+    return entry !== undefined && isSuppressed(entry, ruleId, line)
+  }
 
   const findings: Finding[] = []
+  if (categories.includes('structure') && ruleSelected('mastra/lint-comment-invalid')) {
+    for (const file of files) {
+      for (const { id, line } of suppressions.get(file.path)!.invalid) {
+        findings.push(
+          finding('mastra/lint-comment-invalid', `Unknown rule ID in lint comment: ${id}`, { file: file.path, line }),
+        )
+      }
+    }
+  }
   const skipped: SkippedCheck[] = []
   const ran: string[] = []
   let fixed = 0
@@ -97,18 +110,13 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
       fix: options.fix ?? false,
       categories,
       allFiles,
-      isRuleActive: (ruleId, file) => ruleSelected(ruleId) && !disabledFor(ruleId, file),
+      isRuleActive: (ruleId, file, line) => ruleSelected(ruleId) && !suppressed(ruleId, file?.path, line),
     })
     fixed += result.fixed ?? 0
     skipped.push(...(result.skipped ?? []))
     for (const item of result.findings) {
       if (!categories.includes(item.category) || !ruleSelected(item.ruleId)) continue
-      // lintDisable never hides an invalid lintDisable entry.
-      if (
-        item.ruleId !== 'mastra/lint-disable-invalid' &&
-        disabledFor(item.ruleId, item.file ? filesByPath.get(item.file) : undefined)
-      )
-        continue
+      if (suppressed(item.ruleId, item.file, item.line)) continue
       findings.push(item)
     }
   }

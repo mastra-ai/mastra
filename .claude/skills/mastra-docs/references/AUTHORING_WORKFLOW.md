@@ -68,7 +68,7 @@ Never edit generated `vercel.json` directly. Commit it only when the task includ
 
 ## 5. Verify the change
 
-Start with `pnpm check` from `docs/`. It runs formatting, frontmatter, sidebar, structure, link, remark, Vale, and redirect checks in one pass and reports each finding with a stable `mastra/` rule ID. Pass changed MDX files to scope file-level checks, and `--fix` to apply safe fixes. Rule IDs, the JSON schema, and per-page `lintDisable` are documented in `CHECKS.md` next to this file.
+Start with `pnpm check` from `docs/`. It runs formatting, frontmatter, sidebar, structure, link, remark, Vale, and redirect checks in one pass and reports each finding with a stable `mastra/` rule ID. Pass changed MDX files to scope file-level checks, and `--fix` to apply safe fixes. Rule IDs, the JSON schema, and inline `lint` comments for disabling rules are documented in `CHECKS.md` next to this file.
 
 ```bash
 pnpm check src/content/en/docs/agents/overview.mdx
