@@ -830,6 +830,24 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // `retryOnDead`, Platform status reset on destroy), so a replacement VM
     // re-enters this hook and heals itself with credentials at least as
     // fresh as the start that installed them.
+    // Replaces the installed minted token once it is stale, so `gh` and the
+    // `gh auth git-credential` helper never run with an expired GH_TOKEN. Org
+    // PATs are left alone. Returns whether a fresh token was injected.
+    const refreshStaleGithubToken = async (): Promise<boolean> => {
+      const registration = githubTokenInjectors.get(workspaceId);
+      if (!githubProvider || !registration || !isGithubTokenStale(registration)) return false;
+      // Let an in-flight reconcile settle the role before choosing a credential.
+      await githubTokenReconciliations.get(workspaceId)?.catch(() => {});
+      if (githubTokenInjectors.get(workspaceId) !== registration || !isGithubTokenStale(registration)) return false;
+      if (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, registration.patKind)) {
+        registration.tokenIssuedAt = Date.now();
+        return false;
+      }
+      const token = await getRepositoryToken();
+      if (githubTokenInjectors.get(workspaceId) !== registration) return false;
+      registration.inject(token);
+      return true;
+    };
     const setupHook: SandboxStartHook = async args => {
       // A session retired before its first start must not set anything up.
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
@@ -903,15 +921,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         };
         // A minted token may have expired while the VM was away; re-mint it
         // instead of reinstalling it over the fresh one setup just used.
-        const reinstallToken =
-          isGithubTokenStale(existingRegistration) &&
-          !(await getGithubPat(() => githubProvider.integrationStorage, session.orgId, existingRegistration.patKind))
-            ? await getRepositoryToken()
-            : existingRegistration.ghToken;
         // Install through inject (not optional-chained setEnv) so a provider
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
-        existingRegistration.inject(reinstallToken);
+        if (!(await refreshStaleGithubToken())) existingRegistration.inject(existingRegistration.ghToken);
         await finishStart();
         return;
       }
@@ -984,6 +997,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             `sandbox(${session.id})`,
             ['start', 'stop', 'executeCommand', 'reconnect'],
           );
+          // A turn can outlive the token installed when the workspace was
+          // resolved, so check its age before every command. Best-effort: a
+          // failed re-mint leaves the current token in place.
+          const executeCommand = sandbox.executeCommand?.bind(sandbox);
+          if (executeCommand) {
+            sandbox.executeCommand = async (...args) => {
+              await refreshStaleGithubToken().catch(() => {});
+              return executeCommand(...args);
+            };
+          }
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
           // stack a wrapper per call. Factory's setup runs first: a hook the
