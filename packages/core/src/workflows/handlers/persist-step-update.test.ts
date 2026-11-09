@@ -9,6 +9,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '../../di';
+import { InMemoryStore } from '../../storage';
 import { DefaultExecutionEngine } from '../default';
 import type { ExecutionContext, WorkflowRunStatus } from '../types';
 
@@ -358,5 +359,86 @@ describe('onStepExecutionStart — durable operation skipping (#24731)', () => {
 
     expect(wrapSpy).toHaveBeenCalledTimes(1);
     expect(pubsub.publish).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('persistStepUpdate — repeated suspension writes (#29643)', () => {
+  async function setup() {
+    const storage = new InMemoryStore();
+    const workflows = (await storage.getStore('workflows'))!;
+    const engine = new DefaultExecutionEngine({
+      mastra: { getStorage: () => storage } as any,
+      options: { validateInputs: false, shouldPersistSnapshot: () => true },
+    });
+    const write = (workflowStatus: WorkflowRunStatus, suspendedPaths: Record<string, number[]> = { step: [0] }) =>
+      engine.persistStepUpdate({
+        workflowId: 'wf',
+        runId: 'run-1',
+        resourceId: 'resource-1',
+        stepResults: {},
+        serializedStepGraph: [],
+        executionContext: baseExecutionContext({ suspendedPaths }),
+        workflowStatus,
+        requestContext: new RequestContext(),
+      });
+    const load = () => workflows.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'run-1' });
+    return { engine, workflows, write, load };
+  }
+
+  it('keeps the first timestamp when the same suspension is written again', async () => {
+    const { write, load } = await setup();
+    await write('suspended');
+    const first = (await load())!.timestamp;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await write('suspended');
+
+    expect((await load())!.timestamp).toBe(first);
+  });
+
+  it('does not reset a suspension a resume has claimed', async () => {
+    const { engine, workflows, write, load } = await setup();
+    await write('suspended');
+    await workflows.updateWorkflowState({
+      workflowName: 'wf',
+      runId: 'run-1',
+      opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
+    });
+    await write('suspended');
+
+    expect((await load())!.status).toBe('pending');
+    expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
+  });
+
+  it('marks the run canceled when a repeated write is refused by a cancellation', async () => {
+    const { engine, workflows, write, load } = await setup();
+    await write('suspended');
+    await workflows.updateWorkflowState({ workflowName: 'wf', runId: 'run-1', opts: { status: 'canceled' } });
+    await write('suspended');
+
+    expect((await load())!.status).toBe('canceled');
+    expect(engine.getLastPersistedStatus('run-1')).toBe('canceled');
+  });
+
+  it('writes a new timestamp for a different suspension', async () => {
+    const { write, load } = await setup();
+    await write('suspended', { a: [0] });
+    const first = (await load())!.timestamp;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await write('suspended', { b: [1] });
+
+    const snapshot = (await load())!;
+    expect(snapshot.timestamp).toBeGreaterThan(first);
+    expect(snapshot.suspendedPaths).toEqual({ b: [1] });
+  });
+
+  it('writes a new timestamp when the run suspends again after another status', async () => {
+    const { write, load } = await setup();
+    await write('suspended');
+    const first = (await load())!.timestamp;
+    await write('pending');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await write('suspended');
+
+    expect((await load())!.timestamp).toBeGreaterThan(first);
   });
 });

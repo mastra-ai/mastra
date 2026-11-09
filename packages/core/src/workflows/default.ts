@@ -26,7 +26,7 @@ import {
   executeLoop as executeLoopHandler,
   executeParallel as executeParallelHandler,
 } from './handlers/control-flow';
-import type { ExecuteEntryParams, PersistStepUpdateParams } from './handlers/entry';
+import type { ExecuteEntryParams, PersistedSuspension, PersistStepUpdateParams } from './handlers/entry';
 import {
   executeEntry as executeEntryHandler,
   isWorkflowRunCanceled,
@@ -126,7 +126,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * attempt. That status is the run's starting point, not a cancellation of
    * this execution, so it is not honored until the run writes a status of its own.
    */
-  protected lastPersistedStatusByRun = new Map<string, { status?: WorkflowRunStatus; replayingCanceled: boolean }>();
+  protected lastPersistedStatusByRun = new Map<
+    string,
+    { status?: WorkflowRunStatus; replayingCanceled: boolean; suspension?: PersistedSuspension }
+  >();
 
   /**
    * @internal Returns the journal of the storage-v2 execution of `runId` this is called from; a run
@@ -144,9 +147,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /** Records the last status persisted for a given run in this process. */
-  setLastPersistedStatus(runId: string, status: WorkflowRunStatus): void {
+  setLastPersistedStatus(runId: string, status: WorkflowRunStatus, suspension?: PersistedSuspension): void {
     const replayingCanceled = status === 'canceled' && this.lastPersistedStatusByRun.get(runId)?.replayingCanceled;
-    this.lastPersistedStatusByRun.set(runId, { status, replayingCanceled: replayingCanceled === true });
+    this.lastPersistedStatusByRun.set(runId, {
+      status,
+      replayingCanceled: replayingCanceled === true,
+      ...(status === 'suspended' && suspension ? { suspension } : {}),
+    });
+  }
+
+  /**
+   * The suspension this execution of the run last wrote, while `suspended` is its last persisted
+   * status. Cleared when the run writes another status or starts another execution.
+   */
+  getPersistedSuspension(runId: string): PersistedSuspension | undefined {
+    return this.lastPersistedStatusByRun.get(runId)?.suspension;
   }
 
   /** Clears the last-persisted-status entry for a run (used on run cleanup). */

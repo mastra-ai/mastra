@@ -6,6 +6,7 @@ import type { PubSub } from '../../events/pubsub';
 import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/run-statuses';
+import { deepEqual } from '../../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
@@ -195,6 +196,13 @@ const NOT_CANCELED_STATUSES = WORKFLOW_RUN_STATUSES.filter(
   (status): status is Exclude<WorkflowRunStatus, 'canceled'> => status !== 'canceled',
 );
 
+/** A suspension as last written by one execution of a run. */
+export interface PersistedSuspension {
+  workflowId: string;
+  suspendedPaths: Record<string, number[]>;
+  timestamp: number;
+}
+
 export async function isWorkflowRunCanceled(
   engine: DefaultExecutionEngine,
   workflowId: string,
@@ -265,6 +273,22 @@ export async function persistStepUpdate(
 
     const requestContextObj = engine.serializeRequestContext(requestContext);
 
+    // The run writes the same suspension more than once (the entry's end, then the run's terminal
+    // write). A resume can already be under way between them: it compares the snapshot timestamp it
+    // read with the one it claims, so a repeat keeps the first write's timestamp, and it is written
+    // only over a row that is still suspended, so it never resets a claimed resume.
+    const suspendedPaths = executionContext.suspendedPaths ?? {};
+    const priorSuspension = workflowStatus === 'suspended' ? engine.getPersistedSuspension(runId) : undefined;
+    const repeatedSuspension =
+      priorSuspension?.workflowId === workflowId && deepEqual(priorSuspension.suspendedPaths, suspendedPaths)
+        ? priorSuspension
+        : undefined;
+    const timestamp = repeatedSuspension?.timestamp ?? Date.now();
+    const suspension: PersistedSuspension | undefined =
+      workflowStatus === 'suspended'
+        ? { workflowId, suspendedPaths: JSON.parse(JSON.stringify(suspendedPaths)), timestamp }
+        : undefined;
+
     const snapshot: WorkflowRunState = {
       runId,
       parentWorkflow: executionContext.parentWorkflow,
@@ -281,9 +305,16 @@ export async function persistStepUpdate(
       result,
       error,
       requestContext: requestContextObj,
-      timestamp: Date.now(),
+      timestamp,
       // Persist tracing context for span continuity on resume
       tracingContext,
+    };
+
+    // A repeat the store refused was claimed by a resume, unless the run was canceled meanwhile.
+    const onRepeatRejected = async () => {
+      if (await isWorkflowRunCanceled(engine, workflowId, runId)) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+      }
     };
 
     // A run canceled from another process must not be overwritten. Storage v2 stores and v1 stores
@@ -291,38 +322,48 @@ export async function persistStepUpdate(
     const guardCancellation = workflowStatus !== 'canceled' && engine.honorsStoredCancellation(runId);
     const journal = params.journal ?? engine.getRunJournal(runId);
     if (journal) {
+      const expectedStatus = repeatedSuspension
+        ? ['suspended' as const]
+        : guardCancellation
+          ? NOT_CANCELED_STATUSES
+          : undefined;
       const written = await journal.write({
         resourceId,
         snapshot,
         stepIds,
         foreachItems,
-        ...(guardCancellation ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+        ...(expectedStatus ? { expectedStatus } : {}),
       });
       if (!written) {
+        if (repeatedSuspension) return onRepeatRejected();
         engine.setLastPersistedStatus(runId, 'canceled');
         return;
       }
     } else {
       const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-      const atomicGuard = guardCancellation && !!workflowsStore?.supportsGuardedSnapshotWrites?.();
+      const guardedWrites = !!workflowsStore?.supportsGuardedSnapshotWrites?.();
+      const atomicGuard = guardCancellation && guardedWrites;
       if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
         engine.setLastPersistedStatus(runId, 'canceled');
         return;
       }
+      const expectedStatus =
+        repeatedSuspension && guardedWrites ? ['suspended' as const] : atomicGuard ? NOT_CANCELED_STATUSES : undefined;
 
       const written = await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,
         resourceId,
         snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
-        ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+        ...(expectedStatus ? { expectedStatus } : {}),
       });
-      if (atomicGuard && written === false) {
+      if (expectedStatus && written === false) {
+        if (repeatedSuspension) return onRepeatRejected();
         engine.setLastPersistedStatus(runId, 'canceled');
         return;
       }
     }
-    engine.setLastPersistedStatus(runId, workflowStatus);
+    engine.setLastPersistedStatus(runId, workflowStatus, suspension);
   };
 
   await engine.wrapDurableOperation(operationId, () =>
