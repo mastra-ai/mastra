@@ -1,19 +1,19 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
-  isTerminalWorkItem,
   rulePhaseField,
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
-import { incidentioClaimKey } from './claim.js';
 import type { IncidentioEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -74,6 +74,17 @@ export interface IncidentioRulesIngress {
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
 
+/**
+ * The status change a incident.io sync reports: a follow-up seen for the first time is created, and a
+ * completed or canceled one is closed for that reason. Later sightings of an open follow-up report none.
+ */
+export function boardEventFor(context: Pick<FactoryIncidentioRuleContext, 'event' | 'issue' | 'item'>): BoardEventFacts | undefined {
+  if (context.event === 'followUpClosed') {
+    return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
+  }
+  return context.item ? undefined : { type: 'work_item.created' };
+}
+
 export class IncidentioRules {
   constructor(private readonly options: IncidentioRulesOptions) {}
 
@@ -81,47 +92,28 @@ export class IncidentioRules {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
 
+    // A finished card may still be only in the legacy table; copy it so the issue finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+      sources: input.issues.map(issue => ({ integrationId: 'incidentio', type: 'issue', externalId: issue.id })),
+    });
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
-    const itemsByClaimKey = new Map(items.filter(item => item.claimKey).map(item => [item.claimKey, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      // The claim finds the card even after a metadata drift; the raw item
-      // reference covers cards filed before claims existed.
-      const relatedItem = itemsByClaimKey.get(incidentioClaimKey(issue.id)) ?? itemsBySourceKey.get(issue.id);
-      // One live card per follow-up per org. The store's claim index is the
-      // guarantee; this check spares the dispatcher a refused upsert.
-      if (!relatedItem && (await this.#heldElsewhere(input, issue))) {
-        statuses.push('missing');
-        continue;
-      }
-      statuses.push(await this.#ingestIssue(input, issue, relatedItem));
+      // One card per follow-up per project; other projects may file their own.
+      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
     return { status: 'missing', ingested: statuses.length };
   }
 
-  async #heldElsewhere(input: IncidentioRulesIngress, issue: IncidentioIssueIngress): Promise<boolean> {
-    const heldLive = (row: WorkItemRow) =>
-      row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row);
-    const claimant = await this.options.storage.getByClaimKey({
-      orgId: input.orgId,
-      claimKey: incidentioClaimKey(issue.id),
-    });
-    if (claimant && heldLive(claimant)) return true;
-    // Cards filed before claims existed carry only the item reference.
-    const legacy = await this.options.storage.listBySource({
-      orgId: input.orgId,
-      source: { integrationId: 'incidentio', type: 'issue', externalId: issue.id },
-    });
-    return legacy.some(heldLive);
-  }
-
   async #ingestIssue(
     input: IncidentioRulesIngress,
     issue: IncidentioIssueIngress,
-    relatedItem: WorkItemRow | undefined,
+    relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `incidentio:${issue.id}:${issue.updatedAt}`;
@@ -153,6 +145,7 @@ export class IncidentioRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              workItem: relatedItem.workItem,
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
@@ -166,13 +159,20 @@ export class IncidentioRules {
       event,
       issue,
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
 
+    const ownedByDeployment = deploymentOwnsEvent(
+      this.options.incidentioRules,
+      boardEventHandlers(this.options.boards, eventBoardId(context), 'incidentio'),
+      context.event,
+    );
     const rule = selectEventRule(
       this.options.incidentioRules,
       boardEventHandlers(this.options.boards, eventBoardId(context), 'incidentio'),
       context.event,
     );
-    let decision: FactoryRuleDecision | void;
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -200,6 +200,14 @@ export class IncidentioRules {
             ? error.message.slice(0, 2_000)
             : 'Factory incident.io rule failed.',
       };
+    }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+    if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+      const routed = await routeEventDecision(context, this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+      });
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

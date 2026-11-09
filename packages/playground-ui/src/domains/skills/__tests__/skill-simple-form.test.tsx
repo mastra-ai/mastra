@@ -10,7 +10,7 @@ const skill = {
   instructions: '# Release notes\n\nGroup merged PRs by package.',
 };
 
-function EditableForm({ readOnly }: { readOnly?: boolean }) {
+function EditableForm({ readOnly, nameReadOnly }: { readOnly?: boolean; nameReadOnly?: boolean }) {
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
   const [instructions, setInstructions] = useState(skill.instructions);
@@ -24,6 +24,7 @@ function EditableForm({ readOnly }: { readOnly?: boolean }) {
         instructions={instructions}
         onInstructionsChange={setInstructions}
         readOnly={readOnly}
+        nameReadOnly={nameReadOnly}
       />
       <output data-testid="current-name">{name}</output>
     </>
@@ -48,6 +49,16 @@ describe('SkillSimpleForm', () => {
       fireEvent.change(screen.getByDisplayValue(skill.name), { target: { value: 'changelog' } });
 
       expect(screen.getByTestId('current-name').textContent).toBe('changelog');
+    });
+  });
+
+  describe('when only the name is locked', () => {
+    it('locks the name and keeps description and instructions editable', () => {
+      const { container } = render(<EditableForm nameReadOnly />);
+
+      expect((screen.getByDisplayValue(skill.name) as HTMLInputElement).disabled).toBe(true);
+      expect((screen.getByDisplayValue(skill.description) as HTMLInputElement).disabled).toBe(false);
+      expect(container.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('true');
     });
   });
 

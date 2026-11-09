@@ -13,6 +13,11 @@
 //   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
 //   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
+//   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
+//   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
+//   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
+
+import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
 // Each option is { selector, message }: report every node an esquery selector matches.
 function selectorRule(selectors) {
@@ -178,6 +183,93 @@ const noBarrelImports = selectorRule(() =>
   ]).map(selector => ({ selector, message: BARREL_MESSAGE })),
 );
 
+// --- placeholder-text ----------------------------------------------------------------------------------
+// Placeholders read like the system search field on macOS and iOS: "Search agents", "Filter by name". No
+// trailing ellipsis (`…` or `...`): the dimmed text already says the field is empty. Placeholders that give
+// an instruction (start with Search, Filter, Select…) also use sentence case. Example values ("My Agent",
+// "e.g. Production alerts") keep their capitals.
+// Checks string `placeholder` / `*Placeholder` values in JSX attributes, object properties, default
+// parameters and variables, including each branch of a ternary. Strings built at runtime are only partly seen.
+// Options: { properNouns?: string[] } words that stay capitalized after the first, added to the defaults.
+const PLACEHOLDER_NAME = /^placeholder$|Placeholder$/;
+const INSTRUCTION_VERBS =
+  /^(Search|Filter|Find|Select|Choose|Pick|Enter|Type|Paste|Add|Write|Describe|Leave|Ask|Send|Name)\b/;
+const PLACEHOLDER_PROPER_NOUNS = [
+  'Mastra Code',
+  'Mastra',
+  'Studio',
+  'Factory',
+  'Factories',
+  'MastraCode',
+  'GitHub',
+  'GitLab',
+  'Google',
+  'Slack',
+  'Linear',
+  'Vercel',
+  'Stripe',
+];
+
+// The string values a placeholder expression can take: literals, static template parts, ternary branches.
+function placeholderStrings(node) {
+  if (!node) return [];
+  if (node.type === 'JSXExpressionContainer') return placeholderStrings(node.expression);
+  if (node.type === 'Literal' && typeof node.value === 'string') return [{ node, head: node.value, tail: node.value }];
+  if (node.type === 'TemplateLiteral') {
+    const { quasis } = node;
+    return [{ node, head: quasis[0].value.cooked, tail: quasis[quasis.length - 1].value.cooked }];
+  }
+  if (node.type === 'ConditionalExpression')
+    return [...placeholderStrings(node.consequent), ...placeholderStrings(node.alternate)];
+  if (node.type === 'LogicalExpression') return placeholderStrings(node.right);
+  return [];
+}
+
+function placeholderText(context) {
+  const nouns = [...PLACEHOLDER_PROPER_NOUNS, ...(context.options[0]?.properNouns ?? [])];
+  const properNouns = new RegExp(`\\b(?:${nouns.sort((a, b) => b.length - a.length).join('|')})\\b`, 'g');
+  // The first capitalized word that doesn't start a sentence and isn't (part of) a proper noun.
+  const titleCaseWord = text => {
+    let sentenceStart = true;
+    for (const word of text.replace(properNouns, 'x').trim().split(/\s+/)) {
+      if (!sentenceStart && /^[A-Z][a-z]/.test(word)) return word;
+      sentenceStart = /[.!?:]$/.test(word);
+    }
+    return null;
+  };
+  const check = value => {
+    for (const { node, head, tail } of placeholderStrings(value)) {
+      // A progress state shown in the field ("Loading agents…") keeps its ellipsis.
+      if (/(…|\.\.\.)\s*$/.test(tail) && !/^\s*\w+ing\b/.test(head)) {
+        context.report({ node, message: 'Drop the trailing ellipsis from this placeholder ("Search agents").' });
+      }
+      if (!INSTRUCTION_VERBS.test(head)) continue;
+      const word = titleCaseWord(head);
+      if (word) {
+        context.report({
+          node,
+          message: `Use sentence case in this placeholder: lowercase "${word.replace(/[^A-Za-z]+$/, '')}" unless it's a proper noun (add it to properNouns).`,
+        });
+      }
+    }
+  };
+  const keyName = key => (key?.type === 'Identifier' ? key.name : key?.type === 'Literal' ? key.value : '');
+  return {
+    JSXAttribute(node) {
+      if (node.name.type === 'JSXIdentifier' && PLACEHOLDER_NAME.test(node.name.name)) check(node.value);
+    },
+    Property(node) {
+      if (PLACEHOLDER_NAME.test(keyName(node.key))) check(node.value);
+    },
+    AssignmentPattern(node) {
+      if (node.left.type === 'Identifier' && PLACEHOLDER_NAME.test(node.left.name)) check(node.right);
+    },
+    VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && PLACEHOLDER_NAME.test(node.id.name)) check(node.init);
+    },
+  };
+}
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -186,7 +278,20 @@ const plugin = {
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
+    'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
+    'no-text-separators': noTextSeparators,
+    'no-text-layout-spacing': noTextLayoutSpacing,
   },
+};
+
+export const copyRules = {
+  'playground-ui/no-text-separators': 'error',
+  'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const copyRuleExclusions = {
+  files: ['**/*.{test,spec,stories,story}.*', '**/{test,tests,__tests__,__mocks__,__fixtures__,fixtures,generated}/**'],
+  rules: Object.fromEntries(Object.keys(copyRules).map(rule => [rule, 'off'])),
 };
 
 // Every rule at its default options. Spread into `rules`, then turn rules off per glob in `overrides`
@@ -197,6 +302,8 @@ export const recommended = {
   'playground-ui/txt-tone': 'error',
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
+  'playground-ui/placeholder-text': 'error',
+  ...copyRules,
 };
 
 export default plugin;

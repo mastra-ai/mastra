@@ -27,8 +27,8 @@ overrides:
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   jose@>=4.14.0 <6.2.12: 6.2.12
   hono@<4.13.8: 4.13.11
-  better-auth: ^1.7.13
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.13
+  better-auth: ^1.7.18
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.18
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.42
   es-toolkit@<1.52.0: 1.52.0
@@ -48,3 +48,7 @@ allowBuilds:
   esbuild: true
 patchedDependencies:
   'body-parser@1.20.9': patches/body-parser@1.20.9.patch
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.1.0'
+  - '@vitest/spy@5.1.0'
+  - vitest@5.1.0

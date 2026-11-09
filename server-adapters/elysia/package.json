@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elysia",
-  "version": "0.1.21",
+  "version": "0.1.23-alpha.2",
   "description": "Mastra Elysia adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "fetch-to-node": "^2.1.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.136",
+    "@ai-sdk/openai": "^2.0.139",
     "@copilotkit/aimock": "^1.46.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/node": "^1.4.5",

@@ -37,6 +37,7 @@
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "stepfun-ai/Step-3.7-Flash",
     "stepfun-ai/Step-5-Preview",
@@ -175,6 +176,7 @@
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "openai/gpt-oss-120b",
@@ -194,9 +196,38 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "ByteDance/Seed-2.0-code": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "nvidia/Nemotron-3-Nano-30B-A3B": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.1": [
@@ -209,28 +240,6 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
@@ -240,18 +249,7 @@
         "values": ["high", "max"]
       }
     ],
-    "tencent/Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "XiaomiMiMo/MiMo-V2.5-Pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "XiaomiMiMo/MiMo-V2.6-Flash": [
+    "zai-org/GLM-4.7": [
       {
         "type": "toggle"
       }
@@ -261,71 +259,25 @@
         "type": "toggle"
       }
     ],
+    "XiaomiMiMo/MiMo-V2.6-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
     "XiaomiMiMo/MiMo-V2.5": [
       {
         "type": "toggle"
       }
     ],
-    "google/gemma-4-E4B-it": [
+    "XiaomiMiMo/MiMo-V2.5-Pro": [
       {
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ByteDance/Seed-2.0-code": [
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "anthropic/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "stepfun-ai/Step-5-Preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
@@ -343,7 +295,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V3.1": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
@@ -357,12 +315,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
@@ -372,25 +324,47 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
+    "deepseek-ai/DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "deepseek-ai/DeepSeek-V3.1": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "google/gemma-4-31B-it": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-E4B-it": [
+      {
+        "type": "toggle"
       }
     ],
     "moonshotai/Kimi-K2.7-Code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }
@@ -406,9 +380,43 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/Hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

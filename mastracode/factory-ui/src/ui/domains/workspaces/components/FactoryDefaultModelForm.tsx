@@ -87,7 +87,7 @@ export function FactoryDefaultModelForm({
             setModelId(modelId);
             onPreviewModel?.(modelId);
           }}
-          placeholder="Select a default model…"
+          placeholder="Select a default model"
         />
       </Field>
       {selectedModelId && !modelId && (

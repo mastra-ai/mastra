@@ -406,6 +406,14 @@ describe('chat run errors', () => {
 });
 
 describe('chat run errors on an account limit', () => {
+  async function expectCredentialHolder(holder: string) {
+    const credential = await screen.findByText('Runs on Claude Pro/Max');
+    const metadata = credential.closest<HTMLElement>('[data-slot="metadata"]');
+    if (!metadata) throw new Error('Credential metadata is missing');
+    expect(credential).toBeVisible();
+    expect(within(metadata).getByText(holder)).toBeVisible();
+  }
+
   const rateLimited = failedReply(
     "This request would exceed your account's rate limit. Please try again later.",
     'AI_APICallError',
@@ -457,14 +465,14 @@ describe('chat run errors on an account limit', () => {
     stubCredential('organization');
     renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
-    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+    await expectCredentialHolder('Shared by the organization');
   });
 
   it('tells the chat owner the limit belongs to their own subscription', async () => {
     stubCredential('personal');
     renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
-    expect(await screen.findByText('Runs on Claude Pro/Max · Damien Schneider (you)')).toBeVisible();
+    await expectCredentialHolder('Damien Schneider (you)');
   });
 
   it('does not name a credential on an older failure, which may predate a credential change', async () => {
@@ -494,7 +502,7 @@ describe('chat run errors on an account limit', () => {
     const { rerender } = renderWithProviders(
       <ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />,
     );
-    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+    await expectCredentialHolder('Shared by the organization');
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /gpt-5\.5/i }));

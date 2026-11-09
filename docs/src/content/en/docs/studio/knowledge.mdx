@@ -8,43 +8,63 @@ packages:
 
 # Knowledge
 
-Studio can browse the Knowledge instances registered on your Mastra server. It shows every scope and page as a tree beside a graph of the same pages, with parent links and the mentions between them. Selecting a page in either view opens it with its notes, pin and the pages it references. Search covers page names, synopses, bodies and note text. The page is read-only.
+Studio's Knowledge page shows what your agents know: every scope and page, how they link, and who wrote what. Use it to check content you loaded and to watch agents' edits as they happen. It's read-only.
 
-On narrow screens the tree and graph share one panel, with a toggle between them that keeps the selected page.
+:::alpha
 
-The routes that feed it are **off by default**. Until you enable them, the Knowledge page in Studio shows an explainer saying Knowledge browsing isn't enabled.
+Knowledge is in alpha. Its API may change between releases.
+
+:::
 
 ## Enable the routes
 
-Register the Knowledge routes explicitly:
+The Knowledge routes are **off by default**. Until you enable them, Studio's Knowledge page says browsing isn't enabled. Register the Knowledge instance on `Mastra` and add the routes:
 
-```typescript
-import { Mastra } from '@mastra/core'
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
 import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter'
+import { knowledge } from './knowledge'
+import { supportAgent } from './agents/support-agent'
 
 export const mastra = new Mastra({
+  agents: { supportAgent },
+  knowledge: { company: knowledge },
   server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
 })
 ```
 
-They mount under your configured API prefix (`/api/knowledge` by default) and are gated by the `knowledge:read` permission.
+The routes mount under your server's API prefix, `/api/knowledge` by default, and need `@mastra/core` 1.81.0 or later. With 1.81.0, Studio counts links only among the pages it has loaded. [Server routes](/reference/server/routes#knowledge) lists each route, its parameters and its errors.
 
-| Route | Returns |
-| - | - |
-| `GET /knowledge` | The Knowledge instances you can read |
-| `GET /knowledge/:knowledgeKey/tree` | The root scopes, or the child scopes and pages under `parentId` |
-| `GET /knowledge/:knowledgeKey/pages/:pageId` | One page with its ancestors, notes, pin and referenced pages |
-| `GET /knowledge/:knowledgeKey/graph` | A bounded graph of pages with parent and mention edges |
-| `GET /knowledge/:knowledgeKey/search` | Pages and notes matching a query |
-| `GET /knowledge/:knowledgeKey/activity` | Recent changes, optionally for one scope or page |
-| `GET /knowledge/:knowledgeKey/events` | A Server-Sent Events stream of the writes the caller can read, which Studio follows to show changes as they happen |
+## What you see
 
-## Access
+- **Tree**: every scope and the pages inside it, nested the way your agents organized them.
+- **Graph**: the same pages and how they connect. Lines show each page's parent, the pages its notes mention, the links written in its body, and which scopes grant access to which. A legend names each kind of line. Select a page in either view to open it.
+- **Page**: the body, version and who last updated it, its notes with their authors, its child pages, the notes on other pages that mention it, and who it's pinned for.
+- **Activity**: each page's history of creates, edits, moves, merges, notes and pins, with the author and time of each.
+- **Search**: over page names, descriptions, bodies and note text.
+
+On narrow screens the tree and graph share one panel, with a toggle between them that keeps the selected page.
+
+When an agent writes, the tree, graph and open page update as it happens, without a reload. Studio follows writes made through the Knowledge instance registered with Mastra. Writes from another process or another instance on the same storage show up after a reload.
+
+![Studio's Knowledge page: the page tree of a website scope on the left, and the graph of the same pages on the right, grouped around the scope with each branch in its own color.](/img/knowledge/studio-tree-and-graph.png)
+
+Hover over or select a page in the graph to draw its links: solid green lines for the pages it links to, dashed orange lines for the pages that link to it.
+
+![A page selected in the graph, with a tooltip reading "2 links in, 2 links out", and its links drawn to the pages they connect.](/img/knowledge/studio-graph-links.png)
+
+Focus a page to see only it, its parent and its child pages.
+
+![The graph focused on a Research page: its parent scope above it, four child pages below it, and one incoming link from another branch.](/img/knowledge/studio-graph-focus.png)
+
+In an agent's chat, Knowledge tool calls show the pages they read or wrote, and pinned pages show what the run received. Both link to the page in this view.
+
+## Control who sees what
 
 What the routes return depends on whether your app configures auth (`server.auth` or `studio.auth`):
 
-- **No auth:** the routes read as the instance owner and return every scope, page and note. This suits a local or test project.
-- **Auth:** the routes return only what the signed-in caller can read. Map each user to Knowledge principals in `authorize` by setting the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY`. The instance turns the principals into a read scope with the same rules agents use. A caller with no mapping gets `403`.
+- **No auth:** the routes read as the instance owner and return every scope, page and note to anyone who can reach the server. Use this only for a local or test project, and add auth before you deploy.
+- **Auth:** the routes return only what the signed-in user can read. In `authorize`, set the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` to the user's Knowledge scopes. Knowledge applies the same access rules agents use. In the alpha, these rules aren't an [isolation boundary](/docs/knowledge/scopes-and-access), so don't store content that must never reach another user.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -73,13 +93,18 @@ export const mastra = new Mastra({
 })
 ```
 
+If you set a different prefix, change the `/api/knowledge` check in `authorize` to match. Otherwise the key isn't set and the routes return `403`.
+
 An `authorize` function replaces the server's rules and role checks for every route, so keep your app's existing decision for the other paths, as above. Returning `true` for everything would let any signed-in user call any route.
 
-Set the value to a string array of principals, or `'all'` for someone who should see the whole instance. An empty array reads nothing. A principal that matches no declared scope type is a configuration error and returns `500`. If you configure `studio.auth`, Studio requests use it instead of `server.auth`, so set the key in that `authorize`.
+Set the value to an array of scopes, or `'all'` for someone who should see the whole instance. An empty array reads nothing. See [Knowledge access and errors](/reference/server/routes#knowledge-access-and-errors) for what other values return. If you configure `studio.auth`, Studio requests use it instead of `server.auth`, so set the key in that `authorize`.
 
-## Deployment notes
+### Deployment notes
 
-- **No auth configured:** the routes are open to anyone who can reach the server and read the whole instance. Enable them only where Studio itself is private.
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user with a principal mapping can read the pages those principals cover, in every instance.
-- **With an FGA provider:** Knowledge instances are checked as resource type `knowledge` by their registered key (`main` in `knowledge: { main }`) with `knowledge:read`. `GET /knowledge` lists only the instances the caller can read, and the other routes refuse any other instance with `403`. Like the other list routes, `GET /knowledge` has no route FGA metadata, so `requireForProtectedRoutes` refuses it.
+- **With an FGA provider:** each Knowledge instance is checked separately with `knowledge:read`. A user sees only the instances you grant. See [Knowledge access and errors](/reference/server/routes#knowledge-access-and-errors).
 - **NestJS:** the NestJS adapter doesn't serve the Knowledge routes yet.
+
+## Build your own view
+
+To show Knowledge changes in your own app, subscribe with [`knowledge.onChange()`](/reference/knowledge/knowledge-class#onchange). Events carry IDs, not content. Read the page again under the user's scopes before you show it to them. A `page` `delete` event can't be read again, so remove the page from your view. A `page` `merge` event's `pageId` is the target, so also remove the merged-away page in `sourceId`. A `scope` event is sent for a new scope only, not for its child scopes or template pages, so list the scope again to find them.

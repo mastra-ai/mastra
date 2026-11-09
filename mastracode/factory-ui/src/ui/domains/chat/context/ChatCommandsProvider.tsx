@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, useState } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 
 import type { SlashCommand } from '../services/commands';
@@ -14,10 +14,11 @@ export interface ChatCommandsApi {
   composerDraft: string;
   composerPreview: ComposerPreview | undefined;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
-  setComposerDraft: (draft: string) => void;
+  setComposerDraft: Dispatch<SetStateAction<string>>;
   showComposerPreview: (text: string) => void;
   clearComposerPreview: (text: string) => void;
   prefillComposer: (draft: string) => void;
+  restoreComposerDraft: (draft: string) => void;
   submitComposer: (draft: string) => void;
   commands: SlashCommand[];
   runComposerCommand: (text: string) => Promise<boolean>;
@@ -25,8 +26,8 @@ export interface ChatCommandsApi {
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
-export function ChatCommandsProvider({ children }: { children: ReactNode }) {
-  const [composerDraft, setComposerDraft] = useState('');
+export function ChatCommandsProvider({ children, initialDraft = '' }: { children: ReactNode; initialDraft?: string }) {
+  const [composerDraft, setComposerDraft] = useState(initialDraft);
   const [composerPreview, setPreview] = useState<ComposerPreview>();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   // Measured before the preview lands: a composer that grew to fit it would move what the pointer is on.
@@ -37,6 +38,11 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const clearComposerPreview = (text: string) => setPreview(current => (current?.text === text ? undefined : current));
   const prefillComposer = (draft: string) => {
     setComposerDraft(draft);
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  };
+  // Gives back a message that never sent without dropping what was typed since.
+  const restoreComposerDraft = (draft: string) => {
+    setComposerDraft(current => (current.trim() ? `${draft}\n\n${current}` : draft));
     requestAnimationFrame(() => composerInputRef.current?.focus());
   };
   // Committed before submitting so the composer's own Send path, gates included, reads it.
@@ -54,6 +60,7 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
     showComposerPreview,
     clearComposerPreview,
     prefillComposer,
+    restoreComposerDraft,
     submitComposer,
     commands,
     runComposerCommand,

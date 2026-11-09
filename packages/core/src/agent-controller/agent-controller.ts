@@ -450,7 +450,7 @@ export class AgentController<TState = {}> {
             AGENTIC_EXECUTION_WORKFLOW_ID,
             DurableStepIds.AGENTIC_LOOP,
             DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 })),
         );
       },
       // History lets the runtime skip retained run parts that storage already
@@ -2228,7 +2228,9 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
-      ...(untilIdle !== undefined && { untilIdle }),
+      // Sessions report background work inside the run that started it, and their
+      // completion notices only persist, so runs stay open until that work is done.
+      untilIdle: untilIdle ?? true,
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);

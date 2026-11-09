@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import {
   closePropertiesMenus,
@@ -38,7 +39,6 @@ const workItem = (id: string, board: 'work' | 'review', metadata: Record<string,
   triageType: null,
   acceptedAt: null,
   commentCount: 0,
-  feedActivityAt: null,
   revision: 1,
   createdAt: now,
   updatedAt: now,
@@ -85,24 +85,11 @@ function renderBoard(
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        projects: [{ id: 'factory-1', name: 'Factory' }],
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'connection-1',
-            integrationId: 'github',
-            installationId: '1',
-            repositories: [
-              {
-                id: 'repo-1',
-                branch: 'main',
-                sandboxWorkdir: '',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: 'factory-1',
+            name: 'Factory',
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '' })],
           },
         ],
       }),
@@ -249,8 +236,9 @@ describe('BoardPage filters', () => {
     await waitFor(() => expect(screen.queryByText('Card both')).not.toBeInTheDocument());
     expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toEqual([]);
+    // Work holds pull request cards too, so it filters by who review was requested from.
     await openPropertiesMenu(user, MENU);
-    expect(screen.queryByRole('menuitem', { name: /^Review requested/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Review requested/ })).toBeInTheDocument();
     await closePropertiesMenus(user);
   });
 

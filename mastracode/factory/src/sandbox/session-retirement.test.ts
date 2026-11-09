@@ -10,7 +10,7 @@ import {
 } from '../session/environment-state-processor.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { SessionRetirementCoordinator } from './session-retirement.js';
 import {
   __clearSessionSandboxesForTests,
@@ -25,12 +25,40 @@ afterEach(() => {
   __clearSessionEnvironmentsForTests();
 });
 
-function workItem(sessionId: string): WorkItemRow {
+function workItem(sessionId: string): Card {
   const session = { sessionId, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' };
   return {
     id: 'item-1',
     orgId: 'org-1',
     factoryProjectId: 'project-1',
+    workItemId: 'work-item-1',
+    parentBoardItemId: null,
+    board: 'work',
+    triageType: null,
+    acceptedAt: null,
+    autonomyArmedAt: null,
+    plansPreapprovedAt: null,
+    commentCount: 0,
+    workItem: {
+      id: 'work-item-1',
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      sources: [],
+      provider: 'factory',
+      externalId: 'item-1',
+      key: null,
+      url: null,
+      title: 'Fix the bug',
+      state: null,
+      labels: [],
+      author: null,
+      parentWorkItemId: null,
+      metadata: null,
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
     externalSource: null,
     parentWorkItemId: null,
     title: 'Fix the bug',
@@ -45,7 +73,7 @@ function workItem(sessionId: string): WorkItemRow {
   };
 }
 
-function workItems(item: WorkItemRow): Pick<WorkItemsStorage, 'get'> {
+function workItems(item: Card): Pick<WorkItemsStorage, 'get'> {
   return { get: async () => item };
 }
 

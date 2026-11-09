@@ -1,0 +1,116 @@
+---
+title: "Knowledge"
+description: "Give agents shared pages and notes they search, read and write, with access decided by your configuration rather than by the model."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/server"
+---
+
+# Knowledge
+
+**Added in:** `@mastra/core@1.82.0`
+
+Knowledge gives agents a shared, organized place for information that lives outside any one conversation: policies, product docs, conventions, runbooks and what other agents have learned. Agents search, read and write it with tools. Pages you pin reach the agent's context through [signals](/docs/signals/overview) and stay current while it runs.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call, but the alpha doesn't guarantee isolation between scopes yet. Don't store anything in Knowledge that must never reach another customer or user. Knowledge also has no built-in importers or retention yet.
+
+:::
+
+## What Knowledge is
+
+Knowledge is a graph of pages and notes, divided into scopes.
+
+- A **page** is a topic with a name, a short description and a markdown body. Pages nest like folders, so `org:acme#policies/refund` is the `refund` page under `policies` in the `org:acme` scope.
+- A **note** is a short fact added to a page and attributed to its author. People and agents can add notes without rewriting the page.
+- A **link** connects pages. Page bodies and notes link to other pages as `[[org:acme#policies/refund]]`, and reading a page shows the notes that mention it. These links make Knowledge a graph rather than a list of documents.
+- A **scope**, such as `org:acme` or `team:acme:support`, is a separate part of the graph. You declare the kinds of scope you need, and your server says which scopes each agent call, or **run**, holds.
+- A **role** sets what a run can do in a scope: a viewer reads, a contributor adds pages and notes, an editor changes pages, and an owner can also delete pages and move them between scopes. Roles come from rules in your scope declarations and are worked out each time a tool runs. Nothing is stored per user.
+
+## When to use Knowledge
+
+[Memory](/docs/memory/overview) keeps what happens in a conversation, so one agent can continue its work in a thread. Knowledge holds information that outlasts any conversation and is shared across threads, agents and people.
+
+Use Knowledge when you want agents to:
+
+- **Follow rules you update.** Pin a policy page and every agent that can read it sees it each turn. Edit it, and running agents get the new version on their next turn.
+- **Serve many customers or teams from one agent.** Each customer's or team's pages live in their own scope, and the scopes your server passes for a run decide which ones it can read.
+- **Build on what other agents learned.** Agents record decisions, conventions and runbook notes as pages and attributed notes, which other agents and people then find and add to.
+- **Hand work between agents.** A research agent writes findings, a planning agent adds a plan under them, and a coding agent reads both from the same scope.
+- **Answer from your content instead of guessing.** Load your docs or policies into a scope and give the agent read-only tools.
+
+## Quickstart
+
+Create a Knowledge instance, declare the kinds of scope it uses, and attach it to an agent. `tools: true` gives the agent the tools to search, read and write pages. Registering the instance on `Mastra` with `KNOWLEDGE_ROUTES` lets you browse it in Studio:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+import { Memory } from '@mastra/memory'
+import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter'
+
+const storage = new LibSQLStore({ id: 'storage', url: 'file:./mastra.db' })
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage,
+  scopes: { ...knowledgeMemoryScopes() },
+  tools: true,
+})
+
+export const agent = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You help your team and keep its knowledge up to date.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({ storage }),
+  knowledge,
+})
+
+export const mastra = new Mastra({
+  agents: { agent },
+  knowledge: { company: knowledge },
+  server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+})
+```
+
+`tools` is off by default, so an agent with Knowledge attached gets no tools until you turn them on. Memory is optional: an agent without it works too, as long as each call passes `scopes`, but [pinned context](/docs/knowledge/pinned-context) needs Memory.
+
+`knowledgeMemoryScopes()` declares three kinds of scope: one per org, one per user (`resource:`) and one per conversation thread (`thread:`). Each run says which ones it holds. This script runs the agent for two users at the same org, Dana and Bea, each in their own thread:
+
+```typescript title="src/try-knowledge.ts"
+import { mastra } from './mastra'
+
+const agent = mastra.getAgent('agent')
+
+await agent.generate('Our refund window is 30 days. Save that for the team.', {
+  scopes: ['org:acme', 'resource:dana', 'thread:dana-1'],
+})
+
+const answer = await agent.generate('How long is our refund window?', {
+  scopes: ['org:acme', 'resource:bea', 'thread:bea-1'],
+})
+
+console.log(answer.text)
+```
+
+The `resource:` and `thread:` scopes also tell Memory which user and thread the conversation belongs to. In a real app, scopes come from your server code for the authenticated user, never from the model or the request body. To set them for every request, see [Set a run's scopes](/docs/knowledge/scopes-and-access#set-a-runs-scopes).
+
+On Dana's run, the agent calls `knowledge_page` to save a page in the `org:acme` scope and gets back a result such as `{ "page": { "name": "Refund window", "ref": "org:acme#refunds", "scope": "org:acme", "version": 1 } }`. On Bea's run, it calls `knowledge_search`, finds `org:acme#refunds`, reads it with `knowledge_read` and answers that the window is 30 days. Search only returns pages the run can read, so a run that holds a different `org:` scope doesn't find Acme's page.
+
+To see the page, run `mastra dev`, open Studio and select **Knowledge**. The `org:acme` scope shows the page the agent wrote.
+
+## Next steps
+
+- [Scopes and access](/docs/knowledge/scopes-and-access): declare scopes, set a run's scopes, and test what it can access.
+- [Agents and tools](/docs/knowledge/agents-and-tools): the tools agents get and how they read and write pages.
+- [Pinned context](/docs/knowledge/pinned-context): keep a page in an agent's context every turn.
+- [Search](/docs/knowledge/search): add search by meaning, and see how results are ranked.
+- [Load your content](/docs/knowledge/load-your-content): write your docs or policies into Knowledge from your server.
+- [Knowledge in Studio](/docs/studio/knowledge): browse what your agents know as a tree and a graph.
+- [What you can build](/docs/knowledge/patterns): nine patterns, from a docs agent to agent hand-offs.

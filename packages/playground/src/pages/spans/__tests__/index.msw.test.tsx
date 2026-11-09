@@ -254,7 +254,7 @@ describe('Spans page', () => {
 
       renderPage();
 
-      const filterInput = await screen.findByPlaceholderText('Filter spans…');
+      const filterInput = await screen.findByPlaceholderText('Filter spans');
       expect(filterInput.closest('main')).not.toBeNull();
     });
 
@@ -354,7 +354,7 @@ describe('Spans page', () => {
       const header = screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header');
       fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
 
-      await screen.findByPlaceholderText('Filter threads…');
+      await screen.findByPlaceholderText('Filter threads');
       expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).toBe(header);
     });
   });
@@ -578,7 +578,7 @@ describe('Spans page', () => {
 
       expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
       expect(
-        screen.getByText('Pick a wider time range — older spans may fall outside the current window.'),
+        screen.getByText('Pick a wider time range. Older spans may fall outside the current window.'),
       ).toBeTruthy();
     });
 
@@ -597,7 +597,7 @@ describe('Spans page', () => {
       renderPage();
 
       await screen.findByRole('heading', { name: 'No spans for the last 7 days' });
-      expect(screen.getByPlaceholderText('Filter spans…')).toBeTruthy();
+      expect(screen.getByPlaceholderText('Filter spans')).toBeTruthy();
     });
   });
 

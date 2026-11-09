@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.5.25",
+  "version": "1.5.27-alpha.2",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -31,12 +31,14 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.136",
+    "@ai-sdk/openai": "^2.0.139",
+    "@copilotkit/aimock": "^1.46.0",
     "@fastify/swagger": "^9.9.2",
     "@fastify/swagger-ui": "^6.1.2",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/evals": "workspace:*",
     "@mastra/libsql": "workspace:*",

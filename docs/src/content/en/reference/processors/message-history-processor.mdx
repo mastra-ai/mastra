@@ -78,7 +78,7 @@ const processor = new MessageHistory({
   },
   {
     name: 'processOutputResult',
-    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>',
+    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext; result?: OutputResult }) => Promise<MessageList>',
     description: 'Persists new messages (user input and assistant response) to storage, excluding system messages',
     isOptional: false,
   },

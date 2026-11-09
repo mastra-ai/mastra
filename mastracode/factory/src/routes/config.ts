@@ -7,6 +7,7 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
+import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { getModelReasoningOptions } from '@mastra/core/llm';
@@ -25,14 +26,13 @@ import type {
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
 import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type {
   MemorySettingsPatch,
   MemorySettingsRecord,
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -45,14 +45,9 @@ import {
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
-
-/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /**
  * Server-side configuration routes for the web app.
@@ -332,12 +327,12 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
 }
 
 /**
- * Providers whose credentials can only come from the server process (Amazon
- * Bedrock authenticates through the AWS credential chain). In tenant mode they
- * are usable only when the operator lists them in
- * `MastraFactoryConfig.deploymentModelProviders`.
+ * Providers whose credentials can only come from the server process. Amazon
+ * Bedrock uses the AWS credential chain, while Google Vertex uses Application
+ * Default Credentials. In tenant mode they are usable only when the operator
+ * lists them in `MastraFactoryConfig.deploymentModelProviders`.
  */
-export const DEPLOYMENT_MODEL_PROVIDERS: readonly string[] = [AMAZON_BEDROCK_GATEWAY_ID];
+export const DEPLOYMENT_MODEL_PROVIDERS: readonly string[] = [AMAZON_BEDROCK_GATEWAY_ID, GOOGLE_VERTEX_GATEWAY_ID];
 
 export function isDeploymentModelProvider(provider: string): boolean {
   return DEPLOYMENT_MODEL_PROVIDERS.includes(provider);
@@ -720,7 +715,7 @@ async function resolveMemorySettingsContext({
   if (memorySettings) {
     try {
       await memorySettings.ensureReady();
-      const factoryUserId = factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : undefined;
+      const factoryUserId = factoryProjectId ? factoryProjectSettingsUserId(factoryProjectId) : undefined;
       return tenant
         ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: factoryUserId ?? tenant.userId }
         : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local' };

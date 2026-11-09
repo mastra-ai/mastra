@@ -36,8 +36,8 @@ export function ScorerSelector({
         options={options}
         value={selectedScorers}
         onValueChange={setSelectedScorers}
-        placeholder="Select scorers..."
-        searchPlaceholder="Search scorers..."
+        placeholder="Select scorers"
+        searchPlaceholder="Search scorers"
         emptyText="No scorers available"
         disabled={disabled || isLoading}
         container={container}

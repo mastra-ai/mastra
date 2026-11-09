@@ -203,6 +203,47 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     await mastra.shutdown();
   });
 
+  it('does not republish workflow.fail when a redelivered workflow.fail arrives past its budget', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+    const failEvents: Event[] = [];
+    await pubsub.subscribe('workflows', async event => {
+      if (event.type === 'workflow.fail') failEvents.push(event);
+    });
+    // A fresh processor (local budget evicted or another worker) receives a
+    // workflow.fail the transport reports past its budget. Republishing it
+    // would start a new fail event with a fresh budget, looping forever.
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    const failEvent: Event = {
+      id: 'fail-event-redelivered',
+      type: 'workflow.fail',
+      runId: 'run-fail-redelivered',
+      createdAt: new Date(),
+      deliveryAttempt: 4,
+      data: {
+        workflowId: 'wf',
+        runId: 'run-fail-redelivered',
+        executionPath: [],
+        stepResults: {},
+        prevResult: { status: 'failed', error: 'boom' },
+        activeStepsPath: {},
+        requestContext: {},
+      },
+    } as Event;
+
+    expect(await processor.handle(failEvent)).toEqual({ ok: false, retry: false });
+    expect(processor.dispatchCalls).toBe(0);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(failEvents.length).toBe(0);
+
+    await mastra.shutdown();
+  });
+
   it('retries the workflow.fail publish, not the handler, when local state was evicted', async () => {
     const inner = new EventEmitterPubSub();
     let rejectFailPublish = true;
