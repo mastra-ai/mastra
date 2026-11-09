@@ -51,7 +51,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai-v5": "npm:ai@5.0.283",
+    "ai-v5": "npm:ai@5.0.284",
     "tsdown": "0.23.1",
     "typescript": "catalog:ts6",
     "vitest": "catalog:",
