@@ -1218,7 +1218,7 @@ describe('DashboardRenderer', () => {
       views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } }] }],
     };
     const { container } = renderDashboard(definition(staging), { environment: 'production' });
-    expect(await within(cell(container, 'agent-runs')).findByText('No agent runs in this range.')).toBeDefined();
+    expect(await within(cell(container, 'agent-runs')).findByText('No data in this range')).toBeDefined();
     server.events.removeAllListeners();
     expect(sent.filter(path => path.includes('/metrics/'))).toEqual([]);
   });

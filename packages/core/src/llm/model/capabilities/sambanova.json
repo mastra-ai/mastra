@@ -15,12 +15,12 @@
         "type": "toggle"
       }
     ],
-    "gemma-4-31B-it": [
+    "DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
     ],
-    "DeepSeek-V3.2": [
+    "gemma-4-31B-it": [
       {
         "type": "toggle"
       }

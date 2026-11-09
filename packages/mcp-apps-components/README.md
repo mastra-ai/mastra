@@ -58,7 +58,7 @@ export const greetingServer = new MCPServer({
 `observabilityDashboardApp` draws a Studio dashboard (rows of KPIs, time series, tables and scores widgets) with the same components Studio uses. Each widget loads and fails on its own.
 
 1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ dashboard, datePreset? }`, where `dashboard` passes `dashboardDefinitionSchema` from `@mastra/core/storage/dashboards` and `datePreset` is one of `24h`, `3d`, `7d`, `14d` or `30d`. Without `datePreset`, the app uses the dashboard's `defaults.datePreset` when it is one of those, else `24h`. The window ends when the app opens. The dashboard's top-level `defaults.filters` chips filter every widget.
-2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), and `args` are that method's arguments, with dates as ISO strings. The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
+2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args, projectId? }`, where `action` is one of `OBSERVABILITY_READ_ACTIONS`, the `MastraClient` observability reads the app sends (`aggregateTraces`, `getMetricBreakdown`, `getScoreTimeSeries`, `listScores`, …), `args` are that method's arguments, with dates as ISO strings, and `projectId` is the project the host passed, if any (see [Drawing over the host page's selection](#drawing-over-the-host-pages-selection)). The tool returns `{ data }`, the method's result; if it throws, that widget shows as failed.
 
 Use `observabilityDashboardInputSchema` as the opening tool's input and `toObservabilityDashboard` as its `execute`:
 
@@ -85,6 +85,9 @@ import { z } from 'zod';
 
 const uri = 'ui://mastra/observability-widget';
 const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! });
+// Yours to write: checks the caller can access `projectId`, throws if not, and returns a client
+// whose reads stay in that project.
+declare function projectClient(projectId: string, context: unknown): Promise<MastraClient>;
 
 export const observabilityServer = new MCPServer({
   id: 'observability',
@@ -105,17 +108,24 @@ export const observabilityServer = new MCPServer({
     [QUERY_OBSERVABILITY_TOOL]: createTool({
       id: QUERY_OBSERVABILITY_TOOL,
       description: 'Runs one observability read',
-      inputSchema: z.object({ action: z.enum(OBSERVABILITY_READ_ACTIONS), args: z.record(z.string(), z.unknown()) }),
+      inputSchema: z.object({
+        action: z.enum(OBSERVABILITY_READ_ACTIONS),
+        args: z.record(z.string(), z.unknown()),
+        projectId: z.string().optional(),
+      }),
       outputSchema: z.object({ data: z.unknown() }),
       mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
-      execute: async ({ action, args }) => {
-        const read = client[action].bind(client) as (args: unknown) => Promise<unknown>;
+      execute: async ({ action, args, projectId }, context) => {
+        const reader = projectId ? await projectClient(projectId, context) : client;
+        const read = reader[action].bind(reader) as (args: unknown) => Promise<unknown>;
         return { data: await read(args) };
       },
     }),
   },
 });
 ```
+
+`projectId` comes from the app's iframe, so the server can't trust it: check that the caller can access that project before reading. A read that throws shows its widget as failed.
 
 The input names each widget, read and column type by a key instead of a `kind`, `source` or `type` field, so a validation error points at the part that's wrong. Each number holds the read it comes from, so nothing points at a query by id:
 
@@ -158,7 +168,34 @@ const host = useMemo(
 <McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
 ```
 
-A pin carries the widget, the date preset it was drawn over and, when the dashboard had any, its `defaults.filters`. The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
+A pin carries the widget, the date preset it was drawn over (with its `customRange` when `custom`) and, when it had any, the filters it was drawn under (the host's, else the dashboard's `defaults.filters`). The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
+
+#### Drawing over the host page's selection
+
+A host page with its own project, date range and filters, such as Studio's Metrics page, passes them down with `observabilityWidgetHost`. Pinning isn't needed for this:
+
+```tsx
+import { McpAppHostProvider } from '@mastra/playground-ui/domains/mcps';
+import { observabilityWidgetHost } from '@mastra/mcp-apps-components/host';
+
+const host = useMemo(
+  () =>
+    observabilityWidgetHost({
+      resourceUri: 'ui://mastra/observability-widget',
+      projectId,
+      datePreset, // '24h' | '3d' | '7d' | '14d' | '30d' | 'custom'
+      customRange, // { from?, to? } as Dates or ISO strings, drawn when datePreset is 'custom'
+      filters, // FilterNode[], as a dashboard's defaults.filters
+    }),
+  [projectId, datePreset, customRange, filters],
+);
+
+<McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
+```
+
+`projectId` is sent with every `queryObservability` call, so your server can scope the reads to that project. It also sets the widgets' scope, as on the Metrics page: with a `projectId`, they show at project scope; without one, at org scope. Widgets, views and columns tagged for the other scope are hidden. The host's `datePreset` and `filters` replace the tool result's and the dashboard's defaults. The Metrics page's `datePreset`, `customRange` and `filterTokens` can be passed as they are. With `datePreset: 'custom'`, the widgets read over `customRange`, like the Metrics page: without `from`, the window starts 24 hours before now, and without `to`, it ends now. A value the app can't read (filters that fail the dashboard schema, an unknown preset, a range that ends before it starts) shows an error instead of the dashboard, so the widgets never draw data the host page didn't ask for. When any value changes, the app reads again; a preset window then ends at that moment. Each value is optional: leave one out to fall back to the dashboard's.
+
+To let the user pin widgets too, add `pins: { pinnedIds, onPin, onUnpin }`. `observabilityWidgetPins` is the same helper with only pins.
 
 ## Documentation
 
