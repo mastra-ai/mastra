@@ -832,6 +832,8 @@ export class DurableAgent<
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
   #timedOutExecutions = new WeakSet<ExecutionFence>();
+  /** Canceled parked runs whose abort terminal this process already published. */
+  #canceledRunTerminals = new Set<string>();
 
   /**
    * User-supplied snapshot-persistence policy
@@ -2915,6 +2917,8 @@ export class DurableAgent<
    * publish the abort terminal so observers still attached to the parked run close.
    * Done here rather than at abort time: a run still executing in this process unwinds
    * through its own abort path, which reads the snapshot.
+   * A run the abort already marked `canceled` keeps its row, since that row is what
+   * stops other servers from resuming it; it still gets the abort terminal, once.
    */
   async #deleteFencedSuspendedRun(runId: string): Promise<void> {
     try {
@@ -2924,8 +2928,17 @@ export class DurableAgent<
         typeof persisted?.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted?.snapshot;
-      if (snapshot?.status !== 'suspended') return;
-      await this.deleteRunSnapshots(runId);
+      if (snapshot?.status === 'canceled') {
+        if (this.#canceledRunTerminals.has(runId)) return;
+        this.#canceledRunTerminals.add(runId);
+        if (this.#canceledRunTerminals.size > 1000) {
+          this.#canceledRunTerminals.delete(this.#canceledRunTerminals.values().next().value!);
+        }
+      } else if (snapshot?.status === 'suspended') {
+        await this.deleteRunSnapshots(runId);
+      } else {
+        return;
+      }
       await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`Failed to delete snapshot of aborted suspended run ${runId}`, {

@@ -4,7 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, createDurableAgent } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
@@ -125,7 +125,7 @@ describe('aborting a parked durable run across servers', () => {
     const runId = text.match(/"runId":"([^"]+)"/)?.[1];
     if (!runId) throw new Error(`no runId in stream: ${text}`);
 
-    return { executor, other, runId, storage, toolRuns: () => toolRuns };
+    return { bus, executor, other, runId, storage, toolRuns: () => toolRuns };
   }
 
   async function abort(peer: { post: (path: string, body: unknown) => Promise<Response> }, runId: string) {
@@ -155,6 +155,46 @@ describe('aborting a parked durable run across servers', () => {
     const text = await approved.text();
     expect({ status: approved.status, toolRuns: toolRuns() }).toEqual({ status: 409, toolRuns: 0 });
     expect(JSON.parse(text)).toMatchObject({ error: expect.stringContaining(`cannot resume aborted run "${runId}"`) });
+  });
+
+  it('closes an observer of the aborted run once when its approval is refused', async () => {
+    const { bus, executor, other, runId, storage, toolRuns } = await setup();
+    let published = 0;
+    await new EventEmitterPubSub(bus).subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      if (event.type === 'abort') published++;
+    });
+    const observed = await executor.post('observe', { runId });
+    expect(observed.status).toBe(200);
+    const reader = observed.body!.getReader();
+    const decoder = new TextDecoder();
+    let frames = '';
+    const closed = (async () => {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return true;
+        frames += decoder.decode(value, { stream: true });
+      }
+    })();
+
+    await abort(executor, runId);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const approved = await executor.post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
+      await approved.text();
+      expect(approved.status).toBe(409);
+    }
+
+    const timeout = new Promise<false>(resolve => setTimeout(() => resolve(false), 2_000));
+    const ended = await Promise.race([closed, timeout]);
+    if (!ended) await reader.cancel();
+    expect(ended).toBe(true);
+    expect(frames.match(/"type":"abort"/g)).toHaveLength(1);
+    expect(published).toBe(1);
+    // The canceled row survives the terminal, so another server still refuses the run.
+    const workflows = (await storage.getStore('workflows'))!;
+    expect(await workflows.loadWorkflowRunStatus({ workflowName: 'durable-agentic-loop', runId })).toBe('canceled');
+    const peerApproval = await other.post('approve-tool-call', { runId, toolCallId: 'call-fetch-1' });
+    await peerApproval.text();
+    expect({ status: peerApproval.status, toolRuns: toolRuns() }).toEqual({ status: 409, toolRuns: 0 });
   });
 
   it('denies another resource before disclosing that the run was aborted', async () => {
