@@ -7,9 +7,11 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardState';
+import type { CardContextSession } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
+import type { ReworkReason } from '../reworkReason';
 import type { AuditEventPage } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -24,6 +26,8 @@ export function WorkItemDetailsPanel({
   columnStage,
   projectRepositoryId,
   activityPage,
+  contextSessions,
+  rework,
   morph,
   relatedLinks,
   status,
@@ -35,6 +39,8 @@ export function WorkItemDetailsPanel({
   columnStage: BoardStageId;
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
   morph: CardMorph;
   relatedLinks: ReactNode;
   status: BoardCardStatus;
@@ -70,6 +76,7 @@ export function WorkItemDetailsPanel({
           actions={actions}
           beforeStart={morph.closeDetails}
           open
+          rework={rework}
           controls={
             <>
               <WorkItemExternalLink item={item} />
@@ -108,6 +115,8 @@ export function WorkItemDetailsPanel({
         highlightCommentId={highlightCommentId}
         events={events}
         actors={actors}
+        contextSessions={contextSessions}
+        rework={rework}
       />
     </CardDetailsPanel>
   );

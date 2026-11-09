@@ -451,6 +451,16 @@ describe('theme.css export', () => {
     }
   });
 
+  it('floors typed text at 16px on touch screens only, over any role or variant on the field', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['zoom-safe-text']);
+
+    expect(output).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.zoom-safe-text \{\s*font-size: 16px !important;\s*\}\s*\}/,
+    );
+    expect(output.match(/\.zoom-safe-text \{/g)).toHaveLength(1);
+  });
+
   it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(semanticTokens.map(token => `bg-${token}`));

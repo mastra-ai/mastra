@@ -1,0 +1,303 @@
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import type { ServerResponse } from 'node:http';
+import type { LogEvent, TracingEvent } from '@mastra/core/observability';
+import { afterEach, describe, expect, it } from 'vitest';
+import { MastraPlatformExporter } from './mastra-platform';
+import type { MastraPlatformExporterConfig } from './mastra-platform';
+
+const cleanup: (() => Promise<void>)[] = [];
+afterEach(async () => {
+  for (const close of cleanup.splice(0).reverse()) await close();
+});
+
+async function collector(hold = false, reply?: (res: ServerResponse) => void) {
+  const bodies: { path: string; bytes: number; data: Record<string, any[]> }[] = [];
+  const responses: ServerResponse[] = [];
+  let active = 0;
+  let peak = 0;
+  const server = createServer(async (req, res) => {
+    active++;
+    peak = Math.max(peak, active);
+    res.on('finish', () => active--);
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks);
+    bodies.push({ path: req.url!, bytes: body.length, data: JSON.parse(body.toString()) });
+    responses.push(res);
+    if (!hold) {
+      if (reply) reply(res);
+      else res.writeHead(204).end();
+    }
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected TCP address');
+  cleanup.push(async () => {
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  });
+  return {
+    endpoint: `http://127.0.0.1:${address.port}`,
+    bodies,
+    get peak() {
+      return peak;
+    },
+    release() {
+      hold = false;
+      for (const res of responses) if (!res.writableEnded) res.writeHead(204).end();
+    },
+  };
+}
+
+function log(id: number, text = '😀é漢'.repeat(60)): LogEvent {
+  return { type: 'log', log: { logId: `log-${id}`, timestamp: new Date(), level: 'info', message: text } } as LogEvent;
+}
+
+function exporter(endpoint: string, overrides: Partial<MastraPlatformExporterConfig> = {}) {
+  const config = {
+    accessToken: 'local-test-token',
+    resolveFromEnv: false,
+    endpoint,
+    maxBatchWaitMs: 60_000,
+    maxRetries: 1,
+    byteBatching: { maxBatchBytes: 1800, maxConcurrentUploads: 2, uploadTimeoutMs: 2000 },
+    ...overrides,
+  };
+  const instance = new MastraPlatformExporter(config);
+  cleanup.push(() => instance.shutdown());
+  return instance;
+}
+
+describe('Platform uploads over HTTP', () => {
+  it('flushes UTF-8 payloads at the byte threshold without losing or duplicating records', async () => {
+    const receiver = await collector();
+    const instance = exporter(receiver.endpoint);
+    for (let i = 0; i < 10; i++) await instance.onLogEvent(log(i));
+    await instance.flush();
+    expect(receiver.bodies.length).toBeGreaterThan(1);
+    expect(receiver.bodies.filter(body => body.bytes >= 1800)).toHaveLength(3);
+    expect(receiver.bodies.flatMap(body => body.data.logs!.map(record => record.logId)).sort()).toEqual(
+      Array.from({ length: 10 }, (_, i) => `log-${i}`).sort(),
+    );
+  });
+
+  it.each(Array.from({ length: 20 }, (_, i) => i))(
+    'limits concurrent uploads when the collector holds responses open (run %i)',
+    async () => {
+      const receiver = await collector(true);
+      const instance = exporter(receiver.endpoint, { maxBatchSize: 1 });
+      try {
+        for (let i = 0; i < 10; i++) await instance.onLogEvent(log(i));
+        await expect.poll(() => receiver.bodies.length).toBeGreaterThanOrEqual(2);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(receiver.peak).toBe(2);
+      } finally {
+        receiver.release();
+      }
+      await instance.flush();
+      expect(receiver.bodies.flatMap(body => body.data.logs!).length).toBe(10);
+    },
+  );
+
+  it('retains every queued record behind slow uploads and drains concurrent flush callers', async () => {
+    const receiver = await collector(true);
+    const instance = exporter(receiver.endpoint, {
+      maxBatchSize: 1,
+      byteBatching: { maxBatchBytes: 1800, maxConcurrentUploads: 2, uploadTimeoutMs: 2000 },
+    });
+    let completed = false;
+    let pending = 0;
+    let drain: Promise<void[]>;
+    try {
+      for (let i = 0; i < 100; i++) {
+        await instance.onLogEvent(log(i));
+      }
+      const stats = instance.getByteBatchingStats()!;
+      pending = stats.pendingBytes;
+      expect(pending).toBeGreaterThan(3600);
+      drain = Promise.all([instance.flush(), instance.flush()]).then(result => {
+        completed = true;
+        return result;
+      });
+      await expect.poll(() => receiver.bodies.length).toBe(2);
+      expect(completed).toBe(false);
+    } finally {
+      receiver.release();
+    }
+    await drain!;
+    const received = receiver.bodies.flatMap(body => body.data.logs!);
+    expect(received.length).toBe(100);
+    expect(new Set(received.map(record => record.logId)).size).toBe(received.length);
+    expect(receiver.bodies.reduce((total, body) => total + body.bytes, 0)).toBe(pending);
+    expect(instance.getByteBatchingStats()!.pendingBytes).toBe(0);
+    expect(instance.getByteBatchingStats()!.activeUploads).toBe(0);
+    await instance.onLogEvent(log(100));
+    await instance.flush();
+    expect(receiver.bodies.at(-1)!.data.logs![0].logId).toBe('log-100');
+  });
+
+  it('sends oversized records intact and reports serialization errors', async () => {
+    const receiver = await collector();
+    const instance = exporter(receiver.endpoint);
+    await instance.onLogEvent(log(1, 'x'.repeat(1800)));
+    const invalid = log(2);
+    invalid.log.data = { unsupported: 1n };
+    await expect(instance.onLogEvent(invalid)).rejects.toThrow();
+    await instance.onLogEvent(log(3));
+    await instance.flush();
+    expect(receiver.bodies.flatMap(body => body.data.logs!.map(record => record.logId))).toEqual(['log-1', 'log-3']);
+    expect(receiver.bodies[0]!.data.logs![0].message).toBe('x'.repeat(1800));
+    expect(instance.getByteBatchingStats()).toMatchObject({
+      pendingBytes: 0,
+    });
+  });
+
+  it('counts envelope and UTF-8 bytes at the exact single-record boundary', async () => {
+    const receiver = await collector();
+    const event = log(1);
+    const bytes = Buffer.byteLength(JSON.stringify({ logs: [event.log] }));
+    const instance = exporter(receiver.endpoint, { byteBatching: { maxBatchBytes: bytes } });
+    await instance.onLogEvent(event);
+    await instance.flush();
+    expect(receiver.bodies.map(body => body.bytes)).toEqual([bytes]);
+    const larger = { ...event, log: { ...event.log, message: event.log.message + 'x' } };
+    await instance.onLogEvent(larger);
+    await instance.flush();
+    expect(receiver.bodies.map(body => body.bytes)).toEqual([bytes, bytes + 1]);
+  });
+
+  it('flushes partial batches on the wait timer and freezes records at admission', async () => {
+    const receiver = await collector();
+    const instance = exporter(receiver.endpoint, { maxBatchWaitMs: 20 });
+    const event = log(1, 'before');
+    await instance.onLogEvent(event);
+    event.log.message = 'after';
+    await expect.poll(() => receiver.bodies.length).toBe(1);
+    expect(receiver.bodies[0]!.data.logs![0].message).toBe('before');
+  });
+
+  it('routes all five signals and drains partial batches on shutdown', async () => {
+    const receiver = await collector();
+    const instance = exporter(receiver.endpoint);
+    await instance.onTracingEvent({
+      type: 'span_ended',
+      exportedSpan: {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'model',
+        type: 'model_step',
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: true,
+        attributes: {},
+        input: 'prompt',
+        output: 'answer',
+      },
+    } as TracingEvent);
+    await instance.onLogEvent(log(1));
+    await instance.onMetricEvent({
+      type: 'metric',
+      metric: { metricId: 'metric-1', timestamp: new Date(), name: 'test', value: 1, labels: {} },
+    });
+    await instance.onScoreEvent({
+      type: 'score',
+      score: { scoreId: 'score-1', timestamp: new Date(), scorerId: 'test', traceId: 'trace-1', score: 1 },
+    });
+    await instance.onFeedbackEvent({
+      type: 'feedback',
+      feedback: {
+        feedbackId: 'feedback-1',
+        timestamp: new Date(),
+        feedbackType: 'thumbs',
+        feedbackSource: 'user',
+        traceId: 'trace-1',
+        value: 'up',
+      },
+    });
+    await instance.shutdown();
+    expect(receiver.bodies.map(body => body.path).sort()).toEqual(
+      ['spans', 'logs', 'metrics', 'scores', 'feedback'].map(signal => `/ai/${signal}/publish`).sort(),
+    );
+    expect(receiver.bodies).toHaveLength(5);
+    expect(receiver.bodies.find(body => body.data.spans)?.data.spans![0]).toMatchObject({
+      spanId: 'span-1',
+      input: 'prompt',
+      output: 'answer',
+    });
+    expect(instance.getByteBatchingStats()!.pendingBytes).toBe(0);
+  });
+
+  it.each([401, 402])('drops queued telemetry after collector status %i', async status => {
+    const receiver = await collector(false, res => res.writeHead(status).end());
+    const instance = exporter(receiver.endpoint, {
+      maxBatchSize: 1,
+      byteBatching: { maxBatchBytes: 1800, maxConcurrentUploads: 1 },
+    });
+    for (let i = 0; i < 10; i++) await instance.onLogEvent(log(i));
+    await instance.flush();
+    expect(receiver.bodies.length).toBe(1);
+    expect(instance.getByteBatchingStats()!.pendingBytes).toBe(0);
+    await instance.onLogEvent(log(11));
+    await instance.flush();
+    expect(receiver.bodies.length).toBe(1);
+  });
+
+  it('times out stalled uploads, frees their budget and finishes shutdown', async () => {
+    const receiver = await collector(true);
+    const instance = exporter(receiver.endpoint, {
+      maxBatchSize: 1,
+      byteBatching: { maxBatchBytes: 1800, maxConcurrentUploads: 1, uploadTimeoutMs: 100 },
+    });
+    await instance.onLogEvent(log(1));
+    await instance.onLogEvent(log(2));
+    await instance.shutdown();
+    expect(receiver.bodies.length).toBe(2);
+    expect(instance.getByteBatchingStats()).toMatchObject({ pendingBytes: 0, activeUploads: 0 });
+    receiver.release();
+  });
+
+  it('retries the same bounded body while retaining one upload slot and its byte budget', async () => {
+    let attempts = 0;
+    const receiver = await collector(false, res => res.writeHead(++attempts === 1 ? 503 : 204).end());
+    const instance = exporter(receiver.endpoint, {
+      maxBatchSize: 1,
+      maxRetries: 2,
+      byteBatching: { maxBatchBytes: 1800, maxConcurrentUploads: 1, uploadTimeoutMs: 5000 },
+    });
+    await instance.onLogEvent(log(1));
+    const drain = instance.flush();
+    await expect.poll(() => receiver.bodies.length).toBe(1);
+    expect(instance.getByteBatchingStats()).toMatchObject({
+      activeUploads: 1,
+      pendingBytes: receiver.bodies[0]!.bytes,
+    });
+    await drain;
+    expect(receiver.bodies).toHaveLength(2);
+    expect(receiver.bodies[1]).toEqual(receiver.bodies[0]);
+    expect(instance.getByteBatchingStats()).toMatchObject({ activeUploads: 0, pendingBytes: 0 });
+  });
+
+  it('preserves count batching when byte mode is omitted', async () => {
+    const receiver = await collector();
+    const instance = exporter(receiver.endpoint, { byteBatching: undefined });
+    for (let i = 0; i < 10; i++) await instance.onLogEvent(log(i));
+    await instance.flush();
+    expect(receiver.bodies.length).toBe(1);
+    expect(receiver.bodies[0]!.bytes).toBeGreaterThan(1800);
+    expect(instance.getByteBatchingStats()).toBeUndefined();
+  });
+
+  it.each([
+    { maxBatchBytes: 0 },
+    { maxBatchBytes: NaN },
+    { maxBatchBytes: Infinity },
+    { maxBatchBytes: 1800, maxConcurrentUploads: 0 },
+    { maxBatchBytes: 1800, maxConcurrentUploads: 1.5 },
+    { maxBatchBytes: 1800, uploadTimeoutMs: 2 ** 31 },
+  ])('rejects invalid byte limits: %j', byteBatching => {
+    expect(() => new MastraPlatformExporter({ accessToken: 'local', resolveFromEnv: false, byteBatching })).toThrow();
+  });
+});

@@ -50,6 +50,13 @@ interface MastraPlatformExporterConfig extends BaseExporterConfig {
   /** Maximum wait time before flushing in milliseconds. Default: 5000 */
   maxBatchWaitMs?: number
 
+  /** Opt into byte-triggered batches and upload concurrency control */
+  byteBatching?: {
+    maxBatchBytes?: number // Default: 8 MiB
+    maxConcurrentUploads?: number // Default: 2
+    uploadTimeoutMs?: number // Default: 30000
+  }
+
   /** Maximum retry attempts. Default: 3 */
   maxRetries?: number
 
@@ -260,6 +267,32 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 - Flushes when total buffered event count reaches `maxBatchSize`
 - Flushes when `maxBatchWaitMs` elapsed since the first buffered signal in the batch
 - Flushes on `shutdown()`
+
+### Byte batching
+
+Set `byteBatching` to flush by serialized byte size and control concurrent uploads:
+
+```typescript
+import { MastraPlatformExporter } from '@mastra/observability'
+
+const exporter = new MastraPlatformExporter({
+  byteBatching: {
+    maxBatchBytes: 8 * 1024 * 1024,
+    maxConcurrentUploads: 2,
+    uploadTimeoutMs: 30_000,
+  },
+})
+```
+
+Without `byteBatching`, the exporter keeps its existing count-based batching behavior.
+
+- `maxBatchBytes` triggers an upload when a batch reaches 8 MiB by default. Larger records are sent intact, without truncation or size-based drops.
+- `maxConcurrentUploads` controls concurrent uploads across all signal types. The default is two.
+- `uploadTimeoutMs` sets the upload deadline, including retries. The default is 30 seconds.
+
+Record-count and timer-based flush triggers still apply. Queued records are retained when uploads fall behind, so queue memory can grow.
+
+Inspect the current queue with `exporter.getByteBatchingStats()`.
 
 ### Error handling
 
