@@ -1,0 +1,976 @@
+{
+  "messages": [
+    {
+      "id": "a4484e4a-a220-438b-9f1f-3be161e05b85",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "Plan a 4-day road trip from Lisbon to Seville.",
+            "createdAt": 1794075708720
+          }
+        ],
+        "content": "Plan a 4-day road trip from Lisbon to Seville."
+      },
+      "role": "user",
+      "createdAt": "2026-11-07T18:21:48.720Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "0f9b4002-7b67-4a64-8aea-0c14d10129e9",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/root",
+                "value": "trip"
+              }
+            },
+            "createdAt": 1794075714297
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/state",
+                "value": {
+                  "packed": {}
+                }
+              }
+            },
+            "createdAt": 1794075714298
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/trip",
+                "value": {
+                  "type": "Stack",
+                  "props": {},
+                  "children": ["title", "days"]
+                }
+              }
+            },
+            "createdAt": 1794075714310
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/title",
+                "value": {
+                  "type": "Heading",
+                  "props": {
+                    "text": "Lisbon → Seville",
+                    "subtitle": "4 days on the road"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075714312
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days",
+                "value": {
+                  "type": "Grid",
+                  "props": {
+                    "columns": 2
+                  },
+                  "children": []
+                }
+              }
+            },
+            "createdAt": 1794075714321
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-1",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 1,
+                    "title": "Évora",
+                    "morning": "Drive 196 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075714685
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-1"
+              }
+            },
+            "createdAt": 1794075714738
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_048cde5797ce7c32006aef6c41dc2887d29aa2918d23bf96d1",
+                "reasoningEncryptedContent": "gAAAAABq72xBpcusvXWbipQgMNwLJo3ozvA67vwpVqj2HmmhouBEY4x8yi6xMa830qi-RrTLU1y5DsSKhjsZCDaVChnMIaZdCTpvesI7UainOnLwHAQG1uSBiwNZmUeaVA5LHLZ21jahFyTe-FivO4mgkqaGf4Lbex5gBUOsOdbDmzTGBFLEuIgWh6-qQN_H14H_QYViohz7mr02VS5feBeXogdXMUYhD6T9E0eyXxuNqnOZ6DMpJ7e3e10pVeBSxrF3O_WegZyt_L81TNel0Lisak5PD9xE94GOzTtHpRf53AlNRQakqww2Ifp-xBgsqq1IHNRNxhE6wMg2Fz8M9uZq0No14Ie3wJTfNrhWLXPMzWILmFcqQBrNZzxx5ZiUthQhHWGl_WLjrDteBFMnM95ry-IOVNMInsYK_yAvJiAM-C1d4yntUevkF43v_uehXrCFD-PCtmu4rqhk0Vedeku9faokcR60L019AZkqIFQNMoeJxsf-kCKEF6A6Z-IhgUleyUHsfFGlM0idjAFIuJkip60psIhlExsNzlnkxMA5vpccNcD6M0QE66BGT1dgnBT-rEd7HgOLHAcIRt4CTngNTC95WfigZbRpBfgfW9nZSK0h_ojXs00GarnJrJsOykF2dm0lVum8bHtUWpNUlPxMWfBgS0ObLwWFnid12ki0takTE69hyWZnzncfbCqC4G_JPqgQIgaSM5j-PSy4MXhcGuhY9A-61GxJfroCl9qT-Ir1jzdVQ8UZ3F6LdM519G26EXrTRL1kieSOIFyVhGSNNyfugyIdu_quuMQcr3A5-jaqaoduQeGmvlDsyskdKTaG5J_UsQJxT6Mn0TDsJVMX9P3wtuqQ17EwsLFdHHxYi5u9c78MKMkX3zSE_n331Xb1pqKEI5gRLKmUKDeIYxBPjznL4JcRYsIbhO5FqqvhECunZ28nLvBXzDa2E4vOIc1Ou4aX4ZSh_7jpEXPoR_EgCoNXfN5WMrzjOuA5PtidLB5qzdDRP_g91ybinUEfeqVT6HzzJFJLbXCRDnEBZNts36tSFYUoZwvZ3SjIG2qwYQnmxSSausIazX37JakU8q3JpnNf9rmV85k-KkLc4aKO_jD_4Tgehom82r0PJBctA7HkE4O1FeTI7BOFBHeb6hUAFlcQ2gx7cikJPxU3z4-hrShzNsYhoqpjTZsW_g1ybTJeVySA-n5-XVukefJ9LH4NAPkSDc48cA3nvkJqaiVU5RI7PPTmY5d9N0_zX9TghjcuGVori7yPtnKwl6G5q6N_geYQ2IYjdCX8BWf07ZTlbqZXKTBUkUZqLBMMLZw2cP_Hqy24xhatA8-jf_3M9NBCPIh79Zv6KNpm4fLisRLBgJlU5fqvrT3SJ5ZTjSH8fqV5biNIT7AVzEG5op-Ca3n2dyDz7Mjsn41kfpCf02_hELztGK-iGlvTH4kIwf7EHX0UZUqJGksvOX-4b8ldF_djBcqtiKTUIujvpqy5faEFVkiW6LV6zhG0Fes5ZbuOdXNczbALBYA0G0nh9BxR3sqCt8HjHPokCMy7x0Tx3mqv0Wis2vTtJS7_2h9kQQvqr5t6CM75zTlW0cOVRPEc9UuzpU1geqqw4HPMl9uBAS4StcOzLOkAjjKjBp0eLeQc3-MwEMhoYn_EM3juy6K09SyTDcemznkhchhj_ns7s3kdIypFNAfHNAAG36sAaln6T8h3vZ9q98bLW3iLfST1G_9KLVl5bI6cnWdr5W8vt2Vywmyppx089CMz4z5IxVyk6IFeGtsjuPk="
+              }
+            },
+            "createdAt": 1794075714996
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "result": {
+                "stops": ["Évora", "Mérida", "Córdoba", "Seville"]
+              },
+              "toolCallId": "call_mKAHFiLy41ezUyRV4DtBclrK",
+              "toolName": "planRoadTrip",
+              "args": {
+                "from": "Lisbon",
+                "to": "Seville",
+                "days": 4
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_048cde5797ce7c32006aef6c41f28c87d2b2a97602f1769f2b"
+              }
+            },
+            "updatedAt": 1794075715974
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-2",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 2,
+                    "title": "Mérida",
+                    "morning": "Drive 127 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075715092
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-2"
+              }
+            },
+            "createdAt": 1794075715097
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-3",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 3,
+                    "title": "Córdoba",
+                    "morning": "Drive 152 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075715477
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-3"
+              }
+            },
+            "createdAt": 1794075715522
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-4",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 4,
+                    "title": "Seville",
+                    "morning": "Drive 110 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075715893
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-4"
+              }
+            },
+            "createdAt": 1794075715906
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/packing",
+                "value": {
+                  "type": "Checklist",
+                  "props": {
+                    "title": "Road kit",
+                    "items": ["Spare tyre", "Snacks", "Playlist", "Sunglasses"],
+                    "checked": {
+                      "$bindState": "/packed"
+                    }
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075715909
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/trip/children/-",
+                "value": "packing"
+              }
+            },
+            "createdAt": 1794075715911
+          },
+          {
+            "type": "step-start",
+            "createdAt": 1794075716029,
+            "model": "openai/gpt-5.6"
+          },
+          {
+            "type": "text",
+            "text": "Your 4-day Lisbon-to-Seville road trip is ready above.",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_048cde5797ce7c32006aef6c46a04087d28d10c16054338966",
+                "phase": "final_answer"
+              }
+            },
+            "createdAt": 1794075719623
+          }
+        ],
+        "metadata": {
+          "modelId": "gpt-5.6",
+          "provider": "openai"
+        },
+        "content": "Your 4-day Lisbon-to-Seville road trip is ready above."
+      },
+      "role": "assistant",
+      "createdAt": "2026-11-07T18:21:54.297Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "de36fb5d-a814-430f-b45d-337aee3e647a",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "Plan a 3-day road trip from Porto to Granada.",
+            "createdAt": 1794075745004
+          }
+        ],
+        "content": "Plan a 3-day road trip from Porto to Granada."
+      },
+      "role": "user",
+      "createdAt": "2026-11-07T18:22:25.004Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "d4cd9683-454b-460a-a5a5-6ae6fcf80b71",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/root",
+                "value": "trip"
+              }
+            },
+            "createdAt": 1794075748640
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/state",
+                "value": {
+                  "packed": {}
+                }
+              }
+            },
+            "createdAt": 1794075748640
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/trip",
+                "value": {
+                  "type": "Stack",
+                  "props": {},
+                  "children": ["title", "days"]
+                }
+              }
+            },
+            "createdAt": 1794075748640
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/title",
+                "value": {
+                  "type": "Heading",
+                  "props": {
+                    "text": "Porto → Granada",
+                    "subtitle": "3 days on the road"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075748640
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days",
+                "value": {
+                  "type": "Grid",
+                  "props": {
+                    "columns": 2
+                  },
+                  "children": []
+                }
+              }
+            },
+            "createdAt": 1794075748640
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-1",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 1,
+                    "title": "Évora",
+                    "morning": "Drive 209 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075748991
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-1"
+              }
+            },
+            "createdAt": 1794075748992
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-2",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 2,
+                    "title": "Mérida",
+                    "morning": "Drive 155 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075749342
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-2"
+              }
+            },
+            "createdAt": 1794075749342
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "result": {
+                "stops": ["Évora", "Mérida", "Granada"]
+              },
+              "toolCallId": "call_75DGVelj890mvwNpl14hdbfY",
+              "toolName": "planRoadTrip",
+              "args": {
+                "from": "Porto",
+                "to": "Granada",
+                "days": 3
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_048cde5797ce7c32006aef6c6466d087d2a339e8e5e53b0cd4"
+              }
+            },
+            "updatedAt": 1794075749695
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/day-3",
+                "value": {
+                  "type": "DayCard",
+                  "props": {
+                    "day": 3,
+                    "title": "Granada",
+                    "morning": "Drive 80 km",
+                    "afternoon": "Explore the old town",
+                    "evening": "Dinner at a local spot"
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075749694
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/days/children/-",
+                "value": "day-3"
+              }
+            },
+            "createdAt": 1794075749694
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/packing",
+                "value": {
+                  "type": "Checklist",
+                  "props": {
+                    "title": "Road kit",
+                    "items": ["Spare tyre", "Snacks", "Playlist", "Sunglasses"],
+                    "checked": {
+                      "$bindState": "/packed"
+                    }
+                  }
+                }
+              }
+            },
+            "createdAt": 1794075749694
+          },
+          {
+            "type": "data-spec",
+            "data": {
+              "type": "patch",
+              "patch": {
+                "op": "add",
+                "path": "/elements/trip/children/-",
+                "value": "packing"
+              }
+            },
+            "createdAt": 1794075749694
+          },
+          {
+            "type": "step-start",
+            "createdAt": 1794075749700,
+            "model": "openai/gpt-5.6"
+          },
+          {
+            "type": "text",
+            "text": "Your 3-day Porto-to-Granada road trip is ready above.",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_048cde5797ce7c32006aef6c69ef7087d2bfbfe0791bbc576d",
+                "phase": "final_answer"
+              }
+            },
+            "createdAt": 1794075754948
+          }
+        ],
+        "metadata": {
+          "modelId": "gpt-5.6",
+          "provider": "openai"
+        },
+        "content": "Your 3-day Porto-to-Granada road trip is ready above."
+      },
+      "role": "assistant",
+      "createdAt": "2026-11-07T18:22:28.640Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "9ccc2a50-b00d-4ec7-803f-d129b681bd24",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "Compose a weekend plan with ui_spec: a heading \"Weekend plan\" and a checklist titled \"Chores\" with items Laundry, Groceries, Gym, with checked bound to /done.",
+            "createdAt": 1794075764990
+          }
+        ],
+        "content": "Compose a weekend plan with ui_spec: a heading \"Weekend plan\" and a checklist titled \"Chores\" with items Laundry, Groceries, Gym, with checked bound to /done."
+      },
+      "role": "user",
+      "createdAt": "2026-11-07T18:22:44.990Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "8f6b1f4a-7d15-46a9-affa-fafcdfce42eb",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "reasoning",
+            "reasoning": "",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_048cde5797ce7c32006aef6c7843e887d2a48464e502126068",
+                "reasoningEncryptedContent": "gAAAAABq72x4N30SRHjnJIyCMLXnK2FNuEMvmo5ud7oVsPlqwk2gbS4Cv_XaR2qSQKyubrACYfTdXYhAqCYg8mJDTicmFdKaIKSPHc3OT3gSnrxt1_JO49mz2cyJ8npaiSDInai84LH4MCVKgT0J174lMs1qOaaO40LQDc3a3JEtsEMv6eNjYVt8wvBu0KoP051slXjkw1kNSMTbLO1pqzn0-felhMfD9GLr61XHHhj6Ata2m04FiPkaFINaz7ZfiZIKqZej8-UlnwBDEVrMYxv4Wk72rjz7Qev4L19xHoLo_h3Ns32jILkZG2huMnhBUFGFkowkewvmQZWm4vHnh3avfwVi3ULiX5OsQaljUY91kH5oeFTiOJMPirz1inqG05h3Y4Nluf61RSAm2FY1MQ1TpW7H1eWJdfqmY9yzcGUUNW7OtN9-iZvTfON4K_rNe4kIZlMcYtXrnoLDQFbZ5xryRg5YoScFtcAzXQcV-Fbj2hJE2MCQMt6vGP7z2wX9LOSx8G3WfOp8X-hfqEEYew-Ts4YhvQvyyMPVg-q6KHhrUWnCvWX-0jCDb217JG2o-8Q7uCeDj8PCTGIsxhUu_il48NJjMrm0jn0w7ycDHNhcNm_smohrN__zWHyQR-dVewO3ENtskfqh9VhI8k8SIsKU1F2v7OFBEfwBY2GXrbo1vdGqhUG_2n7WD7E5A0_IeRrxjTZIyWRczkYRUdQVTDuuqTywOG4AliAaLjoi-Z7YKW4bVA-YgjGrgnn6PnKb8h41FuJf1OcD4AvxdIK4o3tD4atCcabuplRCukcg5BTHpU9iCKIH_b12TeLOWq9Grecn3JY5yngeSP3tTX8y-c4xWqjnol6qE245VE6QrhadAgVbqa9jmpQBhQZKCqr5yupQzLYiSGq-ouFxoJiNpzy584Wp107AL9-3CxNqXRqaKhIe5OLl4elnslkCNQ0IXK3-5VhRl8xlEWJEP2R5kRvNy6i3YOU_juFHa5C9DXH8RNIh_E4Rzby63iAUrzu0tMhAzhaImWj5fM1AsPA7XCQE0FWvDaaAldcDEDHezjipqBbanfKbsrZBB7dmj_o37HXXevMHXpML0bB2-3PRLj-34T-mffg8CEWBqDXKMVFRYpiGYGhab5WGgrWezO7lvd6xhQJn8G7rGXyLM2HqYeDt9C7gswh5Id_gcCDEqdBvwDFSikUEpe4uu5ZMKcANWytsBFo6HIgWR_C1GfHGiJizU4L7XMRL8izciPT-UDGD_j4f1sBPqnwQFq2FwEKuGiy38NzsZH2kKxH7lwjPoxuiOr9mMndvzqTVSg8WuL9dF7SbEUz-SmgfMSCvFTB0QHJy_Tiveo8K1niXwythRTjCaY1FALYE7QJ_yyyVmoePo2eOUifn2vVmEcmQlEW_AWb9oAggYw4O5Sth9zOKQKBSfl80cY5vYWXY73nv_hCjY0BDWH002uAC2Zoi88JRH6Q4S3wmBRVPEQkjUfDQnrQ867T7pwAzgPva2pXOFQB3w7ROjpjQYylM_0e9EoGojf0UwullaKrBqHOfXRnQY6_lJvE6FQkwplf7atjO1M_jGHNCqWyoI8OGeHvW0H2KF7COSwd0M9pnhN1oB1iRH45fto0uUvjUcHkWCuMfgipriwl79GB8DLZkpW_Z877TstFYyI1ByKhqPyX7awHrZdSNgTYHWO_1yO2113tjYzXv3OLWqWZB_a0="
+              }
+            },
+            "createdAt": 1794075770032
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_fVP2c5zMFRb5OKKFfR3Sfpp3",
+              "toolName": "ui_spec",
+              "args": {
+                "state": "{\"done\":{}}",
+                "root": "root",
+                "elements": [
+                  {
+                    "type": "Stack",
+                    "id": "root",
+                    "props": {},
+                    "children": ["heading", "chores"],
+                    "visible": null,
+                    "repeat": null,
+                    "watch": null
+                  },
+                  {
+                    "type": "Heading",
+                    "id": "heading",
+                    "props": {
+                      "text": "Weekend plan",
+                      "subtitle": null
+                    },
+                    "children": null,
+                    "visible": null,
+                    "repeat": null,
+                    "watch": null
+                  },
+                  {
+                    "type": "Checklist",
+                    "id": "chores",
+                    "props": {
+                      "title": "Chores",
+                      "items": ["Laundry", "Groceries", "Gym"],
+                      "checked": {
+                        "$bindState": "/done"
+                      }
+                    },
+                    "children": null,
+                    "visible": null,
+                    "repeat": null,
+                    "watch": null
+                  }
+                ]
+              },
+              "result": {
+                "ok": true,
+                "id": "call_fVP2c5zMFRb5OKKFfR3Sfpp3"
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_048cde5797ce7c32006aef6c78613c87d288575e65eaf8cc01"
+              }
+            },
+            "createdAt": 1794075770032,
+            "updatedAt": 1794075770071
+          },
+          {
+            "type": "step-start",
+            "model": "openai/gpt-5.6"
+          },
+          {
+            "type": "text",
+            "text": "Your weekend checklist is ready above.",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_048cde5797ce7c32006aef6c7c8cbc87d2b0fb8e6af4ab34c8",
+                "phase": "final_answer"
+              }
+            },
+            "createdAt": 1794075773508
+          }
+        ],
+        "metadata": {
+          "modelId": "gpt-5.6",
+          "provider": "openai"
+        },
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_fVP2c5zMFRb5OKKFfR3Sfpp3",
+            "toolName": "ui_spec",
+            "args": {
+              "state": "{\"done\":{}}",
+              "root": "root",
+              "elements": [
+                {
+                  "type": "Stack",
+                  "id": "root",
+                  "props": {},
+                  "children": ["heading", "chores"],
+                  "visible": null,
+                  "repeat": null,
+                  "watch": null
+                },
+                {
+                  "type": "Heading",
+                  "id": "heading",
+                  "props": {
+                    "text": "Weekend plan",
+                    "subtitle": null
+                  },
+                  "children": null,
+                  "visible": null,
+                  "repeat": null,
+                  "watch": null
+                },
+                {
+                  "type": "Checklist",
+                  "id": "chores",
+                  "props": {
+                    "title": "Chores",
+                    "items": ["Laundry", "Groceries", "Gym"],
+                    "checked": {
+                      "$bindState": "/done"
+                    }
+                  },
+                  "children": null,
+                  "visible": null,
+                  "repeat": null,
+                  "watch": null
+                }
+              ]
+            },
+            "result": {
+              "ok": true,
+              "id": "call_fVP2c5zMFRb5OKKFfR3Sfpp3"
+            }
+          }
+        ],
+        "content": "Your weekend checklist is ready above."
+      },
+      "role": "assistant",
+      "createdAt": "2026-11-07T18:22:50.032Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "8c2fefdf-8245-4ed7-9dcb-212fb50577a8",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "Add a \"Budget\" card with a short text to the layout above, and rename its heading to \"Updated plan\".",
+            "createdAt": 1794075795778
+          }
+        ],
+        "content": "Add a \"Budget\" card with a short text to the layout above, and rename its heading to \"Updated plan\"."
+      },
+      "role": "user",
+      "createdAt": "2026-11-07T18:23:15.778Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    },
+    {
+      "id": "a076021d-0512-4373-9e39-67dbb4879574",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "reasoning",
+            "reasoning": "",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_048cde5797ce7c32006aef6c972b0487d2a4c703871469d2df",
+                "reasoningEncryptedContent": "gAAAAABq72yXa8EdzQIkn0HUXYO3iwTypIqFKvwBJQhFQXGYYeZNvBJCCLPeWuVNuA2b18WXDn3cOkSrnY6pPe8VSNiN27NNBvmV_5VTAhIpfECCwGHCImBBcb-7zWK_yoLqnwqF8alR_92oxSDbPM8v4H9Q1N-3Hdq0UIzTPJq4Ct4j5lGThZL98Fk4VJcced9A37dEVCIKl-hZgcc-cRXITMfM6r19SnIg0-B6xXjO92daD0sj-AL3vkNF2mj95dUKVfk7JDNPoPAKn9ZpPJeFHhKoUTsmbk4bYtG_5zXGewK2JJ3Rr8BqlPagb7JtYN3dpkapyFvJiBSstzefL6brqZOhWXcssXyolfKd5rTEZjhHNVfoj6e6VZ4JsvbGvNe3qzOnwBpDo-H8z1oFdrZ1Kp4IGRwabTjcBewelWcjbn9SQZ_7GipcK4zSWGdeZJCPWuPP8k_zT00TpQ7v_gFQQD2dRqTbIvjbV-f2q9D3Pk2ivRJMK2dHJMrjrP-beb8yT4-yeNFatT5HvRCeFAx-mmZCA-ysxxXlLjGMJGgUA9EMcyGuZSTkhCYPDGbnddZsHtSkLjZ75QbzrzJJnK_zSApKtt4xMPmlIrLcT1PcciZg77GAtIuSpj31o-TsbM6UMrlpAbRnGzMGmiMTqoYWCZQhBzfq0ii-DZB44CsX4fdGapNwD9WTUk67OxX1fV8b0X4bnMmyE4cPFQz6gxZ_FlvvpW7wzhdl5EE-RmuxMvKqif0FqMKOgGl0NXp0LnGnXGkphb32hcmXDmHLGvG_h-J0ALq3qQpTZCZWb1AEDYrOphpqngCKIeYB0rEv6vqewb3Mi5rN9q2RoAnNRnD--RW36oi2FOeejNXUac_1YnsvLxnRl5SHwXuldiWf1eNphLMHZM68CUvM7auhVNBZ-J40VTxt-b-s_K3STEcaVCqESxpXoW6Gc1TWmdX03OPsMTnrxkmNAvZzQ4L735TIla5sG6LDiMtqujWII_SEZQTVqD1inrx2k_AKlJelotxhQ1vTx2ooaP0SsgMWLn04AQ59U5Fnvk5RjTVgEcpl8h0j1Ec846LUpFBRhcebtKWVZLpvrTrs9kRMw6wNujZswRFFOfuG2ElXSSICnOQHT6ij04wZlkrdMbvQ5WRLOpifquQ6FAqRkKYO_LpmLi7R1xAyhsnhvTLZdQv7Hh7MRZ5znKzxYylssuBP6W9zQMbb4KN2houHUqV-QzXO25c9gkT87kyFOAyeqgb4cm0A8RwC1B2-m-tC4RXqAMDj4ltmDTmgerLodIeO0LrYCmO7RDpl6bbRkSPuGEmu09U9Fn3kIIy-wDcbkEcvlUy2QJOdbyVgvK5wTDFE48856yzvJCIYGC8EZOCWhArAYqgMvRNw5-7YciQDy53gozkOtGthZzDoQWhcUs_1P813M4PKJNjuYubXaqtdl5ziA85crGy37wNuDdUY4XpThhqiAGugu2_mSS5rm87CKf_LtpPJbzIL3kmnM83oTx5aPOGew0uVzoDL8KEh2uJ1fiITDKUI418825OgZYoUonX9jS847S7zO1zBJm7I50Tz1BpJlIj-bZmThhikt7vixUAG_Ic6pNbuydY_hEf-d4YaDSosUWt_8ceKi0H2gbIJ-NPPR6J9AzC6vom2sGPCVWMu8NqJ6LaQhbwa5ycjE6PHNf7b3b9vSd_o9EUMsaEDwFmiqOY5HZrcT2h-Izjav7fKoXPyuEPma6TajWf0cLcBLH2IegN1ZRDjZzJBtZ9CLnQGaOv2OQZfiiJBTXegrslG5BB7WoEDP1JJDYpz8NBvmB2U8P8HB-IQmBhHmwl2BQVL2PPh_EMWd1xa_-f-mJD4C39o9l458xQV9Wh4tlBtafNcEEpripGLThjK9zCAJk36YkU8Z1K5idTAif3ChwqIIBXECdAtYQ32NV_zdwSV340OEQz1iuH1xodlsjm3-EGadJHiQt9ax5ulKz3mWylYKfQq-YCq7LqQQIT5Qvb0vmRnPbthXVAoZAe83gExs3aJPm6WFTObBRGgB_BVxwZqU27gupb6VXlio4ywgRC-Pyo1cPjBm-8MG_m66XZbmQDJcN8FWJvS98U591QjnFiK1J0KLg7BMhxRWqa6HY6iFWOCeutDoAE0dP1Ig8lXtiqP397ndU8O6oeRJVS21ffKBoEmL7C3kV_Vw-ID5bQ8fkqHY5FyzF6ZeNORA6dsqLLhxA_6n-0Qh8hf0V8Fv06GYlW63coaPIpkNJSQMClPJzmJ0HCWTIMBCN0tJZr_OPbirr0KWNP5he-Ew9bRuukgu1mVlIjJ72oL734rkWi683u1MbJBC1rg_aAC8a0r4RcYifx73jyaweVIfyyW_UCmbwppQEKzTCW0UWQ_vKP0QIq8wMfPAmRz7F3Emm0n05ZPOS4TSkXSeoE6ZARTy5lFo-v-NnLsUJ6inTDMuSsBaHsU796OKCM18wCWANutdstJ7vWL-KxCgWF_-T3fXz2LG9TbR0h7ETuLaPn-8zOCbaTClUBFw6rsu1DAbtb_1avcdgfkwmt676oVMCVJT2trJwPzgqi2-k3dOGlJwoFEM4n4dZi5ZHBsb2q9sGAXxKvsLzgkpPGo7RRH_FBEaWKWWLvrfob3pCk0nOEBx9irMf_mZ0g-4yKjdJk19eQAFCfXsraofez_xuBcNAz9KatghvYIqlTAHN4SyOjtWvZbGMF4dS0ZC2fH-Q=="
+              }
+            },
+            "createdAt": 1794075801488
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_WzNPXq1uGVj1fXLRf0gPbPcj",
+              "toolName": "ui_spec_edit",
+              "args": {
+                "target": "call_fVP2c5zMFRb5OKKFfR3Sfpp3",
+                "mode": "patch",
+                "patch": [
+                  {
+                    "op": "replace",
+                    "path": "/elements/heading/props/text",
+                    "from": null,
+                    "value": "\"Updated plan\""
+                  },
+                  {
+                    "op": "add",
+                    "path": "/elements/budgetText",
+                    "from": null,
+                    "value": "{\"type\":\"Text\",\"props\":{\"text\":\"Set a spending limit for groceries and weekend activities.\",\"tone\":\"muted\"}}"
+                  },
+                  {
+                    "op": "add",
+                    "path": "/elements/budget",
+                    "from": null,
+                    "value": "{\"type\":\"Card\",\"props\":{\"title\":\"Budget\"},\"children\":[\"budgetText\"]}"
+                  },
+                  {
+                    "op": "add",
+                    "path": "/elements/root/children/-",
+                    "from": null,
+                    "value": "\"budget\""
+                  }
+                ],
+                "merge": null
+              },
+              "result": {
+                "ok": true,
+                "id": "call_WzNPXq1uGVj1fXLRf0gPbPcj",
+                "target": "call_fVP2c5zMFRb5OKKFfR3Sfpp3",
+                "baseState": {
+                  "done": {
+                    "Groceries": true
+                  }
+                }
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_048cde5797ce7c32006aef6c97d57087d2bdc3975f6f51ac6b"
+              }
+            },
+            "createdAt": 1794075801488,
+            "updatedAt": 1794075801524
+          },
+          {
+            "type": "step-start",
+            "model": "openai/gpt-5.6"
+          },
+          {
+            "type": "text",
+            "text": "The heading and new Budget card have been added.",
+            "providerMetadata": {
+              "openai": {
+                "itemId": "msg_048cde5797ce7c32006aef6c9eb31887d2a3fb85803091d986",
+                "phase": "final_answer"
+              }
+            },
+            "createdAt": 1794075807749
+          }
+        ],
+        "metadata": {
+          "modelId": "gpt-5.6",
+          "provider": "openai"
+        },
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_WzNPXq1uGVj1fXLRf0gPbPcj",
+            "toolName": "ui_spec_edit",
+            "args": {
+              "target": "call_fVP2c5zMFRb5OKKFfR3Sfpp3",
+              "mode": "patch",
+              "patch": [
+                {
+                  "op": "replace",
+                  "path": "/elements/heading/props/text",
+                  "from": null,
+                  "value": "\"Updated plan\""
+                },
+                {
+                  "op": "add",
+                  "path": "/elements/budgetText",
+                  "from": null,
+                  "value": "{\"type\":\"Text\",\"props\":{\"text\":\"Set a spending limit for groceries and weekend activities.\",\"tone\":\"muted\"}}"
+                },
+                {
+                  "op": "add",
+                  "path": "/elements/budget",
+                  "from": null,
+                  "value": "{\"type\":\"Card\",\"props\":{\"title\":\"Budget\"},\"children\":[\"budgetText\"]}"
+                },
+                {
+                  "op": "add",
+                  "path": "/elements/root/children/-",
+                  "from": null,
+                  "value": "\"budget\""
+                }
+              ],
+              "merge": null
+            },
+            "result": {
+              "ok": true,
+              "id": "call_WzNPXq1uGVj1fXLRf0gPbPcj",
+              "target": "call_fVP2c5zMFRb5OKKFfR3Sfpp3",
+              "baseState": {
+                "done": {
+                  "Groceries": true
+                }
+              }
+            }
+          }
+        ],
+        "content": "The heading and new Budget card have been added."
+      },
+      "role": "assistant",
+      "createdAt": "2026-11-07T18:23:21.488Z",
+      "threadId": "thread-7b0c22cd",
+      "resourceId": "gen-ui-demo-user"
+    }
+  ],
+  "total": 8,
+  "page": 0,
+  "perPage": 100,
+  "hasMore": false
+}
