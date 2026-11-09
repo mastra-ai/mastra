@@ -42,10 +42,14 @@ export function createGenUIContextStore(): GenUIContextStore {
   };
 }
 
+// `\u003c` keeps published text from closing the block early; JSON readers still decode it as `<`.
+const escapeTags = (text: string) => text.replace(/</g, '\\u003c');
+
 /** The published values as a system-prompt block, or `undefined` when nothing is published. */
 export function formatGenUIContext(snapshot: Readonly<Record<string, GenUIContextEntry>>): string | undefined {
   const lines = Object.entries(snapshot).map(
-    ([key, { description, value }]) => `- ${key}${description ? ` (${description})` : ''}: ${JSON.stringify(value)}`,
+    ([key, { description, value }]) =>
+      `- ${key}${description ? ` (${escapeTags(description)})` : ''}: ${escapeTags(JSON.stringify(value))}`,
   );
   if (!lines.length) return undefined;
   return [
