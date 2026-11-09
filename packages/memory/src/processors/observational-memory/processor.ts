@@ -421,8 +421,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         } catch (error) {
           // Map observation errors through abort (processor-specific concern)
           const err = error instanceof Error ? error : new Error(String(error));
+          // Name the abort's reason (e.g. a lost thread lease): the tripwire replaces the run's abort chunk.
+          const abortReason: unknown = abortSignal?.reason;
           const abortMessage = abortSignal?.aborted
-            ? 'Agent execution was aborted'
+            ? abortReason instanceof Error && abortReason.name !== 'AbortError'
+              ? `Agent execution was aborted: ${abortReason.message}`
+              : 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
           // A tripwire skips output processors, so end the turn here to save the user message and
           // finished steps. The step that failed never reached the model, so nothing blocked is saved.

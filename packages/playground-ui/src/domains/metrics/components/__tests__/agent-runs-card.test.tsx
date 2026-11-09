@@ -31,7 +31,7 @@ describe('AgentRunsCard', () => {
   it('says when the range has no runs', async () => {
     emptyMetrics();
     renderInMetrics(<AgentRunsCard />);
-    expect(await screen.findByText('No agent runs in this range.')).toBeDefined();
+    expect(await screen.findByText('No data in this range')).toBeDefined();
   });
 
   it('says so when the data fails to load', async () => {

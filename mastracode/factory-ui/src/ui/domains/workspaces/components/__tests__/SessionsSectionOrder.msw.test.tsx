@@ -109,7 +109,7 @@ function renderSection(openSessionId?: string) {
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
   const group = await screen.findByRole('region', { name: 'Review sessions' });
-  const rows = await within(group).findAllByRole('link', { name: /^factory\/pr-\d+$/ });
+  const rows = await within(group).findAllByRole('link', { name: /^Reviewing: factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
 }
 
@@ -132,7 +132,11 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-102', 'factory/pr-101', 'factory/pr-103']);
+    expect(await reviewRowLabels(client)).toEqual([
+      'Reviewing: factory/pr-102',
+      'Reviewing: factory/pr-101',
+      'Reviewing: factory/pr-103',
+    ]);
   });
 
   it('keeps a merged session up top while its agent is still running', async () => {
@@ -147,7 +151,7 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-302', 'factory/pr-301']);
+    expect(await reviewRowLabels(client)).toEqual(['Reviewing: factory/pr-302', 'Reviewing: factory/pr-301']);
   });
 
   it('keeps a merged session up top while its agent waits on an answer', async () => {
@@ -163,7 +167,7 @@ describe('Sessions sidebar order', () => {
 
     const { client } = renderSection();
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-402', 'factory/pr-401']);
+    expect(await reviewRowLabels(client)).toEqual(['Reviewing: factory/pr-402', 'Reviewing: factory/pr-401']);
     expect(screen.getByRole('status', { name: /^factory\/pr-402 waiting on you$/i })).toBeInTheDocument();
   });
 
@@ -176,7 +180,11 @@ describe('Sessions sidebar order', () => {
     stubSidebar([oldest, middle, newest], cards);
     const { client } = renderSection(oldest.sessionId);
 
-    expect(await reviewRowLabels(client)).toEqual(['factory/pr-403', 'factory/pr-402', 'factory/pr-401']);
+    expect(await reviewRowLabels(client)).toEqual([
+      'Reviewing: factory/pr-403',
+      'Reviewing: factory/pr-402',
+      'Reviewing: factory/pr-401',
+    ]);
   });
 
   it('keeps the open session visible when creation order puts it past the collapsed rows', async () => {
@@ -192,12 +200,12 @@ describe('Sessions sidebar order', () => {
     const { client } = renderSection(oldest.sessionId);
 
     expect(await reviewRowLabels(client)).toEqual([
-      'factory/pr-507',
-      'factory/pr-506',
-      'factory/pr-505',
-      'factory/pr-504',
-      'factory/pr-503',
-      'factory/pr-501',
+      'Reviewing: factory/pr-507',
+      'Reviewing: factory/pr-506',
+      'Reviewing: factory/pr-505',
+      'Reviewing: factory/pr-504',
+      'Reviewing: factory/pr-503',
+      'Reviewing: factory/pr-501',
     ]);
   });
 
@@ -235,15 +243,20 @@ describe('Sessions sidebar order', () => {
 
     const rendered = renderSection();
     expect(await reviewRowLabels(rendered.client)).toEqual([
-      'factory/pr-601',
-      'factory/pr-604',
-      'factory/pr-602',
-      'factory/pr-603',
+      'Reviewing: factory/pr-601',
+      'Reviewing: factory/pr-604',
+      'Reviewing: factory/pr-602',
+      'Reviewing: factory/pr-603',
     ]);
 
     await pickSessionProperty(user, 'Sort', 'Last updated');
 
-    const byLastUpdate = ['factory/pr-601', 'factory/pr-603', 'factory/pr-604', 'factory/pr-602'];
+    const byLastUpdate = [
+      'Reviewing: factory/pr-601',
+      'Reviewing: factory/pr-603',
+      'Reviewing: factory/pr-604',
+      'Reviewing: factory/pr-602',
+    ];
     expect(await reviewRowLabels(rendered.client)).toEqual(byLastUpdate);
     rendered.unmount();
 

@@ -8,7 +8,7 @@ import type { DashboardExpand } from '../widget-kind';
  */
 export type ViewHeading = Pick<
   ChartCardProps,
-  'title' | 'titleMenu' | 'href' | 'LinkComponent' | 'dragHandle' | 'actions' | 'persistentActions'
+  'title' | 'titleMenu' | 'href' | 'LinkComponent' | 'dragHandle' | 'onTitleChange' | 'actions' | 'persistentActions'
 >;
 
 /** Filters a gate can't apply, named as the filter bar names them. */
