@@ -463,7 +463,9 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
-    if (this.resolveSession) {
+    // A caller that skips binding may get back a live session without going through
+    // createSession or the resolver, so it must pass the same EXECUTE check they do.
+    if (this.resolveSession || !bindThread) {
       await controller.requireAgentControllerFGA({
         permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
         requestContext,
@@ -482,10 +484,20 @@ export class AgentControllerChannels extends AgentChannels {
     // tagged as a refusal so the channel error boundary keeps it out of the
     // chat thread instead of posting the host's authorization message there.
     // createSession rebinds an existing session to the requested thread, which is
-    // exactly what a caller that doesn't want to bind is avoiding.
-    if (!bindThread && !this.resolveSession) {
+    // exactly what a caller that doesn't want to bind is avoiding. A resolver that
+    // follows the documented pattern calls createSession too, so when the live
+    // session is on another thread, return it without asking the resolver. The
+    // caller treats that as stale and acts on nothing. When the live session is
+    // already on this thread, the resolver still runs so the host can revalidate.
+    if (!bindThread) {
       const existing = await controller.getSession(channelResourceId, requestContext);
-      if (existing) return existing;
+      if (
+        existing &&
+        existing.identity.getResourceId() === channelResourceId &&
+        (!this.resolveSession || existing.thread.getId() !== thread.id)
+      ) {
+        return existing;
+      }
     }
     const session = this.resolveSession
       ? await this.resolveChannelSession({ controller, thread, requestContext })
