@@ -5832,6 +5832,7 @@ export class Run<
           stepExecutionPath: snapshot?.stepExecutionPath,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
           label: params.label,
+          resumeLabels: snapshot?.resumeLabels,
         },
         format: params.format,
         pubsub: this.pubsub,

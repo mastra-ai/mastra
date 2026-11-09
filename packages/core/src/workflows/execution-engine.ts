@@ -12,6 +12,7 @@ import type {
   OutputWriter,
   SerializedStepFlowEntry,
   StepResult,
+  WorkflowResumeLabel,
   WorkflowRunStatus,
   WorkflowRunState,
   WorkflowFinishCallbackResult,
@@ -243,6 +244,7 @@ export abstract class ExecutionEngine extends MastraBase {
       stepExecutionPath?: string[];
       forEachIndex?: number;
       label?: string;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
     };
     pubsub: PubSub;
     requestContext: RequestContext;
