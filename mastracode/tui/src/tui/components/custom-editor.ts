@@ -583,17 +583,13 @@ export class CustomEditor extends Editor {
   }
 
   /**
-   * Keys while a mouse selection exists. Backspace/Delete remove it, Esc and
-   * arrows clear it, and text or a paste replaces it. Returns true when the key
+   * Keys while a mouse selection exists. Backspace/Delete remove it, text or a
+   * paste replaces it, and any other key clears it and keeps its usual effect. Returns true when the key
    * is fully handled.
    */
   private handleSelectionInput(data: string): boolean {
     if (matchesKey(data, 'backspace') || matchesKey(data, 'delete')) {
       this.deleteSelection();
-      return true;
-    }
-    if (matchesKey(data, 'escape')) {
-      this.selection.clear();
       return true;
     }
     if (isTextInput(data)) {

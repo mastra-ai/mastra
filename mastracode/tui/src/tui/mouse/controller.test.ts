@@ -746,6 +746,20 @@ describe('input box mouse mode', () => {
     expect(h.editor.getText()).toBe('hello braveworld');
   });
 
+  it('Esc clears the selection and still does its usual job (e.g. cancelling a run)', async () => {
+    const h = await inputHarness('hello brave world');
+    const escapes: string[] = [];
+    h.editor.onAction('clear', () => escapes.push('clear'));
+    const word = h.find('brave');
+    await h.click(word.row, word.col);
+    await h.release(word.row, word.col + 5);
+    h.send('\x1b');
+    expect(escapes).toEqual(['clear']);
+    // The selection is gone: Backspace now deletes one character, not "brave".
+    h.send('\x7f');
+    expect(h.editor.getText()).toBe('hello brav world');
+  });
+
   it('typing and editing keys turn mouse mode on; submit turns it off until the next one', async () => {
     harness = createHarness({ inputMouseModeEnabled: true });
     const h = harness;
