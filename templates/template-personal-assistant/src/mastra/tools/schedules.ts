@@ -10,7 +10,7 @@ import { explicitTimezone as timezone } from '../config';
 import type { AssistantConfig } from '../config';
 import { findOwnerThread } from '../context';
 
-const timingInput = z.discriminatedUnion('kind', [
+const explicitTiming = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cron'), cron: z.string().trim().min(1).max(200), timezone }).strict(),
   z
     .object({
@@ -25,6 +25,29 @@ const timingInput = z.discriminatedUnion('kind', [
     })
     .strict(),
 ]);
+
+// Models sometimes omit the redundant discriminator. Infer it only from one
+// unambiguous timing field; explicit invalid kinds and mixed shapes still fail.
+const timingFields = z
+  .object({
+    kind: z.enum(['cron', 'once']).optional().describe('cron for recurring schedules; once for a single date.'),
+    cron: z.string().optional().describe('Cron expression for recurring schedules; omit for once.'),
+    date: z.string().optional().describe('ISO date with seconds and UTC offset for once; omit for cron.'),
+    timezone,
+  })
+  .strict();
+const timingInput = timingFields
+  .transform(input => ({
+    ...input,
+    kind:
+      input.kind ??
+      (input.cron !== undefined && input.date === undefined
+        ? 'cron'
+        : input.date !== undefined && input.cron === undefined
+          ? 'once'
+          : undefined),
+  }))
+  .pipe(explicitTiming);
 
 export const scheduleTiming = timingInput.transform((input, context) => {
   try {
@@ -125,7 +148,11 @@ const schema = z
       .optional()
       .describe('Required for create, optional for update; otherwise omit.'),
     prompt: text.optional().describe('Required for create, optional for update; otherwise omit.'),
-    timing: timingInput.optional().describe('Required for create and update; otherwise omit.'),
+    timing: timingFields
+      .optional()
+      .describe(
+        'Required for create/update. Recurring example: {"kind":"cron","cron":"0 9 * * *","timezone":"America/Sao_Paulo"}. One-time example: {"kind":"once","date":"2030-01-15T09:00:00-03:00","timezone":"America/Sao_Paulo"}. Never combine cron and date. Omit timing for other actions.',
+      ),
     scheduleId: id
       .optional()
       .describe('Required for actions targeting an existing schedule; omit for create and list.'),

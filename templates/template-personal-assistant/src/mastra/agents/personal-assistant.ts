@@ -33,7 +33,9 @@ Use full supported source content and cite source IDs. Explain partial, malforme
 A blank document is incomplete: insert its content separately with approval. If insertion fails, report the existing document ID and incomplete status.
 Do not automatically repeat mutations after failures or uncertain results. Inspect the existing record and ask the owner before retrying.
 Do not claim success without provider evidence.
+Inspect every tool result for errors before moving to the next task. Correct arguments within the remaining step budget only when input validation explicitly rejected them before execution. Output validation failures can follow real side effects: inspect the existing result and ask the owner before retrying any uncertain mutation. If recovery is unavailable or fails, explain which step failed and what is needed next, and return its execution task to pending. A rejected task-list or objective change must preserve the existing plan. Never end with only a progress announcement such as "Creating...".
 Use schedule for explicit scheduled responsibilities. Ask for an explicit IANA timezone and resolve dates before creating schedules.
+For recurring schedules use timing {kind:"cron",cron:"0 9 * * *",timezone:"America/Sao_Paulo"}, adjusting cron and timezone to the owner's request. For one-time schedules use kind:"once" with date and timezone, without cron. Configure the schedule without running its responsibility unless the owner requests an immediate check.
 Keep the same requestId when retrying an identified creation request. Inspect existing schedules before changing them.
 Native schedules discard checks during an active conversation and skip approval-blocked work. Run-now inside a tool call can be discarded; publication is not a completed check.
 Schedules are best effort: missed checks may not replay, duplicated occurrences are possible, and completed cadence is not business success.
@@ -63,7 +65,7 @@ ${config.timezone ? `The owner configured timezone ${config.timezone}.` : 'No sc
     goal: { judge, maxRuns: config.maxGoalEvaluations, maxSteps: 3, prompt: goalGuidance },
     inputProcessors: [progress.processor],
     hooks: progress.hooks,
-    outputProcessors: [connectedContentProcessor],
+    outputProcessors: [progress.processor, connectedContentProcessor],
     defaultOptions: {
       maxSteps: config.maxSteps,
       modelSettings: config.modelSettings,

@@ -1,7 +1,7 @@
 import type { Agent, AgentConfig } from '@mastra/core/agent';
 import type { Processor } from '@mastra/core/processors';
 import type { TaskRecord } from '@mastra/core/storage';
-import { createTool } from '@mastra/core/tools';
+import { createTool, taskUpdateTool, formatTaskListResult } from '@mastra/core/tools';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { z } from 'zod';
 import type { AssistantConfig } from '../config';
@@ -125,6 +125,152 @@ export function createProgressProtection(config: AssistantConfig, getAgent: () =
       } catch {
         return abort('Task state requires a stored conversation belonging to this owner.');
       }
+    },
+    async processOutputResult({ result, messageList, requestContext, sendStateSignal, sendSignal, writer }) {
+      if (result.finishReason === 'suspended') return messageList;
+      const last = result.steps.at(-1);
+      const unresolved = new Map<string, { toolName: string; validation: boolean }>();
+      for (const step of result.steps) {
+        for (const { payload } of step.toolResults) {
+          const args =
+            payload.args && typeof payload.args === 'object' && !Array.isArray(payload.args)
+              ? (payload.args as Record<string, unknown>)
+              : undefined;
+          // Correcting timing retains a schedule's identified operation. A
+          // success for another request must not hide the original failure.
+          const identity =
+            payload.toolName === 'schedule' && args
+              ? { action: args.action, requestId: args.requestId, scheduleId: args.scheduleId }
+              : payload.args;
+          const key = JSON.stringify([payload.toolName, identity]);
+          const value = payload.result;
+          const failed =
+            payload.isError ||
+            (value &&
+              typeof value === 'object' &&
+              (('error' in value && value.error === true) || ('isError' in value && value.isError === true)));
+          if (failed)
+            unresolved.set(key, {
+              toolName: /^[\w.:-]{1,128}$/.test(payload.toolName) ? payload.toolName : 'tool',
+              validation: Boolean(value && typeof value === 'object' && 'validationErrors' in value),
+            });
+          else unresolved.delete(key);
+        }
+      }
+      const failures = [...unresolved.values()];
+      // A suspended approval has no completed result for its pending call.
+      // Leave that native lifecycle and its original arguments untouched.
+      const toolOnlyStop =
+        result.finishReason === 'tool-calls' &&
+        Boolean(last?.toolCalls.length) &&
+        last!.toolResults.length === last!.toolCalls.length;
+      if (!failures.length && !toolOnlyStop && result.finishReason !== 'error') return messageList;
+
+      const failedNames = [...new Set(failures.map(failure => failure.toolName))];
+      let notice = failures.length
+        ? `The ${failedNames.join(', ')} step failed. This turn has stopped; the failed call is not confirmation of success. Inspect its result before continuing or retrying an uncertain action.`
+        : result.finishReason === 'error'
+          ? 'The run failed and has stopped. Work remains unfinished. Inspect existing results before continuing; do not repeat uncertain writes automatically.'
+          : 'This turn ended after a tool call without a final confirmation. Work remains unfinished. Inspect existing results before continuing; do not repeat completed or uncertain actions.';
+      if (failures.some(failure => failure.toolName === 'schedule' && failure.validation)) {
+        notice +=
+          ' Schedule validation failed before execution. Use timing.kind="cron" with cron and timezone, or timing.kind="once" with date and timezone. Keep the same requestId when correcting creation.';
+      }
+
+      // Rejected task/objective management must leave the protected plan intact.
+      // Only execution failures or a tool-only stop park active work.
+      const progressOnlyFailure =
+        failures.length > 0 &&
+        failures.every(failure => taskTools.has(failure.toolName) || failure.toolName === 'objective');
+      if (progressOnlyFailure) notice += ' The rejected progress change left the existing task list unchanged.';
+      const identity = requestContext && contexts.get(requestContext);
+      if (identity && !progressOnlyFailure) {
+        try {
+          const target = await ownedThread(getAgent(), config.ownerId, identity.threadId, identity.resourceId);
+          const tasks = (await target.store.getState<TaskRecord[]>({ threadId: target.threadId, type: 'task' })) ?? [];
+          let updated = tasks;
+          for (const task of tasks.filter(task => task.status === 'in_progress')) {
+            const update = await taskUpdateTool.execute!(
+              { id: task.id, status: 'pending' },
+              {
+                agent: {
+                  ...identity,
+                  agentId: getAgent().id,
+                  toolCallId: `terminal-task-${task.id}`,
+                  messages: messageList.get.all.db(),
+                  suspend: async () => {
+                    throw new Error('Terminal task updates cannot suspend.');
+                  },
+                },
+                requestContext,
+                mastra: getAgent().getMastraInstance(),
+              },
+            );
+            if (!update || !('tasks' in update) || update.isError) throw new Error('Task update unavailable.');
+            updated = update.tasks;
+          }
+          if (updated !== tasks) {
+            const snapshot = {
+              id: 'tasks',
+              mode: 'snapshot' as const,
+              cacheKey: JSON.stringify(updated),
+              tagName: 'current-task-list',
+              contents: formatTaskListResult(updated),
+              value: { tasks: updated },
+              metadata: { value: { tasks: updated } },
+              attributes: { count: updated.length },
+            };
+            if (sendStateSignal) await sendStateSignal(snapshot);
+            else
+              await sendSignal?.({
+                type: 'state',
+                tagName: snapshot.tagName,
+                contents: snapshot.contents,
+                metadata: snapshot.metadata,
+                attributes: snapshot.attributes,
+              });
+          }
+        } catch {
+          notice += ' The task status could not be saved; the displayed task list may be stale.';
+        }
+      }
+      // Native signals make the notice visible during streaming as well as on
+      // reload. Persist an assistant answer even when no model step remains.
+      if (writer) {
+        try {
+          await sendSignal?.({ type: 'notification', tagName: 'execution-status', contents: notice });
+        } catch {
+          notice += ' The live status notification could not be delivered.';
+        }
+      }
+      const answer = messageList.get.response
+        .db()
+        .findLast(
+          message =>
+            message.role === 'assistant' &&
+            message.content.parts.some(part => part.type === 'text' && part.text.trim()),
+        );
+      if (answer && last?.text.trim()) {
+        // Preserve the model's useful explanation and native tool parts. Adding
+        // a separate response would make generate().text expose only our notice.
+        messageList.removeByIds([answer.id]);
+        const lastText = answer.content.parts.findLastIndex(part => part.type === 'text');
+        messageList.add(
+          {
+            ...answer,
+            content: {
+              ...answer.content,
+              parts: answer.content.parts.map((part, index) =>
+                part.type === 'text' && index === lastText ? { ...part, text: `${part.text}\n\n${notice}` } : part,
+              ),
+              content: undefined,
+            },
+          },
+          'response',
+          { merge: false },
+        );
+      } else messageList.add({ role: 'assistant', content: notice }, 'response');
+      return messageList;
     },
   } satisfies Processor;
   const hooks: NonNullable<AgentConfig['hooks']> = {

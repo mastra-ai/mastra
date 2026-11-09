@@ -3,7 +3,7 @@ import { loadConfig } from '../src/mastra/config';
 import { createScheduleOperations } from '../src/mastra/tools/schedules';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AgentSchedule } from '@mastra/core/schedules';
-import type { Schedule } from '@mastra/core/storage';
+import type { Schedule, TaskRecord } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -13,7 +13,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { json, pending, startAssistant } from './helpers';
-import { progressFixture } from './progress';
+import { progressFixture, progressState, progressTurn } from './progress';
+import { connectedFixture } from './connections';
+import type { FixtureReply } from './connections';
 import {
   createMonitor,
   dueNow,
@@ -28,6 +30,271 @@ import {
 
 const agent = 'personalAssistant';
 const query = `?agentId=${agent}`;
+
+test('daily schedules accept unambiguous timing and retain strict validation', { timeout: 120000 }, async () => {
+  const fixture = await progressFixture();
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-timing-shape-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    const input = {
+      action: 'create',
+      requestId: 'daily-proposal',
+      name: 'daily-proposal',
+      prompt: 'Review new proposals.',
+      timing: { cron: '25 18 * * *', timezone: 'America/Sao_Paulo' },
+    };
+    await scheduleTurn(app, 'timing-shape', input);
+    const [created] = await schedules(app);
+    assert.ok(created, 'An unambiguous recurring request must create a schedule even when kind is omitted.');
+    assert.equal(created.cron, input.timing.cron);
+    assert.equal(created.timezone, input.timing.timezone);
+    assert.ok(created.nextFireAt! > Date.now());
+    await scheduleTurn(app, 'timing-shape', input);
+    assert.equal((await schedules(app)).length, 1);
+    const nullableReplay = await scheduleTurn(app, 'timing-shape', {
+      ...input,
+      scheduleId: null,
+      reason: null,
+      timing: { ...input.timing, kind: 'cron', date: null },
+    });
+    assert.match(nullableReplay.text, /Existing identified request preserved/);
+    assert.equal((await schedules(app)).length, 1, 'Provider optional-null arguments preserve creation identity.');
+    const once = { date: '2090-01-15T09:00:00-03:00', timezone: 'America/Sao_Paulo' };
+    await scheduleTurn(app, 'timing-once', { ...input, timing: once });
+    assert.equal((await schedules(app)).find(value => value.threadId === 'timing-once')!.metadata?.date, once.date);
+    for (const timing of [
+      { ...input.timing, kind: 'recurring' },
+      { ...input.timing, date: '2090-01-01T10:00:00Z' },
+      { timezone: 'America/Sao_Paulo' },
+      { cron: '25 18 * * *' },
+    ]) {
+      await scheduleTurn(app, 'timing-shape', { ...input, requestId: 'invalid-shape', timing });
+      assert.equal((await schedules(app)).length, 2, 'Ambiguous or invalid timing must not mutate storage.');
+    }
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test(
+  'terminal schedule failure reports the error and parks active work across restart',
+  { timeout: 120000 },
+  async () => {
+    const fixture = await progressFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-terminal-error-'));
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    const tasks = [
+      { id: 'create', content: 'Create the schedule', activeForm: 'Creating the schedule', status: 'in_progress' },
+      { id: 'unrelated', content: 'Review later', activeForm: 'Reviewing later', status: 'pending' },
+      { id: 'done', content: 'Inspect setup', activeForm: 'Inspecting setup', status: 'completed' },
+    ];
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      for (const mode of ['generate', 'stream']) {
+        const command = {
+          calls: [
+            [{ name: 'task_write', args: { tasks } }],
+            [
+              {
+                name: 'schedule',
+                args: {
+                  action: 'create',
+                  requestId: 'daily-proposal',
+                  name: 'daily-proposal',
+                  prompt: 'private-proposal-marker',
+                  timing: { kind: 'recurring', cron: '25 18 * * *', timezone: 'America/Sao_Paulo' },
+                },
+              },
+            ],
+          ],
+        };
+        const before = fixture.models.length;
+        const response = await app.request(`/agents/${agent}/${mode}`, 'POST', {
+          messages: [{ role: 'user', content: JSON.stringify(command) }],
+          memory: { thread: `terminal-${mode}`, resource: 'local-owner' },
+          maxSteps: 2,
+        });
+        const body = mode === 'generate' ? await json(response) : await response.text();
+        if (mode === 'generate') {
+          assert.match(body.text, /schedule.*failed/i);
+          assert.doesNotMatch(body.text, /private-proposal-marker/);
+        } else {
+          const chunks: {
+            type: string;
+            data?: { tagName?: string; metadata?: { value?: { tasks?: TaskRecord[] } } };
+          }[] = body
+            .split('\n')
+            .filter((line: string) => line.startsWith('data: {'))
+            .map((line: string) => JSON.parse(line.slice(6)));
+          const signal = chunks.find(
+            (chunk: { type: string; data?: { tagName?: string } }) =>
+              chunk.type === 'data-signal' && chunk.data?.tagName === 'execution-status',
+          );
+          assert.ok(signal, 'The live stream must expose a native status notification, not just a stored tool error.');
+          assert.match(JSON.stringify(signal), /schedule.*failed/i);
+          assert.doesNotMatch(JSON.stringify(signal), /private-proposal-marker/);
+          const taskSignal = chunks.findLast(
+            (chunk: { type: string; data?: { tagName?: string } }) =>
+              chunk.type === 'data-signal' && chunk.data?.tagName === 'current-task-list',
+          );
+          assert.equal(
+            taskSignal?.data?.metadata?.value?.tasks?.[0]?.status,
+            'pending',
+            'The live task list must stop showing Creating without requiring a reload.',
+          );
+        }
+        assert.equal(fixture.models.length - before, 2, 'Failure reporting must not spend another model call.');
+        const state = await progressState(dataDir, `terminal-${mode}`);
+        assert.deepEqual(
+          state.tasks,
+          tasks.map(task => (task.id === 'create' ? { ...task, status: 'pending' } : task)),
+        );
+        const saved = await history(app, `terminal-${mode}`);
+        assert.match(saved, /schedule.*failed/i);
+        assert.equal((await schedules(app)).length, 0);
+      }
+      await app.stop();
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      for (const mode of ['generate', 'stream']) {
+        assert.match(await history(app, `terminal-${mode}`), /schedule.*failed/i);
+        assert.equal((await progressState(dataDir, `terminal-${mode}`)).tasks[0]!.status, 'pending');
+      }
+      assert.equal(fixture.providerCalls.length, 0);
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  'tool-only budget stops stay unfinished while successful recovery and approvals keep native semantics',
+  { timeout: 120000 },
+  async () => {
+    const fixture = await progressFixture();
+    const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-turn-outcome-'));
+    let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+    try {
+      app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+      const create = {
+        action: 'create',
+        requestId: 'same-request',
+        name: 'Daily review',
+        prompt: 'Review.',
+        timing: recurring,
+      };
+      const stopped = await progressTurn(
+        app,
+        'budget-stop',
+        { calls: [[{ name: 'schedule', args: create }]] },
+        { maxSteps: 1 },
+      );
+      assert.match(stopped.text, /ended after a tool call without a final confirmation/i);
+      assert.doesNotMatch(stopped.text, /step failed/i);
+      assert.equal((await schedules(app)).length, 1, 'A missing final answer does not undo a successful schedule.');
+      const recovered = await progressTurn(
+        app,
+        'budget-stop',
+        {
+          calls: [
+            [{ name: 'schedule', args: { ...create, timing: { ...recurring, kind: 'recurring' } } }],
+            [{ name: 'schedule', args: create }],
+          ],
+        },
+        { maxSteps: 3 },
+      );
+      assert.match(recovered.text, /Existing identified request preserved/);
+      assert.doesNotMatch(recovered.text, /This turn has stopped/);
+      assert.equal((await schedules(app)).length, 1);
+      const tasks = [
+        { id: 'write', content: 'Create document', activeForm: 'Creating document', status: 'in_progress' },
+      ];
+      await progressTurn(
+        app,
+        'approval-outcome',
+        {
+          calls: [
+            [{ name: 'task_write', args: { tasks } }],
+            [{ name: 'schedule', args: { ...create, timing: { ...recurring, kind: 'recurring' } } }],
+            [{ name: 'google_docs_create_document', args: { title: 'Needs owner approval' } }],
+          ],
+        },
+        { maxSteps: 3 },
+      );
+      const waiting = await pending(app, 'approval-outcome');
+      assert.deepEqual((await progressState(dataDir, 'approval-outcome')).tasks, tasks);
+      assert.equal(fixture.providerCalls.length, 0);
+      assert.doesNotMatch(await history(app, 'approval-outcome'), /execution-status/);
+      await json(
+        await app.request(`/agents/${agent}/decline-tool-call-generate`, 'POST', {
+          runId: waiting.runId,
+          toolCallId: waiting.toolCalls[0]!.toolCallId,
+        }),
+      );
+      assert.equal(fixture.providerCalls.length, 0);
+    } finally {
+      await app?.stop();
+      await fixture.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test('a later empty or misleading answer cannot hide an unresolved tool failure', { timeout: 120000 }, async () => {
+  let replies: FixtureReply[] = [];
+  const fixture = await connectedFixture(() => {
+    const reply = replies.shift();
+    assert.ok(reply, 'The fixture must not request an unbounded model continuation.');
+    return reply;
+  });
+  const dataDir = await mkdtemp(join(tmpdir(), 'personal-assistant-unresolved-error-'));
+  let app: Awaited<ReturnType<typeof startAssistant>> | undefined;
+  const tasks = [{ id: 'create', content: 'Create schedule', activeForm: 'Creating schedule', status: 'in_progress' }];
+  const input = {
+    action: 'create',
+    requestId: 'daily-proposal',
+    name: 'daily-proposal',
+    prompt: 'Review.',
+    timing: recurring,
+  };
+  try {
+    app = await startAssistant(dataDir, fixture.modelUrl, fixture.env);
+    for (const [index, finalText] of ['', 'Creating the schedule...'].entries()) {
+      const thread = `unresolved-${index}`;
+      replies = [
+        { text: '', calls: [{ id: 'plan', name: 'task_write', args: { tasks } }] },
+        {
+          text: '',
+          calls: [{ id: 'invalid', name: 'schedule', args: { ...input, timing: { ...recurring, kind: 'recurring' } } }],
+        },
+        // A different successful schedule must not clear this failed request.
+        { text: '', calls: [{ id: 'other', name: 'schedule', args: { ...input, requestId: 'another-request' } }] },
+        { text: finalText },
+      ];
+      const result = await json(
+        await app.request(`/agents/${agent}/generate`, 'POST', {
+          messages: [{ role: 'user', content: 'Create the daily proposal schedule.' }],
+          memory: { thread, resource: 'local-owner' },
+          maxSteps: 4,
+        }),
+      );
+      assert.match(result.text, /schedule.*failed/i);
+      assert.equal((await progressState(dataDir, thread)).tasks[0]!.status, 'pending');
+      assert.match(await history(app, thread), /schedule.*failed/i);
+      assert.equal(replies.length, 0);
+      assert.equal((await schedules(app)).filter(value => value.threadId === thread).length, 1);
+    }
+    assert.equal(fixture.providerCalls.length, 0);
+  } finally {
+    await app?.stop();
+    await fixture.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
 
 // TODO: Restore this regression when upstream @mastra/libsql sanitizes retry diagnostics.
 // Version 1.29.0 logs raw SQLite errors through a captured default logger.
