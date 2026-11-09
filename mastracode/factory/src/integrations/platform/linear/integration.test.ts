@@ -1000,6 +1000,36 @@ describe('PlatformLinearIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('names disconnected workspaces when an issue lookup misses', async () => {
+    const disconnected = {
+      ...workspace,
+      linearWorkspaceId: 'old',
+      linearWorkspaceName: 'Mastra',
+      urlKey: 'mastra',
+      connected: false,
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({ workspaces: [workspace, disconnected] }));
+    fetchImpl.mockResolvedValueOnce(json({ workspaces: [workspace, disconnected] }));
+    fetchImpl.mockResolvedValueOnce(json({ detail: 'Not found' }, 404));
+    const integration = createIntegration(fetchImpl);
+
+    // Lookups only search connected workspaces, so the miss itself stays a plain null.
+    await expect(
+      integration.intake.getIssue({
+        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+        issueId: 'COR-1502',
+      }),
+    ).resolves.toBeNull();
+    await expect(integration.disconnectedWorkspaceNotice('COR-1502')).resolves.toBe(
+      'Linear issue "COR-1502" was not found, but these Linear workspaces are disconnected and it may live there: "Mastra" (linear.app/mastra). Reconnect them in Factory Settings → Linear.',
+    );
+  });
+
+  it('has no disconnected-workspace notice when every workspace is connected', async () => {
+    const integration = createIntegration(vi.fn<typeof fetch>(async () => json({ workspaces: [workspace] })));
+    await expect(integration.disconnectedWorkspaceNotice('ENG-404')).resolves.toBeNull();
+  });
+
   it('probes only routed workspaces while retaining complete source precedence', async () => {
     const workspace1Source = sourceId('workspace-1', 'project-1');
     const workspace1TeamSource = `linear-team:${Buffer.from(

@@ -392,6 +392,11 @@ export class LinearIntegration implements FactoryIntegration {
    * without a recorded scope were minted with `read` only, so they count as
    * read-only until the org reconnects Linear.
    */
+  /** A self-managed org has a single connection, so there is never another workspace to point at. */
+  async disconnectedWorkspaceNotice(_issueId: string): Promise<string | null> {
+    return null;
+  }
+
   canPostComments(connection: LinearConnectionRow): boolean {
     const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
     return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');

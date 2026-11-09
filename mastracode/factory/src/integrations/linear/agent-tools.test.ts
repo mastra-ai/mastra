@@ -255,6 +255,17 @@ describe('linear_get_issue — execute', () => {
     expect(result).toEqual({ error: 'Linear issue "ENG-999" was not found in this workspace.' });
   });
 
+  it('points at a disconnected workspace instead of saying the issue does not exist', async () => {
+    fetchLinearIssueDetail.mockResolvedValue(null);
+    const notice = vi
+      .spyOn(linear, 'disconnectedWorkspaceNotice')
+      .mockResolvedValue('workspace "Mastra" is disconnected');
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ issue: ' COR-1502 ' });
+    expect(notice).toHaveBeenCalledWith('COR-1502');
+    expect(result).toEqual({ error: 'workspace "Mastra" is disconnected' });
+  });
+
   it('refreshes an expired token before fetching', async () => {
     await seedProject();
     await seedConnection({ expiresAt: new Date(Date.now() - 1000) });
@@ -317,6 +328,14 @@ describe('linear_create_comment — execute', () => {
     const tool = await getTool();
     const result = await (tool.execute as any)({ issue: 'ENG-999', body: 'Hello' });
     expect(result).toEqual({ error: 'Linear issue "ENG-999" was not found in this workspace.' });
+  });
+
+  it('points at a disconnected workspace instead of saying the issue does not exist', async () => {
+    createLinearIssueComment.mockResolvedValue(null);
+    vi.spyOn(linear, 'disconnectedWorkspaceNotice').mockResolvedValue('workspace "Mastra" is disconnected');
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ issue: 'COR-1502', body: 'Hello' });
+    expect(result).toEqual({ error: 'workspace "Mastra" is disconnected' });
   });
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {

@@ -662,6 +662,22 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return this.#listWorkspaces();
   }
 
+  /**
+   * Explains a failed issue lookup when a workspace has been disconnected:
+   * lookups only search connected workspaces, so the issue may live in one of
+   * these instead of not existing.
+   */
+  async disconnectedWorkspaceNotice(issueId: string): Promise<string | null> {
+    const disconnected = (await this.#listAllWorkspaces()).filter(workspace => !workspace.connected);
+    if (disconnected.length === 0) return null;
+    const names = disconnected
+      .map(
+        workspace => `"${workspace.linearWorkspaceName}"${workspace.urlKey ? ` (linear.app/${workspace.urlKey})` : ''}`,
+      )
+      .join(', ');
+    return `Linear issue "${issueId}" was not found, but these Linear workspaces are disconnected and it may live there: ${names}. Reconnect them in Factory Settings → Linear.`;
+  }
+
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
     return (await this.#listAllWorkspaces()).filter(workspace => workspace.connected);
   }
