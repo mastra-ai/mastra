@@ -2651,7 +2651,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "enum": [
                     "work_item.created",
                     "work_item.closed",
-                    "work_item.reopened"
+                    "work_item.reopened",
+                    "pull_request.opened",
+                    "pull_request.synchronized",
+                    "pull_request.review_requested",
+                    "pull_request.merged",
+                    "pull_request.closed"
                   ]
                 }
               },
@@ -2958,7 +2963,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "enum": [
                   "work_item.created",
                   "work_item.closed",
-                  "work_item.reopened"
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
                 ]
               }
             },
@@ -4938,7 +4948,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "work_item.created",
             "work_item.closed",
-            "work_item.reopened"
+            "work_item.reopened",
+            "pull_request.opened",
+            "pull_request.synchronized",
+            "pull_request.review_requested",
+            "pull_request.merged",
+            "pull_request.closed"
           ]
         },
         "__schema14": {
@@ -5033,7 +5048,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "enum": [
                   "work_item.created",
                   "work_item.closed",
-                  "work_item.reopened"
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
                 ]
               }
             },
@@ -7400,7 +7420,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "enum": [
             "work_item.created",
             "work_item.closed",
-            "work_item.reopened"
+            "work_item.reopened",
+            "pull_request.opened",
+            "pull_request.synchronized",
+            "pull_request.review_requested",
+            "pull_request.merged",
+            "pull_request.closed"
           ]
         }
       }
@@ -7487,7 +7512,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "enum": [
                   "work_item.created",
                   "work_item.closed",
-                  "work_item.reopened"
+                  "work_item.reopened",
+                  "pull_request.opened",
+                  "pull_request.synchronized",
+                  "pull_request.review_requested",
+                  "pull_request.merged",
+                  "pull_request.closed"
                 ]
               }
             },
@@ -7810,7 +7840,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "enum": [
                     "work_item.created",
                     "work_item.closed",
-                    "work_item.reopened"
+                    "work_item.reopened",
+                    "pull_request.opened",
+                    "pull_request.synchronized",
+                    "pull_request.review_requested",
+                    "pull_request.merged",
+                    "pull_request.closed"
                   ]
                 }
               },
