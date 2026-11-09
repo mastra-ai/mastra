@@ -37,7 +37,12 @@ export function TimeseriesWidget(props: Props) {
     props.expand,
   );
   const { view } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
+  const heading = {
+    ...menu.heading,
+    dragHandle: props.dragHandle,
+    onTitleChange: props.onTitleChange,
+    ...pinActions(props.pin),
+  };
   if (gate.status === 'pending')
     return (
       <PendingChartCard
