@@ -81,7 +81,7 @@ function AgentRunsChart({
 
   return (
     <ChartCard {...layout} total={formatCount(total)} isLoading={isLoading} isUpdating={isPlaceholderData}>
-      <ChartArea isEmpty={!isLoading && total === 0} emptyMessage="No agent runs in this range.">
+      <ChartArea isEmpty={!isLoading && total === 0}>
         <MetricsStackedBarChart
           data={data}
           series={SERIES}
