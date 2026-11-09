@@ -244,7 +244,7 @@ export function BoardContent({
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
-    // Nothing new lands on the retired Review board: its cards come from pull requests.
+    // No card is created by hand on the retired Review board: its cards come from pull requests.
     const canCreate =
       !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
