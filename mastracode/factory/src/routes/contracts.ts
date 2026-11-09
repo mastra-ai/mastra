@@ -797,8 +797,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
           editable: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
-          /** The project's default board, where cards land when nothing routes them elsewhere. */
-          default: z.boolean().optional(),
           initialPhase: z.string(),
           /**
            * Which phase plays each part of the pull request loop, read from what the phases declare.
@@ -808,8 +806,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
             .object({
               triage: z.string().optional(),
               build: z.string().optional(),
-              /** The session context the build phase runs in. */
-              buildContext: z.string().optional(),
               selfReview: z.string().optional(),
               pullRequestReview: z.string().optional(),
               completed: z.string().optional(),

@@ -4,6 +4,7 @@ import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { BoardCatalogResponse } from '../api/types';
+import { withLegacyFlow } from '../ui/domains/factory/boardFlow';
 
 export function boardCatalogQueryOptions(client: ApiClient, factoryProjectId: string | undefined) {
   return queryOptions({
@@ -16,5 +17,8 @@ export function boardCatalogQueryOptions(client: ApiClient, factoryProjectId: st
 
 export function useBoardCatalog(factoryProjectId: string | undefined) {
   const { client } = useApiConfig();
-  return useQuery({ ...boardCatalogQueryOptions(client, factoryProjectId), select: data => data.boards });
+  return useQuery({
+    ...boardCatalogQueryOptions(client, factoryProjectId),
+    select: data => data.boards.map(withLegacyFlow),
+  });
 }

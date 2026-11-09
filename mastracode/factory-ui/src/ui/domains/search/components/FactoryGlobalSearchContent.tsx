@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardIdOf, boardOf } from '../../factory/boardFlow';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
@@ -52,7 +53,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const catalog = useBoardCatalog(searchableFactoryId);
-  const defaultBoard = catalog.data?.find(board => board.default);
+  const defaultBoard = catalog.data?.find(board => board.id === DEFAULT_BOARD_ID);
   // Unfiled candidates come from the intake feed, which files onto the default board.
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
@@ -123,9 +124,14 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
               onSelect={result => {
                 const target = result.target;
                 if (target.kind === 'candidate') {
-                  closeSearch();
+                  // Until the default board's catalog entry loads there is nowhere to file it: stay open.
                   const [move] = cardMoves(target.candidate, target.candidate.column, defaultBoard);
-                  if (move) workBoard.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
+                  if (!move) {
+                    toast.error('The board is still loading. Try again in a moment.');
+                    return;
+                  }
+                  closeSearch();
+                  workBoard.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
                 const item = target.item;

@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID } from '../boards/index.js';
+import { boardFlow, boardPhaseOutcomes } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -347,7 +347,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               name: board.name,
               title: board.name,
               ...(board.description !== undefined ? { description: board.description } : {}),
-              ...(id === DEFAULT_BOARD_ID ? { default: true } : {}),
               initialPhase: board.initialPhase,
               flow: catalogFlow(boardFlow(board)),
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
@@ -771,7 +770,6 @@ function catalogFlow(flow: FactoryRuleBoardFlow) {
   return {
     ...(flow.triage ? { triage: flow.triage } : {}),
     ...(flow.build ? { build: flow.build } : {}),
-    ...(flow.buildRole ? { buildContext: flow.buildRole } : {}),
     ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
     ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
     ...(flow.completed ? { completed: flow.completed.phase } : {}),

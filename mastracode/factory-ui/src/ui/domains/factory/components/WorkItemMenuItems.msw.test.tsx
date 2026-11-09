@@ -78,6 +78,13 @@ describe('custom-board card menu', () => {
     expect(onMove).toHaveBeenCalledWith('preparing');
   });
 
+  it("names the move into a board's completed phase a completion, on a board without a pull request loop", async () => {
+    // The server names the completed phase for every board, loop or not.
+    renderMenu('shipping', [{ ...releaseBoard, flow: { completed: 'shipped' } }]);
+    expect(await screen.findByRole('menuitem', { name: 'Mark shipped' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Move to Shipped' })).toBeNull();
+  });
+
   it.each(['shipped', 'unknown'])('offers no fabricated destinations for %s', async stage => {
     const { client } = renderMenu(stage);
     await waitForMutationsIdle(client);

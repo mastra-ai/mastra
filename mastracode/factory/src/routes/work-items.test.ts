@@ -224,23 +224,24 @@ describe('installed board catalog', () => {
     });
   });
 
-  it('names the default board and the phase playing each part of its pull request loop', async () => {
+  it("names the phase playing each part of each board's pull request loop", async () => {
     const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     expect(body.boards[0]).toMatchObject({
       id: 'work',
-      default: true,
       flow: {
         triage: 'triage',
         build: 'execute',
-        buildContext: 'work',
         selfReview: 'review',
         pullRequestReview: 'pr-review',
         completed: 'done',
         canceled: 'canceled',
       },
     });
+    // Which board is the default is DEFAULT_BOARD_ID, and the build context is the build phase's own.
+    expect(body.boards[0]).not.toHaveProperty('default');
+    expect(body.boards[0].flow).not.toHaveProperty('buildContext');
   });
 
   it('sends the conditions a phase starts and approves its exit tool under', async () => {

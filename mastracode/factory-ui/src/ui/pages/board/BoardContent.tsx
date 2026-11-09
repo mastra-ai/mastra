@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
@@ -268,7 +269,7 @@ export function BoardContent({
       taskCount === 0;
     return {
       stage,
-      phaseKind: definition.default ? undefined : stage.kind,
+      phaseKind: definition.id === DEFAULT_BOARD_ID ? undefined : stage.kind,
       exitTool: stage.exitTool,
       loading,
       taskCount,

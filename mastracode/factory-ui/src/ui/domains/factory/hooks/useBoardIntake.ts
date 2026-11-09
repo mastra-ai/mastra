@@ -1,3 +1,4 @@
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import {
@@ -121,7 +122,7 @@ export function useBoardIntake({
 }) {
   const kind = definition.id;
   // Unrouted issues and unfiled pull requests land on the default board.
-  const defaultBoard = definition.default === true;
+  const defaultBoard = definition.id === DEFAULT_BOARD_ID;
   const browsesPullRequests = defaultBoard;
   const initialPhase = definition.initialPhase;
   const repository = repositories[0];

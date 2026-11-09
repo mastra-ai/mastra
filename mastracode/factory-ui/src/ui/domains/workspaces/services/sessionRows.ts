@@ -113,6 +113,12 @@ export function sessionBoard(item: WorkItem | undefined): string {
   return item ? itemBoard(item) : DEFAULT_BOARD_ID;
 }
 
+/**
+ * Whether the card sits in a phase its board marks terminal. Only the catalog says which phases those
+ * are (any board may name them anything), so until it loads, or while it fails and retries, no card
+ * counts as finished here and its session reads as active; a card with a pull request still settles
+ * on that pull request's state.
+ */
 function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {
   const board = boards?.find(candidate => candidate.id === itemBoard(item));
   return item.stages.some(stage => board?.phases.find(phase => phase.id === stage)?.kind === 'terminal');

@@ -1319,9 +1319,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "string"
                 }
               },
-              "default": {
-                "type": "boolean"
-              },
               "initialPhase": {
                 "type": "string"
               },
@@ -1332,9 +1329,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                     "type": "string"
                   },
                   "build": {
-                    "type": "string"
-                  },
-                  "buildContext": {
                     "type": "string"
                   },
                   "selfReview": {
