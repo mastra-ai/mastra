@@ -1,0 +1,3942 @@
+[
+  {
+    "id": "/workspace/mastra/packages/memory/src/index.ts",
+    "sha256": "ef3b2aaffbda36ee925e498b6bfdefce7d22ef668a6ff798a9d7a861b162f5b3"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v4/dist/index.js",
+    "sha256": "14c36251c47ee9fe40f1dad63d765b794fb8f36d7d3e898ed78ae84a388159d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v4/dist/dist-coVIEOLh.js",
+    "sha256": "03cc4ece23575a1b242f8e9d6605df623e230f9ab58dac17571bc4226b015a88"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v5/dist/index.js",
+    "sha256": "e2ec8111f9b8c8a0be94ca16218f4f740396809603ef6eadbb549a7532f295c4"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v5/dist/dist-7mT7Zcmc.js",
+    "sha256": "7834dbc1d764ac81bc0d1717d56658e32a9431cb4638666b8ed91f9dd4d8b41d"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v5/dist/dist-Pg6-AA-5.js",
+    "sha256": "10c005b76f98e040bb51af1005d9d1bbb2d958fed2f52f29e27c39c08ffa10f8"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v6/dist/index.js",
+    "sha256": "248283a47f93fec4873d099b2e71a3eebe8e1f66b6204c6c85573ab3c70d47e5"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v6/dist/dist-Dagfit7r.js",
+    "sha256": "f984429a361e9797e12351df025e0b43f2c9700cdf955f8590ab262705d7d37b"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v6/dist/dist-Hl6jAzqF.js",
+    "sha256": "53e10694859db377850198113451daf70db89d7fde08ed9db24b3b491ae9fbe6"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v7/dist/index.js",
+    "sha256": "454514c7dccaff20c5e93fbcf89f776a37255bf470e2bf9bd485990d51f58530"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v7/dist/dist-D8AVLLnB.js",
+    "sha256": "d8e9219751f731a9bd00a55bc1ace925ef4b6507479f8871bd532363ba070c67"
+  },
+  {
+    "id": "/workspace/mastra/packages/_vendored/ai_v7/dist/dist-LLTd3fQV.js",
+    "sha256": "08565a055936e925bcf52a7202be587348589011b3c92e0f8347c6f30c3ec145"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/index.ts",
+    "sha256": "1a81ecf7397e19532107cf9dbf19edbf26aa4c175ddca86be3296774a1bcb42b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/trip-wire.ts",
+    "sha256": "85430f0c871815b06a1a498c0d035b9f9ecc917c9ee08963f5de0d12fea2df1b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/index.ts",
+    "sha256": "2b5885e27cee7607df2e092061caf861fbb9fd93db2ded992320593076273968"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/index.ts",
+    "sha256": "43addc990829ea79dae82ecb28595692ae35988c2bb3b637298ba6ec7bdaea92"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/core.ts",
+    "sha256": "ae09bcba435a6aea4310c3a02a4fa257a1172eb10f8dcf005ed66ad7a4e8bc5d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/tracing.ts",
+    "sha256": "72a0c3aff50f8921ffb260d35c07373db95d96250cb130096b00cabd5c1ce646"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/index.ts",
+    "sha256": "9e8d37beeb7edb8dd27b34140d2083e45938db97b787fe2a00e8066150cb4ae9"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/domains/shared.ts",
+    "sha256": "b079ccdbad8faca65fee7302e799429edf52d05c36f5e6fb5318ebabe79a1451"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/domains/observability/logs.ts",
+    "sha256": "807344d7e4ed39c97234344c8cdffd1364c62359cbcc40b9bc2842de025b8ae6"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/domains/observability/scores.ts",
+    "sha256": "40c655948d981a74c35de9440b681bfc64e763c9cd203bd71f092bb6c717713d"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/domains/observability/feedback.ts",
+    "sha256": "623d23458a8b5989d968aa3a2ddebdb4ad8939c2e817656e7cef5e75d4136fd0"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/domains/observability/metrics.ts",
+    "sha256": "98df32a0001934e003f34f0c389eb2deee3d55ed1d8708f244b06720dbc678a0"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/storage/domains/observability/discovery.ts",
+    "sha256": "8312c8d11b4a49d70d90d72b33081c15c3951b2bde64fd754dcdc2c75338abea"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/outcome.ts",
+    "sha256": "462eab7a303c8e0953bcc67527d7ad8753f2efddb79b09c0cdff2ad485c6f2bd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/client.ts",
+    "sha256": "feec04f8d57d05150f70d14c655a5f896959f41398f880c6635adcec28b9ee52"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/logging.ts",
+    "sha256": "deb3fc4f7cc881cde1e81fa96f55930ad703bc783aa297412db5db08d4f23c84"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/metrics.ts",
+    "sha256": "e07eaff2deb1376bef430b46cbdff10d8d9609b0f53b4be8171f4db32c289788"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/scores.ts",
+    "sha256": "17c6f061668ac03bc5218e6a176d74b56caf7d16fe224a846cf46a67e6c9e186"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/types/feedback.ts",
+    "sha256": "7698994b72544c979ff30075da59dfdb0c9ae3969b4f36356c5d3ff11b582280"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/no-op.ts",
+    "sha256": "1501aa27482659dedfccd9e9ad43a92e2bcaf9addca4ed20ddbea73716d5e41d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/utils.ts",
+    "sha256": "99a174fa33c50486acd22de194f76d6eec72744f9b21790d9bb9e4d5480756b2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/w3c.ts",
+    "sha256": "0d49fd4d9fdb9934580d8dcede834eb5c03b6288a47505ff1ef2deca74882eb4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/span-record.ts",
+    "sha256": "407088a5762c475b9b212c3392cbf6b96cfa09aeedf0ec9cf9e53cc55d757f2f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/processor-span-record.ts",
+    "sha256": "9d59bae453ba10ecae1fe61cc7e988150e25186eb4899f245b32daca28418bc7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/context.ts",
+    "sha256": "c5ac36fa4582ffcdb126d9a002320437d37163cc3cb509e6dd5825a62213f3d9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/context-factory.ts",
+    "sha256": "c6665cf8fc2d05a7b3d37f0e8fefcafad621d65e0af70feceac9c86796a8dab9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/rag-ingestion.ts",
+    "sha256": "42c215768484e13599629502a9a3b72c1d6b15b1c02026e1a0fa5a81eef35678"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/span-previews.ts",
+    "sha256": "b44741b7f872c18eb531932fca1aa10f867eb8a459e9268475e1c09fbd1eea54"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/execution-outcome.ts",
+    "sha256": "6cbcddcba3910b3323a5ed22b49e3475dd895e9bc9dc3b751ffe83d421eeb877"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/outcome-schema.ts",
+    "sha256": "a312d1f843aa70ba36f1dac867a32a53a7098720f2c957a197183a46ae7e106d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/execution-outcome.ts",
+    "sha256": "268b36df0072b1ebf807a12549ebf5886d92ddc7746297bf0319562763bcfd6e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/usage.ts",
+    "sha256": "0a393298b78ea152c63ea622fe5931a8a94275f9575939bf6f6b28eb884b122e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/output.ts",
+    "sha256": "a78392f7b301b5352a981ee339813953c708131aa49453b60370c7b0efd57e4c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/index.ts",
+    "sha256": "c78fd96f23b42cd10aaeda3fd486fe0ca3ad6307cf1b436b9b0b3edb237232ed"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/message-list.ts",
+    "sha256": "a7e95e7c0695a47dc3b744ac7c7434719c33adbe7fb3d7b970de5ab6d5c4a0e8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/error/index.ts",
+    "sha256": "d2d28d3a675691662a7f8d1bda455be5f088c9ac807cf3809e973f9ebdb0dd9f"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/error/index.ts",
+    "sha256": "01af76072d6c9c4bd5b1935a1672b7966ab8c780c80a456c9a001c936c1e68ca"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/error/utils.ts",
+    "sha256": "da4af6ec1984c21e33c2aff2ab8f384f6b9b0eff30cfe07f3e76c12491b8bb65"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/record-terminal-error-message.ts",
+    "sha256": "bc44cfbb4becd42eb9d157833d640b620a6c33b55d3db2dfc0304e02bcdb4def"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/error/provider-error.ts",
+    "sha256": "5b48b3350ea4a8f1e6a548e659045c0d6219bc7cc34828b7df6fbdf1124a4f0b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/provider-error-details.ts",
+    "sha256": "effd0a96e847681885bb514cfbd3cbd0b5370e842894c85d84f40f3ed966be10"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/payload-transform.ts",
+    "sha256": "782e075b5b552badd8eb80cc70a76e49002d9c5ed13c3d7e595686f3fb46ab0b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/safe-stringify.ts",
+    "sha256": "37d5741c0d78ebd76b9099b2a9c97bb48cbcbda26300cb5fc3e0567a5777cd03"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/signals.ts",
+    "sha256": "1c14aa33a74b48bca881ccde65c03f7757e1a1882d2238501012849a1bcbc1d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/data-content.ts",
+    "sha256": "53ccbc966932cdbfae2edd025c9e92692c8e772425b61dd6baccafc93230bde1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/adapters/index.ts",
+    "sha256": "17a5427ea062c82a307b061690c272127f8e38977bc0fa39ed4aed6e73befc65"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/adapters/AIV4Adapter.ts",
+    "sha256": "8fc33229742d01431c210e30f5ebd2b56698ff2b8580f266c1ea5ecf79c9f3fd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/detection/TypeDetector.ts",
+    "sha256": "d3487ce446774c5de61d2aa7debdda8b97f1fd1867b505338404120ca36f23e5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/image-utils.ts",
+    "sha256": "c3948178d8c78c48f8d94529481b705e1f17e748a3a7171facf7d9d54cfd86a3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/media.ts",
+    "sha256": "07303a0dd8397bf048f6f7b873aa1372f310b9407fb6b1741e0b84d128e69d1c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/provider-compat.ts",
+    "sha256": "a8cf0141e3f5d1193f12c54c5224e6130868e576f41c569e3a0a5e96b33d2d2e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/response-item-metadata.ts",
+    "sha256": "9f7337e6cc1e59dc0588c9d5536291aed5b9aa1bf5cc13c72fd6d9fce8c6a616"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/adapters/AIV6Adapter.ts",
+    "sha256": "2bda4dcf1048672a3c6dbb56fa07405e3e6de015f15fa1b3ae31a9171e7481fc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/tool-name.ts",
+    "sha256": "20473b711dc8b616acbb75996ec5adca532700c2c6a8f3238053a9d07830b8b6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/unwrap-legacy-tool-output.ts",
+    "sha256": "bb8564f2c3376e2ed83136aae2136b6d4fabc032f16e0fafdd873f6ff62bdd87"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/adapters/AIV5Adapter.ts",
+    "sha256": "c8834a76f0e5bc981b8c745189d09df876de7cbd15da1a01b22a9cd6b21534bd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/cache/CacheKeyGenerator.ts",
+    "sha256": "2f2cd3e930f079716cc903a448de7f245dc5aa253b0cafeebcf5c0f80006a2ca"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/cache/reasoning-identity.ts",
+    "sha256": "ebe414af90e6b42574c7376c2dbab7453377b5ddfc9c1409784ca1326d4b6bff"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/cache/stable-stringify.ts",
+    "sha256": "565fe3526afcc68f316564fabce96cb46f07cf13e5278eb2ad4fb24399568246"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/conversion/index.ts",
+    "sha256": "6fca9e523f0bf0fe10c547b4217d51e5fa673125d6ee7dabb102a934daba6bc2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/conversion/to-prompt.ts",
+    "sha256": "1ac86ed8dcc9d703161913ef56eb1729ee47f0d2fefe712e8339c90781a8e30d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/conversion/utils.ts",
+    "sha256": "a2640eb1346984c2551c81d6a7fc623095fcd4a1f768204c5b3d2d9b5162afe9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/working-memory-utils.ts",
+    "sha256": "dc636cbefd0a3626cf99ecab6b59e2932c98710bb292d821758ac4d2bc4a547e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/filter-messages-for-persistence.ts",
+    "sha256": "e7d44d5612d5e95dcb996913bfc4c93575e35ac9dd397a344b5650c5b3d521e7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/conversion/input-converter.ts",
+    "sha256": "0811ebc47937ba50a89bbcc5210173a0b056fe60c3cd1f4482313286c904dbe8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/stamp-part.ts",
+    "sha256": "4189038f125c4e0c9f66104c076bbd28c282c742aeaec3f29b956e947f906139"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/conversion/output-converter.ts",
+    "sha256": "eb4fd85a9c20824f79ba88f33840293fcb6b71097aa9e4d6fe6d18dd8532020f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/deep-equal.ts",
+    "sha256": "66bdde7b7b1bfb9249d4e10296b076e3d7fabe243247117c70e30bcb74e96946"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/conversion/step-content.ts",
+    "sha256": "e8ff79ac9ea4b022ea9ea899ac4315e866e97234c72a49cec91eeab65a2f300e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/file.ts",
+    "sha256": "e9dc7a546ccb938cd8078e16ad76e751e6002cfff4ee859ba99408f10a1a7ec0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/content.ts",
+    "sha256": "7208e41bbda3399d19626407b6d64976824342d5ef6fba21d1631e53af33e2ec"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/merge/index.ts",
+    "sha256": "19bc0ebb06135f44dd7b98eb792bf586da837244c70e15a2aa90ef7548da2f4d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/merge/MessageMerger.ts",
+    "sha256": "883d0fbe7c46c168bc1c30fda51350a1c64454eaa7fdf74a5e8534f33ce97397"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/convert-file.ts",
+    "sha256": "a1f0b0adee0eaeb3dc2f6bc2223e87f7fcc9c0dc21daea7c06e02be12f90c3da"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/index.ts",
+    "sha256": "aa4c7037904b8896ac70d51082fd5364ca29a2f8c904ecdcde35e0d6a5444c99"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/ui-message.ts",
+    "sha256": "69c92a7a8c702daf4f2f37f8e7410d5c0c54827b8b0882787477f95f2b87d324"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/validation.ts",
+    "sha256": "80e483c59791fb05f6cc366fa3e5459d875fa905af8d4a6eb5ccf2fec38d9fd5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/delayed-promise.ts",
+    "sha256": "5312e7c244dacabf97849f5b095b3c03a359cf273b38f3b460b2c2cf5bfa1351"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/prepare-tools.ts",
+    "sha256": "53907af0a8a644fec3d489045ae73bd45ff73b7bfc0abfa88ffa78243701933d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/schema/index.ts",
+    "sha256": "9471e00630014575bc0fe97b12f59a1b686e18e229c812e3000a09155b155f41"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/schema.ts",
+    "sha256": "9b550f4f352920e2512ef685ffd47a52751c42aecd211f6e13e45e4de3b34ad4"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/standard-schema/standard-schema.ts",
+    "sha256": "7e676e1177dab53f7556833d75bdf8c00d7f53dbf0830c5db9a87d4ec851308c"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/zod-to-json.ts",
+    "sha256": "3cdee03915146659342c1b3e11732fc6418ddf2b777757c88bc6d3f53ffcd489"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/standard-schema/adapters/ai-sdk.ts",
+    "sha256": "e8addf064fcce6884c2144cf287d25ffe836ce62f5f041c9f40ab87d2cca44bc"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/standard-schema/adapters/json-schema.ts",
+    "sha256": "ede74d5654e42e304de2930956f23dcd2460dfee45d0b03d5a5eba45ac9e5802"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/standard-schema/adapters/zod-v3.ts",
+    "sha256": "6d0eb74366db99909f6addf485b9f3a8bd92f8772d3738a31f08e345d3b89e1f"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/standard-schema/adapters/zod-v4.ts",
+    "sha256": "22a1c8d88c4d4cedf09919ed03c9a14a015d5e65e92b213e88058cb8ba0bf206"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/toolchecks.ts",
+    "sha256": "8feb8dd03a9d992fd36547da4a656d1592165add9467093bd1c40e3b190a27bd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/tool.ts",
+    "sha256": "7d24f9ee61aeaa06c3718ba57a282601d23d08cddfaa0bad7247d35a1561f881"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/request-context/index.ts",
+    "sha256": "bc8064516f13754c4a6263f994dcddb3962a660e2234977467d314f5e19d820c"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/request-context/index.ts",
+    "sha256": "2ce059cbd1fa97c89bf948410a210711d89253b5f914f882ae8d2905a638358d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/request-context/input-source.ts",
+    "sha256": "c679e08d5fc4b68e39cc2849781471d3e8ced9f6f6b2bba04aa8f4edac3e968e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builder-validation-context.ts",
+    "sha256": "36f2cc5d8d11806fcc96b060846d607fd2a90230d986a7a166a3a027b0ccf56d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/observe.ts",
+    "sha256": "f6e8b8cde3e93de3fce0a883cb0615b75d207622fdfbbe35816a53c0fb51efd4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/types.ts",
+    "sha256": "7ee8232f1aeceac176b4470c121e92254854d5617ac6dbac1fcd50b078388486"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/validation.ts",
+    "sha256": "24dbf2909e67adde2c4b49bc896eff73991cc484fd288dcf4353fe49b8e6affa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/zod-utils.ts",
+    "sha256": "e8090485375900d09465e7c61d7cb95214f8547ccc0c6fe86f8c5f75c3bf8fb7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/compat/consume-stream.ts",
+    "sha256": "46cf0eabe449134fc5efd37d92b7a7a1cd22f201e2b3f47285d919230b29844c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/convert-to-mastra-v1.ts",
+    "sha256": "bc57a03ecc10a7caca6e40fbff3e191086ac1ff53f16c737afd7794c2892280f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/attachments-to-parts.ts",
+    "sha256": "5ac555bae2fcf8fa1165f043fef2588dca28e0c1de5f38324863d9e4ff597468"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/download-assets.ts",
+    "sha256": "575ea69a7a3d00e656f7ecbb380e77920b3e5f9e4fb9bb9003ce2c350159cdf3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/fetchWithRetry.ts",
+    "sha256": "c7127bae8b64e1c5e41a87c75d32c88662ec38682b6bea540111c3e3d679049c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/prompt/unavailable-attachments.ts",
+    "sha256": "c6c451b100619d9d15b9a42cdf4d258ab528cb610e0755b11f384a1ca9daecef"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/state/index.ts",
+    "sha256": "10fb82de17cc6e6b2bcc1372297061bcd8f125604337f54584a9f109f40b9bc1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/state/MessageStateManager.ts",
+    "sha256": "2c168b6b570bb71fb2cb3af14722e052d5e05002917914f100415b6ff5c59fa3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/state/serialization.ts",
+    "sha256": "5c14030de9a78ccb42d454810f6fd425211efc7a2cec210a62a3469b65f4225c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/tool-invocation-state.ts",
+    "sha256": "b68720ccb3400c39ecda0ee8dca78fd4c9f88f91d3c046a53395ca2fdab54934"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/utils/convert-messages.ts",
+    "sha256": "8f981bd9d45dc5e4ce3c43379c908439072572da80c38607327a7454f82a2138"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/detection/index.ts",
+    "sha256": "894cb14cdf42b2b8fd53ab10a263b1f4da15a3e3f688cb12f291a1dca5f503ec"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/cache/index.ts",
+    "sha256": "a75ca6956bab430c757c20e3b6053dde9c0cee9604210262067a5da3458d91ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/base.ts",
+    "sha256": "1a8e654a7e211de09dea5b83bedd0329d7401814d7d2cf9a3c2ba218b25cd8ee"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/base/index.ts",
+    "sha256": "8c83c871dfb8a12306104d3d762366932c56bcc352bcf28cbdc90648fe263481"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/base/MastraBase.ts",
+    "sha256": "3a0b6d8da241091f9fa25cbcff32f08e54ae3168e19b070c01851ff11caf560c"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/logger/index.ts",
+    "sha256": "67581fd20060d854ec024f8dd63e62906e4333af04660283e9ff98e633881e8e"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/logger/adapter.ts",
+    "sha256": "048e2eae8979b11bdb2aa4e42e5b59f321dc26b7996c120701018c831c2f91ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/logger/noop-logger.ts",
+    "sha256": "d8dc11e3eee0e0ad9a831e6758b28c9fca1a8fac30bfe81b83a840fd70b0b115"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/types/index.ts",
+    "sha256": "356a1a62de096093e52c7dc01e0c484dc3d24e734ff111c38df6948c18b912c0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/types/dynamic-argument.ts",
+    "sha256": "a92cd5a64706406e9b2a09ac123ca3e86b6b7fcb64f5d333b40214bf4f277e80"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/error/utils.ts",
+    "sha256": "8669629f14e138f546bd3da7ea96d5f8dddf88858d1d597845d1584975c6ebaa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/runner.ts",
+    "sha256": "bdb55e60221c72a15439fa324dc1af027fb6120f289798d1518ff4531b9f85ed"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/state-signals.ts",
+    "sha256": "b3d2a933709a0988c9d2291c029fd5997a91fc960c075c51e8e94f9b74e2a2b0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/utils.ts",
+    "sha256": "7653f6628187a4e5f347999e170a1f90235f9a85ff09b9a605c42f422729a96a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/index.ts",
+    "sha256": "069d7f971524cf3815fe11fe465b4de72613cf2485c8ba29c03393def2e50859"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/router.ts",
+    "sha256": "4101b1686933ba656bd937404a982135322023f7b0bf304208edab5de1297e95"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/types.ts",
+    "sha256": "81a9abaceabe42dce7b6672e943512a0aa7fcae8a46406055901c5453c209700"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/aisdk/v5/model.ts",
+    "sha256": "84d942e05f1584a57e3b4b0a77281e48e1e038331130de96bdcbe836e2cfbfc1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/aisdk/generate-to-stream.ts",
+    "sha256": "b40673e4e56586eb9481c80a07c245bf17b450fdf2458c504531a14797d45f29"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/aisdk/v6/model.ts",
+    "sha256": "e759822ddac2ad3399aebeb66f91869fd0e8a53acea41c6414aa361c3eddb55f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/aisdk/v7/model.ts",
+    "sha256": "9ab2120059016821380e0c683bff24e4f677cb794ba1723814e97fb672ccc5b1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/base.ts",
+    "sha256": "5aa34d8bc0710dab16c88aac4f8dbf7b69093b109533c833496e56c963a4e391"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/defaults.ts",
+    "sha256": "242a25e32ef98260e809afd4772728d18d6c6e65b2f43adb0a5a132ebff5afbc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/provider-registry.ts",
+    "sha256": "be561a90355be7a6c76b68320318b3ff69b7f948c40e6b8139449697dc9ce26c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/capability-file.ts",
+    "sha256": "7e4b615af078ad0e34ea821c9fd003a77beaeb15f4505a4181833b0ec45ff7bc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/gateway-helpers.ts",
+    "sha256": "cd6369d151b333a654b8430c6bd81ce6c4fe4568350124235a696eca52f0c550"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/mastra.ts",
+    "sha256": "a59c9a4e9b0c9dbc683dfba68d922e56d1b5f8d068c52333a39b74eb8c9f2f61"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/constants.ts",
+    "sha256": "c29ff2ffe54a8d836922454045eae57104a93b2b490f854a7c6370a1789509cc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/models-dev.ts",
+    "sha256": "83ae5eb2289b832356d607867624102e7b23d9d4f77363cdd30dac44ef7b747b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateway-resolver.ts",
+    "sha256": "6bd95f5bf5d18691c20ac629ea23f8509487d6b2b2ba92c30cc287bd14645d00"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/url-template.ts",
+    "sha256": "bc3cefbe6c2814f6856749157453f7e68ba81679bbd28857acd8981c958b9ade"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/netlify.ts",
+    "sha256": "8eb67e0946061a40b38c5779701e31a02bcf60faf94da037361ca69d10adef7a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/cache/inmemory.ts",
+    "sha256": "bb9dab55b1cc16e4b32ed3908dc8b75a5e14ebfa7869cc541865a46d63dc9d72"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/cache/base.ts",
+    "sha256": "91c6c1b121ebce25d5ada3bff24cb3528d0ef3a3b4b8f1f249261d81784c9fe2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/provider-registry.json",
+    "sha256": "1de1aac662420c15c358c607c8028b81d5d9c13c100dcb457b745159c10c567e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/index.ts",
+    "sha256": "1a7999b696546273ea0c11e081a5c4c7732560a64762efa5d624f009680708d7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/azure.ts",
+    "sha256": "c0a29820409388848e34ae106894fd8422666e2061ab5d7615f1cc8f40c0048a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/openai-websocket-fetch.ts",
+    "sha256": "1d63330977c8c0a877d2682aa076f7fdcb9aab5adab6c22bd40417ef625e5cad"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/gateways/gateway-manager.ts",
+    "sha256": "f655466aaec68f863180edc89eb1b63e6de5f46bfdc3be8f998fc4e4081a4e12"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/resolve-model.ts",
+    "sha256": "055a99873876d75df8d53d9d5e63c29f59a1800118a3ffb84acdd83fa02d1bed"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/aisdk/v4/model.ts",
+    "sha256": "cbec14a2ee3f1423f2086d666d23b7b42a7068fbbb48bf411b2100d5eec4cd85"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/model-auth-resolver.ts",
+    "sha256": "9ffdee3c5572ad074a9bfaeafbd7a3b6fcd25d1a1fbbda47f0b31e16953e5cb2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/index.ts",
+    "sha256": "aeab34635230cbaaf4e967066192e099b9d665b6ad248befdba59181a414e9c3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/model.ts",
+    "sha256": "b8758896c7ba99aaa0b345e4835740de21123f82ddc3b0fcc69e41347747ac96"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/index.ts",
+    "sha256": "be880e72b0b1009a14d2930060b3739b7fc2c590e0fb15b118837a0d85164e4d"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/schema-compatibility-v3.ts",
+    "sha256": "2e9267caeb2a910e23f6dacac7851576ca8b07d08d5be7d187b984f5dd344818"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/utils.ts",
+    "sha256": "bf68555618aa3f7e36e86c4b90eea243e9c77d1b435dc25063cc7db462b3ed56"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/json-schema.ts",
+    "sha256": "64727b77f1486a111725542c2c2f2b5c6265715be6916ccb0cae539214d4442e"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/schema-compatibility-v4.ts",
+    "sha256": "1c1b66de596cf81898c2fc2008cbd27ce738240ff0b1cabe355573417fc9143a"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/schema-compatibility.ts",
+    "sha256": "b3f7999265c76962b78a38ca6daf61069c47a29cd738998a4ef5fe1b0fd5467d"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/json-schema/utils.ts",
+    "sha256": "56bedc9ef8bec04527d444b6cd3e917a99f5a8af70acfb9ac7c1a239e7cc7f78"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/null-to-undefined.ts",
+    "sha256": "7795f98e38490e76de80e4be949e17c195eb2cba24fd169f195cebf0a712bc83"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/standard-schema-compat.ts",
+    "sha256": "b6ef289e3287ea5a9ab6d1b699ed3f7d984a1c2c15fa2c1f87f96339f3ac0f44"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/provider-compats/openai.ts",
+    "sha256": "975d6b002cefebe0359d683177f5bb81fdda9a3cc89a4c0058c6f3e6692088da"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/zodTypes.ts",
+    "sha256": "9231298153c8ed29dcd6dd157592d70c80a6ffc0692fd42d0824dfaff8ecf673"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/provider-compats/openai-reasoning.ts",
+    "sha256": "98ce47c3c04d764b990ed75e76843702213bcb0124689cfc6d25d2fd5126a8fc"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/provider-compats/anthropic.ts",
+    "sha256": "2b45fdc26554e531e62e9264a335f4fdec2bf1af4d0f4dd728689db8f4fd4e65"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/provider-compats/deepseek.ts",
+    "sha256": "d9e443e4bb352558cb7da7c27e035c07ff46b4b1bd73f01eda88f10da623fc98"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/provider-compats/google.ts",
+    "sha256": "c7c68d8f90ea157523ccc9d27a08b984d65eb7e8486f24e479ec7bb253580f37"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/provider-compats/meta.ts",
+    "sha256": "57f92518e2e1ac57663dc07d9344de8ad819ede1dd6caed2a2a3becf522251a0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v4/usage.ts",
+    "sha256": "11da37c4ecb414f0b91aefc51ae2fbbfb32338cfc6a6838e9f8338f8b0c727a3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils.ts",
+    "sha256": "957bc3564695b00109a4fb71e4a367b803f81e68b6d25d1dbbbcde3d7a05b395"
+  },
+  {
+    "id": "/workspace/mastra/packages/schema-compat/src/json-to-zod.ts",
+    "sha256": "9f00ed2cad6b24560bef814c265520581fa0bb11065bc61ec0780c085db32ef2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/tool-builder/builder.ts",
+    "sha256": "a3bdc9707ed9efc5b8899cdac83f5880bd6456a2466b97798844a20e020aab4d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/run-lease-fence.ts",
+    "sha256": "55d0234aac0fc631efb16b113f460c244a0bc073e19b4e9b88361599a8e081c9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/auth/ee/index.ts",
+    "sha256": "ca92c8fb0b50ddf0571b2b10754170f7f5f18a65357fde5dd6db5b1190f6319d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/auth/ee/telemetry.ts",
+    "sha256": "6ed4fd8336bb3169ff6619f0835613620c11cd9e251f31fe4aa15e008a8bc5bc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/telemetry/posthog.ts",
+    "sha256": "bba6bc6446baeba2dd417a8a199128adae7b757ce08b9cf83d89d6af8f6678e5"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/index.ts",
+    "sha256": "46f9d0daaeb3e37a17f40af8f2a5b8f68661015f5dd902801143ab8d59ea05cb"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/interfaces/index.ts",
+    "sha256": "203dc9a27ec94a911daa6c78d68aa5411a0772eeaacc13d993e7c9031a5fd89b"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/interfaces/permissions.generated.ts",
+    "sha256": "6d424634ab236568f0b928ee2b37343bfecb9eb481a525f94ad7c2c128b7e131"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/capabilities.ts",
+    "sha256": "f460f3cbc19599cf9023c3422e5c1fcbc8a141582993b7d4740c79181a390f84"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/license.ts",
+    "sha256": "8b84c21b7dd1dc8cc5c4b036a63ce7cdbf62d86fa58f3462088938682851daa3"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/telemetry.ts",
+    "sha256": "141d04fe3e4a00d6a16185299bdb1e4d705eb5c0ec928b68e6d29efecf8393ac"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/fga-check.ts",
+    "sha256": "2d0ef571d9b3670e8142d8b8bbdedf9151560bbc78ae884457bd0db5a97d82c2"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/defaults/index.ts",
+    "sha256": "7e84e8c9534d4b845b1986c2fd26afd96161f8365a7c565c102114260e389173"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/defaults/roles.ts",
+    "sha256": "e80ef38950a4522cc9cd4ea50b87587fcc85c0f4b6bf62759a042b371f84cd0f"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/defaults/rbac/index.ts",
+    "sha256": "13d84444a9326085eb316388578357c50495b4b0e6693ad3f36ea287b15ba606"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/auth/src/ee/defaults/rbac/static.ts",
+    "sha256": "d5adc9a5f5700a0ad13d51d1f4cdc5232ac0efc675c86e59b679a4e4d33716b1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/index.ts",
+    "sha256": "1ee67ed50bcfc32e1894899894fd78856a034e49aeb77235d95d5f3ea2433a28"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/types.ts",
+    "sha256": "2f6d529978352a41c0c89643bdb874f1dfd060eeabed6d29f4787e4ae8a3df0a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/manager.ts",
+    "sha256": "75301275b3a16370ea65d7aa11829551b179e2d471c3b9a2420e89fbc94005fb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/workflow-id.ts",
+    "sha256": "49f65091d9e4fe167142faa1cc221811088c57b2abe5643f17129cb992721e5a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/create.ts",
+    "sha256": "b451a78ea2a8789d50f86b9a65d815a5f79f794954f2ed5772ad724157552625"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/resolve-config.ts",
+    "sha256": "a21b4f9743f2275da64a545a25c69fe7393d78fad6095d9c7de49cdb88943709"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/schema-injection.ts",
+    "sha256": "b6366ef68739e18a4702c5d5eb5f8d237ddc0955319184474368b9aca857d9e0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/system-prompt.ts",
+    "sha256": "13285a3e78e37b88ea3ebd3579d009577d9812213f961dcf85eac1ef3c538220"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/eager-tool-execution.ts",
+    "sha256": "eae8c0554dde938b761d5f061489694cb2c7862240a211208bed37833aae089d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/tool-abort-grace.ts",
+    "sha256": "983ffbaaf5067f9a4e36a59950887070b36be66c9de81edb4a77b793364a7612"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/stream.ts",
+    "sha256": "87127fb1c60b5eb56c39d7bded1d0f49c566d3b3455f2d060089e0ba2f87fa0c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/embedding-router.ts",
+    "sha256": "41e4fa286d33e470a751da921222b9810d08dc210011d9cada451aa4440bb155"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/types.ts",
+    "sha256": "5055fc4d90e5c18b970c3862a7945e7f89b6c76649b7a1b4502ec0b6c011f3b7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/run-journal.ts",
+    "sha256": "4a795964bcce462aad3c75bbe05080b4029a0af482b0dd3dbaf581ce16a8e34e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/journal.ts",
+    "sha256": "6f53aa329fc43056a11026a323cf173ce05495ff39898ed07ffa2bc335c8605f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/state-patch.ts",
+    "sha256": "567c34a7b554c58dc3652713d7af039c5010b9441bf2cd2a7474ba054ee23c88"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/snapshot-memory-info.ts",
+    "sha256": "d2e93e7a0346d16b0586235b7759fcde82025c112585ec17c6771b26995b9e35"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/step.ts",
+    "sha256": "57cc7a084b6b5bc2d577457f9b1474731a6aa4a2176ad9d8e040b6f06e6d2d99"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/step-refs.ts",
+    "sha256": "de4992f8e89b05c223ed0f28acd24b4306f2476ae45e408de5cb7468b76e7ed0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/predicate/index.ts",
+    "sha256": "d1abbbdc5d99b557c68352ab4358471eb386c567cf518d3a379b7f1d1c4635de"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/mapping-template.ts",
+    "sha256": "9c51e3722255048de84c37c914b73a784b5f704c7035ae0055de87e275a19512"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/is-processor-workflow.ts",
+    "sha256": "b75fd0b1260eb072dbe1ed11f4f212d45612102a82369fba857bb74070efe325"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/send-signal.ts",
+    "sha256": "4287ae5cf8a3acbdaa2a20e31e50ef25f2ccd745cc419d6fd66902ec54035c87"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/run-scope.ts",
+    "sha256": "d28e992bc3aacf9c3037cfc2ef191b878625348a19a56f26a69c8beb0f40a2a7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/span-declaration.ts",
+    "sha256": "33cb75fac753445bcf596698481d517433be1d3ee9c68300ba6b5cc00e659cd8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/span-payload.ts",
+    "sha256": "80117aab39d159856591414c11a82bdd9b0cd6af49a45b4aeccd275fdd5b0a68"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/stream-reprocess.ts",
+    "sha256": "9042c6b2a170ea913281d60659f086ebbb93462e08d7230067117a1019d4bbe8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/trailing-assistant-guard.ts",
+    "sha256": "21bde39d062de7e21e8c94560af993354ca8d19c778973de62e5100937bc28f8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/provider-history-compat.ts",
+    "sha256": "d53b074159b300a65b93b18ef295736316b103bdb9a7eb52cbe9dc20856fc9dc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/signal-exclusions.ts",
+    "sha256": "a8ccc439f3d34fdd82f48c3dba3eaa6cd1bc2c3dc617ea91eba340c3cb86c0e2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/input.ts",
+    "sha256": "426df6a524450ab60f07543a85754cd68eba464261c2f47f90baf58525d70fe8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/output-format-handlers.ts",
+    "sha256": "76efea5ef13f4321a03069d75468e206308f6000c4cee7f41a3b1d2f8910c327"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/schema.ts",
+    "sha256": "896c956ed112870063864a4130b91f161a042e87966ffbee9e39af5bbb45efd7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/output-processed.ts",
+    "sha256": "74ac46ac42563725d321fc8a6134e38fea78b7083d0990a73581229d7f1582aa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/produced-at.ts",
+    "sha256": "fc54f2e29868c34515dc226cef4e87dbe5568d285b94de9508fd7d89e99c435a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/step-message-mirrors.ts",
+    "sha256": "e66d52993a7f34c6aec3616379531683c72e1dfd3b7b8d3f0f383e7a7b614fff"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/step-request-dedupe.ts",
+    "sha256": "5e99581ef56681aeaa7b18fe4df1ec58b625a4cb5147debb933dcf2e243c8a43"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/types.ts",
+    "sha256": "dc9cec0947db409add4d44c6fb8cd7d3c9a7ea3c09a0b2ce706f3020210044de"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/signals/signal-provider.ts",
+    "sha256": "c1cc6fee88aac672c76a564429e6dbd6c2fbc725ee83bd50f8a347dc8ce3a933"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/signals/webhook-signal-provider.ts",
+    "sha256": "cd42a5ac3c0e6477b124254871c1b0913ea2283a7150eb1c94e1f6747c626938"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/schedules/index.ts",
+    "sha256": "8f27b84689b6a129f688f0804d28722e50467831ca6b1098a29989f3ae16a69e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/schedules/types.ts",
+    "sha256": "275b7647263ee1304bcaa43552efb7c374ec59416dfce09ef16820ea88a66a3e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/schedules/define.ts",
+    "sha256": "47c3514e40d4041e356df77bb9a740ac8829e169c6330211ff061e4cfae6180e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/scheduler/cron.ts",
+    "sha256": "711874dc911f414f0914df22b4cda5b2f23d607f5a860c937ae4692860c34467"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/schedules/schedules.ts",
+    "sha256": "18f1024c8c7287cf6025538bb0475a08f9c5ffba3b9f6f50f8f65a85842251dc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/slugify.ts",
+    "sha256": "7291b5f24c21c9cfc118d77420812f088e6e8f3b3eb99afed9dac05bfdb634e6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/interop.ts",
+    "sha256": "d738c697b5a0b852081cae90673f243c8002182ced96fe33aa67f6e643bea90a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/agent.ts",
+    "sha256": "ab6155cf27befdd3cf34f60d047bc88e30596a25523d73f84455ad42aac675d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/agent-channels.ts",
+    "sha256": "0477596e901ae34f32e605d62355a94bbfe339dbd0f24a74a8c8eeb18829eb1e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/constants.ts",
+    "sha256": "e4e636622f1f95a2bf73082698019fa401de59965399908becf6d23bb3bffef6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/index.ts",
+    "sha256": "0a3cf4b170b2d45652744b9a046ca5571ac257aebe2dbb74c5595f40649591ef"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/stability-defaults.ts",
+    "sha256": "0eed5ec45640c90fabc6cd17920ee269d9c3b0e878f37aa5682d0a51785b034a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/prefill-error-handler.ts",
+    "sha256": "b8defb777cd927f77c8f7aceb538ae11c4de6e9dbafda3cb5d0fa1cf1e400bfa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/stream-error-retry-processor.ts",
+    "sha256": "4796891d201966c126424df5d96fe9f3ec53ce110c8a73720aae2749165cc62e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/retry-after.ts",
+    "sha256": "83050cb5ec633e3a4c23fc7e4bcea6e784b36cdac8bab8299c740ac761c8a7fc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/unsupported-file-handler.ts",
+    "sha256": "f7f72dfcb17a26b05aeb6bdf45ec382f62bae206b07388ea513e5c3814793e59"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/file-upload.ts",
+    "sha256": "635a8d9f08ae72d5aea2a68230e27639b6278c507652930ad20847e20662501c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/file-upload-errors.ts",
+    "sha256": "b9dfa8f465086f43a206f15b967439afc29dab450b23bb5517b75ed2cdb62653"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/file-upload-writer.ts",
+    "sha256": "a1fa9a76e3aed73b871e0751e7a50ff8a2f09300a77e7f1d61b91baae3ec1a6b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/utils.ts",
+    "sha256": "29f224e329e74669209558d6fe3f4ac5d425c1514b381ac1e5c32d6dc08f8cb9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/index.ts",
+    "sha256": "4a6dd04fbf85103908adff2b3281f55dc0a736951058e3c2a37fa749b76fe7d1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/unicode-normalizer.ts",
+    "sha256": "8e2f4d74c1539ec34d00ea6a83f91a28e13e89513824ed83e20afc36e4e04b08"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/moderation.ts",
+    "sha256": "4ac3595ff0f684a04c1aef6defffc0fd3c0caa6c7a69fe9607e77e8ecde4a4fa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/llm-stream-buffer.ts",
+    "sha256": "4b0a2b91df274ac9b50fd87a5ddae831bd6eb1c0c830d6a9892bd7978539eb1a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/message-selection.ts",
+    "sha256": "e6605824429ccfd7cddb93b3d819c1a116ff44a296c1dab4a00192372c67969d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/model-error-strategy.ts",
+    "sha256": "ef51d74a45996b052df1dba1466ffc53825f1c68c9c728a1a0028be467970c9f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/prompt-injection-detector.ts",
+    "sha256": "380d3d3a14ba3de307d355befae69dbda96104e6176b3aadcc1662fa71bd03cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/pii-detector.ts",
+    "sha256": "59882caf43f02f769181ab40b24899c19cb53d646455e1818d1f0e6cbd178db6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/language-detector.ts",
+    "sha256": "c6c00ae48dff64d72e01b1575ce97e36f1557ade5f9d1deb2e437db2444447b8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/structured-output.ts",
+    "sha256": "f221b2c0ffd755933f43003f3aed3ce8e55d6e2d687665205be38d1185cdbd74"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/index.ts",
+    "sha256": "65d591117a7704d9b85c5858831c5f9968eb8d9afb59f8037ee3fe23a932218f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/MastraAgentNetworkStream.ts",
+    "sha256": "4a8305171636ad7ab291f5f8d7e7cfcf5f96080f620007244cd16f75478792b2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/RunOutput.ts",
+    "sha256": "e9b142948643b6bd596de5b1ead6f950dde88d3d2f1de5a250bf5b5eab855e74"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/consume-stream.ts",
+    "sha256": "eaa373376c00aa93c59c4809647f016d41718ebaeaf05e8da96ca5294b5e6a78"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/transform.ts",
+    "sha256": "648a24f475bce20f2761659f16a4f11881acb13ff04e68adc2f78cba79a924b9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/caching-transform-stream.ts",
+    "sha256": "6a62db679679aa68ac3401a8a51f78f93c95a27e4316dff5458929570d2f33c4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/smooth-stream.ts",
+    "sha256": "00b85db6e79ab9d1a46ddb3c1e3c409c01c20ed342380c7a1f80a0da80811ccc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/classifier.ts",
+    "sha256": "d1502b1add5f25bbfa5755883733e85337cc350475207405be2cfa3902fa6c04"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/classifier-decision.ts",
+    "sha256": "a12ca36b6370117df24759cfed83e68a1059c6862cb5d75c1b274eeb53cf280e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/model-selection.ts",
+    "sha256": "15130ca219ca3509ecf04fac0fff52d71670af883d4eea6a2804bcb5fc652272"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/classifier/index.ts",
+    "sha256": "bee4534696c87170af572b1b490210e88077ad1a73ada9eb83f28ddf64862513"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/batch-parts.ts",
+    "sha256": "e5a4397f0dcc0fb56f352a78176e3e7c540dc9009369af8aa5f2302808c3c7ca"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/token-limiter.ts",
+    "sha256": "4f7ee084797a4b4743f7e2e1fc2d17b55784546be77ce98e5ff55106add43c34"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/load-message-history.ts",
+    "sha256": "28e6aa5dbe1207b466bf13bc7cf4f37017d00fc8c1cea85db264d9ebc1d69354"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/message-history-config.ts",
+    "sha256": "6646fdce93d839d4e0e8c63d29c637c2709e85a349b6dae78ee12e6875af3f7b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/utils/slice-by-tokens.ts",
+    "sha256": "221a26f39fc47c017f0b9f5347370c059a3e58f22294cdb241a249483ae7e7cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/system-prompt-scrubber.ts",
+    "sha256": "42fb2de03618285c3d974f059d2ad5293bf4e41d1721807b4843d45ee7d443ee"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/token-cost-control.ts",
+    "sha256": "edf5bcccb41e957c974774144a57b8d8a0f7ed6d4749093fb3456f1ca76333dd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/regex-filter.ts",
+    "sha256": "3138556047ef047929c34a7c4c9ac2da5701bf088dc49edb7a5bcb7d36627a65"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/tool-call-filter.ts",
+    "sha256": "e1f2effc25f8b5b094d4cb6250abd3f16add4eab44d5803db0d770cb0195fff9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/tool-result-reminder.ts",
+    "sha256": "5e5a54ea3acc7721067e4636cc4318dc508cf95a2ef62ff69fc10cce34da30c5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/tool-search.ts",
+    "sha256": "c9567ae1b938897fbe81ce6a96a3f73cd0e670507d01d72fc2c358662d387558"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/index.ts",
+    "sha256": "e5911dc48baa8084589ebebc927225856c0cead1c329a20152e4c591855b87c1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/ui-types.ts",
+    "sha256": "9a77be0232c933635e87ef3a2b67bb5c5c78a3f5e4ff673fd4b22c853ad93f56"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/code-mode/index.ts",
+    "sha256": "9d939545d7c90a0b59a98a3f77545cb85f0cc19b313c89486da990a313791553"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/code-mode/code-mode.ts",
+    "sha256": "94a26aa370a85d85bb5ca34b81dba7eb9d03f70e589d8669f781ec2fb3560424"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/code-mode/stub-generator.ts",
+    "sha256": "8f835812d340431c37dc4ce25549bd07a6fe72a8d0e398c741b58ab5b68820a3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/code-mode/transport.ts",
+    "sha256": "3216bec8c592ef70ede13366a3d4093d5448a8392a639ab2f8268568f1da3ee2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/errors.ts",
+    "sha256": "68d38ed18f293feaaffb93dee1b4b0b421b669a0501e0123c4dde99f60463ad0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/code-mode/runner.ts",
+    "sha256": "72536c0b5e23e1ba0ff596fc45afd34ea453f73e4c0e27f334c74c2a3cd613e6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builtin/ask-user.ts",
+    "sha256": "dc1c20ddf66e0172b660677a4fc748284ffafed11a5e412a250d6cd96fea14c1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builtin/web-fetch.ts",
+    "sha256": "1db3bc0f92a3e7c5361ea3e23a6edaf808dc547381084abf0c4346aba1d7401b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builtin/web-search.ts",
+    "sha256": "7151f3afc34c4982d4cfd6a5ae30e4e83adaf347ce3e89e77c264e22ef89c1a6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builtin/submit-plan.ts",
+    "sha256": "8b3a02a70b1a39b4a7a4075bc86d1e6638c7cd89f7d9bf43a14e0e11d0d18f97"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builtin/task-tools.ts",
+    "sha256": "b4b7699f1e80dc05586d7b334c21089340a85b17ef58baf7f9f4d93a9f96cec1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/builtin/task-state-processor.ts",
+    "sha256": "5913fd3fdfcf589ce82a08a5ec5e23dd4abe77c2a25c37b21a1cd2ffaad5189e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/index.ts",
+    "sha256": "1b4f325e638805b16b68b8235251b13be51248849282f48315817d60dcd6d443"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/objective.ts",
+    "sha256": "92368217fcbbac5454e21a91055d35daaa535d50992faf7e72cb8ee196c6e7c8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/activity.ts",
+    "sha256": "f08ee6fc75fe3b7f6f7070ace0faa870d9cb3e7b137350748a71c10cabc1fe25"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/activity-cache.ts",
+    "sha256": "3193ae498193393075d33827ee151f3f6df0f5456d81d163c10ee43477eb995e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/scorer.ts",
+    "sha256": "8a4354dbc797c4fdd168aea2e6a77c09f254ce4b6d6a530db45ee636130e310d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/index.ts",
+    "sha256": "14b0cabc9e00a00bd0ac46ce32d5a5ed214fd7a8137ef34508c1623922a81e1d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/types.ts",
+    "sha256": "986fe1508ee3011f58e736a0be54b26cfacbdf8e5ea353d235ec7e2528e63b4c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/shared.ts",
+    "sha256": "3c52acbd65eccc0eaef8bb3e5ce6abd5e588ff4a765ec26177d579fe1c76be13"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/base.ts",
+    "sha256": "88e3a76c5a5a9a3d9f8bf8016e8fcaf7fa73ed1224e4d84656a93df2fdcb3be0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/index.ts",
+    "sha256": "a465f6703a4508175c5a3e0c5484b0c3e483a4aa86fe82aa6c2d037bea3ad077"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/logger.ts",
+    "sha256": "b21ab583395f6cf611b85f2907bc4b3d9c66e8c02da2d47afe929bda04d54cc7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/adapter.ts",
+    "sha256": "b1f1da3e0113ecf86c60abda0b6eba8628905160ffee64cebb7140dab9cabc9d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/multi-logger.ts",
+    "sha256": "41264641aaed37d1405740045f14c270d70128cc93df339a4bdde70e8ef96c2d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/dual-logger.ts",
+    "sha256": "bec6ba345d94c50166e624e2f1c7e0e03be45b8510879e45bcf544f15a03f1aa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/noop-logger.ts",
+    "sha256": "d933ca5017399afcf097f5f897315cc6cf696ce86a3b3e7cae9cd3399b10d72c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/default-logger.ts",
+    "sha256": "69e129103b9fa48bba3b110d1123b46adf9b4fb8b5a488ab7fc2a1dbdb767441"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/logger/transport.ts",
+    "sha256": "a0fb4cd99159f5100727f1de1a4b6abefba593209381c4ac068b53e8cef6d3ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/create.ts",
+    "sha256": "448003bcb9608f7c673c0f60a518d2e7f6c04a69d5f599d4094de4892a79908d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow.ts",
+    "sha256": "fd2f1ee1dfe79722317b5796f8f1e5fb397966541b25a959dbdf1878ca26988a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/subagent.ts",
+    "sha256": "4dc2c1ec2123637df5545247e6763279ef0e7f64393a92850d28b78d3eb12be3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/di/index.ts",
+    "sha256": "1428e9e38616e20d469755d823252f3d2b31c629b2d7ebeda61f36ea37e85d1b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/observability/context-storage.ts",
+    "sha256": "00dd7f7c09019ee14320655ed798e5037e34e5074cb3661bbcfe50e71878fd24"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/constants.ts",
+    "sha256": "2f50844545a6dbc018379fedbbbb94a52e9b56b8d20c4d276e9f321814fb0676"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/entry-executors/index.ts",
+    "sha256": "4981453526b70025385f309f50f5d7b8a82fbe4e1f6c941fd04281dca02516da"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/entry-executors/run-agent-entry.ts",
+    "sha256": "f2f356d695b7f0b452acd8589a6e505e67995442fa081610898ab9ae68b1be8a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/stream-utils.ts",
+    "sha256": "186c9e26b95b04dcd9e7951171c028a5d8fc20bf4d1416a7232cbdad32cbcf26"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/entry-executors/actor.ts",
+    "sha256": "6e6816990a5be3f84a51f17a8e2bd041547a5ff07104ecce7d512609bb656a1b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/entry-executors/run-classifier-entry.ts",
+    "sha256": "a75f3ffd895b752d86ac91d3b584b4a324555f9b02a03bdcd2c5d9a6fcb19d97"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/entry-executors/run-tool-entry.ts",
+    "sha256": "65f73a135abecccf3c9c3156db382f2d2dc3c87764f76f7126ea8bb13ba7beee"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/entry-executors/run-mapping-entry.ts",
+    "sha256": "254726f4141c0a75144b7a447d21c36fada040b4e85b899df6cc3091564744b6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/execution-outcome.ts",
+    "sha256": "b0af0862cd46176cacd54ee117d62c1209bcad79686f0440640ceb99e718634b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/step-factories.ts",
+    "sha256": "b23ae3210a3a0fb99215ccc51d2f0c2a0bf17c0412a4e0144e989f3d69dcc3b1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/utils.ts",
+    "sha256": "872ab5612b5f438dca036c3d25026e0438e4025a658269a665d5c62b66c9d14c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/nested-state.ts",
+    "sha256": "72551d66a193efca43bdc800e939d38ca706d74df09c2b431bda347d189ec1e0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/step-entry.ts",
+    "sha256": "a7399fdc75a5faedf41c75f17b13ef19fcaa58d86bb7000c4993ddef0f472cad"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/workflow.ts",
+    "sha256": "55ff8cc5148bf57aa167a475f0dc75adff75632c47d4b8f674e678d7f61f4da9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/event-emitter/index.ts",
+    "sha256": "a8d33c6a27a1d99b8e8961cbef5043bc841c83ab101c486a8a8bff6cf793be0e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/pubsub.ts",
+    "sha256": "6554755cd0cebdadf9ae5bcc11a3590cd68acd61ed99b59f3838562f5d80b1b6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/event-emitter/ack-handle-buffer.ts",
+    "sha256": "657bc99b19f6f038e5fae0f634211e22420822f0f94dd6349cbc03489f3b6081"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/event-emitter/batch-policy.ts",
+    "sha256": "e5032cf51118227dcb95fd5d846bab01806c87ba7907a9b98f1240b8cb0c0cac"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/run-with-concurrency.ts",
+    "sha256": "30824da677213ca5e47f7868cd3de47a5356bf6eefff28a89c031bcdce682830"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/step-schema.ts",
+    "sha256": "153c690d6afd1f5c41629c35ac9352f8d6cb7ac1409c73424084b8cefbc03d7d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/default.ts",
+    "sha256": "70e5f3508e9e7d8a9370a22d4a1fb2c39ba9def6344ad360fcc4068a31aae5cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/execution-engine.ts",
+    "sha256": "6b670b173fca651f0e78e5cbab80bdc450965145a7a86eb9a542b72bf180afdc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/handlers/control-flow.ts",
+    "sha256": "5a6fb55371dce0d1bbb59467ae9556de340b32c1377ba60921a4ef6e037d3fbe"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/handlers/entry.ts",
+    "sha256": "bd77d74a3d706595a66011da2b19db4795bd51cda8369e0f6f0662130bb5518c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/run-statuses.ts",
+    "sha256": "68472740786e2dca89ab0c7d910bea3a6c9ec1ccd5de1af13ca14b244891c825"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/handlers/foreach-progress.ts",
+    "sha256": "42a04b70523fd82098e8f8cf7cc4395c3016cc0a6c862f0098b9dd4a1ab48398"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/handlers/sleep.ts",
+    "sha256": "4410ec607978339bb2c49caddfe7f92af2941647d51863695d3b2313897163d7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/handlers/step.ts",
+    "sha256": "682f1b53ddea3bc48056a147c117527eddc45e6ed28f33aa49f66c079eaf0e1e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/hooks.ts",
+    "sha256": "6577678e448144f33b5a5276c934ee76001a52e764ed270eaed74056813cb2a5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/hooks/index.ts",
+    "sha256": "fcaa94f468630a903633673e56c19edbb28620a7ac892ca9a00d8ac9ab829b7a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/hooks/mitt.ts",
+    "sha256": "87b137d907d260fa25664335418f653592e1ffbf42291ad8e10b48c353d2d891"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/hooks/scorer-owner.ts",
+    "sha256": "4934ecc46a45d06daf65e2700549b1f40fb218a03e13d21b9fd860aaf35bb206"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/predicate.ts",
+    "sha256": "e095f02429c41b2cbadfc79c0573b23820f3a706be50f4733d6737e7805b5017"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/request-context-snapshot.ts",
+    "sha256": "cc14efb06ca7eb0a9a67e205063afbc6c222885f67f1f2dff752dbc651b22e72"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/helpers.ts",
+    "sha256": "853691c6ba085c764fec309db8fc2449a0efea39a15adaa6c95a73fb837cd9a5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/nested-run-recovery.ts",
+    "sha256": "e75a80a9587d9d8a97f0498789694a5bac32dbcf789c52fcf291c932617227ae"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/run-ownership.ts",
+    "sha256": "76eae0a9783e2015cae5b954c23d3c583d87d316a0db18e917e06e78ccc0a683"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/run-ownership.ts",
+    "sha256": "428b6c57b4362e52c9fd5b5f8d981232ce3ff240ebd701a161db30b6d42dff6a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/predicate/index.ts",
+    "sha256": "b331a9af0fc3596c4d252badfd937af15708f98a437d65107a678c60a2404f39"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/run-storage.ts",
+    "sha256": "964e9a1e2261ce60234428d8d0d23b5c53d79b32206374819fa56475d448688b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/execution-engine.ts",
+    "sha256": "3fe6e3396b60b354b02e8245a66eb9303d2d9951ec41ec4cafdc6d8423b42e53"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow-event-processor/utils.ts",
+    "sha256": "b80c9381a35be7da625b092fbf3771ea28e83204152b035b2a3c87dc412d1bbe"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow-event-processor/index.ts",
+    "sha256": "0cd798b892a8fcfbf7a95ef4c8939b3e44daa1c23c686d6ec472b71c7b7fd581"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/evented-execution.ts",
+    "sha256": "4b6a9242b2f72ab48f4e1b53553990d6e55e13cfdc308fab345fde7c73376d4f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/run-fencing.ts",
+    "sha256": "bb27e35c046e89f07e4b10d79502e9aa750d6f8130ffb86f5f0c68a540440f6c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/thread-stream-runtime.ts",
+    "sha256": "f86b4bdbbfeea67724dd885477ac9eaf3ec3c4d8e629ca8f7c079eb67777b7c2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/acking-callback.ts",
+    "sha256": "09de8afede87554b356b8a550986c7460ac9e903e464daef82a8c6d916ef4881"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/loop-builder.ts",
+    "sha256": "5ca534dda2ef8a2d1ebb9ec1c72c0b7219df3f4e7814ee9ccde79226e05b2235"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/base/index.ts",
+    "sha256": "0a0052558965f2ba2817ddb397bc96aa3037b95eef606c890144164bbf713c75"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/run-scope-access.ts",
+    "sha256": "5bdd6526fab812652684c8e63bd6ba3200602becad1cfb733dc3ddef8b61aa86"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/run-scope-keys.ts",
+    "sha256": "1719429724492a5cbeab5901084aadd76b1d029542eedcda35fba75b0a28d125"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/continuation-core.ts",
+    "sha256": "2a274c16ec9804e4739d7124b2b7d7a7ee74a329597e4070eb7cd57eb98bd086"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/signal-drain-core.ts",
+    "sha256": "dc725f37de341c83355ebac97528b042ae659e6d0596daec241d385340e1f315"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/background-task-check-step.ts",
+    "sha256": "52be714103e9851f6ab7b78693ce43ebf1c293e66ff4e606f2ce226220ae3b92"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/background-task-check-core.ts",
+    "sha256": "c990949491b12dfdef219f61326fb2fcf064877807686862c4ccb0b4d60c5f73"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/schema.ts",
+    "sha256": "45a233d41117d50306644424ea57af778f16f1f2e2814f2b708cc4d6a872ff88"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/goal-step.ts",
+    "sha256": "8dd9795344976b590ceaf10af6ff7baa78b8211de4be25b859fbb78e394bb6ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/goal-core.ts",
+    "sha256": "b0f57baf990691b6674c10174d1bca66ba13ba8f1fdb59558bbf9feff125f06d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/network/validation.ts",
+    "sha256": "84124e6bd99ee4baeb350dd7c44123b4ad2c0328ef4cef019c6489aabb3348a8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/is-task-complete-step.ts",
+    "sha256": "d543ddb3248c48868b7d314d007b4b7ee2109f363303fd88722cf79b11ba70f1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/is-task-complete-core.ts",
+    "sha256": "8b9f116c1c742c4607b6b93346aa7f78f8432342783ee0797afe3df9ca93e52e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts",
+    "sha256": "03e22b3f17f4dcb5876f9b07f5cfe6e1ba51cf0109f65e6b1bf2b2f13ed5ba01"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/model-settings.ts",
+    "sha256": "e212f1e3edef73852ea8afd7281a2237000ed2bc9dc9d84445cceae88dafa191"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/provider-options.ts",
+    "sha256": "0d9584dc039d01be1245f51dfada56a5f8bf21385e20e507e1806073a9fbdf8a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/prepare-step.ts",
+    "sha256": "33795c77a6e14591bec4a186f70cdff8dc106356c97b92cfbd14bf2d0404326f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/retry-budget.ts",
+    "sha256": "dfdcd749e9eda617fb470f1589c5bd65ccb843ac83debcc68997dc34de35891b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/execute.ts",
+    "sha256": "c3336130be01cb62e033cbb1ef82f0a7be3e64e840203c12a5c8362826f2ebb8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/timeout.ts",
+    "sha256": "acbadee5f851e40964b81cee6e1bf89fcafc18c2789443a9f4e9211147f2e7ed"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/input.ts",
+    "sha256": "4b28ca929d291e5a3c8bdc62403cd475044524679dea6bc6835be90b9f65b50f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/aisdk/v5/output-helpers.ts",
+    "sha256": "d2393956d73800aab31e74ae6ddd43287d90e0c34d9e9b3a54b899882c6e0a01"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/provider-tool-utils.ts",
+    "sha256": "27ba7f62bb6a326feadbe161b41dddfb513a6756333d38cea4db9dde077336cb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tools/tool-title.ts",
+    "sha256": "6cd913af5e00d1ffb329ea42d2ce52fc1d4d1c9ec9a7b1abea7785d342a07422"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/auto-resume-system-message.ts",
+    "sha256": "69aff9bd8d65ca822a4befcbe57aeb3bec70492fdc806abff020cd4ded3de218"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/build-llm-prompt-args.ts",
+    "sha256": "5e87231d480a5ff12e40fa4bcc5aa8f5e556dada7f596dda6e5fcfe7399b3755"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/compose-step-input.ts",
+    "sha256": "2517071ed56d4726778bb4acb37f22a11009618a29727994094d3931d3bef5f3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/inject-background-task-prompt.ts",
+    "sha256": "9b94637ade9a7d2e66dbbf38966a13fe145a6797e0dfdcff7b21c9a246601bfc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/interruptible-stream.ts",
+    "sha256": "e73a31af7964c96911c18abe16ae1631a38f432de4d4c60c41ef09bacf5b72d9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/step-content-chunk-types.ts",
+    "sha256": "b7616cb1c0a3e9c1d10a318e75b3fc3ef6bb589757d680bc149aca137f31e885"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/merge-llm-call-headers.ts",
+    "sha256": "37dc77f224f0a3750ab3aec721546577a9472930d14e31e8100512e5669e0c43"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/persist-unavailable-attachments.ts",
+    "sha256": "c5fee8c6f2e74aae743cc82ee07fe01e5a8562411841282031cebebcb668c883"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/signal-outcome.ts",
+    "sha256": "938cf7bb8a86d96428260ec1528c0cc796165217c88ea09009edff92de790e8c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/process-chunk-core.ts",
+    "sha256": "d04f03f3138b6b4e8f8c7f67f5230b6cd078f9877a3505d34a4196dd9c8424d6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/terminal-finish-reasons.ts",
+    "sha256": "5eedaee67eba5d0fd87065576ed59621c6674a3410c9ac8c1aa0e2aca828f6e9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/transcript-step.ts",
+    "sha256": "6b1c0d91cab15698e98fc137569f44a8da7a2638263803011c2c444a647b27ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/run-state.ts",
+    "sha256": "3ab5ec346ddccfa76758738eb8a097e82cec33e4692ba991cdcaf8c403fb4832"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/build-messages-from-chunks.ts",
+    "sha256": "25b99fac7ff7e170968cd8a5b2c657c6df3535fbadc07a202a0677cc85017001"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/message-part-spans.ts",
+    "sha256": "60da18ad7d6de010e9bbc5e0d8ee1103b9f0e110e40933c263e5fbffd083dd62"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/provider-tool-result-state.ts",
+    "sha256": "70aeb543d1d21a5b0af8c70947df5822d15f3e50ec8e1e312cc13a0c4fd790e9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/provider-tool-spans.ts",
+    "sha256": "baff907845e8be2ef16e35072e2346d39398da90088ec1741ad743ea896048d6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/tool-call-concurrency.ts",
+    "sha256": "3568a49a053c10f09a38bc772f04340bf0243183c2a3713bca06380259c37c38"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/tool-approval-verdict.ts",
+    "sha256": "4744bd49f397df8813b2501164206818d59f62fa2107ac5e924597a4a2d0e522"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/llm-mapping-step.ts",
+    "sha256": "046a91c9aa0d52c8bdfcbdda10429fecbce011967b65826a34d951ec95b2d4e5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/delegation-outcome.ts",
+    "sha256": "cd4e981d6c2dd86c70164fd872df9a4b5c5262dc00f7ef86675bfa6a6483c917"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/read-tool-result.ts",
+    "sha256": "b411836623df3c13f5e662e979a8d386f7b03d69020fa809178de8fa759764b7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/tool-result-commit-core.ts",
+    "sha256": "82e0cace3dae8ee9f097e3cb940f4db04b44f3bcd2217fffd5f9418d6de776fb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/normalize-model-output.ts",
+    "sha256": "a010f6d9adf7395523a4626d363ff453f77d7c9bf90d6198abca439f00f17efc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/tool-payload-transform.ts",
+    "sha256": "07e7d0c8e0fc07c7cb1a9104f0c98870809695d9f5a06f627ed6889812985fb0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/errors.ts",
+    "sha256": "c756faef6a356cd24d3cdc6500f088383907d60bceabe16f9e17b3a012772f00"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/tool-call-step.ts",
+    "sha256": "b0bc44050e301a6705f40de11af6ce806c759a09e86963a39663a4adbd4d2af3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/message-list/memory-message-refs.ts",
+    "sha256": "0c5321438b5296eac46c1225ddbd6ca87325bf530cd9bc7e833fb3e6015e4e2c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/tool-approval.ts",
+    "sha256": "75a6bb3f82392369c1f8be2eda1d785e421a85e2a4daeb976b17d224f81151e0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/background-tasks/adoption.ts",
+    "sha256": "723c002393bc8df2de724a8fb7be8b63e561a5bfd1f9313fe932d3dc6df657cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/background-work-signals.ts",
+    "sha256": "00f1f26fa06fe5993e1efb7cfd25e02677a3c6b345f7f7b8fcf69c687ad8b0b3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/approval-schema.ts",
+    "sha256": "5449c3cefd2b6a6becf64fdefa98b4a3d9d96ecddda68e664a873b5cc5e29b25"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/background-dispatch-core.ts",
+    "sha256": "3a762cd90a545915fc133a469cb55b7de71c8a9cfedb73d6825f358f246120dd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/background-task-result-core.ts",
+    "sha256": "9e3b4b360c2f4640a304edbacf06309b58eedb2427a973d484465a55f39fce77"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/steps/execute-tool-core.ts",
+    "sha256": "c9f4eacbe60a6ff6cf7b97da423dfac9440ba8cb3802779a1c60d0c70e0f08d8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/suspended-tool-run-id.ts",
+    "sha256": "ca8f5f7e429c40a25e74efc75447e86a73dcf4012257207306793feb6e664668"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/suspended-stream-state.ts",
+    "sha256": "d26d72fcd2ecb33bdcbca6746129850d46de21c0e9f049025fe571969bd12c35"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/prune-snapshot.ts",
+    "sha256": "5eea405e0555827a4df4817e7ef94f3355b27809e977ef84c5cba3e3396cfa8b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/stream/strip-model-snapshots.ts",
+    "sha256": "eb10cd56eca139f01a2a7126c1736c9c80af65b6c9f8b259c246f17b39de7c9e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/constants.ts",
+    "sha256": "098011106c3ee636fec2bf13057a5ecd5a0c0340a96249b40197ff17f3e814cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/constants.ts",
+    "sha256": "345f330101281f8f675c94a6aca067b56f76d84ed4ebbdcc31123b8399e6bc0e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/recent-requests.ts",
+    "sha256": "63154548ecf10ebb70298f067bdf6f52f9a178f48a69f64240df31b177eeb5f6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/scopes.ts",
+    "sha256": "80fe137da3ff975f6842c223cae7d40805477253aecbd9cb6870256536a98e82"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/thread-history.ts",
+    "sha256": "4ddcb47d8a7fde2806e4a8ff83b55f70b37f99c0d3849d5cd58052eba0fa4c26"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/thread-saves.ts",
+    "sha256": "d2fda11a724c9e3d634969aba34c475808b923c4747e8804e404f04f61f28edd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/thread-stream-topic.ts",
+    "sha256": "2890336ac4dcaa5dee804f0e133811500bae540fd7e8bb48029c9305962673c7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/execution-fence.ts",
+    "sha256": "9baacde087459dfb1d18990d0bca8fe79c86a3fa34660135f1b14c55d62dc2d4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/execution-ownership-guard.ts",
+    "sha256": "8e25f968493fc26d50d7171e5128b0996816a0f6a2447d20ecf3f3ecfd3ea587"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/run-fence-scope.ts",
+    "sha256": "90dd2ce04678f99fcf54e251d664b787f65103f15c436f48954f07aacf343fc6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/stream-adapter.ts",
+    "sha256": "25b1e51c586649f42688c75f3029eee955fd09dda07a49a041d25513c4777405"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/durable/index.ts",
+    "sha256": "01e2a83c23e789b0152911fc48870caec55adab40a6ca3270e4e6282788eaef1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/events.ts",
+    "sha256": "39c76cbb73172df80b3df1466f3354ac62087a0fa00786e7bab2c9b2bb446f7a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/processor.ts",
+    "sha256": "59d30a72c40c6761c46695c34dca173677b7825649a93d2ad0ea3fca7488426e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/publisher-queue-limit-error.ts",
+    "sha256": "3f1cbe4daa7bc98e99b17be36aba531cd4435d4db140f12f8cb99fd11958601b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/workflow-step-guard.ts",
+    "sha256": "6a12f23aed71ff6aba052e2850f90ecb5cef18b8ea3483340cd97be3c1f1bbc1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/scheduler/definition-hash.ts",
+    "sha256": "0bc99b82564872c7e1e27f390d0a6874532bfdcadae5be6ca5dcd1fea2c84f89"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/step-executor.ts",
+    "sha256": "d85269ceb82d26515af0b9a1b67f1ffa25c7088f48a0bc74c5e9eb93840a4cd0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/caching-pubsub.ts",
+    "sha256": "c43a47cb085b93db1d6756b519a48133d96f6f3e138c24b033671efba0e04b11"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/topics.ts",
+    "sha256": "5d02059455045c46f0445fd0f1a8b6590e7af35361161d3a1b2ec6d494dbed3f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow-event-processor/loop.ts",
+    "sha256": "f35bc7e17cd481c09142a9076b84d3a436e345cf9bd45b8d2a391bd1d18009bc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/types.ts",
+    "sha256": "6de934adba294831b8d7acdb47542a55de1365a5c6c3f2aeff9fe3fde2d2957f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow-event-processor/parallel.ts",
+    "sha256": "76efc74c7bcc20b898fc856e317ed2d90f9f917ab1807a3b3d17b2f1f5642804"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow-event-processor/restart.ts",
+    "sha256": "07952b0592a51428f1d45b2dd2cd4a32bd1e7f3dab30e74a0657af3dcf270c78"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/workflow-event-processor/sleep.ts",
+    "sha256": "ff0cbea1371315274a1a539433cb8c6a4ed9253281a77b6dd33b87d715b49787"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/not-scorable.ts",
+    "sha256": "5fba186902e64e7f6c275a8841609657ccef6d99791d426f695cb4849fced002"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/classifier-scorer.ts",
+    "sha256": "ff2614736841fe4d6bc7522f6718730738402eb7a8a93fa3fea172c4ca4cba5a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/run/index.ts",
+    "sha256": "f40de6780c551353c4977fc039486139e2ccb5ff90275eab4ad1b0934100af22"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/hooks.ts",
+    "sha256": "03a3080bb1a9e088b860e357728c11e2be2853bda8d0aced5c89f53e0744820f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/resolve-agent.ts",
+    "sha256": "20b76fb7188b08b10d241fa4aa423af9495d7668e1759b9852bebff5506bbf01"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/flush-before-trace-read.ts",
+    "sha256": "6bf3eaf87866813065737bef12a53b35d772a00e07c25a15a95f0fd3b64b92fd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/thresholds.ts",
+    "sha256": "8eab1e600d1d486272b08d0faa42efae2112616fef9e55b44d7334655bf8f463"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/run/scorerAccumulator.ts",
+    "sha256": "2d6bd198123c0f4c337be18bf682aea7fb2d3749f0ccea661cca04f8b819f3c6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/evals/collect-tool-mocks.ts",
+    "sha256": "38727922fc1aa48122f741a9c50b132c0e0b5d206d1c57be29cf860c2b8cc1a0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/state-processor.ts",
+    "sha256": "f89839fa32621275f133d09b0d3cd73d1051746da7b393e0c99d6b80e983ff2c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/goal/signal-provider.ts",
+    "sha256": "fd8c643833e2551e03c3147881318e5932cb767f8e44e0dba053ef5fdeccd785"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/search/bm25.ts",
+    "sha256": "a7ddc5b3067e49b5faf6b482136f6d6886059078d004340155fb8f4b2c75f974"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/line-utils.ts",
+    "sha256": "080f053942c8d99f101239751a1ff1d5593703b8a765dc14085d128ee014332e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/tool-search-stores.ts",
+    "sha256": "0ebbea2ba2e094d6f51917695a12d4215c354ee419097f329c4be5b3ce4c8e4e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/skills.ts",
+    "sha256": "c89dfc2a6b22a0baa0a14a835ba6f80e6641b410a8a0bfaa0bae4bdb3df5bef9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/skill-search.ts",
+    "sha256": "a38391e775e44b4dbb1a041a1075d09d966d7e50c2af25076e0fcc5c952f96ed"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/workspace-instructions.ts",
+    "sha256": "360018f2a4fd75228b2ec54df7fd3f7ac7a8a4c81522a8ca9f68a0991a62d288"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/processors/response-cache.ts",
+    "sha256": "e06b15efabb98f9078d16909d5c1d518d233199c947eaf439025a15aa72d568d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/cyber-refusal-handler.ts",
+    "sha256": "4f72b6e536e76d1a3fea272ff835c4d0b9e34e80e0eb571ceafedc8b24f887c7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/index.ts",
+    "sha256": "645139b412b3ab74858619a3f26597ef94f3025d87c69764decbf0f03dba5be3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/message-history.ts",
+    "sha256": "05b9e1f19346ce297551acc22fb07991d211dd661bc15fd0a115efb96407e9dd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/index.ts",
+    "sha256": "307812e0aea1eceb30a3db10cc66543a1efd21863297763dba46c73300223a28"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/memory.ts",
+    "sha256": "f575d6688971b232ea3e99553335b2e381a01da3874e5b9c5d1ca579a3406ef4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/embedding-dimension.ts",
+    "sha256": "0a33348af424bd15d5e61973857ecc487c78c0244d51de24680287f63ef45c73"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/storageWithInit.ts",
+    "sha256": "e66d34d9180455ba7b2f85a1c43ac0d23ac9ffb39373f016b10eea3810629b47"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/thread-fga.ts",
+    "sha256": "ecb4ccf4fc82a142f3cfdc67f025f90be5aaf909aa72328e368446dcf97daba3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/system-reminders.ts",
+    "sha256": "e76b6b1a64237a67f3cd1539383511efefb9efb38a0fc0d4b3e475f0a5a1890d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/mock.ts",
+    "sha256": "4c0bb02826367bf243932cd4baa00df82c5bdc40b987d0a396d97164e1ed1b6c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/index.ts",
+    "sha256": "8664643db8b3c24edbdf13da702543347f0580189e1ad4b5dd2f7b17ff8bfbe8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/base.ts",
+    "sha256": "3719d11e9f6d199c471810d1ab58a6ff85f845caff58ddd1612da15c2fe231cd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/thread-state/inmemory.ts",
+    "sha256": "7ef99dae29075898690475d9dce10735b2010ecb4b5423411bebaa6807145acb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/thread-state/base.ts",
+    "sha256": "e62a94d777bc8863e55308ab6144a0f87f7d9fa7870ccbcfd99d79ae80cb4a72"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/factory-storage.ts",
+    "sha256": "790bb13a18facff1df83fabe8b2a3436f85d50447e7fc3216f85ab2c8fec5332"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/base.ts",
+    "sha256": "c8bf7fd97801b6039b643ab82356bcff86d9c18c5116bebfa83776c61f246f07"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/retention.ts",
+    "sha256": "5683f2e9f6f159e7c0aaaebffcff5297afb73c853a027235433149aa37e7bd37"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/utils.ts",
+    "sha256": "ebcf974e36d967655c2da562210b83f3a845bef2f34f657a6cf5c0348827e71e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/constants.ts",
+    "sha256": "4ddb62fceb8059aacfcc21d8ea6173a27dfe4146cb4e08f8854054cd56387b53"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/memory/index.ts",
+    "sha256": "18c25af8d28e0185c1965edf7d2fcc379cf9255872f9d7e3dbd96a56e7b23810"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/index.ts",
+    "sha256": "baac6bc276bc7c5796ec1dd7857af6c9c8d40d76ed4e208df9e19bdb5ac482b1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/base.ts",
+    "sha256": "b28ed3be611e1d7a7f66f2681f9050d8f4f9345c0f1d39f9962f6bac5a70cb63"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/tracing.ts",
+    "sha256": "c510d9fe9f1937a076d25d26d6d21f7610eb1444207d3d71e775a6a61bd43d53"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/discovery.ts",
+    "sha256": "8fc9c12d51ba41f2caba7b5a8fe31169852802d9709783e5ef8e01b1d9f2760c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/feedback.ts",
+    "sha256": "7ec9bddfe67888cc0cbf25b2dc2fcdb2226e2b1724421784c51b8590e1ac3922"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/inmemory.ts",
+    "sha256": "789aeb3dc616b73803754be3763a99de275e2e5fe6b083d12d787460e2531bc2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/features/index.ts",
+    "sha256": "79440aa128566f46652309fb7c91ac69ff8c8beeaee9f8d5b6a1db40c8b868db"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/logs.ts",
+    "sha256": "5def4e57f6a1b4a70c31287b57bf0a86c3ec0cd82f503680664223ec82860222"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/metrics.ts",
+    "sha256": "64d17f0c24bfac9e5de83c46ba1629dc9f9d814d7f5b0997e1c13ea4e89d9332"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/scores.ts",
+    "sha256": "3b043bb4d1362e4b8588b12f4fd72a814654fc0971117621e3986eff888dcec8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/span-aggregate.ts",
+    "sha256": "6fee373c1a014591d7e7fedb321b2ece6b408eec04fd47d2357ba83e73b75b3b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/trace-aggregate.ts",
+    "sha256": "b793c188d0c56044813f75c990a237bd3d82ac1756f40d20f7373aef18f355f9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/trace-query.ts",
+    "sha256": "384d3687283ec3c734cfa53285272221c26af3d72d31639bc8ebdf500a8384d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/trace-aggregate-planner.ts",
+    "sha256": "e853b84e9740b948b1c1e6b5638e736d80328d3a9f5b080d0ae715d4243815f5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/trace-aggregate-registry.ts",
+    "sha256": "5cda6d1f7dcd57150221d19b53feb3978189df94aedb43a682a0db4d00e38dbd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/record-builders.ts",
+    "sha256": "9ea4417d7c0a502328c1555e83bd48acecb57955c98f5ce2067a29a3e21b31f0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/trace-query-plan.ts",
+    "sha256": "d5b59dd3c71ff6ec9ec7e1f51874fff783cd0fed80b299f983bda8273e3480b8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/types.ts",
+    "sha256": "153d5c698d69098400c85a93278195aa6027a58aa29800cf832d8b8ebe3d04ce"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/span-query.ts",
+    "sha256": "cddc509765d240fde49295ef88311df390d33aa6bbf172c7ed16e658cd9d0226"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/observability/thread-query.ts",
+    "sha256": "b847f0898eec05d6e5c7c105d2516fbc51632c787e02dc6bf14cca311e5c1e18"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/types.ts",
+    "sha256": "ce1ba9594dfd6e61700ae1e632c56cd50b5517152cdd0415d5d79e730f1d81bb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/mock.ts",
+    "sha256": "eb80157313938ac3650d1c257fa5f45a818e222be78648bc2b3742742067f9a0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/agents/inmemory.ts",
+    "sha256": "0fe2dfbd79d1d2a89aa05c01ab83f6cde32e3acfd7347ff28f857732e3f41fb9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/agents/base.ts",
+    "sha256": "4c3a9bda42e68f5eb2c525316038b5746ba245ea6da57c187409ca882081b2c7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/versioned.ts",
+    "sha256": "fbd03ee9b9899ba7b7243892a35275ffe7c026a27d9df6aaa3e8b1a8a44970d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/background-tasks/inmemory.ts",
+    "sha256": "9fc57d51a4067874b10b33fb13d17864dd3bc3eaa5f9176dd4799420ff960b65"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/background-tasks/base.ts",
+    "sha256": "716022b1a117d76d85016857c973e47bd3a33906d00b4e549667cdf9bff35fee"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/blobs/inmemory.ts",
+    "sha256": "c7ffc86519f399dd26aec8c08a6e4e69fe3192bba72986cc8c0a64cfa9601e7e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/blobs/base.ts",
+    "sha256": "eb2ca3963d1ed9cf54dfdf22ef35d6ab554b7260175be703b3bfbdce43eb8487"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/channels/inmemory.ts",
+    "sha256": "d21dab2a3e7f22d1141f1737085f5fe80a957d8b83b6e510799f07f395b5d48c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/channels/base.ts",
+    "sha256": "1e36728e665e051005c9fc63a58494bc7e82b2d20a21814d7a683d1734d0a96b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/datasets/inmemory.ts",
+    "sha256": "16a8d1ad1028e14a20f4036fc059c8eb706a9815d3bab0bddb8af74059f5d04e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/datasets/base.ts",
+    "sha256": "b37564816c53b93845fbf38695a58d1ee9aecd73fd37b1949155d81f2b2c03ee"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/validation/index.ts",
+    "sha256": "8afaa30829699082673cdd60ed06852d067d6040a8e959ad9ba3e1021cfec930"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/validation/validator.ts",
+    "sha256": "bc0dabb86b260c10c2c41943dce559191e6ea9916882941c26c78ce220eb7beb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/validation/errors.ts",
+    "sha256": "94f8c99fda17b431551eb932b856ce9af3f0625a9dae58d675c733e6211421d8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/validation/safe-regex.ts",
+    "sha256": "6c259d4cf35c0e7492daba529e02507a151fda8717fb1997e286a6911eb6c71a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/datasets/identity.ts",
+    "sha256": "de3c3d2c855f26bef0545aca198a9391f93ffc3a79474682da9dfaff3cf8aff9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/datasets/serialization.ts",
+    "sha256": "b10b31d2ff4310bd557e0633be5f950dfbfd6af45d2d170962ce60598d44f699"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/experiments/inmemory.ts",
+    "sha256": "9fb5b35aa11f222795d7cb0af602396ffe0917387717dbfdafe91c8d1ed60f46"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/experiments/base.ts",
+    "sha256": "992b295d77b2a017d49f2114a7444c4f3359ef056e6fb08ae40841d0ec12c89d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/favorites/inmemory.ts",
+    "sha256": "dc54e81b8b235c06032a207b208ddfaeca33430e0d1d8dc5811660a1253234de"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/favorites/base.ts",
+    "sha256": "d6ac5d28ffd5c97cc34dcf683a18e6fe7df92ebaaa2a07241803a9f9a0213683"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/harness/inmemory.ts",
+    "sha256": "a1c19170fccd462236ecb6fddc066c32657e7e2179d2b31e5ed3c5a187a92cc4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/harness/base.ts",
+    "sha256": "bf97c9a7904e7476c9455d32d7b6d737b11dec03676383500651a21447cadcc4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/inmemory-db.ts",
+    "sha256": "6894a4ee679eb8b71e02318e85802d0ecf37539b2943041635a8be3e1a9511aa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/knowledge/inmemory.ts",
+    "sha256": "71baf90202f4a49e97ff238efb0ab7742ce7bb3f26e1b486a0cf6170b5c6f92a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/knowledge/base.ts",
+    "sha256": "0f15c007a2c83ee58c5e88e88faa56fe6838cc0f3a20bcd4b396878620af1d14"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/knowledge/pages-inmemory.ts",
+    "sha256": "0a1a7130965d6eb149538e11695893bd47770ed4520950c8517fc44d859595a4"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/knowledge-compat/index.ts",
+    "sha256": "84f7db02244fdf33cf004236eb9b7b9636dda214bc1e50fb59e38426c7e2615c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/knowledge/pages.ts",
+    "sha256": "64cdf19083ee89a3f97e726a0c906ffa6263c9f7b9c4a6770577a03c1b0965f4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-clients/inmemory.ts",
+    "sha256": "5048cb883ab02e23e37aafe090a93ce6bd4f24d97b76e0c484134d4cd67cb6a2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-clients/base.ts",
+    "sha256": "6af1940086c248a766f978d16c3076162d3f4292ca9bded3ce871985789bc84c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-servers/inmemory.ts",
+    "sha256": "bde91e0fafcf0c45f37ec9dae848312399a98658dd3bf21ed70ad42d311ddc72"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-servers/base.ts",
+    "sha256": "29c38d2039facc818cef711b39f19882efc82e4343cc6601e8db0a9afacadded"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/memory/inmemory.ts",
+    "sha256": "18e23f35860c7548152b6519e47b84ba6b71e0c805ae0d3cb626817ddcf83c24"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/memory/base.ts",
+    "sha256": "0710edb664fbbee235b6858e6aeb59c1d244630d27246b6311a7baa7935802d5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/memory/observational-memory-lifecycle.ts",
+    "sha256": "bba2732eb14c6eb423b4df800122781d73bd42df82b7208fa1aa29b99df396d1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/notifications/index.ts",
+    "sha256": "9b56f4c92a989f0f7befe5315d9137a2f2ea67fa8ba471ca4ec935a310d43d4e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/notifications/dispatcher.ts",
+    "sha256": "7a5ff22d1164ca0d66cc3b43d918a724f79395ec3bb061d60aceb824a527bdb6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/notifications/delivery-policy.ts",
+    "sha256": "e46681622c9ab2c2e8332d36c81a228d3a2b9bdd901b24821fb4da4796eb6148"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/notifications/routing.ts",
+    "sha256": "3e8f91ac4b78a2fad188be42d860216c573d3570da160a5f985568af0600536d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/notifications/signals.ts",
+    "sha256": "78fcd0164a1c5d83d32ebbcb6e5b51568b6a6f24733d3e53ec9e3475aa508796"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/notifications/storage.ts",
+    "sha256": "5c0103e00fcff589ad527773c5e1f4ef09c703ae1b6ce49ad94bd950c2d1849d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/prompt-blocks/inmemory.ts",
+    "sha256": "828814104eb0481db458b6a4cafec0896c0b689edf310d249f767a5e1d6ed4d7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/prompt-blocks/base.ts",
+    "sha256": "d93c0598d08980d70cf8a105e1b34162cb59c3d87f0c9e4d47728fa5e9c9cff8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/schedules/inmemory.ts",
+    "sha256": "601e03ab56a86e73ae2e599bceae5eb0bc516c56ca958cf3818787014f68a8b1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/schedules/base.ts",
+    "sha256": "4e1603221e8b618459243b587009901b44319398ab3c25023505b3310eb0510e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scorer-definitions/inmemory.ts",
+    "sha256": "5e1aa7321a5f3916f06d696629d6905708437a5c70e27fcb841afa5ed161afaa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scorer-definitions/base.ts",
+    "sha256": "7883b583138a8fe68ba6f06c83e2d35fba6fd25ab3a8906171e9c9e0fbe387da"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scores/inmemory.ts",
+    "sha256": "abd92b59c68ee99b2e877aec50ff0420dea306f7ddf258e6ff949b2ce81b1f19"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scores/base.ts",
+    "sha256": "fc2037902b424f40fd662f3020fe273452c93757be9d9a5788e1206edb982f61"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/skills/inmemory.ts",
+    "sha256": "7aba5d5cbe26b5789baac75fa2cce6152cb4a0a9828fedb651b5c53ed485cf83"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/skills/base.ts",
+    "sha256": "7880a8460384f1b29d70bc47be6b6016327f587c289de421fbbe3dae3d90d1f8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/skills/skill-snapshot-field-equal.ts",
+    "sha256": "4d26c4f4fa02c3b8281f97ec71584a6acd507ee97b2d37c8345dbab7e45299f0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/tool-provider-connections/inmemory.ts",
+    "sha256": "52e11917c5d68daed22307934cd610bcf5f2e1b50df0be8646dbaa59210a2937"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/tool-provider-connections/base.ts",
+    "sha256": "032a3b446b119b175e5cd58684b877f3e7e9e8ae8472a8c0a37a8e6094ced08c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflow-definitions/inmemory.ts",
+    "sha256": "151403a3d17c200a373b98a0fab7c5c3e92f1df21556873c3016213b226e7cce"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflow-definitions/base.ts",
+    "sha256": "d6031e716d8e3d7c7a51a6c81c81c894399d96aec6d6bb03acfed1f5c5dae51c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/inmemory.ts",
+    "sha256": "319415a193e96693def1ca62587b26c49183e7d11c309128e53893662c8ac1fa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/workflow-snapshot.ts",
+    "sha256": "c71529567ba8732846f404c175ea51a5724e977a8c1d8e5553099afad0181efe"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/base.ts",
+    "sha256": "0a4a249d0278b43860c20add6045613f09a279c1ccfd5dbb36e80e9105f1c99b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workspaces/inmemory.ts",
+    "sha256": "c3e1375eb16500e578348c413558c070958c94e2243ba66d10190ce80ea30388"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workspaces/base.ts",
+    "sha256": "8c47ae844c7e4b8bd19588ba4ca593f45d7af55f5b0f41077e4a5defbc19a065"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/filesystem.ts",
+    "sha256": "e546d9e8c985c8fb0df27e0501faac10dbe7ee4bfee34bbfde29345446e4cc37"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/agents/filesystem.ts",
+    "sha256": "8b171c9a071d90a2c2c1c3073eb3269ae41cea38df9aa5694d2f061b4bf1792e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/filesystem-versioned.ts",
+    "sha256": "e91b4496922e4c501ee44214f19900afe4e36e50648a5461913e38db5e77ab15"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/git-history.ts",
+    "sha256": "ac9d98cfc89f17026288b33e44e0cea6951dd65e54492b1a3cdf9cba25c9ab43"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/source-control.ts",
+    "sha256": "a604348bbd298d00b1d1b84e3db65544a991d17978fb05eb466125007ad8eba9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-clients/filesystem.ts",
+    "sha256": "47c2950b7b659566da962eed262b2e3209872509503e8435c78466997a83d976"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-servers/filesystem.ts",
+    "sha256": "4166730c004c4fed656abf0109479655b60a23e078e2c6ac684f77eb0bf85dce"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/prompt-blocks/filesystem.ts",
+    "sha256": "1e3a1b932c57ff31de6e3a8aed905043b0f11961e6a4ea9a0d404be3928d88c3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scorer-definitions/filesystem.ts",
+    "sha256": "64b34fe42bb48719044daacfae1bd95ccffe0725133ada0dcc2564c26939089b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/skills/filesystem.ts",
+    "sha256": "2436ed738c98a4a340c3fe59464563aa1d90edf96610133e775143c6913eb041"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workspaces/filesystem.ts",
+    "sha256": "ed11b5cf88f02f7436b0f6617b3c452bf75abff16e7c996f4431da07e7089817"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/filesystem-db.ts",
+    "sha256": "052f49b3e2310570602480b2fa86ad6f0c46d2391a2e9bde27b9d7017343b418"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/providers/index.ts",
+    "sha256": "c4c8f6df6c0fa8fbbc9930083698c9683fdf4ce3a64dec67feafe4384d2910d9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/providers/github.ts",
+    "sha256": "3b1b2a69f1aa2cc4e916cc05e5f89266cb099b53b369bb569c2400418253baa9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/index.ts",
+    "sha256": "8709308ce3efde9ee6b95292524036451cb66e50caf4c5c6d1a3e5d404495f94"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/agents/index.ts",
+    "sha256": "479d1482381290da180766fb39a2295f17912728b19cafd4ae92421c309db579"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/agents/source.ts",
+    "sha256": "8e4c526ff5cdb3c253d81ed6eb017b2356fb19b93d8780011ea0b5069225fe1b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/channels/index.ts",
+    "sha256": "6d7ca4730e49932b6b9c4b7a04ef4bb3a92ef476c56e8f71e9d923c8aa5a13af"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/prompt-blocks/index.ts",
+    "sha256": "280ed5767a4b1d4ceaeca2cd320c2be4563f0e3180695d05e8a2e68d5bb3f7ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scorer-definitions/index.ts",
+    "sha256": "280ed5767a4b1d4ceaeca2cd320c2be4563f0e3180695d05e8a2e68d5bb3f7ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-clients/index.ts",
+    "sha256": "280ed5767a4b1d4ceaeca2cd320c2be4563f0e3180695d05e8a2e68d5bb3f7ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/mcp-servers/index.ts",
+    "sha256": "280ed5767a4b1d4ceaeca2cd320c2be4563f0e3180695d05e8a2e68d5bb3f7ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workspaces/index.ts",
+    "sha256": "280ed5767a4b1d4ceaeca2cd320c2be4563f0e3180695d05e8a2e68d5bb3f7ab"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/skills/index.ts",
+    "sha256": "e13114967476b92337ec5c8b2529c6111c742ee9e5095ab8f32edb7c034deed4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/favorites/index.ts",
+    "sha256": "87f68842a816c1ba518f8ad7a81b2509b813cd98a2f28c2f02b39e3c4aa7ac79"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/harness/index.ts",
+    "sha256": "ff93850642791b0c35eb30ede9397c9132ff1ce0bc245ccc468b9a49d1fa7f92"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/blobs/index.ts",
+    "sha256": "886ffcf9fbd97b75e59adef83bb2a2c64e5d055d34014f30b3fa530a558561eb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/scores/index.ts",
+    "sha256": "a6c228cfa9205b6e1bdb1e8be14303b73e78e84d4d0c531ddfbbd73f5cc7f956"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/studio/index.ts",
+    "sha256": "9ee94a402e241d0933005311c18c5508768009b537eb77b8f3f02bbf4c3f8f3f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/studio/saved-views/index.ts",
+    "sha256": "0b93d107ef075ce511a1017939f11c5424a406a406569275f7b3ce6322844dfd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/studio/saved-views/filter-node.ts",
+    "sha256": "8107be45c072c0b02f28786d6b2fd6ab6fd21ac96be33b858aafdc51bbb0b0ff"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/studio/saved-views/saved-view.ts",
+    "sha256": "71c562d86a7c0a53010ad208429e8048ab8c09f6590e003eec68e2bd05714f20"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/studio/dashboards/index.ts",
+    "sha256": "3f4c5a3d33576f0daf9795b306846d97b3abc5fbfab3c2d8d22d3047133559c8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/studio/dashboards/dashboard.ts",
+    "sha256": "cb432399a6f355df212619df69235807008f5c0833d4cd85a3945647700bcf27"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/operations/index.ts",
+    "sha256": "a6c228cfa9205b6e1bdb1e8be14303b73e78e84d4d0c531ddfbbd73f5cc7f956"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/operations/base.ts",
+    "sha256": "a1f18cb8244e6855f590073dd2c99d9f90aba8a58cb38d412ab148da9da5e984"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/operations/inmemory.ts",
+    "sha256": "f2b9672da09367617649dd3891a7b87bcba935a63ae7ce5a1eef8c932db92d80"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflows/index.ts",
+    "sha256": "c59070bc0e51a4828977130b849d8b1965e0ca7b761e67f36c577cbbb015ffc7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/workflow-definitions/index.ts",
+    "sha256": "a6c228cfa9205b6e1bdb1e8be14303b73e78e84d4d0c531ddfbbd73f5cc7f956"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/memory/index.ts",
+    "sha256": "458643fb1f572455c497e8146e3bcb8a6fdc27b007815e7934df59fe4e9531e4"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/knowledge/index.ts",
+    "sha256": "03fd3e5bb6d04e0c9b5b952730a1e8f5030b553eb800e8c7a5665a2a46efd0ca"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/knowledge/legacy.ts",
+    "sha256": "95854752e123578e1d0fa3c48d20b027069ee206a4d4413e234c79df789d18aa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/datasets/index.ts",
+    "sha256": "5b2fa61563b5dc58ccf57c587c6c42e694cd0ab3e94560d949bacd6857d61ea2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/experiments/index.ts",
+    "sha256": "24158b5975289b2d877bc4ddf8e2a0eee48f5c76a574f62e1c81265edcfaadb5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/background-tasks/index.ts",
+    "sha256": "a6c228cfa9205b6e1bdb1e8be14303b73e78e84d4d0c531ddfbbd73f5cc7f956"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/schedules/index.ts",
+    "sha256": "a6c228cfa9205b6e1bdb1e8be14303b73e78e84d4d0c531ddfbbd73f5cc7f956"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/tool-provider-connections/index.ts",
+    "sha256": "ee92227d5d406b17a1dc56ca30804e4f3d15a50a12403ed734fd2f7a47e4d35e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/storage/domains/thread-state/index.ts",
+    "sha256": "65943efc0034261fcf28261d1cf3d041151b42439df80ec11a1cb987467c3ae1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/memory/run-state.ts",
+    "sha256": "cd2460dc2fcc53f0f8a07a665f4efd74b5a8c0979b3d13c886808df26ece26f6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/working-memory.ts",
+    "sha256": "7268036c265f68fa99ac12fa9f4e7ce97f11653648f19e93064c91c071888685"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/semantic-recall.ts",
+    "sha256": "52c730e6d59b7496425a82111c5c31638a4eeeb7124dfed888222a4d3615168c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/embedding-cache.ts",
+    "sha256": "8cd35018961d2135090ba0dcf9a6bb46f0fb1dc4207f5ee1304650874ed31cbc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/processors/memory/memory-input-filter.ts",
+    "sha256": "5cf4386576fe27353e1f0c74a2ca169d8f447f205aa5488498896b98fcd334f2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/constants/index.ts",
+    "sha256": "ccd307cf88b6bbefd9c27bb79a14b38c384ac61c3f8e06a2e1a9e5917830797c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/composite-filesystem.ts",
+    "sha256": "73d1951ad0dad1294dbffe3f5231b6c470168a8e5ce8abad2c149bceac6558b7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/lifecycle.ts",
+    "sha256": "deb5a1452e638821988b1da94025fa31703932b6604f39cfd586b3cdc7f4877b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/tools.ts",
+    "sha256": "450ce97de426e7dab76dd831e336443db7e27ec8ab821954c46a38541ba825dc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/index.ts",
+    "sha256": "59d281797b6e4a66f2a582473cca738ab082ff19341589865fb51eb2ba92e1c2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/filesystem.ts",
+    "sha256": "d5c347931f195894df2f5a4b04dc22c3b0d5b47f8ab4f9da06087a687a057b7e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/mount.ts",
+    "sha256": "722408d94590441b8dfa2db4e02ed250ee5227f31bd83f86a3271b7683faab9a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/mastra-filesystem.ts",
+    "sha256": "236f64ce5d026f9022f2eda7cc00dbee5a6606a9c8f15e328d0d4d2a0b9a406e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/fs-utils.ts",
+    "sha256": "7e9cb115697fd0b9df11af4649c5874646e2b3551c7f2388970bd53d71b02f74"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/local-filesystem.ts",
+    "sha256": "addd9a55be023474d68ac754fae6c5f5cc3920fb157f529c844fe05dd4326c82"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/utils.ts",
+    "sha256": "dec95836d76e5f19e7e98c1cf1d3dc3430cea7ba9a1a5075c56dfd449dbed152"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/file-read-tracker.ts",
+    "sha256": "6eb81204b1e66da0987fa9d33fa79f10b42a442abbf51ecce8c6f46e72ad3668"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/thread-state-read-tracker.ts",
+    "sha256": "07ec74ee5b6ea234035e5c44f06e523234c8182a687b2947807f990160361914"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/filesystem/file-write-lock.ts",
+    "sha256": "60b81ef957ffd3a4b3ff3772748fc6bee9e59004aba63a1fac8dea628fab4702"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/index.ts",
+    "sha256": "ac7403d11492e7a74869256798774069dc6708a875dd166a51a8f6eff28c76ce"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/types.ts",
+    "sha256": "be3913c1747a7983e800c7e25b21dddde708c59d2c3248cf2ab89cb8276dd08c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/errors.ts",
+    "sha256": "bbba0b00dc6fc3b0769323e7b38c6eaefcf7cd95ddf60c57edaea4910063d57f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/mount-manager.ts",
+    "sha256": "02f8ce792c2b64c37ba26cff3c2ab597819af69e0e88f86cf278d85885723e7a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/mounts/types.ts",
+    "sha256": "9349f595aa94dc6ea7ccc826aad28114fdbea3d8459da2d46cb69f8bdd6c25be"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/mounts/index.ts",
+    "sha256": "d5c19655468e29f60c871b21e73af8ebc653f736e7123ade916f22c4a5f80ce5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/sandbox.ts",
+    "sha256": "5d43a44cd80a12a6d4c4c9c59fbdf80941f201ece7fdbdf8163599178dea0bbe"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/mastra-sandbox.ts",
+    "sha256": "4823bda2c43cd7540e1841b74b97cf5fcff78774c978b1f84a7d69991845e283"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/process-manager/process-handle.ts",
+    "sha256": "c77abba4256e85ba583a8c46ee850a755dc7031af11ec7e5c36db2e3a1d8302e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/local-sandbox.ts",
+    "sha256": "7ade4f8bbe5088671f950fbc93b40dfc358cea2610bbffe7f2d7af400fdaeddc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/local-process-manager.ts",
+    "sha256": "43b93d77bc23dc5357fce76adeb3267f5c042f38551e9ee966032a0c1ade225c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/execa.ts",
+    "sha256": "a1c209fb66da76471cbaae36941a46bdc2f26d3aa9d6a1e9368583aee51c4053"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/process-manager/index.ts",
+    "sha256": "a101ffa033f17c5efca0f8e5c743a1ce0a0e3b0a0dc4347f2187bd1c5020ed1e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/process-manager/types.ts",
+    "sha256": "05b25b2afb3c4ea992e786a8f99561a567adfdcdc729a02ce85d0bf56db201f9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/process-manager/process-manager.ts",
+    "sha256": "7bb14134f54c6a5ff08ff4e7e27725281235b39b193150a10c2116e93b770e6b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/native-sandbox/index.ts",
+    "sha256": "83687f50b534bdb8382135f2974279501428229fc9d0eee84913640c1636b875"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/native-sandbox/types.ts",
+    "sha256": "1ecd02440a140a25894e1edc5ea23d76f609cde7910f59b99569b615cd3bb31b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/native-sandbox/detect.ts",
+    "sha256": "475e385dd2a3b0c41d7251cc7df85f68418a5154116bc130792f51908ceb854f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/native-sandbox/seatbelt.ts",
+    "sha256": "b446aa42d8571c6fba6c592a9d62d19172b5b2917b7d9b409509bfdd7bcccd2d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/native-sandbox/bubblewrap.ts",
+    "sha256": "0197b53a9713e1f0cc133019dc9572bd89613cb25decfa57373cd92ff4beb064"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/sandbox/native-sandbox/wrapper.ts",
+    "sha256": "eb52f27e34febe2d1fd631a8445cf45f50d849e757c72b20d2d7d535c595f898"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/apply-patch.ts",
+    "sha256": "25b631105c16c8e22e817429bb53c71e208e3e399791390641c3903e896f0d70"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/apply-patch-parser.ts",
+    "sha256": "dd88d157232823955b4bf344619be6dcc0c86b47b7e845019c1858f95fc220de"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/helpers.ts",
+    "sha256": "6edb2dad8fede68414bfe7684216655550d71f7e1d67d957778aed03bcdd4fd3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/tracing.ts",
+    "sha256": "10e563cd69b13ca7625c3f81d5ba57069d2f5904c3f3c87aae7d8bf591ea3830"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/ast-edit.ts",
+    "sha256": "20dbceac26d743db0365f881eab4b35dbc12a0bdbcf7eaa66eaf62880f2e3307"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-click.ts",
+    "sha256": "3c92763279ada0cd641f05e6622cd1c9dc96e1d2edb9d80fc34241272e061c13"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-helpers.ts",
+    "sha256": "bc1cbfe3c4811c429fda43172509ebcec499e671c716fd424143328830e9c3df"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/media.ts",
+    "sha256": "031ccd71a3bbe54307a7628638937e41691fd24d6995f7002f7dd5ca5b4e4873"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-double-click.ts",
+    "sha256": "b267af43e478370148a4391ed03d8d78e302445b0030b06d602c3b059fddadff"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-drag.ts",
+    "sha256": "80f56fa9c0902067fbe58075aa8f2cacc33b9f4911d3916645e87e075e88b060"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-get-screen-info.ts",
+    "sha256": "ccb2abbc33affa9208cd71b302905f6eabf1e5d928c5a201142227602fed2647"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-move-mouse.ts",
+    "sha256": "bc62311f59b558f0b1b2983dac7e4af87ef7d71982b5784d4e146735f3ee50fc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-press-key.ts",
+    "sha256": "3865fa813f290f1b758f9ea976df668e112dd7bb3eb0ed4dea1ce5a7a96c3ee3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-right-click.ts",
+    "sha256": "ae3849e02e8ae3e9a29af740b845f56f9033a11a67cfe0d3156a3f9038a0e0cb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-screenshot.ts",
+    "sha256": "14995cb9d902c1233b88fbc2058f08f20526eae6d25ec5fbdfc527e3cfea136b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-scroll.ts",
+    "sha256": "e66565dcf8cb270d5bc8edd0811b35a2889acaea6cfbc19ff83bc09e07c6dd1a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-type.ts",
+    "sha256": "990f9f539be8e6988b3081775a3a046e61ca509d0bb154f218cbefe9f11ba30a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/computer-wait.ts",
+    "sha256": "74490a094c5889c16523561b6c85b3e80797eb3136d7276d143dd9f6cfe029c5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/delete-file.ts",
+    "sha256": "5f4b57fa928eeb5de9227cc92de1f8bc5b6170e0c36e18fcd38c2dd36384bb43"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/edit-file.ts",
+    "sha256": "2b0fc51361e8b6e72e0bd349926749a55fbec22f6b26f6b45e3a4c552c53afb0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/execute-command.ts",
+    "sha256": "344f5236b76fa203b1e196249b5e2953e8e80bed88dc1b68e5a1d28577ea653e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/browser/cli-handler.ts",
+    "sha256": "988d978a2e0c778d810292d6b92dfef5188cfc25c7df83617a89e887c9e3cda6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/output-helpers.ts",
+    "sha256": "c82190b1c01f9916aece3bc81d8c65e702f8312579974d1bb6e0bfefcba1af81"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/file-stat.ts",
+    "sha256": "fffc69ccbd697ce28d9344eabcfedd30e00db94c085a73e37389b290b88b282d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/get-process-output.ts",
+    "sha256": "48183c9c8fb11e9fb2108b8be1cd1770be042ed20c5c4ce468dd5c49ff1f7b49"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/grep.ts",
+    "sha256": "096fca64b8c50f73676436683e0df7351dba5937061c7eff27888f3a77bda1ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/gitignore.ts",
+    "sha256": "b42d181f21e191f8ef64fa6bfd672d9c7d155c383f66af2e89f555a207aad6a5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/glob.ts",
+    "sha256": "83abcb7996367317f6de172b71225217a887abb5e6841cc1d7282b0af068ca48"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/index-content.ts",
+    "sha256": "14d9912595cf0fce247d8cbba82d211112974350ee86688bcde2e8eca6349fec"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/kill-process.ts",
+    "sha256": "23c115a8c143f9c9c63e8515b236a6415e8e080f8e13e2ca6dd9f386b91d39ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/list-files.ts",
+    "sha256": "c1afba92789e3895599d1eb8c4067e771bce877375c4269c1a2614eaacd91a0f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/tree-formatter.ts",
+    "sha256": "928a8d5d42518491a87f236429934c282cb751880624b6f4296ac02417c3599f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/lsp-inspect.ts",
+    "sha256": "03cae72e6edc6c90b91dcd8232aad207fdce9d8b24217c80ccfc28d165936f1b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/mkdir.ts",
+    "sha256": "34fec74914028b7076424eea04f9ceeacf0256b024cc7488a55bd4799d148587"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/read-file.ts",
+    "sha256": "3b5f4c3e350733eada956360b6c14084f67e603d01ef4e928cb8e6bf89a5175f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/search.ts",
+    "sha256": "f97aa2f8a1b9852747ae7b26f88dbb4054680d67006b6ac3c5ac76eeb01c6e81"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/write-file.ts",
+    "sha256": "3c9a7a577d380aaa985e92be22de94e1c63d43d4427150a3a2b297c52b3fb62e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/chat-lazy.ts",
+    "sha256": "67abf78120e693a07fd1721d77cafdc00ff2d16dc4b927d2722a9469e64f3a61"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/chat-logger.ts",
+    "sha256": "1c2085c32087d89d80b53dbb7a133670e1924073b2d00901676b8f9924e70dcb"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/compat/slack.ts",
+    "sha256": "e4bdc75e38280252acb833177e8007ef03468bd4f691571301e3ebae63f242dc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/errors.ts",
+    "sha256": "d58f44dffb7880811618ad4f4d60c0f4dd548728449e3fe3b59bf8786c7a4154"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/formatting.ts",
+    "sha256": "2ec45eec33148187891cce261437a31679118bfd30adb8a625ea33136e018e55"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/inline-media.ts",
+    "sha256": "246e082e7249c7629d3be93e52d44ad17f1c29ca20d5a9712edf16b76cd51288"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/output-processor.ts",
+    "sha256": "58ee44f0cd383c058ac501b42c57295132eb658d8417d3f58fd521efad5e47ae"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/chat-driver-static.ts",
+    "sha256": "cb2a2dcc555d803ed42c03b2d548fc12ed576e006649a58dcc742c4a19c4207b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/stream-helpers.ts",
+    "sha256": "5435ec119e193f7a1595ea8e29df8b5f32c5e1a3d83bf86388460a56c0821e76"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/chat-driver-streaming.ts",
+    "sha256": "ce6e9d720809482440c16398bcc0ca51cf7b12746499b392b42126c5182bcdd0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/om.ts",
+    "sha256": "73290dbd8e531d329727a2ab7345c07c8f3302819b0b6a80fa74fccde255b4c3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/processor.ts",
+    "sha256": "173f60bd8be0896cd5b26352845b47c43b0e5b9249ac2a1349b8099215191ff6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/state-adapter.ts",
+    "sha256": "a07076f605ee990c854ed9024cb9242701a9e3188986d740efc8e9884413fac6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/thread-history.ts",
+    "sha256": "01af3b4d99af971f356f47520bfc32df54b968a69805ff2916e3984de80650e3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/slack-blocks.ts",
+    "sha256": "afa6324d30cf12d2e1bdacdaa1515596ef5e9d5160b30d9bcf7162856ec1a708"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/typing-status.ts",
+    "sha256": "cdce55ddbe45ac33c194120f80fef23983f921b3ba377d52bded897005a4cc29"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/wait-until.ts",
+    "sha256": "b8d2b1415016964f92fa0955591f537f88746a3df7836f6b98c04c0f1b28a8f2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/instructions.ts",
+    "sha256": "55f6e3b5ded2f3ee11ee1d6a5ae35348e91c5ea4958ed94ea1448fc5bf19f833"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/pinned.ts",
+    "sha256": "a54f9fa2a9175e59ab2d9ece50e8ef0ec3046129a2be9d0fe2cdb433ef651058"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/declarations.ts",
+    "sha256": "9503b6923051ebb4bc69826d0130f804296ba84569461e4eea154dc7ec7ae674"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/scope-address.ts",
+    "sha256": "fac2ac40a6069ac6b347b7d0e9dd6878a5c81619800be741b3a9031fd8e7b941"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/page-refs.ts",
+    "sha256": "1d634ad543c57ae97c1c55bbc53e6159046b38c9ede50de3c43bdab4c2d74f07"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/page-tools.ts",
+    "sha256": "8142995377ffe638ea0583602b89262aa71b3782e027a734ed211b1cb20975f0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/access.ts",
+    "sha256": "f0e3fcb39b1147dca9b2c712f00d07da3a1668d6f9a60eeaf00d31dec9b5a1f2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/links.ts",
+    "sha256": "312464093da202dcecc428b7a24d142832f7aab2ef71e0f36a80f950a63728bd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/page-body.ts",
+    "sha256": "1fb9e44c0a058c70bada4956c746aa2be8478492d8c966f1338c734c328f6922"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/run.ts",
+    "sha256": "21a7c2245dc53a5dd2547bc1d65228ba01db7ba6627de8d66f50b32197178695"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/semantic.ts",
+    "sha256": "ec666ee8bd16b7aac6d96ca60c906b3dfd5da0cde7b75ec7fdb35adc50ce52f2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/vector/embed.ts",
+    "sha256": "c2b6f5613335b06bbd2ddd50df973850d2a4db386dfc46b18e9350e84077076c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/knowledge/pinned-state-processor.ts",
+    "sha256": "cac53cbd2563408f228a5a1205c0f3898df9bcd5b9e462d35c183d24dcb92d43"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/model.loop.ts",
+    "sha256": "943081420b6117abb0361cf1d5a0124d8cdf6b62acc9cb57b9162a6f69c6f630"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/index.ts",
+    "sha256": "817a553bde511aee110639abe8363d2aef2ee924d23d0bd44b99a7a18f0ef22d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/loop.ts",
+    "sha256": "806c26f045c10db9167afe5cea2dfee18c8bd23426101d2766edabbeddff9ca8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/stream.ts",
+    "sha256": "50d9fceb011dcd47a5bdb50ce7cf15d4d42dea2a56a85f2cd100793096998801"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/hydrate-run-scope.ts",
+    "sha256": "55cfacadb6436741b86c7a8004b03a75e46f2ea0b4e0c07a2437350844570d74"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-execution/index.ts",
+    "sha256": "05ad3a8649c82f3fd149baa955dd8d546d2c7b7e6b385a232391d9792d05f421"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/workflows/agentic-loop/index.ts",
+    "sha256": "94541c2d20761bfa5203a9266d245900d28d507fb55632c6da15e2dde7581c39"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/server-side-fallback.ts",
+    "sha256": "e43a8b9ef649a874905e7a64eb4f480f9863f59a8ffad1c4822fe142bd31781b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/network/index.ts",
+    "sha256": "32154e903f050459e82cfb9075cf3e7ed4f3f7c37b344aa883ea6579bd06e024"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/types.ts",
+    "sha256": "1abfdc40ae5fdfd2a9ffaa83489dce213ef4867f28b53cb84936b07bbebc0bf8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/shared/stream-until-idle-helpers.ts",
+    "sha256": "7489e562b34ff726da701974998eae00f42406323f740a414419905cd29ccaa9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/mastra-ctor-holder.ts",
+    "sha256": "afd3812b814721faa24b0206116f85f002b51e9309bdb9669648ffa5e637e574"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/types.ts",
+    "sha256": "4787ab054d0d3ff73c164ccbd1de099c4b70327fba3dddfc7c16f511274a442e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/skills/agent-skills-resolver.ts",
+    "sha256": "6800e7016e88833ea9b95eb30ae126118ae097940d70d976f6abe5c2963238d8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/search/index.ts",
+    "sha256": "3e9ac4104f6ac62599e70311a9055919f999f44e01f3086b6eeb8a969acb633e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/search/search-engine.ts",
+    "sha256": "6e1c1c58ab9937b7ed2bf7e3170712dc266c2a3b55b504fcd4e2022fc34633c3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/local-skill-source.ts",
+    "sha256": "7d5db1c7c85350dc7cf3834b6f88bfd0b9516f9b328d32c81e912f823bc3c962"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/workspace-skills.ts",
+    "sha256": "76b058466a4817d1ae8b37b5731114501154fde6ba0add11f17b6afeb454c529"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/schemas.ts",
+    "sha256": "64dd4f8ad1dd3253fdbc03f1ec9bdebc4cb7df7fd18bd90ae60c11ce77131a38"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/frontmatter/index.ts",
+    "sha256": "b06bd45321a6af18e02eb407daec12f2346a9de4f5f71221ff3d008e9e14f7ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/skills/create-skill.ts",
+    "sha256": "fe6ae5e9a73a16e5aa36d4d16f5b4090802d210ec9ea43ed3cf0297659fb1e60"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/skills/inline-skill-source.ts",
+    "sha256": "d8cbc5d9c3f03eb8cd64eba4e10b8e5bb051bb8f916387d6d2710a096211fec0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/voice/index.ts",
+    "sha256": "4919cf9948a063f1fbdaeb0892158b58aaa131d50dcbf6771716d57c3b3d8587"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/index.ts",
+    "sha256": "e9ac8e9b653cb00171ba4b4313875d7eec9be7d0a4b8e8fe407d09db71d70475"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/index.ts",
+    "sha256": "a8ca0169ec01575e3410361775109003179c5564c9632f8954bdafaba4652066"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/voice.ts",
+    "sha256": "1c5197af38413df6f5f21ac6a78ab99320af9aa65d4f2934f6c224bbdc8c14a3"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/composite-voice.ts",
+    "sha256": "37ec0b94a8d90b4efe51dcd62518eea71023334481b53dc7b88b1d3f39139389"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/aisdk/speech.ts",
+    "sha256": "361876ee73c1eed5746f17578c240429ddc2f40be75c3f730e0e20642b57d6bd"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/aisdk/transcription.ts",
+    "sha256": "57f5b2cfc017bdda7edcae63ec82d642ffe3d22f2a87e0bb14e425d13bb1ad68"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/default-voice.ts",
+    "sha256": "40a0ed29142a33b65ae25b139717777cd67ce41b1b701710610322e18bdb20f5"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internals/voice/src/voice/aisdk/index.ts",
+    "sha256": "00004bbe71f62ef5fda37020ec28fa741391067b67d5c07faa796e9c8f0312a0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/index.ts",
+    "sha256": "e33cd12f9b41cb160071ea59816ab55a17f4524e488919049127016a23693843"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/workspace.ts",
+    "sha256": "daf69b2f733833cf63f2e7bcdf1c2f943518397c5db8b57d5541b1a544bce40f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/lsp/index.ts",
+    "sha256": "2ea795ba25c4e469443daccc5937cf98f0ef26b98d21cf7740d300f2001668ad"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/lsp/language.ts",
+    "sha256": "ec473e446175de562eddea70f957f28693caaed9d20279f15a7d3d5852a89c8e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/lsp/client.ts",
+    "sha256": "98b492b1dee353679af05eefed1ec7030ba982c08850e661738dccc31c6b19bd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/lsp/servers.ts",
+    "sha256": "f80ea77fcee62570defb8062dcf843b52431611dad6f584145c08fcb9d92f0d1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/lsp/manager.ts",
+    "sha256": "c3227ab92bb091c68294f8291e2d188271064df15d58d1ca2204b65fc34dc803"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/index.ts",
+    "sha256": "3717c8e6110afb59814de7b33f6ccf290f9ebeed7ed83ff19aadc037ae6e9610"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/types.ts",
+    "sha256": "80823f6b7822e0c001daa697d3c625cd162a2a9f36d5aa17a7c23451bf346ea5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/skill-source.ts",
+    "sha256": "7ef4f47470b113dedf0f4100382f502ac87dd09b8fa606ef0dc3fc936f779ce7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/versioned-skill-source.ts",
+    "sha256": "26bbc5467979bd39b1fcddcf552a4c7a44217441c6051c095e71cfc549dc0da1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/composite-versioned-skill-source.ts",
+    "sha256": "609684afe6e47dde726af7cd9d68a3171196420be6efb704bef811416a431cc9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/publish.ts",
+    "sha256": "b0cc7f5e7d1ae2c55ee060c00cd5d3bdf77b584e1e480f2aefe177bf8feb441c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/skills/tools.ts",
+    "sha256": "43198ff74450a260e0896ccc711ec3de98b8a64753ae1e92f052984d38031bad"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/factory-sandbox.ts",
+    "sha256": "5d65cc7b299a379e753f734d01c332a8092b5301355b79c1b6f5d1d1be4d5494"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/index.ts",
+    "sha256": "16d7b306c9f6bb67d1a9427f689bad331b69befe620a30f023829c979f4675a5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workspace/tools/types.ts",
+    "sha256": "7d1a1465884bad66fff5b3d8fd02a409cbacfbdfae61120a998da129143c8ae0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/agent-legacy.ts",
+    "sha256": "876a2e87199ee7da0c4d3eab05ceb992835a46da68c890b72e39867ecff2bd41"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/memory-thread-ownership.ts",
+    "sha256": "29b9f807de9de881d8d15eecaa884bcb66b3315212e95957d250ef7cb2131eb2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/model-span-attributes.ts",
+    "sha256": "ae4e9525b0966f82c39fc1476a8968a2fe20eef0a17eb0c6390c1dd80947dddd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/client-tool-output-hooks.ts",
+    "sha256": "bf8bab7cbfda9d63910848e337ebffde0774e770ea008174d7c2e86ee99311db"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/delegation-refs.ts",
+    "sha256": "a88b628a05adc4c679bb935db298060ed9ceb6a16a2d54d3c606b2a8ea13cf98"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/mcp-guidance.ts",
+    "sha256": "5bc06eaf9f2d1928e71ca11d613436f004e7ea77630db421fedcb9ff6bb6e3f6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/resume-span-input.ts",
+    "sha256": "13c83466b35fdcc1044ce0a729b865fa83bbe13cae240003ce512d778dd1c7dd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/save-queue/index.ts",
+    "sha256": "9a12808e4c4458795f41f8c0850a768622e0a68ebdfe15fe799378e393e35a4b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/stream-until-idle.ts",
+    "sha256": "1e6f0a74042d95582bb8d3ee8d546682d4a617bd8b477a42436f1e54b1297f7c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/abort-transport.ts",
+    "sha256": "efd3dabed3e63cdc9e22931e3be71fe15cb969c6e8e5f6f6e1b2c9bd2ea926d5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/bus.ts",
+    "sha256": "6754d1e4cdffb829cded6008a75bbd2974e412c2d89ff000c20f3ceff8595f1c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/resolve.ts",
+    "sha256": "5bd12794f20263f27ac2afe60323c5d2c14c0b792156e56f8ecaf451da30d4c5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/config.ts",
+    "sha256": "9fb85565ae7cf3b72eac147fe67f2bfcc670f1d2b4a9b70c210f8400352adcba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/publisher.ts",
+    "sha256": "13b8a5ca7c2e9b3b958a08350a422370d70178028c69c1ee927d5e88e4d7ab8e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/codec/error.ts",
+    "sha256": "dcc82d0eaf9fa36a39a4304f0950ea8917b7d25179b547588ea7e87059c5bd00"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/streams/run-records.ts",
+    "sha256": "232770228583a3ee60de96e90c5b9fc900e60ac8566bb573b499436ce685ea49"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/index.ts",
+    "sha256": "e8ebef6f56bfddc13d1a5f555e79010f996a8035d82add594f83d3e73ed9509f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/map-results-step.ts",
+    "sha256": "508b8279549762302985122a839afa4c57afc76049f7d82a8f8e3cdccccba90d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/llm/model/model-method-from-agent.ts",
+    "sha256": "0bd23f4ff18e84fe8b0c833ac125a4ff513586637308e14c352b40b5c83effa3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/save-queue/undo-saved-response-messages.ts",
+    "sha256": "31b963e64a36c1890572e10e6cf962641c6d22020d154cc1970b6515d2e2d171"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/run-scope-keys.ts",
+    "sha256": "e0f9cc2f2dd12ff143ec26329f93780b9f65af68e6f63ac8b39d1bb434fd3695"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/prepare-memory-step.ts",
+    "sha256": "81729688cff2fbdf5ae60d803432c9708b192dfd81d7c2c769b30ca7a9a2a892"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/schema.ts",
+    "sha256": "aa8b2bb7ea96f8f54fa0f2075ff9a14c1a7c26363ff87056867a19802c4d5374"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/prepare-tools-step.ts",
+    "sha256": "7b1423bf6e58dc1a2a4b380953a402b00fa16518d389e5b4b428a12996ba451f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/workflows/prepare-stream/stream-step.ts",
+    "sha256": "faa42931cf252413c678f09f8b75ffc9187b3156062339b30b2d517a26c8f0d9"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/fs-routing/index.ts",
+    "sha256": "cc7c0bc1539e37005fb265047db6449b7d67b9df7b14658bf7837fdab9c4cd72"
+  },
+  {
+    "id": "/workspace/mastra/packages/_internal-core/src/fs-routing/index.ts",
+    "sha256": "4ffc8ae78892954980283b076e3c64c95b66d4de96dcbd31950f90bc4d59f4db"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/summarize.ts",
+    "sha256": "48b33b47bc11f86fbe6cccb51694af804d785fe506d261069d3b4ea2291a0798"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/constants.ts",
+    "sha256": "afaf12f6bae3a27378be1f73913d4f3688c85b0d7c2d30fc4314b5336a876bdd"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/extracted-values.ts",
+    "sha256": "7949e4434e662e6f1050125e767856d4cbf4408e801ca961d58999f9fc73b8fc"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/extractor.ts",
+    "sha256": "76a65cc510d47eaaffb4a1a0d903f389f2a495a53b1d0fd8ccf8027f9f814f4c"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observer-runner.ts",
+    "sha256": "ea39b593a927f91d737640f60e2246cdfff101f3c7e23107c2ca2fcfc6f8a981"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/debug.ts",
+    "sha256": "b77991c9ca25d2835b73fdf55ed52e81d6440373706048883917bc2e86c5676e"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/error.ts",
+    "sha256": "afa8f1585e6e655e817bb0f1fcf024524bfe5c43f9d82b1840595a4cda768835"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/retry.ts",
+    "sha256": "3ccfc482c31989d33fabf7fa6eb16a43f4ef6149fe9f2506391957941b7ebfcf"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/extraction-runner.ts",
+    "sha256": "3ecf0e81266c925e2986c5d2fcb856223bd746bccd704c6c9317e9a8967ded3a"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/internal-request-context.ts",
+    "sha256": "a40a8dcdce4eba0edf85176846b23f5bd7f927dab3f961fa75faf783d9bbcb27"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observer-agent.ts",
+    "sha256": "2dc7585496cd695b3fb5ba3deb2eb4251fcac9c70bf14ae2ff2163430085f0db"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/system-reminders.ts",
+    "sha256": "a171eeab8e9c78bd81e7a550e811ffaeb609d8746d57360b3a719a3f4ce01ad2"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/anchor-ids.ts",
+    "sha256": "aa6c54e47436d405fdec3863586e77cc8c860353a720556f917b98c131dfcb46"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/date-utils.ts",
+    "sha256": "8396c2286c2e768642b14f3f39de5cfef5b14e7d5d375c0dec0f0822b1e166b0"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/string-utils.ts",
+    "sha256": "c3847b1e645c0767c957db230d9878ca33f05983aa8fefea6308d4aab06cbda0"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/tool-argument-helpers.ts",
+    "sha256": "46af0630a59500dd8cc8b46d712baa567c3f06798c31605a8cec49fc82001abb"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/tool-result-helpers.ts",
+    "sha256": "4558a1d1be34a746a90fcc438f78df19fcf05b32bcb7d075f666f3c25ddbf486"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/temporary-memory.ts",
+    "sha256": "01d9033e9df0af7b3b17640b01700681b4ef5d821a91ff710f111ea053ec2419"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/tracing.ts",
+    "sha256": "9bb73ae4a6788a124cda30bfdcd55f4ed3bd848fcb154e81fc04a88872a0ed54"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/transform-hooks.ts",
+    "sha256": "7b069be1b3aebabbd17c4f2171af8e88d8e2adea5ddf2382673ee115e8f3016f"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/token-counter.ts",
+    "sha256": "5d906e028e695ce2c2a7df181c6e15f42227a04c61de66d8ebd7005e2c43e3fc"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/measure-image-buffer.ts",
+    "sha256": "f9c725a5637de0de009c67c0670f8d23bc9fa5de548eaac66a8c33f30fdfcfed"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/working-memory-extractor.ts",
+    "sha256": "3a323c5581b2e2745206449a80096bc7f032e7e8198c4d097bf5bc2f504ef920"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/tools/working-memory.ts",
+    "sha256": "b3a1ea8503d8d90333d733997022dcfe184f4d7a99ec07c4439975b6eaa58108"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/removed-subconscious.ts",
+    "sha256": "b0535f07941ab6b1b1881c090ff2a76e23881a40328d7befadde4883fed78dea"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/tools/om-tools.ts",
+    "sha256": "ae801b0479461311fdd198da50221703b096ce3e7ca3e99062b3458c8032b976"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/message-utils.ts",
+    "sha256": "bb2ef2d61c013de9042456a15395a7b798fc31d4f744246d6491909f1e6a22e4"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-groups.ts",
+    "sha256": "8d43aec1b8073502ddba943effd8fd54005908e8bf1d2999538b05c872bf8b3f"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/tools/om-observations.ts",
+    "sha256": "78eb3e0d46d39bbf3dd5e8aeb133a894a642ad202dcb723554d440ae3156e3dc"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/tools/om-search-context.ts",
+    "sha256": "ac4c1651926285b46901940eb5d5591fd30dfd2ba2c09e8ad9c7ec224e4c8696"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/model-by-input-tokens.ts",
+    "sha256": "9ab88eadf33cbe679f2cbb9ac9953eaf616b5501b0adfe7e72658444c99f8d76"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/index.ts",
+    "sha256": "16f58e666c0c58e06d64be8d8daba9922f039314a2a73f5c333867c0a5d3fa62"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observational-memory.ts",
+    "sha256": "586188f5bf9b9af6e4d5b66ad46f3782d46e8ccbc09bf4e8e2da01793c3ef43c"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/working-memory-state/processor.ts",
+    "sha256": "bb90094cf7341c6e8139e223d8545ca655aa2f62e5ac06499fdb485313f86353"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/activation-ttl.ts",
+    "sha256": "cf4a5416d43ecb7b01e883dfb60e9d02235970c04b3cb39af44a12995b0bacb8"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/auto-model.ts",
+    "sha256": "d93ae527804153a81066a80cae6b330d14b829ef2b071ad36da1404e1c7a49ef"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/buffering-coordinator.ts",
+    "sha256": "a81b6b6e4cf501fdc012ef2cbac697b124997c18edeefc7da0d156983bedee54"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/commit-queue.ts",
+    "sha256": "e25ed4a9499e59bfad74ce0fba9bca814a548abaa02d0275502964e31ac2f6e6"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/operation-registry.ts",
+    "sha256": "c1eac3cd24b1981ea12b1874328a4c62633717abbb886feafcdd2a3d9a93e03f"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/wait-with-abort.ts",
+    "sha256": "ba2fe7f5b85240810b90a0171cf06d6c031e40caeaa1dcecf11cdb73b18db842"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/built-in-extractors.ts",
+    "sha256": "e9a4552416872d886e2800c651c91167db14612c2578c23eee1f878c62c49089"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/model-context.ts",
+    "sha256": "43e8c08c46760fb170a6a63db3fa942fa9f72e6a74aad71ae3baa1b8268e7741"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/markers.ts",
+    "sha256": "1b0c99701836a740473e1f77f4bde3d243e10cb0e0758ab0e0179e661e4fb2d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-strategies/index.ts",
+    "sha256": "bc9974032e2b89eef4c1c73f49723fe92516e7cbf7e315da1547526fef4600a6"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-strategies/base.ts",
+    "sha256": "4e60ec30bdf9a23a1716f028f1896664e7d75aa322774c0a8ef2d94771ae5d93"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/record-lineage.ts",
+    "sha256": "f50cb461d54ac65bed83de3663d6ba4d5316e0d96ca8c1fcd0908ad0dfb8d9d8"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/thresholds.ts",
+    "sha256": "0dcedd2a224479b35946bbedd220c637d18ed95bcfd58c2f21ba4ffafabdc8d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-strategies/sync.ts",
+    "sha256": "1a5f7ab63d5e86f8e8da2559566dab18bf6468259d901596ae3a1997bf12420b"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-strategies/thread-title.ts",
+    "sha256": "a2da886108adb3bc7c594a6636d04d2ce8924ac079f3bd0992b2fa5e30d26b79"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-strategies/async-buffer.ts",
+    "sha256": "056ac9dfcf157836bc676a83b48760048e2f2cc622ebfb9a5b83da87ce1eff62"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-strategies/resource-scoped.ts",
+    "sha256": "cd1120997211c9f4f0a18f13a711b383f96a149fca6f17217ccddd8721313978"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-turn/index.ts",
+    "sha256": "98ba6885debaa851a59d73e48181881a73a9a23bdf6cec0da17abbe6cde1dc50"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-turn/turn.ts",
+    "sha256": "0a195acc915ef2ea95537d2aff71e7c3319bd8232a4c62a6cd94fb6e5a83ae68"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-turn/load-memory-context.ts",
+    "sha256": "b5085c5f3de1af0bfa22457f14c8a41f4b1aed3da1a4610e4a4589f4f62c241a"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-turn/safe-buffer-prefix.ts",
+    "sha256": "1769bfdb877af75f73e3484214a2e7b256620260c1f84c75e6edb155aa9fc5d2"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-turn/step.ts",
+    "sha256": "dd22c2d5cb40dd97dda8f066728c20c08310383cf179d397fded67f17ef8771a"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/reflector-runner.ts",
+    "sha256": "7f7ba0279877125dbd022291486b7a91270cd54713f3a83ce849176323a38214"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/reflector-agent.ts",
+    "sha256": "2841da3d8ea07274a7dabe66654c24ebce05a60f8f17114688534fa8cee7462b"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/repro-capture.ts",
+    "sha256": "2bf73e82c7f9512458b9cecfd752cc1a4644da7ad1001475c7b9aad4537e06f0"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/processor.ts",
+    "sha256": "69d67c1fb061c3cae7fa1412f23a64802a32e5e7b208249eeb99111d8ec8d805"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/temporal-markers.ts",
+    "sha256": "2ee95e368be3247794262776c157faac92dcbfec48c994b9a2a5b9b5af531a36"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/observational-memory/observation-utils.ts",
+    "sha256": "253e1f7d7682bafa2e46e07ab1e780fb2611caad07e9d1a83f34f8d7ddd969e1"
+  },
+  {
+    "id": "/workspace/mastra/packages/memory/src/processors/working-memory-state/index.ts",
+    "sha256": "050b7b8301ce19f542fc41cfb20b1588d8e193b26b4d0fef3230200ee292bc50"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/test-utils/aimock/aimock-scenario.ts",
+    "sha256": "927aca462a58deaf356b8d8e3f77b91fcf6fc98816d0b43b0970162246e93ff6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/index.ts",
+    "sha256": "8bd91fed0e3188b7d651f89b62e6b565acde4635d792051676eaac9eb208d1cd"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/create-durable-agent.ts",
+    "sha256": "ef6e6736a559f33822b7121ab7400806788c4e7da0d7dcf7d286dcadc50ffaad"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/durable-agent.ts",
+    "sha256": "16c524e5b86070ec6336fd5833aeb3a2a3f3abd91cf0541fd4d0ca9463d3f30d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/abort-transport.ts",
+    "sha256": "cc4b19775f7b9462557fed168733125bc35baae23eb10feaa1be2cfc461ef01f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/run-registry.ts",
+    "sha256": "76d334d0e7160e6b2fa584cda569bbb0daa122dce82123dc6586d62227862eba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/durable-stream-until-idle.ts",
+    "sha256": "8544c2ec2704da8067fe1b646d49d3d9795d8439663699e5b42cb65bde6c6ea2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/persist-run-input.ts",
+    "sha256": "a8f6d7e5358d754270fc19701991da4b2165970ffb73826ff7f9c5548de5f8dc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/memory-fga.ts",
+    "sha256": "96418b3fe1c65ce5f8d6cf8cddbc9555e36e273d85b429e4c596cb55dddb7311"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/preparation.ts",
+    "sha256": "c1d01e7ce26b49fd948fd5e524fb681783a4df45d516a73073e64dbcdfd8bc73"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/run-message-refs.ts",
+    "sha256": "0dfb305f8aa921cefc7575d4b306bd354387090ec52bacdd405a5fa6a64a0195"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/utils/serialize-state.ts",
+    "sha256": "d0fcd70f9ec57b71f0f19e9682be8f83ecab501451ed76f5a704cd22efd94fc5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/finalize-run.ts",
+    "sha256": "0ac588747e5acef1df75b69761f0cf9a918e05fede66e9672f267e540bf8afc5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/utils/resolve-runtime.ts",
+    "sha256": "7bcde9860b809acf8d031a296681e316ae2b4b9f4b375e9a67cc01e09f7dfafc"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/utils/run-message-list.ts",
+    "sha256": "dc9ed22e5cc8a4f0c7dbc7c6c13e560f476b49637674528e82ce7e11e9f59408"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/schemas.ts",
+    "sha256": "2448a19d24e77d865286eb86a4fa2ca1fa0d00a32a1e3fe4e58ba9824fe4eb11"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/utils/restore-completion.ts",
+    "sha256": "bbaa943bc1cdd1abf4cf8e0c0965f9ea12d5bd2cd88b0c5d787d7a3443fe9f2f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/utils/resume-generate-args.ts",
+    "sha256": "2ae676819d6e02d51fd374b6d3687e3927177d838f6780b5b1740141ff9f8119"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/index.ts",
+    "sha256": "1fa8d753018eb2fc8a34fcb889d35a0e0fed1e6715f1c28f9f7783cca320903f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/create-durable-agentic-workflow.ts",
+    "sha256": "fc46fc0c480a46055da7346ea3a5e3c373e10f7a1961970da3733af3e6e5ab32"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/durable-loop-builder.ts",
+    "sha256": "adb14afc6654e6856bcb99f467a29056f659b9b5ec2d5cca1c45e3938c9cad2f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/index.ts",
+    "sha256": "f6a8841096ddac163c84a928456d2203288a6f9a9280ece29a85b84b2e8f03fe"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/execute-scorers.ts",
+    "sha256": "65d4b13cfc8675f48e9c8192f4309b84cbcaac5d95141d1f287a04a17396f4d1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/iteration-state.ts",
+    "sha256": "1e160886b0af41352c04e91e042841526b80820c561be91f351f692b24974d8a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/accumulated-steps.ts",
+    "sha256": "91a40aa4d24dd671179e859e0b7aa49f619864e7a3698fda75294d4aca5a030e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/message-list-state.ts",
+    "sha256": "5745b39894f2378e9a25308a593e2f6b8e7c7bae267c069780c87a2347f99858"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/shared/tool-call-concurrency.ts",
+    "sha256": "76fb7aa3264a29ef6f2d770215abaae979c0d7178bd1500962658b48ef5e7aa2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/index.ts",
+    "sha256": "e3872e7a2067673b8b34fc813a0a9f2482c528169eca5ceda096842612f7e368"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/background-task-check.ts",
+    "sha256": "a2d206cd43f920526f005b73f1af7bc87d6fc74b71d2482daa3766768fa0ff2b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/llm-execution.ts",
+    "sha256": "f8d0aa8307f31909f78a83371a9e30555509465a0b8665f70409aa8eabddcf0d"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/tool-call.ts",
+    "sha256": "abbd0a55627b1c2aacfc10feedcc86e8e170e919c7fffefb3423f38371af0b75"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/llm-mapping.ts",
+    "sha256": "46e488e2af23f1c96b857bf2b558c68cd347f747699d9ba84cba3cd731250358"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/scorer-execution.ts",
+    "sha256": "abfdab38cb4b9f7db07535b2beb74d3d39bca162204fde123d17e1ae77a6fc86"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/is-task-complete.ts",
+    "sha256": "2443408cb59e0d49e77e64f807a11c1e05cb225f8c0c11e41cdb7451d3c22612"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/steps/goal.ts",
+    "sha256": "6bc3f15bed2c3a629e683b6faf11e817f7212e5af955719e26998003322b09c0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/evented-agent.ts",
+    "sha256": "f7e7f45386c0e04fc92b28379ef4d60e3ba76eaebe80ed330781956e91c30e86"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/create-evented-agent.ts",
+    "sha256": "46f59eaed2ca876427e9a7324f95be633bae2f956adc1ed98b77240c99dc994b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/agent/durable/workflows/deprecated-tool-execution.ts",
+    "sha256": "aef26847f36f956ce108984147f6f05ddb37feb0c1b2481d44b4f8d5bf6a52c6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/index.ts",
+    "sha256": "75fbcf248d26819415e2d3a7d94ae17f9187c75332fafc5d1634023616cd7cc3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/types.ts",
+    "sha256": "30be1834a761032194e0ce5db985be83a04fd671da5ad13027bc97aaffc11f37"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/unix-socket-pubsub.ts",
+    "sha256": "faf312f4733b6fe7137b6f9b72d78d4ea95aeeedb3db8e085c8d11ad6eca9aaf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/codec/index.ts",
+    "sha256": "746f782432cc93c28cfeb9c1270795b637e61a551be563af0692e86dcb6a8d0c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/codec/codec.ts",
+    "sha256": "17702f44d2b03e75369da8fd1fe2aa8585436ba6c1fd3a33b956acb2ce7b1360"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/codec/registrations.ts",
+    "sha256": "5df307bfda53475dc1c61855762717414e2b63c78bacf231aeed9a73f43d98ee"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/codec/registry.ts",
+    "sha256": "9e0b15d45a16246959d25b5e2980ee36a3574ba748d679e71d5ae1932001b1c5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/events/codec/tags.ts",
+    "sha256": "d7aeed920b61405152da30a882f5bd87de020725bdf1ed254375370885ee94c6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/index.ts",
+    "sha256": "ec6a837c563eaaea3a45d50be39e36df297c6ceb582997823dac118dc05f9df2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/cache/index.ts",
+    "sha256": "99f37d518231b5f8725c72bb5d23eadc98bf947d651b178974fe8c48b9a36094"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/index.ts",
+    "sha256": "2a3454bb04111635f439e68c37a261a52abe704a777c44ce9eb7e5b416ecad2e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/channels/agent-controller-channels.ts",
+    "sha256": "f7b2592b9663e20be7c381a1ecd8ec8e40f856c96a715a5b329a4eb9b41d9d34"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/manager.ts",
+    "sha256": "603ee6dc2ec15bbc5e94754680a795005e9fd65cfe457cb5cce5f1d831178153"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/dataset.ts",
+    "sha256": "eac2b313beb0df0d261715e80c9707d89198ac4dfe85dc5ed4d0a76004e4092a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/agent-model.ts",
+    "sha256": "9c1b805d12670a2db36bde51dd1a14a72c9a15077d8d1abd3ed3b776fcf820aa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/index.ts",
+    "sha256": "feae257517d177fbfd82c78cdb4ab80942180fd26429b0e9429874fd6048964c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/events.ts",
+    "sha256": "8264062d403e3ae1acfa370c2d3a1f1e542b20d178511af4bec53689bdbc8eb3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/executor.ts",
+    "sha256": "b5fd60d357c458ec5d5defb78f7671128264fab0e4607c2c44895ab8ec7594ba"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/tool-mocks.ts",
+    "sha256": "b43e4baa4e4b1034351fbf48e608e8ef4f346474aebc8a0582d2f8cb772585b7"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/resolve-target.ts",
+    "sha256": "55678132793771233606848d5bdee4b2c654670d9e5122f583b77fe209a9c60a"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/scorer.ts",
+    "sha256": "8f3b59daa126c9c89b7facf35c9a48acff284c362fd213519d895336b5510638"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/analytics/index.ts",
+    "sha256": "ce6804893de9a7b730f0648b7f202f9d2d13cc04b617e59516fdf8b528d8295b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/analytics/types.ts",
+    "sha256": "fb63afa63c2893f8bc0ffef847e60a77c737868cd65fc3cb87b266a17d76a5a2"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/analytics/aggregate.ts",
+    "sha256": "a5087e38851657f95ab078b3602ae721219894a43086b9ce6365ec0b45e407ca"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/analytics/compare.ts",
+    "sha256": "22d64018891b2688993c8f9879b82a85bf9964c4ee5848ee4a68a90562acdd82"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment/item.ts",
+    "sha256": "d9a2341b0e9bdce3501370954634feb91c5b90b763af8855828c20796e0e3e06"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/datasets/experiment-traces.ts",
+    "sha256": "3ecd654086e2411513f43404aa3e35ff36c389407721fb8f607f65b95c77b2aa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/license/index.ts",
+    "sha256": "f6166fa22499302099872a323d6f531c351d9ca7ddd37fedc91195ae84c6ed44"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/notifications/workflow.ts",
+    "sha256": "0e6e1a9eafd2c7fdfd8f9fe373f3812ccdf20dc9584a2ba5c766c701bbb9b407"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/evented/index.ts",
+    "sha256": "adfeeec70f5bf503740fdb8f08e6eee7f0e96890f3bbfc59a8d14f8497cc69d3"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/scheduler/index.ts",
+    "sha256": "daf3dad3587df0fc7f5939d0de8af5443eae8c9b8126b3ff499daf6677fea7fa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/scheduler/scheduler.ts",
+    "sha256": "a5766d7686258feeaa87d3bfb52b1757b40a06458ca1c23dc1b86bb26933d1df"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/schedules/row-diff.ts",
+    "sha256": "43877ff3c8ed53869494465a393ac722b3f04d2454b3458c09225bdeefd5c3d1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/telemetry/feature-telemetry.ts",
+    "sha256": "e3917cdebcbfd4cd4601dbd80c80f4c73b0aaa4f5da25a89960470f5266d77a0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/telemetry/context.ts",
+    "sha256": "bccd2b9d68c47e7774e97de73a119c0efa8914767802d37b7a0f8cb25c340538"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tool-loop-agent/index.ts",
+    "sha256": "bd833678a95ce651a7bb8da6fb0cada8aa2cb79d9d159ba42016986d8124c507"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tool-loop-agent/tool-loop-processor.ts",
+    "sha256": "2c1c7ab3a2c8de9806ebe67cdf8626546d742ed29b50080f1731d6f1b2da890e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/tool-loop-agent/utils.ts",
+    "sha256": "198a24b6ef57a2622f21fd8b295b91450abec2a2343e722cb3b4c3d295c20d6f"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/index.ts",
+    "sha256": "6325a0e709194326c4d71f9c5d724a8b23781eccc860ffcc3b12cce860bd08f1"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/worker.ts",
+    "sha256": "6743ae07926e375fa09031c337981b90c8175eb569dd0c4c23f0fc3f6f4e68fa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/workers/orchestration-worker.ts",
+    "sha256": "46b820618aa6292a514a146a351abfe6fd8773cc2385108dbf02420c970e6306"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/strategies/http-remote-strategy.ts",
+    "sha256": "d9e4bd338e2b40e9b9a896afa4eafca65cea9f9d5e8ab71adff1969c1a368fd0"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/transport/pull-transport.ts",
+    "sha256": "91e8307835ab095f56c6eab57db012b1756a412b7ba4dd9c423eaf8661132c79"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/drain-timeout.ts",
+    "sha256": "cd71753f473d7416c5cce466b4ba786465a757d1a28f308cd54ba11f0c2117ee"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/workers/scheduler-worker.ts",
+    "sha256": "ad6b66b908ff648a692c8d04266fc2ed0bcd9fd48988e56b6c8716146f7ffc72"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/workers/background-task-worker.ts",
+    "sha256": "72115d6dda12d601447ee94160c6268ef6cbac6567d56ddae19e46bbbae50355"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/worker/strategies/in-process-strategy.ts",
+    "sha256": "01202519085fe916553cbb0a2b1da1bc1ca60eaee2fc43ec882e78cccc5f0dd8"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/builder/index.ts",
+    "sha256": "950a37ccda252403402c2c8486e00b9421b487db2f10a41248782c55a0f6878e"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/builder/authoring-playbook.ts",
+    "sha256": "405c7110dcc948d3a2a41e24fea0efb926fd71fddc7f8bdb1cf5dd3b59440b8c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/builder/preflight.ts",
+    "sha256": "be7801da368b1d85fd0171f1cbc570d65aadb17fc56ea20e4b47e99c1d0b51df"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/index.ts",
+    "sha256": "c1e8c0fdfa5fa450c3cdbcce8f31fde1b887b4a6ee2c1d2dd57532f32bddd9db"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/refs.ts",
+    "sha256": "6fbd5871477974af4e19a71b3945379de2b6041e20e4c5e8bb701e3d7268d6fa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/graph.ts",
+    "sha256": "157b8f0892e2dc58aa9bf262f2f9d1787b16c6d9b62147817cc70a5df673d6fa"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/repair-actions.ts",
+    "sha256": "16f77c8b6c313a545c75e4d326ed957858adab2fde20c75d375ff839f1bd63fe"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/schema-utils.ts",
+    "sha256": "b0f18b6cade942a9918abdef120e7300459b59420deb40343fa58dbb5bef7a46"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/types.ts",
+    "sha256": "17e93c377bdb47a79aa5b5737d86b7a7b1591bf253cfc7012259c8e6e4d1e357"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/schema-flow.ts",
+    "sha256": "b58b7d4590495f68f76a71259cf0acbbc9cd5bd0e560f61e09167fbae6db52f6"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/mapping-config.ts",
+    "sha256": "3314bbff2d12d8f47a9a27169c8e5911176fea23905ec6dca1ac99e944e21e2c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/schemas.ts",
+    "sha256": "a279bb7d0c4cbb67ca47f1cba4b05b60503e44778e20ceaa7e09a76bb219b6cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/json-schema-to-zod.ts",
+    "sha256": "c18256ed563d7d487e3cdd178a69be5a8e6a5cf09d1cb8feda34361deb960656"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/validate/structure.ts",
+    "sha256": "c4b61364d71681598f6c226807cfa2837f93181afc9818a56c2e92e82d9c6d60"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/builder/inspection.ts",
+    "sha256": "46817d66458096a30bb41981a6db0b4c3cd711e49e1828f771008ae460ce05cf"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/builder/authoring-schema.ts",
+    "sha256": "877dfc930e6bed82487b89dc63a274674526ecfadd974dbec0398fa982efd177"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/builder/agent.ts",
+    "sha256": "ffc951444c9f2744bed7fe7e1a20ef0bf11afd7e28a60208d12bdda1ce2c03d5"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/index.ts",
+    "sha256": "1ee8b84bb9cab8c42029edbb9ab9898c880b020cd2c173691f99118877666d87"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/serialize.ts",
+    "sha256": "0f9132fc4a008090e98dee8489c860a3d6faf5f49cbfe7c3bfd29c8f89d52fef"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/workflows/dynamic/rehydrate.ts",
+    "sha256": "5f6c442a0e3b33e49f6ac573739c7661c89ad3f5b34606c5c22e9017c2cb3c0c"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/mastra/fs-agent-schedules.ts",
+    "sha256": "4979bfa3ba07cedf4ac93e0aa18c870ee2d3c2fb428fb4667ff7230d5b14038b"
+  },
+  {
+    "id": "/workspace/mastra/packages/core/src/loop/test-utils/aimock/types.ts",
+    "sha256": "7288546eca7107215d7047392c625cb7d41180c505710aa1145e7931751264a2"
+  }
+]

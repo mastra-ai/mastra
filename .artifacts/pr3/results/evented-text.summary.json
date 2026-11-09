@@ -1,0 +1,808 @@
+{
+  "engine": "evented",
+  "approval": false,
+  "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+  "executions": 0,
+  "caller": {
+    "text": "Plain response.",
+    "types": [
+      "start",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+        "from": "AGENT",
+        "payload": {
+          "providerMetadata": {
+            "openai": {
+              "responseId": "resp-IoRav9PFs0QF2hFY"
+            }
+          },
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "output": {
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            }
+          },
+          "metadata": {
+            "id": "resp-IoRav9PFs0QF2hFY",
+            "timestamp": "2026-11-09T05:51:26.000Z",
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-IoRav9PFs0QF2hFY"
+              }
+            },
+            "modelId": "gpt-4o-mini"
+          },
+          "messages": {
+            "all": [],
+            "user": [],
+            "nonUser": []
+          },
+          "type": "finish",
+          "_durableStepContent": [
+            {
+              "type": "text",
+              "text": "Plain response.",
+              "providerOptions": {
+                "openai": {
+                  "itemId": "msg-CtlktN9KXGZ0M_ud"
+                },
+                "mastra": {
+                  "createdAt": 1794203486378
+                }
+              }
+            }
+          ],
+          "_durableResponseMessages": [
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Plain response.",
+                  "providerOptions": {
+                    "openai": {
+                      "itemId": "msg-CtlktN9KXGZ0M_ud"
+                    },
+                    "mastra": {
+                      "createdAt": 1794203486378
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "index": 5
+      },
+      {
+        "type": "finish",
+        "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+        "from": "AGENT",
+        "index": 7,
+        "payload": {
+          "output": {
+            "text": "Plain response.",
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "text": "Plain response.",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ],
+                "toolCalls": [],
+                "toolResults": [],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "finishReason": "stop"
+              }
+            ]
+          },
+          "stepResult": {
+            "reason": "stop",
+            "warnings": [],
+            "isContinued": false,
+            "totalUsage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:26 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-7o9ImLAle4ZBh00p"
+            },
+            "messageId": "478716c0-8f04-46cb-ab7a-c8d98b78fd36"
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203486086
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203486086
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "resumed": {
+    "text": "",
+    "types": [],
+    "indexes": [],
+    "lifecycle": []
+  },
+  "live": {
+    "text": "Plain response.",
+    "types": [
+      "start",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+        "from": "AGENT",
+        "payload": {
+          "providerMetadata": {
+            "openai": {
+              "responseId": "resp-IoRav9PFs0QF2hFY"
+            }
+          },
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "output": {
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            }
+          },
+          "metadata": {
+            "id": "resp-IoRav9PFs0QF2hFY",
+            "timestamp": "2026-11-09T05:51:26.000Z",
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-IoRav9PFs0QF2hFY"
+              }
+            },
+            "modelId": "gpt-4o-mini"
+          },
+          "messages": {
+            "all": [],
+            "user": [],
+            "nonUser": []
+          },
+          "type": "finish",
+          "_durableStepContent": [
+            {
+              "type": "text",
+              "text": "Plain response.",
+              "providerOptions": {
+                "openai": {
+                  "itemId": "msg-CtlktN9KXGZ0M_ud"
+                },
+                "mastra": {
+                  "createdAt": 1794203486378
+                }
+              }
+            }
+          ],
+          "_durableResponseMessages": [
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Plain response.",
+                  "providerOptions": {
+                    "openai": {
+                      "itemId": "msg-CtlktN9KXGZ0M_ud"
+                    },
+                    "mastra": {
+                      "createdAt": 1794203486378
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "index": 5
+      },
+      {
+        "type": "finish",
+        "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+        "from": "AGENT",
+        "index": 7,
+        "payload": {
+          "output": {
+            "text": "Plain response.",
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "text": "Plain response.",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ],
+                "toolCalls": [],
+                "toolResults": [],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "finishReason": "stop"
+              }
+            ]
+          },
+          "stepResult": {
+            "reason": "stop",
+            "warnings": [],
+            "isContinued": false,
+            "totalUsage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:26 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-7o9ImLAle4ZBh00p"
+            },
+            "messageId": "478716c0-8f04-46cb-ab7a-c8d98b78fd36"
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203486086
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203486086
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "replay": {
+    "text": "Plain response.",
+    "types": [
+      "start",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+        "from": "AGENT",
+        "payload": {
+          "providerMetadata": {
+            "openai": {
+              "responseId": "resp-IoRav9PFs0QF2hFY"
+            }
+          },
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "output": {
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            }
+          },
+          "metadata": {
+            "id": "resp-IoRav9PFs0QF2hFY",
+            "timestamp": "2026-11-09T05:51:26.000Z",
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-IoRav9PFs0QF2hFY"
+              }
+            },
+            "modelId": "gpt-4o-mini"
+          },
+          "messages": {
+            "all": [],
+            "user": [],
+            "nonUser": []
+          },
+          "type": "finish",
+          "_durableStepContent": [
+            {
+              "type": "text",
+              "text": "Plain response.",
+              "providerOptions": {
+                "openai": {
+                  "itemId": "msg-CtlktN9KXGZ0M_ud"
+                },
+                "mastra": {
+                  "createdAt": 1794203486378
+                }
+              }
+            }
+          ],
+          "_durableResponseMessages": [
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Plain response.",
+                  "providerOptions": {
+                    "openai": {
+                      "itemId": "msg-CtlktN9KXGZ0M_ud"
+                    },
+                    "mastra": {
+                      "createdAt": 1794203486378
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "index": 5
+      },
+      {
+        "type": "finish",
+        "runId": "d5910afe-fad5-47f7-a27e-d33c11a23d91",
+        "from": "AGENT",
+        "index": 7,
+        "payload": {
+          "output": {
+            "text": "Plain response.",
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "text": "Plain response.",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ],
+                "toolCalls": [],
+                "toolResults": [],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "finishReason": "stop"
+              }
+            ]
+          },
+          "stepResult": {
+            "reason": "stop",
+            "warnings": [],
+            "isContinued": false,
+            "totalUsage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:26 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-7o9ImLAle4ZBh00p"
+            },
+            "messageId": "478716c0-8f04-46cb-ab7a-c8d98b78fd36"
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203486086
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203486086
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plain response.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-CtlktN9KXGZ0M_ud"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203486378
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "offsetReplay": {
+    "text": "",
+    "types": [],
+    "indexes": [],
+    "lifecycle": []
+  },
+  "topicTypes": [
+    {
+      "type": "chunk",
+      "index": 0
+    },
+    {
+      "type": "step-start",
+      "index": 1
+    },
+    {
+      "type": "chunk",
+      "index": 2
+    },
+    {
+      "type": "chunk",
+      "index": 3
+    },
+    {
+      "type": "chunk",
+      "index": 4
+    },
+    {
+      "type": "chunk",
+      "index": 5
+    },
+    {
+      "type": "iteration-complete",
+      "index": 6
+    },
+    {
+      "type": "finish",
+      "index": 7
+    }
+  ]
+}

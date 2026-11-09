@@ -1,0 +1,98 @@
+workspaces/sprites                       | [WARN] Unsupported engine: wanted: {"node":">=24.0.0"} (current: {"node":"v22.23.3","pnpm":"11.21.0"})
+Scope: all 194 workspace projects
+✓ Lockfile passes supply-chain policies (verified 1m ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+. prepare$ husky
+. prepare: Done
+Done in 7.6s using pnpm v11.21.0
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.1.0 [39m[90m/workspace/mastra[39m
+
+ [32m✓[39m .artifacts/pr3/payload.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 4003[2mms[22m[39m
+   [32m✓[39m normal [2m(4)[22m
+     [33m[2m✓[22m[39m text[33m 441[2mms[22m[39m
+     [33m[2m✓[22m[39m approval[33m 403[2mms[22m[39m
+     [33m[2m✓[22m[39m serialized-approval[33m 384[2mms[22m[39m
+     [33m[2m✓[22m[39m snapshot-approval[33m 370[2mms[22m[39m
+   [32m✓[39m durable [2m(3)[22m
+     [33m[2m✓[22m[39m text[33m 337[2mms[22m[39m
+     [33m[2m✓[22m[39m approval[33m 347[2mms[22m[39m
+     [33m[2m✓[22m[39m serialized-approval[33m 350[2mms[22m[39m
+   [32m✓[39m evented [2m(3)[22m
+     [33m[2m✓[22m[39m text[33m 353[2mms[22m[39m
+     [33m[2m✓[22m[39m approval[33m 392[2mms[22m[39m
+     [33m[2m✓[22m[39m serialized-approval[33m 612[2mms[22m[39m
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:237:26
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at publishStepStartChunk [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:134:16[90m)[39m
+    at emitStepStartEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:99:9[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:209:30
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:237:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:237:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:237:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:237:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.9848651d-806b-4037-ac5e-2e4abdf0d3cf Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitFinishEvent [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/events.ts:163:16[90m)[39m
+    at [90m/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:215:30
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+    at end [90m(/workspace/mastra/[39mpackages/core/src/agent/streams/publisher.ts:194:5[90m)[39m
+
+ [32m✓[39m .artifacts/pr3/controls.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2174[2mms[22m[39m
+   [32m✓[39m normal [2m(3)[22m
+     [33m[2m✓[22m[39m gate[33m 442[2mms[22m[39m
+     [33m[2m✓[22m[39m append-outage[33m 401[2mms[22m[39m
+     [33m[2m✓[22m[39m transport-outage[33m 392[2mms[22m[39m
+   [32m✓[39m durable [2m(1)[22m
+     [33m[2m✓[22m[39m gate[33m 453[2mms[22m[39m
+   [32m✓[39m evented [2m(1)[22m
+     [33m[2m✓[22m[39m gate[33m 469[2mms[22m[39m
+ [32m✓[39m .artifacts/pr3/semantics.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 334[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m18 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 05:51:13
+[2m   Duration [22m 20.82s[2m (transform 40%, tests 32%, import 28%)[22m

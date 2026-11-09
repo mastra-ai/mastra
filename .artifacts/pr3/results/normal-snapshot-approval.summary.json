@@ -1,0 +1,5166 @@
+{
+  "engine": "normal",
+  "approval": true,
+  "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+  "executions": 1,
+  "suspensionIndex": 7,
+  "caller": {
+    "text": "",
+    "types": [
+      "start",
+      "step-start",
+      "tool-call-input-streaming-start",
+      "tool-call-delta",
+      "tool-call-input-streaming-end",
+      "tool-call",
+      "tool-call-approval"
+    ],
+    "indexes": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "lifecycle": []
+  },
+  "resumed": {
+    "text": "Approved and done.",
+    "types": [
+      "tool-call-resumed",
+      "tool-result",
+      "step-finish",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "tool-calls",
+            "isContinued": true,
+            "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d"
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-ak5dL1J-rItt2d80"
+              }
+            },
+            "id": "resp-ak5dL1J-rItt2d80",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-EiI0kiUx7AjN1s4g"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            }
+          },
+          "output": {
+            "text": "",
+            "toolCalls": [
+              {
+                "toolCallId": "call_approve",
+                "toolName": "lookup_status",
+                "args": {
+                  "query": "alpha"
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "itemId": "fc-sS7p-qtuAHyWZWch"
+                  }
+                }
+              }
+            ],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203484692
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              }
+            ]
+          },
+          "processorRetryCount": 0,
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-53YnChARlnI-xZV8"
+              }
+            },
+            "id": "resp-53YnChARlnI-xZV8",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            },
+            "request": {
+              "body": {
+                "model": "gpt-4o-mini",
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent driven by scripted AIMock responses."
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "input_text",
+                        "text": "Look up alpha"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "item_reference",
+                    "id": "fc-sS7p-qtuAHyWZWch"
+                  },
+                  {
+                    "type": "function_call_output",
+                    "call_id": "call_approve",
+                    "output": "{\"status\":\"OK:alpha\"}"
+                  }
+                ],
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_status",
+                    "description": "Look up status",
+                    "parameters": {
+                      "$schema": "http://json-schema.org/draft-07/schema#",
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "query"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": false
+                  }
+                ],
+                "tool_choice": "auto"
+              }
+            }
+          },
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "processorRetryCount": 0
+        }
+      },
+      {
+        "type": "finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-53YnChARlnI-xZV8"
+              }
+            },
+            "id": "resp-53YnChARlnI-xZV8",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            },
+            "request": {
+              "body": {
+                "model": "gpt-4o-mini",
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent driven by scripted AIMock responses."
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "input_text",
+                        "text": "Look up alpha"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "item_reference",
+                    "id": "fc-sS7p-qtuAHyWZWch"
+                  },
+                  {
+                    "type": "function_call_output",
+                    "call_id": "call_approve",
+                    "output": "{\"status\":\"OK:alpha\"}"
+                  }
+                ],
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_status",
+                    "description": "Look up status",
+                    "parameters": {
+                      "$schema": "http://json-schema.org/draft-07/schema#",
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "query"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": false
+                  }
+                ],
+                "tool_choice": "auto"
+              }
+            }
+          },
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "processorRetryCount": 0,
+          "response": {
+            "id": "resp-53YnChARlnI-xZV8",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            },
+            "messages": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "uiMessages": [
+              {
+                "id": "6cff727f-2609-4de1-8845-b1fd28348e2c",
+                "role": "assistant",
+                "metadata": {
+                  "modelId": "gpt-4o-mini",
+                  "provider": "openai.responses",
+                  "mastra": {
+                    "responseBoundary": true
+                  },
+                  "createdAt": "2026-11-09T05:51:24.692Z",
+                  "threadId": "pr3-dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+                  "resourceId": "pr3"
+                },
+                "parts": [
+                  {
+                    "type": "tool-lookup_status",
+                    "toolCallId": "call_approve",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "status": "OK:alpha"
+                    },
+                    "state": "output-available",
+                    "callProviderMetadata": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "step-start",
+                    "createdAt": 1794203484757
+                  }
+                ]
+              },
+              {
+                "id": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+                "role": "assistant",
+                "metadata": {
+                  "modelId": "gpt-4o-mini",
+                  "provider": "openai.responses",
+                  "createdAt": "2026-11-09T05:51:25.017Z",
+                  "threadId": "pr3-dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+                  "resourceId": "pr3"
+                },
+                "parts": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerMetadata": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "live": {
+    "text": "Approved and done.",
+    "types": [
+      "start",
+      "step-start",
+      "tool-call-input-streaming-start",
+      "tool-call-delta",
+      "tool-call-input-streaming-end",
+      "tool-call",
+      "tool-call-approval",
+      "tool-call-resumed",
+      "tool-result",
+      "step-finish",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "tool-calls",
+            "isContinued": true,
+            "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d"
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-ak5dL1J-rItt2d80"
+              }
+            },
+            "id": "resp-ak5dL1J-rItt2d80",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-EiI0kiUx7AjN1s4g"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            }
+          },
+          "output": {
+            "text": "",
+            "toolCalls": [
+              {
+                "toolCallId": "call_approve",
+                "toolName": "lookup_status",
+                "args": {
+                  "query": "alpha"
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "itemId": "fc-sS7p-qtuAHyWZWch"
+                  }
+                }
+              }
+            ],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203484692
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              }
+            ]
+          },
+          "processorRetryCount": 0,
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "index": 10
+      },
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-53YnChARlnI-xZV8"
+              }
+            },
+            "id": "resp-53YnChARlnI-xZV8",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            },
+            "request": {
+              "body": {
+                "model": "gpt-4o-mini",
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent driven by scripted AIMock responses."
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "input_text",
+                        "text": "Look up alpha"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "item_reference",
+                    "id": "fc-sS7p-qtuAHyWZWch"
+                  },
+                  {
+                    "type": "function_call_output",
+                    "call_id": "call_approve",
+                    "output": "{\"status\":\"OK:alpha\"}"
+                  }
+                ],
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_status",
+                    "description": "Look up status",
+                    "parameters": {
+                      "$schema": "http://json-schema.org/draft-07/schema#",
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "query"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": false
+                  }
+                ],
+                "tool_choice": "auto"
+              }
+            }
+          },
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "processorRetryCount": 0
+        },
+        "index": 15
+      },
+      {
+        "type": "finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "index": 16,
+        "payload": {
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "replay": {
+    "text": "Approved and done.",
+    "types": [
+      "start",
+      "step-start",
+      "tool-call-input-streaming-start",
+      "tool-call-delta",
+      "tool-call-input-streaming-end",
+      "tool-call",
+      "tool-call-approval",
+      "tool-call-resumed",
+      "tool-result",
+      "step-finish",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "tool-calls",
+            "isContinued": true,
+            "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d"
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-ak5dL1J-rItt2d80"
+              }
+            },
+            "id": "resp-ak5dL1J-rItt2d80",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-EiI0kiUx7AjN1s4g"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            }
+          },
+          "output": {
+            "text": "",
+            "toolCalls": [
+              {
+                "toolCallId": "call_approve",
+                "toolName": "lookup_status",
+                "args": {
+                  "query": "alpha"
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "itemId": "fc-sS7p-qtuAHyWZWch"
+                  }
+                }
+              }
+            ],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203484692
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              }
+            ]
+          },
+          "processorRetryCount": 0,
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "index": 10
+      },
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-53YnChARlnI-xZV8"
+              }
+            },
+            "id": "resp-53YnChARlnI-xZV8",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            },
+            "request": {
+              "body": {
+                "model": "gpt-4o-mini",
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent driven by scripted AIMock responses."
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "input_text",
+                        "text": "Look up alpha"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "item_reference",
+                    "id": "fc-sS7p-qtuAHyWZWch"
+                  },
+                  {
+                    "type": "function_call_output",
+                    "call_id": "call_approve",
+                    "output": "{\"status\":\"OK:alpha\"}"
+                  }
+                ],
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_status",
+                    "description": "Look up status",
+                    "parameters": {
+                      "$schema": "http://json-schema.org/draft-07/schema#",
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "query"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": false
+                  }
+                ],
+                "tool_choice": "auto"
+              }
+            }
+          },
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "processorRetryCount": 0
+        },
+        "index": 15
+      },
+      {
+        "type": "finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "index": 16,
+        "payload": {
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "offsetReplay": {
+    "text": "Approved and done.",
+    "types": [
+      "tool-call-resumed",
+      "tool-result",
+      "step-finish",
+      "step-start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "step-finish",
+      "finish"
+    ],
+    "indexes": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "lifecycle": [
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "tool-calls",
+            "isContinued": true,
+            "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d"
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-ak5dL1J-rItt2d80"
+              }
+            },
+            "id": "resp-ak5dL1J-rItt2d80",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-EiI0kiUx7AjN1s4g"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            }
+          },
+          "output": {
+            "text": "",
+            "toolCalls": [
+              {
+                "toolCallId": "call_approve",
+                "toolName": "lookup_status",
+                "args": {
+                  "query": "alpha"
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "itemId": "fc-sS7p-qtuAHyWZWch"
+                  }
+                }
+              }
+            ],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203484692
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              }
+            ]
+          },
+          "processorRetryCount": 0,
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "index": 10
+      },
+      {
+        "type": "step-finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "payload": {
+          "messageId": "a610cf1a-18db-48d5-8b70-5d4ee559570d",
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "metadata": {
+            "providerMetadata": {
+              "openai": {
+                "responseId": "resp-53YnChARlnI-xZV8"
+              }
+            },
+            "id": "resp-53YnChARlnI-xZV8",
+            "timestamp": "2026-11-09T05:51:24.000Z",
+            "modelId": "gpt-4o-mini",
+            "headers": {
+              "access-control-allow-headers": "*",
+              "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+              "cache-control": "no-cache",
+              "connection": "keep-alive",
+              "content-type": "text/event-stream",
+              "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+              "transfer-encoding": "chunked",
+              "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+            },
+            "modelMetadata": {
+              "modelId": "gpt-4o-mini",
+              "modelVersion": "v2",
+              "modelProvider": "openai.responses"
+            },
+            "request": {
+              "body": {
+                "model": "gpt-4o-mini",
+                "input": [
+                  {
+                    "role": "system",
+                    "content": "You are a test agent driven by scripted AIMock responses."
+                  },
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "input_text",
+                        "text": "Look up alpha"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "item_reference",
+                    "id": "fc-sS7p-qtuAHyWZWch"
+                  },
+                  {
+                    "type": "function_call_output",
+                    "call_id": "call_approve",
+                    "output": "{\"status\":\"OK:alpha\"}"
+                  }
+                ],
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_status",
+                    "description": "Look up status",
+                    "parameters": {
+                      "$schema": "http://json-schema.org/draft-07/schema#",
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "query"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": false
+                  }
+                ],
+                "tool_choice": "auto"
+              }
+            }
+          },
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "processorRetryCount": 0
+        },
+        "index": 15
+      },
+      {
+        "type": "finish",
+        "runId": "dbbcd9de-a351-46ee-9ba6-f6287fb32d01",
+        "from": "AGENT",
+        "index": 16,
+        "payload": {
+          "output": {
+            "text": "Approved and done.",
+            "toolCalls": [],
+            "usage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "raw": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+              }
+            },
+            "steps": [
+              {
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  },
+                  {
+                    "type": "tool-result",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status"
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {},
+                "response": {
+                  "id": "resp-ak5dL1J-rItt2d80",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:24 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-EiI0kiUx7AjN1s4g"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203484692
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-ak5dL1J-rItt2d80"
+                  }
+                }
+              },
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ],
+                "usage": {
+                  "inputTokens": 0,
+                  "outputTokens": 0,
+                  "totalTokens": 0,
+                  "raw": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                  }
+                },
+                "warnings": [],
+                "request": {
+                  "body": {
+                    "model": "gpt-4o-mini",
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent driven by scripted AIMock responses."
+                      },
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Look up alpha"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "item_reference",
+                        "id": "fc-sS7p-qtuAHyWZWch"
+                      },
+                      {
+                        "type": "function_call_output",
+                        "call_id": "call_approve",
+                        "output": "{\"status\":\"OK:alpha\"}"
+                      }
+                    ],
+                    "tools": [
+                      {
+                        "type": "function",
+                        "name": "lookup_status",
+                        "description": "Look up status",
+                        "parameters": {
+                          "$schema": "http://json-schema.org/draft-07/schema#",
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "query"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "strict": false
+                      }
+                    ],
+                    "tool_choice": "auto"
+                  }
+                },
+                "response": {
+                  "id": "resp-53YnChARlnI-xZV8",
+                  "timestamp": "2026-11-09T05:51:24.000Z",
+                  "modelId": "gpt-4o-mini",
+                  "headers": {
+                    "access-control-allow-headers": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-origin": "*",
+                    "access-control-expose-headers": "X-Total-Count, X-Request-Id",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                    "content-type": "text/event-stream",
+                    "date": "Mon, 09 Nov 2026 05:51:25 GMT",
+                    "transfer-encoding": "chunked",
+                    "x-request-id": "req-qd_Tx9xYh1ZoNOBB"
+                  },
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "input": {
+                            "query": "alpha"
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call_approve",
+                          "toolName": "lookup_status",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "status": "OK:alpha"
+                            }
+                          },
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "fc-sS7p-qtuAHyWZWch"
+                            }
+                          },
+                          "input": {
+                            "query": "alpha"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Approved and done.",
+                          "providerOptions": {
+                            "openai": {
+                              "itemId": "msg-HUntqMlYqKB9l4Bs"
+                            },
+                            "mastra": {
+                              "createdAt": 1794203485017
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "providerMetadata": {
+                  "openai": {
+                    "responseId": "resp-53YnChARlnI-xZV8"
+                  }
+                }
+              }
+            ]
+          },
+          "stepResult": {
+            "reason": "stop",
+            "isContinued": false
+          },
+          "messages": {
+            "all": [
+              {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Look up alpha",
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1794203484678
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "user": [],
+            "nonUser": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool-call",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "input": {
+                      "query": "alpha"
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "content": [
+                  {
+                    "type": "tool-result",
+                    "toolCallId": "call_approve",
+                    "toolName": "lookup_status",
+                    "output": {
+                      "type": "json",
+                      "value": {
+                        "status": "OK:alpha"
+                      }
+                    },
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "fc-sS7p-qtuAHyWZWch"
+                      }
+                    },
+                    "input": {
+                      "query": "alpha"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Approved and done.",
+                    "providerOptions": {
+                      "openai": {
+                        "itemId": "msg-HUntqMlYqKB9l4Bs"
+                      },
+                      "mastra": {
+                        "createdAt": 1794203485017
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "topicTypes": [
+    {
+      "type": "chunk",
+      "index": 0
+    },
+    {
+      "type": "step-start",
+      "index": 1
+    },
+    {
+      "type": "chunk",
+      "index": 2
+    },
+    {
+      "type": "chunk",
+      "index": 3
+    },
+    {
+      "type": "chunk",
+      "index": 4
+    },
+    {
+      "type": "chunk",
+      "index": 5
+    },
+    {
+      "type": "chunk",
+      "index": 6
+    },
+    {
+      "type": "suspended",
+      "index": 7
+    },
+    {
+      "type": "chunk",
+      "index": 8
+    },
+    {
+      "type": "chunk",
+      "index": 9
+    },
+    {
+      "type": "chunk",
+      "index": 10
+    },
+    {
+      "type": "step-start",
+      "index": 11
+    },
+    {
+      "type": "chunk",
+      "index": 12
+    },
+    {
+      "type": "chunk",
+      "index": 13
+    },
+    {
+      "type": "chunk",
+      "index": 14
+    },
+    {
+      "type": "chunk",
+      "index": 15
+    },
+    {
+      "type": "finish",
+      "index": 16
+    }
+  ]
+}

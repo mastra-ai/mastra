@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-09",
+  "initialRevision": "a2a03b53fe71a4587ee12cd121f2f43d9ede445d",
+  "mergedRevision": "ed1cecba5c26a73600640f74e9a1c9d322271b23",
+  "node": "v22.23.3",
+  "harnessSHA256": {
+    "vitest.config.ts": "eed15fcd0f66d114de7b0faef30bd22a13573caebe1e86e462474c9be5ea002f",
+    "payload.test.ts": "e6b5d611a5add5e8676e12cf246555a5a2a0a1135b48f4445c473dab09775168",
+    "controls.test.ts": "f86782cc14380175726db5de823ae5f77e762c767e9d67c7ee14fb41c9c674d9",
+    "semantics.test.ts": "39ce8c765f49d8e91c715c91b7b7353fba054ca005b0235f3c00b3f55801ac86"
+  },
+  "verification": {
+    "initial": "18/18 in 20.82s",
+    "merged": "18/18 in 20.72s"
+  },
+  "dependencies": "Prepared node_modules linked; 11 unchanged vendored AI SDK dist modules; zero non-vendored dist. Merged touched source modules all in merged worktree.",
+  "productionDiffs": [],
+  "remoteRedis": "UNVERIFIED"
+}

@@ -1,0 +1,110 @@
+workspaces/sprites                       | [WARN] Unsupported engine: wanted: {"node":">=24.0.0"} (current: {"node":"v22.23.3","pnpm":"11.21.0"})
+Scope: all 194 workspace projects
+✓ Lockfile passes supply-chain policies (verified 2m ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+[WARN] Failed to create bin at /workspace/mastra/mastracode/factory/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/mastracode/mastra-factory/node_modules/.bin/mastra. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/cli/dist/index.js'
+[WARN] Failed to create bin at /workspace/mastra/mastracode/sdk/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/mastracode/tui/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/connect/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/create-mastra/node_modules/.bin/mastra. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/cli/dist/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/deployer/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/editor/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/mcp-apps-components/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/mcp-docs-server/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/packages/mcp-registry-registry/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+[WARN] Failed to create bin at /workspace/mastra/server-adapters/server-adapters-test-suite/node_modules/.bin/mastra-mcp. ENOENT: no such file or directory, open '/workspace/mastra/.artifacts/pr3/merged-runtime/packages/mcp/dist/cli/index.js'
+
+. prepare$ husky
+. prepare: Done
+Done in 7.8s using pnpm v11.21.0
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.1.0 [39m[90m/workspace/mastra/.artifacts/pr3/merged-runtime[39m
+
+ [32m✓[39m .artifacts/pr3/payload.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 3999[2mms[22m[39m
+   [32m✓[39m normal [2m(4)[22m
+     [33m[2m✓[22m[39m text[33m 458[2mms[22m[39m
+     [33m[2m✓[22m[39m approval[33m 414[2mms[22m[39m
+     [33m[2m✓[22m[39m serialized-approval[33m 380[2mms[22m[39m
+     [33m[2m✓[22m[39m snapshot-approval[33m 377[2mms[22m[39m
+   [32m✓[39m durable [2m(3)[22m
+     [33m[2m✓[22m[39m text[33m 329[2mms[22m[39m
+     [33m[2m✓[22m[39m approval[33m 377[2mms[22m[39m
+     [33m[2m✓[22m[39m serialized-approval[33m 343[2mms[22m[39m
+   [32m✓[39m evented [2m(3)[22m
+     [33m[2m✓[22m[39m text[33m 350[2mms[22m[39m
+     [33m[2m✓[22m[39m approval[33m 387[2mms[22m[39m
+     [33m[2m✓[22m[39m serialized-approval[33m 572[2mms[22m[39m
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:235:26
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at publishStepStartChunk [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:134:16[90m)[39m
+    at emitStepStartEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:99:9[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:207:30
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:235:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:235:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:235:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitChunkEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:38:16[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:235:26
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+[90mstderr[2m | .artifacts/pr3/controls.test.ts[2m > [22m[2mnormal[2m > [22m[2mappend-outage
+[22m[39m[CachingPubSub] Failed to cache event for agent.stream.f687ec7f-d16c-4ff5-9364-8840e0f19157 Error: PR3 deliberate append outage
+    at BrokenAppendCache.listPushIndexed [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39m.artifacts/pr3/controls.test.ts:20:61[90m)[39m
+    at CachingPubSub.publish [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/events/caching-pubsub.ts:182:32[90m)[39m
+    at emitFinishEvent [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/events.ts:163:16[90m)[39m
+    at [90m/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:213:30
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+    at end [90m(/workspace/mastra/.artifacts/pr3/merged-runtime/[39mpackages/core/src/agent/streams/publisher.ts:192:5[90m)[39m
+
+ [32m✓[39m .artifacts/pr3/controls.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 2131[2mms[22m[39m
+   [32m✓[39m normal [2m(3)[22m
+     [33m[2m✓[22m[39m gate[33m 435[2mms[22m[39m
+     [33m[2m✓[22m[39m append-outage[33m 404[2mms[22m[39m
+     [33m[2m✓[22m[39m transport-outage[33m 390[2mms[22m[39m
+   [32m✓[39m durable [2m(1)[22m
+     [33m[2m✓[22m[39m gate[33m 439[2mms[22m[39m
+   [32m✓[39m evented [2m(1)[22m
+     [33m[2m✓[22m[39m gate[33m 449[2mms[22m[39m
+ [32m✓[39m .artifacts/pr3/semantics.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 367[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m18 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 05:51:51
+[2m   Duration [22m 20.72s[2m (transform 42%, tests 32%, import 26%)[22m
