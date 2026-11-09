@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 import { tripArgs, tripCatalog } from './catalog.mock';
 import { createGenUIDefinition, createSpecResolver, createSpecTools } from './index';
-import type { CreateGenUIDefinitionOptions, GenUISpecTool } from './index';
+import type { CreateGenUIDefinitionOptions, GenUISpecResolver, GenUISpecTool } from './index';
 
 const message = (id: string, parts: object[]): MastraDBMessage => ({
   id,
@@ -24,17 +24,15 @@ const retitle = (title: string, target?: string) => ({
   patch: [{ op: 'replace', path: '/elements/card/props/title', value: JSON.stringify(title) }],
 });
 
-function setup(specTool: CreateGenUIDefinitionOptions['specTool'] = true, messages: MastraDBMessage[] = []) {
+function setup(specTool: CreateGenUIDefinitionOptions['specTool'] = true, resolver?: GenUISpecResolver) {
   const definition = createGenUIDefinition({ catalog: tripCatalog, specTool });
-  const resolver = createSpecResolver({ ...(definition.specTool ? { specTool: definition.specTool } : {}) });
-  resolver.update(messages);
-  const tools = createSpecTools({ definition, resolver });
+  const tools = createSpecTools({ definition, ...(resolver ? { resolver } : {}) });
   const tool = (name: string): GenUISpecTool => {
     const found = tools.find(entry => entry.name === name);
     if (!found) throw new Error(`no tool "${name}"`);
     return found;
   };
-  return { tools, tool, resolver };
+  return { tools, tool };
 }
 
 describe('createSpecTools', () => {
@@ -123,7 +121,9 @@ describe('createSpecTools', () => {
     const thread = [message('a1', [specCall('s1', tripArgs)])];
 
     it('applies the edit to the latest interface and reports its base state', async () => {
-      const result = await setup(true, thread).tool('ui_spec_edit').execute(retitle('Lisbon'), { toolCallId: 'e1' });
+      const result = await setup()
+        .tool('ui_spec_edit')
+        .execute(retitle('Lisbon'), { toolCallId: 'e1', messages: thread });
 
       expect(result).toEqual({ ok: true, id: 'e1', target: 's1', baseState: { remind: false } });
     });
@@ -134,15 +134,15 @@ describe('createSpecTools', () => {
         patch: [{ op: 'replace', path: '/elements/card/props/title', value: '42' }],
       };
 
-      const result = await setup(true, thread).tool('ui_spec_edit').execute(edit, { toolCallId: 'e1' });
+      const result = await setup().tool('ui_spec_edit').execute(edit, { toolCallId: 'e1', messages: thread });
 
       expect(result).toMatchObject({ ok: false, error: expect.stringContaining('title') });
     });
 
     it('rejects an edit of an interface that does not exist', async () => {
-      const result = await setup(true, thread)
+      const result = await setup()
         .tool('ui_spec_edit')
-        .execute(retitle('Lisbon', 'nope'), { toolCallId: 'e1' });
+        .execute(retitle('Lisbon', 'nope'), { toolCallId: 'e1', messages: thread });
 
       expect(result).toEqual({ ok: false, error: 'there is no interface "nope" to edit' });
     });
@@ -150,7 +150,9 @@ describe('createSpecTools', () => {
     it('rejects an edit of an interface that failed to display', async () => {
       const failed = [message('a1', [specCall('s1', tripArgs, { ok: false, error: 'bad' })])];
 
-      const result = await setup(true, failed).tool('ui_spec_edit').execute(retitle('Lisbon'), { toolCallId: 'e1' });
+      const result = await setup()
+        .tool('ui_spec_edit')
+        .execute(retitle('Lisbon'), { toolCallId: 'e1', messages: failed });
 
       expect(result).toEqual({
         ok: false,
@@ -159,15 +161,46 @@ describe('createSpecTools', () => {
     });
 
     it('needs the tool call id to know what it edits', async () => {
-      const result = await setup(true, thread).tool('ui_spec_edit').execute(retitle('Lisbon'));
+      const result = await setup().tool('ui_spec_edit').execute(retitle('Lisbon'), { messages: thread });
 
       expect(result).toEqual({ ok: false, error: 'ui_spec_edit was called without a tool call id' });
+    });
+
+    it('needs the conversation to know what it edits', async () => {
+      const result = await setup().tool('ui_spec_edit').execute(retitle('Lisbon'), { toolCallId: 'e1' });
+
+      expect(result).toEqual({ ok: false, error: 'ui_spec_edit was called without the conversation' });
+    });
+
+    it('edits the interface in the conversation each call brings', async () => {
+      const edit = setup().tool('ui_spec_edit');
+      const other = [message('b1', [specCall('s9', { ...tripArgs, state: { remind: true } })])];
+
+      const first = await edit.execute(retitle('Lisbon'), { toolCallId: 'e1', messages: thread });
+      const second = await edit.execute(retitle('Porto'), { toolCallId: 'e2', messages: other });
+
+      expect(first).toMatchObject({ ok: true, target: 's1', baseState: { remind: false } });
+      expect(second).toMatchObject({ ok: true, target: 's9', baseState: { remind: true } });
+    });
+
+    it('starts from the state the user set when it shares the resolver the views read', async () => {
+      const definition = createGenUIDefinition({ catalog: tripCatalog, specTool: true });
+      const resolver = createSpecResolver({
+        ...(definition.specTool ? { specTool: definition.specTool } : {}),
+        stateOf: toolCallId => (toolCallId === 's1' ? { remind: true } : undefined),
+      });
+
+      const result = await setup(true, resolver)
+        .tool('ui_spec_edit')
+        .execute(retitle('Lisbon'), { toolCallId: 'e1', messages: thread });
+
+      expect(result).toEqual({ ok: true, id: 'e1', target: 's1', baseState: { remind: true } });
     });
   });
 
   describe('when the edit tool runs before any interface exists', () => {
     it('tells the model there is nothing to edit', async () => {
-      const result = await setup().tool('ui_spec_edit').execute(retitle('Lisbon'), { toolCallId: 'e1' });
+      const result = await setup().tool('ui_spec_edit').execute(retitle('Lisbon'), { toolCallId: 'e1', messages: [] });
 
       expect(result).toEqual({ ok: false, error: 'there is no interface to edit' });
     });
@@ -182,9 +215,9 @@ describe('createSpecTools', () => {
         },
       ]);
 
-      const result = await setup(true, [streaming])
+      const result = await setup()
         .tool('ui_spec_edit')
-        .execute(retitle('Lisbon'), { toolCallId: 'e1' });
+        .execute(retitle('Lisbon'), { toolCallId: 'e1', messages: [streaming] });
 
       expect(result).toEqual({ ok: false, error: 'interface "s1" is not complete yet' });
     });

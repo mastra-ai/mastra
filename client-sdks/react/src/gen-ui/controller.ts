@@ -244,6 +244,12 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     specTool: registry.specTool,
     stateOf: toolCallId => stores.get(toolCallId)?.getSnapshot(),
   });
+  // The messages the resolver last read; the edit tool reads the same ones, so it finds what the views show.
+  let specMessages: ReadonlyArray<MastraDBMessage> = [];
+  const readSpecs = (messages: ReadonlyArray<MastraDBMessage>) => {
+    specMessages = messages;
+    return resolver.update(messages);
+  };
 
   // ---- frontend tools --------------------------------------------------------------------------
   const toolCallIdFrom = (executeContext: unknown) => {
@@ -290,7 +296,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       description: tool.description,
       inputSchema: tool.inputSchema,
       execute: (input: unknown, executeContext: unknown) =>
-        tool.execute(input, { toolCallId: toolCallIdFrom(executeContext) }),
+        tool.execute(input, { toolCallId: toolCallIdFrom(executeContext), messages: specMessages }),
     };
   }
 
@@ -312,7 +318,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       if (syncedThread && syncedThread.id !== chat.threadId) reset();
       syncedThread = { id: chat.threadId };
       updateToolMeta(messages);
-      if (resolver.update(messages)) specListeners.forEach(listener => listener());
+      if (readSpecs(messages)) specListeners.forEach(listener => listener());
       const next = chat.running ?? false;
       if (next !== running) {
         running = next;
@@ -320,7 +326,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       }
     },
     readSpecs(messages) {
-      resolver.update(messages);
+      readSpecs(messages);
     },
     isRunning: () => running,
     subscribe(listener) {

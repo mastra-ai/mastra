@@ -1,5 +1,7 @@
 import { builtInValidationFunctions } from '@json-render/core';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { GenUIDefinition } from './definition';
+import { createSpecResolver } from './resolver';
 import type { GenUISpecResolver } from './resolver';
 import { readSpecToolArgs, specToolInputSchema } from './spec';
 import { applySpecEdit, readSpecEditArgs, specEditDescription, specEditInputSchema } from './spec-edit';
@@ -10,6 +12,11 @@ import type { GenUISpecValidator } from './validator';
 export interface GenUISpecToolExecuteContext {
   /** The id of the tool call being run. The edit tool needs it to find what it edits. */
   toolCallId?: string;
+  /**
+   * The conversation so far, as stored thread messages. The edit tool needs it to find the interface it edits:
+   * the call's `target`, or the latest spec before the call.
+   */
+  messages?: ReadonlyArray<MastraDBMessage>;
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -25,8 +32,12 @@ export interface GenUISpecTool {
 /** @experimental Generative UI is in beta and may change without notice. */
 export interface CreateSpecToolsOptions {
   definition: GenUIDefinition;
-  /** Resolves the interfaces edits apply to; keep it updated with the conversation. */
-  resolver: GenUISpecResolver;
+  /**
+   * Reads the interfaces edits apply to from each call's `messages`. Pass the resolver your views read, so an
+   * edit starts from the same state the user had set in its target (its `stateOf`). Defaults to a new resolver,
+   * where an edit starts from the state the target's spec set.
+   */
+  resolver?: GenUISpecResolver;
   /** Defaults to a validator for the definition. */
   validator?: GenUISpecValidator;
 }
@@ -82,9 +93,10 @@ function specToolDescription(definition: GenUIDefinition): string {
  * @experimental Generative UI is in beta and may change without notice.
  */
 export function createSpecTools(options: CreateSpecToolsOptions): GenUISpecTool[] {
-  const { definition, resolver } = options;
+  const { definition } = options;
   const specTool = definition.specTool;
   if (!specTool) return [];
+  const resolver = options.resolver ?? createSpecResolver({ specTool });
   const { checkSpec } = options.validator ?? createSpecValidator(definition);
   const edit = specTool.edit;
   const declarative = Object.values(definition.components).filter(entry => entry.declarative);
@@ -113,8 +125,10 @@ export function createSpecTools(options: CreateSpecToolsOptions): GenUISpecTool[
       execute: async (input, context) => {
         const id = context?.toolCallId;
         if (!id) return { ok: false, error: `${edit.name} was called without a tool call id` };
+        if (!context?.messages) return { ok: false, error: `${edit.name} was called without the conversation` };
         const read = readSpecEditArgs(input, true, edit.modes);
         if (!read.ok) return { ok: false, error: read.error };
+        resolver.update(context.messages);
         const base = resolver.readEditBase(id, read.edit);
         if (!base.spec) return { ok: false, error: base.error ?? `interface "${base.target}" is not complete yet` };
         const applied = applySpecEdit(base.spec, read.edit);

@@ -17,6 +17,8 @@ const read = resolver.specForCall(toolCallId);
 if (read?.spec) await postToSlack(read.spec);
 ```
 
+`createSpecTools` builds the spec tool and its edit tool from the same definition. The edit tool takes everything it needs in its execute context, `{ toolCallId, messages }`, so it finds the interface it edits in the conversation you pass rather than in state held elsewhere.
+
 `@json-render/core` is an optional peer dependency, needed only when you import `@mastra/client-js/gen-ui`. The `@mastra/react/gen-ui` API is unchanged.
 
 Fixed the spec edit tool telling the model `interface "undefined" is not complete yet` when it edited an interface that was still streaming. The error now names that interface.
