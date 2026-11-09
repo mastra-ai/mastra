@@ -18,6 +18,9 @@ export function createAssistant(
   let storage: LibSQLStore;
   try {
     if (config.runtime.mode === 'local') mkdirSync(dirname(config.runtime.databasePath), { recursive: true });
+    // TODO: Recheck upstream LibSQL retry logging when upgrading @mastra/libsql.
+    // Version 1.29.0 can log raw database errors, stack traces and operation details
+    // through a captured default logger, bypassing AssistantLogger sanitization.
     storage = new LibSQLStore({
       id: 'personal-assistant-storage',
       ...(config.runtime.mode === 'local'

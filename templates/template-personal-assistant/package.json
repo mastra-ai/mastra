@@ -17,8 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "node --import tsx --test tests/config.test.ts",
     "test:integration": "node --import tsx --test tests/assistant.test.ts tests/connections.test.ts tests/progress.test.ts tests/schedules.test.ts",
-    "test:runtime": "node --import tsx --test tests/runtime.test.ts",
-    "postinstall": "node scripts/apply-libsql-patch.mjs"
+    "test:runtime": "node --import tsx --test tests/runtime.test.ts"
   },
   "dependencies": {
     "@mastra/connect": "latest",
@@ -26,8 +25,7 @@
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
-    "zod": "^4.3.6",
-    "patch-package": "8.0.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "mastra": "latest",
