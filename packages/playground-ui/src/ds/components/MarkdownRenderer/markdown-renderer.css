@@ -33,7 +33,7 @@
   .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
     margin: 1.6em 0 0.6em;
     color: var(--foreground);
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     letter-spacing: -0.012em;
     line-height: 1.35;
   }
@@ -54,9 +54,10 @@
     font-size: 1em;
   }
 
+  /* Bold sits a clear step above the regular (450) prose weight; 500 is too close to tell apart. */
   .mastra-markdown strong {
     color: var(--foreground);
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .mastra-markdown em {
