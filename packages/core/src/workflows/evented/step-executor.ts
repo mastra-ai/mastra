@@ -127,12 +127,9 @@ export class StepExecutor extends MastraBase {
         getStepResultAsync: getStepResultAsync.bind(this, stepResults),
       };
     }
-    const hydrate = async (stepIds: string[]) =>
-      hydrateStepResults(
-        { store: await this.mastra?.getStorage()?.getStore('workflows'), workflowName, runId },
-        stepResults,
-        stepIds,
-      );
+    const loadSteps = async (stepIds: string[]) =>
+      (await this.mastra?.getStorage()?.getStore('workflows'))?.loadWorkflowRunSteps({ workflowName, runId, stepIds });
+    const hydrate = (stepIds: string[]) => hydrateStepResults({ runId, loadSteps }, stepResults, stepIds);
     return storageV2StepResultAccessors(step => getHydratedStepResult(stepResults, step, hydrate));
   }
 

@@ -5,6 +5,7 @@ import { applyStatePatch, diffStateAsJson, patchState } from '../../../storage/d
 import type { StatePatchOp } from '../../../storage/domains/workflows/state-patch';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { copyState, toJsonState } from '../../nested-state';
+import { hydrateStepResults, isStepResultStub } from '../../run-journal';
 import type { RunStorage } from '../../run-storage';
 
 /**
@@ -29,7 +30,7 @@ type StorageScope = {
 const scopes = new AsyncLocalStorage<StorageScope>();
 
 /** Step messages: the processor loads their step results and state from storage. */
-const TRIMMED_EVENTS = new Set(['workflow.step.run', 'workflow.step.end']);
+export const STEP_MESSAGES = new Set(['workflow.step.run', 'workflow.step.end']);
 
 export function runInStorageScope<T>(storageVersion: 1 | 2, fn: () => T): T {
   return scopes.run({ storageVersion, bases: new Map() }, fn);
@@ -138,10 +139,21 @@ function trimParent(parent: Record<string, any>, keepInput: boolean): Record<str
 /** Events that start a nested run, whose start needs its parent descriptor's `input`. */
 const NESTED_START_EVENTS = new Set(['workflow.start', 'workflow.resume']);
 
+/**
+ * `stepResults` without the stubs a step message's dispatch loads (see `stubStepResult`). The
+ * receiving dispatch loads those steps as stored, while a stub sent on would replace them: a
+ * serializing pubsub turns it into a plain result without its output.
+ */
+function withoutStubs(stepResults: Record<string, unknown>): Record<string, unknown> {
+  if (!Object.values(stepResults).some(isStepResultStub)) return stepResults;
+  return Object.fromEntries(Object.entries(stepResults).filter(([, result]) => !isStepResultStub(result)));
+}
+
 function scopedEvent(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id' | 'createdAt'> {
   const scope = scopes.getStore();
   if (topic !== 'workflows' || scope?.storageVersion !== 2 || !event.data) return event;
-  const data = TRIMMED_EVENTS.has(event.type) ? trimStepEventData(event.data, scope) : { ...event.data };
+  const data = STEP_MESSAGES.has(event.type) ? trimStepEventData(event.data, scope) : { ...event.data };
+  if (data.stepResults && event.type !== 'workflow.start') data.stepResults = withoutStubs(data.stepResults);
   if (data.parentWorkflow) data.parentWorkflow = trimParent(data.parentWorkflow, NESTED_START_EVENTS.has(event.type));
   if (data.parentContext) data.parentContext = trimParent(data.parentContext, false);
   return { ...event, data: { ...data, storageVersion: 2 } };
@@ -168,6 +180,18 @@ export function scopedPubSub(pubsub: PubSub): PubSub {
   return scoped;
 }
 
+/** `results` with its stubs (see `stubStepResult`) swapped for the stored results they stand for. */
+export async function storedResults<R extends Record<string, any>>(
+  runStorage: Pick<RunStorage, 'loadSteps'>,
+  runId: string,
+  results: R,
+): Promise<R> {
+  if (!Object.values(results).some(isStepResultStub)) return results;
+  const copy = { ...results };
+  await hydrateStepResults({ runId, loadSteps: stepIds => runStorage.loadSteps(stepIds) }, copy);
+  return copy;
+}
+
 /** `runStorage`, with whole-state writes in a v2 scope sent as patches on the run's stored state. */
 export function scopedRunStorage(runId: string, runStorage: RunStorage): RunStorage {
   const scope = scopes.getStore();
@@ -181,9 +205,30 @@ export function scopedRunStorage(runId: string, runStorage: RunStorage): RunStor
     return statePatch.length > 0 ? { ...write, statePatch } : write;
   };
 
+  // A step message's dispatch holds the results of steps outside its entry as stubs: retiring a
+  // predecessor (its successor's start guard, or the successor marking it continued) writes the
+  // stored result the stub stands for.
+  const unstubbed = async (write: Parameters<RunStorage['writeStepResult']>[0]) => {
+    const { startGuard } = write;
+    const previousStep = startGuard?.previousStep;
+    if (!isStepResultStub(write.result) && !isStepResultStub(previousStep?.result)) return write;
+    const stored = await storedResults(runStorage, runId, {
+      [write.stepId]: write.result,
+      ...(previousStep && { [previousStep.stepId]: previousStep.result }),
+    });
+    return {
+      ...write,
+      result: stored[write.stepId]!,
+      startGuard:
+        startGuard && previousStep
+          ? { ...startGuard, previousStep: { ...previousStep, result: stored[previousStep.stepId]! } }
+          : startGuard,
+    };
+  };
+
   const overrides: Partial<RunStorage> = {
     writeStepResult: async write => {
-      const patched = await toPatch(write);
+      const patched = await toPatch(await unstubbed(write));
       try {
         return await runStorage.writeStepResult(patched);
       } catch (error) {

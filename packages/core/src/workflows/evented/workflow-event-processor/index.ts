@@ -50,6 +50,7 @@ import type {
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
+import { hydrateStepResults } from '../../run-journal';
 import { createRunStorage } from '../../run-storage';
 import type { RunStorage } from '../../run-storage';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
@@ -76,7 +77,9 @@ import {
   runInStorageScope,
   scopedPubSub,
   scopedRunStorage,
+  STEP_MESSAGES,
   storageVersionOf,
+  storedResults,
 } from './storage-scope';
 import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
@@ -3180,13 +3183,19 @@ export class WorkflowEventProcessor extends EventProcessor {
       } else if (abortController.signal.aborted) {
         stepResult = { status: 'canceled' };
       } else if (this.stepExecutionStrategy) {
+        // A strategy can send the step results to another process as JSON, where a stub reads as a
+        // result without its output, so it gets them loaded.
+        const sentStepResults =
+          currentStorageVersion() === 2
+            ? await storedResults(this.#runStorage(workflowId, runId), runId, stepResults)
+            : stepResults;
         stepResult = await this.stepExecutionStrategy.executeStep({
           workflowId,
           runId,
           stepId: leafId,
           executionPath,
           parentWorkflow: toStepExecutionParentWorkflow(parentWorkflow),
-          stepResults,
+          stepResults: sentStepResults,
           state: currentState,
           requestContext: Object.fromEntries(rc.entries()),
           actor,
@@ -4880,6 +4889,49 @@ export class WorkflowEventProcessor extends EventProcessor {
     return runInStorageScope(storageVersion, () => this.#dispatchInScope(event, storageVersion));
   }
 
+  /**
+   * The run as stored. A v2 step message's dispatch loads the run's earlier successful steps as
+   * stubs (see `stubStepResult`), and `#hydrateEntrySteps` loads the ones its handler reads.
+   */
+  async #loadRun(type: string, data: Record<string, any>, storageVersion: 1 | 2) {
+    if (storageVersion === 2 && STEP_MESSAGES.has(type)) {
+      const summary = await this.#runStorage(data.workflowId, data.runId).loadForResume({ wait: false });
+      if (summary) return summary;
+    }
+    return this.loadData({ workflowId: data.workflowId, runId: data.runId });
+  }
+
+  /**
+   * Loads the stubbed results of a step message's entry: the steps its handler reads (the step's
+   * own result, a foreach's items, a parallel block's branches). A branch's own messages read only
+   * that branch: its step end loads its siblings as of its write. Step code reads any other step
+   * through `getStepResultAsync`; published events drop stubs, and retiring a predecessor writes
+   * the stored result its stub stands for (see `scopedPubSub`, `scopedRunStorage`).
+   */
+  async #hydrateEntrySteps(
+    workflow: Workflow,
+    {
+      workflowId,
+      runId,
+      executionPath,
+      stepResults,
+    }: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'executionPath' | 'stepResults'>,
+  ) {
+    const [index, branch] = executionPath ?? [];
+    const entry = index === undefined ? undefined : workflow.stepGraph[index];
+    if (!entry || !stepResults) return;
+    const branchEntry =
+      (entry.type === 'parallel' || entry.type === 'conditional') && branch !== undefined
+        ? entry.steps[branch]
+        : undefined;
+    const runStorage = this.#runStorage(workflowId, runId);
+    await hydrateStepResults(
+      { runId, loadSteps: ids => runStorage.loadSteps(ids) },
+      stepResults,
+      getStepIds(branchEntry ?? entry),
+    );
+  }
+
   async #dispatchInScope(event: Event, storageVersion: 1 | 2) {
     const { type } = event;
     let { data } = event;
@@ -4890,10 +4942,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         ? { ready: this.isControlSubscriptionReady(), missedAborts: this.missedControlAborts }
         : {};
 
-    const currentState = await this.loadData({
-      workflowId: data.workflowId,
-      runId: data.runId,
-    });
+    const currentState = await this.#loadRun(type, data, storageVersion);
     if (type === 'workflow.step.run') control.storedRun = currentState ?? null;
     if (storageVersion === 2) {
       data = hydrateEventData(type, data, currentState);
@@ -4998,6 +5047,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     // avoid widening the shared `ProcessorArgs.workflow` type across the
     // hundreds of usage sites in this file.
     const workflowArg = workflow as Workflow;
+
+    if (storageVersion === 2 && workflow && STEP_MESSAGES.has(type)) {
+      await this.#hydrateEntrySteps(workflow, workflowData);
+    }
 
     switch (type) {
       case 'workflow.cancel':

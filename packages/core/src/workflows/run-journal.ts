@@ -566,7 +566,11 @@ export class RunJournal {
 
   /** Swap the stubs among `stepIds` back for their stored results, with one read. */
   async hydrate(stepResults: StepResults, stepIds: readonly string[] = Object.keys(stepResults)): Promise<void> {
-    const hydrated = await hydrateStepResults(this, stepResults, stepIds);
+    const { store, workflowName, runId } = this;
+    // Without storage nothing is evicted, so there are no stubs to load.
+    if (!store) return;
+    const loadSteps = (ids: string[]) => store.loadWorkflowRunSteps({ workflowName, runId, stepIds: ids });
+    const hydrated = await hydrateStepResults({ runId, loadSteps }, stepResults, stepIds);
     // The loaded results are what's stored, so the next write doesn't resend them.
     for (const [stepId, result] of hydrated) this.#written.set(stepId, result);
   }
@@ -645,7 +649,7 @@ export function storageV2StepResultAccessors(getStepResultAsync: (step: unknown)
  * @internal
  */
 export async function hydrateStepResults(
-  run: { store: WorkflowsStorage | undefined; workflowName: string; runId: string },
+  run: { runId: string; loadSteps: (stepIds: string[]) => Promise<StepResults | null | undefined> },
   stepResults: StepResults,
   stepIds: readonly string[] = Object.keys(stepResults),
 ): Promise<Map<string, StepResult<any, any, any, any>>> {
@@ -654,13 +658,9 @@ export async function hydrateStepResults(
   for (const stepId of stepIds) {
     if (isStepResultStub(stepResults[stepId])) stubbed.set(stepId, stepResults[stepId]);
   }
-  if (!run.store || !stubbed.size) return hydrated;
+  if (!stubbed.size) return hydrated;
 
-  const loaded = await run.store.loadWorkflowRunSteps({
-    workflowName: run.workflowName,
-    runId: run.runId,
-    stepIds: [...stubbed.keys()],
-  });
+  const loaded = await run.loadSteps([...stubbed.keys()]);
   for (const [stepId, stub] of stubbed) {
     // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
     // is at least as new as the one read.
