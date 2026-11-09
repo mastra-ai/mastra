@@ -1023,6 +1023,37 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ address, resumeData: 'Yes', requestContext });
     });
 
+    it('uses the warm claim on supported older core versions without persisted recovery', async () => {
+      const session = await getRouteSession('older-core');
+      Object.defineProperty(session, 'claimPersistedToolSuspension', { value: undefined, configurable: true });
+      const address = {
+        threadId: session.thread.requireId(),
+        resourceId: session.identity.getResourceId(),
+        runId: 'run-old',
+        toolCallId: 'call-old',
+      };
+      const claim = vi.spyOn(session, 'claimToolSuspension').mockReturnValue({
+        accepted: true,
+        toolCallId: address.toolCallId,
+        address,
+        claimKey: `${address.threadId}\0${address.runId}\0${address.toolCallId}`,
+      });
+      const resume = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
+
+      const result = await AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'older-core',
+        toolCallId: address.toolCallId,
+        runId: address.runId,
+        resumeData: 'Yes',
+      } as any);
+
+      expect(result).toEqual({ ok: true });
+      expect(claim).toHaveBeenCalledWith(address.toolCallId, address.runId);
+      expect(resume).toHaveBeenCalledWith({ address, resumeData: 'Yes', requestContext: undefined });
+    });
+
     it('acks a tool suspension without waiting for the resumed run to finish', async () => {
       const session = await getRouteSession('user-suspension-ack');
       const address = {

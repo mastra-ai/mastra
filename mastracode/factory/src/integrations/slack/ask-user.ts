@@ -136,6 +136,12 @@ export function slackQuestionHandlers(
     thread: { id: string; resourceId: string; metadata?: Record<string, unknown> },
     ctx: ActionContext,
   ) => Promise<Session>,
+  authorizeActor: (
+    thread: { id: string; channelId: string },
+    actorId: string,
+    raw: unknown,
+    ctx: ActionContext,
+  ) => Promise<boolean>,
 ): Pick<ChannelHandlers, 'onAction' | 'onModalSubmit'> {
   async function findQuestion(
     mastra: Mastra,
@@ -222,6 +228,7 @@ export function slackQuestionHandlers(
       const messageId = event.messageId;
       const actorId = event.user?.userId;
       if (!externalId || !channelId || !messageId || !actorId || !ctx.mastra) return;
+      if (!(await authorizeActor(event.thread!, actorId, event.raw, ctx))) return;
       const found = await findQuestion(ctx.mastra, externalId, channelId, messageId, ctx);
       if (!found || found.prompt.requesterId !== actorId) return;
       const { session, prompt } = found;
@@ -280,6 +287,8 @@ export function slackQuestionHandlers(
         return;
       }
       if (!data.externalId || !data.channelId || !data.messageId || event.relatedThread?.id !== data.externalId) return;
+      if (event.relatedThread.channelId !== data.channelId) return;
+      if (!(await authorizeActor(event.relatedThread, event.user.userId, event.raw, ctx))) return;
       const response = event.values.answer?.trim();
       if (!response) return;
       await answer(

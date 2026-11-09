@@ -775,7 +775,7 @@ type ExistingSessionOwnerContext =
 async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
-  ctx: ChannelHandlerContext,
+  ctx: Pick<ChannelHandlerContext, 'mastra' | 'requestContext'>,
   options: {
     expectedOrgId?: string;
     senderUserId?: string;
@@ -1162,12 +1162,10 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
         requireInternalThread: true,
         internalThread,
         addressed: thread.isDM || !!message.isMention,
-      }).catch(
-        async (error: unknown) => {
-          await reportPreDispatchError(thread, message, ctx, error);
-          return null;
-        },
-      );
+      }).catch(async (error: unknown) => {
+        await reportPreDispatchError(thread, message, ctx, error);
+        return null;
+      });
       if (!gate) return;
       const command = message.isMention ? muteCommand(message) : undefined;
       if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
@@ -1260,11 +1258,33 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
 
   const startedSessions: SlackStartedSessions = new WeakMap();
   const resolveSession = createChannelSessionResolver(deps);
-  const questions = slackQuestionHandlers(adapter, async (mastra, thread, ctx) => {
-    const controller = mastra.getAgentController('code');
-    if (!controller) throw new Error('Factory agent controller is unavailable');
-    return resolveSession({ controller, thread, requestContext: ctx.requestContext });
-  });
+  const questions = slackQuestionHandlers(
+    adapter,
+    async (mastra, thread, ctx) => {
+      const controller = mastra.getAgentController('code');
+      const channels = controller?.getChannels();
+      if (!channels) throw new Error('Factory agent controller channels are unavailable');
+      return channels.getSessionForInteractiveThread(thread, ctx.requestContext);
+    },
+    async (thread, actorId, raw, ctx) => {
+      if (!deps.accountLinks) return true;
+      const externalTeamId = rawTeamId(raw);
+      if (!externalTeamId) return false;
+      const link = await deps.accountLinks.getAccountLink({
+        platform: 'slack',
+        externalTeamId,
+        externalUserId: actorId,
+      });
+      if (!link) return false;
+      ctx.requestContext.set('user', { id: link.userId, organizationId: link.orgId });
+      const owner = await prepareExistingSessionOwnerContext(thread as HandlerThread, deps, ctx, {
+        expectedOrgId: link.orgId,
+        senderUserId: link.userId,
+        requireInternalThread: true,
+      });
+      return owner.status === 'ready';
+    },
+  );
   const onSessionStart = createChannelSessionStartHook(deps);
   return {
     adapters: { slack },

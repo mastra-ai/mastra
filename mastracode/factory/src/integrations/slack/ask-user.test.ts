@@ -55,7 +55,9 @@ function fixture(selectionMode: 'single_select' | 'multi_select' = 'single_selec
       }),
     }),
   };
-  const handlers = slackQuestionHandlers(adapter as any, async () => session as any);
+  const authorizeActor = vi.fn().mockResolvedValue(true);
+  const resolveSession = vi.fn().mockResolvedValue(session);
+  const handlers = slackQuestionHandlers(adapter as any, resolveSession as any, authorizeActor);
   const ctx = {
     mastra,
     requestContext: new RequestContext(),
@@ -95,6 +97,8 @@ function fixture(selectionMode: 'single_select' | 'multi_select' = 'single_selec
     session,
     mastra,
     handlers,
+    authorizeActor,
+    resolveSession,
     ctx,
     event,
     settings,
@@ -105,6 +109,26 @@ function fixture(selectionMode: 'single_select' | 'multi_select' = 'single_selec
 }
 
 describe('Slack suspended questions', () => {
+  it('rejects unlinked action clicks and modal submissions before resolving a session', async () => {
+    const f = fixture();
+    await f.posted();
+    f.authorizeActor.mockResolvedValue(false);
+    await f.handlers.onAction!(f.event('factory_ask_user:option:0'), vi.fn(), f.ctx);
+    await f.handlers.onModalSubmit!(
+      {
+        callbackId: 'factory_ask_user_custom',
+        privateMetadata: JSON.stringify({ externalId, channelId, messageId: 'card-1' }),
+        relatedThread: { id: externalId, channelId },
+        user: { userId: 'U1' },
+        values: { answer: 'Staging' },
+      } as any,
+      f.ctx,
+    );
+    expect(f.authorizeActor).toHaveBeenCalledTimes(2);
+    expect(f.resolveSession).not.toHaveBeenCalled();
+    expect(f.session.claimPersistedToolSuspension).not.toHaveBeenCalled();
+  });
+
   it('posts only one card when duplicate suspension events arrive before delivery finishes', async () => {
     const f = fixture();
     let completePost!: (value: { id: string }) => void;
