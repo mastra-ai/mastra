@@ -16,6 +16,8 @@ export function TableWidget(props: WidgetKindProps<TableOptions>) {
       <ChartCard
         title={props.widget.title ?? ''}
         dragHandle={props.dragHandle}
+        // Its loaded card titles several tabs with a menu, which can't be renamed.
+        onTitleChange={props.views.length < 2 ? props.onTitleChange : undefined}
         {...pinActions(props.pin)}
         bodyHeight="fit"
       >
