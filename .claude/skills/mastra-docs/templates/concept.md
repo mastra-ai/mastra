@@ -6,7 +6,7 @@ Guide: `references/DOC.md` (Focused concept pages and Conceptual pages).
 
 Answers: "What is this capability, how does it behave, and when should I use it?"
 
-Use it for one coherent capability, behavior, or mental model under `/docs`, such as structured output, working memory, or suspend and resume. It may include configuration when code is part of the concept.
+Use it for one coherent capability, behavior, or mental model under `/docs`, such as structured output, working memory, or suspend and resume. It also covers setup and configuration pages that enable a Mastra-owned feature, such as JWT auth: lead with the supported setup, separate local development from production requirements, and show how readers verify it works.
 
 Don't use it for:
 

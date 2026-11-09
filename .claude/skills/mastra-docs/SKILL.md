@@ -23,16 +23,14 @@ To replace an existing diagram image with Mermaid, use the `docs-diagrams` skill
 
 When creating a page, pick the template that matches the reader's question:
 
-| Reader question                                    | Template                     | Typical location                             |
-| -------------------------------------------------- | ---------------------------- | -------------------------------------------- |
-| "What is this area, and which option fits?"        | `templates/overview.md`      | `/docs/<category>/overview`                  |
-| "What is this capability, and how does it behave?" | `templates/concept.md`       | `/docs/<category>/<feature>`                 |
-| "How do I install, connect, or configure this?"    | `templates/setup.md`         | `/docs/<category>/<setup-topic>`             |
-| "How do I accomplish this specific task?"          | `templates/how-to.md`        | `/docs/<category>/<task>`                    |
-| "What's the fastest way to see it working?"        | `templates/quickstart.md`    | `## Quickstart` in an overview or setup page |
-| "What does this API accept and return?"            | `templates/reference-api.md` | `/reference/<category>/<api>`                |
-| "What does this command and its flags do?"         | `templates/reference-cli.md` | `/reference/cli/<command>`                   |
-| "How do I use Mastra with this product?"           | `templates/integration.md`   | `/integrations/<category>/<product>`         |
+| Reader question                                    | Template                     | Typical location                               |
+| -------------------------------------------------- | ---------------------------- | ---------------------------------------------- |
+| "What is this area, and which option fits?"        | `templates/overview.md`      | `/docs/<category>/overview`                    |
+| "What is this capability, and how do I set it up?" | `templates/concept.md`       | `/docs/<category>/<feature>`                   |
+| "How do I accomplish this specific task?"          | `templates/how-to.md`        | `/docs/<category>/<task>`                      |
+| "What's the fastest way to see it working?"        | `templates/quickstart.md`    | `## Quickstart` in an overview or concept page |
+| "What does this API or command accept?"            | `templates/reference-api.md` | `/reference/<category>/<api-or-command>`       |
+| "How do I use Mastra with this product?"           | `templates/integration.md`   | `/integrations/<category>/<product>`           |
 
 1. Copy the template's skeleton into the new `.mdx` file and replace every `$PLACEHOLDER`.
 2. Compare the result with the template's example page and with neighboring pages. Where the section has an established convention, follow it.

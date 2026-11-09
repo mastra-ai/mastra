@@ -6,13 +6,12 @@ Guide: `references/REFERENCE.md`.
 
 Answers: "What exactly does this API accept, return, and do?"
 
-Use it for a class, factory, function, method, options object, or result type under `/reference`. A page may cover one primitive or a tightly related API surface that readers look up together.
+Use it for a class, factory, function, method, options object, result type, or CLI command under `/reference`. For a CLI command, document syntax, arguments, and flags with the same `PropertiesTable` sections and follow the CLI section of `references/REFERENCE.md`. A page may cover one primitive or a tightly related API surface that readers look up together.
 
 Don't use it for:
 
 - explaining when or why to use the API (use `concept.md` and link to it);
 - step-by-step instructions (use `how-to.md`);
-- CLI commands (use `reference-cli.md`);
 - internal or unexported APIs. Document only public exports and supported contracts.
 
 ## Title grammar

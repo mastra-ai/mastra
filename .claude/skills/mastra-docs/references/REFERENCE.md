@@ -10,7 +10,7 @@ Use this file for API, configuration, CLI, type, and lookup pages under `docs/sr
 
 ## Reference page types
 
-Scaffold API pages from `.claude/skills/mastra-docs/templates/reference-api.md` and CLI pages from `.claude/skills/mastra-docs/templates/reference-cli.md`.
+Scaffold API and CLI pages from `.claude/skills/mastra-docs/templates/reference-api.md`.
 
 Choose the structure that matches the subject:
 
@@ -94,7 +94,7 @@ For a CLI command, include:
 - required build or initialization state;
 - environment variables;
 - important side effects;
-- short examples for common invocations.
+- short examples for common invocations. Use `@latest` only for bootstrap commands that run before a project exists, such as `npx create-mastra@latest` or `npx mastra@latest init`. Project commands such as `npx mastra dev` run the CLI version the project installed.
 
 Keep task walkthroughs in `/docs` or `/integrations` and link to them.
 

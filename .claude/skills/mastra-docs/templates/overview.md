@@ -11,7 +11,7 @@ Use it for a category landing page under `/docs`, such as agents, memory, auth, 
 Don't use it for:
 
 - a single capability or behavior (use `concept.md`);
-- enabling one feature (use `setup.md`);
+- enabling or configuring one feature (use `concept.md`);
 - an exhaustive list of child pages, which the sidebar already provides;
 - an external product (use `integration.md`).
 

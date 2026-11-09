@@ -10,7 +10,7 @@ Use it to connect Mastra to an external framework, platform, deployment target, 
 
 Don't use it for:
 
-- Mastra's own features (use `concept.md`, `setup.md`, or `how-to.md`);
+- Mastra's own features (use `concept.md` or `how-to.md`);
 - the full API of a Mastra adapter package (use `reference-api.md`, and link to it);
 - re-documenting the external product. Link to its docs instead.
 

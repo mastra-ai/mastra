@@ -80,7 +80,7 @@ Conceptual pages may compare patterns, explain architecture, or establish termin
 - Explain defaults and persistence boundaries when they affect behavior.
 - Separate local development assumptions from production requirements.
 
-Scaffold the page from `.claude/skills/mastra-docs/templates/setup.md`.
+Scaffold the page from `.claude/skills/mastra-docs/templates/concept.md`, leading with the setup and configuration sections.
 
 ## Task-oriented docs pages
 
