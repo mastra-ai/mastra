@@ -7974,7 +7974,8 @@ export class Mastra<
    * it end; its partial response is not saved. A run parked on a tool
    * approval or suspension stays parked and resumable. Either way the thread
    * lease is released right away instead of at expiry, so another process
-   * can use the thread immediately. Handing runs back can take up to about
+   * can use the thread immediately, unless an aborted run doesn't stop in
+   * time: then the lease is kept until it expires. Handing runs back can take up to about
    * 1.5 seconds past `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {

@@ -164,7 +164,7 @@ Shutdown then hands back the agent thread runs the process still holds:
 
 - A run still executing is aborted. Clients watching the thread from other processes see it end, and its partial response isn't saved.
 - A run waiting on a tool approval or suspension stays suspended and can be resumed from another process.
-- The thread lease is released right away, so another process can start a run on the thread without waiting for the lease to expire.
+- The thread lease is released right away, so another process can start a run on the thread without waiting for the lease to expire. If an aborted run doesn't stop in time, its lease is kept until it expires instead.
 
 Handing runs back can take up to about 1.5 seconds past the drain timeout.
 

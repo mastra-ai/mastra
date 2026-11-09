@@ -1292,10 +1292,11 @@ export class AgentThreadStreamRuntime {
    * without either leaves them waiting for the lease to lapse and then failing the run as having lost its lease,
    * and leaves the thread blocked until then.
    *
-   * A run still executing here is aborted and gets up to `abortGraceMs` to stop, so its tools aren't still running
-   * once another process can take the thread. A run parked on a suspension is announced as `run-suspended`, so it
-   * stays resumable; any other run as an unpersisted `run-completed`. Each lease is released only after that event
-   * is published, so no observer finds the thread free while the run still looks live there. Every lease renewal
+   * A run still executing here is aborted and gets up to `abortGraceMs` to stop. A run parked on a suspension is
+   * announced as `run-suspended`, so it stays resumable; any other run as an unpersisted `run-completed`. Each lease
+   * is released only after that event is published, so no observer finds the thread free while the run still looks
+   * live there. A run that didn't stop within the grace keeps its lease until it expires, and its remaining tool
+   * calls fail, so its tools aren't still running once another process can take the thread. Every lease renewal
    * of the owner's runs stops, whether or not the run still held its thread. A run `executesElsewhere` reports as
    * executed by another process is left to that process, lease included.
    */
@@ -1310,7 +1311,7 @@ export class AgentThreadStreamRuntime {
     const resolved = this.#getPubSub(pubsub);
     const state = this.#statesByPubSub.get(resolved);
     if (!state) return;
-    const provider = this.#getLeaseProvider(resolved);
+    const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
     const records = [...state.threadRunsById.values()].filter(
       record => record.agent.getMastraInstance?.() === owner && !state.shutdownStreams.has(record.streamId),
     );
@@ -1323,34 +1324,39 @@ export class AgentThreadStreamRuntime {
         return;
       }
       const preparedRun = this.#isParkedRun(state, runId) ? undefined : state.preparedRunsById.get(runId);
-      const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
-      const leaseOwner = state.leaseOwners.get(runId) ?? record.leaseOwner ?? this.#threadLeaseOwner(resolved, runId);
-      // Ask the lease backend rather than the record: a durable run this Mastra just abandoned counts as having lost
-      // its execution, yet still holds its thread here until released.
-      const holdsThread =
-        state.leaseRenewalTimers.has(runId) &&
-        !record.registeredElsewhere &&
-        !record.lateRetakeHandoff &&
-        (await provider.getLeaseOwner(key).catch(() => undefined)) === leaseOwner;
-      if (!holdsThread) {
+      if (!state.leaseRenewalTimers.has(runId) || record.registeredElsewhere || record.lateRetakeHandoff) {
         // Another execution has the thread; it ends the run and releases the thread.
         preparedRun?.abortController.abort();
         this.#stopLeaseRenewal(resolved, runId);
         return;
       }
+      const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
+      const leaseOwner = state.leaseOwners.get(runId) ?? record.leaseOwner ?? this.#threadLeaseOwner(resolved, runId);
       // From here the run's own end neither publishes nor gives up its lease: shutdown does both below.
       state.shutdownStreams.set(streamId, 'ending');
-      if (preparedRun) {
-        preparedRun.abortController.abort();
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        await Promise.race([
-          Promise.allSettled([record.output._waitUntilFinished(), record.broadcastFinished]),
-          new Promise(resolve => {
-            timer = setTimeout(resolve, abortGraceMs);
-          }),
-        ]);
-        clearTimeout(timer);
-      }
+      preparedRun?.abortController.abort();
+      // Ask the lease backend rather than the record: a durable run this Mastra just abandoned counts as having lost
+      // its execution, yet still holds its thread here until released. The read runs while the run winds down and
+      // shares its grace, so a slow backend can neither keep the run executing nor outlast shutdown; a backend that
+      // doesn't answer in time leaves the lease to expire.
+      const [holdsLease, stopped] = await Promise.all([
+        isFallback ||
+          this.#withinGrace(
+            this.#readLeaseOwnerInTime(provider, key).then(
+              current => current === leaseOwner,
+              () => false,
+            ),
+            abortGraceMs,
+            false,
+          ),
+        preparedRun
+          ? this.#withinGrace(
+              Promise.allSettled([record.output._waitUntilFinished(), record.broadcastFinished]).then(() => true),
+              abortGraceMs,
+              false,
+            )
+          : true,
+      ]);
       state.shutdownStreams.set(streamId, 'ended');
       const event: AgentThreadStreamRuntimeEvent = this.#isParkedRun(state, runId)
         ? { type: 'run-suspended', runId, streamId }
@@ -1358,10 +1364,31 @@ export class AgentThreadStreamRuntime {
       // Release even if the publish failed: holding the lease past this process only delays every observer by a TTL.
       await this.#publishAndWait(resolved, key, event).catch(() => {});
       this.#stopLeaseRenewal(resolved, runId);
-      await provider.releaseLease(key, leaseOwner).catch(() => {});
+      if (!stopped) {
+        // The run ignored the abort and may still call tools or write: fail its remaining tool calls and leave the
+        // lease to expire, so no other process takes the thread while it still runs.
+        const handedBack = async () => {
+          throw new AgentThreadLeaseLostError(runId);
+        };
+        state.leaseFences.set(runId, handedBack);
+        setRunLeaseFence(runId, handedBack);
+        return;
+      }
+      if (holdsLease) await provider.releaseLease(key, leaseOwner).catch(() => {});
     };
 
     await Promise.all(records.map(handBack));
+  }
+
+  /** `promise`'s value, or `fallback` once `ms` pass first. */
+  async #withinGrace<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      promise,
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]).finally(() => clearTimeout(timer));
   }
 
   #getSourceId(): string {

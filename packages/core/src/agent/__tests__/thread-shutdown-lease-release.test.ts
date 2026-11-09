@@ -12,6 +12,7 @@
  * - case 5b: a run still streaming. Shutdown aborts it and gives it a moment
  *   to stop, so its tools aren't still running once the other replica can
  *   take the thread, then ends the run for everyone else.
+ * - a pubsub without leases: the run still ends for everyone else.
  *
  * Either way, the replica stops renewing the lease once it has shut down.
  */
@@ -101,6 +102,13 @@ class ReplicaPubSub extends EventEmitterPubSub {
   override async close() {}
 }
 
+/** A shared pubsub without a lease backend, so the thread runtime falls back to running without leases. */
+class LeaselessReplicaPubSub extends ReplicaPubSub {
+  getLeaseProvider() {
+    return undefined;
+  }
+}
+
 describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
   let llm: LLMock;
 
@@ -113,8 +121,14 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     await llm.stop();
   });
 
-  function replica(shared: SharedLeases, events: EventEmitter, memory: MockMemory, tools: Record<string, ToolAction>) {
-    const pubsub = new ReplicaPubSub(shared, events);
+  function replica(
+    shared: SharedLeases,
+    events: EventEmitter,
+    memory: MockMemory,
+    tools: Record<string, ToolAction>,
+    { leases = true }: { leases?: boolean } = {},
+  ) {
+    const pubsub = leases ? new ReplicaPubSub(shared, events) : new LeaselessReplicaPubSub(shared, events);
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
     const model = openai('gpt-4o-mini');
     const base =
@@ -233,6 +247,39 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     follower.unsubscribe();
     await observer.mastra.shutdown({ drainTimeout: 200 });
     void output;
+  }, 20_000);
+
+  it('stops a still-streaming run and ends it for followers on a pubsub without leases', async () => {
+    const threadId = `shutdown-leaseless-${engine}`;
+    for (let i = 0; i < 60; i++) {
+      llm.on(
+        { userMessage: 'keep running without leases', sequenceIndex: i },
+        { toolCalls: [{ id: `call_leaseless_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const counter = { ticks: 0 };
+    const running = replica(shared, events, memory, { tick: tickTool(counter) }, { leases: false });
+    const observer = replica(shared, events, memory, {}, { leases: false });
+    const follower = await follow(observer.agent, threadId);
+
+    await startStream(running.agent, 'keep running without leases', threadId, {});
+    await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    await running.mastra.shutdown({ drainTimeout: 200 });
+    const ticksAtShutdown = counter.ticks;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(counter.ticks).toBe(ticksAtShutdown);
+    running.pubsub.dead = true;
+
+    await vi.waitFor(() => expect(follower.ended()).toBe(true), { timeout: 5_000 });
+    expect(follower.types).not.toContain('error');
+
+    follower.unsubscribe();
+    await observer.mastra.shutdown({ drainTimeout: 200 });
   }, 20_000);
 
   it('announces a run parked on an approval as suspended and frees its thread (5)', async () => {
