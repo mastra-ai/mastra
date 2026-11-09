@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { ALL_SERVER_ROUTES } from '../server-adapter/routes';
+import { getAllServerRoutes } from '../server-adapter/routes';
 
-// Covers the opt-in routes too: they are served when an app registers them, so their
-// OpenAPI metadata and schemas have to hold the same contracts as the mounted ones.
-const ROUTES_UNDER_TEST = ALL_SERVER_ROUTES;
+// Covers opt-in and experimental routes too: when enabled or registered, their OpenAPI
+// metadata and schemas have to hold the same contracts as the routes mounted by default.
+const ROUTES_UNDER_TEST = getAllServerRoutes({ includeExperimentalComputers: true });
 
 /**
  * Extract path parameters from a path pattern
@@ -34,7 +34,7 @@ describe('Schema Consistency Across All Routes', () => {
         if (route.openapi) {
           expect(route.openapi.tags).toBeDefined();
           expect(Array.isArray(route.openapi.tags)).toBe(true);
-          expect(route.openapi.tags.length).toBeGreaterThan(0);
+          expect(route.openapi.tags!.length).toBeGreaterThan(0);
         }
       });
     });

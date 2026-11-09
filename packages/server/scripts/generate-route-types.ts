@@ -8,7 +8,8 @@ import type ts from 'typescript-classic';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 
-import { ALL_SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
+import { getAllServerRoutes } from '../src/server/server-adapter/routes/index.js';
+import type { ALL_SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -298,6 +299,8 @@ function renderRequestType(
 >;`;
 }
 
+const GENERATED_SERVER_ROUTES = getAllServerRoutes({ includeExperimentalComputers: true });
+
 export type RouteDefinition = (typeof ALL_SERVER_ROUTES)[number];
 
 function renderRouteBlock(route: RouteDefinition): string {
@@ -461,7 +464,7 @@ async function formatGeneratedFileContent(fileContent: string): Promise<string> 
   return result.code;
 }
 
-export function renderRouteTypesFileContent(routes: readonly RouteDefinition[] = ALL_SERVER_ROUTES): string {
+export function renderRouteTypesFileContent(routes: readonly RouteDefinition[] = GENERATED_SERVER_ROUTES): string {
   // Pass 1: convert everything once purely to count nested schema instance reuse.
   renderStates = createRenderStates();
   countingPass = true;
@@ -491,7 +494,7 @@ async function main(): Promise<void> {
   }
 
   console.info(`✓ Generated ${OUTPUT_PATH}`);
-  console.info(`  - ${ALL_SERVER_ROUTES.length} routes`);
+  console.info(`  - ${GENERATED_SERVER_ROUTES.length} routes`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {

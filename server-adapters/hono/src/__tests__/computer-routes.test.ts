@@ -26,6 +26,7 @@ async function setup(options: {
   fga?: unknown;
   allowedOrigins?: string | string[];
   configured?: boolean;
+  experimental?: boolean;
 } = {}) {
   const state: ComputerState = { attached: true, running: true, holder: 'agent', revision: 0 };
   const viewer = vi.fn(async () => {
@@ -72,7 +73,15 @@ async function setup(options: {
     configureComputerServer(mastra, { ticketStore, allowedOrigins: options.allowedOrigins });
   }
   const app = new Hono();
-  await new MastraServer({ app, mastra, prefix: '/api' }).init();
+  const previousFlag = process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+  if (options.experimental === false) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+  else process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+  try {
+    await new MastraServer({ app, mastra, prefix: '/api', openapiPath: '/openapi.json' }).init();
+  } finally {
+    if (previousFlag === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    else process.env.MASTRA_EXPERIMENTAL_COMPUTER = previousFlag;
+  }
   return { app, mastra, state, viewer, controlState, control, ticketStore };
 }
 
@@ -105,6 +114,21 @@ function changeControl(
 }
 
 describe('registered computer routes', () => {
+  it('does not register or describe computer routes while the experiment is disabled', async () => {
+    const { app, viewer, controlState } = await setup({ experimental: false });
+
+    const response = await session(app);
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('404 Not Found');
+    expect(viewer).not.toHaveBeenCalled();
+    expect(controlState).not.toHaveBeenCalled();
+
+    const openapi = await app.request('http://localhost/api/openapi.json', { headers: authorized });
+    expect(openapi.status).toBe(200);
+    const spec = (await openapi.json()) as { paths: Record<string, unknown> };
+    expect(Object.keys(spec.paths).some(path => path.startsWith('/computers/'))).toBe(false);
+  });
+
   it('requires authentication before viewer or control side effects', async () => {
     const { app, viewer, controlState, control } = await setup();
     expect((await app.request('http://localhost/api/computers/c1/session', { method: 'POST' })).status).toBe(401);

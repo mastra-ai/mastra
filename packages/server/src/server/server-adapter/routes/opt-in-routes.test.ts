@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { KNOWLEDGE_ROUTES } from './knowledge';
 import { getEffectivePermission } from './permissions';
-import { ALL_SERVER_ROUTES, OPT_IN_ROUTES, SERVER_ROUTES } from '.';
+import { ALL_SERVER_ROUTES, OPT_IN_ROUTES, SERVER_ROUTES, getAllServerRoutes, getServerRoutes } from '.';
 
 describe('opt-in routes', () => {
   it('does not mount the Knowledge routes on every server', () => {
@@ -25,6 +25,26 @@ describe('opt-in routes', () => {
     const allPaths = new Set(ALL_SERVER_ROUTES.map(route => route.path));
     expect(allPaths.has('/knowledge')).toBe(true);
     expect(allPaths.has('/knowledge/:knowledgeKey/pages/:pageId')).toBe(true);
+  });
+
+  it('hides Computer routes unless the experimental flag is exactly true', () => {
+    const previous = process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+    try {
+      for (const value of [undefined, 'false', '1']) {
+        if (value === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+        else process.env.MASTRA_EXPERIMENTAL_COMPUTER = value;
+
+        expect(getServerRoutes().some(route => route.path.startsWith('/computers/'))).toBe(false);
+        expect(getAllServerRoutes().some(route => route.path.startsWith('/computers/'))).toBe(false);
+      }
+
+      process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+      expect(getServerRoutes().filter(route => route.path.startsWith('/computers/'))).toHaveLength(3);
+      expect(getAllServerRoutes().filter(route => route.path.startsWith('/computers/'))).toHaveLength(3);
+    } finally {
+      if (previous === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+      else process.env.MASTRA_EXPERIMENTAL_COMPUTER = previous;
+    }
   });
 
   it('still derives knowledge:read from the opt-in routes', () => {

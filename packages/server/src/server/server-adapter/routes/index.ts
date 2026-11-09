@@ -188,49 +188,59 @@ const OPT_IN_ROUTE_SET = new Set<ServerRoute>(OPT_IN_ROUTES);
  * ones. Code generators derive from this, so a route an app registers deliberately
  * still has types, permissions and CLI metadata.
  */
-export const ALL_SERVER_ROUTES: readonly ServerRoute[] = [
-  ...AGENTS_ROUTES,
-  ...AUTH_ROUTES,
-  ...WORKFLOWS_ROUTES,
-  ...TOOLS_ROUTES,
-  ...PROCESSORS_ROUTES,
-  ...RESPONSES_ROUTES,
-  ...COMPUTER_ROUTES,
-  ...CONVERSATIONS_ROUTES,
-  ...MEMORY_ROUTES,
-  ...SCORES_ROUTES,
-  ...OBSERVABILITY_ROUTES,
-  ...LOGS_ROUTES,
-  ...VECTORS_ROUTES,
-  ...KNOWLEDGE_ROUTES,
-  ...A2A_ROUTES,
-  ...WORKSPACE_ROUTES,
-  ...LEGACY_ROUTES,
-  ...MCP_ROUTES,
-  ...STORED_AGENTS_ROUTES,
-  ...DYNAMIC_WORKFLOWS_ROUTES,
-  ...STORED_MCP_CLIENTS_ROUTES,
-  ...STORED_PROMPT_BLOCKS_ROUTES,
-  ...STORED_SCORERS_ROUTES,
-  ...STORED_WORKSPACES_ROUTES,
-  ...STORED_SKILLS_ROUTES,
-  ...TOOL_PROVIDER_ROUTES,
-  ...PROCESSOR_PROVIDER_ROUTES,
-  ...SYSTEM_ROUTES,
-  ...DATASETS_ROUTES,
-  ...BACKGROUND_TASK_ROUTES,
-  ...EDITOR_BUILDER_ROUTES,
-  ...AGENT_BUILDER_ROUTES,
-  ...SCHEDULES_ROUTES,
-  ...CHANNELS_ROUTES,
-  ...AGENT_CONTROLLER_ROUTES,
-];
+export function getAllServerRoutes(options: { includeExperimentalComputers?: boolean } = {}): readonly ServerRoute[] {
+  const includeExperimentalComputers =
+    options.includeExperimentalComputers ?? process.env.MASTRA_EXPERIMENTAL_COMPUTER === 'true';
+  return [
+    ...AGENTS_ROUTES,
+    ...AUTH_ROUTES,
+    ...WORKFLOWS_ROUTES,
+    ...TOOLS_ROUTES,
+    ...PROCESSORS_ROUTES,
+    ...RESPONSES_ROUTES,
+    ...(includeExperimentalComputers ? COMPUTER_ROUTES : []),
+    ...CONVERSATIONS_ROUTES,
+    ...MEMORY_ROUTES,
+    ...SCORES_ROUTES,
+    ...OBSERVABILITY_ROUTES,
+    ...LOGS_ROUTES,
+    ...VECTORS_ROUTES,
+    ...KNOWLEDGE_ROUTES,
+    ...A2A_ROUTES,
+    ...WORKSPACE_ROUTES,
+    ...LEGACY_ROUTES,
+    ...MCP_ROUTES,
+    ...STORED_AGENTS_ROUTES,
+    ...DYNAMIC_WORKFLOWS_ROUTES,
+    ...STORED_MCP_CLIENTS_ROUTES,
+    ...STORED_PROMPT_BLOCKS_ROUTES,
+    ...STORED_SCORERS_ROUTES,
+    ...STORED_WORKSPACES_ROUTES,
+    ...STORED_SKILLS_ROUTES,
+    ...TOOL_PROVIDER_ROUTES,
+    ...PROCESSOR_PROVIDER_ROUTES,
+    ...SYSTEM_ROUTES,
+    ...DATASETS_ROUTES,
+    ...BACKGROUND_TASK_ROUTES,
+    ...EDITOR_BUILDER_ROUTES,
+    ...AGENT_BUILDER_ROUTES,
+    ...SCHEDULES_ROUTES,
+    ...CHANNELS_ROUTES,
+    ...AGENT_CONTROLLER_ROUTES,
+  ];
+}
+
+export function getServerRoutes(options: { includeExperimentalComputers?: boolean } = {}): readonly ServerRoute[] {
+  return getAllServerRoutes(options).filter(route => !OPT_IN_ROUTE_SET.has(route));
+}
+
+export const ALL_SERVER_ROUTES: readonly ServerRoute[] = getAllServerRoutes();
 
 /**
  * Routes every Mastra server mounts: everything in {@link ALL_SERVER_ROUTES} except the
  * {@link OPT_IN_ROUTES} an app has to register itself.
  */
-export const SERVER_ROUTES: readonly ServerRoute[] = ALL_SERVER_ROUTES.filter(route => !OPT_IN_ROUTE_SET.has(route));
+export const SERVER_ROUTES: readonly ServerRoute[] = getServerRoutes();
 
 /**
  * Union type of all individual route arrays.

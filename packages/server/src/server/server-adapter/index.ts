@@ -44,7 +44,7 @@ import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
-import { OPT_IN_ROUTES, SERVER_ROUTES, getEffectivePermission } from './routes';
+import { OPT_IN_ROUTES, getEffectivePermission, getServerRoutes } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
@@ -168,7 +168,7 @@ export const MASTRA_FRAMEWORK_PUBLIC_KEY = '__mastraFrameworkPublic';
  * A pre-computed matcher that returns true if a given (path, method) targets a
  * route the framework has declared public via `requiresAuth: false`.
  *
- * Built once at server-adapter registration time from `SERVER_ROUTES` and the
+ * Built once at server-adapter registration time from `getServerRoutes()` and the
  * `customRouteAuthConfig` map. Called by each adapter's context middleware to
  * stash a boolean on the per-request context under `MASTRA_FRAMEWORK_PUBLIC_KEY`.
  */
@@ -886,7 +886,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * routes the framework declared public (e.g. Studio sign-in endpoints).
    *
    * The matcher considers:
-   *   - Built-in `SERVER_ROUTES` entries with `requiresAuth === false`
+   *   - Built-in `getServerRoutes()` entries with `requiresAuth === false`
    *     (paths joined with the adapter's configured `prefix`).
    *   - Custom user API routes registered with `requiresAuth: false` via the
    *     `customRouteAuthConfig` map.
@@ -894,7 +894,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   getFrameworkPublicMatcher(): FrameworkPublicMatcher {
     const prefix = this.prefix ?? '';
 
-    const publicRoutes = SERVER_ROUTES.filter(r => r.requiresAuth === false).map(r => ({
+    const publicRoutes = getServerRoutes().filter(r => r.requiresAuth === false).map(r => ({
       method: r.method.toUpperCase(),
       pattern: `${prefix}${r.path}`,
     }));
@@ -1040,7 +1040,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const customRoutes = (this.customApiRoutes ?? serverConfig?.apiRoutes ?? []).filter(
       route => !route._mastraInternal,
     );
-    const routes = [...SERVER_ROUTES, ...customRoutes] as ServerRoute[];
+    const routes = [...getServerRoutes(), ...customRoutes] as ServerRoute[];
 
     if (fgaProvider.validatePermissions) {
       const permissions = [...new Set(routes.flatMap(route => getRoutePermissions(route)))];
@@ -1351,7 +1351,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Builds the OpenAPI spec object with servers field and custom route paths.
    */
   private buildOpenAPISpec(config: { title: string; version: string; description: string }, prefix?: string): any {
-    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, config);
+    const openApiSpec = generateOpenAPIDocument(getServerRoutes(), config);
 
     if (prefix) {
       openApiSpec.servers = [{ url: prefix }];
@@ -1410,7 +1410,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Register routes sequentially to maintain order - important for routers where
     // more specific routes (e.g., /versions/compare) must be registered before
     // parameterized routes (e.g., /versions/:versionId)
-    for (const route of SERVER_ROUTES) {
+    for (const route of getServerRoutes()) {
       await this.registerRoute(this.app, route, { prefix: this.prefix });
     }
 

@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { schemaToJsonSchema } from './openapi-utils';
-import { SERVER_ROUTES } from './routes/index';
+import { getServerRoutes } from './routes/index';
 import type { ServerRoute } from './routes/index';
 
 export interface ApiSchemaResponseShape {
@@ -87,7 +87,7 @@ function isManifestRoute(route: ServerRoute): boolean {
   return route.responseType === 'json' && !route.deprecated;
 }
 
-export function buildApiSchemaManifest(routes: readonly ServerRoute[] = SERVER_ROUTES): ApiSchemaManifest {
+export function buildApiSchemaManifest(routes: readonly ServerRoute[] = getServerRoutes()): ApiSchemaManifest {
   return {
     version: 1,
     routes: routes.filter(isManifestRoute).map(route => {
