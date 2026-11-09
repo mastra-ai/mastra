@@ -5,7 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
@@ -18,10 +18,12 @@ export interface StudioConfigFormProps {
 
 export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
+  // Rows keep an id so removing one doesn't hand its inputs to the next.
+  const nextHeaderId = useRef(0);
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
 
-    return Object.entries(initialConfig.headers).map(([name, value]) => ({ name, value }));
+    return Object.entries(initialConfig.headers).map(([name, value]) => ({ id: nextHeaderId.current++, name, value }));
   });
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -45,7 +47,7 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
   };
 
   const handleAddHeader = (header: HeaderListFormItem) => {
-    setHeaders(prev => [...prev, header]);
+    setHeaders(prev => [...prev, { ...header, id: nextHeaderId.current++ }]);
   };
 
   const handleRemoveHeader = (index: number) => {
