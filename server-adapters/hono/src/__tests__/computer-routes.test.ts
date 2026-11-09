@@ -200,6 +200,24 @@ describe('registered computer routes', () => {
     expect(viewer).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the shared public-origin precedence for proxy-facing computer routes', async () => {
+    const { app, viewer } = await setup();
+    const response = await app.request('http://internal.test/api/computers/c1/session', {
+      method: 'POST',
+      headers: {
+        ...authorized,
+        'content-type': 'application/json',
+        'x-mastra-public-host': 'studio.test',
+        'x-forwarded-host': 'internal-proxy.test',
+        origin: 'https://studio.test',
+      },
+      body: JSON.stringify({ threadId: 'thread-1', resourceId: 'res-1', mode: 'control' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(viewer).toHaveBeenCalledOnce();
+  });
+
   it('accepts JSON parameters, allows no-Origin clients, and validates notes', async () => {
     const { app, control } = await setup();
     expect((await changeControl(app, {}, { 'content-type': 'application/json; charset=utf-8' })).status).toBe(200);

@@ -12,6 +12,7 @@ import {
   getComputerControlQuerySchema,
 } from '../schemas/computers';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getPublicOrigin } from './auth';
 import { enforceThreadAccess } from './utils';
 
 const notFound = () => new HTTPException(404, { message: 'Computer not found' });
@@ -55,12 +56,7 @@ async function authorize(
 
 function callerOrigin(request: Request | undefined, allowedOrigins?: string | string[]): string {
   if (!request) return 'http://localhost';
-  const forwarded = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
-  const host =
-    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
-    request.headers.get('host')?.split(',')[0]?.trim() ||
-    new URL(request.url).host;
-  const serverOrigin = `${forwarded === 'https' || new URL(request.url).protocol === 'https:' ? 'https' : 'http'}://${host}`;
+  const serverOrigin = getPublicOrigin(request);
   const raw = request.headers.get('origin');
   if (!raw) return serverOrigin;
   let origin: URL;
