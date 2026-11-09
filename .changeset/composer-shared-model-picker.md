@@ -38,8 +38,8 @@ import { ModelPicker } from '@mastra/playground-ui/domains/llm';
         </ComposerActionsStart>
         <ComposerActionsEnd>
           <ModelPicker
-            providers={[{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-5', name: 'GPT-5' }] }]}
-            value={{ provider: 'openai', model: 'gpt-5' }}
+            providers={[{ id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-5.6', name: 'GPT-5.6' }] }]}
+            value={{ provider: 'openai', model: 'gpt-5.6' }}
             onValueChange={({ provider, model }) => setModel(provider, model)}
           />
           {sendButton}
