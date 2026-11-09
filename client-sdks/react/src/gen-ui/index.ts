@@ -8,6 +8,7 @@ export type {
   GenUIFallbacks,
   GenUIRegistry,
   GenUISpecStatusProps,
+  GenUISpecEditMode,
   GenUISpecEditToolOptions,
   GenUISpecToolOptions,
   GenUIStreamingProps,

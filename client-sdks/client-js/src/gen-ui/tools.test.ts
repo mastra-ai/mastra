@@ -110,13 +110,12 @@ describe('createSpecTools', () => {
     });
   });
 
-  describe('when the edit tool allows diffs', () => {
-    it('returns the accepted spec as text the model can diff against', async () => {
-      const result = await setup({ edit: { modes: ['patch', 'diff'] } })
-        .tool('ui_spec')
-        .execute(tripArgs, { toolCallId: 's1' });
-
-      expect(result).toMatchObject({ ok: true, id: 's1', spec: expect.stringContaining('"title": "Trip"') });
+  describe('when the edit tool is given a mode it does not support', () => {
+    it('refuses the definition and names the supported modes', () => {
+      // `diff` is a json-render edit mode, but spec JSON repeats lines too often to place hunks reliably.
+      expect(() => setup({ edit: { modes: ['patch', 'diff' as never] } })).toThrow(
+        'Unknown GenUI spec edit mode "diff"; use patch or merge',
+      );
     });
   });
 

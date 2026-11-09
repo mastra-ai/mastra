@@ -1,5 +1,5 @@
 import { applySpecPatch, deepMergeSpec } from '@json-render/core';
-import type { EditMode, JsonPatch, PatchOp, Spec } from '@json-render/core';
+import type { JsonPatch, PatchOp, Spec } from '@json-render/core';
 import { readSpecToolArgs } from './spec';
 import type { SpecReadResult } from './spec';
 
@@ -8,27 +8,30 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export const EDIT_MODES: readonly EditMode[] = ['patch', 'merge', 'diff'];
+/**
+ * How the model writes an edit: RFC 6902 JSON Patch or RFC 7396 JSON Merge Patch.
+ *
+ * @experimental Generative UI is in beta and may change without notice.
+ */
+export type GenUISpecEditMode = 'patch' | 'merge';
+
+export const EDIT_MODES: readonly GenUISpecEditMode[] = ['patch', 'merge'];
 const PATCH_OPS: readonly PatchOp[] = ['add', 'remove', 'replace', 'move', 'copy', 'test'];
 
 /** One edit of an earlier interface, as the model asked for it. */
 export interface SpecEdit {
   /** Tool call id of the interface to edit. Omitted: the latest interface before the edit. */
   target?: string;
-  mode: EditMode;
+  mode: GenUISpecEditMode;
   patch?: JsonPatch[];
   merge?: Record<string, unknown>;
-  diff?: string;
 }
-
-/** Text of a spec as sent to the model, which `diff` edits are written against. */
-export const serializeSpec = (spec: Spec) => JSON.stringify(spec, null, 2);
 
 /**
  * Model-facing input of the edit tool. Only the enabled modes' payloads are advertised. Strict structured-output
  * providers close every object, so patch values and merge patches are JSON-encoded strings.
  */
-export function specEditInputSchema(modes: readonly EditMode[]) {
+export function specEditInputSchema(modes: readonly GenUISpecEditMode[]) {
   return {
     type: 'object',
     properties: {
@@ -63,15 +66,12 @@ export function specEditInputSchema(modes: readonly EditMode[]) {
             },
           }
         : {}),
-      ...(modes.includes('diff')
-        ? { diff: { type: 'string', description: 'Unified diff against the spec text the tool result returned' } }
-        : {}),
     },
     required: ['mode'],
   };
 }
 
-export function specEditDescription(modes: readonly EditMode[], specToolName: string) {
+export function specEditDescription(modes: readonly GenUISpecEditMode[], specToolName: string) {
   return [
     `Change an interface rendered earlier by ${specToolName} or by this tool. The changed interface renders as a new one where this call appears; the earlier one stays as it was, and the values the user set in it carry over as the starting state.`,
     'Edits apply to the json-render spec {root, state, elements: {<id>: {type, props, children?, slots?, visible?, repeat?, on?, watch?}}}, with `slots` as {<name>: [ids]} and `on` / `watch` as {<event or state path>: binding}. Elements use the components, props and expressions of ' +
@@ -81,9 +81,6 @@ export function specEditDescription(modes: readonly EditMode[], specToolName: st
       : '',
     modes.includes('merge')
       ? 'mode "merge": `merge` is an RFC 7396 JSON merge patch of the spec: objects merge, other values replace, null removes.'
-      : '',
-    modes.includes('diff')
-      ? 'mode "diff": `diff` is a unified diff against the `spec` text the earlier tool result returned. Hunks are placed by their lines, not their @@ line numbers, so include enough unchanged context lines (such as the element id line) that each hunk matches exactly one place.'
       : '',
     'The result returns the new interface `id` to edit it again.',
   ]
@@ -122,17 +119,21 @@ export type SpecEditReadResult = { ok: true; edit: SpecEdit } | { ok: false; err
 
 /**
  * Read the edit tool's arguments. While they stream, the last patch operation may be cut off, so only the
- * operations before it are kept; merge patches and diffs are only read once complete.
+ * operations before it are kept; merge patches are only read once complete.
  */
-export function readSpecEditArgs(args: unknown, complete: boolean, modes: readonly EditMode[]): SpecEditReadResult {
+export function readSpecEditArgs(
+  args: unknown,
+  complete: boolean,
+  modes: readonly GenUISpecEditMode[],
+): SpecEditReadResult {
   if (!isRecord(args))
     return complete ? { ok: false, error: 'edit arguments must be an object' } : { ok: true, edit: { mode: 'patch' } };
-  const mode = args.mode ?? (args.merge != null ? 'merge' : args.diff != null ? 'diff' : 'patch');
-  if (typeof mode !== 'string' || !modes.includes(mode as EditMode)) {
+  const mode = args.mode ?? (args.merge != null ? 'merge' : 'patch');
+  if (typeof mode !== 'string' || !modes.includes(mode as GenUISpecEditMode)) {
     if (!complete) return { ok: true, edit: { mode: 'patch' } };
     return { ok: false, error: `edit mode "${String(mode)}" is not enabled; use ${modes.join(', ')}` };
   }
-  const edit: SpecEdit = { mode: mode as EditMode };
+  const edit: SpecEdit = { mode: mode as GenUISpecEditMode };
   if (typeof args.target === 'string' && args.target) edit.target = args.target;
 
   if (mode === 'patch') {
@@ -147,73 +148,9 @@ export function readSpecEditArgs(args: unknown, complete: boolean, modes: readon
     return { ok: true, edit: { ...edit, patch } };
   }
   if (!complete) return { ok: true, edit };
-  if (mode === 'merge') {
-    const merge = readPatchValue(args.merge);
-    if (!isRecord(merge)) return { ok: false, error: 'mode "merge" needs a `merge` object' };
-    return { ok: true, edit: { ...edit, merge } };
-  }
-  if (typeof args.diff !== 'string' || !args.diff.trim()) return { ok: false, error: 'mode "diff" needs a `diff`' };
-  return { ok: true, edit: { ...edit, diff: args.diff } };
-}
-
-interface Hunk {
-  old: string[];
-  next: string[];
-}
-
-function readHunks(diff: string): Hunk[] {
-  const hunks: Hunk[] = [];
-  const lines = diff.replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
-  for (const line of lines) {
-    if (line.startsWith('@@')) {
-      hunks.push({ old: [], next: [] });
-      continue;
-    }
-    const hunk = hunks.at(-1);
-    // File headers before the first hunk, and "\ No newline at end of file" markers.
-    if (!hunk || line.startsWith('\\')) continue;
-    const body = line.slice(1);
-    if (line[0] === '-') hunk.old.push(body);
-    else if (line[0] === '+') hunk.next.push(body);
-    else {
-      hunk.old.push(body);
-      hunk.next.push(body);
-    }
-  }
-  return hunks;
-}
-
-/**
- * Apply a unified diff to `text`. The model never sees line numbers, so the `@@` line numbers are ignored and
- * each hunk is placed by its content (ignoring indentation). Spec JSON repeats lines, so a hunk must match
- * exactly one place; otherwise the edit fails and tells the model to add context rather than guess.
- */
-export function applyUnifiedDiff(
-  text: string,
-  diff: string,
-): { ok: true; text: string } | { ok: false; error: string } {
-  const lines = text.split('\n');
-  const hunks = readHunks(diff);
-  if (!hunks.length) return { ok: false, error: 'the diff has no @@ hunks' };
-  for (const [index, hunk] of hunks.entries()) {
-    const name = `diff hunk ${index + 1}`;
-    if (!hunk.old.length) {
-      return { ok: false, error: `${name} has no unchanged or removed lines; include context lines around the change` };
-    }
-    const places: number[] = [];
-    for (let start = 0; start + hunk.old.length <= lines.length; start++) {
-      if (hunk.old.every((line, i) => line.trim() === lines[start + i]!.trim())) places.push(start);
-    }
-    if (!places.length) return { ok: false, error: `${name} does not match the spec` };
-    if (places.length > 1) {
-      return {
-        ok: false,
-        error: `${name} matches ${places.length} places in the spec; include the element id as context so it matches one`,
-      };
-    }
-    lines.splice(places[0]!, hunk.old.length, ...hunk.next);
-  }
-  return { ok: true, text: lines.join('\n') };
+  const merge = readPatchValue(args.merge);
+  if (!isRecord(merge)) return { ok: false, error: 'mode "merge" needs a `merge` object' };
+  return { ok: true, edit: { ...edit, merge } };
 }
 
 /** Apply an edit to a copy of `base` and read the result back as a spec, like the spec tool's own input. */
@@ -224,12 +161,8 @@ export function applySpecEdit(base: Spec, edit: SpecEdit): SpecReadResult {
       const spec = structuredClone(base);
       for (const op of edit.patch ?? []) applySpecPatch(spec, op);
       edited = spec;
-    } else if (edit.mode === 'merge') {
-      edited = deepMergeSpec(base as unknown as Record<string, unknown>, edit.merge ?? {});
     } else {
-      const applied = applyUnifiedDiff(serializeSpec(base), edit.diff ?? '');
-      if (!applied.ok) return applied;
-      edited = JSON.parse(applied.text);
+      edited = deepMergeSpec(base as unknown as Record<string, unknown>, edit.merge ?? {});
     }
   } catch (error) {
     return { ok: false, error: `the edit could not be applied: ${errorMessage(error)}` };

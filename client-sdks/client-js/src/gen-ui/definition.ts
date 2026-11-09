@@ -2,12 +2,13 @@ import type {
   Catalog,
   ComputedFunction,
   DirectiveDefinition,
-  EditMode,
   InferCatalogComponents,
   ValidationFunction,
 } from '@json-render/core';
 import { z } from 'zod/v4';
 import type { JSONObject } from './json';
+import { EDIT_MODES } from './spec-edit';
+import type { GenUISpecEditMode } from './spec-edit';
 
 /** @experimental Generative UI is in beta and may change without notice. */
 export type GenUIToolPhase =
@@ -53,8 +54,8 @@ export interface GenUISpecToolOptions {
 export interface GenUISpecEditToolOptions {
   /** Defaults to `ui_spec_edit`. */
   name?: string;
-  /** json-render edit modes the model may use. Defaults to `['patch']`. */
-  modes?: EditMode[];
+  /** Edit modes the model may use. Defaults to `['patch']`. */
+  modes?: GenUISpecEditMode[];
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -88,7 +89,7 @@ export interface GenUIActionEntry {
 export interface GenUISpecToolConfig {
   name: string;
   instructions?: string;
-  edit?: { name: string; modes: EditMode[] };
+  edit?: { name: string; modes: GenUISpecEditMode[] };
 }
 
 /** @experimental Generative UI is in beta and may change without notice. */
@@ -215,8 +216,10 @@ export function createGenUIDefinition<C extends Catalog = Catalog>(
       if (editName === name || componentTools[editName] || reserved.has(editName)) {
         throw new Error(`GenUI tool name "${editName}" is used twice`);
       }
-      const modes = [...new Set<EditMode>(editConfig.modes ?? ['patch'])];
+      const modes = [...new Set<GenUISpecEditMode>(editConfig.modes ?? ['patch'])];
       if (!modes.length) throw new Error('The GenUI spec edit tool needs at least one edit mode');
+      const unknown = modes.find(mode => !EDIT_MODES.includes(mode));
+      if (unknown) throw new Error(`Unknown GenUI spec edit mode "${unknown}"; use ${EDIT_MODES.join(' or ')}`);
       edit = { name: editName, modes };
     }
     specTool = {

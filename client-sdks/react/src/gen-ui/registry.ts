@@ -22,6 +22,7 @@ import type { GenUIMcpAppsOptions } from './mcp-apps';
 
 export type {
   GenUIActionEntry,
+  GenUISpecEditMode,
   GenUISpecEditToolOptions,
   GenUISpecToolOptions,
   GenUIToolPhase,

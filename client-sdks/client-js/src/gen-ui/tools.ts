@@ -2,7 +2,7 @@ import { builtInValidationFunctions } from '@json-render/core';
 import type { GenUIDefinition } from './definition';
 import type { GenUISpecResolver } from './resolver';
 import { readSpecToolArgs, specToolInputSchema } from './spec';
-import { applySpecEdit, readSpecEditArgs, serializeSpec, specEditDescription, specEditInputSchema } from './spec-edit';
+import { applySpecEdit, readSpecEditArgs, specEditDescription, specEditInputSchema } from './spec-edit';
 import { createSpecValidator } from './validator';
 import type { GenUISpecValidator } from './validator';
 
@@ -87,7 +87,6 @@ export function createSpecTools(options: CreateSpecToolsOptions): GenUISpecTool[
   if (!specTool) return [];
   const { checkSpec } = options.validator ?? createSpecValidator(definition);
   const edit = specTool.edit;
-  const diffEnabled = edit?.modes.includes('diff') ?? false;
   const declarative = Object.values(definition.components).filter(entry => entry.declarative);
 
   const tools: GenUISpecTool[] = [
@@ -101,7 +100,7 @@ export function createSpecTools(options: CreateSpecToolsOptions): GenUISpecTool[
         const error = checkSpec(read.spec);
         if (error) return { ok: false, error };
         const id = context?.toolCallId;
-        return { ok: true, ...(id ? { id } : {}), ...(diffEnabled ? { spec: serializeSpec(read.spec) } : {}) };
+        return { ok: true, ...(id ? { id } : {}) };
       },
     },
   ];
@@ -127,7 +126,6 @@ export function createSpecTools(options: CreateSpecToolsOptions): GenUISpecTool[
           id,
           target: base.target,
           baseState: base.spec.state ?? {},
-          ...(diffEnabled ? { spec: serializeSpec(applied.spec) } : {}),
         };
       },
     });

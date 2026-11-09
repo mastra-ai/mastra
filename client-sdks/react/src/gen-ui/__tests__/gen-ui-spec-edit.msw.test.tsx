@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { defineCatalog } from '@json-render/core';
-import type { EditMode } from '@json-render/core';
 import { useBoundProp } from '@json-render/react';
 import { schema } from '@json-render/react/schema';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
@@ -12,7 +11,7 @@ import { server } from '../../test/msw-server';
 import { renderWithProviders } from '../../test/render';
 import { MessageFactory } from '../../ui/MessageFactory';
 import { createGenUI, useGenUIChat } from '../index';
-import type { GenUIRegistry } from '../index';
+import type { GenUIRegistry, GenUISpecEditMode } from '../index';
 import { chunk, controllableStream, finish, sseResponse, STREAM_URL } from './sse';
 import { asStrictModelSends } from './strict';
 import type { Schema } from './strict';
@@ -26,7 +25,7 @@ const catalog = defineCatalog(schema, {
   actions: {},
 });
 
-const genUIWith = (modes?: EditMode[]) =>
+const genUIWith = (modes?: GenUISpecEditMode[]) =>
   createGenUI({
     catalog,
     components: {
@@ -95,7 +94,7 @@ type Body = { clientTools: Tools; messages: unknown };
  * The model, one reply per request: request 1 renders `spec`, request 3 (the next user message) edits it,
  * every other request (tool results coming back) ends the turn.
  */
-function model(edit: (tools: Tools, bodies: Body[]) => unknown, spec: object = tripSpec) {
+function model(edit: (tools: Tools) => unknown) {
   const bodies: Body[] = [];
   server.use(
     http.post(STREAM_URL, async ({ request }) => {
@@ -103,7 +102,7 @@ function model(edit: (tools: Tools, bodies: Body[]) => unknown, spec: object = t
       if (bodies.length === 1) {
         return sseResponse([
           chunk('start'),
-          chunk('tool-call', { toolCallId: 's1', toolName: 'ui_spec', args: spec }),
+          chunk('tool-call', { toolCallId: 's1', toolName: 'ui_spec', args: tripSpec }),
           finish('tool-calls'),
         ]);
       }
@@ -113,7 +112,7 @@ function model(edit: (tools: Tools, bodies: Body[]) => unknown, spec: object = t
           chunk('tool-call', {
             toolCallId: 'e1',
             toolName: 'ui_spec_edit',
-            args: edit(bodies[0]!.clientTools, bodies),
+            args: edit(bodies[0]!.clientTools),
           }),
           finish('tool-calls'),
         ]);
@@ -137,12 +136,6 @@ async function renderTripThenAskForChange(registry: GenUIRegistry<any>, bodies: 
 }
 
 const resultSentBack = (bodies: Body[], index: number) => JSON.stringify(bodies[index]!.messages);
-
-/** Lines of the spec text the first tool result sent the model, which its diffs are written against. */
-const specLinesSentBack = (bodies: Body[]) => {
-  const encoded = resultSentBack(bodies, 1).match(/"spec":"((?:[^"\\]|\\.)*)"/)![1]!;
-  return (JSON.parse(`"${encoded}"`) as string).split('\n');
-};
 
 afterEach(() => {
   cleanup();
@@ -183,80 +176,6 @@ describe('spec edit tool', () => {
     const edited = specView('e1');
     expect(within(edited).getByRole('region', { name: 'Trip to Porto' })).toBeTruthy();
     expect(within(edited).getByText('Ping me')).toBeTruthy();
-  });
-
-  it('applies a unified diff against the spec text returned to the model', async () => {
-    const bodies = model((_tools, sent) => {
-      const lines = specLinesSentBack(sent);
-      const at = lines.findIndex(line => line.includes('"title": "Trip"'));
-      const diff = [
-        '--- a/spec.json',
-        '+++ b/spec.json',
-        `@@ -${at},3 +${at},3 @@`,
-        ` ${lines[at - 1]}`,
-        `-${lines[at]}`,
-        `+${lines[at]!.replace('"Trip"', '"Trip to Faro"')}`,
-        ` ${lines[at + 1]}`,
-      ].join('\n');
-      return { target: 's1', mode: 'diff', diff };
-    });
-    await renderTripThenAskForChange(genUIWith(['diff']), bodies);
-
-    expect(within(specView('e1')).getByRole('region', { name: 'Trip to Faro' })).toBeTruthy();
-  });
-
-  describe('when the same lines appear in more than one element', () => {
-    const itemsSpec = {
-      ...tripSpec,
-      elements: {
-        ...tripSpec.elements,
-        card: { ...tripSpec.elements.card, children: ['remind', 'a', 'b'] },
-        a: { type: 'Text', props: { text: 'Item' } },
-        b: { type: 'Text', props: { text: 'Item' } },
-      },
-    };
-
-    it('rejects a hunk that matches several places instead of guessing, and tells the model to add context', async () => {
-      const bodies = model((_tools, sent) => {
-        // The @@ line number points at element b, but the model never saw line numbers: it is a guess.
-        const at = specLinesSentBack(sent).findLastIndex(line => line.includes('"text": "Item"'));
-        const diff = [`@@ -${at + 1},1 +${at + 1},1 @@`, '-        "text": "Item"', '+        "text": "Renamed"'].join(
-          '\n',
-        );
-        return { target: 's1', mode: 'diff', diff };
-      }, itemsSpec);
-      await renderTripThenAskForChange(genUIWith(['diff']), bodies);
-
-      expect(resultSentBack(bodies, 3)).toContain(
-        'diff hunk 1 matches 2 places in the spec; include the element id as context so it matches one',
-      );
-      expect(specView('e1')).toBeNull();
-      expect(within(specView('s1')).getAllByText('Item')).toHaveLength(2);
-      expect(within(specView('s1')).queryByText('Renamed')).toBeNull();
-    });
-
-    it('edits the one element the hunk names when it includes the element id as context', async () => {
-      const bodies = model((_tools, sent) => {
-        const lines = specLinesSentBack(sent);
-        const id = lines.findIndex(line => line.trim() === '"b": {');
-        const text = lines.findIndex((line, i) => i > id && line.includes('"text": "Item"'));
-        const diff = [
-          '@@ -1,1 +1,1 @@',
-          ...lines.slice(id, text).map(line => ` ${line}`),
-          `-${lines[text]}`,
-          `+${lines[text]!.replace('"Item"', '"Renamed"')}`,
-        ].join('\n');
-        return { target: 's1', mode: 'diff', diff };
-      }, itemsSpec);
-      await renderTripThenAskForChange(genUIWith(['diff']), bodies);
-
-      const edited = specView('e1');
-      expect(edited.getAttribute('data-genui-status')).toBe('ready');
-      const texts = within(edited)
-        .getAllByText(/^(Item|Renamed)$/)
-        .map(node => node.textContent);
-      expect(texts).toEqual(['Item', 'Renamed']);
-    });
   });
 
   it('rejects an edit that breaks the interface and tells the model why', async () => {

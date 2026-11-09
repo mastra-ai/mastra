@@ -7,7 +7,7 @@ import type { GenUISpecToolConfig, NormalizedToolCall } from './index';
 
 const specTool: GenUISpecToolConfig = {
   name: 'ui_spec',
-  edit: { name: 'ui_spec_edit', modes: ['patch', 'merge', 'diff'] },
+  edit: { name: 'ui_spec_edit', modes: ['patch', 'merge'] },
 };
 
 const message = (id: string, role: 'user' | 'assistant', parts: object[]): MastraDBMessage => ({

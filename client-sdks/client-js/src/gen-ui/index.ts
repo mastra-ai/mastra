@@ -13,7 +13,7 @@ export type {
 
 export { createSpecResolver } from './resolver';
 export type { CreateSpecResolverOptions, DataSpecRead, EditBaseRead, GenUISpecResolver, SpecRead } from './resolver';
-export type { SpecEdit } from './spec-edit';
+export type { GenUISpecEditMode, SpecEdit } from './spec-edit';
 
 export { createSpecTools } from './tools';
 export type { CreateSpecToolsOptions, GenUISpecTool, GenUISpecToolExecuteContext } from './tools';
