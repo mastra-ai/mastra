@@ -254,6 +254,20 @@ Everything Factory knows about the session, passed to `create`, `template` and t
       'Resolves the commit a repository template pins, given its clone URL and the credential minted for it. When absent, the provider resolves the default branch head itself.',
     isOptional: true,
   },
+  {
+    name: 'buildEnv',
+    type: 'Record<string, string>',
+    description:
+      "Environment for template builds and setup steps only, never for runtime commands. Keep it out of the template identity and the image. A provider whose builder can't do that may ignore it. Factory sets it from the factory's Build variables.",
+    isOptional: true,
+  },
+  {
+    name: 'buildEnvRevision',
+    type: 'string',
+    description:
+      'Opaque id that changes whenever buildEnv changes. Include it in the template identity so an edit rebuilds the template. It is a random id, never derived from the values.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -269,7 +283,19 @@ When the sandbox declares `builds`, factory builds the environment template ahea
 - on a cron schedule kept in core `Schedules`, enabled through `PATCH { buildTriggers: { schedule: { enabled: true, cron, timezone } } }`; needs a storage adapter with the schedules domain, otherwise the route reports `scheduleAvailable: false`
 - after a push to a linked repository's default branch when `buildTriggers.push.enabled` is set, at most once per `debounceMinutes`
 
-Saving environment settings never starts a build. Scheduled and push builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands or the working directory). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
+Saving environment settings never starts a build. Scheduled and push builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands, the working directory or the factory's Build variables). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
+
+## Environment variables
+
+Factory members add environment variables for every sandbox of a factory in **Settings › Manage Factory › Environment variables**. Each variable applies to one of:
+
+- **Runtime**: every command in every session sandbox. Adding, editing or deleting one takes effect on the next command in a running sandbox, without a restart. A process that is already running keeps the environment it started with.
+- **Build**: the template build and the setup commands Factory runs itself, never runtime commands. Factory passes them to the provider as `buildEnv` and `buildEnvRevision`, so an edit rebuilds the template on the next build. A running sandbox doesn't rerun setup; sandboxes started from the rebuilt template see the new values.
+- **Both**: runtime and build.
+
+A runtime variable with the same name as a key from the provider's `env` option replaces it, and deleting the variable restores the host value. Names that Factory sets itself, such as `GH_TOKEN`, are reserved.
+
+Values are encrypted at rest with the factory's credential encryption key and can't be read back through the API or the UI. Anything running in the sandbox can read them. When sign-in is on and no encryption key is configured, Factory refuses to save variables and the settings page explains why. The routes are `GET /web/factory/projects/:id/sandbox-envs` and `PUT`, `PATCH` and `DELETE /web/factory/projects/:id/sandbox-envs/:name`.
 
 ## Related
 
