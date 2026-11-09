@@ -1167,11 +1167,11 @@ describe('DashboardRenderer', () => {
     });
     // jsdom resolves no container queries; the classes are what decide the width.
     const columns = (id: string) => cell(container, id).className.match(/@\w+:col-span-\d+/g);
-    expect(columns('half')).toEqual(['@3xl:col-span-6']);
-    expect(columns('third')).toEqual(['@3xl:col-span-4']);
-    expect(columns('sixth')).toEqual(['@3xl:col-span-2']);
-    expect(columns('quarter')).toEqual(['@3xl:col-span-3']);
-    expect(columns('twelfth')).toEqual(['@3xl:col-span-1']);
+    expect(columns('half')).toEqual(['@5xl:col-span-6']);
+    expect(columns('third')).toEqual(['@5xl:col-span-4']);
+    expect(columns('sixth')).toEqual(['@5xl:col-span-2']);
+    expect(columns('quarter')).toEqual(['@5xl:col-span-3']);
+    expect(columns('twelfth')).toEqual(['@5xl:col-span-1']);
   });
 
   it('stretches every card to its row, so a row of cards shares one height', () => {
