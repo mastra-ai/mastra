@@ -3,11 +3,11 @@ import { LRUCache } from 'lru-cache';
 const DEFAULT_CACHE_MAX_SIZE = 1000;
 
 /**
- * Global embedding cache shared across all SemanticRecall instances.
- * This ensures embeddings are cached and reused even when new processor
- * instances are created.
+ * Process-wide cache of text embeddings, shared by the `SemanticRecall` processor and `Memory`.
+ * When both write the same message in one run, the second writer reuses the first one's
+ * embedding instead of calling the embedder again.
  *
- * Cache key format: `${indexName}:${contentHash}`
+ * Cache key format: `${provider}:${modelId}:${providerOptionsHash}:${textHash}`
  * Cache value: embedding vector (number[])
  */
 export const globalEmbeddingCache = new LRUCache<string, number[]>({
