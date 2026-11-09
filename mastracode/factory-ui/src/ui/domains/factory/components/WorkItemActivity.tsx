@@ -6,7 +6,9 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playgroun
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
+import { useParams } from 'react-router';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
@@ -23,6 +25,7 @@ const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, string
   [ASSIGNED_ACTION]: 'Assigned the item',
   'factory.work_item.updated': 'Updated the item',
   'factory.work_item.stage_moved': 'Moved the item',
+  'factory.work_item.transition_rejected': 'A move was rejected',
   'factory.work_item.deleted': 'Removed the item',
   'factory.run.started': 'Started a run',
   'factory.run.ended': 'Run ended',
@@ -48,6 +51,31 @@ function actionLabel(action: string): string {
 function metadataString(event: AuditEvent, key: string): string | undefined {
   const value = event.metadata[key];
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+/** Actor id prefix of a session agent, whose moves carry the machine cause `factory_tools`. */
+const SESSION_AGENT_PREFIX = 'agent:session:';
+
+/** A bound agent's move carries its rationale as the cause; everyone else's cause is a machine code. */
+function agentRationale(event: AuditEvent): string | undefined {
+  if (event.actorType !== 'agent' || event.actorId.startsWith(SESSION_AGENT_PREFIX)) return undefined;
+  return metadataString(event, 'cause');
+}
+
+/** "Move to Review rejected: <reason>", naming the phase from the board catalog when it is loaded. */
+function RejectedMove({ event }: { event: AuditEvent }) {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const boards = useBoardCatalog(factoryId).data;
+  const to = metadataString(event, 'to');
+  const phase = to === undefined ? undefined : boards?.flatMap(board => board.phases).find(phase => phase.id === to);
+  const reason = metadataString(event, 'reason') ?? metadataString(event, 'code');
+  const text = `Move to ${phase?.name ?? phase?.title ?? to ?? 'another phase'} rejected${reason ? `: ${reason}` : ''}`;
+  const rationale = agentRationale(event);
+  return (
+    <span className="min-w-0 truncate" title={rationale ? `${text}\n\nWhy it was asked: ${rationale}` : text}>
+      {text}
+    </span>
+  );
 }
 
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
@@ -93,6 +121,8 @@ export function ActivityEvent({
               <time dateTime={event.occurredAt}>
                 Created at: {timestampFormatter.format(new Date(event.occurredAt))}
               </time>
+            ) : event.action === 'factory.work_item.transition_rejected' ? (
+              <RejectedMove event={event} />
             ) : (
               actionLabel(event.action)
             )}
