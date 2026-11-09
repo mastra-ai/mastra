@@ -68,6 +68,7 @@ export const mouseInputModeScenario = {
       await terminal.flushInput?.();
       await runtime.sleep(50);
     }
+    if (!/→\s*Mouse\b/.test(terminal.serialize().view)) throw new Error('Could not reach the Mouse row in /settings');
     terminal.write('\r');
     await runtime.waitForScreenText(/Dialogs \+ input box/, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B\r');
