@@ -2,7 +2,7 @@ import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { lazy, Suspense, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 
-function PageLoader() {
+export function PageLoader() {
   return (
     <div className="flex flex-1 items-center justify-center transition-opacity delay-150 starting:opacity-0">
       <BrandLoader size="lg" aria-label="Loading page" />

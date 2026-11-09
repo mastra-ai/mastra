@@ -31,6 +31,13 @@ export type StatelessWidgetProps = {
   onDrilldown?: OnDashboardDrilldown;
   expand?: DashboardExpand;
   dragHandle?: MetricsCardDragHandleProps;
+  /**
+   * Makes the card's title editable in place, and is called with the trimmed new title when the
+   * user changes it (Enter or blur; Escape reverts). The host stores it and passes the widget back
+   * with its new `title`. Only a plain title is editable: not a title that picks between several
+   * views, nor one that links to `expand`. KPI groups have no title.
+   */
+  onTitleChange?: (title: string) => void;
   pin?: StatelessWidgetPin;
   /** The card's Create alert button; see `DashboardAlert`. */
   alert?: DashboardAlert;

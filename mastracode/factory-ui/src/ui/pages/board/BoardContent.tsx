@@ -258,6 +258,7 @@ export function BoardContent({
     return {
       stage,
       phaseKind: builtin ? undefined : stage.kind,
+      exitTool: stage.exitTool,
       loading,
       taskCount,
       collapsed,

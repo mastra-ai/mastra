@@ -2,9 +2,8 @@ import type { DashboardWidget } from '@mastra/core/storage/dashboards';
 import type { StatelessWidgetPin } from '@mastra/playground-ui/domains/dashboards';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { ObservabilityWidgetPreset } from './opened';
 import { OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY, OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY } from './tool';
-import type { ObservabilityWidgetPin } from './tool';
+import type { ObservabilityDatePreset, ObservabilityWidgetDateRange, ObservabilityWidgetPin } from './tool';
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(item => typeof item === 'string');
@@ -30,7 +29,9 @@ function useHostPinnedIds(app: App): readonly string[] | undefined {
 export function usePin(
   app: App,
   widget: DashboardWidget,
-  datePreset: ObservabilityWidgetPreset,
+  datePreset: ObservabilityDatePreset | 'custom',
+  customRange: ObservabilityWidgetDateRange | undefined,
+  filters: readonly unknown[] | undefined,
 ): StatelessWidgetPin | undefined {
   const hostIds = useHostPinnedIds(app);
   const [requested, setRequested] = useState<boolean>();
@@ -53,7 +54,13 @@ export function usePin(
     // The host gets the widget as the opening tool returned it, not as the renderer parsed it.
     onPin: (_parsed, pinned) => {
       setRequested(pinned);
-      const pin: ObservabilityWidgetPin = { pinned, widget, datePreset };
+      const pin: ObservabilityWidgetPin = {
+        pinned,
+        widget,
+        datePreset,
+        ...(customRange ? { customRange } : {}),
+        ...(filters?.length ? { filters: [...filters] } : {}),
+      };
       app
         .updateModelContext({
           content: [{ type: 'text', text: `The user ${pinned ? 'pinned' : 'unpinned'} the "${name}" widget.` }],
