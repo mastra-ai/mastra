@@ -1,7 +1,11 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import selection from './select-affected-tests.cjs';
 
-const { routeTests } = selection;
+const { routeTests, diffLockfiles } = selection;
 
 const workspacePackages = [
   { id: 's3', name: '@mastra/s3', dependencies: {} },
@@ -80,5 +84,44 @@ describe('Prebuild test routing', () => {
     const { flags } = route({ changedFiles: ['packages/core/README.md', 'stores/pg/CHANGELOG.md'] });
 
     expect(Object.values(flags).some(Boolean)).toBe(false);
+  });
+});
+
+// Lines kept apart so the branch and main edits merge without a conflict.
+const lockfile = (a: number, b: number) => `a: ${a}\n${'pad: 0\n'.repeat(5)}b: ${b}\n`;
+
+describe('PR lockfile diff', () => {
+  test('ignores lockfile changes main made after the branch point when the merge commit is checked out', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'lockfile-diff-'));
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], {
+        cwd: repo,
+        encoding: 'utf-8',
+      });
+    const commit = (text: string, message: string) => {
+      writeFileSync(join(repo, 'pnpm-lock.yaml'), text);
+      git('commit', '-qam', message);
+      return git('rev-parse', 'HEAD').trim();
+    };
+    try {
+      git('init', '-q', '-b', 'main');
+      writeFileSync(join(repo, 'pnpm-lock.yaml'), lockfile(1, 1));
+      git('add', '.');
+      git('commit', '-qm', 'branch point');
+      git('checkout', '-qb', 'pr');
+      const headSha = commit(lockfile(2, 1), 'pr bumps a');
+      git('checkout', '-q', 'main');
+      const baseSha = commit(lockfile(1, 2), 'main bumps b');
+      // actions/checkout on pull_request checks out the merge of the PR into main.
+      git('merge', '-q', '--no-edit', 'pr');
+
+      expect(readFileSync(join(repo, 'pnpm-lock.yaml'), 'utf-8')).toBe(lockfile(2, 2));
+      expect(diffLockfiles(git, { baseSha, headSha, changedFiles: ['pnpm-lock.yaml'] })).toEqual({
+        baseLockfile: lockfile(1, 1),
+        headLockfile: lockfile(2, 1),
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });

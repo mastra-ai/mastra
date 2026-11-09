@@ -127,6 +127,21 @@ function routeTests({ changedFiles, affectedTests, fullSuite, workspacePackages,
   };
 }
 
+/**
+ * The lockfiles at both ends of the PR diff. Dependency routing compares their resolved
+ * trees. A pull_request checkout is the merge commit, so the working-tree lockfile also
+ * holds lockfile changes that reached main after the branch point.
+ *
+ * @param {(...args: string[]) => string} git
+ * @param {{ baseSha: string, headSha: string, changedFiles: string[] }} diff
+ */
+function diffLockfiles(git, { baseSha, headSha, changedFiles }) {
+  const headLockfile = git('show', `${headSha}:pnpm-lock.yaml`);
+  if (!changedFiles.includes('pnpm-lock.yaml')) return { baseLockfile: '', headLockfile };
+  const mergeBase = git('merge-base', baseSha, headSha).trim();
+  return { baseLockfile: git('show', `${mergeBase}:pnpm-lock.yaml`), headLockfile };
+}
+
 function main() {
   const { BASE_SHA, HEAD_SHA, FULL_SUITE, GITHUB_OUTPUT, GITHUB_STEP_SUMMARY } = process.env;
   const requestedFullSuite = FULL_SUITE === 'true';
@@ -168,11 +183,7 @@ function main() {
     : dependencyAffectedTests({
         changedFiles,
         addedOrRemovedFiles,
-        // Dependency routing compares resolved trees, so it needs the lockfile the diff started from.
-        baseLockfile: changedFiles.includes('pnpm-lock.yaml')
-          ? git('show', `${git('merge-base', BASE_SHA, HEAD_SHA).trim()}:pnpm-lock.yaml`)
-          : '',
-        headLockfile: fs.readFileSync('pnpm-lock.yaml', 'utf-8'),
+        ...diffLockfiles(git, { baseSha: BASE_SHA, headSha: HEAD_SHA, changedFiles }),
         testFiles,
         readTest: file => fs.readFileSync(file, 'utf-8'),
       });
@@ -234,4 +245,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { routeTests };
+module.exports = { routeTests, diffLockfiles };
