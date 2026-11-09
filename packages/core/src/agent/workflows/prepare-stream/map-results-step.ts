@@ -7,7 +7,7 @@ import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/mo
 import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
 import type { MastraMemory } from '../../../memory/memory';
-import { isObservationalMemoryEnabled } from '../../../memory/types';
+import { isObservationalMemoryEnabled, parseMemoryRequestContext } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
@@ -343,11 +343,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
-        // The deadline pass saves the turn through MessageHistory, so it needs write access. Like the
-        // finish path, check it for any thread: MessageHistory can save without a Memory instance.
+        // The deadline pass saves the turn through MessageHistory, so it needs write access. Check the
+        // thread MessageHistory will write to: it reads the request context first, and can save
+        // without a Memory instance or a thread option.
         beforeDeadlineSave: async () => {
-          const threadId = memoryData.thread?.id ?? result.threadId;
-          if (threadId && !memoryConfig?.readOnly) {
+          const memoryContext = parseMemoryRequestContext(requestContext);
+          const threadId = memoryContext?.thread?.id ?? memoryData.thread?.id ?? result.threadId;
+          if (threadId && !memoryConfig?.readOnly && !memoryContext?.memoryConfig?.readOnly) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
           }
         },

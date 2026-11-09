@@ -406,6 +406,66 @@ describe('Agent FGA checks', () => {
       expect(messages).toEqual([]);
       expect(vi.mocked(fgaProvider.require).mock.calls.map(([, input]) => input.permission)).toContain('memory:write');
     });
+
+    it('does not save the turn at the total deadline without write access to the request context thread', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+        if (input.permission === 'memory:write') {
+          throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+        }
+      });
+      const store = new InMemoryStore();
+      const storage = (await store.getStore('memory'))!;
+      const saveMessages = vi.spyOn(storage, 'saveMessages');
+      const hang = createTool({
+        id: 'hang',
+        description: 'never finishes',
+        inputSchema: z.object({}),
+        execute: (_input, { abortSignal }) =>
+          new Promise(resolve => abortSignal?.addEventListener('abort', () => resolve({ done: true }))),
+      });
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [
+            { type: 'tool-call', toolCallType: 'function', toolCallId: 'call_hang', toolName: 'hang', input: '{}' },
+          ],
+        }),
+      });
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        tools: { hang },
+        outputProcessors: [new MessageHistory({ storage })],
+      });
+      new Mastra({ agents: { testAgent: agent }, logger: false, storage: store, server: { fga: fgaProvider } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+      // No thread option: MessageHistory takes the thread from the request context.
+      requestContext.set('MastraMemory', { thread: { id: 'thread-ctx' }, resourceId: 'resource-1' });
+
+      await expect(
+        agent.generate('test', {
+          requestContext: requestContext as any,
+          modelSettings: { timeout: { totalMs: 300 } },
+        } as any),
+      ).rejects.toThrow();
+
+      // Give a save that slipped through time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_500));
+      expect(saveMessages).not.toHaveBeenCalled();
+      expect(await storage.getThreadById({ threadId: 'thread-ctx' })).toBeNull();
+      expect(
+        vi
+          .mocked(fgaProvider.require)
+          .mock.calls.some(([, input]) => input.permission === 'memory:write' && input.resource.id === 'thread-ctx'),
+      ).toBe(true);
+    });
   });
 
   describe('stream()', () => {
