@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Added Studio conversation replay creation, ordered turn results, production/candidate comparisons, and replay endpoint discovery in the API CLI.
+Added conversation replay to Studio. From a saved thread, create a replay dataset and run it; the experiment view lists turn results in order and compares the production reply with the candidate's.

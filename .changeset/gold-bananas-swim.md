@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Persisted experiment working-memory seeds and tool mock matching mode across dataset creation, version updates, batch inserts, and content purges.
+Added support for replay datasets to retain working-memory seeds and tool-mock matching mode when items are updated, batch-inserted, or purged.
