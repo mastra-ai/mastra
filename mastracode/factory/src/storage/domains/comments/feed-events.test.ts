@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic } from '../../../feed-events.js';
+import { feedTopic, touchFeed } from '../../../feed-events.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
@@ -180,6 +180,27 @@ describe('feed events stream', () => {
     ]);
 
     await feed.stop();
+  });
+
+  it('pushes one frame to a board when one of its cards changes, and none to another project', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const { project: other } = await seedProjectItem(seed);
+    const pubsub = new EventEmitterPubSub();
+    seed.workItems.onBoardChanged(scope => touchFeed(pubsub, scope));
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    const otherFeed = openFeed(await app.request(`/web/factory/projects/${other.id}/feed-events`));
+
+    const input = { title: 'Fix logout', stages: ['intake'], sessions: {}, metadata: {} };
+    await seed.workItems.upsert({ orgId: ORG, userId: 'user-alice', factoryProjectId: project.id, input });
+    await seed.workItems.upsert({ orgId: ORG, userId: 'user-alice', factoryProjectId: other.id, input });
+
+    await vi.waitFor(() => expect(otherFeed.frames).toHaveLength(1));
+    expect(feed.frames).toHaveLength(1);
+
+    await feed.stop();
+    await otherFeed.stop();
   });
 
   it('acknowledges every delivery so durable brokers can settle it', async () => {
