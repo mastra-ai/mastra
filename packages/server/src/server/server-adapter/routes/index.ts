@@ -230,17 +230,24 @@ export function getAllServerRoutes(options: { includeExperimentalComputers?: boo
   ];
 }
 
+let serverRouteExtensions: readonly ServerRoute[] | undefined;
+
 export function getServerRoutes(options: { includeExperimentalComputers?: boolean } = {}): readonly ServerRoute[] {
-  return getAllServerRoutes(options).filter(route => !OPT_IN_ROUTE_SET.has(route));
+  const routes = getAllServerRoutes(options).filter(route => !OPT_IN_ROUTE_SET.has(route));
+  if (!serverRouteExtensions) return routes;
+  const builtInRoutes = new Set(getAllServerRoutes({ includeExperimentalComputers: true }));
+  return [...routes, ...serverRouteExtensions.filter(route => !builtInRoutes.has(route))];
 }
 
 export const ALL_SERVER_ROUTES: readonly ServerRoute[] = getAllServerRoutes();
 
 /**
  * Routes every Mastra server mounts: everything in {@link ALL_SERVER_ROUTES} except the
- * {@link OPT_IN_ROUTES} an app has to register itself.
+ * {@link OPT_IN_ROUTES} an app has to register itself. The stable array also remains the
+ * adapter conformance extension point; dynamic reads preserve routes appended by tests.
  */
 export const SERVER_ROUTES: readonly ServerRoute[] = getServerRoutes();
+serverRouteExtensions = SERVER_ROUTES;
 
 /**
  * Union type of all individual route arrays.
