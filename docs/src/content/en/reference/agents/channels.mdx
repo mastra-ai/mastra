@@ -442,6 +442,8 @@ Set `generativeUI: true` on an adapter to let the agent post structured cards (s
 npm install @json-render/chat
 ```
 
+`@json-render/chat` requires zod 4, so projects still on zod 3 can't enable `generativeUI` yet.
+
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
