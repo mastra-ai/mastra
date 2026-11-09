@@ -249,7 +249,7 @@ describe('cold durable tool-call resume (#25978)', () => {
       inputData: { toolCallId: 'call-1', toolName: 'ask', args: {} },
       requestContext: new Map(),
       suspend: vi.fn(),
-      getStepResult: () => ({ messageListState: context.serialize() }),
+      getStepResultAsync: async () => ({ messageListState: context.serialize() }),
       getInitData: () => ({
         runId,
         agentId: 'saver',
