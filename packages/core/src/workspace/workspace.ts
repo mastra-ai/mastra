@@ -622,6 +622,11 @@ export class Workspace<
   private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
+    if (config.computerTools === 'resolve' && process.env.MASTRA_EXPERIMENTAL_COMPUTER !== 'true') {
+      throw new Error(
+        'Workspace computer tools are experimental; set MASTRA_EXPERIMENTAL_COMPUTER=true to enable them',
+      );
+    }
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
     this.createdAt = new Date();

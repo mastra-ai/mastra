@@ -107,6 +107,26 @@ describe('Workspace', () => {
   // Constructor
   // ===========================================================================
   describe('constructor', () => {
+    it('gates resolver-backed computer tools behind the experimental flag', () => {
+      const previous = process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+      const sandbox = async () => new LocalSandbox({ workingDirectory: tempDir });
+      try {
+        for (const value of [undefined, 'false', '1']) {
+          if (value === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+          else process.env.MASTRA_EXPERIMENTAL_COMPUTER = value;
+          expect(() => new Workspace({ sandbox, computerTools: 'resolve' })).toThrow(
+            'Workspace computer tools are experimental; set MASTRA_EXPERIMENTAL_COMPUTER=true to enable them',
+          );
+        }
+
+        process.env.MASTRA_EXPERIMENTAL_COMPUTER = 'true';
+        expect(() => new Workspace({ sandbox, computerTools: 'resolve' })).not.toThrow();
+      } finally {
+        if (previous === undefined) delete process.env.MASTRA_EXPERIMENTAL_COMPUTER;
+        else process.env.MASTRA_EXPERIMENTAL_COMPUTER = previous;
+      }
+    });
+
     it('should create workspace with filesystem only', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
