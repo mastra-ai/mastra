@@ -9,12 +9,6 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "MiniMax-M2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "Qwen3.8-Max": [
       {
         "type": "effort",
@@ -22,6 +16,12 @@
       }
     ],
     "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "MiniMax-M2.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

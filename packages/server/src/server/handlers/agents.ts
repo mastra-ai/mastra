@@ -258,6 +258,13 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
+
 // Matches the snapshot wait of the durable resume path this check gates
 // (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
 const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
@@ -2572,40 +2579,47 @@ async function authorizeDurableRun({
 }
 
 /**
- * Authorizes observing a run: the caller must own it and have read access to
- * its thread. Plain agent runs are checked against their shared run record,
- * so any server sharing the agent's record cache can authorize them. Durable
- * runs use the owner the agent tracks in this process, then their workflow
- * rows. Throws 404 when the run cannot be found or verified.
+ * The ownership policy for observing (`MEMORY_READ`) and aborting
+ * (`MEMORY_WRITE`) a run: the caller must own the run and have `permission` on
+ * its thread. Throws 403 when access is denied and 503 when ownership cannot be
+ * read. Returns undefined when the run is unknown, expired, or its owner cannot
+ * be verified; the caller decides how to report that.
+ *
+ * Plain runs are checked against their shared run record. Durable runs are
+ * checked against their workflow rows; observers may also use the owner the
+ * agent tracks in this process, which outlives the run so finished runs can be
+ * replayed. Aborts never use it, so a finished run is not reported stopped.
  */
-async function authorizeRunObservation({
+async function authorizeRunAccess({
   mastra,
   agent,
   runId,
   requestContext,
+  permission,
 }: {
   mastra: Mastra;
   agent: Agent<any, any, any, any>;
   runId: string;
   requestContext: RequestContext;
-}): Promise<void> {
-  const permission = MastraFGAPermissions.MEMORY_READ;
+  permission: string;
+}): Promise<{ status?: PlainRunRecord['status'] } | undefined> {
   if (!isDurableAgentLike(agent)) {
     const record = await getPlainRunRecord(agent, runId);
-    if (!record) throw new HTTPException(404, { message: 'Run not found' });
+    if (!record) return undefined;
     await authorizeRunOwner({ mastra, agent, owner: record, requestContext, permission });
-    return;
+    return record;
   }
   const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
-  const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
+  const owner =
+    permission === MastraFGAPermissions.MEMORY_READ && typeof getOwner === 'function'
+      ? getOwner.call(agent, runId)
+      : undefined;
   if (owner) {
     await authorizeRunOwner({ mastra, agent, owner, requestContext, permission });
-    return;
+    return {};
   }
   const access = await authorizeDurableRun({ mastra, agent, runId, requestContext, permission });
-  if (access !== 'ok') {
-    throw new HTTPException(404, { message: 'Run not found' });
-  }
+  return access === 'ok' ? {} : undefined;
 }
 
 export const ABORT_AGENT_RUN_ROUTE = createRoute({
@@ -2633,31 +2647,27 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
             message: 'Run-scoped cancellation requires a durable agent or an agent with resumable streams',
           });
         }
-        const record = await getPlainRunRecord(agent, runId);
-        if (!record) throw new HTTPException(404, { message: 'Run not found' });
-        await authorizeRunOwner({
-          mastra,
-          agent,
-          owner: record,
-          requestContext,
-          permission: MastraFGAPermissions.MEMORY_WRITE,
-        });
-        if (record.status === 'finished') return { aborted: false };
-        // The run may execute on another server: only report it aborted once
-        // the executing process confirms.
-        if (typeof resumable.__abortRunAcknowledged === 'function') {
-          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
-        }
-        return { aborted: agent.abortRunStream(runId) };
       }
-      const access = await authorizeDurableRun({
+      const run = await authorizeRunAccess({
         mastra,
         agent,
         runId,
         requestContext,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      if (access !== 'ok') return { aborted: false };
+      if (!isDurableAgentLike(agent)) {
+        if (!run) throw new HTTPException(404, { message: 'Run not found' });
+        if (run.status === 'finished') return { aborted: false };
+        // The run may execute on another server: only report it aborted once
+        // the executing process confirms.
+        const resumable = agent as unknown as ResumableStreamsAgent;
+        if (typeof resumable.__abortRunAcknowledged === 'function') {
+          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
+        }
+        return { aborted: agent.abortRunStream(runId) };
+      }
+      // A durable run that cannot be found or verified is not stopped.
+      if (!run) return { aborted: false };
       // Another server may be executing the run: only report it aborted once that server confirms.
       if (typeof agent.__abortRunAcknowledged === 'function') {
         return { aborted: await agent.__abortRunAcknowledged(runId) };
@@ -3029,7 +3039,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames. Frames whose replay-cache write failed, or all frames when caching is off, carry no index, so no offset can resume at them; omitting `offset` replays whatever the transport itself retains, which can repeat frames already received.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
@@ -3038,7 +3048,14 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
-      await authorizeRunObservation({ mastra, agent, runId, requestContext });
+      const run = await authorizeRunAccess({
+        mastra,
+        agent,
+        runId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
+      if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
@@ -3051,11 +3068,30 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         if (typeof durableAgent?.__subscribeToRunStream === 'function') {
           return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
-        const subscribed =
-          offset !== undefined
-            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
-            : pubsub.subscribeWithReplay(topic, onEvent);
-        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+        if (offset === undefined) {
+          return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));
+        }
+        return pubsub.subscribeFromOffset(topic, offset, onEvent).then(() => {
+          // Resuming past the run's last entry replays nothing; if that entry ended the
+          // run, nothing more will arrive, so close instead of waiting for the idle timeout.
+          // Read only after subscribing so a terminal entry racing attachment is not lost.
+          // A failed read only means we can't close early; the idle timer still bounds the stream.
+          // A client resuming at last index + 1 needs a one-entry read; only an offset
+          // further past the end falls back to the full log to find the true tail.
+          if (offset > 0) {
+            const readTail = async () => {
+              const window = await pubsub.getHistory(topic, offset - 1);
+              return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
+            };
+            // Don't hold back the unsubscribe handle while the read waits on the cache.
+            void readTail()
+              .catch(() => undefined)
+              .then(last => {
+                if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) onComplete();
+              });
+          }
+          return () => pubsub.unsubscribe(topic, onEvent);
+        });
       };
 
       let closed = false;
