@@ -56,14 +56,23 @@ const EMPTY_INDICES: ReadonlySet<number> = new Set();
  *
  * Every cached publish goes through {@link MastraServerCache.listPushIndexed},
  * which allocates the frame's index and appends it. The cache list is
- * therefore the run's log, in index order, and the transport only carries the
+ * therefore the run's log, and the transport only carries the
  * live tail of that log. Subscribers hold a single integer cursor and backfill
  * any gap they observe from the log rather than relying on transport replay.
  *
  * A list position is not necessarily its index: a cache whose append is not
  * atomic can allocate an index and then fail to push the frame, leaving a hole
  * that shifts every later frame to a lower position. Reads go through
- * `readLogFrom`, which accounts for those holes.
+ * `readLogFrom`, which uses the counter minus the list length to find where
+ * index `from` can start, and returns entries in index order. A frame whose
+ * cache write failed is not recoverable.
+ *
+ * Limitation: a non-atomic append (the default
+ * {@link MastraServerCache.listPushIndexed}, or Redis after its CROSSSLOT
+ * fallback) can also let concurrent publishes store frames out of order. An
+ * entry that lands below the computed start position is then missed, e.g.
+ * the log `[0, 2, 1, 3]` read from index 2 loses index 2. Removing that needs
+ * an atomic append.
  *
  * If caching a frame fails, it is published without an index and delivered
  * live only.
@@ -178,15 +187,19 @@ export class CachingPubSub extends PubSub {
    * Each hole left by an allocated-but-unpushed index moves later entries one
    * position below their index, so slicing at `from` would skip them. The
    * counter minus the list length is the number of holes; start that many
-   * positions earlier and filter by index.
+   * positions earlier and filter by index. When either value is unavailable
+   * (a failed read, or a cache whose `get` does not return counters), read
+   * the whole log instead.
+   *
+   * Numbered entries are returned in index order, followed by unnumbered
+   * ones, because a non-atomic append can store frames out of order.
    */
   private async readLogFrom(topic: string, from: number): Promise<Event[]> {
     const cacheKey = this.getCacheKey(topic);
-    let start = from;
+    let start = 0;
     if (from > 0) {
       // Length before counter: an append landing between the two reads can
       // only overstate the holes, which starts the slice early, never late.
-      // If either read fails, fall back to slicing at `from`.
       const length = await this.cache.listLength(cacheKey).catch(() => undefined);
       const counter =
         length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
@@ -195,7 +208,14 @@ export class CachingPubSub extends PubSub {
       }
     }
     const entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
-    return entries.filter(event => typeof event.index !== 'number' || event.index >= from);
+    const numbered: Event[] = [];
+    const unnumbered: Event[] = [];
+    for (const event of entries) {
+      if (typeof event.index !== 'number') unnumbered.push(event);
+      else if (event.index >= from) numbered.push(event);
+    }
+    numbered.sort((a, b) => a.index! - b.index!);
+    return [...numbered, ...unnumbered];
   }
 
   async publish(

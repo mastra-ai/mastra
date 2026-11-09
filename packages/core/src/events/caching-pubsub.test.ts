@@ -989,6 +989,70 @@ describe('CachingPubSub', () => {
         await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 5 } });
         await vi.waitFor(() => expect(seen).toEqual([4, 5]));
       });
+
+      it.each([
+        {
+          label: 'listLength throws',
+          breakMetadata: (cache: PartialAppendCache) =>
+            vi.spyOn(cache, 'listLength').mockRejectedValue(new Error('length unavailable')),
+        },
+        {
+          // Like ConvexServerCache, whose get() only returns plain values.
+          label: 'get does not return the counter',
+          breakMetadata: (cache: PartialAppendCache) => vi.spyOn(cache, 'get').mockResolvedValue(null),
+        },
+      ])('reads the whole log when hole metadata is unavailable ($label)', async ({ breakMetadata }) => {
+        const { cache, pubsub } = await setupWithHole();
+        breakMetadata(cache);
+
+        expect((await pubsub.getHistory(topic, 3)).map(e => e.index)).toEqual([3]);
+
+        const seen: number[] = [];
+        await pubsub.subscribeFromOffset(topic, 3, event => {
+          seen.push(event.index!);
+        });
+        expect(seen).toEqual([3]);
+      });
+    });
+
+    it('returns log entries in index order when concurrent appends store them out of order', async () => {
+      const topic = 'out-of-order-topic';
+      // Non-atomic append whose next push can be held back, so a later
+      // publish lands in the list first.
+      class DelayedPushCache extends InMemoryServerCache {
+        holdNextPush: Promise<void> | undefined;
+        override async listPush(key: string, value: unknown) {
+          const hold = this.holdNextPush;
+          this.holdNextPush = undefined;
+          if (hold) await hold;
+          return super.listPush(key, value);
+        }
+        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>) {
+          return MastraServerCache.prototype.listPushIndexed.call(this, listKey, counterKey, value);
+        }
+      }
+      const cache = new DelayedPushCache();
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 0 } });
+      let release!: () => void;
+      cache.holdNextPush = new Promise(resolve => (release = resolve));
+      const delayed = pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 1 } });
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 2 } });
+      release();
+      await delayed;
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 3 } });
+
+      const log = (await cache.listFromTo(`pubsub:${topic}`, 0)) as Event[];
+      expect(log.map(e => e.index)).toEqual([0, 2, 1, 3]);
+
+      expect((await pubsub.getHistory(topic, 0)).map(e => e.index)).toEqual([0, 1, 2, 3]);
+
+      const seen: number[] = [];
+      await pubsub.subscribeFromOffset(topic, 0, event => {
+        seen.push(event.index!);
+      });
+      expect(seen).toEqual([0, 1, 2, 3]);
     });
 
     it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
