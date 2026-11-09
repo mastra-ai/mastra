@@ -9,8 +9,10 @@ import { answersById, exprRefs } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { kpiFigures } from './options';
 import type { KpisOptions } from './options';
+import { Card } from '@/ds/components/Card';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
+import { cn } from '@/lib/utils';
 
 const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: MessagesSquareIcon } as const;
 
@@ -31,18 +33,26 @@ export function KpisWidget({
   const figures =
     gate.status === 'ready' ? <KpisView view={view} results={results} comparisonLabel={comparisonLabel} /> : null;
   if (!dragHandle && !pin && !alert) return figures;
-  // The group has no title of its own, so the grip, the alert and the pin sit beside it, there even before the figures load.
+  // The group has no title to hold the grip, the alert and the pin, so they float over its top edge on hover:
+  // beside the figures they would narrow the row and break its alignment with the full-width cards around it.
   return (
-    <div className="flex items-center gap-1.5">
-      {dragHandle && <MetricsCard.DragHandle {...dragHandle} />}
-      <div className="min-w-0 flex-1">{figures}</div>
-      {/* KPIs read metrics and scores aggregates only, which every page filter applies to. */}
-      {gate.status === 'ready' &&
-        alertAction(alert, widget, view, {
-          page: gate.page,
-          values: view.options.items.map(({ label, value }) => ({ label, value })),
-        })}
-      {pin && <PinAction {...pin} />}
+    <div className="group/kpis relative">
+      {figures}
+      <Card
+        className={cn(
+          'absolute -top-4 left-3 z-10 flex items-center gap-0.5 p-0.5',
+          'opacity-0 transition-opacity duration-fast group-hover/kpis:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 motion-reduce:transition-none',
+        )}
+      >
+        {dragHandle && <MetricsCard.DragHandle {...dragHandle} className="my-0" />}
+        {/* KPIs read metrics and scores aggregates only, which every page filter applies to. */}
+        {gate.status === 'ready' &&
+          alertAction(alert, widget, view, {
+            page: gate.page,
+            values: view.options.items.map(({ label, value }) => ({ label, value })),
+          })}
+        {pin && <PinAction {...pin} />}
+      </Card>
     </div>
   );
 }

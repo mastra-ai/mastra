@@ -599,6 +599,16 @@ describe('DashboardRenderer', () => {
       expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
     });
 
+    it('keeps the pin of a KPI group for hover, pinned or not, so it never takes room from the figures', async () => {
+      const { container } = renderWithProviders(<PinningHost widgets={[kpisWidget]} onPin={() => {}} />);
+      const card = cell(container, kpisWidget.id);
+      const pin = await within(card).findByRole('button', { name: pinLabel('Pin', kpisWidget) }, { timeout: 5000 });
+      expect(waitsForHover(pin)).toBe(true);
+
+      fireEvent.click(pin);
+      expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', kpisWidget) }))).toBe(true);
+    });
+
     it("shows the host's pinned widgets without a click", async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), metricsWidget('token-usage')), {
         pin: { onPin: () => {}, isPinned: id => id === 'token-usage' },
