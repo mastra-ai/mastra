@@ -12,4 +12,4 @@ const memory = new Memory({
 });
 ```
 
-The `SemanticRecall` processor and `memory.saveMessages()` now write the same vector rows: the same text rules, chunking, and thread metadata. Messages embedded during an agent run now carry thread metadata, so `memory.recall()` with a `semanticRecall.filter` on thread attributes finds them.
+The `SemanticRecall` processor now splits long messages into chunks and stores the thread's metadata on each vector row, instead of embedding the whole text as one input.
