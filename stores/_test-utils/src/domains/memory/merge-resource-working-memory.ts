@@ -25,7 +25,8 @@ export function createMergeResourceWorkingMemoryTest({ storage }: { storage: Mas
     it('keeps every field when many merges run at once, including the first write', async ctx => {
       if (!memory.supportsAtomicWorkingMemoryMerge) return ctx.skip();
       const resourceId = `resource-${randomUUID()}`;
-      const keys = Array.from({ length: 24 }, (_, i) => `k${i}`);
+      // More writers than WM_MAX_CAS_ATTEMPTS, so a retry loop without backoff would run out of attempts.
+      const keys = Array.from({ length: 100 }, (_, i) => `k${i}`);
 
       const results = await Promise.all(
         keys.map(key => memory.mergeResourceWorkingMemory({ resourceId, merge: addField(key) })),

@@ -73,6 +73,16 @@ const OM_MAX_HEAD_HOPS = 3;
 const OM_MAX_CAS_ATTEMPTS = 10;
 const OM_CAS_CONFLICT = Symbol('om-cas-conflict');
 const WM_MAX_CAS_ATTEMPTS = 50;
+const WM_CAS_MAX_BACKOFF_MS = 32;
+
+/**
+ * After a lost working memory compare-and-swap, waits a random delay that grows with the attempt
+ * (capped at WM_CAS_MAX_BACKOFF_MS), so writers contending on one resource spread out instead of
+ * re-reading and colliding in lockstep.
+ */
+function wmCasBackoff(attempt: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, Math.random() * Math.min(2 ** attempt, WM_CAS_MAX_BACKOFF_MS)));
+}
 /** A stored OM row plus a WHERE fragment matching exactly that row state. */
 type OMRow = { record: ObservationalMemoryRecord; guard: { sql: string; args: InValue[] } };
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -1315,6 +1325,7 @@ export class MemoryLibSQL extends MemoryStorage {
         }
         // An embedded replica reads locally; pull the other instance's write before re-reading.
         if (this.#embeddedReplica) await this.#client.sync?.();
+        await wmCasBackoff(i);
       }
       throw new MastraError({
         id: createStorageErrorId('LIBSQL', 'MERGE_RESOURCE_WORKING_MEMORY', 'CONFLICT'),
