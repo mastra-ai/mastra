@@ -2,4 +2,4 @@
 '@mastra/libsql': patch
 ---
 
-Fixed local LibSQL vector truncation so indexes remain usable for later inserts.
+Fixed `truncateIndex` on LibSQL vector stores leaving the vector index broken, so later inserts failed with "failed to insert shadow row".

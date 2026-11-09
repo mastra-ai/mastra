@@ -411,7 +411,7 @@ describe('LibSQLVector local-file concurrency', () => {
   });
 });
 
-describe('LibSQLVector local-file truncation', () => {
+describe('LibSQLVector truncation', () => {
   const indexName = 'truncate_vectors';
   let tmpDir: string;
   let vector: LibSQLVector;
@@ -437,15 +437,10 @@ describe('LibSQLVector local-file truncation', () => {
         [0, 0, 1],
       ],
     });
-    const internals = vector as unknown as {
-      turso: ReturnType<typeof createClient>;
-      vectorIndexes: Set<string>;
-    };
-    const executeSpy = vi.spyOn(internals.turso, 'execute');
+    const internals = vector as unknown as { vectorIndexes: Set<string> };
 
     await vector.truncateIndex({ indexName });
 
-    expect(executeSpy).toHaveBeenCalledWith({ sql: `DELETE FROM ${indexName} WHERE rowid IS NOT NULL`, args: [] });
     await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[1, 1, 0]] })).resolves.toEqual([
       'replacement',
     ]);
@@ -490,16 +485,20 @@ describe('LibSQLVector local-file truncation', () => {
     ]);
   });
 
-  it('leaves the in-memory truncate statement unchanged', async () => {
+  it('can reinsert and retrieve vectors after truncating an in-memory indexed table', async () => {
     const memoryVector = new LibSQLVector({ id: 'truncate-memory', url: ':memory:' });
     try {
       await memoryVector.createIndex({ indexName: 'memory_vectors', dimension: 3 });
-      const internals = memoryVector as unknown as { turso: ReturnType<typeof createClient> };
-      const executeSpy = vi.spyOn(internals.turso, 'execute');
+      await memoryVector.upsert({ indexName: 'memory_vectors', ids: ['first'], vectors: [[1, 0, 0]] });
 
       await memoryVector.truncateIndex({ indexName: 'memory_vectors' });
 
-      expect(executeSpy).toHaveBeenCalledWith({ sql: 'DELETE FROM memory_vectors', args: [] });
+      await expect(
+        memoryVector.upsert({ indexName: 'memory_vectors', ids: ['replacement'], vectors: [[1, 1, 0]] }),
+      ).resolves.toEqual(['replacement']);
+      await expect(
+        memoryVector.query({ indexName: 'memory_vectors', queryVector: [1, 1, 0], topK: 10 }),
+      ).resolves.toMatchObject([{ id: 'replacement' }]);
     } finally {
       await memoryVector.close();
     }
