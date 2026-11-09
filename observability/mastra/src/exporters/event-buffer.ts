@@ -1,6 +1,7 @@
 import { TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan, ObservabilityEvent } from '@mastra/core/observability';
 import type { CreateSpanRecord, ObservabilityStorageStrategy, UpdateSpanRecord } from '@mastra/core/storage';
+import type { StorageByteTracker } from './storage-byte-tracker';
 
 /** Mixin interface that tracks how many times a buffered event has been retried. */
 export interface RetryCount {
@@ -32,9 +33,12 @@ export class EventBuffer {
   #firstEventTime?: Date;
   #storageStrategy?: ObservabilityStorageStrategy;
   #maxRetries: number;
+  #byteTracker?: StorageByteTracker;
+  #preferUpdates = false;
 
-  constructor(args: { maxRetries: number }) {
+  constructor(args: { maxRetries: number; byteTracker?: StorageByteTracker }) {
     this.#maxRetries = args.maxRetries;
+    this.#byteTracker = args.byteTracker;
   }
 
   /** Initialize with a storage strategy and replay any pre-init events. */
@@ -62,13 +66,15 @@ export class EventBuffer {
   }
 
   private pushCreate(event: ObservabilityEvent): void {
+    const buffered = this.#byteTracker ? this.#byteTracker.capture(event) : { ...event, retryCount: 0 };
     this.setFirstEventTime();
-    this.#creates.push({ ...event, retryCount: 0 });
+    this.#creates.push(buffered);
   }
 
   private pushUpdate(event: ObservabilityEvent): void {
+    const buffered = this.#byteTracker ? this.#byteTracker.capture(event) : { ...event, retryCount: 0 };
     this.setFirstEventTime();
-    this.#updates.push({ ...event, retryCount: 0 });
+    this.#updates.push(buffered);
   }
 
   /** Route an event to the create or update buffer based on its type and the storage strategy. */
@@ -84,10 +90,10 @@ export class EventBuffer {
         switch (this.#storageStrategy) {
           case 'realtime':
           case 'batch-with-updates':
+            this.pushCreate(event);
             if (!event.exportedSpan.isEvent) {
               this.#pendingCreateSpans.add(this.exportedSpanKey(event.exportedSpan));
             }
-            this.pushCreate(event);
             break;
           case 'event-sourced':
             this.pushCreate(event);
@@ -136,6 +142,7 @@ export class EventBuffer {
     for (const e of events) {
       if (++e.retryCount <= this.#maxRetries) {
         retryable.push(e);
+        this.#byteTracker?.enqueue(e);
       } else {
         dropped.push(e);
       }
@@ -157,6 +164,7 @@ export class EventBuffer {
     for (const e of events) {
       if (++e.retryCount <= this.#maxRetries) {
         retryable.push(e);
+        this.#byteTracker?.enqueue(e);
       } else {
         dropped.push(e);
       }
@@ -168,6 +176,57 @@ export class EventBuffer {
     }
 
     return dropped;
+  }
+
+  /** Alternate creates and eligible updates so either queue can make progress under load. */
+  takeByteBatch(maxRecords: number): { creates: BufferedEvent[]; updates: BufferedEvent[] } {
+    const tracker = this.#byteTracker!;
+    const creates: BufferedEvent[] = [];
+    const updates: BufferedEvent[] = [];
+    const selectedUpdates = new Set<number>();
+    let updateIndex = 0;
+    let bytes = 0;
+    while (creates.length + updates.length < maxRecords && bytes < tracker.config.maxBatchBytes) {
+      // Waiting on a create isn't a failed storage operation. Leave these entries
+      // in place, with their retry count unchanged, until their create settles.
+      while (updateIndex < this.#updates.length) {
+        const event = this.#updates[updateIndex]!;
+        if (!('exportedSpan' in event) || !this.isAwaitingCreate(event.exportedSpan)) break;
+        updateIndex++;
+      }
+      const create = this.#creates[creates.length];
+      const update = this.#updates[updateIndex];
+      if (!create && !update) break;
+      const takeUpdate = !!update && (!create || this.#preferUpdates);
+      const event = takeUpdate ? update! : create!;
+      if (takeUpdate) {
+        updates.push(event);
+        selectedUpdates.add(updateIndex++);
+      } else {
+        creates.push(event);
+      }
+      this.#preferUpdates = !takeUpdate;
+      tracker.dequeue(event);
+      bytes += tracker.size(event);
+    }
+    this.#creates.splice(0, creates.length);
+    this.#updates = this.#updates.filter((_, index) => !selectedUpdates.has(index));
+    if (this.totalSize === 0) this.#firstEventTime = undefined;
+    return { creates, updates };
+  }
+
+  /** Retries/deferred updates remain reserved; everything else has finished or been dropped. */
+  releaseByteBatch(events: BufferedEvent[]): void {
+    if (!this.#byteTracker) return;
+    for (const event of events) {
+      if (!this.#byteTracker.releaseIfUnqueued(event)) continue;
+      this.forgetDroppedCreates([event]);
+      if (event.type === TracingEventType.SPAN_ENDED) {
+        this.endFinishedSpans({
+          records: [{ traceId: event.exportedSpan.traceId, spanId: event.exportedSpan.id, updates: {} }],
+        });
+      }
+    }
   }
 
   /** Snapshot of buffered create events. */
