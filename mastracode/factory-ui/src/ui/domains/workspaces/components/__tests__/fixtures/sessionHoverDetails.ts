@@ -11,7 +11,7 @@ export const workName = 'Investigate the authentication regression across long-r
 export const reviewName = 'Review the authentication refresh fix before release';
 /** The sidebar rows' accessible names: the context each card files the session under, then the session's name. */
 export const workRowName = `Implementation: ${workName}`;
-export const reviewRowName = `PR review: ${reviewName}`;
+export const reviewRowName = `Review: ${reviewName}`;
 
 const HOUR = 3_600_000;
 
