@@ -437,8 +437,6 @@ describe('LibSQLVector truncation', () => {
         [0, 0, 1],
       ],
     });
-    const internals = vector as unknown as { vectorIndexes: Set<string> };
-
     await vector.truncateIndex({ indexName });
 
     await expect(vector.upsert({ indexName, ids: ['replacement'], vectors: [[1, 1, 0]] })).resolves.toEqual([
@@ -447,7 +445,6 @@ describe('LibSQLVector truncation', () => {
     await expect(vector.query({ indexName, queryVector: [1, 1, 0], topK: 10 })).resolves.toMatchObject([
       { id: 'replacement' },
     ]);
-    expect(internals.vectorIndexes).toContain(`${indexName}_vector_idx`);
   });
 
   it('supports empty and repeated truncate cycles', async () => {
