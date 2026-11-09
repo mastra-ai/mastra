@@ -934,7 +934,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // deferring the failure to a later token refresh.
         // A failed mint keeps the reconnect usable with the current token.
         const refreshed = await refreshStaleGithubToken().catch(() => false);
-        if (!refreshed) existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
+        if (!refreshed) {
+          // Reinstalling the same credential must not reset its age.
+          const { tokenIssuedAt } = existingRegistration;
+          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
+          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+        }
         await finishStart();
         return;
       }

@@ -2714,8 +2714,13 @@ describe('GitHub session workspace preparation', () => {
       });
       const sandbox = mocks.createSandbox.mock.results[0]!.value;
       await expect(sandbox.start()).resolves.not.toThrow();
-
       expect(lastGhToken()).toBe(installed);
+
+      // The reinstalled token keeps its age, so the next command still re-mints it.
+      mocks.getRepositoryAccess.mockImplementation(access);
+      await sandbox.executeCommand('git', ['push']);
+      expect(lastGhToken()).not.toBe(installed);
+      expect(lastGhToken()).toMatch(/^minted-/);
     });
 
     it('keeps an org PAT installed regardless of age', async () => {
@@ -2743,14 +2748,16 @@ describe('GitHub session workspace preparation', () => {
 
     it('does not replace an installed org PAT when a later PAT lookup fails', async () => {
       mocks.githubPat = 'ghp_org_pat';
-      const { workspace } = await createLocalFactory();
+      const { workspace, github } = await createLocalFactory();
       addProject();
       addSession({ id: 'session-a' });
       await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
       expect(lastGhToken()).toBe('ghp_org_pat');
 
       // getGithubPat fails soft: a storage error reads as "no PAT configured".
-      mocks.githubPat = null;
+      const settingsGet = github.integrationStorage.settings.get as ReturnType<typeof vi.fn>;
+      settingsGet.mockClear();
+      settingsGet.mockRejectedValue(new Error('storage unavailable'));
       vi.advanceTimersByTime(46 * 60_000);
       mocks.setEnv.mockClear();
       await workspace({
@@ -2758,6 +2765,7 @@ describe('GitHub session workspace preparation', () => {
         mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
       });
       await mocks.createSandbox.mock.results[0]!.value.executeCommand('gh', ['pr', 'list']);
+      expect(settingsGet).toHaveBeenCalled();
       expect(mocks.setEnv).not.toHaveBeenCalled();
 
       await mocks.createSandbox.mock.results[0]!.value.start();
