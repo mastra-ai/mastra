@@ -292,6 +292,25 @@ const options = {
 }
 ```
 
+### Long messages
+
+Embedding models accept a limited number of tokens per input. Memory splits longer messages into chunks and stores each chunk as its own vector row, so every part of the message can be recalled. `maxChunkChars` sets the largest chunk in characters:
+
+```typescript {5}
+const agent = new Agent({
+  id: 'agent',
+  memory: new Memory({
+    options: {
+      semanticRecall: { maxChunkChars: 6000 },
+    },
+  }),
+})
+```
+
+The default is 16,384 characters, about 4,096 tokens of English text, which fits `openai/text-embedding-3-small` and its 8,191-token limit. The limit is in characters because each embedding provider uses its own tokenizer. Chinese, Japanese, and Korean text, and code, use more tokens per character than English, so lower `maxChunkChars` when that kind of text makes up most of your messages.
+
+When you don't set `maxChunkChars` and the embedder declares its input limit, Memory derives the chunk size from that limit. [FastEmbed](#using-fastembed-local) models declare their 512-token window, so they need no configuration.
+
 ## Server-side embeddings
 
 Some vector stores generate the embeddings themselves. With one of those, semantic recall runs without an `embedder`: the database embeds each message on write and the search string on arrival. The embedding provider stays out of your application entirely.
@@ -433,7 +452,7 @@ Memory uses a single embedder for both storing and recalling messages, so pick o
 
 Multilingual E5 produces 1024-dimensional vectors. Your vector index must be created with matching dimensions, and E5 vectors can't be mixed with vectors from another embedder in the same index.
 
-FastEmbed models embed at most 512 tokens per input (roughly 2,000 to 2,500 characters of English text). Longer inputs are truncated, so text past the limit doesn't affect the embedding and can't be found by semantic recall. The AI SDK v3 FastEmbed models return a warning when this happens. The legacy v1 and v2 models don't. If you embed long documents with FastEmbed, chunk them to fit the window, for example with `maxSize: 1500` in `MDocument.chunk()`.
+FastEmbed models embed at most 512 tokens per input (roughly 2,000 to 2,500 characters of English text). Longer inputs are truncated, so text past the limit doesn't affect the embedding. Semantic recall sizes its message chunks to fit this window automatically (see [Long messages](#long-messages)). Outside of memory, the AI SDK v3 FastEmbed models return a warning when an input is truncated. The legacy v1 and v2 models don't. If you embed long documents with FastEmbed, chunk them to fit the window, for example with `maxSize: 1500` in `MDocument.chunk()`.
 
 ### Setting the embedding dimension
 
