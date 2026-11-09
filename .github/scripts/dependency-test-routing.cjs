@@ -108,8 +108,8 @@ function ownerOf(file, packageDirs) {
  * - A test that scans its package's directory runs when a file in that package is added,
  *   deleted or renamed.
  * - A change to the root importer's dependencies (vitest, TypeScript, shared tooling) can
- *   affect every package, so it asks for the full suite, as does a selection too large for
- *   the unsharded affected-test job.
+ *   affect every package, so it asks for the full suite, as does a selection covering more
+ *   than a quarter of the suite.
  *
  * @param {{
  *   changedFiles: string[],
@@ -163,8 +163,8 @@ function dependencyAffectedTests({
     }
   }
 
-  // The affected-test job is a single unsharded runner; past this share of the suite the
-  // sharded full run finishes sooner.
+  // The affected-unit job splits at most three ways by file count; past this share of the
+  // suite the full run, sharded four ways, finishes sooner.
   if (tests.size > testFiles.length * MAX_SELECTED_SHARE) {
     return { runFull: true, reason: 'dependency changes select most of the suite', packages: [], tests: [] };
   }

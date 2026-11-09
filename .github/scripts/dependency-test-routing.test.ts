@@ -161,7 +161,7 @@ describe('dependency test routing', () => {
     expect(result.tests).toEqual([]);
   });
 
-  test('hands a selection too large for one runner to the sharded full suite', () => {
+  test('hands a selection over a quarter of the suite to the full suite', () => {
     const result = dependencyAffectedTests({
       changedFiles: ['stores/pg/package.json'],
       headLockfile: lockfile().replace(
