@@ -138,9 +138,19 @@ describe('Knowledge write-run start matches per-scope materialization', () => {
   async function tree(store: KnowledgeStorage, addresses: string[]) {
     const scopes = await store.getScopesByAddress(addresses);
     const byId = new Map(scopes.map(scope => [scope.id, scope.address]));
-    return Object.fromEntries(
-      scopes.map(scope => [scope.address, scope.parentId ? (byId.get(scope.parentId) ?? 'other') : null]),
-    );
+    const entries = [];
+    for (const scope of scopes) {
+      const about = await store.getPageByPath({ scopeId: scope.id, path: ['about'], read: 'all' });
+      entries.push([
+        scope.address,
+        {
+          parent: scope.parentId ? (byId.get(scope.parentId) ?? 'other') : null,
+          declaration: scope.declaration,
+          about: !!about,
+        },
+      ]);
+    }
+    return Object.fromEntries(entries);
   }
 
   /** Runs each start through the old per-principal loop and through materializeScopes, comparing outcomes. */
@@ -155,11 +165,11 @@ describe('Knowledge write-run start matches per-scope materialization', () => {
         for (const principal of principals) await serial.runtime.materializeScope(principal, principals, provenance);
       })().then(
         () => 'ok',
-        (error: Error) => error.message,
+        (error: Error) => `${error.name}: ${error.message}`,
       );
       const now = await batch.runtime.materializeScopes(principals, principals, provenance).then(
         () => 'ok',
-        (error: Error) => error.message,
+        (error: Error) => `${error.name}: ${error.message}`,
       );
       expect(now).toBe(old);
       expect(batch.warnings).toEqual(serial.warnings);
@@ -193,5 +203,22 @@ describe('Knowledge write-run start matches per-scope materialization', () => {
       ['b:y', 'a:y'],
     ]);
     expect(warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Knowledge write-run start scope lookup', () => {
+  it('costs one lookup for any number of held scopes', async () => {
+    const store = (await new InMemoryStore().getStore('knowledge'))!;
+    await store.init();
+    const runtime = new KnowledgeScopeRuntime(
+      { 'project:$projectId': {} },
+      async () => store,
+      () => {},
+    );
+    const principals = Array.from({ length: 2500 }, (_, i) => `project:p${i}`);
+    await runtime.materializeScopes(principals, principals, provenance);
+    const calls = counted(store);
+    await runtime.materializeScopes(principals, principals, provenance);
+    expect(calls).toEqual({ lookups: 1, materialize: [] });
   });
 });
