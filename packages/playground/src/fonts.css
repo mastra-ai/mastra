@@ -1,8 +1,8 @@
 /*
  * Local Mastra Studio fonts. Bundled into the public `mastra` CLI build.
  * Inter (display + body) and Commit Mono (code) are both SIL OFL — safe to
- * redistribute in the open-source package (Inter's licence ships with
- * @fontsource-variable/inter; see OFL-CommitMono.txt). Inter loads with its
+ * redistribute in the open-source package (see OFL-Inter.txt and
+ * OFL-CommitMono.txt). Inter loads with its
  * optical-size axis, so large text gets the tighter Display cut automatically.
  * Non-OFL product fonts stay outside this package.
  */
