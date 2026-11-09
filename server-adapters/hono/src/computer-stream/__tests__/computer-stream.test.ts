@@ -102,6 +102,26 @@ describe('websocket proxy', () => {
     expect((await openSocket((await mintSocketUrl(origin, 'c1')).url, { origin }, ['binary', 'base64'])).status).toBe(400);
   });
 
+  it('drops RFB input frames in watch mode and forwards them in control mode', async () => {
+    const { origin } = await start();
+    const pointer = Buffer.from([5, 0, 0, 1, 0, 1]);
+
+    const watch = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'watch' })).url, { origin });
+    await waitFor(() => upstream.upstreamSockets.size === 1);
+    watch.ws!.send(pointer);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(upstream.upstreamMessages).toEqual([]);
+    watch.ws!.close();
+    await waitFor(() => upstream.upstreamSockets.size === 0);
+
+    const control = await openSocket((await mintSocketUrl(origin, 'c1', { mode: 'control' })).url, { origin });
+    await waitFor(() => upstream.upstreamSockets.size === 1);
+    control.ws!.send(pointer);
+    await waitFor(() => upstream.upstreamMessages.length === 1);
+    expect([...upstream.upstreamMessages[0]!]).toEqual([...pointer]);
+    control.ws!.close();
+  });
+
   it('re-checks the attachment when the socket opens', async () => {
     const { origin } = await start();
     const { url } = await mintSocketUrl(origin, 'c1');

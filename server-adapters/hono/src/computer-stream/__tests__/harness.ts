@@ -73,6 +73,7 @@ export async function startUpstream() {
 
   const wss = new WebSocketServer({ noServer: true, handleProtocols: protocols => (protocols.has('binary') ? 'binary' : false) });
   const upstreamSockets = new Set<WebSocket>();
+  const upstreamMessages: Buffer[] = [];
   const wsHandshakes: UpstreamRequest[] = [];
   server.on('upgrade', (req, socket, head) => {
     wsHandshakes.push({ method: req.method!, url: req.url!, headers: req.headers });
@@ -85,6 +86,7 @@ export async function startUpstream() {
       upstreamSockets.add(ws);
       ws.on('close', () => upstreamSockets.delete(ws));
       ws.on('message', (data, isBinary) => {
+        upstreamMessages.push(Buffer.from(data as ArrayBuffer));
         // Control words arrive as binary, like real RFB traffic.
         if (data.toString() === 'close-me') {
           ws.close(4000, 'upstream bye');
@@ -105,6 +107,7 @@ export async function startUpstream() {
     server,
     requests,
     wsHandshakes,
+    upstreamMessages,
     state,
     upstreamSockets,
     base: `http://127.0.0.1:${port}`,

@@ -101,8 +101,8 @@ function canonicalOrigin(origin: string): string | undefined {
  * computer from the thread cuts its viewers within that interval; thread
  * permissions are checked when the ticket is minted, not re-checked live.
  *
- * Both modes require write access to the thread: the proxy does not filter RFB
- * input, so "watch" is a display setting on the viewer, not a security boundary.
+ * Both modes require write access to the thread. Watch sessions additionally
+ * drop RFB keyboard, pointer, clipboard, extended-key, and QEMU input messages.
  *
  * Requires a long-running Node server that accepts WebSocket upgrades (not
  * serverless). Sockets are in-process, so multi-instance deployments need
@@ -199,6 +199,9 @@ export async function setupComputerStream(
   };
 
   const computerIdOf = (c: Context) => c.req.param('computerId')!;
+
+  // Platform's view filter permits RFB setup/read requests and blocks these input-bearing message types.
+  const isWatchInput = (data: ArrayBuffer): boolean => [4, 5, 6, 251, 255].includes(new Uint8Array(data)[0] ?? -1);
 
   const requireComputers: MiddlewareHandler = async (c, next) => {
     if (!config.getViewer) return c.json({ error: 'No computers are registered' }, 404);
@@ -320,6 +323,7 @@ export async function setupComputerStream(
             return;
           }
           sessions.touch(session.id, session.computerId);
+          if (session.mode === 'watch' && isWatchInput(data)) return;
           const upstream = live.upstream;
           if (upstream?.readyState === WebSocketClient.OPEN) {
             upstream.send(data);
