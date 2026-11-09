@@ -375,6 +375,7 @@ type ResumableStreamsAgent = {
   __getStreamBus?: () => { pubsub: PubSub } | undefined;
   __getPublishedRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
   __getRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+  __getReplayOwner?: (runId: string) => Promise<{ resourceId?: string; threadId?: string } | undefined>;
   __getRunRecord?: (runId: string) => Promise<PlainRunRecord | undefined>;
   __abortRunAcknowledged?: (runId: string) => Promise<boolean>;
 };
@@ -2587,8 +2588,10 @@ async function authorizeDurableRun({
  *
  * Plain runs are checked against their shared run record. Durable runs are
  * checked against their workflow rows; observers may also use the owner the
- * agent tracks in this process, which outlives the run so finished runs can be
- * replayed. Aborts never use it, so a finished run is not reported stopped.
+ * agent tracks in this process, or, once the rows are gone, the replay owner
+ * the executing process shared. Both outlive the run so finished runs can be
+ * replayed from any server, and both go when the replay history is cleared.
+ * Aborts never use them, so a finished run is not reported stopped.
  */
 async function authorizeRunAccess({
   mastra,
@@ -2619,7 +2622,21 @@ async function authorizeRunAccess({
     return {};
   }
   const access = await authorizeDurableRun({ mastra, agent, runId, requestContext, permission });
-  return access === 'ok' ? {} : undefined;
+  if (access === 'ok') return {};
+  // Only a run with no workflow rows left may fall back to the shared replay owner; a row that
+  // cannot be verified yet, or one that refused the caller, stays authoritative.
+  if (access !== 'missing') return undefined;
+  const getReplayOwner = (agent as unknown as ResumableStreamsAgent).__getReplayOwner;
+  if (permission !== MastraFGAPermissions.MEMORY_READ || typeof getReplayOwner !== 'function') return undefined;
+  let replayOwner: { resourceId?: string; threadId?: string } | undefined;
+  try {
+    replayOwner = await getReplayOwner.call(agent, runId);
+  } catch {
+    throw new HTTPException(503, { message: 'Run ownership is temporarily unavailable' });
+  }
+  if (!replayOwner) return undefined;
+  await authorizeRunOwner({ mastra, agent, owner: replayOwner, requestContext, permission });
+  return {};
 }
 
 export const ABORT_AGENT_RUN_ROUTE = createRoute({
