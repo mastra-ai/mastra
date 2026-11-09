@@ -706,9 +706,17 @@ export class Computers implements MastraComputers {
           const id = this.#attachments.get(scope.key);
           const entry = id ? this.#computers.get(id) : undefined;
           if (!entry?.sandbox || entry.ownerResourceId !== scope.resourceId) return NOT_ATTACHED;
-          if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
-          const result = await entry.sandbox.captureCheckpoint();
-          return result.status === 'skipped' ? { status: result.status, reason: result.reason } : { status: result.status };
+          const run = entry.queue.then(async () => {
+            if (entry.control.holder === 'human') return HUMAN_HAS_CONTROL;
+            if (entry.control.enforcedRevision < entry.control.revision) return CONTROL_NOT_ENFORCED;
+            const result = await entry.sandbox!.captureCheckpoint();
+            return result.status === 'skipped' ? { status: result.status, reason: result.reason } : { status: result.status };
+          });
+          entry.queue = run.then(
+            () => undefined,
+            () => undefined,
+          );
+          return run;
         },
       }),
       [WORKSPACE_TOOLS.COMPUTER_LIFECYCLE.DESTROY]: createTool({

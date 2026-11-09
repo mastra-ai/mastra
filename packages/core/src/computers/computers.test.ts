@@ -150,6 +150,36 @@ describe('Computers', () => {
     disposeSecond();
   });
 
+  it('serializes snapshots behind mutations and rechecks control before capture', async () => {
+    const createdSandboxes: ComputerSandbox[] = [];
+    const computers = new Computers({ provider: provider(createdSandboxes), secret: 'secret' });
+    const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, context);
+    const captureCheckpoint = vi.fn(async () => ({ status: 'captured' as const }));
+    createdSandboxes[0]!.captureCheckpoint = captureCheckpoint;
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>(resolve => (release = resolve));
+    const started = new Promise<void>(resolve => (entered = resolve));
+    const mutation = computers.runComputerAction(
+      { sandboxId: 'sandbox-1', action: 'mutate', context },
+      async () => {
+        entered();
+        await blocked;
+      },
+    );
+    await started;
+
+    const snapshot = (computers.tools().mastra_workspace_computer_snapshot as any).execute({}, context);
+    await Promise.resolve();
+    expect(captureCheckpoint).not.toHaveBeenCalled();
+    await computers.control(created.computer.id, { resourceId: 'resource', threadId: 'thread' }, { action: 'take' });
+    release();
+    await mutation;
+
+    await expect(snapshot).resolves.toBe('the user has control of this computer; wait for them to hand it back');
+    expect(captureCheckpoint).not.toHaveBeenCalled();
+  });
+
   it('fails managed mutations closed until required subscribers enforce the revision', async () => {
     const computers = new Computers({ provider: provider(), secret: 'secret' });
     const created = await (computers.tools().mastra_workspace_computer_create as any).execute({}, context);
