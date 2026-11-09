@@ -21,6 +21,7 @@ import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
+import { SandboxEnvsStorage } from './domains/sandbox-envs/base.js';
 import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
@@ -123,6 +124,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   modelDefaults: ModelDefaultsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
+  sandboxEnvs: SandboxEnvsStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
   comments: WorkItemCommentsStorage;
@@ -159,6 +161,7 @@ export async function createFactoryStorageForTests(
   const modelDefaults = storage.registerDomain(new ModelDefaultsStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
+  const sandboxEnvs = storage.registerDomain(new SandboxEnvsStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
@@ -179,6 +182,7 @@ export async function createFactoryStorageForTests(
     modelDefaults,
     memorySettings,
     customProviders,
+    sandboxEnvs,
     queueHealth,
     channelIdentity,
     comments,

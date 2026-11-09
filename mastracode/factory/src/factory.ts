@@ -162,6 +162,7 @@ import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
+import { SandboxEnvsStorage } from './storage/domains/sandbox-envs/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
@@ -824,6 +825,7 @@ export class MastraFactory {
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
+    const sandboxEnvsStorage = storage.registerDomain(new SandboxEnvsStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -845,6 +847,7 @@ export class MastraFactory {
       modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      sandboxEnvs: sandboxEnvsStorage,
       filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
