@@ -6,6 +6,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { FACTORY_INTERACTIVE_KEY } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -13,9 +14,10 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
-function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
+function requestContext({ orgId = 'org-1', userId = 'user-1', interactive = true } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
+  if (interactive) requestContext.set(FACTORY_INTERACTIVE_KEY, true);
   requestContext.set('controller', {
     // The session runs under its Factory, so only its session id names the source-control session.
     sessionId: 'session-1',
@@ -190,6 +192,26 @@ describe('createSourceControlTools', () => {
       sourceId: 'acme/repo',
       actingUserId: 'user-1',
       pullRequestId: '17',
+    });
+  });
+
+  it('attributes no person when an autonomous turn writes as the session owner', async () => {
+    const setup = await fixture();
+    const tools = await createSourceControlTools({
+      requestContext: requestContext({ interactive: false }),
+      providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+
+    await (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it', body: 'Body' });
+
+    expect(setup.createPullRequest).toHaveBeenCalledWith({
+      connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+      sourceId: 'acme/repo',
+      title: 'Ship it',
+      body: 'Body',
+      baseBranch: 'main',
+      headBranch: 'factory/issue-1',
     });
   });
 

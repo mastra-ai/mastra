@@ -4,7 +4,12 @@ import { createTool } from '@mastra/core/tools';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { z } from 'zod';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
+import {
+  FACTORY_INTERACTIVE_KEY,
+  getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
+  getFactoryAuthUserId,
+} from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
@@ -273,12 +278,15 @@ export async function createSourceControlTools({
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
+  // Autonomous turns run as the session owner (often whoever connected the repository),
+  // but no person drove the write, so they must not be attributed to anyone.
+  const interactive = requestContext.get(FACTORY_INTERACTIVE_KEY) === true;
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
       repositoryId: target.repository.id,
     })),
-    actingUserId: target.userId,
+    ...(interactive ? { actingUserId: target.userId } : {}),
   });
 
   return {
@@ -759,7 +767,7 @@ export async function createSourceControlTools({
         return publishCommitCheck({
           connection: ref.connection,
           sourceId: ref.sourceId,
-          actingUserId: ref.actingUserId,
+          ...(ref.actingUserId !== undefined ? { actingUserId: ref.actingUserId } : {}),
           headSha,
           ref: pullRequest.headBranch,
           name: FACTORY_TEST_CHECK_NAME,
