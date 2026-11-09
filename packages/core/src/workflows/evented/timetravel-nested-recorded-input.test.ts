@@ -182,7 +182,7 @@ describe('evented time travel into a nested workflow step', () => {
 });
 
 describe('createTimeTravelExecutionParams', () => {
-  it('carries only the recorded nested run ids into rebuilt step results', () => {
+  it('carries only the nested run ids recorded in the snapshot into rebuilt step results', () => {
     const step = (id: string) =>
       createStep({ id, inputSchema: z.any(), outputSchema: z.any(), execute: async ({ inputData }) => inputData });
     const inner = createWorkflow({ id: 'inner', inputSchema: z.any(), outputSchema: z.any() })
@@ -197,6 +197,15 @@ describe('createTimeTravelExecutionParams', () => {
     const params = createTimeTravelExecutionParams({
       steps: ['inner', 'charge'],
       graph: outer.buildExecutionGraph(),
+      // Caller-supplied context must not choose which recorded nested run gets reused.
+      context: {
+        first: { status: 'success', payload: {}, output: {}, metadata: { nestedRunId: 'someone-elses-run' } },
+        inner: {
+          status: 'failed',
+          payload: {},
+          metadata: { nestedRunId: 'someone-elses-run', foreachNestedRunIds: { 0: 'someone-elses-run' } },
+        },
+      } as any,
       snapshot: {
         runId: 'run-1',
         status: 'failed',
