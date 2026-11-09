@@ -53,7 +53,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
-The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`.
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
 
 ## Usage
 
@@ -102,12 +102,11 @@ The default `ISOLATED` mode allows outbound internet access only, with no privat
 
 ### Public ports
 
-Ports are available on E2B sandboxes and are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
+Ports are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
 
 ```typescript
 const workspace = new Workspace({
   sandbox: new PlatformSandbox({
-    sandboxProvider: 'e2b',
     publicPorts: true,
   }),
 })
@@ -425,7 +424,7 @@ A long-running process's output stream reconnects periodically, and the process 
     name: 'publicPorts',
     type: 'boolean',
     description:
-      "Let anyone with a port's URL reach it without signing in. E2B sandboxes only. Defaults to `false`. Fixed when the sandbox is created.",
+      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. Fixed when the sandbox is created.",
     isOptional: true,
   },
   {
