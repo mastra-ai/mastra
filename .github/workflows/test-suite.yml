@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'false'
+      unit_shards:
+        description: JSON list of shard numbers for the affected unit job, e.g. [1] or [1, 2, 3]
+        required: false
+        type: string
+        default: '[1]'
       e2e_test_files:
         required: false
         type: string
@@ -21,6 +26,10 @@ on:
         required: false
         type: string
         default: 'true'
+      durable_streams_changed:
+        required: false
+        type: string
+        default: 'false'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -92,10 +101,14 @@ jobs:
           retention-days: 1
 
   affected-unit-test:
-    name: Affected UNIT Test
+    name: Affected UNIT Test${{ strategy.job-total > 1 && format(' ({0}/{1})', matrix.shard, strategy.job-total) || '' }}
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.unit_shards) }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -144,7 +157,8 @@ jobs:
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+            --outputFile.blob=.vitest-reports/blob-unit-affected-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/${{ strategy.job-total }} \
             --passWithNoTests \
             "${test_files[@]}"
 
@@ -152,7 +166,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: vitest-blob-unit-affected
+          name: vitest-blob-unit-affected-${{ matrix.shard }}
           path: .vitest-reports/
           include-hidden-files: true
           retention-days: 1
@@ -233,10 +247,29 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  # Durable takeover runs against real Redis and Postgres. It reports as its own check and is
+  # deliberately kept out of merge-reports: it is a multi-process SIGTERM/SIGKILL suite whose
+  # flake rate has not been measured, so a red run must not block a merge.
+  durable-streams:
+    name: Durable Stream Tests
+    if: inputs.has_code == 'true' && inputs.durable_streams_changed == 'true'
+    uses: ./.github/workflows/test-durable-streams.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ inputs.head_sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
   merge-reports:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
+    # Required check: stays always() so a run cancelled mid-tests still reaches the
+    # "Require every test job to finish" step and fails. A skipped required job counts
+    # as a pass. The heavy steps below keep the implicit success() guard, which is
+    # false once the run is cancelled, so a superseded run spends seconds here.
     if: always()
     permissions:
       actions: read
@@ -270,7 +303,7 @@ jobs:
 
       - name: Merge reports
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
-        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
 
       # A test job that failed or was cancelled before uploading its blob would otherwise
       # be missing from the merged report, and this required check would pass without it.

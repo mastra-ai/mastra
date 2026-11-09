@@ -7,7 +7,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, isPullRequestCard, pullRequestReviewPhase } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -20,6 +20,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -52,6 +53,7 @@ import {
   SourceControlConnectionNotFoundError,
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
@@ -65,6 +67,7 @@ import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -73,6 +76,7 @@ import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import { VoiceRoutes } from './voice.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const MATERIALIZE_FAILURE_CODE = {
@@ -128,6 +132,7 @@ export interface FactoryApiRoutesDeps {
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
     skillOverrides: SkillOverridesStorage;
+    voiceSettings: VoiceSettingsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -271,7 +276,10 @@ async function legacyPlanSession(
 function restingExitLane(
   board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
+  pullRequestCard: boolean,
 ): string | undefined {
+  // A pull request's own card is reviewed in PR review; Work's Review lane is the builder's self-review.
+  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return pullRequestReviewPhase('work');
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
@@ -296,7 +304,7 @@ export async function prepareFactoryRuleBinding(
         ? sourceControlProvider.sourceControlStorage
         : sourceControlProvider;
     const source = workItemBranchSource(input.item.externalSource);
-    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
+    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.workItem.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
@@ -309,7 +317,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(board, input.role)
+          ? restingExitLane(board, input.role, isPullRequestCard({ source: workItemSource(input.item.externalSource) }))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -418,7 +426,7 @@ export async function prepareFactoryRuleBinding(
       sessionId: preparedSession.sessionId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
-      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {
@@ -479,7 +487,14 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
+      | 'projects'
+      | 'intake'
+      | 'workItems'
+      | 'channelIdentity'
+      | 'memorySettings'
+      | 'modelDefaults'
+      | 'modelCredentials'
+      | 'voiceSettings'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -512,6 +527,8 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
       modelDefaults: deps.domains.modelDefaults,
+      modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
@@ -793,6 +810,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
+    ...new VoiceRoutes({
+      auth: deps.auth,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
+      factoryProjects: deps.domains.projects,
+    }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,
       controllerId: deps.controllerId,
@@ -836,6 +860,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
@@ -849,6 +874,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
         }).routes()

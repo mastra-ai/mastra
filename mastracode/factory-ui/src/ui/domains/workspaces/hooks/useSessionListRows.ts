@@ -60,6 +60,7 @@ export function useSessionListRows(factoryId: string | undefined): {
         session,
         item: workItem?.item,
         boards: catalog.data,
+        context: workItem?.context,
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
         factoryId,

@@ -266,11 +266,26 @@ export type FullOutput<OUTPUT = undefined> = {
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
  */
-function resolveOutputMessageSkippingCompletionChecks(messageList: MessageList): MastraDBMessage | undefined {
+export function resolveOutputMessageSkippingCompletionChecks(messageList: MessageList): MastraDBMessage | undefined {
   const responseDbMessages = messageList.get.response.db();
   return responseDbMessages.some(m => m.content?.metadata?.completionResult)
     ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
     : responseDbMessages[responseDbMessages.length - 1];
+}
+
+/**
+ * A failed completion check moves the answer to a new message, but this output keeps the id it
+ * was built with. Resolve at write time so processor data lands on the answer that is returned.
+ */
+function resolveProcessorWriterMessageId(
+  messageList: MessageList,
+  fallbackMessageId: string,
+  explicitMessageId?: string,
+): string {
+  if (explicitMessageId) return explicitMessageId;
+  const responseDbMessages = messageList.get.response.db();
+  if (!responseDbMessages.some(m => m.content?.metadata?.completionResult)) return fallbackMessageId;
+  return resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? fallbackMessageId;
 }
 
 function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
@@ -905,7 +920,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   data: { type: string; data?: unknown; transient?: boolean },
                   writerOptions?: { messageId?: string },
                 ) => {
-                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  persistProcessorDataChunk(
+                    self.messageList,
+                    resolveProcessorWriterMessageId(self.messageList, self.messageId, writerOptions?.messageId),
+                    data,
+                  );
                   controller.enqueue(data as ChunkType<OUTPUT>);
                 },
               };
@@ -991,7 +1010,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               0,
               {
                 custom: async (data, writerOptions) => {
-                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  persistProcessorDataChunk(
+                    self.messageList,
+                    resolveProcessorWriterMessageId(self.messageList, self.messageId, writerOptions?.messageId),
+                    data,
+                  );
                   controller.enqueue(data as ChunkType<OUTPUT>);
                 },
               },
@@ -1710,7 +1733,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   data: { type: string; data?: unknown; transient?: boolean },
                   writerOptions?: { messageId?: string },
                 ) => {
-                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  persistProcessorDataChunk(
+                    self.messageList,
+                    resolveProcessorWriterMessageId(self.messageList, self.messageId, writerOptions?.messageId),
+                    data,
+                  );
                   self.#emitChunk(data as ChunkType<OUTPUT>);
                   controller.enqueue(data as ChunkType<OUTPUT>);
                 },

@@ -15,14 +15,9 @@ const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 const CURRENT_PATH = '/factories/factory-1/work?view=mine#item-1';
 
 function renderApp({
-  projects = () => HttpResponse.json({ projects: [factory] }),
+  projects = () => HttpResponse.json({ projects: [{ ...factory, repositories: [] }] }),
 }: { projects?: Parameters<typeof http.get>[1] } = {}) {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, projects),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/source-control-connections`, () =>
-      HttpResponse.json({ connections: [] }),
-    ),
-  );
+  server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, projects));
   const router = createMemoryRouter(
     [
       {
@@ -138,7 +133,9 @@ describe('Factory list failures', () => {
     let listAvailable = false;
     const { router } = renderApp({
       projects: () =>
-        listAvailable ? HttpResponse.json({ projects: [factory] }) : new HttpResponse(undefined, { status: 500 }),
+        listAvailable
+          ? HttpResponse.json({ projects: [{ ...factory, repositories: [] }] })
+          : new HttpResponse(undefined, { status: 500 }),
     });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load your factories');

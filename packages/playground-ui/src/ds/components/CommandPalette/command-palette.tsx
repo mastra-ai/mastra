@@ -169,7 +169,7 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
 type CommandPaletteItemProps = Omit<ComponentPropsWithoutRef<typeof CommandItem>, 'children'> & {
   icon: ReactNode;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   path?: string;
   badge?: string;
   shortcut?: ReactNode;
@@ -218,7 +218,7 @@ function CommandPaletteItem({
         </span>
         {(subtitle || path) && (
           <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-2">
-            {subtitle && <span className="truncate">{subtitle}</span>}
+            {subtitle && <span className="min-w-0 truncate">{subtitle}</span>}
             {path && (
               <Txt
                 as="span"

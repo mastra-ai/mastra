@@ -15,7 +15,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
+import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
@@ -349,7 +349,10 @@ describe('buildProviderAccess', () => {
 describe('resolveDeploymentModelProviders', () => {
   it('keeps supported providers and warns about the rest', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect([...resolveDeploymentModelProviders([' amazon-bedrock', 'openai', ''])]).toEqual(['amazon-bedrock']);
+    expect([...resolveDeploymentModelProviders([' amazon-bedrock', ' google-vertex ', 'openai', ''])]).toEqual([
+      'amazon-bedrock',
+      'google-vertex',
+    ]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('"openai"'));
     expect(resolveDeploymentModelProviders(undefined).size).toBe(0);
     warn.mockRestore();
@@ -1614,7 +1617,7 @@ describe('OM routes with a tenant', () => {
     });
     expect(write.status).toBe(404);
     await expect(
-      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(foreign.id) }),
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryProjectSettingsUserId(foreign.id) }),
     ).resolves.toBeNull();
   });
 

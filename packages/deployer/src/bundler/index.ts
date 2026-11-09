@@ -390,7 +390,8 @@ export abstract class Bundler extends MastraBase implements IBundler {
 
       return bundlerOptions ?? defaultBundlerOptions;
     } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to load the bundler options, using the defaults instead: ${message}`, { error });
     }
 
     return defaultBundlerOptions;

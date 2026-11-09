@@ -107,6 +107,7 @@ export class AuthService {
       buildAuthorizeContext: () => ({
         get: (key: string) => {
           if (key === 'mastra') return this.mastra;
+          if (key === 'requestContext') return requestContext;
           if (key === 'customRouteAuthConfig') return customRouteAuthConfig;
           return undefined;
         },

@@ -10,6 +10,8 @@ import { deriveAction, extractResource } from '../server-adapter/routes/permissi
 import {
   GET_KNOWLEDGE_ACTIVITY_ROUTE,
   GET_KNOWLEDGE_GRAPH_ROUTE,
+  GET_KNOWLEDGE_LINK_COUNTS_ROUTE,
+  GET_KNOWLEDGE_PAGE_LINKS_ROUTE,
   GET_KNOWLEDGE_PAGE_ROUTE,
   GET_KNOWLEDGE_TREE_ROUTE,
   LIST_KNOWLEDGE_ROUTE,
@@ -72,6 +74,15 @@ describe('Knowledge read routes', () => {
     expect(names((await call(GET_KNOWLEDGE_TREE_ROUTE, { ...args, parentId: support.id })).pages)).toEqual(['Refunds']);
   });
 
+  it('says how many children sit under each page of a tree level', async () => {
+    const { mastra, acme } = await setup();
+    const level = await call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, knowledgeKey: 'main', parentId: acme.id });
+    expect(level.pages.map((page: { name: string; childCount?: number }) => [page.name, page.childCount])).toEqual([
+      ['Support', 1],
+      ['Engineering', expect.any(Number)],
+    ]);
+  });
+
   it('returns a page with ancestors, notes, references and pin, and 404s an unknown page', async () => {
     const { mastra, refunds, roadmap } = await setup();
     const args = { mastra, knowledgeKey: 'main' };
@@ -83,6 +94,26 @@ describe('Knowledge read routes', () => {
       'team:acme:eng',
     ]);
     await expect(call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'missing' })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('opens a page by the reference tool results name it with: a scope address or scope#key/path', async () => {
+    const { mastra, support } = await setup();
+    const store = await mastra.getKnowledge('main')!.getStorage();
+    const guide = await store.createPage({ parentId: support.id, key: 'guides', name: 'Guides', provenance });
+    const refundsGuide = await store.createPage({
+      parentId: guide.id,
+      key: 'refunds',
+      name: 'Refunds guide',
+      provenance,
+    });
+    const args = { mastra, knowledgeKey: 'main' };
+    expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'team:acme:support' })).page.id).toBe(support.id);
+    const page = await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'team:acme:support#guides/refunds' });
+    expect(page.page.id).toBe(refundsGuide.id);
+    expect(names(page.ancestors)).toEqual(['Acme', 'Support', 'Guides']);
+    await expect(
+      call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'team:acme:support#guides/nowhere' }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("labels scope pages with their declaration's displayLabel, params filled in, in the tree, page and graph", async () => {
@@ -164,6 +195,113 @@ describe('Knowledge read routes', () => {
       expect(graph.grants).toEqual([
         { principal: 'org:acme', principalId: acme.id, target: support.id, role: 'viewer' },
       ]);
+    });
+  });
+
+  describe('page links', () => {
+    /** Refunds links out to Roadmap in its body, and a new page links in; the UI has loaded none of them. */
+    async function linked() {
+      const world = await setup();
+      const store = await world.mastra.listKnowledge().main!.getStorage();
+      const billing = await store.createPage({ parentId: world.support.id, name: 'Billing', provenance });
+      await store.replacePageBodyLinks({
+        pageId: world.refunds.id,
+        links: [{ ref: 'Roadmap', toPageId: world.roadmap.id, count: 2 }],
+      });
+      await store.replacePageBodyLinks({
+        pageId: billing.id,
+        links: [{ ref: 'Refunds', toPageId: world.refunds.id, count: 1 }],
+      });
+      return { ...world, billing };
+    }
+
+    it('counts the links in and out of pages, from the store, for any pages asked about', async () => {
+      const { mastra, refunds, roadmap } = await linked();
+      const { counts } = await call(GET_KNOWLEDGE_LINK_COUNTS_ROUTE, {
+        mastra,
+        knowledgeKey: 'main',
+        pageId: [refunds.id, roadmap.id, 'missing'],
+      });
+      // Refunds: Billing links in, Roadmap out plus the note mention to Roadmap (one distinct page).
+      expect(counts[refunds.id]).toEqual({ in: 1, out: 1 });
+      expect(counts[roadmap.id]).toEqual({ in: 1, out: 0 });
+      expect(counts.missing).toEqual({ in: 0, out: 0 });
+    });
+
+    it("lists one page's links with the pages at their other ends", async () => {
+      const { mastra, refunds, roadmap, billing } = await linked();
+      const links = await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { mastra, knowledgeKey: 'main', pageId: refunds.id });
+      expect(
+        links.edges.map((edge: { fromPageId: string; toPageId: string }) => [edge.fromPageId, edge.toPageId]),
+      ).toEqual(
+        expect.arrayContaining([
+          [refunds.id, roadmap.id],
+          [billing.id, refunds.id],
+        ]),
+      );
+      expect(names(links.pages).sort()).toEqual(['Billing', 'Roadmap']);
+      expect(links.truncated).toBe(false);
+      const out = await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, {
+        mastra,
+        knowledgeKey: 'main',
+        pageId: refunds.id,
+        direction: 'out',
+      });
+      expect(names(out.pages)).toEqual(['Roadmap']);
+    });
+
+    it('checks both link routes against the knowledge key under FGA and refuses a denied caller', async () => {
+      const { mastra, refunds } = await linked();
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      const filterAccessible = vi.fn(async (_user: unknown, items: unknown[]) => items);
+      const routes = [
+        [GET_KNOWLEDGE_LINK_COUNTS_ROUTE, { pageId: [refunds.id] }],
+        [GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { pageId: refunds.id }],
+      ] as const;
+
+      (mastra as any).getServer = () => ({ fga: { filterAccessible, check: async () => false } });
+      for (const [route, params] of routes) {
+        await expect(call(route, { mastra, requestContext, knowledgeKey: 'main', ...params })).rejects.toMatchObject({
+          status: 404,
+        });
+      }
+
+      const check = vi.fn(async () => true);
+      (mastra as any).getServer = () => ({ fga: { filterAccessible, check } });
+      for (const [route, params] of routes) {
+        await call(route, { mastra, requestContext, knowledgeKey: 'main', ...params });
+      }
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(check).toHaveBeenCalledWith(
+        { id: 'u1' },
+        { resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' },
+      );
+    });
+
+    it('shows a caller no link to, from or count for a page it cannot read', async () => {
+      const { mastra, refunds, roadmap } = await linked();
+      const knowledge = mastra.listKnowledge().main as unknown as Record<string, unknown>;
+      knowledge.readScopeFor = vi.fn(async (principals: string[]) => ({
+        addresses: principals,
+        prefixes: [],
+        children: [],
+      }));
+      (mastra as any).getServer = () => ({ auth: { authenticateToken: async () => ({ id: 'u1' }) } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, ['team:acme:support']);
+      const args = { mastra, requestContext, knowledgeKey: 'main' };
+      const { counts } = await call(GET_KNOWLEDGE_LINK_COUNTS_ROUTE, { ...args, pageId: [refunds.id, roadmap.id] });
+      expect(counts[roadmap.id]).toEqual({ in: 0, out: 0 });
+      expect(counts[refunds.id].out).toBe(0);
+      const own = await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { ...args, pageId: refunds.id });
+      expect(names(own.pages)).not.toContain('Roadmap');
+      expect(await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { ...args, pageId: roadmap.id })).toEqual({
+        edges: [],
+        pages: [],
+        truncated: false,
+      });
     });
   });
 
@@ -356,6 +494,19 @@ describe('Knowledge read routes with app auth', () => {
     await expect(
       call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext: asCaller(undefined), knowledgeKey: 'main' }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('404s a page by reference outside what the caller can read', async () => {
+    const { mastra } = await setupWithAuth();
+    const read = (pageId: string) =>
+      call(GET_KNOWLEDGE_PAGE_ROUTE, {
+        mastra,
+        requestContext: asCaller(['team:acme:support']),
+        knowledgeKey: 'main',
+        pageId,
+      });
+    expect((await read('team:acme:support')).page.name).toBe('Support');
+    await expect(read('team:acme:eng')).rejects.toMatchObject({ status: 404 });
   });
 
   it("reads only the pages the caller's principals can read", async () => {

@@ -451,6 +451,28 @@ A long-running process's output stream reconnects periodically, and the process 
 ]}
 />
 
+### Port URLs
+
+`sandbox.networking.getPortUrl(port)` returns the URL of a port your app listens on in the sandbox, for example a dev server:
+
+```typescript
+await sandbox.processes.spawn('pnpm dev --host 0.0.0.0 --port 3000')
+
+const url = await sandbox.networking?.getPortUrl(3000)
+// https://3000-<sandbox id>.sandbox.us.mastra.cloud/
+```
+
+Ports are private: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. You can share it, since it never expires, and opening it wakes a paused sandbox.
+
+`networking` is `undefined` on a sandbox whose ports can't be opened. `getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, for a port that isn't a whole number from 1 to 65535, and for the sandbox's reserved control port. Other platform errors, such as an invalid access token, are thrown.
+
+A browser you control, such as an agent's browser, can't sign in. `getPortAuthCookie(port)` returns a cookie that lets it open the port's URL for an hour without signing in. Don't share the cookie: anyone holding it can open the port.
+
+```typescript
+const cookie = await sandbox.getPortAuthCookie(3000)
+if (cookie) await browserContext.addCookies([cookie])
+```
+
 ## Properties
 
 <PropertiesTable
@@ -481,6 +503,12 @@ A long-running process's output stream reconnects periodically, and the process 
     type: 'SandboxProcessManager',
     description:
       "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
+  },
+  {
+    name: 'networking',
+    type: 'SandboxNetworking | undefined',
+    description:
+      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra, or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
   },
   {
     name: 'filesystem',
@@ -536,6 +564,12 @@ A long-running process's output stream reconnects periodically, and the process 
     type: '() => Promise<void>',
     description:
       'Capture the configured recovery checkpoint immediately. Resolves without work when no caller-provided id exists or the sandbox is not running.',
+  },
+  {
+    name: 'getPortAuthCookie',
+    type: '(port: number) => Promise<SandboxPortAuthCookie | null>',
+    description:
+      "Return a cookie that lets a browser you control open the port's URL for an hour without signing in, in the shape Playwright's `addCookies()` accepts. `null` in the same cases as `networking.getPortUrl()`. See [Port URLs](#port-urls).",
   },
   {
     name: 'getInfo',

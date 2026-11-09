@@ -38,7 +38,7 @@ function wireComment(id: string, body: string): WorkItemComment {
   };
 }
 
-function wireBoardItem(feedActivityAt: string | null) {
+function wireBoardItem(commentCount: number) {
   return {
     id: ITEM_ID,
     orgId: 'org-1',
@@ -51,8 +51,7 @@ function wireBoardItem(feedActivityAt: string | null) {
     stageHistory: [],
     sessions: {},
     metadata: {},
-    commentCount: 1,
-    feedActivityAt,
+    commentCount,
     revision: 1,
     createdAt: '2026-08-26T00:00:00.000Z',
     updatedAt: '2026-08-26T00:00:00.000Z',
@@ -130,17 +129,15 @@ describe('useWorkItemComments', () => {
     expect(result.current.thread.data).toBe(result.current.panel.data);
   });
 
-  it('never refetches off the board poll, whatever feedActivityAt does', async () => {
+  it('never refetches off the board poll when the comment count changes', async () => {
     let commentRequests = 0;
-    let feedActivityAt = '2026-08-26T10:00:00.000Z';
+    let commentCount = 1;
     server.use(
       http.get(COMMENTS_URL, () => {
         commentRequests += 1;
         return HttpResponse.json({ comments: [wireComment('c1', 'hello')] });
       }),
-      http.get(BOARD_URL, () =>
-        HttpResponse.json({ workItems: [wireBoardItem(feedActivityAt)], runningSessionIds: [] }),
-      ),
+      http.get(BOARD_URL, () => HttpResponse.json({ workItems: [wireBoardItem(commentCount)], runningSessionIds: [] })),
     );
 
     const { result, client } = renderHookWithProviders(() => useFeedFromBoard());
@@ -148,7 +145,7 @@ describe('useWorkItemComments', () => {
     await waitForMutationsIdle(client);
     expect(commentRequests).toBe(1);
 
-    feedActivityAt = '2026-08-26T10:00:05.000Z';
+    commentCount = 2;
     await act(async () => {
       await client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
     });
@@ -214,7 +211,7 @@ describe('useCreateWorkItemCommentMutation', () => {
     });
     let commentRequests = 0;
     let boardRequests = 0;
-    let feedActivityAt = '2026-08-26T10:00:00.000Z';
+    let commentCount = 1;
     const serverComments: WorkItemComment[] = [wireComment('c1', 'hello')];
     server.use(
       http.get(COMMENTS_URL, async () => {
@@ -226,12 +223,12 @@ describe('useCreateWorkItemCommentMutation', () => {
       }),
       http.get(BOARD_URL, () => {
         boardRequests += 1;
-        return HttpResponse.json({ workItems: [wireBoardItem(feedActivityAt)], runningSessionIds: [] });
+        return HttpResponse.json({ workItems: [wireBoardItem(commentCount)], runningSessionIds: [] });
       }),
       http.post(COMMENTS_URL, async () => {
         await responseGate;
         serverComments.unshift({ ...wireComment('c2', 'brand new'), clientToken: 'token-1' });
-        feedActivityAt = '2026-08-26T10:00:10.000Z';
+        commentCount = 2;
         return HttpResponse.json({ comment: serverComments[0] }, { status: 201 });
       }),
     );
@@ -260,8 +257,7 @@ describe('useCreateWorkItemCommentMutation', () => {
     // The settled create pulls its own row back without waiting on the stream.
     await waitFor(() => expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']));
 
-    // The settled mutation invalidates only the board; its bumped
-    // feedActivityAt drives the single comments refetch, which reconciles the
+    // The settled mutation refreshes the board count and reconciles the feed
     // row that is already on screen.
     releaseRefetch();
     await waitForMutationsIdle(client);

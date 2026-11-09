@@ -155,7 +155,9 @@ describe('the new session page', () => {
 
   it('keeps previewing the hovered card when a refresh takes another card away', async () => {
     const intakeCard = card('Login fails on Safari', ['intake']);
-    stubDraftRoute({ workItems: [intakeCard, { ...card('Crash on save', ['triage']), triageType: 'bug' }] });
+    stubDraftRoute({
+      workItems: [intakeCard, { ...card('Crash on save', ['triage']), metadata: { labels: ['bug'] } }],
+    });
     const user = userEvent.setup();
     const { client } = renderDraft();
 

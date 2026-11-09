@@ -35,8 +35,9 @@ function PinnedRowItem({ row }: { row: PinnedRow }) {
           </span>
         ) : null}
         <Txt as="span" variant="label" className={`min-w-0 truncate ${removed ? 'line-through opacity-70' : ''}`}>
-          <KnowledgePageLink pageId={row.id}>{row.name ?? 'A pinned page'}</KnowledgePageLink>
+          <KnowledgePageLink pageId={row.listOf ?? row.id}>{row.name ?? 'A pinned page'}</KnowledgePageLink>
         </Txt>
+        {row.listOf ? <Badge size="xs">Listing</Badge> : null}
         {row.scope ? (
           <Txt as="span" variant="meta" tone="muted" className="truncate">
             {row.scope}
@@ -50,13 +51,18 @@ function PinnedRowItem({ row }: { row: PinnedRow }) {
             onClick={() => setOpen(value => !value)}
           >
             <Txt as="span" variant="meta">
-              {open ? 'Hide text' : 'Text'}
+              {open ? (row.listOf ? 'Hide pages' : 'Hide text') : row.listOf ? 'Pages' : 'Text'}
             </Txt>
           </button>
         ) : null}
       </div>
       {open && row.text ? (
-        <Txt variant="caption" tone="muted" className="ml-5 break-words whitespace-pre-wrap">
+        <Txt
+          variant="caption"
+          tone="muted"
+          className="ml-5 break-words whitespace-pre-wrap"
+          data-testid={row.listOf ? 'pinned-knowledge-listing' : undefined}
+        >
           {row.text}
         </Txt>
       ) : null}

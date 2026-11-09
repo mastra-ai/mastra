@@ -67,8 +67,6 @@ If the configured failure policy lets the main execution continue, it can still 
 
 Model inference spans (`MODEL_INFERENCE`) measure provider execution and record usage. Model chunk spans (`MODEL_CHUNK`) capture content after output processors have accepted or transformed it. Chunks belong to the logical step (`MODEL_STEP`), so buffered output can arrive after provider execution ends without outliving its parent. In the agent streaming paths, inference spans no longer capture response output; use the processed chunk spans or the generation output instead.
 
-When durable execution finishes on another worker, the original termination cause may be unavailable. Normal completion and step-limit exits can then report `unknown`. Separate resumed-segment tracing isn't supported on Inngest. A caller-side Inngest deadline may also be missing from worker-owned outcomes. Core durable resume tracing also requires the workers to share live tracing state. Span identity and finalization across workers aren't yet guaranteed.
-
 ## Sampling strategies
 
 Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs.

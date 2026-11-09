@@ -23,7 +23,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
-import { findCommand, parseSlashCommand } from '../services/commands';
+import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import type { ThinkingDefault } from '../services/thinkingLevels';
@@ -184,7 +184,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           !usage?.totalTokens
             ? 'No token usage recorded yet.'
-            : `Tokens — prompt: ${usage.promptTokens ?? 0}, completion: ${usage.completionTokens ?? 0}, total: ${usage.totalTokens}`,
+            : `Used ${usage.totalTokens} tokens (${usage.promptTokens ?? 0} prompt, ${usage.completionTokens ?? 0} completion).`,
         );
       },
     },
@@ -297,10 +297,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     requiresSession: false,
     execute: async () => {
       const commands = [...commandsWithoutHelp, helpCommand];
-      const width = Math.max(...commands.map(command => `/${command.name} ${command.args ?? ''}`.length));
       const lines = commands.map(command => {
-        const signature = `/${command.name} ${command.args ?? ''}`.padEnd(width);
-        return `  ${signature}  — ${command.description}`;
+        return `/${command.name}${command.args ? ` ${command.args}` : ''}: ${command.description}`;
       });
       pushNotice(['Available commands:', ...lines].join('\n'));
     },
@@ -309,7 +307,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const commands = [...commandsWithoutHelp, helpCommand];
 
   const runComposerCommand = async (text: string): Promise<boolean> => {
-    if (!text.startsWith('/')) return false;
+    if (!isSlashCommand(text)) return false;
     const command = findCommand(commands, text);
     const parsed = parseSlashCommand(text);
     if (!command) {

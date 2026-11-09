@@ -47,7 +47,7 @@ function uniqueTopic() {
   return `test-group-${Date.now()}-${topicCounter++}`;
 }
 
-describe.sequential('GoogleCloudPubSub group support', () => {
+describe('GoogleCloudPubSub group support', { concurrent: false }, () => {
   // All instances created during tests, for cleanup
   const instances: GoogleCloudPubSub[] = [];
 
