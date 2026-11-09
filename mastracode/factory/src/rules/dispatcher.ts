@@ -177,12 +177,11 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
   return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
 }
 
-/** A pull request review run: the only runs that keep a status comment on the pull request. */
-function isReviewRun(decision: unknown): boolean {
-  if (!decision || typeof decision !== 'object') return false;
+/** A run in the review seat: a pull request review, unless it is the card's board's self-review. */
+function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined {
+  if (!decision || typeof decision !== 'object') return undefined;
   const value = decision as { type?: unknown; role?: unknown; skillName?: unknown };
-  // A builder checking its own work reviews no pull request, even on a card that carries one.
-  return value.type === 'invokeSkill' && value.role === REVIEW_CONTEXT && value.skillName !== 'factory-self-review';
+  return value.type === 'invokeSkill' && value.role === REVIEW_CONTEXT ? value : undefined;
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
@@ -1117,7 +1116,7 @@ export class FactoryDecisionDispatcher {
     session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
     runStillActive: () => boolean,
   ): Promise<void> {
-    if (!isReviewRun(decision)) return;
+    if (!(await this.#isReviewRun(record, decision))) return;
     if (runStillActive()) {
       const run = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
@@ -1229,6 +1228,22 @@ export class FactoryDecisionDispatcher {
     await this.#remindPhaseGoal(record, objective, session, binding, requestContext);
   }
 
+  /**
+   * A pull request review run: the only runs that keep a status comment on the pull request. A
+   * review-seat run of the skill the card's board self-reviews with checks the builder's own work
+   * and reviews no pull request, even on a card that carries one.
+   */
+  async #isReviewRun(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<boolean> {
+    const run = reviewSeatSkill(decision);
+    if (!run) return false;
+    const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+    if (!item) return true;
+    const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
+    const selfReview = boardFlow(board).selfReview;
+    const phase = selfReview === undefined ? undefined : board?.phases[selfReview];
+    return phase?.kind !== 'working' || phase.runner.skill !== run.skillName;
+  }
+
   async #reviewQueuedOnce(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<void> {
     if (this.#reviewQueued.has(record)) return;
     this.#reviewQueued.add(record);
@@ -1242,7 +1257,13 @@ export class FactoryDecisionDispatcher {
     step: Pick<FactoryReviewStatusEvent, 'phase' | 'startedAt' | 'endedAt' | 'reason'>,
   ): Promise<void> {
     const report = this.#reportReviewStatus;
-    if (!report || !record.workItemId || !isReviewRun(decision)) return;
+    if (!report || !record.workItemId) return;
+    try {
+      if (!(await this.#isReviewRun(record, decision))) return;
+    } catch (error) {
+      console.warn('Factory review status update failed', sanitizeDispatchError(error));
+      return;
+    }
     const event: FactoryReviewStatusEvent = {
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,

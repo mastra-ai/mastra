@@ -5,6 +5,7 @@ import { workItemBranch } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
 import {
+  awaitsAcceptance,
   boardFlow,
   boardForWorkItem,
   cardOwnsBranch,
@@ -126,6 +127,23 @@ describe('boardFlow', () => {
     });
     expect(boardFlow(board)).toMatchObject({ pullRequestReview: 'pr', build: 'make' });
     expect(boardFlow(board).selfReview).toBeUndefined();
+  });
+
+  it('marks no triage phase on a board that builds nothing', () => {
+    const board = defineBoard({
+      id: 'post',
+      name: 'Post',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['draft'] },
+        draft: { name: 'Draft', kind: 'working', runner: { context: 'work' }, nextPhases: ['publish'] },
+        publish: { name: 'Publish', kind: 'working', runner: { context: 'publish' }, nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    expect(boardFlow(board).triage).toBeUndefined();
+    expect(awaitsAcceptance(board, 'draft')).toBe(false);
+    expect(awaitsAcceptance(board, 'inbox')).toBe(true);
   });
 });
 
