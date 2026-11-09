@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `agent.stream()` skipping `onFinish` when an output processor aborts the stream with a tripwire. `onFinish` now runs once with `finishReason: 'other'` and the tripwire details, so run spans close and finish hooks see the blocked run.
+Fixed `agent.stream()` skipping `onFinish` when an output processor blocks the stream with a tripwire. `onFinish` and the agent's finish handling (memory, title generation, scorers) now run once with `finishReason: 'other'` and the tripwire details. This also applies to tool-result tripwires on the default in-process loop; the durable, evented and Inngest engines still settle those without calling `onFinish`.

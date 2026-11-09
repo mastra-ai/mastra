@@ -50,4 +50,50 @@ describe('agent.stream() output processor tripwire', () => {
     await vi.waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1));
     expect(onFinish.mock.calls[0]![0]).toMatchObject({ finishReason: 'other', tripwire: { reason: 'not allowed' } });
   });
+  it('delivers the tripwire chunk to a fullStream reader that attaches while onFinish is pending', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model: model(),
+      outputProcessors: [blockOnWord],
+    });
+    const events: string[] = [];
+    let releaseOnFinish!: () => void;
+    const onFinishGate = new Promise<void>(resolve => {
+      releaseOnFinish = resolve;
+    });
+    let onFinishStarted!: () => void;
+    const onFinishRunning = new Promise<void>(resolve => {
+      onFinishStarted = resolve;
+    });
+    const onFinish = vi.fn(async () => {
+      events.push('onFinish');
+      onFinishStarted();
+      await onFinishGate;
+    });
+
+    const stream = await agent.stream('hi', { onFinish });
+    await stream.finishReason;
+    await onFinishRunning;
+
+    // Attach the reader only after finishReason resolved and while onFinish is still held open.
+    const reading = (async () => {
+      const types: string[] = [];
+      for await (const chunk of stream.fullStream) {
+        types.push(chunk.type);
+        if (chunk.type === 'tripwire') events.push('tripwire');
+      }
+      events.push('closed');
+      return types;
+    })();
+
+    releaseOnFinish();
+    const types = await reading;
+
+    expect(types).toContain('tripwire');
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(events.indexOf('onFinish')).toBeLessThan(events.indexOf('closed'));
+    expect(events.indexOf('tripwire')).toBeLessThan(events.indexOf('closed'));
+  });
 });
