@@ -350,13 +350,29 @@ export class MessageMerger {
 
   private static createMergeIndex(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): MergeIndex {
     const keys = new Map<MessagePart, string>();
+    const baseKeyOf = (part: MessagePart) => CacheKeyGenerator.fromDBParts([part]);
+    const dataPartId = (part: MessagePart) =>
+      part.type.startsWith('data-') && 'id' in part && typeof part.id === 'string' ? part.id : undefined;
+    const idlessDataKeys = (parts: MessagePart[]) =>
+      new Set(parts.filter(part => part.type.startsWith('data-') && !dataPartId(part)).map(baseKeyOf));
+    const latestIdlessDataKeys = idlessDataKeys(latestMessage.content.parts);
+    const incomingIdlessDataKeys = idlessDataKeys(incomingMessage.content.parts);
+    // Data part ids only distinguish parts when both sides carry ids. A stored part without an id
+    // (legacy rows, regular-agent persistence) still matches an incoming copy that has one.
+    const keyParts = (parts: MessagePart[], otherIdlessDataKeys: Set<string>) => {
+      for (const part of parts) {
+        if (keys.has(part)) continue;
+        const baseKey = baseKeyOf(part);
+        const id = dataPartId(part);
+        keys.set(part, id && !otherIdlessDataKeys.has(baseKey) ? `${baseKey}|id:${JSON.stringify(id)}` : baseKey);
+      }
+    };
+    keyParts(latestMessage.content.parts, incomingIdlessDataKeys);
+    keyParts(incomingMessage.content.parts, latestIdlessDataKeys);
     const keyOf = (part: MessagePart) => {
       let key = keys.get(part);
       if (key === undefined) {
-        key = CacheKeyGenerator.fromDBParts([part]);
-        if (part.type.startsWith('data-') && 'id' in part && typeof part.id === 'string') {
-          key += `|id:${JSON.stringify(part.id)}`;
-        }
+        key = baseKeyOf(part);
         keys.set(part, key);
       }
       return key;

@@ -214,9 +214,9 @@ async function flushMessagesBeforeSuspension({
   threadExists?: boolean;
   onThreadCreated?: () => void;
   beforePersist?: () => Promise<void>;
-}) {
+}): Promise<boolean> {
   if (!saveQueueManager || !messageList || !threadId || memoryConfig?.readOnly) {
-    return;
+    return true;
   }
 
   try {
@@ -234,11 +234,13 @@ async function flushMessagesBeforeSuspension({
     }
 
     // Flush all pending messages immediately
-    await saveQueueManager.flushMessages(messageList, threadId, memoryConfig, { beforePersist });
+    await saveQueueManager.flushMessages(messageList, threadId, memoryConfig, { beforePersist, throwOnError: true });
+    return true;
   } catch (error) {
     // A superseded execution must not suspend the run it no longer owns.
     if (isExecutionFenceError(error)) throw error;
     // Otherwise don't throw — suspension should proceed even if flush fails
+    return false;
   }
 }
 
@@ -863,15 +865,17 @@ export function createDurableToolCallStep() {
           await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
           if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         }
+        let flushedDataParts: typeof processorDataParts = [];
         if (messagesToFlush && processorDataParts.length) {
           const invocation = [...messagesToFlush.get.all.db()].reverse().find(hasInvocation);
           if (invocation) {
-            for (const part of processorDataParts.splice(0)) {
+            flushedDataParts = processorDataParts.splice(0);
+            for (const part of flushedDataParts) {
               persistProcessorDataChunk(messagesToFlush, part.messageId ?? invocation.id, part);
             }
           }
         }
-        await flushMessagesBeforeSuspension({
+        const flushed = await flushMessagesBeforeSuspension({
           saveQueueManager,
           messageList: messagesToFlush,
           memory,
@@ -884,6 +888,14 @@ export function createDurableToolCallStep() {
           },
           beforePersist: assertOwned,
         });
+        if (!flushed) {
+          logger?.warn?.('Failed to persist messages before durable tool suspension', {
+            runId,
+            toolCallId,
+          });
+          // Keep the parts for the mapping step to persist if this save did not land.
+          processorDataParts.unshift(...flushedDataParts);
+        }
       };
 
       // 2. Check if tool requires approval. Prefer the live policy on the

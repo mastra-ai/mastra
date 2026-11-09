@@ -103,11 +103,19 @@ describe('MessageMerger insertion positions', () => {
 
   it('preserves distinct data parts with the same payload and deduplicates repeated IDs', () => {
     const question = (id: string): Part => ({ type: 'data-question', id, data: { prompt: 'Continue?' } });
-    const list = merge([tool('c1'), question('q1')], [tool('c1', true), question('q1'), question('q2')]);
-    expectParts(list, [tool('c1', true), question('q1'), question('q2')]);
+    const list = merge([tool('c1'), question('q1')], [tool('c1', true), question('q2')]);
+    expectParts(list, [tool('c1', true), question('q2'), question('q1')]);
 
     list.add(message([tool('c1', true), question('q1'), question('q2')]), 'response');
-    expectParts(list, [tool('c1', true), question('q1'), question('q2')]);
+    expectParts(list, [tool('c1', true), question('q2'), question('q1')]);
+  });
+
+  it('deduplicates a stored data part without an ID against an incoming copy with one', () => {
+    const stored: Part = { type: 'data-question', data: { prompt: 'Continue?' } };
+    const withId: Part = { ...stored, id: 'q1' };
+
+    expectParts(merge([tool('c1', true), stored], [tool('c1', true), withId]), [tool('c1', true), stored]);
+    expectParts(merge([tool('c1', true), withId], [tool('c1', true), stored]), [tool('c1', true), withId]);
   });
 
   it('does not duplicate parts on repeated updates', () => {

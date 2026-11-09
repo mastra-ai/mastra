@@ -230,9 +230,13 @@ describe('cold durable tool-call resume (#25978)', () => {
     const flushMessages = vi.fn(async (list: MessageList) => {
       snapshots.push(structuredClone(list.get.all.db()));
     });
+    const nested = (id: string) => ({
+      type: 'tool-output',
+      payload: { output: { type: 'data-question', id, data: { question: 'Continue?' } } },
+    });
     const execute = vi.fn(async (_args: unknown, options: any) => {
-      await options.outputWriter({ type: 'data-question', id: 'q-1', data: { question: 'Continue?' } });
-      await options.outputWriter({ type: 'data-question', id: 'q-2', data: { question: 'Continue?' } });
+      await options.outputWriter(nested('q-1'));
+      await options.outputWriter(nested('q-2'));
       await options.suspend({ question: 'Continue?' });
     });
     vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
