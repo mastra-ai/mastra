@@ -1,8 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { feedTopic } from '../feed-events.js';
 import type { LiveSession } from './live-sessions.js';
-import { LiveSessions } from './live-sessions.js';
+import { LiveSessions, liveSessionsTouchingTheFeed } from './live-sessions.js';
 
 function fakeController() {
   const created: ((session: LiveSession) => void)[] = [];
@@ -21,13 +23,18 @@ function fakeController() {
   };
 }
 
-function fakeSession(id: string, running: { value: boolean } = { value: false }, factoryProjectId = 'project-1') {
+/** `factoryProjectId: null` is a session recovered after a restart: its state kept the org only. */
+function fakeSession(
+  id: string,
+  running: { value: boolean } = { value: false },
+  factoryProjectId: string | null = 'project-1',
+) {
   const listeners = new Set<(event: AgentControllerEvent) => void>();
   const pendingSuspensions = new Map<string, { toolName: string }>();
   const session: LiveSession = {
     identity: { getId: () => id },
     run: { isRunning: () => running.value },
-    state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId }) },
+    state: { get: () => ({ factoryOrgId: 'org-1', ...(factoryProjectId ? { factoryProjectId } : {}) }) },
     displayState: { get: () => ({ pendingSuspensions }) },
     subscribe: listener => {
       listeners.add(listener);
@@ -204,5 +211,25 @@ describe('LiveSessions', () => {
     controller.delete(fake.session);
 
     expect(changed).not.toHaveBeenCalled();
+  });
+});
+
+describe('liveSessionsTouchingTheFeed', () => {
+  it("touches the feed of a recovered session's Factory, read from its row since its state lost it", async () => {
+    const controller = fakeController();
+    const eventBus = new EventEmitterPubSub();
+    const rows = {
+      getBySessionId: async (sessionId: string) =>
+        sessionId === 'session-1' ? { orgId: 'org-1', factoryProjectId: 'project-1' } : null,
+    };
+    liveSessionsTouchingTheFeed(controller, eventBus, rows);
+    const frames: unknown[] = [];
+    await eventBus.subscribe(feedTopic('org-1', 'project-1'), event => frames.push(event));
+    const recovered = fakeSession('session-1', { value: false }, null);
+    controller.create(recovered.session);
+
+    recovered.start();
+
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
   });
 });

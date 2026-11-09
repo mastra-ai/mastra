@@ -35,7 +35,26 @@ async function seedWorkItem(storage: WorkItemsStorage): Promise<string> {
   return created.item.id;
 }
 
-async function queueDecision(storage: WorkItemsStorage, workItemId: string, key: string): Promise<void> {
+type QueuedDecision = Parameters<WorkItemsStorage['commitRuleEvaluation']>[0]['decisions'][number];
+
+const runSkill = (key: string): QueuedDecision => ({
+  type: 'invokeSkill',
+  role: 'triage',
+  skillName: 'factory-triage',
+  idempotencyKey: key,
+});
+const routeClose = (key: string): QueuedDecision => ({
+  type: 'routeEvent',
+  idempotencyKey: key,
+  event: { type: 'work_item.closed' },
+});
+
+async function queueDecision(
+  storage: WorkItemsStorage,
+  workItemId: string,
+  key: string,
+  decision: QueuedDecision = runSkill(key),
+): Promise<void> {
   const workItem = await storage.get({ orgId: SCOPE.orgId, id: workItemId });
   if (!workItem) throw new Error('Expected the seeded work item');
   await storage.commitRuleEvaluation({
@@ -46,7 +65,7 @@ async function queueDecision(storage: WorkItemsStorage, workItemId: string, key:
     expectedRevision: workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
-    decisions: [{ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: key }],
+    decisions: [decision],
     causalChain: [],
     now: NOW,
   });
@@ -118,6 +137,42 @@ describe('board announcements', () => {
 
     expect(renewed).toBe(true);
     expect(announced).toEqual([]);
+  });
+
+  it('keeps a route move waiting on its card run silent, yet still wakes the dispatcher for its next try', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'close', routeClose('close'));
+    const wakes: unknown[] = [];
+    storage.onClaimableWork(scope => wakes.push(scope));
+    announced.length = 0;
+
+    const claimed = await claim(storage);
+    const postponed = await storage.postponeDeferredDecision(leaseOf(claimed), new Date(NOW.getTime() + 10_000), NOW);
+
+    expect(postponed?.status).toBe('pending');
+    expect(announced).toEqual([]);
+    expect(wakes).toEqual([SCOPE]);
+  });
+
+  it('announces a route move claimed again after a failure, since its retry warning clears', async () => {
+    const { storage, announced } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    await queueDecision(storage, workItemId, 'close', routeClose('close'));
+    const claimed = await claim(storage);
+    await storage.failDeferredDecision({
+      ...leaseOf(claimed),
+      now: NOW,
+      availableAt: NOW,
+      lastError: 'nope',
+      failureCode: 'session_unavailable',
+      terminal: false,
+    });
+    announced.length = 0;
+
+    await claim(storage);
+
+    expect(announced).toEqual([SCOPE]);
   });
 
   it('keeps the shared card list cached across a decision write, which moves no card', async () => {

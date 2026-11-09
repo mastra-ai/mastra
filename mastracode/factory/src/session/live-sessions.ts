@@ -1,4 +1,8 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import type { PubSub } from '@mastra/core/events';
+
+import { touchFeed } from '../feed-events.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 
 /** The slice of a live session this registry needs: its id, its run, its parked tools, and who it works for. */
 export interface LiveSession {
@@ -9,9 +13,14 @@ export interface LiveSession {
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
 
-interface SessionNotifier {
+export interface SessionNotifier {
   onSessionCreated(listener: (session: LiveSession) => void): () => void;
   onSessionDeleted(listener: (session: LiveSession) => void): () => void;
+}
+
+/** Where a session's Factory is written down for good: its live state can lose it, its row cannot. */
+export interface SessionRows {
+  getBySessionId(sessionId: string): Promise<Pick<SourceControlSession, 'orgId' | 'factoryProjectId'> | null>;
 }
 
 /** The tool a session has waited on longest, and since when (epoch ms). */
@@ -107,4 +116,28 @@ export class LiveSessions {
     this.#runListeners.add(listener);
     return () => this.#runListeners.delete(listener);
   }
+}
+
+/** A run starting, parking, being answered or ending changes what boards show, so the registry bumps the project's feed. */
+export function liveSessionsTouchingTheFeed(
+  controller: SessionNotifier,
+  eventBus: PubSub,
+  rows: SessionRows,
+): LiveSessions {
+  const liveSessions = new LiveSessions(controller);
+  liveSessions.onRunChanged(session => {
+    const { factoryOrgId, factoryProjectId } = session.state.get();
+    if (factoryOrgId && factoryProjectId) {
+      touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
+      return;
+    }
+    // A session recovered after a restart comes back with its org only.
+    rows
+      .getBySessionId(session.identity.getId())
+      .then(row => {
+        if (row?.factoryProjectId) touchFeed(eventBus, { orgId: row.orgId, factoryProjectId: row.factoryProjectId });
+      })
+      .catch(error => console.warn('[factory] Unable to find the board of a session run.', error));
+  });
+  return liveSessions;
 }

@@ -128,7 +128,7 @@ import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
-import { LiveSessions } from './session/live-sessions.js';
+import { liveSessionsTouchingTheFeed } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
@@ -492,16 +492,6 @@ function warnIgnoredMcpConfig(): void {
  */
 function buildDefaultStudioAuth(): IMastraAuthProvider {
   return new MastraAuthStudio();
-}
-
-/** A run starting, parking, being answered or ending changes what boards show, so the registry bumps the project's feed. */
-function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
-  const liveSessions = new LiveSessions(controller);
-  liveSessions.onRunChanged(session => {
-    const { factoryOrgId, factoryProjectId } = session.state.get();
-    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
-  });
-  return liveSessions;
 }
 
 let warnedDefinedBoards = false;
@@ -1994,7 +1984,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
+            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus, sourceControlSessions),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,

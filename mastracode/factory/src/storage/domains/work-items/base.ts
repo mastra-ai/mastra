@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
+import { isStatusEventDecision } from '../../../rules/event-rules.js';
 import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
@@ -987,6 +988,15 @@ function decisionRowPayload(decision: unknown): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }
 
+/**
+ * A route move is claimed and handed back every few seconds while its card's run is in flight.
+ * Claimed from `pending` it shows nothing new until it moves the card, and that move announces itself.
+ */
+function claimShowsNothing(table: string, row: GovernanceDbRow): boolean {
+  if (table !== 'factory_deferred_decisions') return true;
+  return row.status === 'pending' && isStatusEventDecision(decisionRowPayload(row.decision));
+}
+
 function safeJsonParse(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -1790,8 +1800,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     map: (row: GovernanceDbRow) => T,
     accept?: (row: GovernanceDbRow) => boolean,
   ): Promise<T[]> {
+    let shown = new BoardScopes();
     const claim = () =>
-      this.#withTransaction(async ops => {
+      this.storage.withTransaction(async ops => {
+        shown = new BoardScopes();
         // Bounded candidate window: only rows in claimable/expirable statuses,
         // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
         // deployment's lifetime and must never be scanned per dispatch tick.
@@ -1835,6 +1847,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
               if (!currentClaimable && !currentExpired) return null;
               didClaim = true;
+              if (!claimShowsNothing(table, current)) {
+                shown.add({ orgId: current.org_id as string, factoryProjectId: current.factory_project_id as string });
+              }
               return {
                 status: 'leased',
                 attempts: Number(current.attempts) + 1,
@@ -1851,7 +1866,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         } while (!exhausted && claimed.length < input.limit);
         return claimed;
       });
-    return claim();
+    const leased = await claim();
+    // A claim leaves its rows leased: no card moved and nothing became claimable, so only shown boards hear of it.
+    for (const scope of shown.values()) this.#announceBoard(scope);
+    return leased;
   }
 
   async #renewLease(
@@ -2866,7 +2884,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     let postponed = false;
-    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+    // Untracked by boards: a route move handed back shows nothing new, but the dispatcher needs the wake to retry it.
+    const row = await trackClaimableWrites(super.ops, scope =>
+      this.#claimableWork(scope),
+    ).updateAtomic<GovernanceDbRow>(
       'factory_deferred_decisions',
       { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
       current => {
