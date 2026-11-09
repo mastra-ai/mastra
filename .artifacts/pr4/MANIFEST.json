@@ -1,0 +1,196 @@
+{
+  "generatedAt": "2026-11-09T05:58:03.852Z",
+  "validatedCommit": "ed1cecba5c26a73600640f74e9a1c9d322271b23",
+  "initialCommit": "a2a03b53fe71a4587ee12cd121f2f43d9ede445d",
+  "sanitization": "No real credentials found; synthetic local alice/bob bearer fixtures and test model key retained. See HANDOFF.md.",
+  "files": [
+    {
+      "file": "HANDOFF.md",
+      "sha256": "b7083f9498bf4170019e3da95ec5c00fd5a592cd9e88bed239086c7144bf6b36"
+    },
+    {
+      "file": "REPORT.md",
+      "sha256": "dc836877050ab51e2e89a0a9bafa32cd53bf5e3aa74b5b3cefcf114f70d6844a"
+    },
+    {
+      "file": "approval-baseline.log",
+      "sha256": "b81ec6d58250dc42187599fbd0adb704e7845ee4ef8e4fd540bddd0b26bc9fad"
+    },
+    {
+      "file": "approval-fence.log",
+      "sha256": "bbd69c6ce6cf389e189988f5cee07dcf6f6248a4b5f832b861c49b27b54796db"
+    },
+    {
+      "file": "approval-local-abort.log",
+      "sha256": "65d7982b84f3c21e6cc033ad674fdf32b9974c601f14ee55df95d6246560df54"
+    },
+    {
+      "file": "approval-local-fence.log",
+      "sha256": "287cb2955b6a4f257db8d308482098c4ba3b203613ffd7f119fe124aaab4215a"
+    },
+    {
+      "file": "approval-remote-abort.log",
+      "sha256": "871639f78f2c4c9a4a830863ec972ac0f4ccd0b6d2dee31a511c590d99400c77"
+    },
+    {
+      "file": "approval-remote.log",
+      "sha256": "34e69dd0156bf9705ecab8a8c1a62a756de91c6d8b6a6754b6e599f3a7f2d0da"
+    },
+    {
+      "file": "approval-verified-baseline.log",
+      "sha256": "810ca987d46453af29d90162c936c2c3e9e247fdf74050d3476ed5944c708aed"
+    },
+    {
+      "file": "approval-verified-local-abort.log",
+      "sha256": "16098c5e85e2509b785f9b3514274933c21f80cdaed00eebc47abbe7b1792085"
+    },
+    {
+      "file": "approval-verified-local-fence.log",
+      "sha256": "c427ca55c15e617a5196e9108f7a00d51492ca74c6609bf01d2d146b3c272b65"
+    },
+    {
+      "file": "approval-verified-remote-abort.log",
+      "sha256": "2e7e3db842cae0fea0f618dd535294dc14afd5cb58db052c743566abe9bb3d4b"
+    },
+    {
+      "file": "build-post-pr1.log",
+      "sha256": "d21a6f7efdc789ef15f33af61a041dba6417a5d041fa1c9962b29d747d792499"
+    },
+    {
+      "file": "build.log",
+      "sha256": "ec80cc82c4d7cf5b912512731f960dfac8ebcbcf79ec2c0b0b8688e365003994"
+    },
+    {
+      "file": "child.mjs",
+      "sha256": "78e685ed151baa0773ed583dc53f5399f9baff29fcef58bc3768cdcf17290717"
+    },
+    {
+      "file": "continuation-durable.log",
+      "sha256": "a40651d42cc5bcff5a69a13f8f0eac4133e694d3d77f8276ca59926bd564ad20"
+    },
+    {
+      "file": "continuation-evented.log",
+      "sha256": "eb7f36897ca73c7c6b76e2bf92ccc39184fc1dea0a7b4a453663a2eed274c5e5"
+    },
+    {
+      "file": "continuation-plain.log",
+      "sha256": "87b99f620062317d795f027ecfdd91f8e2587d0ad546ad0b969876613f08d801"
+    },
+    {
+      "file": "continuation.log",
+      "sha256": "792344cd30a99d876af4c0732e31eb6995fb5b7cd5a4cbf82b8e86d8fd5d7bdb"
+    },
+    {
+      "file": "eviction-independent.jsonl",
+      "sha256": "a258dc17fbfb309dbc13d4d75fb269a3ae27b4d42bf0d15276eac2476f5419fc"
+    },
+    {
+      "file": "eviction-independent.log",
+      "sha256": "88254c0572af4ca6feca152ac922f58ab40285e69d51c0f5b9197c4ca10007f0"
+    },
+    {
+      "file": "eviction-independent.mjs",
+      "sha256": "2ccc21698b26d8db39142e2abd0e8d32b5d2956f8954fbf760d0df218972fa18"
+    },
+    {
+      "file": "eviction.jsonl",
+      "sha256": "83726855edb45129e153d2e99841e4df03d4b95b51e18587c0bfbd7d9deb7507"
+    },
+    {
+      "file": "eviction.log",
+      "sha256": "83726855edb45129e153d2e99841e4df03d4b95b51e18587c0bfbd7d9deb7507"
+    },
+    {
+      "file": "eviction.mjs",
+      "sha256": "ade27f48d60cd74d71ba738a689182d9ea760f06aa8c28fde6046d0680dc6dc0"
+    },
+    {
+      "file": "evidence-summary.json",
+      "sha256": "7c002aa626e9f857f2b3703b0d7a49279e98d11b8b4facc9275993dea8c9d489"
+    },
+    {
+      "file": "extra-build.log",
+      "sha256": "83222184d3caae7d6365f55fc3291a731df46bc0261d364600c54dba0bc61667"
+    },
+    {
+      "file": "lifecycle-child.mjs",
+      "sha256": "6a9619a89abae0019d0f13ff7408ebf587d6ebb2fdd1fb2f816f89fc3451ea3d"
+    },
+    {
+      "file": "lifecycle.jsonl",
+      "sha256": "ea6b8edd03dd6ad61207d1fe531eb4411ccf0313272098ba3c80b25bf268d5b4"
+    },
+    {
+      "file": "lifecycle.mjs",
+      "sha256": "f93c02291936a0548ad738f9d576447e6d366f33357267266b60344fb9614c16"
+    },
+    {
+      "file": "matrix-post-pr1.log",
+      "sha256": "78c993322fe1659fda6343fe5477e64c4bd29880f5152041bc18fabd4caba87d"
+    },
+    {
+      "file": "matrix-rest.log",
+      "sha256": "1e2d1018541abebddf8092af2906607a7abb498d6f23d27a1beea0284860b8eb"
+    },
+    {
+      "file": "matrix.log",
+      "sha256": "8caddb3806a849380dcd3c2d89b6e9dc8b0d330e3423f4dce57f64d1ea83a0d1"
+    },
+    {
+      "file": "post-pr1-approval-baseline.log",
+      "sha256": "f2df77b9e89ba1779b690cc2a57d3a20e7f941790d26c53f6101979d3da7c599"
+    },
+    {
+      "file": "post-pr1-approval-local-abort.log",
+      "sha256": "d78ee8dd47b94ff9f7a139d8526aa2afa89fb61beca97d1b554f06a45468524b"
+    },
+    {
+      "file": "post-pr1-approval-local-fence.log",
+      "sha256": "0e4f623a8504d23d41d8deda6c33de7e10ce1a86885d567473a4d18ff843f2ab"
+    },
+    {
+      "file": "post-pr1-approval-remote-abort.log",
+      "sha256": "b7e639832d91eacc590725fca853571f44c1b4b5de4de0e67bbe62e992d571ca"
+    },
+    {
+      "file": "post-pr1-continuation-durable.log",
+      "sha256": "813d15d16f01b76d101ad83584a12904ba8845b70e1e3a684fb53c3bd180b1c0"
+    },
+    {
+      "file": "post-pr1-continuation-evented.log",
+      "sha256": "28b9d82f6a71baa6b3e4438b7a00e76ca122941ad48d952a2c345920ca8ab946"
+    },
+    {
+      "file": "post-pr1-continuation-plain.log",
+      "sha256": "10c0b4ce2c42ee7386373c9622d6824c3698ad4f8825929c05b50733b176da77"
+    },
+    {
+      "file": "post-pr1-eviction-independent.log",
+      "sha256": "933c685edb72dfbfefcc5648fdcc38f18849740134653184a7455f1bb921ac2b"
+    },
+    {
+      "file": "post-pr1-run-access-tests.log",
+      "sha256": "9cf4d2293f1e9ff0b088fe80a8a9f88216ec15e3f680d20f5b0fe7312a5a4f2a"
+    },
+    {
+      "file": "provenance-initial.json",
+      "sha256": "132630ecac04477cb881166976801030874ae37044cf855b9684fb9c49bab252"
+    },
+    {
+      "file": "redis-build.log",
+      "sha256": "3f0cac5416e5310df78420fae0a0e6e9d5f888820ec05ce4e966acb3ad9ce76a"
+    },
+    {
+      "file": "reproduce.mjs",
+      "sha256": "6b1c936c322150f31b921859ca2376939a0c92615cb9b8bdaa120ae560cfa929"
+    },
+    {
+      "file": "reproduction.jsonl",
+      "sha256": "d9a38b11b6075f85f0638257aab6996923db7dd8931b7db947c1de5b7f3e8ca3"
+    },
+    {
+      "file": "run.log",
+      "sha256": "8c3a1ac32c41ea1bea2a839eeb00b4e0632f27efd638e3a72b0000c0ebd8a30a"
+    }
+  ]
+}

@@ -1,0 +1,786 @@
+{
+  "commit": "ed1cecba5c26a73600640f74e9a1c9d322271b23",
+  "continuation": {
+    "durable": {
+      "publicRunId": "0c20f588-3837-49b6-ae9f-084efc04b5f5",
+      "segmentRunIds": [
+        "0c20f588-3837-49b6-ae9f-084efc04b5f5",
+        "8f5615eb-f06f-49cd-b259-66148c317957"
+      ],
+      "lifecycle": [
+        {
+          "type": "start",
+          "runId": "0c20f588-3837-49b6-ae9f-084efc04b5f5"
+        },
+        {
+          "type": "background-task-started",
+          "runId": "0c20f588-3837-49b6-ae9f-084efc04b5f5"
+        },
+        {
+          "type": "finish",
+          "runId": "0c20f588-3837-49b6-ae9f-084efc04b5f5"
+        },
+        {
+          "type": "background-task-completed"
+        },
+        {
+          "type": "start",
+          "runId": "8f5615eb-f06f-49cd-b259-66148c317957"
+        },
+        {
+          "type": "finish",
+          "runId": "8f5615eb-f06f-49cd-b259-66148c317957"
+        }
+      ],
+      "hasContinuation": true,
+      "toolCommits": 1,
+      "observe": [
+        {
+          "step": "observe-before-release-local",
+          "status": 200,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-before-release-remote",
+          "status": 404,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-after-release-local",
+          "status": 404,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-after-release-remote",
+          "status": 404,
+          "open": false,
+          "continuation": false
+        }
+      ],
+      "modelRequests": 3
+    },
+    "plain": {
+      "publicRunId": "6586a272-962c-45fe-9db8-3a2c000d3a69",
+      "segmentRunIds": [
+        "6586a272-962c-45fe-9db8-3a2c000d3a69",
+        "95fbc2ec-139d-4515-bee5-15e1f868a067"
+      ],
+      "lifecycle": [
+        {
+          "type": "start",
+          "runId": "6586a272-962c-45fe-9db8-3a2c000d3a69"
+        },
+        {
+          "type": "background-task-started",
+          "runId": "6586a272-962c-45fe-9db8-3a2c000d3a69"
+        },
+        {
+          "type": "finish",
+          "runId": "6586a272-962c-45fe-9db8-3a2c000d3a69"
+        },
+        {
+          "type": "background-task-completed"
+        },
+        {
+          "type": "start",
+          "runId": "95fbc2ec-139d-4515-bee5-15e1f868a067"
+        },
+        {
+          "type": "finish",
+          "runId": "95fbc2ec-139d-4515-bee5-15e1f868a067"
+        }
+      ],
+      "hasContinuation": true,
+      "toolCommits": 1,
+      "observe": [
+        {
+          "step": "observe-before-release-local",
+          "status": 200,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-before-release-remote",
+          "status": 200,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-after-release-local",
+          "status": 200,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-after-release-remote",
+          "status": 200,
+          "open": false,
+          "continuation": false
+        }
+      ],
+      "modelRequests": 3
+    },
+    "evented": {
+      "publicRunId": "ec8d4f75-e2f5-49cd-b7b2-1de28ea8b375",
+      "segmentRunIds": [
+        "ec8d4f75-e2f5-49cd-b7b2-1de28ea8b375",
+        "8cef1103-5ed8-4277-91a7-8996639c262c"
+      ],
+      "lifecycle": [
+        {
+          "type": "start",
+          "runId": "ec8d4f75-e2f5-49cd-b7b2-1de28ea8b375"
+        },
+        {
+          "type": "background-task-started",
+          "runId": "ec8d4f75-e2f5-49cd-b7b2-1de28ea8b375"
+        },
+        {
+          "type": "finish",
+          "runId": "ec8d4f75-e2f5-49cd-b7b2-1de28ea8b375"
+        },
+        {
+          "type": "background-task-completed"
+        },
+        {
+          "type": "start",
+          "runId": "8cef1103-5ed8-4277-91a7-8996639c262c"
+        },
+        {
+          "type": "finish",
+          "runId": "8cef1103-5ed8-4277-91a7-8996639c262c"
+        }
+      ],
+      "hasContinuation": true,
+      "toolCommits": 1,
+      "observe": [
+        {
+          "step": "observe-before-release-local",
+          "status": 200,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-before-release-remote",
+          "status": 404,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-after-release-local",
+          "status": 404,
+          "open": false,
+          "continuation": false
+        },
+        {
+          "step": "observe-after-release-remote",
+          "status": 404,
+          "open": false,
+          "continuation": false
+        }
+      ],
+      "modelRequests": 3
+    }
+  },
+  "approval": {
+    "baseline": [
+      {
+        "step": "observe-parked-local",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "observe-parked-remote",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "approve-remote",
+        "status": 200,
+        "open": false
+      },
+      {
+        "step": "side-effect-summary",
+        "commits": 1,
+        "modelRequests": 2
+      }
+    ],
+    "remote-abort": [
+      {
+        "step": "observe-parked-local",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "observe-parked-remote",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "abort-remote-abort",
+        "status": 200,
+        "open": false,
+        "text": "{\"aborted\":true}"
+      },
+      {
+        "step": "approve-remote",
+        "status": 500,
+        "open": false,
+        "text": "{\"error\":\"DurableAgent \\\"Agent\\\" cannot resume aborted run \\\"55426b52-2c20-4828-a744-979fdae2b92b\\\".\"}"
+      },
+      {
+        "step": "side-effect-summary",
+        "commits": 0,
+        "modelRequests": 1
+      }
+    ],
+    "local-fence": [
+      {
+        "step": "observe-parked-local",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "observe-parked-remote",
+        "status": 200,
+        "open": true
+      },
+      {
+        "event": "direct-abort",
+        "result": true
+      },
+      {
+        "step": "approve-remote",
+        "status": 200,
+        "open": false
+      },
+      {
+        "step": "side-effect-summary",
+        "commits": 1,
+        "modelRequests": 2
+      }
+    ],
+    "local-abort": [
+      {
+        "step": "observe-parked-local",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "observe-parked-remote",
+        "status": 200,
+        "open": true
+      },
+      {
+        "step": "abort-local-abort",
+        "status": 200,
+        "open": false,
+        "text": "{\"aborted\":true}"
+      },
+      {
+        "step": "approve-remote",
+        "status": 200,
+        "open": false
+      },
+      {
+        "step": "side-effect-summary",
+        "commits": 1,
+        "modelRequests": 1
+      }
+    ]
+  },
+  "replay": [
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "stream",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "local",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "remote",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "local-tenant",
+      "status": 403,
+      "finish": false,
+      "text": "{\"error\":\"Access denied: workflow run belongs to a different resource\"}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "remote-tenant",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "local-anonymous",
+      "status": 401,
+      "finish": false,
+      "text": "{\"error\":\"Invalid or expired token\"}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "remote-anonymous",
+      "status": 401,
+      "finish": false,
+      "text": "{\"error\":\"Invalid or expired token\"}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "evidence-local",
+      "owner": {
+        "resourceId": "alice"
+      },
+      "replayLength": 9,
+      "historyLength": 9,
+      "lastType": "finish"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "evidence-remote",
+      "replayLength": 9,
+      "historyLength": 9,
+      "lastType": "finish"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "abort-finished-local",
+      "status": 200,
+      "finish": false,
+      "text": "{\"aborted\":false}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "expired-local",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-durable-1794203335108",
+      "step": "expired-remote",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "stream",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "local",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "remote",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "local-tenant",
+      "status": 403,
+      "finish": false,
+      "text": "{\"error\":\"Access denied: workflow run belongs to a different resource\"}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "remote-tenant",
+      "status": 403,
+      "finish": false,
+      "text": "{\"error\":\"Access denied: workflow run belongs to a different resource\"}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "local-anonymous",
+      "status": 401,
+      "finish": false,
+      "text": "{\"error\":\"Invalid or expired token\"}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "remote-anonymous",
+      "status": 401,
+      "finish": false,
+      "text": "{\"error\":\"Invalid or expired token\"}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "evidence-local",
+      "replayLength": 8,
+      "historyLength": 8,
+      "lastType": "finish"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "evidence-remote",
+      "replayLength": 8,
+      "historyLength": 8,
+      "lastType": "finish"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "abort-finished-local",
+      "status": 200,
+      "finish": false,
+      "text": "{\"aborted\":false}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "expired-local",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-plain-1794203370730",
+      "step": "expired-remote",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "stream",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "local",
+      "status": 200,
+      "finish": true
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "remote",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "local-tenant",
+      "status": 403,
+      "finish": false,
+      "text": "{\"error\":\"Access denied: workflow run belongs to a different resource\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "remote-tenant",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "local-anonymous",
+      "status": 401,
+      "finish": false,
+      "text": "{\"error\":\"Invalid or expired token\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "remote-anonymous",
+      "status": 401,
+      "finish": false,
+      "text": "{\"error\":\"Invalid or expired token\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "evidence-local",
+      "owner": {
+        "resourceId": "alice"
+      },
+      "replayLength": 9,
+      "historyLength": 9,
+      "lastType": "finish"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "evidence-remote",
+      "replayLength": 9,
+      "historyLength": 9,
+      "lastType": "finish"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "abort-finished-local",
+      "status": 200,
+      "finish": false,
+      "text": "{\"aborted\":false}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "expired-local",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    },
+    {
+      "kind": "evented",
+      "runId": "pr4-evented-1794203406136",
+      "step": "expired-remote",
+      "status": 404,
+      "finish": false,
+      "text": "{\"error\":\"Run not found\"}"
+    }
+  ],
+  "eviction": [
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-native-evicted-1794203412382",
+      "step": "native-evicted",
+      "deleted": 1,
+      "cacheLength": 7
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-native-evicted-1794203412382",
+      "step": "native-evicted",
+      "where": "local",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-native-evicted-1794203412382",
+      "step": "native-evicted",
+      "where": "remote",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-replay-evicted-1794203412630",
+      "step": "replay-evicted",
+      "deleted": 1,
+      "cacheLength": 0
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-replay-evicted-1794203412630",
+      "step": "replay-evicted",
+      "where": "local",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-replay-evicted-1794203412630",
+      "step": "replay-evicted",
+      "where": "remote",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-both-history-evicted-1794203412696",
+      "step": "both-history-evicted",
+      "deleted": 2,
+      "cacheLength": 0
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-both-history-evicted-1794203412696",
+      "step": "both-history-evicted",
+      "where": "local",
+      "status": 200,
+      "open": true,
+      "finish": false
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-both-history-evicted-1794203412696",
+      "step": "both-history-evicted",
+      "where": "remote",
+      "status": 200,
+      "open": true,
+      "finish": false
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-owner-evicted-1794203415140",
+      "step": "owner-evicted",
+      "deleted": 1,
+      "cacheLength": 7
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-owner-evicted-1794203415140",
+      "step": "owner-evicted",
+      "where": "local",
+      "status": 404,
+      "open": false,
+      "finish": false
+    },
+    {
+      "kind": "plain",
+      "runId": "pr4-independent-plain-owner-evicted-1794203415140",
+      "step": "owner-evicted",
+      "where": "remote",
+      "status": 404,
+      "open": false,
+      "finish": false
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-native-evicted-1794203418559",
+      "step": "native-evicted",
+      "deleted": 1,
+      "cacheLength": 8
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-native-evicted-1794203418559",
+      "step": "native-evicted",
+      "where": "local",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-native-evicted-1794203418559",
+      "step": "native-evicted",
+      "where": "remote",
+      "status": 404,
+      "open": false,
+      "finish": false
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-replay-evicted-1794203418783",
+      "step": "replay-evicted",
+      "deleted": 1,
+      "cacheLength": 0
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-replay-evicted-1794203418783",
+      "step": "replay-evicted",
+      "where": "local",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-replay-evicted-1794203418783",
+      "step": "replay-evicted",
+      "where": "remote",
+      "status": 404,
+      "open": false,
+      "finish": false
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-both-history-evicted-1794203418853",
+      "step": "both-history-evicted",
+      "deleted": 2,
+      "cacheLength": 0
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-both-history-evicted-1794203418853",
+      "step": "both-history-evicted",
+      "where": "local",
+      "status": 200,
+      "open": true,
+      "finish": false
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-both-history-evicted-1794203418853",
+      "step": "both-history-evicted",
+      "where": "remote",
+      "status": 404,
+      "open": false,
+      "finish": false
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-owner-evicted-1794203420114",
+      "step": "owner-evicted",
+      "deleted": 0,
+      "cacheLength": 8
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-owner-evicted-1794203420114",
+      "step": "owner-evicted",
+      "where": "local",
+      "status": 200,
+      "open": false,
+      "finish": true
+    },
+    {
+      "kind": "durable",
+      "runId": "pr4-independent-durable-owner-evicted-1794203420114",
+      "step": "owner-evicted",
+      "where": "remote",
+      "status": 404,
+      "open": false,
+      "finish": false
+    }
+  ]
+}

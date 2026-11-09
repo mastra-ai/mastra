@@ -1,0 +1,14 @@
+{"at":"2026-11-09T05:34:56.733Z","step":"ready","port":44481,"pid":5089,"kind":"durable"}
+{"at":"2026-11-09T05:34:58.417Z","step":"ready","port":45493,"pid":5098,"kind":"durable"}
+{"at":"2026-11-09T05:34:58.640Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"stream","status":200,"bytes":4046,"finish":true}
+{"at":"2026-11-09T05:34:58.656Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"local","status":200,"bytes":4046,"finish":true}
+{"at":"2026-11-09T05:34:58.683Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"remote","status":404,"bytes":25,"finish":false,"text":"{\"error\":\"Run not found\"}"}
+{"at":"2026-11-09T05:34:58.690Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"local-tenant","status":403,"bytes":71,"finish":false,"text":"{\"error\":\"Access denied: workflow run belongs to a different resource\"}"}
+{"at":"2026-11-09T05:34:58.698Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"remote-tenant","status":404,"bytes":25,"finish":false,"text":"{\"error\":\"Run not found\"}"}
+{"at":"2026-11-09T05:34:58.702Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"local-anonymous","status":401,"bytes":36,"finish":false,"text":"{\"error\":\"Invalid or expired token\"}"}
+{"at":"2026-11-09T05:34:58.707Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"remote-anonymous","status":401,"bytes":36,"finish":false,"text":"{\"error\":\"Invalid or expired token\"}"}
+{"at":"2026-11-09T05:34:58.709Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"evidence-local","op":"evidence","owner":{"resourceId":"alice"},"keys":["mastra:topic:agent.control.pr4-durable-1794202498417","mastra_workflow_run_owners:run_id:pr4-durable-1794202498417","mastra:cache:pubsub:agent.stream.pr4-durable-1794202498417","mastra:cache:pubsub:agent.stream.pr4-durable-1794202498417:counter","mastra:topic:agent.stream.pr4-durable-1794202498417"],"history":[]}
+{"at":"2026-11-09T05:34:58.710Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"evidence-remote","op":"evidence","keys":["mastra:topic:agent.control.pr4-durable-1794202498417","mastra_workflow_run_owners:run_id:pr4-durable-1794202498417","mastra:cache:pubsub:agent.stream.pr4-durable-1794202498417","mastra:cache:pubsub:agent.stream.pr4-durable-1794202498417:counter","mastra:topic:agent.stream.pr4-durable-1794202498417"],"history":[]}
+{"at":"2026-11-09T05:34:58.714Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"abort-finished-local","status":404,"bytes":13,"finish":false,"text":"404 Not Found"}
+{"at":"2026-11-09T05:35:30.229Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"expired-local","status":404,"bytes":25,"finish":false,"text":"{\"error\":\"Run not found\"}"}
+{"at":"2026-11-09T05:35:30.237Z","kind":"durable","runId":"pr4-durable-1794202498417","step":"expired-remote","status":404,"bytes":25,"finish":false,"text":"{\"error\":\"Run not found\"}"}

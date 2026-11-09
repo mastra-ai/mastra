@@ -1,0 +1,23 @@
+workspaces/sprites                       | [WARN] Unsupported engine: wanted: {"node":">=24.0.0"} (current: {"node":"v22.23.3","pnpm":"11.21.0"})
+$ pnpm build:lib
+$ tsdown --silent --config tsdown.config.ts
+ℹ tsdown v0.23.1 powered by rolldown v1.2.16
+ℹ config file: /workspace/mastra/stores/redis/tsdown.config.ts 
+ℹ entry: src/index.ts
+ℹ target: node22.13.0
+ℹ tsconfig: tsconfig.json
+ℹ Build start
+
+ WARN  We recommend using the ESM format instead of CommonJS.
+The ESM format is compatible with modern platforms and runtimes, and most new libraries are now distributed only in ESM format.
+Learn more at https://nodejs.org/en/learn/modules/publishing-a-package#how-did-we-get-here
+
+ℹ Cleaning 34 files
+ℹ [CJS] dist/index.cjs       80.72 kB │ gzip: 16.62 kB
+ℹ [CJS] dist/index.cjs.map  158.66 kB │ gzip: 32.98 kB
+ℹ [CJS] 2 files, total: 239.39 kB
+✔ Build complete in 69ms
+ℹ [ESM] dist/index.js       75.73 kB │ gzip: 16.49 kB
+ℹ [ESM] dist/index.js.map  154.78 kB │ gzip: 32.36 kB
+ℹ [ESM] 2 files, total: 230.50 kB
+✔ Build complete in 70ms
