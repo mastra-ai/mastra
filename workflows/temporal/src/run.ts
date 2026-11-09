@@ -44,10 +44,10 @@ type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
 } & WorkflowRunStartOptions;
 
 export class TemporalWorkflowStatusUnknownError extends Error {
-  constructor(runId: string, cause: unknown, afterResumeSignal = false) {
+  constructor(runId: string, cause: unknown, afterResumeOperation = false) {
     super(
-      afterResumeSignal
-        ? `Unable to determine Temporal workflow status for run "${runId}" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.`
+      afterResumeOperation
+        ? `Unable to determine Temporal workflow status for run "${runId}" after executing a resume Update. The Update was accepted; do not retry resume() with different inputs.`
         : `Unable to determine Temporal workflow status for run "${runId}".`,
       { cause },
     );
@@ -306,27 +306,6 @@ export class TemporalRun<
     return { stepId, suspendedAt: stepResult.suspendedAt };
   }
 
-  private async claimExecution(handle: WorkflowHandle, operation: 'resume' | 'timeTravel', target?: { step: string }) {
-    const token = randomUUID();
-    await handle.signal('mastra.claimExecution', {
-      action: 'claim',
-      operation,
-      token,
-      ...(target !== undefined && { target }),
-    });
-    const claim = (await handle.query('mastra.executionClaim')) as
-      | { operation?: string; token?: string; stepId?: string }
-      | undefined;
-    if (claim?.operation !== operation || claim.token !== token) {
-      throw new Error(`Temporal ${operation} for run "${this.runId}" was already claimed.`);
-    }
-    return token;
-  }
-
-  private async releaseExecutionClaim(handle: WorkflowHandle, operation: 'resume' | 'timeTravel', token: string) {
-    await handle.signal('mastra.claimExecution', { action: 'release', operation, token });
-  }
-
   private async resumePayload(params: {
     step?:
       | Step<string, any, any, any, any, any, TemporalEngineType, any>
@@ -404,13 +383,16 @@ export class TemporalRun<
     const payload = await this.resumePayload(params);
     const status = await this.queryStatus(handle);
     const previousSuspension = this.resolveSuspendedStep(status, payload);
-    const claimToken = await this.claimExecution(handle, 'resume', { step: previousSuspension.stepId });
-    try {
-      await handle.signal('mastra.resume', { ...payload, step: previousSuspension.stepId, claimToken });
-    } catch (error) {
-      await this.releaseExecutionClaim(handle, 'resume', claimToken).catch(() => undefined);
-      throw error;
-    }
+    await handle.executeUpdate('mastra.executeOperation', {
+      args: [
+        {
+          operation: 'resume',
+          operationId: randomUUID(),
+          target: { step: previousSuspension.stepId },
+          resumeData: payload.resumeData,
+        },
+      ],
+    });
     return this.awaitResultOrSuspended(handle, undefined, undefined, requestContext, previousSuspension, true);
   }
 
@@ -441,13 +423,16 @@ export class TemporalRun<
     const payload = await this.resumePayload(params);
     const status = await this.queryStatus(handle);
     const suspension = this.resolveSuspendedStep(status, payload);
-    const claimToken = await this.claimExecution(handle, 'resume', { step: suspension.stepId });
-    try {
-      await handle.signal('mastra.resume', { ...payload, step: suspension.stepId, claimToken });
-    } catch (error) {
-      await this.releaseExecutionClaim(handle, 'resume', claimToken).catch(() => undefined);
-      throw error;
-    }
+    await handle.executeUpdate('mastra.executeOperation', {
+      args: [
+        {
+          operation: 'resume',
+          operationId: randomUUID(),
+          target: { step: suspension.stepId },
+          resumeData: payload.resumeData,
+        },
+      ],
+    });
     return { runId: this.runId };
   }
 
@@ -589,70 +574,57 @@ export class TemporalRun<
     }
     await this._validateRequestContext(requestContext as RequestContext<unknown>);
 
-    const claimToken =
-      sourceExecutionIsOpen && status.status === 'suspended'
-        ? await this.claimExecution(sourceHandle, 'timeTravel')
-        : undefined;
-
-    try {
-      const previousTemporalRunId = sourceDescription.runId;
-      const workflowArgs = {
-        inputData: status.input,
-        initialState: timeTravel.state,
-        requestContext: Object.fromEntries(requestContext.entries()),
-        runId: this.runId,
-        resourceId: this.resourceId,
-        outputOptions: args.outputOptions,
-        tracingOptions: args.tracingOptions,
-        perStep: args.perStep,
-        validateInputs: this.validateInputs,
-        timeTravel,
-        timeTravelLineage: { previousTemporalRunId, target: steps },
-      };
-      let handle: WorkflowHandle;
-      if (claimToken) {
-        try {
-          handle = await this.startWorkflow(workflowArgs, {
-            workflowIdReusePolicy: 'ALLOW_DUPLICATE',
-            workflowIdConflictPolicy: 'TERMINATE_EXISTING',
-          });
-        } catch (error) {
-          if (
-            !(error instanceof WorkflowExecutionAlreadyStartedError) &&
-            (!(error instanceof Error) || error.name !== 'WorkflowExecutionAlreadyStartedError')
-          ) {
-            throw error;
-          }
-          handle = await this.startWorkflow(workflowArgs, { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' });
-        }
-      } else {
-        const replacementClaimToken = randomUUID();
-        handle = await this.client.workflow.signalWithStart(toWorkflowType(this.workflowId), {
-          ...this.workflowStartOptions(workflowArgs, { workflowIdReusePolicy: 'ALLOW_DUPLICATE' }),
-          workflowIdConflictPolicy: 'USE_EXISTING',
-          signal: 'mastra.claimExecution',
-          signalArgs: [{ action: 'claim', operation: 'timeTravel', token: replacementClaimToken }],
-        });
-        const claim = (await handle.query('mastra.executionClaim')) as
-          | { operation?: string; token?: string }
-          | undefined;
-        if (claim?.operation !== 'timeTravel' || claim.token !== replacementClaimToken) {
-          throw new Error(`Temporal time travel for run "${this.runId}" was already claimed.`);
-        }
-      }
-
-      return this.awaitResultOrSuspended(
-        handle,
-        status.input as TInput,
-        timeTravel.state as TState,
-        requestContext as RequestContext,
-      ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
-    } catch (error) {
-      if (claimToken) {
-        await this.releaseExecutionClaim(sourceHandle, 'timeTravel', claimToken).catch(() => undefined);
-      }
-      throw error;
+    const previousTemporalRunId = sourceDescription.runId;
+    const operationId = `timeTravel:${previousTemporalRunId}:${steps[0]}`;
+    const sourceIsSuspended = sourceExecutionIsOpen && status.status === 'suspended';
+    if (sourceIsSuspended) {
+      await sourceHandle.executeUpdate('mastra.executeOperation', {
+        args: [{ operation: 'timeTravel', operationId }],
+      });
     }
+
+    const workflowArgs = {
+      inputData: status.input,
+      initialState: timeTravel.state,
+      requestContext: Object.fromEntries(requestContext.entries()),
+      runId: this.runId,
+      resourceId: this.resourceId,
+      outputOptions: args.outputOptions,
+      tracingOptions: args.tracingOptions,
+      perStep: args.perStep,
+      validateInputs: this.validateInputs,
+      timeTravel,
+      timeTravelLineage: { previousTemporalRunId, target: steps, operationId },
+    };
+    let handle: WorkflowHandle;
+    if (sourceIsSuspended) {
+      try {
+        handle = await this.startWorkflow(workflowArgs, {
+          workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+          workflowIdConflictPolicy: 'TERMINATE_EXISTING',
+        });
+      } catch (error) {
+        if (
+          !(error instanceof WorkflowExecutionAlreadyStartedError) &&
+          (!(error instanceof Error) || error.name !== 'WorkflowExecutionAlreadyStartedError')
+        ) {
+          throw error;
+        }
+        handle = await this.startWorkflow(workflowArgs, { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' });
+      }
+    } else {
+      handle = await this.startWorkflow(workflowArgs, {
+        workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+        workflowIdConflictPolicy: 'USE_EXISTING',
+      });
+    }
+
+    return this.awaitResultOrSuspended(
+      handle,
+      status.input as TInput,
+      timeTravel.state as TState,
+      requestContext as RequestContext,
+    ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
   }
 
   override timeTravelStream(..._args: unknown[]): never {

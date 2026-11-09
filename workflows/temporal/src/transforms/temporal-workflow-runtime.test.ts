@@ -7,6 +7,7 @@ const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
 const defineQuery = vi.fn((name: string) => name);
 const defineSignal = vi.fn((name: string) => name);
+const defineUpdate = vi.fn((name: string) => name);
 const signalHandlers = new Map<string, (...args: unknown[]) => unknown>();
 const setHandler = vi.fn((signal: string, handler: (...args: unknown[]) => unknown) => {
   signalHandlers.set(signal, handler);
@@ -24,6 +25,7 @@ vi.mock('@temporalio/workflow', async importOriginal => {
     condition,
     defineQuery,
     defineSignal,
+    defineUpdate,
     executeChild,
     proxyActivities,
     setHandler,
@@ -64,9 +66,43 @@ describe('temporal workflow runtime helper module', () => {
     logInfo.mockClear();
     defineQuery.mockClear();
     defineSignal.mockClear();
+    defineUpdate.mockClear();
     setHandler.mockClear();
     condition.mockClear();
     signalHandlers.clear();
+  });
+
+  it('coordinates resume and time travel atomically through a workflow update', async () => {
+    const { TemporalExecutionEngine } = await import('./temporal-workflow-runtime.mjs');
+    const engine = new TemporalExecutionEngine();
+    engine.suspendedSteps.add('approval');
+    const executeOperation = signalHandlers.get('mastra.executeOperation');
+
+    expect(
+      executeOperation?.({
+        operation: 'resume',
+        operationId: 'resume-1',
+        target: { step: 'approval' },
+        resumeData: { approved: true },
+      }),
+    ).toEqual({ operationId: 'resume-1', stepId: 'approval' });
+    expect(engine.resumePayloads.get('approval')).toMatchObject({
+      resumeData: { approved: true },
+      operationId: 'resume-1',
+    });
+    expect(() =>
+      executeOperation?.({ operation: 'timeTravel', operationId: 'time-travel-1', target: ['approval'] }),
+    ).toThrow('already claimed');
+
+    const competingEngine = new TemporalExecutionEngine();
+    competingEngine.suspendedSteps.add('approval');
+    const competingUpdate = signalHandlers.get('mastra.executeOperation');
+    expect(competingUpdate?.({ operation: 'timeTravel', operationId: 'time-travel-1', target: ['approval'] })).toEqual({
+      operationId: 'time-travel-1',
+    });
+    expect(() =>
+      competingUpdate?.({ operation: 'resume', operationId: 'resume-2', target: { step: 'approval' } }),
+    ).toThrow('already claimed');
   });
 
   it('executes chained workflow steps through proxy activities', async () => {

@@ -33,6 +33,7 @@ vi.mock('@temporalio/workflow', async importOriginal => {
     condition: vi.fn(),
     defineQuery: (name: string) => name,
     defineSignal: (name: string) => name,
+    defineUpdate: (name: string) => name,
     setHandler: vi.fn(),
     executeChild: vi.fn(),
     proxyActivities: vi.fn(),
@@ -182,14 +183,16 @@ describe('TemporalRun', () => {
       }),
       query: vi.fn(),
     };
-    const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
-      replacementHandle.query.mockResolvedValue({ operation: 'timeTravel', token: options.signalArgs[0].token });
-      return replacementHandle;
-    });
+    const start = vi.fn().mockResolvedValue(replacementHandle);
     const getHandle = vi.fn().mockReturnValue(sourceHandle);
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
-      { client: { workflow: { getHandle, signalWithStart } } as unknown as Client, taskQueue: 'test-queue' },
+      {
+        client: {
+          workflow: { getHandle, start },
+        } as unknown as Client,
+        taskQueue: 'test-queue',
+      },
     )
       .then(target)
       .commit();
@@ -199,7 +202,7 @@ describe('TemporalRun', () => {
       status: 'success',
       result: { value: 2 },
     });
-    expect(signalWithStart).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledOnce();
   });
 
   it('surfaces source status query failures without starting a replacement', async () => {
@@ -401,14 +404,11 @@ describe('TemporalRun', () => {
       result: vi.fn().mockResolvedValue(replacementResult),
       query: vi.fn(),
     };
-    const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
-      replacementHandle.query.mockResolvedValue({ operation: 'timeTravel', token: options.signalArgs[0].token });
-      return replacementHandle;
-    });
+    const start = vi.fn().mockResolvedValue(replacementHandle);
     const getHandle = vi.fn().mockReturnValue(sourceHandle);
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
-      { client: { workflow: { getHandle, signalWithStart } } as unknown as Client, taskQueue: 'test-queue' },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
     )
       .then(first)
       .then(target)
@@ -419,14 +419,12 @@ describe('TemporalRun', () => {
       status: 'success',
       result: { value: 4 },
     });
-    expect(signalWithStart).toHaveBeenCalledWith(
+    expect(start).toHaveBeenCalledWith(
       'testWorkflow',
       expect.objectContaining({
         workflowId: 'test-run',
         workflowIdReusePolicy: 'ALLOW_DUPLICATE',
         workflowIdConflictPolicy: 'USE_EXISTING',
-        signal: 'mastra.claimExecution',
-        signalArgs: [expect.objectContaining({ action: 'claim', operation: 'timeTravel', token: expect.any(String) })],
         args: [
           expect.objectContaining({
             runId: 'test-run',
@@ -447,6 +445,7 @@ describe('TemporalRun', () => {
             timeTravelLineage: {
               previousTemporalRunId: 'temporal-run-1',
               target: ['target'],
+              operationId: 'timeTravel:temporal-run-1:target',
             },
           }),
         ],
@@ -454,7 +453,7 @@ describe('TemporalRun', () => {
     );
   });
 
-  it('allows only one concurrent time-travel replacement of a suspended run', async () => {
+  it('retries the same prepared time-travel operation for a suspended run', async () => {
     const schema = z.object({ value: z.number() });
     const target = createStep({
       id: 'target',
@@ -476,24 +475,18 @@ describe('TemporalRun', () => {
       },
       suspended: [['target']],
     };
-    let claimToken: string | undefined;
-    const signal = vi.fn(async (_signal: string, claim: { action: string; token: string }) => {
-      if (claim.action === 'claim') {
-        claimToken ??= claim.token;
-      } else if (claimToken === claim.token) {
-        claimToken = undefined;
+    let operationId: string | undefined;
+    const executeUpdate = vi.fn(async (_update: string, options: { args: [{ operationId: string }] }) => {
+      if (operationId && operationId !== options.args[0].operationId) {
+        throw new Error('Temporal time travel for run "test-run" was already claimed.');
       }
+      operationId = options.args[0].operationId;
+      return { operationId };
     });
     const sourceHandle = {
-      query: vi.fn(async (query: string) =>
-        query === 'mastra.status'
-          ? sourceStatus
-          : claimToken
-            ? { operation: 'timeTravel', token: claimToken }
-            : undefined,
-      ),
+      query: vi.fn().mockResolvedValue(sourceStatus),
       describe: vi.fn().mockResolvedValue({ runId: 'temporal-run-1' }),
-      signal,
+      executeUpdate,
     };
     const replacementHandle = {
       result: vi.fn().mockResolvedValue({ status: 'success', input: { value: 1 }, state: {}, steps: {}, result: {} }),
@@ -520,30 +513,23 @@ describe('TemporalRun', () => {
 
     const results = await Promise.allSettled([run.timeTravel({ step: 'target' }), run.timeTravel({ step: 'target' })]);
 
-    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter(result => result.status === 'rejected')).toEqual([
-      expect.objectContaining({
-        reason: expect.objectContaining({ message: expect.stringContaining('already claimed') }),
-      }),
-    ]);
-    expect(signal).toHaveBeenCalledTimes(2);
-    expect(start).toHaveBeenCalledTimes(2);
-    expect(start).toHaveBeenNthCalledWith(
-      1,
-      'testWorkflow',
-      expect.objectContaining({
-        workflowIdReusePolicy: 'ALLOW_DUPLICATE',
-        workflowIdConflictPolicy: 'TERMINATE_EXISTING',
-      }),
-    );
-    expect(start).toHaveBeenNthCalledWith(
-      2,
-      'testWorkflow',
-      expect.objectContaining({ workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' }),
-    );
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(2);
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(0);
+    expect(executeUpdate).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledTimes(3);
+    expect(
+      start.mock.calls.filter(
+        ([, options]) =>
+          options.workflowIdReusePolicy === 'ALLOW_DUPLICATE' &&
+          options.workflowIdConflictPolicy === 'TERMINATE_EXISTING',
+      ),
+    ).toHaveLength(2);
+    expect(
+      start.mock.calls.filter(([, options]) => options.workflowIdReusePolicy === 'TERMINATE_IF_RUNNING'),
+    ).toHaveLength(1);
   });
 
-  it('allows only one concurrent time-travel replacement of a completed run', async () => {
+  it('joins concurrent time-travel retries to the same completed-run replacement', async () => {
     const schema = z.object({ value: z.number() });
     const target = createStep({
       id: 'target',
@@ -564,22 +550,16 @@ describe('TemporalRun', () => {
       query: vi.fn().mockResolvedValue(sourceStatus),
       describe: vi.fn().mockResolvedValue({ runId: 'temporal-run-1' }),
     };
-    let claimToken: string | undefined;
     const replacementHandle = {
       result: vi.fn().mockResolvedValue({ status: 'success', input: { value: 1 }, state: {}, steps: {}, result: {} }),
-      query: vi
-        .fn()
-        .mockImplementation(async () => (claimToken ? { operation: 'timeTravel', token: claimToken } : undefined)),
+      query: vi.fn(),
     };
-    const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
-      claimToken ??= options.signalArgs[0].token;
-      return replacementHandle;
-    });
+    const start = vi.fn().mockResolvedValue(replacementHandle);
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
       {
         client: {
-          workflow: { getHandle: vi.fn().mockReturnValue(sourceHandle), signalWithStart },
+          workflow: { getHandle: vi.fn().mockReturnValue(sourceHandle), start },
         } as unknown as Client,
         taskQueue: 'test-queue',
       },
@@ -590,13 +570,8 @@ describe('TemporalRun', () => {
 
     const results = await Promise.allSettled([run.timeTravel({ step: 'target' }), run.timeTravel({ step: 'target' })]);
 
-    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter(result => result.status === 'rejected')).toEqual([
-      expect.objectContaining({
-        reason: expect.objectContaining({ message: expect.stringContaining('already claimed') }),
-      }),
-    ]);
-    expect(signalWithStart).toHaveBeenCalledTimes(2);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(2);
+    expect(start).toHaveBeenCalledTimes(2);
   });
 
   it('restores source request context for time travel, lets callers override it, and drops stale auth tokens', async () => {
@@ -629,15 +604,12 @@ describe('TemporalRun', () => {
       result: vi.fn().mockResolvedValue({ status: 'success', input: { value: 1 }, state: {}, steps: {}, result: {} }),
       query: vi.fn(),
     };
-    const signalWithStart = vi.fn().mockImplementation(async (_workflowType, options) => {
-      replacementHandle.query.mockResolvedValue({ operation: 'timeTravel', token: options.signalArgs[0].token });
-      return replacementHandle;
-    });
+    const start = vi.fn().mockResolvedValue(replacementHandle);
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
       {
         client: {
-          workflow: { getHandle: vi.fn().mockReturnValue(sourceHandle), signalWithStart },
+          workflow: { getHandle: vi.fn().mockReturnValue(sourceHandle), start },
         } as unknown as Client,
         taskQueue: 'test-queue',
       },
@@ -652,7 +624,7 @@ describe('TemporalRun', () => {
 
     await run.timeTravel({ step: 'target', requestContext });
 
-    expect(signalWithStart).toHaveBeenCalledWith(
+    expect(start).toHaveBeenCalledWith(
       'testWorkflow',
       expect.objectContaining({
         args: [
@@ -724,27 +696,16 @@ describe('TemporalRun', () => {
       resolveResult = resolve;
     });
     const result = vi.fn(() => terminalResult);
-    let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
-    const query = vi
-      .fn()
-      .mockImplementation(async name => (name === 'mastra.executionClaim' ? executionClaim : status));
-    const signal = vi.fn().mockImplementation(async (name, payload) => {
-      if (name === 'mastra.claimExecution') {
-        if (payload.action === 'claim') {
-          executionClaim ??= { operation: 'resume', token: payload.token, stepId: payload.target.step };
-        } else if (executionClaim?.token === payload.token) {
-          executionClaim = undefined;
-        }
-        return;
-      }
-      executionClaim = undefined;
-      if (payload.step === 'firstApproval') {
+    const query = vi.fn(async () => status);
+    const executeUpdate = vi.fn().mockImplementation(async (_name, { args: [payload] }) => {
+      if (payload.target.step === 'firstApproval') {
         status = secondSuspension;
       } else {
         resolveResult(finalResult);
       }
+      return { operationId: payload.operationId, stepId: payload.target.step };
     });
-    const handle = { signal, result, query };
+    const handle = { executeUpdate, result, query };
     const start = vi.fn().mockResolvedValue(handle);
     const getHandle = vi.fn().mockReturnValue(handle);
     const onFinish = vi.fn();
@@ -819,10 +780,27 @@ describe('TemporalRun', () => {
     });
 
     expect(getHandle).toHaveBeenCalledTimes(2);
-    expect(signal.mock.calls.filter(([name]) => name === 'mastra.resume')).toEqual([
-      ['mastra.resume', { step: 'firstApproval', resumeData: { approved: true }, claimToken: expect.any(String) }],
-      ['mastra.resume', { step: 'secondApproval', resumeData: { approved: true }, claimToken: expect.any(String) }],
-    ]);
+    expect(executeUpdate).toHaveBeenCalledTimes(2);
+    expect(executeUpdate).toHaveBeenNthCalledWith(1, 'mastra.executeOperation', {
+      args: [
+        {
+          operation: 'resume',
+          operationId: expect.any(String),
+          target: { step: 'firstApproval' },
+          resumeData: { approved: true },
+        },
+      ],
+    });
+    expect(executeUpdate).toHaveBeenNthCalledWith(2, 'mastra.executeOperation', {
+      args: [
+        {
+          operation: 'resume',
+          operationId: expect.any(String),
+          target: { step: 'secondApproval' },
+          resumeData: { approved: true },
+        },
+      ],
+    });
     expect(onFinish).toHaveBeenCalledTimes(3);
     expect(onFinish).toHaveBeenNthCalledWith(1, expect.objectContaining({ status: 'suspended' }));
     expect(onFinish).toHaveBeenNthCalledWith(2, expect.objectContaining({ status: 'suspended' }));
@@ -852,7 +830,7 @@ describe('TemporalRun', () => {
     });
   });
 
-  it('does not send a resume signal when the current status query fails', async () => {
+  it('does not execute a resume Update when the current status query fails', async () => {
     const queryError = new Error('query unavailable');
     const signal = vi.fn();
     const getHandle = vi.fn().mockReturnValue({
@@ -873,7 +851,7 @@ describe('TemporalRun', () => {
     expect(signal).not.toHaveBeenCalled();
   });
 
-  it('warns that a resume signal may have been delivered when a later status query fails', async () => {
+  it('reports that a resume Update was accepted when a later status query fails', async () => {
     const queryError = new Error('query unavailable');
     const suspended = {
       status: 'suspended',
@@ -886,19 +864,13 @@ describe('TemporalRun', () => {
       },
       suspended: [['approval']],
     };
-    let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
-    const signal = vi.fn().mockImplementation(async (name, payload) => {
-      if (name === 'mastra.claimExecution') {
-        executionClaim = { operation: 'resume', token: payload.token, stepId: payload.target.step };
-      }
-    });
-    const query = vi.fn().mockImplementation(async name => {
-      if (name === 'mastra.executionClaim') return executionClaim;
-      if (query.mock.calls.filter(([queryName]) => queryName === 'mastra.status').length === 1) return suspended;
+    const executeUpdate = vi.fn().mockResolvedValue({ operationId: 'resume-1', stepId: 'approval' });
+    const query = vi.fn().mockImplementation(async () => {
+      if (query.mock.calls.length === 1) return suspended;
       throw queryError;
     });
     const getHandle = vi.fn().mockReturnValue({
-      signal,
+      executeUpdate,
       query,
       result: vi.fn(() => new Promise(() => {})),
     });
@@ -916,10 +888,18 @@ describe('TemporalRun', () => {
     ).rejects.toMatchObject({
       name: 'TemporalWorkflowStatusUnknownError',
       message:
-        'Unable to determine Temporal workflow status for run "test-run" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.',
+        'Unable to determine Temporal workflow status for run "test-run" after executing a resume Update. The Update was accepted; do not retry resume() with different inputs.',
       cause: queryError,
     });
-    expect(signal.mock.calls.filter(([name]) => name === 'mastra.resume')).toHaveLength(1);
+    expect(executeUpdate).toHaveBeenCalledWith('mastra.executeOperation', {
+      args: [
+        expect.objectContaining({
+          operation: 'resume',
+          target: { step: 'approval' },
+          resumeData: { approved: true },
+        }),
+      ],
+    });
   });
 
   it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
@@ -968,23 +948,14 @@ describe('TemporalRun', () => {
     expect(query).toHaveBeenCalledWith('mastra.status');
   });
 
-  it('signals the matching Temporal workflow when resuming asynchronously', async () => {
-    let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
-    const signal = vi.fn().mockImplementation(async (name, payload) => {
-      if (name === 'mastra.claimExecution') {
-        executionClaim = { operation: 'resume', token: payload.token, stepId: payload.target.step };
-      }
+  it('updates the matching Temporal workflow when resuming asynchronously', async () => {
+    const executeUpdate = vi.fn().mockResolvedValue({ operationId: 'resume-1', stepId: 'approval' });
+    const query = vi.fn().mockResolvedValue({
+      status: 'suspended',
+      steps: { approval: { status: 'suspended', suspendedAt: 1 } },
+      suspended: [['approval']],
     });
-    const query = vi.fn().mockImplementation(async name =>
-      name === 'mastra.executionClaim'
-        ? executionClaim
-        : {
-            status: 'suspended',
-            steps: { approval: { status: 'suspended', suspendedAt: 1 } },
-            suspended: [['approval']],
-          },
-    );
-    const getHandle = vi.fn().mockReturnValue({ signal, query });
+    const getHandle = vi.fn().mockReturnValue({ executeUpdate, query });
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
       { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
@@ -996,10 +967,14 @@ describe('TemporalRun', () => {
     });
 
     expect(getHandle).toHaveBeenCalledWith('test-run');
-    expect(signal).toHaveBeenCalledWith('mastra.resume', {
-      step: 'approval',
-      resumeData: { approved: true },
-      claimToken: expect.any(String),
+    expect(executeUpdate).toHaveBeenCalledWith('mastra.executeOperation', {
+      args: [
+        expect.objectContaining({
+          operation: 'resume',
+          target: { step: 'approval' },
+          resumeData: { approved: true },
+        }),
+      ],
     });
   });
 
@@ -1191,22 +1166,17 @@ describe('TemporalRun', () => {
       const failure = new Error('activity failed after resume');
       const onFinish = vi.fn();
       const onError = vi.fn();
-      let executionClaim: { operation: 'resume'; token: string; stepId: string } | undefined;
-      const signal = vi.fn().mockImplementation(async (name, payload) => {
-        if (name === 'mastra.claimExecution') {
-          executionClaim = { operation: 'resume', token: payload.token, stepId: payload.target.step };
-        }
+      const executeUpdate = vi.fn().mockResolvedValue({ operationId: 'resume-1', stepId: 'approval' });
+      const query = vi.fn().mockResolvedValue({
+        status: 'suspended',
+        steps: { approval: { status: 'suspended', suspendedAt: 1 } },
+        suspended: [['approval']],
       });
-      const query = vi.fn().mockImplementation(async name =>
-        name === 'mastra.executionClaim'
-          ? executionClaim
-          : {
-              status: 'suspended',
-              steps: { approval: { status: 'suspended', suspendedAt: 1 } },
-              suspended: [['approval']],
-            },
-      );
-      const getHandle = vi.fn().mockReturnValue({ signal, query, result: vi.fn().mockRejectedValue(failure) });
+      const getHandle = vi.fn().mockReturnValue({
+        executeUpdate,
+        query,
+        result: vi.fn().mockRejectedValue(failure),
+      });
       const workflow = createWorkflow(
         {
           id: 'hooked-workflow',
@@ -1221,10 +1191,14 @@ describe('TemporalRun', () => {
       const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
 
       expect(result.status).toBe('failed');
-      expect(signal).toHaveBeenCalledWith('mastra.resume', {
-        step: 'approval',
-        resumeData: { approved: true },
-        claimToken: expect.any(String),
+      expect(executeUpdate).toHaveBeenCalledWith('mastra.executeOperation', {
+        args: [
+          expect.objectContaining({
+            operation: 'resume',
+            target: { step: 'approval' },
+            resumeData: { approved: true },
+          }),
+        ],
       });
       expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));

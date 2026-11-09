@@ -4,6 +4,7 @@ import {
   condition,
   defineQuery,
   defineSignal,
+  defineUpdate,
   executeChild,
   isCancellation,
   proxyActivities,
@@ -14,6 +15,7 @@ import {
 
 const resumeSignal = defineSignal('mastra.resume');
 const claimExecutionSignal = defineSignal('mastra.claimExecution');
+const executeOperationUpdate = defineUpdate('mastra.executeOperation');
 const statusQuery = defineQuery('mastra.status');
 const executionClaimQuery = defineQuery('mastra.executionClaim');
 const authTokenKey = 'mastra__authToken';
@@ -65,9 +67,43 @@ export class TemporalExecutionEngine {
 
   constructor(params) {
     this.startToCloseTimeout = params?.options?.startToCloseTimeout ?? '1 minute';
+    if (params?.operationId !== undefined) {
+      this.executionClaim = { operation: 'timeTravel', operationId: params.operationId };
+    }
     this.activityHandle = proxyActivities({
       startToCloseTimeout: this.startToCloseTimeout,
       ...(params?.options?.retry !== undefined && { retry: params.options.retry }),
+    });
+    setHandler(executeOperationUpdate, payload => {
+      const existingClaim = this.executionClaim;
+      if (existingClaim?.operationId === payload?.operationId) {
+        return {
+          operationId: existingClaim.operationId,
+          ...(existingClaim.stepId !== undefined && { stepId: existingClaim.stepId }),
+        };
+      }
+      if (existingClaim !== undefined) {
+        throw ApplicationFailure.nonRetryable(`Temporal ${payload?.operation} operation was already claimed.`);
+      }
+      if (payload?.operation === 'resume') {
+        const stepId = this.resumeTarget(payload.target);
+        if (stepId === undefined || this.resumePayloads.has(stepId)) {
+          throw ApplicationFailure.nonRetryable('No suspended step matches the requested resume target.');
+        }
+        this.executionClaim = { operation: 'resume', operationId: payload.operationId, stepId };
+        this.resumePayloads.set(stepId, {
+          ...payload.target,
+          step: stepId,
+          resumeData: payload.resumeData,
+          operationId: payload.operationId,
+        });
+        return { operationId: payload.operationId, stepId };
+      }
+      if (payload?.operation !== 'timeTravel') {
+        throw ApplicationFailure.nonRetryable(`Unsupported Temporal operation "${payload?.operation}".`);
+      }
+      this.executionClaim = { operation: 'timeTravel', operationId: payload.operationId };
+      return { operationId: payload.operationId };
     });
     setHandler(resumeSignal, payload => {
       const claim = this.executionClaim;
@@ -271,7 +307,11 @@ export class TemporalExecutionEngine {
         const resumePayload = this.resumePayloads.get(id);
         resumeData = resumePayload?.resumeData;
         this.resumePayloads.delete(id);
-        if (this.executionClaim?.operation === 'resume' && this.executionClaim.token === resumePayload?.claimToken) {
+        if (
+          this.executionClaim?.operation === 'resume' &&
+          (this.executionClaim.operationId === resumePayload?.operationId ||
+            this.executionClaim.token === resumePayload?.claimToken)
+        ) {
           this.executionClaim = undefined;
         }
       } finally {
@@ -540,7 +580,10 @@ export function createWorkflow(workflowId, options) {
   const nextId = prefix => `${prefix}_${autoId++}`;
 
   const workflow = async startArgs => {
-    const engine = new TemporalExecutionEngine({ options });
+    const engine = new TemporalExecutionEngine({
+      options,
+      operationId: startArgs?.timeTravelLineage?.operationId,
+    });
 
     return engine.execute({
       workflowId,
