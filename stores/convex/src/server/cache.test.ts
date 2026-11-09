@@ -661,10 +661,24 @@ describe('mastraCache server handler', () => {
       const { pushed, row } = await pushAndReadLast(ctx);
 
       // A client may already hold index 2 from the old non-atomic path, so the
-      // new frame must not be stamped 2 again.
+      // new frame must not be stamped 2 again. It is stored at its index,
+      // leaving a gap at position 2, so replay by offset still lines up.
       expect(pushed).toEqual({ ok: true, result: 3 });
-      expect(row).toMatchObject({ index: 2 });
+      expect(row).toMatchObject({ index: 3 });
       expect(JSON.parse(row.value as string)).toEqual({ id: 'next', index: 3 });
+      await expect(pushAndReadLast(ctx)).resolves.toMatchObject({ pushed: { ok: true, result: 4 }, row: { index: 4 } });
+
+      // A client that received index 3 and resumes at offset 4 gets index 4.
+      const readFrom = (from: number) =>
+        handleCacheOperation(ctx as any, { op: 'listFromTo', key: 'mastra:cache:log', from, to: -1 });
+      await expect(readFrom(4)).resolves.toEqual({ ok: true, result: [{ id: 'next', index: 4 }] });
+      await expect(readFrom(3)).resolves.toEqual({
+        ok: true,
+        result: [
+          { id: 'next', index: 3 },
+          { id: 'next', index: 4 },
+        ],
+      });
       await expect(
         handleCacheOperation(ctx as any, {
           op: 'increment',
@@ -672,7 +686,7 @@ describe('mastraCache server handler', () => {
           keyPrefix: 'mastra:cache:',
           expiresAt: null,
         }),
-      ).resolves.toEqual({ ok: true, result: 5 });
+      ).resolves.toEqual({ ok: true, result: 6 });
     });
 
     it('keeps indices aligned with positions when the counter document is missing', async () => {

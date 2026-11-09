@@ -257,14 +257,14 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
       }
 
       // Never reuse an index: take the larger of the counter document and the
-      // list length. The counter can be missing or expired (the list length
-      // then keeps indices aligned with positions), or ahead of the list after
-      // a failed append on the old non-atomic path (going backwards would
-      // re-issue an index a resumed client has already consumed). The counter
+      // list length. The counter can be missing or expired, or ahead of the
+      // list after a failed append on the old non-atomic path (going backwards
+      // would re-issue an index a resumed client has already consumed). The row
+      // is stored at the index itself, leaving a gap rather than shifting
+      // positions, because replay reads from an offset by position. The counter
       // document is still written because `clear` and the fallback's
       // `increment` use it.
-      const position = existingList?.counter ?? 0;
-      const index = Math.max(existingCounter?.counter ?? 0, position);
+      const index = Math.max(existingCounter?.counter ?? 0, existingList?.counter ?? 0);
       // The list and its counter share one deadline so they expire together.
       await writeCacheDoc(ctx, request.counterKey, existingCounter, {
         kind: 'counter',
@@ -275,13 +275,13 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
       await writeCacheDoc(ctx, request.key, existingList, {
         kind: 'list',
         keyPrefix: request.keyPrefix,
-        counter: position + 1,
+        counter: index + 1,
         expiresAt: request.expiresAt,
       });
       await ctx.db.insert(CACHE_LIST_TABLE, {
         key: request.key,
         keyPrefix: request.keyPrefix,
-        index: position,
+        index,
         value: encodeValue({ ...request.value, index }),
       });
 
