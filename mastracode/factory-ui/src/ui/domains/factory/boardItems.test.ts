@@ -244,6 +244,17 @@ describe('card sessions by context', () => {
     ]);
   });
 
+  it("opens a Work card's planner under the legacy plan key while it is in Planning", () => {
+    const plan = session('plan-session');
+    const item = workItem({ board: 'work', stages: ['planning'], sessions: { triage, plan } });
+
+    expect(cardThreadSession(item, workBoard.phases, 'planning')).toBe(plan);
+    expect(cardContextSessions(item, workBoard.phases, 'planning')).toEqual([
+      { context: 'work', label: 'Work', ref: plan, current: true },
+      { context: 'triage', label: 'Triage', ref: triage, current: false },
+    ]);
+  });
+
   it('keeps the lifecycle order without a board catalog', () => {
     const item = workItem({ board: 'work', stages: ['execute'], sessions: { work, triage } });
 

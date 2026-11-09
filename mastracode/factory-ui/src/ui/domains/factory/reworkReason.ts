@@ -7,6 +7,8 @@ import type { WorkItem } from './services/workItems';
 
 const STAGE_MOVED_ACTION = 'factory.work_item.stage_moved';
 /** Where a self-review that asked for changes sends the card: back to Building, or parked in Intake. */
+/** Actor id prefix of a session agent moving the card through Factory's tools, not the bound transition tool. */
+const SESSION_AGENT_PREFIX = 'agent:session:';
 const SELF_REVIEW_RETURN_STAGES = new Set(['execute', 'intake']);
 
 export type ReworkPhase = Pick<InstalledPhaseInfo, 'id' | 'title' | 'name' | 'kind'>;
@@ -22,7 +24,8 @@ export interface ReworkReason {
 /**
  * Why the card's latest move sent it back to an earlier phase, or undefined
  * when that move went forward. Reads the latest `stage_moved` audit event for
- * the card; when the recent page holds none, the card's own stage history.
+ * the card; when the recent page holds none ending at the card's stage, the
+ * card's own stage history.
  */
 export function reworkReason(
   item: Pick<WorkItem, 'id' | 'stages' | 'stageHistory' | 'metadata'>,
@@ -33,14 +36,17 @@ export function reworkReason(
   if (current === undefined) return undefined;
 
   const latestMove = latestStageMove(item.id, events);
-  const move = latestMove
-    ? {
-        from: stringField(latestMove.metadata, 'from'),
-        to: stringField(latestMove.metadata, 'to'),
-        movedBy: latestMove.actorType,
-        cause: latestMove.actorType === 'agent' ? stringField(latestMove.metadata, 'cause')?.trim() : undefined,
-      }
-    : historyMove(item, current);
+  // Audit writes are best-effort, so an in-page move that doesn't end where the
+  // card is now means the latest move went unrecorded: read the stage history.
+  const move =
+    latestMove && stringField(latestMove.metadata, 'to') === current
+      ? {
+          from: stringField(latestMove.metadata, 'from'),
+          to: current,
+          movedBy: latestMove.actorType,
+          cause: agentRationale(latestMove),
+        }
+      : historyMove(item, current);
   if (!move?.from || move.to !== current) return undefined;
 
   const order = new Map(phases.filter(phase => phase.kind !== 'terminal').map((phase, index) => [phase.id, index]));
@@ -66,6 +72,16 @@ export function reasonSummary(reason: string): string {
   const lines = reason.split('\n').filter(text => text.trim().length > 0);
   const line = lines.find(text => !text.trimStart().startsWith('#')) ?? lines[0] ?? '';
   return line.replace(/^[\s#>*-]+/, '').trim();
+}
+
+/**
+ * The agent's own words for a move. A bound agent's transition tool records its
+ * rationale; a session agent moving through Factory's tools records the code
+ * `factory_tools`, which is no reason.
+ */
+function agentRationale(event: AuditEvent): string | undefined {
+  if (event.actorType !== 'agent' || event.actorId.startsWith(SESSION_AGENT_PREFIX)) return undefined;
+  return stringField(event.metadata, 'cause')?.trim();
 }
 
 function latestStageMove(itemId: string, events: readonly AuditEvent[] | undefined): AuditEvent | undefined {

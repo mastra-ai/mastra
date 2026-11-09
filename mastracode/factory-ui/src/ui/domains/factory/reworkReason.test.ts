@@ -89,6 +89,40 @@ describe('reworkReason', () => {
     expect(reworkReason(card('execute'), phases, events)).toBe(undefined);
   });
 
+  it("falls back to the stage history when the card's latest move went unrecorded", () => {
+    const item = card('execute', {
+      stageHistory: [
+        {
+          stage: 'execute',
+          enteredAt: '2026-11-06T08:00:00.000Z',
+          exitedAt: '2026-11-06T09:00:00.000Z',
+          by: 'agent:work',
+        },
+        {
+          stage: 'review',
+          enteredAt: '2026-11-06T09:00:00.000Z',
+          exitedAt: '2026-11-06T10:00:00.000Z',
+          by: 'agent:work',
+        },
+        { stage: 'execute', enteredAt: '2026-11-06T10:00:00.000Z', by: 'user-1' },
+      ],
+    });
+
+    expect(
+      reworkReason(item, phases, [moved('execute', 'review', 'agent', 'Built.', '2026-11-06T09:00:00.000Z')]),
+    ).toEqual({ fromPhase: 'review', fromLabel: 'Review', movedBy: 'human' });
+  });
+
+  it("gives no reason text when a session agent moves the card back through Factory's tools", () => {
+    const event = { ...moved('review', 'execute', 'agent', 'factory_tools'), actorId: 'agent:session:session-1' };
+
+    expect(reworkReason(card('execute'), phases, [event])).toEqual({
+      fromPhase: 'review',
+      fromLabel: 'Review',
+      movedBy: 'agent',
+    });
+  });
+
   it('uses the latest move by time and ignores other cards', () => {
     const events = [
       moved('planning', 'execute', 'agent', 'Plan approved.', '2026-11-06T08:00:00.000Z'),

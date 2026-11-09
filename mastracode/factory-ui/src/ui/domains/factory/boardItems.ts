@@ -283,6 +283,20 @@ export function contextLabel(context: string, phases: readonly ContextPhase[] | 
   return CONTEXT_LABELS[context] ?? context.charAt(0).toUpperCase() + context.slice(1);
 }
 
+/**
+ * The session a card holds in a context. Cards planned before Planning moved
+ * into `work` hold their planner under the old `plan` key, which stands in for
+ * `work` until the card gets a `work` session, unless a phase runs in `plan`.
+ */
+function contextSession(
+  item: Pick<WorkItem, 'sessions'>,
+  phases: readonly ContextPhase[],
+  context: string,
+): WorkItemSessionRef | undefined {
+  const legacyPlanner = context === 'work' && !phases.some(phase => phaseContext(phase) === 'plan');
+  return item.sessions[context] ?? (legacyPlanner ? item.sessions.plan : undefined);
+}
+
 /** Contexts holding a session, by the card's current phase first, then its most recently visited phases. */
 function visitedContexts(
   item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
@@ -293,7 +307,9 @@ function visitedContexts(
   for (const stage of [columnStage, ...item.stageHistory.map(entry => entry.stage).reverse()]) {
     const phase = phases.find(candidate => candidate.id === stage);
     const context = phase && phaseContext(phase);
-    if (context !== undefined && item.sessions[context] && !contexts.includes(context)) contexts.push(context);
+    if (context !== undefined && contextSession(item, phases, context) && !contexts.includes(context)) {
+      contexts.push(context);
+    }
   }
   return contexts;
 }
@@ -314,7 +330,8 @@ export function cardContextSessions(
   const order = [...new Set([...visited, ...Object.keys(item.sessions)])];
   const seen = new Set<string>();
   return order.flatMap(context => {
-    const ref = item.sessions[context];
+    const ref = (phases && contextSession(item, phases, context)) ?? item.sessions[context];
+    if (!ref) return [];
     const key = `${ref.sessionId}:${ref.threadId}`;
     if (seen.has(key)) return [];
     seen.add(key);
@@ -333,7 +350,7 @@ export function cardThreadSession(
   columnStage: string,
 ): WorkItemSessionRef | undefined {
   const context = phases && visitedContexts(item, phases, columnStage)[0];
-  return context === undefined ? itemThreadSession(item.sessions) : item.sessions[context];
+  return context === undefined ? itemThreadSession(item.sessions) : contextSession(item, phases, context);
 }
 
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
