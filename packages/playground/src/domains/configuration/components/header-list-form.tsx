@@ -7,32 +7,27 @@ import { Plus, Trash } from 'lucide-react';
 export type HeaderListFormItem = {
   name: string;
   value: string;
-  /** Keeps a row's inputs with its header when an earlier one is removed. Rows without one key by index. */
-  id?: number;
 };
 
 export interface HeaderListFormProps {
   headers: Array<HeaderListFormItem>;
-  showHeading?: boolean;
   onAddHeader: (header: HeaderListFormItem) => void;
   onRemoveHeader: (index: number) => void;
 }
 
-export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeading = true }: HeaderListFormProps) => {
+export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      {showHeading && (
-        <Txt as="h2" variant="body" tone="ink">
-          Headers
-        </Txt>
-      )}
+      <Txt as="h2" variant="body" tone="ink">
+        Headers
+      </Txt>
 
       <div className="space-y-6">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
-              <li key={header.id ?? index}>
-                <HeaderFieldsRow index={index} header={header} onRemove={() => onRemoveHeader(index)} />
+              <li key={index}>
+                <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
               </li>
             ))}
           </ul>
@@ -60,7 +55,7 @@ interface HeaderListFormItemProps {
   onRemove: () => void;
 }
 
-export const HeaderFieldsRow = ({ index, header, onRemove }: HeaderListFormItemProps) => (
+const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => (
   <div className="grid grid-cols-[1fr_1fr_auto] gap-x-4">
     <Field className="row-span-3 grid-rows-subgrid gap-y-0">
       <FieldLabel required className="mb-2">
