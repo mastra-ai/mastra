@@ -427,6 +427,30 @@ describe('createRepoTemplate', () => {
     expect(serialized).toContain('PIP_INDEX_URL');
   });
 
+  describe('buildStepEnv and buildEnvRevision', () => {
+    it('applies buildStepEnv to build steps without putting values in the name', async () => {
+      const spec = await resolve({ ...BASE, buildStepEnv: { NPM_TOKEN: 'sentinel-e2b' }, buildEnvRevision: 'rev-a' });
+      const serialized = await serializedSteps(spec);
+      expect(serialized).toContain('sentinel-e2b');
+      expect(spec.ref).not.toContain('sentinel-e2b');
+    });
+
+    it('names the template by the revision, never the values', async () => {
+      const a = await resolve({ ...BASE, buildStepEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-a' });
+      const aOtherValue = await resolve({ ...BASE, buildStepEnv: { NPM_TOKEN: 'two' }, buildEnvRevision: 'rev-a' });
+      const b = await resolve({ ...BASE, buildStepEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-b' });
+      expect(aOtherValue.ref).toBe(a.ref);
+      expect(aOtherValue.staleRef).toBe(a.staleRef);
+      expect(b.ref).not.toBe(a.ref);
+      expect(a.ref).toBe(repoTemplateRef({ ...IDENTITY, buildEnvRevision: 'rev-a' }));
+    });
+
+    it('keeps the existing name when neither is set', async () => {
+      expect((await resolve(BASE)).ref).toBe(repoTemplateRef(IDENTITY));
+      expect((await resolve({ ...BASE, buildStepEnv: { NPM_TOKEN: 'one' } })).ref).toBe(repoTemplateRef(IDENTITY));
+    });
+  });
+
   it('needs no root prep when workingDirectory is omitted', async () => {
     const steps = await serializedSteps(await resolve(BASE));
     expect(steps).not.toContain('chown');

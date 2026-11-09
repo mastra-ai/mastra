@@ -216,6 +216,18 @@ export interface RepoTemplateOptions {
    */
   buildEnv?: Record<string, string> | (() => Promise<Record<string, string>>);
   /**
+   * Build-step environment kept out of the template name: applied with
+   * `setEnvs` like the clone token, so it is visible to build steps but never
+   * persisted into runtime sandbox envs. Pair it with
+   * {@link buildEnvRevision} so a change still builds a new template.
+   */
+  buildStepEnv?: Record<string, string>;
+  /**
+   * Opaque id that changes whenever {@link buildStepEnv} changes. Hashed into
+   * the template name in place of the values. Never derive it from the values.
+   */
+  buildEnvRevision?: string;
+  /**
    * vCPUs allocated to sandboxes created from this template. Resources are
    * a property of the built template, not of an individual sandbox, so this
    * is hashed into the template name — a resize builds a new template
@@ -251,6 +263,8 @@ export interface RepoTemplateIdentity {
   sha?: string;
   setupCommand?: string | string[];
   buildEnv?: Record<string, string>;
+  /** See {@link RepoTemplateOptions.buildEnvRevision}. */
+  buildEnvRevision?: string;
   cpuCount?: number;
   memoryMB?: number;
   workingDirectory?: string;
@@ -322,6 +336,9 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     // Appended only when set, so templates predating the option keep their
     // existing names (and warm builds) instead of all rebuilding.
     ...(identity.workingDirectory !== undefined ? [identity.workingDirectory] : []),
+    // Same rule: appended only when set. The revision stands in for the
+    // build-step env values, which never enter the name.
+    ...(identity.buildEnvRevision !== undefined ? ['buildEnvRevision', identity.buildEnvRevision] : []),
     // The list form appends its members (caller order) so it never collides
     // with the single form of its first repository.
     ...(identity.repos
@@ -459,6 +476,7 @@ export async function resolveSpecAtHead(
     // templates keep their hashes; omitted entirely when nothing would run.
     ...(normalizeSetupCommands(first.setupCommand).length > 0 ? { setupCommand: first.setupCommand } : {}),
     ...(buildEnv ? { buildEnv } : {}),
+    ...(options.buildEnvRevision !== undefined ? { buildEnvRevision: options.buildEnvRevision } : {}),
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
     ...(options.workingDirectory !== undefined
@@ -480,7 +498,7 @@ export async function resolveSpecAtHead(
         }
       : {}),
   };
-  const spec = buildRepoTemplateSpec(identity, repos, options.continueOnSetupFailure ?? false);
+  const spec = buildRepoTemplateSpec(identity, repos, options.continueOnSetupFailure ?? false, options.buildStepEnv);
   const sha = isList ? (repos.every(repo => repo.sha) ? listSha(repos.map(repo => repo.sha!)) : undefined) : first.sha;
   return { spec, ...(sha ? { sha } : {}) };
 }
@@ -563,12 +581,13 @@ function buildRepoTemplateSpec(
   identity: RepoTemplateIdentity,
   repos: ResolvedRepository[],
   continueOnFailure: boolean,
+  buildStepEnv?: Record<string, string>,
 ): NamedTemplateSpec {
   const { buildEnv, workingDirectory } = identity;
   const isList = identity.repos !== undefined;
 
   let template = createDefaultMountableTemplate().template;
-  const env: Record<string, string> = { ...buildEnv };
+  const env: Record<string, string> = { ...buildEnv, ...buildStepEnv };
   for (const repo of repos) if (repo.tokenEnv && repo.token) env[repo.tokenEnv] = repo.token;
   if (Object.keys(env).length > 0) {
     // Visible to build steps; probed to NOT persist into runtime sandbox
