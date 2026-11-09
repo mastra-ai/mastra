@@ -7,7 +7,7 @@ description: "Browse LLM Gateway model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/llmgateway-providers.svg" alt="LLM Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LLM Gateway
 
-Access 433 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 434 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [LLM Gateway documentation](https://llmgateway.io/docs).
 
@@ -1712,6 +1712,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.15,
     "outputCost": 0.6
+  },
+  {
+    "model": "llmgateway-providers/canopywave/qwen3.8-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "llmgateway-providers/cerebras/gpt-oss-120b",
@@ -4190,8 +4202,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 384000,
     "inputCost": 0.135,
